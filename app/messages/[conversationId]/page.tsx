@@ -102,6 +102,43 @@ function updateMessageStatus(
   })
 }
 
+// Helper to detect URLs in text and render clickable links
+function renderTextWithLinks(text: string, linkColor?: string) {
+  const urlRegex = /(https?:\/\/[^\s<>\"']+)/g
+  const parts = text.split(urlRegex)
+  if (parts.length === 1) return text
+  return parts.map((part, i) => {
+    if (urlRegex.test(part)) {
+      // Reset lastIndex since we're reusing the regex
+      urlRegex.lastIndex = 0
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: linkColor || '#90caf9',
+            textDecoration: 'underline',
+            wordBreak: 'break-all',
+          }}
+        >
+          {part}
+        </a>
+      )
+    }
+    urlRegex.lastIndex = 0
+    return part
+  })
+}
+
+// Helper to check if a file is a PDF
+function isPdfFile(url: string, fileName?: string): boolean {
+  const lower = (fileName || url).toLowerCase()
+  return lower.endsWith('.pdf')
+}
+
 export default function ConversationPage({ params }: { params: Promise<{ conversationId: string }> }) {
   const router = useRouter()
   const { showToast } = useToast()
@@ -131,7 +168,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [pendingAttachment, setPendingAttachment] = useState<MediaAttachment | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [previewOpen, setPreviewOpen] = useState<{ type: 'image' | 'video'; url: string } | null>(null)
+  const [previewOpen, setPreviewOpen] = useState<{ type: 'image' | 'video' | 'file'; url: string; fileName?: string } | null>(null)
 
   // 注入 spin 动画样式
   useEffect(() => {
@@ -1173,16 +1210,16 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                       </Box>
                     )}
                     {msg.media_url && msg.media_type === 'file' && (
-                      <a
-                        href={msg.media_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
+                      <Box
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation()
+                          setPreviewOpen({ type: 'file', url: msg.media_url!, fileName: msg.media_name || undefined })
+                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: 10,
-                          textDecoration: 'none',
+                          cursor: 'pointer',
                           color: 'inherit',
                         }}
                       >
@@ -1211,10 +1248,10 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                             {msg.media_name || t('file')}
                           </Text>
                           <Text size="xs" style={{ opacity: 0.7 }}>
-                            {t('clickToDownload')}
+                            {t('clickToPreview') || t('clickToDownload')}
                           </Text>
                         </Box>
-                      </a>
+                      </Box>
                     )}
                     {/* Text content */}
                     {msg.content && !msg.content.startsWith('[') && (
@@ -1228,7 +1265,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           padding: msg.media_url && msg.media_type !== 'file' ? '0 10px 6px' : 0,
                         }}
                       >
-                        {msg.content}
+                        {renderTextWithLinks(msg.content, isMine ? '#e0d4f5' : '#90caf9')}
                       </Text>
                     )}
                     {/* Show text for messages without media */}
@@ -1241,7 +1278,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           lineHeight: 1.5,
                         }}
                       >
-                        {msg.content}
+                        {renderTextWithLinks(msg.content, isMine ? '#e0d4f5' : '#90caf9')}
                       </Text>
                     )}
                   </Box>
@@ -1441,7 +1478,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               }}
               unoptimized
             />
-          ) : (
+          ) : previewOpen.type === 'video' ? (
             <video
               src={previewOpen.url}
               controls
@@ -1453,7 +1490,94 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 borderRadius: 8,
               }}
             />
-          )}
+          ) : previewOpen.type === 'file' ? (
+            isPdfFile(previewOpen.url, previewOpen.fileName) ? (
+              <Box
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                style={{
+                  width: '90vw',
+                  height: '90vh',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: '#fff',
+                }}
+              >
+                <iframe
+                  src={previewOpen.url}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    border: 'none',
+                  }}
+                  title={previewOpen.fileName || 'PDF Preview'}
+                />
+              </Box>
+            ) : (
+              <Box
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                style={{
+                  background: tokens.colors.bg.secondary,
+                  borderRadius: 16,
+                  padding: '40px 48px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 16,
+                  maxWidth: 400,
+                }}
+              >
+                <Box style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 16,
+                  background: tokens.colors.bg.tertiary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.secondary} strokeWidth="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                </Box>
+                <Text size="base" weight="bold" style={{
+                  color: tokens.colors.text.primary,
+                  textAlign: 'center',
+                  wordBreak: 'break-word',
+                }}>
+                  {previewOpen.fileName || t('file')}
+                </Text>
+                <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
+                  {t('previewNotSupported') || '此文件类型不支持预览'}
+                </Text>
+                <a
+                  href={previewOpen.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '12px 24px',
+                    background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
+                    color: '#fff',
+                    borderRadius: 12,
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    marginTop: 8,
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  {t('download') || '下载文件'}
+                </a>
+              </Box>
+            )
+          ) : null}
         </Box>
       )}
 
