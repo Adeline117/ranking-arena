@@ -20,6 +20,27 @@ const COVER_GRADIENTS: Record<string, string[]> = {
     'linear-gradient(135deg, #c3cfe2 0%, #f5f7fa 100%)',
     'linear-gradient(135deg, #fdcbf1 0%, #e6dee9 100%)',
   ],
+  academic_paper: [
+    'linear-gradient(135deg, #2c3e50 0%, #3498db 100%)',
+    'linear-gradient(135deg, #1a2a6c 0%, #b21f1f 50%, #fdbb2d 100%)',
+    'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)',
+    'linear-gradient(135deg, #4b6cb7 0%, #182848 100%)',
+    'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)',
+  ],
+  finance: [
+    'linear-gradient(135deg, #134e5e 0%, #71b280 100%)',
+    'linear-gradient(135deg, #0f3443 0%, #34e89e 100%)',
+    'linear-gradient(135deg, #1d4350 0%, #a43931 100%)',
+    'linear-gradient(135deg, #003973 0%, #e5e5be 100%)',
+    'linear-gradient(135deg, #1f4037 0%, #99f2c8 100%)',
+  ],
+  regulatory: [
+    'linear-gradient(135deg, #2c3e50 0%, #bdc3c7 100%)',
+    'linear-gradient(135deg, #485563 0%, #29323c 100%)',
+    'linear-gradient(135deg, #414345 0%, #232526 100%)',
+    'linear-gradient(135deg, #536976 0%, #292e49 100%)',
+    'linear-gradient(135deg, #3a6186 0%, #89253e 100%)',
+  ],
   book: [
     'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
     'linear-gradient(135deg, #2d1b69 0%, #11998e 100%)',
