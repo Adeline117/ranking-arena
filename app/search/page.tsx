@@ -17,16 +17,15 @@ type SearchResult = {
   title: string
   subtitle?: string
   meta?: string
-  uid?: number // 用户数字编号
+  uid?: number
 }
 
-// 高亮样式 - 使用 CSS 变量实现主题一致性
 const HIGHLIGHT_STYLE = {
-  backgroundColor: 'rgba(139, 111, 168, 0.4)',
-  color: '#d4b8e8',
-  borderRadius: '4px',
-  padding: '1px 4px',
-  fontWeight: 600,
+  backgroundColor: 'rgba(139, 111, 168, 0.25)',
+  color: 'inherit',
+  borderRadius: '2px',
+  padding: '0 2px',
+  fontWeight: 600 as const,
 }
 
 type TabType = 'all' | 'users' | 'traders' | 'posts' | 'groups'
@@ -50,7 +49,6 @@ function SearchContent() {
   const [hasMore, setHasMore] = useState<Record<string, boolean>>({ users: true, traders: true, posts: true, groups: true })
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({ users: false, traders: false, posts: false, groups: false })
 
-  // Advanced filter state for traders
   const [traderFilter, setTraderFilter] = useState<TraderFilterConfig>({})
   const [isFilterVisible, setIsFilterVisible] = useState(false)
 
@@ -70,37 +68,24 @@ function SearchContent() {
     })
   }, [])
 
-  // 高亮匹配文本的函数
   const highlightText = useCallback((text: string, searchQuery: string): React.ReactNode => {
     if (!text || !searchQuery.trim()) return text
-
     const lowerText = text.toLowerCase()
     const lowerQuery = searchQuery.toLowerCase().trim()
     const parts: React.ReactNode[] = []
     let lastIndex = 0
-
-    // 找到所有匹配项
     let index = lowerText.indexOf(lowerQuery)
     while (index !== -1) {
-      // 添加匹配前的文本
-      if (index > lastIndex) {
-        parts.push(text.slice(lastIndex, index))
-      }
-      // 添加高亮的匹配文本
+      if (index > lastIndex) parts.push(text.slice(lastIndex, index))
       parts.push(
-        <span key={`highlight-${index}`} style={HIGHLIGHT_STYLE}>
+        <span key={`hl-${index}`} style={HIGHLIGHT_STYLE}>
           {text.slice(index, index + lowerQuery.length)}
         </span>
       )
       lastIndex = index + lowerQuery.length
       index = lowerText.indexOf(lowerQuery, lastIndex)
     }
-    
-    // 添加剩余文本
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex))
-    }
-
+    if (lastIndex < text.length) parts.push(text.slice(lastIndex))
     return parts.length > 0 ? parts : text
   }, [])
 
@@ -109,7 +94,6 @@ function SearchContent() {
       setResults([])
       return
     }
-    // Reset pagination state on new query
     setOffsets({ users: PAGE_SIZE, traders: PAGE_SIZE, posts: PAGE_SIZE, groups: PAGE_SIZE })
     setHasMore({ users: true, traders: true, posts: true, groups: true })
 
@@ -118,7 +102,6 @@ function SearchContent() {
       setSearchError(false)
       const results: SearchResult[] = []
 
-      // 转义 LIKE 通配符防止注入
       const sanitizedQuery = query.trim()
         .slice(0, 100)
         .replace(/[\\%_]/g, c => `\\${c}`)
@@ -131,18 +114,12 @@ function SearchContent() {
       try {
         const isNumericQuery = /^\d+$/.test(query.trim())
 
-        // 并行查询所有数据源（使用 allSettled 避免单个失败丢失全部结果）
-        // Fetch PAGE_SIZE + 1 to detect if more results exist
         const settled = await Promise.allSettled([
-          // 搜索用户
           isNumericQuery
             ? supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').eq('uid', parseInt(query.trim())).limit(PAGE_SIZE + 1)
             : supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').ilike('handle', `%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
-          // 搜索交易者
           supabase.from('trader_sources').select('source_trader_id, handle, source').or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
-          // 搜索帖子
           supabase.from('posts').select('id, title, content, author_handle, created_at').or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
-          // 搜索小组
           supabase.from('groups').select('id, name').ilike('name', `%${sanitizedQuery}%`).limit(PAGE_SIZE + 1),
         ])
         const usersData = settled[0].status === 'fulfilled' ? settled[0].value : { data: null }
@@ -150,7 +127,6 @@ function SearchContent() {
         const postsData = settled[2].status === 'fulfilled' ? settled[2].value : { data: null }
         const groupsData = settled[3].status === 'fulfilled' ? settled[3].value : { data: null }
 
-        // Detect hasMore for each category
         const newHasMore = {
           users: (usersData.data?.length ?? 0) > PAGE_SIZE,
           traders: (tradersData.data?.length ?? 0) > PAGE_SIZE,
@@ -159,10 +135,8 @@ function SearchContent() {
         }
         setHasMore(newHasMore)
 
-        // 处理用户结果
         if (usersData.data) {
-          const users = usersData.data.slice(0, PAGE_SIZE)
-          users.forEach((u: Record<string, unknown>) => {
+          usersData.data.slice(0, PAGE_SIZE).forEach((u: Record<string, unknown>) => {
             results.push({
               type: 'user',
               id: u.id as string,
@@ -174,10 +148,8 @@ function SearchContent() {
           })
         }
 
-        // 处理交易员结果 - 批量获取快照数据
-        let traders = tradersData.data?.slice(0, PAGE_SIZE * 2) ?? null // Fetch more to account for filtering
+        let traders = tradersData.data?.slice(0, PAGE_SIZE * 2) ?? null
 
-        // Apply exchange filter
         if (traders && traderFilter.exchange?.length) {
           traders = traders.filter(t =>
             traderFilter.exchange!.some(ex =>
@@ -189,21 +161,18 @@ function SearchContent() {
         if (traders && traders.length > 0) {
           const traderKeys = traders.map(t => t.source_trader_id)
 
-          // Build snapshot query with period filter
           let snapshotQuery = supabase
             .from('trader_snapshots')
             .select('source_trader_id, season_id, roi, arena_score, captured_at')
             .in('source_trader_id', traderKeys)
             .not('arena_score', 'is', null)
 
-          // Apply period filter if set
           if (traderFilter.period) {
             snapshotQuery = snapshotQuery.eq('season_id', traderFilter.period)
           }
 
           const { data: allSnapshots } = await snapshotQuery.order('captured_at', { ascending: false })
 
-          // 构建映射（优先 90D > 30D > 7D，除非指定了周期）
           const snapshotMap = new Map<string, { season_id: string; roi: number; arena_score: number }>()
           const windowPriority: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
 
@@ -222,19 +191,17 @@ function SearchContent() {
           for (const trader of traders) {
             const latest = snapshotMap.get(trader.source_trader_id)
 
-            // Apply ROI and score filters
             if (latest) {
               if (traderFilter.roi_min != null && latest.roi < traderFilter.roi_min) continue
               if (traderFilter.roi_max != null && latest.roi > traderFilter.roi_max) continue
               if (traderFilter.min_score != null && latest.arena_score < traderFilter.min_score) continue
             } else if (traderFilter.roi_min != null || traderFilter.roi_max != null || traderFilter.min_score != null) {
-              // Skip traders without snapshot data if filters are active
               continue
             }
 
             const platformLabel = (trader.source || '').replace(/_/g, ' ').toUpperCase()
             const subtitle = latest
-              ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
+              ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% | Score ${latest.arena_score?.toFixed(1)}`
               : platformLabel
             results.push({
               type: 'trader',
@@ -244,15 +211,12 @@ function SearchContent() {
               meta: platformLabel || undefined,
             })
 
-            // Limit to PAGE_SIZE after filtering
             if (results.filter(r => r.type === 'trader').length >= PAGE_SIZE) break
           }
         }
 
-        // 处理帖子结果
         if (postsData.data) {
-          const posts = postsData.data.slice(0, PAGE_SIZE)
-          posts.forEach((p: Record<string, unknown>) => {
+          postsData.data.slice(0, PAGE_SIZE).forEach((p: Record<string, unknown>) => {
             results.push({
               type: 'post',
               id: p.id as string,
@@ -263,10 +227,8 @@ function SearchContent() {
           })
         }
 
-        // 处理小组结果
         if (groupsData.data) {
-          const groups = groupsData.data.slice(0, PAGE_SIZE)
-          groups.forEach((g: Record<string, unknown>) => {
+          groupsData.data.slice(0, PAGE_SIZE).forEach((g: Record<string, unknown>) => {
             results.push({
               type: 'group',
               id: g.id as string,
@@ -312,9 +274,7 @@ function SearchContent() {
           ? await supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').eq('uid', parseInt(query.trim())).range(offset, offset + PAGE_SIZE)
           : await supabase.from('user_profiles').select('id, handle, avatar_url, bio, uid').ilike('handle', `%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
         if (data) {
-          if (data.length <= PAGE_SIZE) {
-            setHasMore(prev => ({ ...prev, users: false }))
-          }
+          if (data.length <= PAGE_SIZE) setHasMore(prev => ({ ...prev, users: false }))
           data.slice(0, PAGE_SIZE).forEach((u: Record<string, unknown>) => {
             newResults.push({
               type: 'user',
@@ -330,8 +290,6 @@ function SearchContent() {
         const { data } = await supabase.from('trader_sources').select('source_trader_id, handle, source').or(`handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE * 2)
         if (data) {
           let traders = data
-
-          // Apply exchange filter
           if (traderFilter.exchange?.length) {
             traders = traders.filter(t =>
               traderFilter.exchange!.some(ex =>
@@ -339,27 +297,16 @@ function SearchContent() {
               )
             )
           }
-
-          if (traders.length <= PAGE_SIZE) {
-            setHasMore(prev => ({ ...prev, traders: false }))
-          }
-
+          if (traders.length <= PAGE_SIZE) setHasMore(prev => ({ ...prev, traders: false }))
           if (traders.length > 0) {
             const traderKeys = traders.map(t => t.source_trader_id)
-
-            // Build snapshot query with period filter
             let snapshotQuery = supabase
               .from('trader_snapshots')
               .select('source_trader_id, season_id, roi, arena_score, captured_at')
               .in('source_trader_id', traderKeys)
               .not('arena_score', 'is', null)
-
-            if (traderFilter.period) {
-              snapshotQuery = snapshotQuery.eq('season_id', traderFilter.period)
-            }
-
+            if (traderFilter.period) snapshotQuery = snapshotQuery.eq('season_id', traderFilter.period)
             const { data: allSnapshots } = await snapshotQuery.order('captured_at', { ascending: false })
-
             const snapshotMap = new Map<string, { season_id: string; roi: number; arena_score: number }>()
             const windowPriority: Record<string, number> = { '90D': 3, '30D': 2, '7D': 1 }
             allSnapshots?.forEach((s: Record<string, unknown>) => {
@@ -373,11 +320,8 @@ function SearchContent() {
                 snapshotMap.set(key, { season_id: s.season_id as string, roi, arena_score: arenaScore })
               }
             })
-
             for (const trader of traders) {
               const latest = snapshotMap.get(trader.source_trader_id)
-
-              // Apply ROI and score filters
               if (latest) {
                 if (traderFilter.roi_min != null && latest.roi < traderFilter.roi_min) continue
                 if (traderFilter.roi_max != null && latest.roi > traderFilter.roi_max) continue
@@ -385,10 +329,9 @@ function SearchContent() {
               } else if (traderFilter.roi_min != null || traderFilter.roi_max != null || traderFilter.min_score != null) {
                 continue
               }
-
               const platformLabel = (trader.source || '').replace(/_/g, ' ').toUpperCase()
               const subtitle = latest
-                ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% • Score ${latest.arena_score?.toFixed(1)}`
+                ? `${latest.season_id}: ROI ${latest.roi?.toFixed(1)}% | Score ${latest.arena_score?.toFixed(1)}`
                 : platformLabel
               newResults.push({
                 type: 'trader',
@@ -397,7 +340,6 @@ function SearchContent() {
                 subtitle,
                 meta: platformLabel || undefined,
               })
-
               if (newResults.length >= PAGE_SIZE) break
             }
           }
@@ -405,9 +347,7 @@ function SearchContent() {
       } else if (type === 'posts') {
         const { data } = await supabase.from('posts').select('id, title, content, author_handle, created_at').or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
         if (data) {
-          if (data.length <= PAGE_SIZE) {
-            setHasMore(prev => ({ ...prev, posts: false }))
-          }
+          if (data.length <= PAGE_SIZE) setHasMore(prev => ({ ...prev, posts: false }))
           data.slice(0, PAGE_SIZE).forEach((p: Record<string, unknown>) => {
             newResults.push({
               type: 'post',
@@ -421,9 +361,7 @@ function SearchContent() {
       } else if (type === 'groups') {
         const { data } = await supabase.from('groups').select('id, name').ilike('name', `%${sanitizedQuery}%`).range(offset, offset + PAGE_SIZE)
         if (data) {
-          if (data.length <= PAGE_SIZE) {
-            setHasMore(prev => ({ ...prev, groups: false }))
-          }
+          if (data.length <= PAGE_SIZE) setHasMore(prev => ({ ...prev, groups: false }))
           data.slice(0, PAGE_SIZE).forEach((g: Record<string, unknown>) => {
             newResults.push({
               type: 'group',
@@ -462,7 +400,6 @@ function SearchContent() {
     ? results.filter(r => r.type === filterType)
     : results
 
-  // Calculate counts for each tab
   const resultCounts = {
     all: results.length,
     users: results.filter(r => r.type === 'user').length,
@@ -479,7 +416,17 @@ function SearchContent() {
     return '#'
   }
 
-  const getIcon = (type: string): string => {
+  const getTypeLabel = (type: string): string => {
+    switch (type) {
+      case 'user': return t('users')
+      case 'trader': return t('traders')
+      case 'post': return t('posts')
+      case 'group': return t('groups')
+      default: return ''
+    }
+  }
+
+  const getIconLetter = (type: string): string => {
     switch (type) {
       case 'user': return 'U'
       case 'trader': return 'T'
@@ -489,104 +436,277 @@ function SearchContent() {
     }
   }
 
-  const getBadgeBackground = (type: string): string => {
+  const getIconStyle = (type: string): { bg: string; color: string; radius: string } => {
     switch (type) {
-      case 'user': return 'linear-gradient(135deg, rgba(139, 111, 168, 0.2), rgba(139, 111, 168, 0.1))'
-      case 'trader': return tokens.gradient.successSubtle
-      case 'post': return tokens.gradient.primarySubtle
-      default: return tokens.gradient.warningSubtle
+      case 'user':
+        return { bg: 'rgba(139, 111, 168, 0.15)', color: '#8b6fa8', radius: tokens.radius.full }
+      case 'trader':
+        return { bg: tokens.gradient.successSubtle, color: tokens.colors.accent.success, radius: tokens.radius.full }
+      case 'post':
+        return { bg: tokens.gradient.primarySubtle, color: tokens.colors.accent.primary, radius: tokens.radius.lg }
+      case 'group':
+        return { bg: tokens.gradient.warningSubtle, color: tokens.colors.accent.warning, radius: tokens.radius.md }
+      default:
+        return { bg: tokens.gradient.primarySubtle, color: tokens.colors.accent.primary, radius: tokens.radius.lg }
     }
   }
 
-  const getBadgeColor = (type: string): string => {
-    switch (type) {
-      case 'user': return '#8b6fa8'
-      case 'trader': return tokens.colors.accent.success
-      case 'post': return tokens.colors.accent.primary
-      default: return tokens.colors.accent.warning
-    }
+  // Parse trader ROI for color coding
+  const parseRoi = (subtitle: string | undefined): number | null => {
+    if (!subtitle) return null
+    const match = subtitle.match(/ROI\s+(-?\d+\.?\d*)%/)
+    return match ? parseFloat(match[1]) : null
+  }
+
+  const renderResultCard = (result: SearchResult) => {
+    const iconStyle = getIconStyle(result.type)
+    const roi = result.type === 'trader' ? parseRoi(result.subtitle) : null
+
+    return (
+      <Link
+        key={`${result.type}-${result.id}`}
+        href={getHref(result)}
+        className="search-result-card"
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: tokens.spacing[3],
+          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+          textDecoration: 'none',
+          color: 'inherit',
+          transition: tokens.transition.base,
+          borderBottom: `1px solid ${tokens.colors.border?.subtle || 'var(--glass-border-light)'}`,
+          position: 'relative',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = tokens.glass.bg.light
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent'
+        }}
+      >
+        {/* Avatar / Icon */}
+        <div style={{
+          width: 48,
+          height: 48,
+          borderRadius: iconStyle.radius,
+          background: iconStyle.bg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: tokens.typography.fontSize.lg,
+          fontWeight: tokens.typography.fontWeight.black,
+          color: iconStyle.color,
+          flexShrink: 0,
+        }}>
+          {getIconLetter(result.type)}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          {/* Row 1: Name + type tag */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            marginBottom: '2px',
+          }}>
+            <span style={{
+              fontSize: tokens.typography.fontSize.md,
+              fontWeight: tokens.typography.fontWeight.bold,
+              color: tokens.colors.text.primary,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {highlightText(result.title, query)}
+            </span>
+            {/* Type badge - small pill */}
+            <span style={{
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              color: iconStyle.color,
+              background: iconStyle.bg,
+              padding: '1px 6px',
+              borderRadius: tokens.radius.full,
+              flexShrink: 0,
+              lineHeight: '16px',
+            }}>
+              {getTypeLabel(result.type)}
+            </span>
+          </div>
+
+          {/* Row 2: Handle / meta */}
+          {result.meta && (
+            <div style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.tertiary,
+              marginBottom: '2px',
+            }}>
+              {result.meta}
+            </div>
+          )}
+
+          {/* Row 3: Subtitle / bio / content preview */}
+          {result.subtitle && (
+            <div style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.secondary,
+              lineHeight: tokens.typography.lineHeight.normal,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}>
+              {result.type === 'trader' && roi !== null ? (
+                <span>
+                  {result.subtitle?.split('ROI')[0]}ROI{' '}
+                  <span style={{
+                    color: roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                    fontWeight: tokens.typography.fontWeight.bold,
+                  }}>
+                    {roi >= 0 ? '+' : ''}{roi.toFixed(1)}%
+                  </span>
+                  {result.subtitle?.split('%').slice(1).join('%')}
+                </span>
+              ) : (
+                highlightText(result.subtitle, query)
+              )}
+            </div>
+          )}
+        </div>
+      </Link>
+    )
+  }
+
+  const renderLoadMoreButton = (type: 'users' | 'traders' | 'posts' | 'groups', label?: string) => {
+    if (!hasMore[type]) return null
+    const typeLabel = label || t(type).toLowerCase()
+    return (
+      <button
+        key={`load-more-${type}`}
+        onClick={() => loadMore(type)}
+        disabled={loadingMore[type]}
+        style={{
+          display: 'block',
+          width: '100%',
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          background: 'transparent',
+          border: 'none',
+          color: tokens.colors.accent.primary,
+          fontWeight: tokens.typography.fontWeight.semibold,
+          fontSize: tokens.typography.fontSize.sm,
+          cursor: loadingMore[type] ? 'not-allowed' : 'pointer',
+          transition: tokens.transition.base,
+          opacity: loadingMore[type] ? 0.5 : 1,
+          textAlign: 'center',
+        }}
+        onMouseEnter={(e) => {
+          if (!loadingMore[type]) e.currentTarget.style.background = tokens.glass.bg.light
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent'
+        }}
+      >
+        {loadingMore[type] ? t('loading') : (activeTab === 'all' ? t('loadMoreType').replace('{type}', typeLabel) : t('loadMore'))}
+      </button>
+    )
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, position: 'relative' }}>
+    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       {/* Background mesh */}
-      <div 
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: tokens.gradient.mesh,
-          opacity: 0.5,
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
-      
-      <TopNav email={email} />
-      
-      <main className="page-enter" style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px', paddingBottom: 100, position: 'relative', zIndex: 1 }}>
-        <div style={{ marginBottom: '24px' }}>
-          <h1 className="search-title gradient-text" style={{ fontSize: '28px', fontWeight: 950, marginBottom: '8px' }}>
-            {t('searchResults')}
-          </h1>
-          <div style={{ fontSize: '14px', color: tokens.colors.text.tertiary }}>
-            {query ? `${t('search')}: "${query}"` : t('enterSearchTerm')}
-          </div>
-        </div>
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        background: tokens.gradient.mesh,
+        opacity: 0.5,
+        pointerEvents: 'none',
+        zIndex: 0,
+      }} />
 
+      <TopNav email={email} />
+
+      <main className="page-enter" style={{
+        maxWidth: 680,
+        margin: '0 auto',
+        padding: `${tokens.spacing[5]} ${tokens.spacing[4]}`,
+        paddingBottom: tokens.spacing[20],
+        position: 'relative',
+        zIndex: 1,
+      }}>
+        {/* Search header - compact */}
         {query && (
-          <div className="search-tabs" style={{ 
-            display: 'flex', 
-            gap: '8px', 
-            marginBottom: '20px',
-            paddingBottom: '12px',
+          <div style={{
+            fontSize: tokens.typography.fontSize.sm,
+            color: tokens.colors.text.tertiary,
+            padding: `${tokens.spacing[3]} 0`,
           }}>
-            {(['all', 'users', 'traders', 'posts', 'groups'] as const).map((tab) => (
-              <button
-                key={tab}
-                className="search-tab-button btn-press"
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: tokens.radius.lg,
-                  border: activeTab === tab ? 'none' : tokens.glass.border.light,
-                  background: activeTab === tab ? tokens.gradient.primary : tokens.glass.bg.light,
-                  backdropFilter: tokens.glass.blur.sm,
-                  WebkitBackdropFilter: tokens.glass.blur.sm,
-                  color: activeTab === tab ? '#fff' : tokens.colors.text.secondary,
-                  fontWeight: activeTab === tab ? 900 : 600,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  transition: tokens.transition.all,
-                  boxShadow: activeTab === tab ? `0 4px 12px ${tokens.colors.accent.primary}40` : 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (activeTab !== tab) {
-                    e.currentTarget.style.background = tokens.glass.bg.medium
-                    e.currentTarget.style.color = tokens.colors.text.primary
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeTab !== tab) {
-                    e.currentTarget.style.background = tokens.glass.bg.light
-                    e.currentTarget.style.color = tokens.colors.text.secondary
-                  }
-                }}
-              >
-                {{ all: t('all'), users: t('users'), traders: t('traders'), posts: t('posts'), groups: t('groups') }[tab]}
-                {resultCounts[tab] > 0 && (
-                  <span style={{
-                    marginLeft: '6px',
-                    padding: '2px 6px',
-                    borderRadius: tokens.radius.sm,
-                    background: activeTab === tab ? 'rgba(255,255,255,0.2)' : 'rgba(139, 111, 168, 0.15)',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                  }}>
-                    {resultCounts[tab] > 99 ? '99+' : resultCounts[tab]}
-                  </span>
-                )}
-              </button>
-            ))}
+            {t('searchResults')}: &quot;{query}&quot;
+          </div>
+        )}
+
+        {/* Tab bar - sticky, compact, underline style */}
+        {query && (
+          <div style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            background: tokens.colors.bg.primary,
+            borderBottom: `1px solid ${tokens.colors.border?.subtle || 'var(--glass-border-light)'}`,
+            marginLeft: `-${tokens.spacing[4]}`,
+            marginRight: `-${tokens.spacing[4]}`,
+            paddingLeft: tokens.spacing[4],
+            paddingRight: tokens.spacing[4],
+          }}>
+            <div style={{
+              display: 'flex',
+              gap: 0,
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+            }}>
+              {(['all', 'users', 'traders', 'posts', 'groups'] as const).map((tab) => {
+                const isActive = activeTab === tab
+                const count = resultCounts[tab]
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    style={{
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: isActive ? `2px solid ${tokens.colors.accent.primary}` : '2px solid transparent',
+                      color: isActive ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+                      fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                      fontSize: tokens.typography.fontSize.sm,
+                      cursor: 'pointer',
+                      transition: tokens.transition.fast,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) e.currentTarget.style.color = tokens.colors.text.secondary
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) e.currentTarget.style.color = tokens.colors.text.tertiary
+                    }}
+                  >
+                    {{ all: t('all'), users: t('users'), traders: t('traders'), posts: t('posts'), groups: t('groups') }[tab]}
+                    {count > 0 && (
+                      <span style={{
+                        marginLeft: '4px',
+                        fontSize: tokens.typography.fontSize.xs,
+                        color: isActive ? tokens.colors.text.secondary : tokens.colors.text.tertiary,
+                      }}>
+                        ({count > 99 ? '99+' : count})
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
 
@@ -600,44 +720,41 @@ function SearchContent() {
           />
         )}
 
+        {/* Results */}
         {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
             {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                style={{
-                  padding: '20px',
-                  borderRadius: tokens.radius.xl,
-                  background: tokens.glass.bg.secondary,
-                  border: tokens.glass.border.light,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+              <div key={i} style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: tokens.spacing[3],
+                padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+                borderBottom: `1px solid ${tokens.colors.border?.subtle || 'var(--glass-border-light)'}`,
+              }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: tokens.radius.full,
+                  background: tokens.colors.bg.tertiary,
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  flexShrink: 0,
+                }} />
+                <div style={{ flex: 1 }}>
                   <div style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: tokens.radius.lg,
+                    width: `${40 + i * 8}%`,
+                    height: 14,
+                    borderRadius: tokens.radius.sm,
+                    background: tokens.colors.bg.tertiary,
+                    marginBottom: 8,
+                    animation: 'pulse 1.5s ease-in-out infinite',
+                  }} />
+                  <div style={{
+                    width: `${25 + i * 5}%`,
+                    height: 11,
+                    borderRadius: tokens.radius.sm,
                     background: tokens.colors.bg.tertiary,
                     animation: 'pulse 1.5s ease-in-out infinite',
-                    flexShrink: 0,
                   }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{
-                      width: `${50 + i * 8}%`,
-                      height: 16,
-                      borderRadius: tokens.radius.sm,
-                      background: tokens.colors.bg.tertiary,
-                      marginBottom: 8,
-                      animation: 'pulse 1.5s ease-in-out infinite',
-                    }} />
-                    <div style={{
-                      width: `${30 + i * 5}%`,
-                      height: 12,
-                      borderRadius: tokens.radius.sm,
-                      background: tokens.colors.bg.tertiary,
-                      animation: 'pulse 1.5s ease-in-out infinite',
-                    }} />
-                  </div>
                 </div>
               </div>
             ))}
@@ -653,195 +770,71 @@ function SearchContent() {
             description={t('startSearchingDesc')}
           />
         ) : filteredResults.length === 0 ? (
-          <EmptyState
-            title={t('noResults')}
-            description={t('noResultsForQuery').replace('{query}', query)}
-          />
+          <div style={{
+            textAlign: 'center',
+            padding: `${tokens.spacing[16]} ${tokens.spacing[4]}`,
+          }}>
+            <div style={{
+              fontSize: tokens.typography.fontSize['2xl'],
+              marginBottom: tokens.spacing[3],
+              opacity: 0.3,
+            }}>
+              /
+            </div>
+            <div style={{
+              fontSize: tokens.typography.fontSize.md,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              color: tokens.colors.text.primary,
+              marginBottom: tokens.spacing[2],
+            }}>
+              {t('noResults')}
+            </div>
+            <div style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.tertiary,
+            }}>
+              {t('noResultsForQuery').replace('{query}', query)}
+            </div>
+          </div>
         ) : (
-          <div className="stagger-children search-results" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {filteredResults.map((result) => (
-              <Link
-                key={`${result.type}-${result.id}`}
-                href={getHref(result)}
-                className="search-result-item search-result-card glass-card-hover list-item-indicator"
-                style={{
-                  display: 'block',
-                  padding: '20px',
-                  borderRadius: tokens.radius.xl,
-                  background: tokens.glass.bg.secondary,
-                  backdropFilter: tokens.glass.blur.md,
-                  WebkitBackdropFilter: tokens.glass.blur.md,
-                  border: tokens.glass.border.light,
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  transition: tokens.transition.all,
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = tokens.glass.bg.tertiary
-                  e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}30`
-                  e.currentTarget.style.boxShadow = tokens.shadow.lg
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = tokens.glass.bg.secondary
-                  e.currentTarget.style.borderColor = 'var(--glass-border-light)'
-                  e.currentTarget.style.boxShadow = 'none'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-                  {/* Type Icon Badge */}
-                  <div style={{ 
-                    width: 44,
-                    height: 44,
-                    borderRadius: tokens.radius.lg,
-                    background: getBadgeBackground(result.type),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '18px',
-                    fontWeight: 900,
-                    color: getBadgeColor(result.type),
-                    flexShrink: 0,
-                  }}>
-                    {getIcon(result.type)}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="search-result-title" style={{ 
-                      fontSize: '16px', 
-                      fontWeight: 800, 
-                      marginBottom: '6px', 
-                      color: tokens.colors.text.primary,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {highlightText(result.title, query)}
-                    </div>
-                    {result.subtitle && (
-                      <div className="search-result-subtitle" style={{ 
-                        fontSize: '13px', 
-                        color: tokens.colors.text.secondary, 
-                        marginBottom: '6px',
-                        lineHeight: 1.5,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}>
-                        {highlightText(result.subtitle, query)}
-                      </div>
-                    )}
-                    {result.meta && (
-                      <div className="search-result-meta" style={{ fontSize: '12px', color: tokens.colors.text.tertiary }}>
-                        {result.meta}
-                      </div>
-                    )}
-                  </div>
-                  {/* Arrow indicator */}
-                  <div style={{ 
-                    color: tokens.colors.text.tertiary,
-                    opacity: 0.5,
-                    transition: tokens.transition.base,
-                  }}>
-                    →
-                  </div>
-                </div>
-              </Link>
-            ))}
+          <div className="stagger-children search-results" style={{
+            background: tokens.glass.bg.secondary,
+            borderRadius: tokens.radius.xl,
+            border: tokens.glass.border.light,
+            overflow: 'hidden',
+            marginTop: tokens.spacing[3],
+          }}>
+            {filteredResults.map((result) => renderResultCard(result))}
 
-            {/* Load More button for the active tab */}
-            {activeTab !== 'all' && hasMore[activeTab] && (
-              <button
-                onClick={() => loadMore(activeTab as 'users' | 'traders' | 'posts' | 'groups')}
-                disabled={loadingMore[activeTab]}
-                className="btn-press"
-                style={{
-                  width: '100%',
-                  padding: '14px 24px',
-                  marginTop: '8px',
-                  borderRadius: tokens.radius.lg,
-                  border: tokens.glass.border.light,
-                  background: tokens.glass.bg.light,
-                  backdropFilter: tokens.glass.blur.sm,
-                  WebkitBackdropFilter: tokens.glass.blur.sm,
-                  color: tokens.colors.text.secondary,
-                  fontWeight: 700,
-                  fontSize: '14px',
-                  cursor: loadingMore[activeTab] ? 'not-allowed' : 'pointer',
-                  transition: tokens.transition.all,
-                  opacity: loadingMore[activeTab] ? 0.6 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!loadingMore[activeTab]) {
-                    e.currentTarget.style.background = tokens.glass.bg.medium
-                    e.currentTarget.style.color = tokens.colors.text.primary
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = tokens.glass.bg.light
-                  e.currentTarget.style.color = tokens.colors.text.secondary
-                }}
-              >
-                {loadingMore[activeTab] ? t('loading') : t('loadMore')}
-              </button>
-            )}
+            {/* Load More buttons */}
+            {activeTab !== 'all' && renderLoadMoreButton(activeTab as 'users' | 'traders' | 'posts' | 'groups')}
 
-            {/* Load More buttons for "all" tab - show per category */}
             {activeTab === 'all' && (
               <>
                 {(['users', 'traders', 'posts', 'groups'] as const).map((type) => {
-                  const typeResults = results.filter(r => {
-                    if (type === 'users') return r.type === 'user'
-                    if (type === 'traders') return r.type === 'trader'
-                    if (type === 'posts') return r.type === 'post'
-                    if (type === 'groups') return r.type === 'group'
-                    return false
-                  })
-                  if (typeResults.length === 0 || !hasMore[type]) return null
-                  const typeLabel = type === 'users' ? t('users').toLowerCase() : type === 'traders' ? t('traders').toLowerCase() : type === 'posts' ? t('posts').toLowerCase() : t('groups').toLowerCase()
-                  return (
-                    <button
-                      key={type}
-                      onClick={() => loadMore(type)}
-                      disabled={loadingMore[type]}
-                      className="btn-press"
-                      style={{
-                        width: '100%',
-                        padding: '14px 24px',
-                        marginTop: '8px',
-                        borderRadius: tokens.radius.lg,
-                        border: tokens.glass.border.light,
-                        background: tokens.glass.bg.light,
-                        backdropFilter: tokens.glass.blur.sm,
-                        WebkitBackdropFilter: tokens.glass.blur.sm,
-                        color: tokens.colors.text.secondary,
-                        fontWeight: 700,
-                        fontSize: '14px',
-                        cursor: loadingMore[type] ? 'not-allowed' : 'pointer',
-                        transition: tokens.transition.all,
-                        opacity: loadingMore[type] ? 0.6 : 1,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!loadingMore[type]) {
-                          e.currentTarget.style.background = tokens.glass.bg.medium
-                          e.currentTarget.style.color = tokens.colors.text.primary
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = tokens.glass.bg.light
-                        e.currentTarget.style.color = tokens.colors.text.secondary
-                      }}
-                    >
-                      {loadingMore[type] ? t('loading') : t('loadMoreType').replace('{type}', typeLabel)}
-                    </button>
-                  )
+                  const typeKey = type === 'users' ? 'user' : type === 'traders' ? 'trader' : type === 'posts' ? 'post' : 'group'
+                  const typeResults = results.filter(r => r.type === typeKey)
+                  if (typeResults.length === 0) return null
+                  return renderLoadMoreButton(type, t(type).toLowerCase())
                 })}
               </>
             )}
           </div>
         )}
       </main>
+
+      {/* Hide scrollbar on tab bar */}
+      <style>{`
+        .search-result-card:last-child {
+          border-bottom: none !important;
+        }
+        @media (max-width: 640px) {
+          main {
+            padding-left: ${tokens.spacing[3]} !important;
+            padding-right: ${tokens.spacing[3]} !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
@@ -851,44 +844,40 @@ export default function SearchPage() {
     <Suspense fallback={
       <div style={{ minHeight: '100vh', background: '#060606', color: '#f2f2f2' }}>
         <TopNav email={null} />
-        <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 60 }}>
+        <main style={{ maxWidth: 680, margin: '0 auto', padding: '20px 16px' }}>
+          <div style={{ marginTop: 60 }}>
             {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                style={{
-                  padding: '20px',
-                  borderRadius: '16px',
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+              <div key={i} style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '16px',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.06)',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  flexShrink: 0,
+                }} />
+                <div style={{ flex: 1 }}>
                   <div style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: '12px',
+                    width: `${40 + i * 8}%`,
+                    height: 14,
+                    borderRadius: '4px',
+                    background: 'rgba(255,255,255,0.06)',
+                    marginBottom: 8,
+                    animation: 'pulse 1.5s ease-in-out infinite',
+                  }} />
+                  <div style={{
+                    width: `${25 + i * 5}%`,
+                    height: 11,
+                    borderRadius: '4px',
                     background: 'rgba(255,255,255,0.06)',
                     animation: 'pulse 1.5s ease-in-out infinite',
-                    flexShrink: 0,
                   }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{
-                      width: `${50 + i * 8}%`,
-                      height: 16,
-                      borderRadius: '6px',
-                      background: 'rgba(255,255,255,0.06)',
-                      marginBottom: 8,
-                      animation: 'pulse 1.5s ease-in-out infinite',
-                    }} />
-                    <div style={{
-                      width: `${30 + i * 5}%`,
-                      height: 12,
-                      borderRadius: '6px',
-                      background: 'rgba(255,255,255,0.06)',
-                      animation: 'pulse 1.5s ease-in-out infinite',
-                    }} />
-                  </div>
                 </div>
               </div>
             ))}
@@ -900,4 +889,3 @@ export default function SearchPage() {
     </Suspense>
   )
 }
-
