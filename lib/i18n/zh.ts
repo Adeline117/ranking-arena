@@ -2569,9 +2569,6 @@ const zh = {
     // Search
     noRelatedResults: '未找到相关结果',
 
-    // Groups
-    noPostsYet: '还没有帖子，成为第一个发帖的人吧！',
-
 } as const
 
 export default zh

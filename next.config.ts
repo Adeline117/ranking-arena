@@ -393,7 +393,7 @@ export default withSentryConfig(withBundleAnalyzer(nextConfig), {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   silent: true,
-  hideSourceMaps: true,
+  sourcemaps: { disable: true },
   widenClientFileUpload: true,
   disableLogger: true,
   automaticVercelMonitors: true,

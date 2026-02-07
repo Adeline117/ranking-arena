@@ -8,8 +8,8 @@ import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
-import JoinedGroups from '@/app/components/trader/JoinedGroups'
-import UserBookmarkFolders from '@/app/components/trader/UserBookmarkFolders'
+const JoinedGroups = dynamic(() => import('@/app/components/trader/JoinedGroups'), { ssr: false })
+const UserBookmarkFolders = dynamic(() => import('@/app/components/trader/UserBookmarkFolders'), { ssr: false })
 import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -254,16 +254,13 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           <Box style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: tokens.radius.xl, pointerEvents: 'none' }}>
             {profile.cover_url ? (
               <>
-                <img
+                <Image
                   src={profile.cover_url}
                   alt=""
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                  }}
+                  fill
+                  priority
+                  sizes="(max-width: 768px) 100vw, 800px"
+                  style={{ objectFit: 'cover' }}
                 />
                 {/* Dark overlay for text readability */}
                 <Box style={{
@@ -350,7 +347,6 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                       const img = e.target as HTMLImageElement
                       img.style.display = 'none'
                     }}
-                    unoptimized
                   />
                 ) : (
                   <Text
