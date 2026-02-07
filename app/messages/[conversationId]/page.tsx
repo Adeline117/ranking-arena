@@ -1816,41 +1816,6 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           boxShadow: tokens.shadow.inner,
           transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
         }}>
-          {/* Sticker button */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowStickerPicker(prev => !prev)}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'transparent',
-                color: showStickerPicker ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                transition: 'all 0.2s',
-              }}
-              title={language === 'zh' ? '贴纸' : 'Stickers'}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
-                <path d="M14 3v4a2 2 0 0 0 2 2h4" />
-              </svg>
-            </button>
-            <DynamicStickerPicker
-              isOpen={showStickerPicker}
-              onClose={() => setShowStickerPicker(false)}
-              onSelect={(sticker: Sticker) => {
-                setNewMessage(prev => prev + `[sticker:${sticker.id}]`)
-                setShowStickerPicker(false)
-                inputRef.current?.focus()
-              }}
-            />
-          </div>
           {/* File upload button */}
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -1923,6 +1888,41 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               }
             }}
           />
+          {/* Sticker button */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowStickerPicker(prev => !prev)}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'transparent',
+                color: showStickerPicker ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                transition: 'all 0.2s',
+              }}
+              title={language === 'zh' ? '贴纸' : 'Stickers'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
+                <path d="M14 3v4a2 2 0 0 0 2 2h4" />
+              </svg>
+            </button>
+            <DynamicStickerPicker
+              isOpen={showStickerPicker}
+              onClose={() => setShowStickerPicker(false)}
+              onSelect={(sticker: Sticker) => {
+                setNewMessage(prev => prev + `[sticker:${sticker.id}]`)
+                setShowStickerPicker(false)
+                inputRef.current?.focus()
+              }}
+            />
+          </div>
           <VoiceRecorder onVoiceSent={handleVoiceSent} disabled={sending} />
           <button
             onClick={handleSend}
