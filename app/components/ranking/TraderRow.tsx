@@ -17,7 +17,7 @@ import {
   ArenaScoreBadge,
   areTraderPropsEqual,
 } from './shared/TraderDisplay'
-import AddCompareButton from '../trader/AddCompareButton'
+// AddCompareButton removed — compare accessible via toolbar only
 
 const ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
@@ -143,19 +143,6 @@ export const TraderRow = memo(function TraderRow({
                 </Text>
               )}
             </Box>
-          </Box>
-          {/* Compare button - appears on hover */}
-          <Box className="compare-btn-wrapper" style={{ flexShrink: 0, opacity: 0.7 }}>
-            <AddCompareButton
-              trader={{
-                id: trader.id,
-                handle: trader.handle || trader.id,
-                source: trader.source || source || '',
-                avatarUrl: trader.avatar_url || undefined,
-              }}
-              variant="icon"
-              size="sm"
-            />
           </Box>
         </Box>
 
