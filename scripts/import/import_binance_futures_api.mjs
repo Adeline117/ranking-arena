@@ -219,7 +219,7 @@ async function saveTradersBatch(traders, period) {
     source: SOURCE,
     source_type: 'leaderboard',
     source_trader_id: t.traderId,
-    handle: t.nickname,
+    handle: (t.nickname && !/^\d{10,}$/.test(t.nickname)) ? t.nickname : null,
     avatar_url: t.avatar || null,
     is_active: true,
   }))
