@@ -1,17 +1,23 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
+
+const BookDetailModal = lazy(() => import('./BookDetailModal'))
 
 type LibraryItem = {
   id: string
   title: string
   author: string | null
   description: string | null
+  publisher: string | null
   category: string
   subcategory: string | null
+  publish_date: string | null
+  isbn: string | null
+  page_count: number | null
   source_url: string | null
   pdf_url: string | null
   cover_url: string | null
@@ -44,6 +50,7 @@ export default function BookshelfTab() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [langFilter, setLangFilter] = useState<'all' | 'zh' | 'en'>('all')
+  const [selectedBook, setSelectedBook] = useState<LibraryItem | null>(null)
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -154,13 +161,11 @@ export default function BookshelfTab() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
           {items.map(item => (
-            <a
+            <div
               key={item.id}
-              href={item.pdf_url || item.source_url || item.buy_url || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={() => setSelectedBook(item)}
               style={{
-                borderRadius: 12, overflow: 'hidden', textDecoration: 'none',
+                borderRadius: 12, overflow: 'hidden',
                 background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
                 transition: 'transform 0.2s', cursor: 'pointer',
                 display: 'flex', flexDirection: 'column',
@@ -231,9 +236,16 @@ export default function BookshelfTab() {
                   />
                 </div>
               </div>
-            </a>
+            </div>
           ))}
         </div>
+      )}
+
+      {/* Book detail modal */}
+      {selectedBook && (
+        <Suspense fallback={null}>
+          <BookDetailModal item={selectedBook} onClose={() => setSelectedBook(null)} />
+        </Suspense>
       )}
     </div>
   )

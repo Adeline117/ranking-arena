@@ -16,10 +16,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const body = await req.json()
-    const { rating, review } = body
+    const { rating, review, status } = body
 
-    if (!rating || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
-      return NextResponse.json({ error: 'Rating must be 1-5' }, { status: 400 })
+    const effectiveStatus = status || 'read'
+
+    if (effectiveStatus === 'read') {
+      if (!rating || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+        return NextResponse.json({ error: 'Rating must be 1-5 for read status' }, { status: 400 })
+      }
+    }
+
+    if (effectiveStatus === 'want_to_read' && rating) {
+      return NextResponse.json({ error: 'Cannot rate a book you have not read' }, { status: 400 })
     }
 
     // Upsert rating
@@ -28,8 +36,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .upsert({
         user_id: user.id,
         library_item_id: id,
-        rating,
+        rating: effectiveStatus === 'want_to_read' ? null : rating,
         review: review || null,
+        status: effectiveStatus,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id,library_item_id' })
 
