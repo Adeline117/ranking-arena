@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const category = searchParams.get('category') || ''
   const search = searchParams.get('search') || ''
+  const lang = searchParams.get('language') || ''
   const page = parseInt(searchParams.get('page') || '1')
   const limit = Math.min(parseInt(searchParams.get('limit') || '24'), 100)
   const offset = (page - 1) * limit
