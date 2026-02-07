@@ -154,28 +154,30 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     const translateTitles = async () => {
       setTranslating(true)
       try {
-        const textsToTranslate = postsToTranslate.map(p => p.title).join('\n---SPLIT---\n')
         const targetLang = language === 'zh' ? 'zh' : 'en'
-        const sourceLang = language === 'zh' ? 'en' : 'zh'
 
         const res = await fetch('/api/translate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            text: textsToTranslate,
+            items: postsToTranslate.map(p => ({
+              id: p.id,
+              text: p.title,
+              contentType: 'post_title',
+              contentId: p.id,
+            })),
             targetLang,
-            sourceLang,
           }),
         })
 
         if (res.ok) {
-          const data = await res.json()
-          const translatedTexts = (data.translatedText || '').split('\n---SPLIT---\n')
+          const json = await res.json()
+          const results = json.data?.results || {}
 
           const newTranslations: Record<string, string> = { ...translatedTitles }
-          postsToTranslate.forEach((post, idx) => {
-            if (translatedTexts[idx]) {
-              newTranslations[langKey(post.id)] = translatedTexts[idx].trim()
+          postsToTranslate.forEach((post) => {
+            if (results[post.id]?.translatedText) {
+              newTranslations[langKey(post.id)] = results[post.id].translatedText
             }
           })
           // Also mark untranslated posts
