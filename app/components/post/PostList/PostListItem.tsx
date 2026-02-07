@@ -1,5 +1,6 @@
 'use client'
 
+import React, { memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -31,7 +32,7 @@ interface PostListItemProps {
   t: (key: string) => string
 }
 
-export function PostListItem({
+export const PostListItem = memo(function PostListItem({
   post: p,
   isMasonry,
   language,
@@ -372,4 +373,18 @@ export function PostListItem({
       </div>
     </div>
   )
-}
+}, (prev, next) => {
+  // Custom comparison for performance - only re-render when post data changes
+  return (
+    prev.post.id === next.post.id &&
+    prev.post.like_count === next.post.like_count &&
+    prev.post.dislike_count === next.post.dislike_count &&
+    prev.post.comment_count === next.post.comment_count &&
+    prev.post.user_reaction === next.post.user_reaction &&
+    prev.post.user_vote === next.post.user_vote &&
+    prev.post.is_pinned === next.post.is_pinned &&
+    prev.isMasonry === next.isMasonry &&
+    prev.language === next.language &&
+    prev.currentUserId === next.currentUserId
+  )
+})
