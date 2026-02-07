@@ -295,7 +295,9 @@ export default function CommentsModal({
 
             {/* Content */}
             <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
-              {renderContentWithLinks(displayContent || '')}
+              {hasStickers(displayContent || '')
+                ? renderWithStickers(displayContent || '', 64)
+                : renderContentWithLinks(displayContent || '')}
             </div>
 
             {/* Actions */}
@@ -486,11 +488,44 @@ export default function CommentsModal({
           }}>
             {/* Left: action buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {/* Sticker picker */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowStickerPicker(prev => !prev); setShowEmojiPicker(false) }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 4,
+                    borderRadius: 6,
+                    color: showStickerPicker ? ARENA_PURPLE : tokens.colors.text.tertiary,
+                    fontSize: 15,
+                    lineHeight: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title={language === 'zh' ? '贴纸' : 'Stickers'}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
+                    <path d="M14 3v4a2 2 0 0 0 2 2h4" />
+                    <circle cx="10" cy="13" r="2" />
+                    <path d="m20 17-1.09-1.09a2 2 0 0 0-2.82 0L10 22" />
+                  </svg>
+                </button>
+                <DynamicStickerPicker
+                  isOpen={showStickerPicker}
+                  onClose={() => setShowStickerPicker(false)}
+                  onSelect={handleStickerSelect}
+                />
+              </div>
+
               {/* Emoji picker */}
               <div style={{ position: 'relative' }}>
                 <button
                   type="button"
-                  onClick={() => setShowEmojiPicker(prev => !prev)}
+                  onClick={() => { setShowEmojiPicker(prev => !prev); setShowStickerPicker(false) }}
                   style={{
                     background: 'transparent',
                     border: 'none',
