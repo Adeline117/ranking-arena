@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
@@ -8,6 +9,9 @@ const supabase = createClient(
 
 export async function GET(req: NextRequest) {
   try {
+  // Rate limit: 60 req/min
+  const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.search)
+  if (rateLimitResponse) return rateLimitResponse
   const { searchParams } = new URL(req.url)
   const category = searchParams.get('category') || ''
   const search = (searchParams.get('search') || '').slice(0, 200) // cap search length
