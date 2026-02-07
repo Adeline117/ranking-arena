@@ -195,7 +195,7 @@ function HotContent() {
   const loadPosts = useCallback(async () => {
     setLoadingPosts(true)
     try {
-      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=100`)
+      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=30`)
       const json = await res.json()
       const data = json.posts || json.data?.posts || []
 
@@ -267,7 +267,7 @@ function HotContent() {
     const loadGroups = async () => {
       setLoadingGroups(true)
       try {
-        const res = await fetch('/api/groups?sort_by=activity&limit=10')
+        const res = await fetch('/api/groups?sort_by=activity&limit=30')
         const json = await res.json()
         // Handle both old and new API response formats
         const data = json.data?.groups || json.groups || json.data || []
