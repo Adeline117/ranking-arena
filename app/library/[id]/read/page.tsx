@@ -137,7 +137,7 @@ export default function ReadPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const lastScrollY = useRef(0)
-  const toolbarTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const toolbarTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const pdfDocRef = useRef<any>(null)
 
   const themeColors = THEME_PRESETS[theme]
@@ -178,7 +178,7 @@ export default function ReadPage() {
       try {
         const pdfjsLib = await import('pdfjs-dist')
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
-        const doc = await pdfjsLib.getDocument({ url, disableAutoFetch: false, disableStream: false }).promise
+        const doc = await pdfjsLib.getDocument({ url: url || '', disableAutoFetch: false, disableStream: false }).promise
         if (cancelled) return
         setPdfDoc(doc)
         pdfDocRef.current = doc
