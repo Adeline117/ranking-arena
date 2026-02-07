@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import SidebarCard from './SidebarCard'
 
 type CoinPrice = {
   symbol: string
@@ -10,7 +11,6 @@ type CoinPrice = {
   change24h: number
 }
 
-// Mock data — replace with real API (e.g. CoinGecko) later
 const MOCK_COINS: CoinPrice[] = [
   { symbol: 'BTC', price: 97842.5, change24h: 2.34 },
   { symbol: 'ETH', price: 3412.8, change24h: -0.87 },
@@ -26,18 +26,21 @@ export default function WatchlistMarket() {
   const [coins] = useState<CoinPrice[]>(MOCK_COINS)
 
   return (
-    <div>
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        {isZh ? '自选行情' : 'Watchlist'}
-      </h3>
+    <SidebarCard title={isZh ? '自选行情' : 'Watchlist'}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {coins.map(coin => (
+        {coins.map((coin, idx) => (
           <div
             key={coin.symbol}
             style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '8px 4px', borderBottom: `1px solid ${tokens.colors.border.primary}`,
+              padding: '8px 4px',
+              borderBottom: idx < coins.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+              borderRadius: tokens.radius.sm,
+              transition: 'background 0.15s',
+              cursor: 'pointer',
             }}
+            onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
             <span style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary }}>
               {coin.symbol}
@@ -56,6 +59,6 @@ export default function WatchlistMarket() {
           </div>
         ))}
       </div>
-    </div>
+    </SidebarCard>
   )
 }

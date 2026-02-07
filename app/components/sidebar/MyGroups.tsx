@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import SidebarCard from './SidebarCard'
 
 type Group = {
   id: string
@@ -22,7 +23,7 @@ export default function MyGroups() {
 
   useEffect(() => {
     if (!user) { setLoading(false); return }
-    async function fetch() {
+    async function load() {
       const { data } = await supabase
         .from('group_members')
         .select('group_id, groups(id, name, name_en)')
@@ -32,33 +33,21 @@ export default function MyGroups() {
       setGroups(gs)
       setLoading(false)
     }
-    fetch()
+    load()
   }, [user])
 
-  if (!user) {
-    return (
-      <div>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 8 }}>
-          {isZh ? '我的小组' : 'My Groups'}
-        </h3>
-        <p style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
+  return (
+    <SidebarCard title={isZh ? '我的小组' : 'My Groups'}>
+      {!user ? (
+        <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
           {isZh ? '登录后查看' : 'Login to view'}
         </p>
-      </div>
-    )
-  }
-
-  return (
-    <div>
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        {isZh ? '我的小组' : 'My Groups'}
-      </h3>
-      {loading ? (
+      ) : loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {[1, 2].map(i => <div key={i} className="skeleton" style={{ height: 28, borderRadius: 6 }} />)}
+          {[1, 2].map(i => <div key={i} className="skeleton" style={{ height: 28, borderRadius: tokens.radius.md }} />)}
         </div>
       ) : groups.length === 0 ? (
-        <p style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
+        <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
           {isZh ? '还没有加入小组' : 'No groups joined yet'}
         </p>
       ) : (
@@ -69,9 +58,10 @@ export default function MyGroups() {
               href={`/groups/${g.id}`}
               style={{
                 padding: '5px 4px', fontSize: 13, color: tokens.colors.text.primary,
-                textDecoration: 'none', borderRadius: 6, transition: 'background 0.15s',
+                textDecoration: 'none', borderRadius: tokens.radius.md, transition: 'background 0.15s',
+                display: 'block',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.secondary)}
+              onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
               {isZh ? g.name : (g.name_en || g.name)}
@@ -79,6 +69,6 @@ export default function MyGroups() {
           ))}
         </div>
       )}
-    </div>
+    </SidebarCard>
   )
 }
