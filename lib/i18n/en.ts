@@ -596,7 +596,7 @@ const en = {
     proSnapshotLimit: 'Pro users: {days} days retention',
     unlockMoreHistory: 'Upgrade for more history',
     // Advanced Filter
-    advancedFilterLocked: '🔒 Advanced Filter',
+    advancedFilterLocked: '[Lock] Advanced Filter',
     unlockAdvancedFilter: 'Upgrade to Pro for advanced filtering',
     filtered: 'Filtered',
     categoryType: 'Category',

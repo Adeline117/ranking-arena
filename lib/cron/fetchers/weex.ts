@@ -4,7 +4,7 @@
  *
  * Weex copy trading page: https://www.weex.com/zh-CN/copy-trading
  *
- * ⚠️  BROWSER-ONLY: All API endpoints return "Page is Not Found" as of 2025.
+ * [WARN] BROWSER-ONLY: All API endpoints return "Page is Not Found" as of 2025.
  * The original script uses Puppeteer to browse the page and intercept internal API calls.
  * POST endpoints (/api/copyTrade/topTraderListView etc.) require browser session cookies.
  * Needs browser/proxy infrastructure to work.

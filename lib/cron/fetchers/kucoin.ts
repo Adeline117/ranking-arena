@@ -5,7 +5,7 @@
  * KuCoin copy trading page: https://www.kucoin.com/copytrading
  * The browser intercepts API responses containing 'leaderboard/query'.
  *
- * ⚠️  BROWSER-ONLY: All known API endpoints return 404.
+ * [WARN] BROWSER-ONLY: All known API endpoints return 404.
  * The original script uses Puppeteer to browse the page and intercept internal API calls.
  * The leaderboard/query endpoint is only accessible via browser context with session cookies.
  * Needs browser/proxy infrastructure to work.

@@ -114,7 +114,7 @@ export const DATA_QUALITY_CONFIG = {
  * 基于 OPTIMIZATION_PLAN.md 的评估
  */
 export const PLATFORM_RELIABILITY: Record<string, number> = {
-  // ⭐⭐⭐⭐⭐ 稳定平台 (90-100)
+  // [5-star] 稳定平台 (90-100)
   'okx-futures': 95,
   'okx-web3': 90,
   'htx': 95,
@@ -125,12 +125,12 @@ export const PLATFORM_RELIABILITY: Record<string, number> = {
   'kwenta': 88,
   'mux': 88,
   
-  // ⭐⭐⭐⭐ 需代理但稳定 (80-89)
+  // [4-star] 需代理但稳定 (80-89)
   'binance-futures': 88,
   'binance-spot': 88,
   'binance-web3': 85,
   
-  // ⭐⭐⭐ 需浏览器/有限制 (60-79)
+  // [3-star] 需浏览器/有限制 (60-79)
   'mexc': 75,
   'kucoin': 72,
   'coinex': 72,
@@ -140,7 +140,7 @@ export const PLATFORM_RELIABILITY: Record<string, number> = {
   'bitget-spot': 65,
   'xt': 55,
   
-  // ⭐⭐ 不稳定/数据少 (40-59)
+  // [2-star] 不稳定/数据少 (40-59)
   'bybit': 45,
   'bybit-spot': 45,
   'bingx': 40,

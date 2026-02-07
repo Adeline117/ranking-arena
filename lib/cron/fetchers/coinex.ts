@@ -4,7 +4,7 @@
  *
  * CoinEx copy trading page: https://www.coinex.com/en/copy-trading/futures
  *
- * ⚠️  BROWSER-ONLY: The original script uses pure DOM scraping (no API endpoint).
+ * [WARN] BROWSER-ONLY: The original script uses pure DOM scraping (no API endpoint).
  * CoinEx perpetual API returns "unknown method" (code 4009) for all copy-trading paths.
  * The website internal API (www.coinex.com/res/) returns 404.
  * Needs browser/proxy infrastructure to work.

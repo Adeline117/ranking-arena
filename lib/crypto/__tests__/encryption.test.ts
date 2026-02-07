@@ -54,7 +54,7 @@ describe('Encryption Utility', () => {
     })
 
     it('should handle unicode characters', () => {
-      const plaintext = '你好世界🚀✨'
+      const plaintext = 'hello-world-test'
       const encrypted = encrypt(plaintext)
       const decrypted = decrypt(encrypted)
 

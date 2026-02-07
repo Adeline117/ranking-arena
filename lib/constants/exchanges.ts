@@ -286,7 +286,7 @@ export const EXCHANGE_NAMES: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export const SOURCE_RELIABILITY: Record<string, number> = {
-  // ⭐⭐⭐⭐⭐ 稳定平台 (90-100) - 纯 API，无反爬
+  // [5-star] 稳定平台 (90-100) - 纯 API，无反爬
   okx_futures: 95,
   okx_web3: 90,
   okx_wallet: 90,
@@ -303,12 +303,12 @@ export const SOURCE_RELIABILITY: Record<string, number> = {
   aevo: 85,
   synthetix: 85,
   
-  // ⭐⭐⭐⭐ 需代理但稳定 (80-89)
+  // [4-star] 需代理但稳定 (80-89)
   binance_futures: 88,
   binance_spot: 88,
   binance_web3: 85,
   
-  // ⭐⭐⭐ 需浏览器/有限制 (60-79)
+  // [3-star] 需浏览器/有限制 (60-79)
   mexc: 75,
   kucoin: 72,
   coinex: 72,
@@ -321,7 +321,7 @@ export const SOURCE_RELIABILITY: Record<string, number> = {
   xt: 55,
   pionex: 60,
   
-  // ⭐⭐ 不稳定/数据少 (40-59)
+  // [2-star] 不稳定/数据少 (40-59)
   bybit: 45,
   bybit_spot: 45,
   bingx: 40,

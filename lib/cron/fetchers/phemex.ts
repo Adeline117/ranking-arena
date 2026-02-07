@@ -4,7 +4,7 @@
  *
  * Phemex copy trading page: https://phemex.com/copy-trading
  *
- * ⚠️  CLOUDFRONT-BLOCKED: All API endpoints return 403 (CloudFront geo-restriction).
+ * [WARN] CLOUDFRONT-BLOCKED: All API endpoints return 403 (CloudFront geo-restriction).
  * Original script uses Playwright to browse the page and intercept internal API calls.
  * The browser intercepted API calls with 'copy', 'trader', 'leader', 'rank', 'copyTrad' in URL.
  * Phemex uses E8 scaling for PnL values (divide by 1e8).

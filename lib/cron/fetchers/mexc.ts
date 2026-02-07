@@ -4,7 +4,7 @@
  *
  * MEXC copy trading page: https://www.mexc.com/futures/copyTrade/home
  *
- * ⚠️  CDN-BLOCKED: API behind Akamai CDN, returns empty from US IPs.
+ * [WARN] CDN-BLOCKED: API behind Akamai CDN, returns empty from US IPs.
  * Endpoints: contract.mexc.com/api/v1/private/copyTrade/traderRank/list (primary)
  * May work from Vercel datacenter IPs — needs testing on deployment.
  */

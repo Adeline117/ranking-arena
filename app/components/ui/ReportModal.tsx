@@ -322,7 +322,7 @@ export default function ReportModal({
                         color: '#fff', fontSize: 12, cursor: 'pointer', display: 'flex',
                         alignItems: 'center', justifyContent: 'center',
                       }}
-                    >✕</button>
+                    >X</button>
                   </Box>
                 ))}
 

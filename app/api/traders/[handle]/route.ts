@@ -239,7 +239,7 @@ async function getTraderDetails(
   const traderId = source.source_trader_id
   const traderHandle = source.handle || source.source_trader_id
   
-  // 🚀 并行获取所有数据（10s 超时保护）
+  // Parallel获取所有数据（10s 超时保护）
   const [
     snapshotResult,
     snapshot7dResult,

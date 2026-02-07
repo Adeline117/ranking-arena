@@ -522,7 +522,7 @@ export default function FavoritesPage() {
                           borderRadius: tokens.radius.sm,
                         }}
                       >
-                        ★ {t('bookmarked')}
+                        [Saved] {t('bookmarked')}
                       </span>
                     </Box>
                     {folder.description && (

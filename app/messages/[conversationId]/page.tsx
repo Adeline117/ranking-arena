@@ -1384,7 +1384,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           {formatTime(msg.created_at)}
                           {isMine && (
                             <span style={{ marginLeft: 2, opacity: 0.7 }}>
-                              {msg.read ? '✓✓' : '✓'}
+                              {msg.read ? 'Read' : 'Sent'}
                             </span>
                           )}
                         </>

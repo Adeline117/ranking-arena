@@ -148,8 +148,8 @@ async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
 
   const levelEmoji = {
     info: 'ℹ️',
-    warning: '⚠️',
-    critical: '🚨',
+    warning: '[WARN]',
+    critical: '[CRIT]',
   }
 
   const detailsHtml = payload.details

@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import Image from 'next/image'
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
+import BookCover from '@/app/library/BookCover'
 import type { LibraryItem } from '@/lib/types/library'
 
 const BookDetailModal = lazy(() => import('./BookDetailModal'))
@@ -50,32 +51,33 @@ export default function BookshelfTab() {
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
-  const categoryEmoji = (cat: string) => {
-    if (cat === 'whitepaper') return 'WP'
-    if (cat === 'book') return 'BK'
-    if (cat === 'paper') return 'PP'
-    return 'RS'
-  }
-
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 16 }}>
-        <p style={{ color: tokens.colors.text.secondary, fontSize: 13 }}>
-          {isZh ? `${total.toLocaleString()} 篇白皮书、研报、书籍、论文与事件` : `${total.toLocaleString()} whitepapers, research, books, papers & events`}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <p style={{ color: tokens.colors.text.secondary, fontSize: 13, margin: 0 }}>
+          {isZh ? `${total.toLocaleString()} 篇文献` : `${total.toLocaleString()} items`}
         </p>
+        <Link href="/library" style={{
+          fontSize: 13, color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 500,
+        }}>
+          {isZh ? '查看全部' : 'View All'}
+        </Link>
       </div>
 
       {/* Search */}
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+          <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+        </svg>
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder={isZh ? '搜索标题、作者...' : 'Search titles, authors...'}
           style={{
-            width: '100%', maxWidth: 400, padding: '8px 12px',
-            borderRadius: 8, border: `1px solid ${tokens.colors.border.primary}`,
+            width: '100%', maxWidth: 400, padding: '8px 12px 8px 32px',
+            borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}`,
             background: tokens.colors.bg.secondary, color: tokens.colors.text.primary,
             fontSize: 13, outline: 'none',
           }}
@@ -83,40 +85,45 @@ export default function BookshelfTab() {
       </div>
 
       {/* Category pills */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
-        {CATEGORIES.map(cat => (
-          <button
-            key={cat.key}
-            onClick={() => setCategory(cat.key)}
-            style={{
-              padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-              border: category === cat.key ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-              background: category === cat.key ? tokens.colors.accent.brand : 'transparent',
-              color: category === cat.key ? '#fff' : tokens.colors.text.secondary,
-              cursor: 'pointer', transition: 'all 0.2s',
-            }}
-          >
-            {isZh ? cat.zh : cat.en}
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
+        {CATEGORIES.map(cat => {
+          const active = category === cat.key
+          return (
+            <button
+              key={cat.key}
+              onClick={() => setCategory(cat.key)}
+              style={{
+                padding: '5px 14px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: active ? 600 : 500,
+                border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+                background: active ? tokens.colors.accent.brand : 'transparent',
+                color: active ? '#fff' : tokens.colors.text.secondary,
+                cursor: 'pointer', transition: `all ${tokens.transition.fast}`,
+                whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              {isZh ? cat.zh : cat.en}
+            </button>
+          )
+        })}
       </div>
 
       {/* Language filter */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
         {([
           { key: 'all' as const, label: isZh ? '全部语言' : 'All Languages' },
-          { key: 'zh' as const, label: '🇨🇳 中文' },
-          { key: 'en' as const, label: '🇺🇸 English' },
+          { key: 'zh' as const, label: isZh ? '中文' : 'Chinese' },
+          { key: 'en' as const, label: 'English' },
         ]).map(opt => (
           <button
             key={opt.key}
             onClick={() => setLangFilter(opt.key)}
             style={{
-              padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+              padding: '5px 14px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: langFilter === opt.key ? 600 : 500,
               border: langFilter === opt.key ? 'none' : `1px solid ${tokens.colors.border.primary}`,
               background: langFilter === opt.key ? tokens.colors.accent.brand : 'transparent',
               color: langFilter === opt.key ? '#fff' : tokens.colors.text.secondary,
-              cursor: 'pointer', transition: 'all 0.2s',
+              cursor: 'pointer', transition: `all ${tokens.transition.fast}`,
+              whiteSpace: 'nowrap', flexShrink: 0,
             }}
           >
             {opt.label}
@@ -126,9 +133,12 @@ export default function BookshelfTab() {
 
       {/* Grid */}
       {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 260, borderRadius: 12 }} />
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ aspectRatio: '2/3', borderRadius: tokens.radius.lg, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ height: 12, borderRadius: 4, width: '75%', background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </div>
           ))}
         </div>
       ) : items.length === 0 ? (
@@ -136,83 +146,56 @@ export default function BookshelfTab() {
           {isZh ? '暂无内容' : 'No items found'}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
           {items.map(item => (
             <div
               key={item.id}
               onClick={() => setSelectedBook(item)}
               style={{
-                borderRadius: 12, overflow: 'hidden',
-                background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
-                transition: 'transform 0.2s', cursor: 'pointer',
-                display: 'flex', flexDirection: 'column',
+                cursor: 'pointer',
+                transition: `transform ${tokens.transition.base}`,
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)' }}
+              onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-4px)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
             >
               {/* Cover */}
               <div style={{
-                height: 130, background: `linear-gradient(135deg, ${tokens.colors.accent.brand}22, ${tokens.colors.accent.brand}44)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' as const,
+                aspectRatio: '2/3', borderRadius: tokens.radius.lg,
+                overflow: 'hidden', boxShadow: tokens.shadow.md, marginBottom: 8,
               }}>
-                {item.cover_url ? (
-                  <Image src={item.cover_url} alt={item.title || ''} fill style={{ objectFit: 'cover' }} unoptimized />
-                ) : (
-                  <span style={{ fontSize: 36 }}>{categoryEmoji(item.category)}</span>
-                )}
+                <BookCover
+                  title={item.title}
+                  author={item.author}
+                  category={item.category}
+                  coverUrl={item.cover_url}
+                  fontSize="sm"
+                />
               </div>
 
               {/* Info */}
-              <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
-                  <span style={{
-                    fontSize: 10, padding: '1px 7px', borderRadius: 10,
-                    background: tokens.colors.accent.brand + '22', color: tokens.colors.accent.brand,
-                    fontWeight: 600, textTransform: 'uppercase',
-                  }}>
-                    {item.category}
-                  </span>
-                  {item.language && (
-                    <span style={{
-                      fontSize: 10, padding: '1px 7px', borderRadius: 10,
-                      background: 'rgba(255,255,255,0.08)', color: tokens.colors.text.secondary,
-                      fontWeight: 500,
-                    }}>
-                      {item.language === 'zh' ? '🇨🇳' : item.language === 'en' ? '🇺🇸' : item.language}
-                    </span>
-                  )}
-                  {item.language_group_id && (
-                    <span style={{
-                      fontSize: 10, padding: '1px 7px', borderRadius: 10,
-                      background: 'rgba(59,130,246,0.15)', color: '#60a5fa',
-                      fontWeight: 500,
-                    }}>
-                      {isZh ? '多语言' : 'Multi-lang'}
-                    </span>
-                  )}
-                </div>
-                <h3 style={{
-                  fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary,
-                  lineHeight: 1.3, marginBottom: 4,
-                  overflow: 'hidden', textOverflow: 'ellipsis',
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any,
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
+                <span style={{
+                  fontSize: 10, padding: '1px 7px', borderRadius: tokens.radius.full,
+                  background: tokens.colors.accent.brandMuted, color: tokens.colors.accent.brand,
+                  fontWeight: 600, textTransform: 'uppercase',
                 }}>
-                  {item.title}
-                </h3>
-                {item.author && (
-                  <p style={{ fontSize: 11, color: tokens.colors.text.secondary, marginBottom: 6 }}>
-                    {item.author.length > 40 ? item.author.slice(0, 40) + '...' : item.author}
-                  </p>
-                )}
-                <div style={{ marginTop: 'auto' }}>
-                  <StarRating
-                    rating={item.rating || 0}
-                    ratingCount={item.rating_count || 0}
-                    size={14}
-                    readonly
-                  />
-                </div>
+                  {item.category}
+                </span>
               </div>
+              <h3 style={{
+                fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary,
+                lineHeight: 1.3, margin: '0 0 2px',
+                overflow: 'hidden', textOverflow: 'ellipsis',
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any,
+              }}>
+                {item.title}
+              </h3>
+              {item.author && (
+                <p style={{ fontSize: 11, color: tokens.colors.text.secondary, margin: '0 0 4px' }}>
+                  {item.author.length > 30 ? item.author.slice(0, 30) + '...' : item.author}
+                </p>
+              )}
+              <StarRating rating={item.rating || 0} ratingCount={item.rating_count || 0} size={13} readonly />
             </div>
           ))}
         </div>
