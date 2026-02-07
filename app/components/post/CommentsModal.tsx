@@ -383,7 +383,7 @@ export default function CommentsModal({
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: submittingReply || !replyContent.trim() ? 'default' : 'pointer',
-                  }
+                  }}
                 >
                   {submittingReply ? '...' : t('send')}
                 </button>
