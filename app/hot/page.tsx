@@ -564,17 +564,13 @@ function HotContent() {
   // 关闭帖子详情
   const handleClosePost = useCallback(() => {
     setOpenPost(null)
-    if (openedViaNav.current) {
-      // We pushed a history entry when opening, so go back
-      openedViaNav.current = false
-      router.back()
-    } else {
-      // Fallback: direct URL access or restored from URL, use replace
-      const params = new URLSearchParams(searchParams.toString())
-      params.delete('post')
-      const newUrl = params.toString() ? `/hot?${params.toString()}` : '/hot'
-      router.replace(newUrl, { scroll: false })
-    }
+    // Always use replace to stay on /hot — router.back() can navigate away
+    // if user came from messages/groups/etc
+    openedViaNav.current = false
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('post')
+    const newUrl = params.toString() ? `/hot?${params.toString()}` : '/hot'
+    router.replace(newUrl, { scroll: false })
   }, [searchParams, router])
 
   // Post modal: URL restore, ESC key, body scroll lock, and browser back button
