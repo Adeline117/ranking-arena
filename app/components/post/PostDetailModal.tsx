@@ -219,7 +219,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
             onClick={(e) => e.stopPropagation()}
             style={{ color: tokens.colors.text.secondary, textDecoration: 'none', fontWeight: 600 }}
           >
-            {post.author_handle || t('anonymous')}
+            {post.author_handle || 'user'}
           </Link>
           <span>&middot;</span>
           <span>{formatTimeAgo(post.created_at, language)}</span>
@@ -367,7 +367,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                       </Link>
                     ) : (
                       <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.tertiary }}>
-                        {t('anonymous')}
+                        {'user'}
                       </span>
                     )}
                     <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>

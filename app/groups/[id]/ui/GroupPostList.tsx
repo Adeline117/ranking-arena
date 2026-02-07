@@ -814,7 +814,7 @@ function CommentsSection(props: CommentsSectionProps) {
                     </Link>
                   ) : (
                     <Text size="xs" weight="bold" color="secondary">
-                      @{t('anonymous')}
+                      @{'user'}
                     </Text>
                   )}
                   <Text size="xs" color="tertiary">
@@ -840,7 +840,7 @@ function CommentsSection(props: CommentsSectionProps) {
                 <Box style={{ marginLeft: tokens.spacing[4], marginTop: tokens.spacing[1], display: 'flex', gap: tokens.spacing[2] }}>
                   <input
                     type="text"
-                    placeholder={`${t('reply')} @${comment.author_handle || t('anonymous')}...`}
+                    placeholder={`${t('reply')} @${comment.author_handle || 'user'}...`}
                     value={replyContent[comment.id] || ''}
                     onChange={(e) => setReplyContent(prev => ({ ...prev, [comment.id]: e.target.value }))}
                     onKeyDown={(e) => { if (e.key === 'Enter' && replyContent[comment.id]?.trim()) submitReply(postId, comment.id) }}
@@ -893,7 +893,7 @@ function CommentsSection(props: CommentsSectionProps) {
                           </Link>
                         ) : (
                           <Text size="xs" weight="bold" color="secondary">
-                            @{t('anonymous')}
+                            @{'user'}
                           </Text>
                         )}
                         <Text size="xs" color="tertiary">

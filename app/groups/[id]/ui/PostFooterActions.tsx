@@ -77,7 +77,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
   return (
     <>
       <div className="mt-3 flex items-center gap-4 text-xs opacity-70">
-        <span>@{post.author_handle ?? "anonymous"}</span>
+        <span>@{post.author_handle ?? "user"}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <ThumbsUpIcon size={12} /> {post.like_count ?? 0}
         </span>
@@ -104,7 +104,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
             onClick={e => e.stopPropagation()}
           >
             <h3 className="mb-4 text-lg font-semibold text-white">
-              {t('tipAuthor')} @{post.author_handle ?? "anonymous"}
+              {t('tipAuthor')} @{post.author_handle ?? "user"}
             </h3>
             
             <p className="mb-4 text-sm text-gray-400">

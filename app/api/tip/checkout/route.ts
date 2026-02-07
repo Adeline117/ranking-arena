@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: `打赏 @${post.author_handle || 'anonymous'}`,
+              name: `打赏 @${post.author_handle || 'user'}`,
               description: post.title ? `帖子: ${post.title.slice(0, 50)}` : '感谢创作者',
             },
             unit_amount: amount,

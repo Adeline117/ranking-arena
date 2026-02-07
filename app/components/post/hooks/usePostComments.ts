@@ -33,7 +33,7 @@ function toCommentData(comment: Comment): CommentData {
     id: comment.id,
     content: comment.content,
     user_id: comment.user_id,
-    author_handle: comment.author_handle || '匿名',
+    author_handle: comment.author_handle || 'user',
     author_avatar_url: comment.author_avatar_url,
     created_at: comment.created_at,
     like_count: comment.like_count,
