@@ -23,6 +23,8 @@ import { useRealtime } from '@/lib/hooks/useRealtime'
 import ChatSettingsDrawer from '@/app/components/features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import VoiceRecorder from '@/app/components/chat/VoiceRecorder'
+import VoiceMessage from '@/app/components/chat/VoiceMessage'
 
 type MessageStatus = 'sending' | 'sent' | 'failed'
 
@@ -564,6 +566,38 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       showToast(errorMsg, 'error')
     }
   }
+
+  const handleVoiceSent = useCallback(async (voiceUrl: string, duration: number) => {
+    if (!userId || !otherUser) return
+    const content = `🎤 ${t('voiceMessage')} (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`
+    const auth = await getAuthSession()
+    if (!auth) return
+    const tempId = `voice-${Date.now()}`
+    const tempMsg: Message = {
+      id: tempId,
+      sender_id: userId,
+      receiver_id: otherUser.id,
+      content,
+      read: false,
+      created_at: new Date().toISOString(),
+      media_url: voiceUrl,
+      media_type: 'file',
+      media_name: 'voice-message.webm',
+      _status: 'sending',
+      _tempId: tempId,
+    }
+    setMessages(prev => [...prev, tempMsg])
+    try {
+      await sendMessageRequest(otherUser.id, content, auth.accessToken, {
+        url: voiceUrl,
+        type: 'file',
+        fileName: 'voice-message.webm',
+        originalName: 'voice-message.webm',
+      })
+    } catch {
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, _status: 'failed' as MessageStatus } : m))
+    }
+  }, [userId, otherUser, t])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1209,7 +1243,16 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                         </Box>
                       </Box>
                     )}
-                    {msg.media_url && msg.media_type === 'file' && (
+                    {msg.media_url && msg.media_type === 'file' && msg.media_name?.endsWith('.webm') && msg.content?.startsWith('🎤') && (
+                      <VoiceMessage
+                        url={msg.media_url}
+                        duration={(() => {
+                          const match = msg.content.match(/(\d+):(\d+)\)/)
+                          return match ? parseInt(match[1]) * 60 + parseInt(match[2]) : 0
+                        })()}
+                      />
+                    )}
+                    {msg.media_url && msg.media_type === 'file' && !(msg.media_name?.endsWith('.webm') && msg.content?.startsWith('🎤')) && (
                       <Box
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
@@ -1799,6 +1842,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               }
             }}
           />
+          <VoiceRecorder onVoiceSent={handleVoiceSent} disabled={sending} />
           <button
             onClick={handleSend}
             disabled={(!newMessage.trim() && !pendingAttachment) || sending || newMessage.length > 2000}
