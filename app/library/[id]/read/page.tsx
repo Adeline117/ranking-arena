@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
@@ -15,9 +15,29 @@ type BookInfo = {
   category: string
 }
 
+type ContentMode = 'pdf' | 'web' | 'none'
+
+function isPdfUrl(url: string | null): boolean {
+  if (!url) return false
+  const lower = url.toLowerCase()
+  return lower.endsWith('.pdf') || lower.includes('.pdf?') || lower.includes('/pdf/') || lower.includes('type=pdf')
+}
+
+function getContentMode(book: BookInfo): ContentMode {
+  if (book.pdf_url) return 'pdf'
+  if (book.source_url && isPdfUrl(book.source_url)) return 'pdf'
+  if (book.source_url) return 'web'
+  return 'none'
+}
+
+function getContentUrl(book: BookInfo): string | null {
+  if (book.pdf_url) return book.pdf_url
+  if (book.source_url) return book.source_url
+  return null
+}
+
 export default function ReadPage() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
   const { language } = useLanguage()
   const isZh = language === 'zh'
 
@@ -25,6 +45,16 @@ export default function ReadPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [darkReader, setDarkReader] = useState(false)
+
+  // PDF state
+  const [pdfDoc, setPdfDoc] = useState<any>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [scale, setScale] = useState(1.5)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const renderTaskRef = useRef<any>(null)
 
   useEffect(() => {
     if (!id) return
@@ -38,7 +68,7 @@ export default function ReadPage() {
         }
         const item = data.item
         if (!item.pdf_url && !item.source_url) {
-          setError(isZh ? '该书籍暂无在线阅读资源' : 'No online reading resource available for this book')
+          setError(isZh ? '该书籍暂无阅读资源' : 'No reading resource available')
           return
         }
         setBook(item)
@@ -47,37 +77,144 @@ export default function ReadPage() {
       .finally(() => setLoading(false))
   }, [id, isZh])
 
-  // Build viewer URL
-  const getViewerUrl = useCallback(() => {
-    if (!book) return null
-    if (book.pdf_url) {
-      // Use Google Docs viewer for PDF - works universally, no extra deps
-      return `https://docs.google.com/gview?url=${encodeURIComponent(book.pdf_url)}&embedded=true`
-    }
-    if (book.source_url) {
-      return book.source_url
-    }
-    return null
-  }, [book])
+  // Load PDF document
+  useEffect(() => {
+    if (!book) return
+    const mode = getContentMode(book)
+    if (mode !== 'pdf') return
 
-  const viewerUrl = getViewerUrl()
+    const url = getContentUrl(book)
+    if (!url) return
 
-  if (loading) {
+    setPdfLoading(true)
+    let cancelled = false
+
+    async function loadPdf() {
+      try {
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+
+        const doc = await pdfjsLib.getDocument({
+          url,
+          // Some PDF hosts require CORS - use range requests when possible
+          disableAutoFetch: false,
+          disableStream: false,
+        }).promise
+
+        if (cancelled) return
+        setPdfDoc(doc)
+        setTotalPages(doc.numPages)
+        setCurrentPage(1)
+      } catch (err: any) {
+        if (cancelled) return
+        console.error('PDF load error:', err)
+        setError(isZh
+          ? '无法加载 PDF，可能是跨域限制'
+          : 'Unable to load PDF, possibly due to CORS restrictions')
+      } finally {
+        if (!cancelled) setPdfLoading(false)
+      }
+    }
+
+    loadPdf()
+    return () => { cancelled = true }
+  }, [book, isZh])
+
+  // Render current PDF page
+  useEffect(() => {
+    if (!pdfDoc || !canvasRef.current) return
+
+    let cancelled = false
+
+    async function renderPage() {
+      // Cancel any ongoing render
+      if (renderTaskRef.current) {
+        try { renderTaskRef.current.cancel() } catch {}
+      }
+
+      try {
+        const page = await pdfDoc.getPage(currentPage)
+        if (cancelled) return
+
+        const viewport = page.getViewport({ scale })
+        const canvas = canvasRef.current!
+        const ctx = canvas.getContext('2d')!
+
+        canvas.height = viewport.height
+        canvas.width = viewport.width
+
+        const task = page.render({ canvasContext: ctx, viewport })
+        renderTaskRef.current = task
+        await task.promise
+      } catch (err: any) {
+        if (err?.name !== 'RenderingCancelledException' && !cancelled) {
+          console.error('Render error:', err)
+        }
+      }
+    }
+
+    renderPage()
+    return () => { cancelled = true }
+  }, [pdfDoc, currentPage, scale])
+
+  // Fit width on load
+  useEffect(() => {
+    if (!pdfDoc || !containerRef.current) return
+
+    async function fitWidth() {
+      const page = await pdfDoc.getPage(1)
+      const baseViewport = page.getViewport({ scale: 1 })
+      const containerWidth = containerRef.current!.clientWidth - 48 // padding
+      const fitScale = Math.min(containerWidth / baseViewport.width, 3)
+      setScale(Math.max(fitScale, 0.5))
+    }
+
+    fitWidth()
+  }, [pdfDoc])
+
+  const goPage = useCallback((delta: number) => {
+    setCurrentPage(p => Math.max(1, Math.min(totalPages, p + delta)))
+  }, [totalPages])
+
+  const handleZoom = useCallback((delta: number) => {
+    setScale(s => Math.max(0.5, Math.min(4, s + delta)))
+  }, [])
+
+  // Keyboard navigation
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goPage(-1) }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); goPage(1) }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); handleZoom(0.2) }
+      if (e.key === '-') { e.preventDefault(); handleZoom(-0.2) }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [goPage, handleZoom])
+
+  // --- Render ---
+
+  if (loading || pdfLoading) {
     return (
       <div style={{
         minHeight: '100vh', background: tokens.colors.bg.primary,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16,
       }}>
         <div style={{
           width: 40, height: 40, border: `3px solid ${tokens.colors.border.primary}`,
           borderTopColor: tokens.colors.accent.brand,
           borderRadius: '50%', animation: 'spin 0.8s linear infinite',
         }} />
+        {pdfLoading && (
+          <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
+            {isZh ? '正在加载文档...' : 'Loading document...'}
+          </p>
+        )}
       </div>
     )
   }
 
-  if (error || !viewerUrl) {
+  if (error || !book) {
     return (
       <div style={{
         minHeight: '100vh', background: tokens.colors.bg.primary,
@@ -101,6 +238,9 @@ export default function ReadPage() {
     )
   }
 
+  const mode = getContentMode(book)
+  const contentUrl = getContentUrl(book)
+
   return (
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -114,7 +254,7 @@ export default function ReadPage() {
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
         zIndex: 10, flexShrink: 0,
       }}>
-        {/* Back button */}
+        {/* Back */}
         <Link href={`/library/${id}`} style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           color: tokens.colors.text.secondary, textDecoration: 'none', fontSize: 13,
@@ -136,16 +276,46 @@ export default function ReadPage() {
             fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary,
             margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {book?.title}
+            {book.title}
           </p>
-          {book?.author && (
+          {book.author && (
             <p style={{ fontSize: 11, color: tokens.colors.text.tertiary, margin: 0 }}>
               {book.author}
             </p>
           )}
         </div>
 
-        {/* Dark mode toggle for reader */}
+        {/* PDF page controls */}
+        {mode === 'pdf' && totalPages > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <ToolbarBtn onClick={() => goPage(-1)} disabled={currentPage <= 1} label={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
+            } />
+            <span style={{ fontSize: 12, color: tokens.colors.text.secondary, minWidth: 60, textAlign: 'center' }}>
+              {currentPage} / {totalPages}
+            </span>
+            <ToolbarBtn onClick={() => goPage(1)} disabled={currentPage >= totalPages} label={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
+            } />
+          </div>
+        )}
+
+        {/* Zoom controls for PDF */}
+        {mode === 'pdf' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <ToolbarBtn onClick={() => handleZoom(-0.2)} label={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            } />
+            <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, minWidth: 38, textAlign: 'center' }}>
+              {Math.round(scale * 100)}%
+            </span>
+            <ToolbarBtn onClick={() => handleZoom(0.2)} label={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            } />
+          </div>
+        )}
+
+        {/* Dark mode toggle */}
         <button
           onClick={() => setDarkReader(!darkReader)}
           style={{
@@ -159,40 +329,70 @@ export default function ReadPage() {
         >
           {darkReader ? (isZh ? '亮色' : 'Light') : (isZh ? '暗色' : 'Dark')}
         </button>
-
-        {/* Open in new tab */}
-        {book?.pdf_url && (
-          <a href={book.pdf_url} target="_blank" rel="noopener noreferrer" style={{
-            padding: '6px 12px', borderRadius: tokens.radius.md,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            background: 'transparent', color: tokens.colors.text.secondary,
-            textDecoration: 'none', fontSize: 12, fontWeight: 500,
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-          }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
-            </svg>
-            {isZh ? '新窗口' : 'New Tab'}
-          </a>
-        )}
       </div>
 
-      {/* Reader iframe */}
-      <div style={{
-        flex: 1, position: 'relative',
-        filter: darkReader ? 'invert(0.88) hue-rotate(180deg)' : 'none',
-      }}>
-        <iframe
-          src={viewerUrl}
+      {/* Content area */}
+      {mode === 'pdf' ? (
+        <div
+          ref={containerRef}
           style={{
-            width: '100%', height: '100%', border: 'none',
-            position: 'absolute', inset: 0,
+            flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center',
+            padding: '24px 0',
+            background: darkReader ? '#1a1a1a' : tokens.colors.bg.tertiary,
           }}
-          title={book?.title || 'Reader'}
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-          loading="lazy"
-        />
-      </div>
+        >
+          <canvas
+            ref={canvasRef}
+            style={{
+              maxWidth: '100%',
+              filter: darkReader ? 'invert(0.88) hue-rotate(180deg)' : 'none',
+              boxShadow: tokens.shadow.lg,
+              borderRadius: 2,
+            }}
+          />
+        </div>
+      ) : mode === 'web' && contentUrl ? (
+        <div style={{
+          flex: 1, position: 'relative',
+          filter: darkReader ? 'invert(0.88) hue-rotate(180deg)' : 'none',
+        }}>
+          <iframe
+            src={contentUrl}
+            style={{
+              width: '100%', height: '100%', border: 'none',
+              position: 'absolute', inset: 0,
+            }}
+            title={book.title || 'Reader'}
+            sandbox="allow-scripts allow-same-origin allow-forms"
+            loading="lazy"
+          />
+        </div>
+      ) : null}
     </div>
+  )
+}
+
+function ToolbarBtn({ onClick, disabled, label }: {
+  onClick: () => void
+  disabled?: boolean
+  label: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: '4px 8px', borderRadius: tokens.radius.sm,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        background: 'transparent',
+        color: disabled ? tokens.colors.text.tertiary : tokens.colors.text.secondary,
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        transition: `all ${tokens.transition.fast}`,
+      }}
+    >
+      {label}
+    </button>
   )
 }
