@@ -526,7 +526,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       const { data: postData, error } = await supabase.from('posts').insert({
         title,
         content: finalContent,
-        author_handle: userHandle || email?.split('@')[0] || 'anonymous',
+        author_handle: userHandle || email?.split('@')[0] || 'user',
         group_id: groupId,
         author_id: userId,
         images: images.map(img => img.url),

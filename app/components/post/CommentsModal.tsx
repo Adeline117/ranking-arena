@@ -273,7 +273,7 @@ export default function CommentsModal({
                 onClick={(e) => e.stopPropagation()}
                 style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, textDecoration: 'none' }}
               >
-                {comment.author_handle || t('anonymous')}
+                {comment.author_handle || 'user'}
               </Link>
               {showProBadge && <ProBadge />}
               <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
@@ -324,7 +324,7 @@ export default function CommentsModal({
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    setReplyingTo(replyingTo?.commentId === comment.id ? null : { commentId: comment.id, handle: comment.author_handle || t('anonymous') })
+                    setReplyingTo(replyingTo?.commentId === comment.id ? null : { commentId: comment.id, handle: comment.author_handle || 'user' })
                   }}
                   style={styles.actionButton}
                 >

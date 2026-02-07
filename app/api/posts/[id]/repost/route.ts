@@ -56,7 +56,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq('id', user.id)
       .maybeSingle()
 
-    const userHandle = userProfile?.handle || user.email?.split('@')[0] || 'anonymous'
+    const userHandle = userProfile?.handle || user.email?.split('@')[0] || 'user'
 
     // 找到最原始的帖子（如果是转发的转发，追溯到源头）
     const rootPostId = originalPost.original_post_id || originalPost.id
