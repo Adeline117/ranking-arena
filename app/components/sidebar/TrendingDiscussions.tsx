@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { formatTimeAgo } from '@/lib/utils/date'
+// date utils not needed for compact view
 
 type TrendingPost = {
   id: string
   title: string
+  body: string | null
   author_handle: string | null
   comment_count: number
   like_count: number
@@ -27,10 +28,10 @@ export default function TrendingDiscussions() {
     async function fetch() {
       const { data } = await supabase
         .from('posts')
-        .select('id, title, author_handle, comment_count, like_count, created_at, group_id')
+        .select('id, title, body, author_handle, comment_count, like_count, created_at, group_id')
         .eq('status', 'active')
         .order('hot_score', { ascending: false })
-        .limit(20)
+        .limit(8)
       setPosts((data as TrendingPost[]) || [])
       setLoading(false)
     }
@@ -62,24 +63,23 @@ export default function TrendingDiscussions() {
               onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.secondary)}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <span style={{
-                fontSize: 12, fontWeight: 700, color: idx < 3 ? '#ff6b35' : tokens.colors.text.secondary,
-                minWidth: 18, textAlign: 'right',
-              }}>
-                {idx + 1}
-              </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{
-                  fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.3,
+                  fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary, lineHeight: 1.3,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  margin: 0,
                 }}>
                   {post.title}
                 </p>
-                <div style={{ display: 'flex', gap: 8, fontSize: 11, color: tokens.colors.text.secondary, marginTop: 2 }}>
-                  <span>{post.comment_count || 0} comments</span>
-                  <span>{post.like_count || 0} likes</span>
-                  <span>{formatTimeAgo(post.created_at, language)}</span>
-                </div>
+                {post.body && (
+                  <p style={{
+                    fontSize: 12, color: tokens.colors.text.secondary, lineHeight: 1.3,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    margin: '2px 0 0 0',
+                  }}>
+                    {post.body.slice(0, 80)}
+                  </p>
+                )}
               </div>
             </Link>
           ))}

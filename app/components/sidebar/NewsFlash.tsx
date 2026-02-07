@@ -27,8 +27,9 @@ export default function NewsFlash() {
       try {
         const res = await fetch('/api/flash-news?limit=5&sort=published_at')
         if (!res.ok) return
-        const data = await res.json()
-        setNews(data.news || [])
+        const json = await res.json()
+        const newsData = json?.data?.news || json?.news || []
+        setNews(newsData)
       } catch {
         // silent fail
       } finally {
