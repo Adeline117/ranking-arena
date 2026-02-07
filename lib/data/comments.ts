@@ -11,6 +11,7 @@ export interface Comment {
   content: string
   parent_id?: string
   like_count: number
+  dislike_count: number
   created_at: string
   updated_at: string
   author_handle?: string
@@ -18,6 +19,7 @@ export interface Comment {
   author_is_pro?: boolean
   author_show_pro_badge?: boolean
   user_liked?: boolean
+  user_disliked?: boolean
   replies?: Comment[]
 }
 
@@ -34,6 +36,7 @@ interface CommentRow {
   content: string
   parent_id?: string | null
   like_count?: number
+  dislike_count?: number
   created_at: string
   updated_at: string
 }
@@ -52,6 +55,7 @@ function toComment(
   row: CommentRow,
   profile?: AuthorProfile,
   userLiked = false,
+  userDisliked = false,
   replies: Comment[] = []
 ): Comment {
   return {
@@ -61,6 +65,7 @@ function toComment(
     content: row.content,
     parent_id: row.parent_id ?? undefined,
     like_count: row.like_count || 0,
+    dislike_count: row.dislike_count || 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
     author_handle: profile?.handle,
@@ -68,6 +73,7 @@ function toComment(
     author_is_pro: profile?.is_pro ?? false,
     author_show_pro_badge: profile?.show_pro_badge !== false,
     user_liked: userLiked,
+    user_disliked: userDisliked,
     replies,
   }
 }
@@ -148,24 +154,33 @@ export async function getPostComments(
       .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
       .in('id', userIds),
     userId
-      ? supabase.from('comment_likes').select('comment_id').eq('user_id', userId).in('comment_id', allCommentIds)
+      ? supabase.from('comment_likes').select('comment_id, reaction_type').eq('user_id', userId).in('comment_id', allCommentIds)
       : Promise.resolve({ data: null }),
   ])
 
   const profileMap = profilesResult.data ? buildProfileMap(profilesResult.data) : new Map()
-  const userLikedSet = new Set(likesResult.data?.map((like: { comment_id: string }) => like.comment_id) || [])
+  const userLikedSet = new Set<string>()
+  const userDislikedSet = new Set<string>()
+  for (const r of likesResult.data || []) {
+    const reaction = r as { comment_id: string; reaction_type?: string }
+    if (reaction.reaction_type === 'dislike') {
+      userDislikedSet.add(reaction.comment_id)
+    } else {
+      userLikedSet.add(reaction.comment_id)
+    }
+  }
 
   const repliesMap = new Map<string, Comment[]>()
   for (const reply of replies || []) {
     if (!reply.parent_id) continue
-    const comment = toComment(reply, profileMap.get(reply.user_id), userLikedSet.has(reply.id))
+    const comment = toComment(reply, profileMap.get(reply.user_id), userLikedSet.has(reply.id), userDislikedSet.has(reply.id))
     const parentReplies = repliesMap.get(reply.parent_id) || []
     parentReplies.push(comment)
     repliesMap.set(reply.parent_id, parentReplies)
   }
 
   return comments.map((c: CommentRow) =>
-    toComment(c, profileMap.get(c.user_id), userLikedSet.has(c.id), repliesMap.get(c.id) || [])
+    toComment(c, profileMap.get(c.user_id), userLikedSet.has(c.id), userDislikedSet.has(c.id), repliesMap.get(c.id) || [])
   )
 }
 
