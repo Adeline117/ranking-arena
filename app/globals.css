@@ -403,6 +403,24 @@ body {
   align-items: start;
   max-width: 1400px;
   margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* Between 1024-1280: hide right sidebar, give more space to center */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .three-col-layout {
+    grid-template-columns: 200px 1fr;
+  }
+  .three-col-right {
+    display: none;
+  }
+}
+
+/* Large desktop: full three columns */
+@media (min-width: 1280px) and (max-width: 1440px) {
+  .three-col-layout {
+    grid-template-columns: 200px 1fr 220px;
+  }
 }
 
 .three-col-left,
@@ -411,7 +429,9 @@ body {
   top: 60px;
   height: calc(100vh - 60px);
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
+  flex-shrink: 0;
 }
 
 .three-col-left::-webkit-scrollbar,
@@ -427,20 +447,70 @@ body {
 
 .three-col-center {
   min-height: calc(100vh - 60px);
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 /* ============================================
    Responsive Utilities
    ============================================ */
 
-@media (max-width: 1024px) {
+@media (max-width: 1023px) {
   .three-col-layout {
     display: block;
+    padding: 0 12px;
+  }
+
+  .three-col-left,
+  .three-col-right {
+    display: none !important;
   }
 
   .main-grid,
   .profile-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  .three-col-layout {
+    padding: 0 8px;
+  }
+}
+
+/* Tablet: profile header stacks vertically */
+@media (max-width: 768px) {
+  .profile-header {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center;
+    padding: 20px 16px !important;
+  }
+  .profile-header-info {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .profile-header-avatar {
+    width: 64px !important;
+    height: 64px !important;
+  }
+  .page-container {
+    padding: 16px 12px 100px !important;
+  }
+}
+
+/* Small mobile: tighter spacing */
+@media (max-width: 480px) {
+  .page-container {
+    padding: 12px 8px 100px !important;
+  }
+  .profile-header {
+    padding: 16px 12px !important;
+  }
+  .profile-header-avatar {
+    width: 56px !important;
+    height: 56px !important;
   }
 }
 
@@ -701,8 +771,10 @@ body {
 }
 
 
-/* Three-column layout responsive */
+/* Responsive utility classes */
 @media (max-width: 1023px) {
-  .hide-mobile { display: none !important; }
   .hide-tablet { display: none !important; }
+}
+@media (max-width: 767px) {
+  .hide-mobile { display: none !important; }
 }
