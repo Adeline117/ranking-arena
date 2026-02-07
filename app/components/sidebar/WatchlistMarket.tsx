@@ -12,10 +12,12 @@ type CoinPrice = {
   change24h: number
 }
 
-const DEFAULT_COINS = ['bitcoin', 'ethereum', 'solana', 'binancecoin']
+const DEFAULT_COINS = ['bitcoin', 'ethereum', 'solana', 'binancecoin', 'ripple']
 const STORAGE_KEY = 'arena_watchlist'
 
-const COIN_OPTIONS: { id: string; symbol: string; name: string }[] = [
+type CoinOption = { id: string; symbol: string; name: string }
+
+const FALLBACK_COIN_OPTIONS: CoinOption[] = [
   { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin' },
   { id: 'ethereum', symbol: 'ETH', name: 'Ethereum' },
   { id: 'solana', symbol: 'SOL', name: 'Solana' },
@@ -31,6 +33,41 @@ const COIN_OPTIONS: { id: string; symbol: string; name: string }[] = [
   { id: 'near', symbol: 'NEAR', name: 'NEAR' },
   { id: 'litecoin', symbol: 'LTC', name: 'Litecoin' },
   { id: 'aptos', symbol: 'APT', name: 'Aptos' },
+  { id: 'tron', symbol: 'TRX', name: 'TRON' },
+  { id: 'stellar', symbol: 'XLM', name: 'Stellar' },
+  { id: 'uniswap', symbol: 'UNI', name: 'Uniswap' },
+  { id: 'hedera-hashgraph', symbol: 'HBAR', name: 'Hedera' },
+  { id: 'internet-computer', symbol: 'ICP', name: 'Internet Computer' },
+  { id: 'render-token', symbol: 'RENDER', name: 'Render' },
+  { id: 'kaspa', symbol: 'KAS', name: 'Kaspa' },
+  { id: 'ethereum-classic', symbol: 'ETC', name: 'Ethereum Classic' },
+  { id: 'aave', symbol: 'AAVE', name: 'Aave' },
+  { id: 'filecoin', symbol: 'FIL', name: 'Filecoin' },
+  { id: 'cosmos', symbol: 'ATOM', name: 'Cosmos' },
+  { id: 'arbitrum', symbol: 'ARB', name: 'Arbitrum' },
+  { id: 'optimism', symbol: 'OP', name: 'Optimism' },
+  { id: 'injective-protocol', symbol: 'INJ', name: 'Injective' },
+  { id: 'the-graph', symbol: 'GRT', name: 'The Graph' },
+  { id: 'celestia', symbol: 'TIA', name: 'Celestia' },
+  { id: 'sei-network', symbol: 'SEI', name: 'Sei' },
+  { id: 'algorand', symbol: 'ALGO', name: 'Algorand' },
+  { id: 'fantom', symbol: 'FTM', name: 'Fantom' },
+  { id: 'matic-network', symbol: 'POL', name: 'Polygon' },
+  { id: 'vechain', symbol: 'VET', name: 'VeChain' },
+  { id: 'theta-token', symbol: 'THETA', name: 'Theta' },
+  { id: 'lido-dao', symbol: 'LDO', name: 'Lido DAO' },
+  { id: 'maker', symbol: 'MKR', name: 'Maker' },
+  { id: 'mantle', symbol: 'MNT', name: 'Mantle' },
+  { id: 'bonk', symbol: 'BONK', name: 'Bonk' },
+  { id: 'pepe', symbol: 'PEPE', name: 'Pepe' },
+  { id: 'floki', symbol: 'FLOKI', name: 'Floki' },
+  { id: 'worldcoin-wld', symbol: 'WLD', name: 'Worldcoin' },
+  { id: 'jupiter-exchange-solana', symbol: 'JUP', name: 'Jupiter' },
+  { id: 'starknet', symbol: 'STRK', name: 'Starknet' },
+  { id: 'pyth-network', symbol: 'PYTH', name: 'Pyth Network' },
+  { id: 'ondo-finance', symbol: 'ONDO', name: 'Ondo' },
+  { id: 'pendle', symbol: 'PENDLE', name: 'Pendle' },
+  { id: 'wormhole', symbol: 'W', name: 'Wormhole' },
 ]
 
 function getWatchlist(): string[] {
@@ -57,9 +94,18 @@ export default function WatchlistMarket() {
   const [loading, setLoading] = useState(true)
   const [showPicker, setShowPicker] = useState(false)
   const [search, setSearch] = useState('')
+  const [coinOptions, setCoinOptions] = useState<CoinOption[]>(FALLBACK_COIN_OPTIONS)
 
   useEffect(() => {
     setWatchIds(getWatchlist())
+    // Fetch top 50 coins from CoinGecko for picker
+    fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((data: any[]) => {
+        const opts = data.map(c => ({ id: c.id, symbol: (c.symbol as string).toUpperCase(), name: c.name }))
+        if (opts.length > 0) setCoinOptions(opts)
+      })
+      .catch(() => { /* keep fallback */ })
   }, [])
 
   const fetchPrices = useCallback(async (ids: string[]) => {
@@ -73,7 +119,7 @@ export default function WatchlistMarket() {
       const results: CoinPrice[] = ids
         .filter(id => data[id])
         .map(id => {
-          const opt = COIN_OPTIONS.find(c => c.id === id)
+          const opt = coinOptions.find(c => c.id === id)
           return {
             id,
             symbol: opt?.symbol || id.toUpperCase(),
@@ -87,7 +133,7 @@ export default function WatchlistMarket() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [coinOptions])
 
   useEffect(() => {
     fetchPrices(watchIds)
@@ -105,7 +151,7 @@ export default function WatchlistMarket() {
     })
   }
 
-  const filteredOptions = COIN_OPTIONS.filter(c =>
+  const filteredOptions = coinOptions.filter(c =>
     c.symbol.toLowerCase().includes(search.toLowerCase()) ||
     c.name.toLowerCase().includes(search.toLowerCase())
   )

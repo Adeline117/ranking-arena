@@ -1,6 +1,6 @@
 'use client'
 
-import React, { memo, useMemo } from 'react'
+import React, { memo, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 
@@ -105,6 +105,8 @@ const BookCover = memo(function BookCover({
   showCategory = true,
   style,
 }: BookCoverProps) {
+  const [imgError, setImgError] = useState(false)
+
   const gradient = useMemo(() => {
     const gradients = COVER_GRADIENTS[category] || COVER_GRADIENTS.book
     return gradients[hashString(title) % gradients.length]
@@ -112,7 +114,7 @@ const BookCover = memo(function BookCover({
 
   const sizes = FONT_SIZES[fontSize]
 
-  if (coverUrl) {
+  if (coverUrl && !imgError) {
     return (
       <div style={{
         width, height, position: 'relative', overflow: 'hidden',
@@ -126,6 +128,7 @@ const BookCover = memo(function BookCover({
           style={{ objectFit: 'cover' }}
           unoptimized
           sizes="(max-width: 768px) 50vw, 200px"
+          onError={() => setImgError(true)}
         />
       </div>
     )
