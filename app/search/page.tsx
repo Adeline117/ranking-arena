@@ -487,17 +487,18 @@ function SearchContent() {
       >
         {/* Avatar / Icon */}
         <div style={{
-          width: 48,
-          height: 48,
+          width: 44,
+          height: 44,
           borderRadius: iconStyle.radius,
           background: iconStyle.bg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: tokens.typography.fontSize.lg,
-          fontWeight: tokens.typography.fontWeight.black,
+          fontSize: tokens.typography.fontSize.md,
+          fontWeight: tokens.typography.fontWeight.bold,
           color: iconStyle.color,
           flexShrink: 0,
+          transition: tokens.transition.base,
         }}>
           {getIconLetter(result.type)}
         </div>
@@ -642,32 +643,36 @@ function SearchContent() {
           <div style={{
             fontSize: tokens.typography.fontSize.sm,
             color: tokens.colors.text.tertiary,
-            padding: `${tokens.spacing[4]} 0 ${tokens.spacing[3]}`,
+            padding: `${tokens.spacing[4]} 0 ${tokens.spacing[2]}`,
             fontWeight: tokens.typography.fontWeight.medium,
+            letterSpacing: '0.01em',
           }}>
             {t('searchResults')}: <span style={{ color: tokens.colors.text.primary, fontWeight: tokens.typography.fontWeight.semibold }}>&quot;{query}&quot;</span>
           </div>
         )}
 
-        {/* Tab bar - sticky, compact, underline style */}
+        {/* Tab bar - sticky, glassmorphic */}
         {query && (
           <div style={{
             position: 'sticky',
             top: 0,
             zIndex: 10,
-            background: tokens.colors.bg.primary,
-            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+            background: tokens.glass.bg.heavy,
+            backdropFilter: tokens.glass.blur.lg,
+            WebkitBackdropFilter: tokens.glass.blur.lg,
+            borderBottom: tokens.glass.border.light,
             marginLeft: `-${tokens.spacing[4]}`,
             marginRight: `-${tokens.spacing[4]}`,
-            paddingLeft: tokens.spacing[4],
-            paddingRight: tokens.spacing[4],
+            paddingLeft: tokens.spacing[3],
+            paddingRight: tokens.spacing[3],
           }}>
             <div style={{
               display: 'flex',
-              gap: 0,
+              gap: tokens.spacing[1],
               overflowX: 'auto',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
+              padding: `${tokens.spacing[2]} 0`,
             }}>
               {(['all', 'users', 'traders', 'posts', 'groups'] as const).map((tab) => {
                 const isActive = activeTab === tab
@@ -678,24 +683,31 @@ function SearchContent() {
                     onClick={() => setActiveTab(tab)}
                     className="touch-target"
                     style={{
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                      background: 'transparent',
-                      border: 'none',
-                      borderBottom: isActive ? `2px solid ${tokens.colors.accent.primary}` : '2px solid transparent',
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                      background: isActive ? tokens.glass.bg.medium : 'transparent',
+                      border: isActive ? tokens.glass.border.light : '1px solid transparent',
+                      borderRadius: tokens.radius.full,
                       color: isActive ? tokens.colors.text.primary : tokens.colors.text.tertiary,
                       fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
                       fontSize: tokens.typography.fontSize.sm,
                       cursor: 'pointer',
-                      transition: tokens.transition.fast,
+                      transition: tokens.transition.base,
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
-                      minHeight: 44,
+                      minHeight: 36,
+                      lineHeight: '20px',
                     }}
                     onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.color = tokens.colors.text.secondary
+                      if (!isActive) {
+                        e.currentTarget.style.color = tokens.colors.text.secondary
+                        e.currentTarget.style.background = tokens.glass.bg.light
+                      }
                     }}
                     onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.color = tokens.colors.text.tertiary
+                      if (!isActive) {
+                        e.currentTarget.style.color = tokens.colors.text.tertiary
+                        e.currentTarget.style.background = 'transparent'
+                      }
                     }}
                   >
                     {{ all: t('all'), users: t('users'), traders: t('traders'), posts: t('posts'), groups: t('groups') }[tab]}
@@ -703,9 +715,10 @@ function SearchContent() {
                       <span style={{
                         marginLeft: '4px',
                         fontSize: tokens.typography.fontSize.xs,
-                        color: isActive ? tokens.colors.text.secondary : tokens.colors.text.tertiary,
+                        color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                       }}>
-                        ({count > 99 ? '99+' : count})
+                        {count > 99 ? '99+' : count}
                       </span>
                     )}
                   </button>
@@ -727,7 +740,13 @@ function SearchContent() {
 
         {/* Results */}
         {loading ? (
-          <div>
+          <div style={{
+            background: tokens.glass.bg.secondary,
+            borderRadius: tokens.radius.xl,
+            border: tokens.glass.border.light,
+            overflow: 'hidden',
+            marginTop: tokens.spacing[3],
+          }}>
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} style={{
                 display: 'flex',
@@ -737,8 +756,8 @@ function SearchContent() {
                 borderBottom: `1px solid ${tokens.colors.border.primary}`,
               }}>
                 <div style={{
-                  width: 48,
-                  height: 48,
+                  width: 44,
+                  height: 44,
                   borderRadius: tokens.radius.full,
                   background: tokens.colors.bg.tertiary,
                   animation: 'pulse 1.5s ease-in-out infinite',
@@ -765,29 +784,25 @@ function SearchContent() {
             ))}
           </div>
         ) : searchError ? (
-          <EmptyState
-            title={t('searchFailedTitle')}
-            description={t('pleaseTryAgainLater')}
-          />
-        ) : !query ? (
           <div style={{
             textAlign: 'center',
-            padding: `${tokens.spacing[20]} ${tokens.spacing[4]}`,
+            padding: `${tokens.spacing[16]} ${tokens.spacing[4]}`,
           }}>
             <div style={{
-              width: 64,
-              height: 64,
+              width: 72,
+              height: 72,
               borderRadius: tokens.radius.full,
-              background: tokens.gradient.primarySubtle,
+              background: tokens.gradient.errorSubtle,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto',
               marginBottom: tokens.spacing[5],
             }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.error} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
               </svg>
             </div>
             <div style={{
@@ -796,16 +811,133 @@ function SearchContent() {
               color: tokens.colors.text.primary,
               marginBottom: tokens.spacing[2],
             }}>
+              {t('searchFailedTitle')}
+            </div>
+            <div style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.tertiary,
+              lineHeight: tokens.typography.lineHeight.relaxed,
+            }}>
+              {t('pleaseTryAgainLater')}
+            </div>
+          </div>
+        ) : !query ? (
+          <div style={{
+            textAlign: 'center',
+            padding: `${tokens.spacing[16]} ${tokens.spacing[4]} ${tokens.spacing[20]}`,
+          }}>
+            {/* Search illustration */}
+            <div style={{
+              width: 80,
+              height: 80,
+              borderRadius: tokens.radius.full,
+              background: tokens.gradient.primarySubtle,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+              marginBottom: tokens.spacing[6],
+              boxShadow: tokens.shadow.glow,
+            }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.9 }}>
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </div>
+            <div style={{
+              fontSize: tokens.typography.fontSize.xl,
+              fontWeight: tokens.typography.fontWeight.bold,
+              color: tokens.colors.text.primary,
+              marginBottom: tokens.spacing[2],
+              letterSpacing: '-0.01em',
+            }}>
               {t('startSearching')}
             </div>
             <div style={{
               fontSize: tokens.typography.fontSize.sm,
               color: tokens.colors.text.tertiary,
               lineHeight: tokens.typography.lineHeight.relaxed,
-              maxWidth: 320,
-              margin: '0 auto',
+              maxWidth: 340,
+              margin: `0 auto ${tokens.spacing[8]}`,
             }}>
               {t('startSearchingDesc')}
+            </div>
+
+            {/* Search history section */}
+            <div style={{
+              textAlign: 'left',
+              maxWidth: 480,
+              margin: '0 auto',
+            }}>
+              {/* Hot searches */}
+              <div style={{ marginBottom: tokens.spacing[6] }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
+                  marginBottom: tokens.spacing[3],
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </svg>
+                  <span style={{
+                    fontSize: tokens.typography.fontSize.xs,
+                    fontWeight: tokens.typography.fontWeight.semibold,
+                    color: tokens.colors.text.secondary,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}>
+                    {t('hotSearches')}
+                  </span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: tokens.spacing[2],
+                }}>
+                  {['BTC', 'ETH', 'Binance', 'Bitget', 'SOL'].map((term, idx) => (
+                    <Link
+                      key={term}
+                      href={`/search?q=${encodeURIComponent(term)}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[2],
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                        background: tokens.glass.bg.light,
+                        border: tokens.glass.border.light,
+                        borderRadius: tokens.radius.lg,
+                        color: tokens.colors.text.secondary,
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: tokens.typography.fontWeight.medium,
+                        textDecoration: 'none',
+                        transition: tokens.transition.base,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = tokens.glass.bg.medium
+                        e.currentTarget.style.color = tokens.colors.text.primary
+                        e.currentTarget.style.borderColor = 'rgba(139, 111, 168, 0.3)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = tokens.glass.bg.light
+                        e.currentTarget.style.color = tokens.colors.text.secondary
+                        e.currentTarget.style.borderColor = ''
+                      }}
+                    >
+                      <span style={{
+                        fontSize: tokens.typography.fontSize.xs,
+                        fontWeight: tokens.typography.fontWeight.bold,
+                        color: idx < 3 ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+                        minWidth: 16,
+                        textAlign: 'center',
+                      }}>
+                        {idx + 1}
+                      </span>
+                      {term}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         ) : filteredResults.length === 0 ? (
@@ -814,14 +946,25 @@ function SearchContent() {
             padding: `${tokens.spacing[16]} ${tokens.spacing[4]}`,
           }}>
             <div style={{
-              fontSize: tokens.typography.fontSize['2xl'],
-              marginBottom: tokens.spacing[3],
-              opacity: 0.3,
+              width: 72,
+              height: 72,
+              borderRadius: tokens.radius.full,
+              background: tokens.gradient.primarySubtle,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+              marginBottom: tokens.spacing[5],
+              opacity: 0.8,
             }}>
-              /
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
             </div>
             <div style={{
-              fontSize: tokens.typography.fontSize.md,
+              fontSize: tokens.typography.fontSize.lg,
               fontWeight: tokens.typography.fontWeight.semibold,
               color: tokens.colors.text.primary,
               marginBottom: tokens.spacing[2],
@@ -831,6 +974,9 @@ function SearchContent() {
             <div style={{
               fontSize: tokens.typography.fontSize.sm,
               color: tokens.colors.text.tertiary,
+              lineHeight: tokens.typography.lineHeight.relaxed,
+              maxWidth: 320,
+              margin: '0 auto',
             }}>
               {t('noResultsForQuery').replace('{query}', query)}
             </div>
@@ -842,6 +988,7 @@ function SearchContent() {
             border: tokens.glass.border.light,
             overflow: 'hidden',
             marginTop: tokens.spacing[3],
+            boxShadow: tokens.shadow.md,
           }}>
             {filteredResults.map((result) => renderResultCard(result))}
 
@@ -862,7 +1009,6 @@ function SearchContent() {
         )}
       </main>
 
-      {/* Hide scrollbar on tab bar */}
       <style>{`
         .search-result-card:last-child {
           border-bottom: none !important;
