@@ -84,7 +84,7 @@ export default function GlobalError({
           .global-error-bg {
             position: fixed;
             inset: 0;
-            background: linear-gradient(135deg, #0a0a0f 0%, #140d14 50%, #0f0d14 100%);
+            background: linear-gradient(135deg, var(--color-bg-primary, #0a0a0f) 0%, #140d14 50%, #0f0d14 100%);
             z-index: 0;
           }
           

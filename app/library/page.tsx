@@ -253,7 +253,7 @@ export default function LibraryPage() {
                     fontSize: tokens.typography.fontSize.sm,
                     fontWeight: active ? tokens.typography.fontWeight.semibold : tokens.typography.fontWeight.medium,
                     border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-                    background: active ? tokens.colors.accent.brand : 'transparent',
+                    background: active ? tokens.gradient.purpleGold : 'transparent',
                     color: active ? '#fff' : tokens.colors.text.secondary,
                     cursor: 'pointer',
                     transition: `all ${tokens.transition.fast}`,
@@ -365,7 +365,7 @@ export default function LibraryPage() {
                   style={{
                     width: 36, height: 36, borderRadius: tokens.radius.md,
                     border: p === page ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-                    background: p === page ? tokens.colors.accent.brand : 'transparent',
+                    background: p === page ? tokens.gradient.purpleGold : 'transparent',
                     color: p === page ? '#fff' : tokens.colors.text.primary,
                     cursor: 'pointer', fontSize: 13, fontWeight: p === page ? 600 : 400,
                     transition: `all ${tokens.transition.fast}`,
