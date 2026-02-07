@@ -798,7 +798,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   return (
     <Box style={{
       minHeight: '100vh',
-      background: tokens.colors.bg.primary,
+      background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary} 50%, ${tokens.colors.bg.primary} 100%)`,
       color: tokens.colors.text.primary,
       display: 'flex',
       flexDirection: 'column',
@@ -815,32 +815,37 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           background: tokens.colors.bg.secondary,
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
-          backdropFilter: 'blur(8px)',
+          backdropFilter: 'blur(12px)',
+          boxShadow: tokens.shadow.xs,
         }}
       >
         <Link 
           href="/messages" 
           style={{ 
-            color: tokens.colors.text.secondary, 
+            color: tokens.colors.text.primary, 
             textDecoration: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 36,
-            height: 36,
+            width: 38,
+            height: 38,
             borderRadius: tokens.radius.full,
-            transition: 'all 0.2s',
+            background: tokens.colors.bg.tertiary,
+            transition: `all ${tokens.transition.fast}`,
+            boxShadow: tokens.shadow.xs,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
-            e.currentTarget.style.color = tokens.colors.text.primary
+            e.currentTarget.style.background = tokens.colors.bg.hover
+            e.currentTarget.style.transform = 'scale(1.05)'
+            e.currentTarget.style.boxShadow = tokens.shadow.sm
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent'
-            e.currentTarget.style.color = tokens.colors.text.secondary
+            e.currentTarget.style.background = tokens.colors.bg.tertiary
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = tokens.shadow.xs
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
         </Link>
@@ -908,6 +913,18 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                   avatarUrl={otherUser.avatar_url}
                   size={44}
                 />
+                {/* Online status indicator */}
+                <Box style={{
+                  position: 'absolute',
+                  bottom: 1,
+                  right: 1,
+                  width: 12,
+                  height: 12,
+                  borderRadius: tokens.radius.full,
+                  background: tokens.colors.accent.success,
+                  border: `2px solid ${tokens.colors.bg.secondary}`,
+                  boxShadow: tokens.shadow.glowSuccess,
+                }} />
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
@@ -1033,10 +1050,10 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       <Box style={{
         flex: 1,
         overflow: 'auto',
-        padding: tokens.spacing[4],
+        padding: `${tokens.spacing[4]} ${tokens.spacing[4]} ${tokens.spacing[6]}`,
         maxWidth: 800,
         margin: '0 auto',
-        width: '100%'
+        width: '100%',
       }}>
         {/* Load older messages */}
         {hasMore && (
@@ -1121,7 +1138,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: isMine ? 'flex-end' : 'flex-start',
-                    marginBottom: isSameSenderAsNext ? '2px' : tokens.spacing[3],
+                    marginBottom: isSameSenderAsNext ? '3px' : tokens.spacing[4],
                     transition: 'background 0.3s',
                     borderRadius: 12,
                     background: highlightedMessageId === msg.id ? 'rgba(149, 117, 205, 0.15)' : 'transparent',
@@ -1167,23 +1184,24 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
 
                   {/* Message bubble */}
                   <Box
+                    className="msg-bubble"
                     style={{
                       maxWidth: '75%',
                       minWidth: 48,
-                      padding: (msg.media_url && msg.media_type !== 'file') ? '4px' : '10px 14px',
+                      padding: (msg.media_url && msg.media_type !== 'file') ? '4px' : '11px 16px',
                       borderRadius: getBubbleBorderRadius(isMine, isSameSenderAsPrev, isSameSenderAsNext),
                       background: isMine
-                        ? `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`
+                        ? tokens.gradient.primary
                         : tokens.colors.bg.secondary,
                       color: isMine ? '#fff' : tokens.colors.text.primary,
                       border: isMine
-                        ? msg._status === 'failed' ? '1px solid rgba(244, 67, 54, 0.6)' : 'none'
+                        ? msg._status === 'failed' ? `1px solid ${tokens.colors.accent.error}99` : 'none'
                         : `1px solid ${tokens.colors.border.primary}`,
                       boxShadow: isMine
-                        ? '0 1px 2px rgba(126, 87, 194, 0.2)'
-                        : '0 1px 2px rgba(0,0,0,0.05)',
-                      opacity: msg._status === 'sending' ? 0.7 : 1,
-                      transition: 'opacity 0.2s',
+                        ? `${tokens.shadow.sm}, 0 2px 8px rgba(139, 111, 168, 0.15)`
+                        : tokens.shadow.sm,
+                      opacity: msg._status === 'sending' ? 0.65 : 1,
+                      transition: `opacity ${tokens.transition.fast}, transform ${tokens.transition.fast}`,
                       overflow: 'hidden',
                     }}
                   >
@@ -1376,8 +1394,11 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     <Text
                       size="xs"
                       color="tertiary"
+                      className="msg-timestamp"
                       style={{
-                        marginTop: 4,
+                        marginTop: 5,
+                        opacity: 0.5,
+                        transition: `opacity ${tokens.transition.fast}`,
                         paddingLeft: isMine ? 0 : 36,
                         paddingRight: isMine ? 4 : 0,
                         fontSize: 11,
@@ -1633,6 +1654,20 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
         </Box>
       )}
 
+      {/* Chat UI polish styles */}
+      <style>{`
+        .msg-bubble:hover + .msg-timestamp,
+        .msg-timestamp:hover {
+          opacity: 1 !important;
+        }
+        div:hover > .msg-timestamp {
+          opacity: 1 !important;
+        }
+        .msg-bubble {
+          position: relative;
+        }
+      `}</style>
+
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -1645,9 +1680,10 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       {/* Input Area */}
       <Box
         style={{
-          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]} ${tokens.spacing[4]}`,
           background: tokens.colors.bg.secondary,
           borderTop: `1px solid ${tokens.colors.border.primary}`,
+          boxShadow: '0 -2px 12px rgba(0,0,0,0.06)',
         }}
       >
         {/* Attachment preview */}
@@ -1774,10 +1810,11 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           gap: tokens.spacing[2],
           alignItems: 'flex-end',
           background: tokens.colors.bg.primary,
-          borderRadius: 24,
-          padding: '6px 6px 6px 12px',
+          borderRadius: 28,
+          padding: '8px 8px 8px 14px',
           border: `1px solid ${tokens.colors.border.primary}`,
-          transition: 'border-color 0.2s, box-shadow 0.2s',
+          boxShadow: tokens.shadow.inner,
+          transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
         }}>
           {/* Sticker button */}
           <div style={{ position: 'relative' }}>
@@ -1891,21 +1928,38 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
             onClick={handleSend}
             disabled={(!newMessage.trim() && !pendingAttachment) || sending || newMessage.length > 2000}
             style={{
-              width: 40,
-              height: 40,
+              width: 42,
+              height: 42,
               borderRadius: '50%',
               border: 'none',
               background: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000
-                ? `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`
+                ? tokens.gradient.primary
                 : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
               color: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000 ? '#fff' : tokens.colors.text.tertiary,
               cursor: (newMessage.trim() || pendingAttachment) && !sending && newMessage.length <= 2000 ? 'pointer' : 'default',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'all 0.2s',
+              transition: `all ${tokens.transition.fast}`,
               flexShrink: 0,
               opacity: sending ? 0.6 : 1,
+              boxShadow: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000
+                ? tokens.shadow.glow
+                : 'none',
+            }}
+            onMouseEnter={(e) => {
+              if ((newMessage.trim() || pendingAttachment) && newMessage.length <= 2000) {
+                e.currentTarget.style.transform = 'scale(1.08)'
+                e.currentTarget.style.background = tokens.gradient.primaryHover
+                e.currentTarget.style.boxShadow = tokens.shadow.glowLg
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)'
+              if ((newMessage.trim() || pendingAttachment) && newMessage.length <= 2000) {
+                e.currentTarget.style.background = tokens.gradient.primary
+                e.currentTarget.style.boxShadow = tokens.shadow.glow
+              }
             }}
           >
             {sending ? (
