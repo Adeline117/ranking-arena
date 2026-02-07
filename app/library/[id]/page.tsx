@@ -197,8 +197,7 @@ export default function BookDetailPage() {
   const count = overview?.count || 0
   const dist = overview?.distribution || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
   const maxDist = Math.max(...Object.values(dist), 1)
-  const hasPdfUrl = !!book.pdf_url
-  const hasSourceUrl = !!book.source_url
+  const hasReadableContent = !!book.pdf_url || !!book.source_url
   const descLong = (book.description?.length || 0) > 300
 
   return (
@@ -295,8 +294,8 @@ export default function BookDetailPage() {
 
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {/* Read Online - only when pdf_url is available */}
-              {hasPdfUrl && (
+              {/* Read - always in-app, never external */}
+              {hasReadableContent ? (
                 <Link
                   href={`/library/${book.id}/read`}
                   style={{
@@ -312,35 +311,9 @@ export default function BookDetailPage() {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                   </svg>
-                  {isZh ? '在线阅读' : 'Read Online'}
+                  {isZh ? '阅读' : 'Read'}
                 </Link>
-              )}
-
-              {/* View Source - when no pdf_url but has source_url */}
-              {!hasPdfUrl && hasSourceUrl && (
-                <a
-                  href={book.source_url!}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    padding: '10px 24px', borderRadius: tokens.radius.lg,
-                    fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
-                    background: tokens.gradient.primary, color: '#fff',
-                    textDecoration: 'none',
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                    transition: `all ${tokens.transition.fast}`,
-                    boxShadow: tokens.shadow.glow,
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
-                  </svg>
-                  {isZh ? '查看原文' : 'View Source'}
-                </a>
-              )}
-
-              {/* No resource available */}
-              {!hasPdfUrl && !hasSourceUrl && (
+              ) : (
                 <span style={{
                   padding: '10px 24px', borderRadius: tokens.radius.lg,
                   fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
@@ -348,9 +321,9 @@ export default function BookDetailPage() {
                   display: 'inline-flex', alignItems: 'center', gap: 8,
                 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                   </svg>
-                  {isZh ? '暂无资源' : 'No Resource'}
+                  {isZh ? '资源整理中' : 'Coming Soon'}
                 </span>
               )}
 
@@ -394,18 +367,7 @@ export default function BookDetailPage() {
                 {isZh ? '已读' : 'Read'}
               </button>
 
-              {/* Buy */}
-              {book.buy_url && (
-                <a href={book.buy_url} target="_blank" rel="noopener noreferrer" style={{
-                  padding: '10px 20px', borderRadius: tokens.radius.lg,
-                  fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
-                  border: `1px solid ${tokens.colors.accent.brand}`, color: tokens.colors.accent.brand,
-                  textDecoration: 'none', background: 'transparent',
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                }}>
-                  {isZh ? '购买' : 'Buy'}
-                </a>
-              )}
+              {/* Buy - kept as internal reference only, no external navigation */}
             </div>
 
             {/* User rating when marked as read */}
