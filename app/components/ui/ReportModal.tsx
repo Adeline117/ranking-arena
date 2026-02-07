@@ -138,10 +138,13 @@ export default function ReportModal({
           style={{
             width: '100%',
             maxWidth: 420,
+            maxHeight: 'calc(100vh - 40px)',
             background: tokens.colors.bg.primary,
             borderRadius: tokens.radius.xl,
             boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
             overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column' as const,
           }}
         >
           {/* Header */}
@@ -187,8 +190,8 @@ export default function ReportModal({
             </button>
           </Box>
 
-          {/* Content */}
-          <Box style={{ padding: tokens.spacing[5] }}>
+          {/* Content - scrollable */}
+          <Box style={{ padding: tokens.spacing[5], overflowY: 'auto', flex: 1 }}>
             {/* Target info */}
             {targetName && (
               <Box
