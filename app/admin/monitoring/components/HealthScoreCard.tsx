@@ -116,7 +116,7 @@ export default function HealthScoreCard({ health, timestamp }: HealthScoreCardPr
                 Data Freshness
               </Text>
               <Text size="xs" color="secondary">
-                {health.score >= 80 ? '✓' : health.score >= 60 ? '⚠' : '✗'}
+                {health.score >= 80 ? 'OK' : health.score >= 60 ? 'WARN' : 'FAIL'}
               </Text>
             </Box>
             <Box style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -124,7 +124,7 @@ export default function HealthScoreCard({ health, timestamp }: HealthScoreCardPr
                 Anomaly Status
               </Text>
               <Text size="xs" color="secondary">
-                {health.score >= 80 ? '✓' : health.score >= 60 ? '⚠' : '✗'}
+                {health.score >= 80 ? 'OK' : health.score >= 60 ? 'WARN' : 'FAIL'}
               </Text>
             </Box>
             <Box style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -132,7 +132,7 @@ export default function HealthScoreCard({ health, timestamp }: HealthScoreCardPr
                 Scraper Health
               </Text>
               <Text size="xs" color="secondary">
-                {health.score >= 80 ? '✓' : health.score >= 60 ? '⚠' : '✗'}
+                {health.score >= 80 ? 'OK' : health.score >= 60 ? 'WARN' : 'FAIL'}
               </Text>
             </Box>
           </Box>

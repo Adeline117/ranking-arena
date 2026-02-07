@@ -55,7 +55,7 @@ const getToastConfig = (type: ToastType) => {
         borderColor: `${tokens.colors.accent.success}50`,
         iconBg: tokens.gradient.success,
         textColor: tokens.colors.accent.success,
-        icon: '✓',
+        icon: 'OK',
         progressColor: tokens.colors.accent.success,
       }
     case 'error':

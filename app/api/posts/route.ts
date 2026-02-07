@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
     if (user && posts.length > 0) {
       const postIds = posts.map(p => p.id)
       
-      // 🚀 并行获取用户反应和投票状态
+      // Parallel获取用户反应和投票状态
       const [reactions, votes] = await Promise.all([
         getUserPostReactions(supabase, postIds, user.id),
         getUserPostVotes(supabase, postIds, user.id),

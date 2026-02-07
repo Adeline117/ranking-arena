@@ -99,7 +99,7 @@ describe('Button', () => {
   })
 
   it('renders with icon', () => {
-    const icon = <span data-testid="test-icon">★</span>
+    const icon = <span data-testid="test-icon">S</span>
     render(<Button icon={icon}>With Icon</Button>)
     
     expect(screen.getByTestId('test-icon')).toBeInTheDocument()
@@ -107,7 +107,7 @@ describe('Button', () => {
   })
 
   it('renders icon on the right when iconPosition is right', () => {
-    const icon = <span data-testid="test-icon">★</span>
+    const icon = <span data-testid="test-icon">S</span>
     render(<Button icon={icon} iconPosition="right">Icon Right</Button>)
     
     expect(screen.getByTestId('test-icon')).toBeInTheDocument()

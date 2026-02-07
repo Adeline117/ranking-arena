@@ -243,7 +243,7 @@ export default function MembershipPage() {
                 justifyContent: 'center',
                 fontSize: 24,
               }}>
-                ✓
+                Yes
               </div>
               <div>
                 <div style={{ fontWeight: 700 }}>Arena Pro NFT #{info.nft.tokenId}</div>
@@ -326,13 +326,13 @@ export default function MembershipPage() {
             <tbody>
               <BenefitRow feature="关注交易员" free={`${FEATURE_LIMITS.free.maxFollows} 个`} pro={`${FEATURE_LIMITS.pro.maxFollows} 个`} />
               <BenefitRow feature="历史数据" free={`${FEATURE_LIMITS.free.historicalDays} 天`} pro={`${FEATURE_LIMITS.pro.historicalDays} 天`} />
-              <BenefitRow feature="交易员变动提醒" free="✗" pro="✓" isPro />
+              <BenefitRow feature="交易员变动提醒" free="--" pro="Yes" isPro />
               <BenefitRow feature="交易员对比" free="有限制" pro="无限制" isPro />
-              <BenefitRow feature="Arena Score 详情" free="✗" pro="✓" isPro />
-              <BenefitRow feature="API 访问" free="✗" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay} 次/天`} isPro />
-              <BenefitRow feature="Pro 专属群组" free="✗" pro="✓" isPro />
-              <BenefitRow feature="高级筛选" free="✗" pro="✓" isPro />
-              <BenefitRow feature="NFT 会员证" free="✗" pro="✓" isPro />
+              <BenefitRow feature="Arena Score 详情" free="--" pro="Yes" isPro />
+              <BenefitRow feature="API 访问" free="--" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay} 次/天`} isPro />
+              <BenefitRow feature="Pro 专属群组" free="--" pro="Yes" isPro />
+              <BenefitRow feature="高级筛选" free="--" pro="Yes" isPro />
+              <BenefitRow feature="NFT 会员证" free="--" pro="Yes" isPro />
             </tbody>
           </table>
         </div>

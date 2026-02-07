@@ -2,7 +2,7 @@
  * Gate.io — Inline fetcher for Vercel serverless
  * Original: scripts/import/import_gateio.mjs (Playwright-based with API interception)
  *
- * ⚠️  AUTH REQUIRED: Gate.io API v4 copy trading endpoints exist and respond
+ * [WARN] AUTH REQUIRED: Gate.io API v4 copy trading endpoints exist and respond
  * at api.gateio.ws/api/v4/copy_trading/leader_board but require KEY header
  * (GATEIO_API_KEY and GATEIO_API_SECRET).
  * Website (www.gate.io) is Akamai WAF-blocked from US IPs.

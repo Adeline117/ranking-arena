@@ -2,7 +2,7 @@
  * LBank — Inline fetcher for Vercel serverless
  * Original: scripts/import/import_lbank.mjs (Puppeteer-based with Stealth plugin)
  *
- * ⚠️  NO PUBLIC API: LBank doesn't have documented public APIs for copy trading.
+ * [WARN] NO PUBLIC API: LBank doesn't have documented public APIs for copy trading.
  * The website returns generic HTML pages for all API paths tested.
  * Original script uses Puppeteer to browse and intercept internal API calls.
  * Needs browser/proxy infrastructure to work.

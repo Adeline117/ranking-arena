@@ -276,7 +276,7 @@ export function getExchangeErrorProps(
     case 'maintenance':
       return {
         show: true,
-        icon: '🔧',
+        icon: '[MAINT]',
         title: isZh ? '交易所维护中' : 'Exchange Maintenance',
         message: isZh 
           ? `${status.platform} 正在进行临时维护，数据将在维护结束后更新。`
@@ -286,7 +286,7 @@ export function getExchangeErrorProps(
     case 'degraded':
       return {
         show: true,
-        icon: '⚠️',
+        icon: '[WARN]',
         title: isZh ? '数据延迟' : 'Data Delayed',
         message: isZh
           ? `${status.platform} 响应缓慢，当前显示缓存数据。`
@@ -296,7 +296,7 @@ export function getExchangeErrorProps(
     case 'offline':
       return {
         show: true,
-        icon: '❌',
+        icon: '[ERROR]',
         title: isZh ? '交易所离线' : 'Exchange Offline',
         message: isZh
           ? `${status.platform} 暂时无法访问，请稍后重试。`

@@ -49,7 +49,7 @@ function parseEnv() {
     const result = envSchema.safeParse(process.env)
     
     if (!result.success) {
-      console.error('❌ 环境变量配置错误:')
+      console.error('[ERROR] Environment variable configuration error:')
       result.error.issues.forEach(issue => {
         console.error(`  - ${issue.path.join('.')}: ${issue.message}`)
       })

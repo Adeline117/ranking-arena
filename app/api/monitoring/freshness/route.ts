@@ -196,10 +196,10 @@ export async function GET(request: NextRequest) {
 
 function generateHtml(results: FreshnessResult): string {
   const statusEmoji: Record<string, string> = {
-    healthy: '✅',
-    warning: '⚠️',
-    critical: '🔴',
-    no_data: '❓',
+    healthy: '[OK]',
+    warning: '[WARN]',
+    critical: '[CRIT]',
+    no_data: '[N/A]',
   }
 
   return `<!DOCTYPE html>
@@ -231,7 +231,7 @@ function generateHtml(results: FreshnessResult): string {
   </style>
 </head>
 <body>
-  <h1>🏆 Data Freshness Status</h1>
+  <h1>Data Freshness Status</h1>
   <p class="timestamp">Updated: ${new Date(results.timestamp).toLocaleString()} (auto-refresh: 5min)</p>
   
   <div class="summary">

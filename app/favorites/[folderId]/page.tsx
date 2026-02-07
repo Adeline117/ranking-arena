@@ -695,12 +695,12 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 t('processing')
               ) : isSubscribed ? (
                 <>
-                  <span style={{ fontSize: 14 }}>✓</span>
+                  <span style={{ fontSize: 14 }}>OK</span>
                   {t('bookmarked')}
                 </>
               ) : (
                 <>
-                  <span style={{ fontSize: 14 }}>★</span>
+                  <span style={{ fontSize: 14, color: 'var(--accent)' }}>Default</span>
                   {t('bookmark')}
                 </>
               )}

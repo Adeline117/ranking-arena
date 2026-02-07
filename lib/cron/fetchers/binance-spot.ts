@@ -6,7 +6,7 @@
  * winRate is 0-100, normalised at save time.
  * timeRange is a string: '7D', '30D', '90D'.
  *
- * ⚠️  GEO-BLOCKED from US IPs (HTTP 451).
+ * [WARN] GEO-BLOCKED from US IPs (HTTP 451).
  * Works correctly from Vercel Japan/Singapore datacenters.
  */
 

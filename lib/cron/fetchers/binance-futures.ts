@@ -5,7 +5,7 @@
  * Converted from app/api/cron/fetch-traders/binance-inline/route.ts
  * ROI from API is a decimal (e.g. 0.5 = 50%), converted to percentage.
  *
- * ⚠️  GEO-BLOCKED from US IPs (HTTP 451).
+ * [WARN] GEO-BLOCKED from US IPs (HTTP 451).
  * Works correctly from Vercel Japan/Singapore datacenters.
  * Verified against working app/api/cron/fetch-traders/binance-inline/route.ts
  */

@@ -655,7 +655,7 @@ function PostListItem(props: PostListItemProps) {
             style={{ padding: 0, minWidth: 'auto', color: post.user_bookmarked ? '#FFB020' : undefined }}
             title={language === 'zh' ? (post.user_bookmarked ? '取消收藏' : '收藏') : (post.user_bookmarked ? 'Remove bookmark' : 'Bookmark')}
           >
-            <span style={{ fontSize: 14 }}>{post.user_bookmarked ? '★' : '☆'}</span>
+            <span style={{ fontSize: 14 }}>{post.user_bookmarked ? '[S]' : '[+]'}</span>
             <Text size="xs" style={{ marginLeft: tokens.spacing[1], color: post.user_bookmarked ? '#FFB020' : tokens.colors.text.secondary }}>
               {post.bookmark_count || 0}
             </Text>

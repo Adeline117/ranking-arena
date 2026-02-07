@@ -341,7 +341,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
   {
     id: 'portfolio_suggestions',
     name: '跟单组合建议',
-    description: '⚠️ 功能已下线 - 因合规风险暂停服务',
+    description: '[OFFLINE] Feature discontinued - 因合规风险暂停服务',
     icon: '',
     tier: [], // 空数组 = 所有人都不可用
   },

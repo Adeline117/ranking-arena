@@ -161,7 +161,7 @@ export default function BookDetailModal({ item, onClose }: BookDetailModalProps)
               fontSize: 20, cursor: 'pointer', padding: 4,
             }}
           >
-            ✕
+            X
           </button>
         </div>
 

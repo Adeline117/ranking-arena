@@ -78,7 +78,7 @@ export function PostDetailActions({
       />
       {/* Bookmark */}
       <Action
-        icon={<span style={{ fontSize: 14 }}>{isBookmarked ? '★' : '☆'}</span>}
+        icon={<span style={{ fontSize: 14 }}>{isBookmarked ? '[S]' : '[+]'}</span>}
         text={isBookmarked ? t('bookmarked') : t('save')}
         onClick={(e) => {
           if (e) {

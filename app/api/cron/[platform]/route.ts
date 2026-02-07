@@ -129,7 +129,7 @@ export async function POST(
     }
 
     const durationMs = Date.now() - startTime
-    logger.info(`✅ ${platform} refresh complete: ${data.length} traders in ${durationMs}ms`)
+    logger.info(`[OK] ${platform} refresh complete: ${data.length} traders in ${durationMs}ms`)
 
     return NextResponse.json({
       success: true,
@@ -140,7 +140,7 @@ export async function POST(
 
   } catch (error) {
     const durationMs = Date.now() - startTime
-    logger.error(`❌ ${platform} refresh failed after ${durationMs}ms:`, error)
+    logger.error(`[ERROR] ${platform} refresh failed after ${durationMs}ms:`, error)
 
     return NextResponse.json({
       success: false,

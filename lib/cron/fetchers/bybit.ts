@@ -5,7 +5,7 @@
  * Uses the beehive public API directly (no puppeteer).
  * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
  *
- * ⚠️  WAF-BLOCKED from US residential IPs (Akamai "Access Denied").
+ * [WARN] WAF-BLOCKED from US residential IPs (Akamai "Access Denied").
  * Strategy:
  * 1. Try direct API (works from Vercel SG/JP regions)
  * 2. Fall back to Cloudflare Worker proxy

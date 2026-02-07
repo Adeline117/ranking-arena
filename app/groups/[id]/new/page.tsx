@@ -636,7 +636,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                 </Box>
                 {draftSaved && (
                   <Text size="xs" color="tertiary" style={{ color: '#2fe57d' }}>
-                    ✓ {t('draftSaved')}
+                    [Saved] {t('draftSaved')}
                   </Text>
                 )}
               </Box>
@@ -1061,7 +1061,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                       fontSize: 18,
                     }}
                   >
-                    ▶
+                    Play
                   </Box>
                   {/* 文件大小标签 */}
                   <Box

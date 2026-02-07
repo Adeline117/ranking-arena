@@ -5,7 +5,7 @@
  * Same beehive API as Bybit futures, labelled as bybit_spot.
  * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
  *
- * ⚠️  WAF-BLOCKED from US residential IPs (Akamai "Access Denied").
+ * [WARN] WAF-BLOCKED from US residential IPs (Akamai "Access Denied").
  * Verified correct endpoint from scripts/import/import_bybit_spot.mjs.
  * Should work from Vercel Japan/Singapore datacenters.
  */

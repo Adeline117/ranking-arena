@@ -27,7 +27,7 @@ export default function PostError({
       padding: 24,
       textAlign: 'center',
     }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>⚠</div>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>!</div>
       <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
         {t('errorPostPage')}
       </h2>

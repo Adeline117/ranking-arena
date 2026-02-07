@@ -2,7 +2,7 @@
  * Pionex — Inline fetcher for Vercel serverless
  * Original: scripts/import/import_pionex_v2.mjs (Playwright-based with CF bypass)
  *
- * ⚠️  CF-PROTECTED: All API endpoints behind Cloudflare challenge.
+ * [WARN] CF-PROTECTED: All API endpoints behind Cloudflare challenge.
  * Endpoints discovered from original script (tried via page.evaluate inside browser):
  * 1. /kol-apis/tapi/v1/kol/list
  * 2. /kol-apis/tapi/v1/future/copy_trading/kol_list

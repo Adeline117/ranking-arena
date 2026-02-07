@@ -596,7 +596,7 @@ const zh = {
     proSnapshotLimit: 'Pro 版最多保留 {days} 天快照',
     unlockMoreHistory: '升级解锁更多历史',
     // 高级筛选
-    advancedFilterLocked: '🔒 高级筛选',
+    advancedFilterLocked: '[Lock] 高级筛选',
     unlockAdvancedFilter: '升级 Pro 解锁多条件筛选',
     filtered: '已筛选',
     categoryType: '类型',
