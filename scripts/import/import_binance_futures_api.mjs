@@ -109,6 +109,10 @@ async function fetchLeaderboard(period) {
         const traderId = String(item.leadPortfolioId || item.portfolioId || item.encryptedUid || '')
         if (!traderId || traders.has(traderId)) continue
         
+        let roi = parseFloat(item.roi ?? 0)
+        // Skip anomalous data (>5000% ROI is unrealistic)
+        if (Math.abs(roi) > 5000) continue
+        
         let winRate = parseFloat(item.winRate ?? 0)
         if (winRate > 1) winRate = winRate / 100
         
@@ -116,7 +120,7 @@ async function fetchLeaderboard(period) {
           traderId,
           nickname: item.nickName || item.nickname || null,
           avatar: item.userPhoto || null,
-          roi: parseFloat(item.roi ?? 0),
+          roi,
           pnl: parseFloat(item.pnl ?? 0),
           winRate,
           maxDrawdown: parseFloat(item.mdd ?? 0),
