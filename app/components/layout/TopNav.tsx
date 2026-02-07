@@ -547,27 +547,17 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 <NotificationIcon size={20} />
                 {totalUnread > 0 && (
                   <Box
-                    className="highlight-pulse"
                     style={{
                       position: 'absolute',
-                      top: 2,
-                      right: 2,
-                      width: 18,
-                      height: 18,
+                      top: 4,
+                      right: 4,
+                      width: 8,
+                      height: 8,
                       borderRadius: '50%',
-                      background: tokens.gradient.error,
-                      color: tokens.colors.white,
-                      fontSize: 10,
-                      fontWeight: 900,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: `2px solid ${tokens.colors.bg.primary}`,
-                      boxShadow: tokens.shadow.glowError,
+                      background: '#ef4444',
+                      border: `1.5px solid ${tokens.colors.bg.primary}`,
                     }}
-                  >
-                    {totalUnread > 9 ? '9+' : totalUnread}
-                  </Box>
+                  />
                 )}
               </button>
               <Box
