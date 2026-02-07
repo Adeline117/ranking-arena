@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
         hasNext: count ? (page * limit) < count : false,
         hasPrev: page > 1,
       }
-    })
+    }, 200, { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' })
   } catch (err: unknown) {
     return handleError(err)
   }
