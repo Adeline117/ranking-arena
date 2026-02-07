@@ -32,7 +32,7 @@ const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
 const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers'] as const;
 
 // Data quality: ROI values above this threshold are considered anomalous
-const ROI_ANOMALY_THRESHOLD = 10000; // 10000% = 100x
+const ROI_ANOMALY_THRESHOLD = 5000; // 5000% = 50x — anything above is likely data error
 
 export async function GET(request: NextRequest) {
   try {
@@ -169,6 +169,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
     .lte('roi', ROI_ANOMALY_THRESHOLD) // Filter out extreme ROI anomalies
+    .gte('roi', -ROI_ANOMALY_THRESHOLD) // Filter out extreme negative anomalies too
     .order(sortColumn, { ascending: sort_dir === 'asc', nullsFirst: false })
     .range(0, fetchLimit - 1);
 
