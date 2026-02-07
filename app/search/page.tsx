@@ -587,6 +587,7 @@ function SearchContent() {
         key={`load-more-${type}`}
         onClick={() => loadMore(type)}
         disabled={loadingMore[type]}
+        className="touch-target"
         style={{
           display: 'block',
           width: '100%',
@@ -600,6 +601,7 @@ function SearchContent() {
           transition: tokens.transition.base,
           opacity: loadingMore[type] ? 0.5 : 1,
           textAlign: 'center',
+          minHeight: 48,
         }}
         onMouseEnter={(e) => {
           if (!loadingMore[type]) e.currentTarget.style.background = tokens.glass.bg.light
@@ -635,14 +637,15 @@ function SearchContent() {
         position: 'relative',
         zIndex: 1,
       }}>
-        {/* Search header - compact */}
+        {/* Search header */}
         {query && (
           <div style={{
             fontSize: tokens.typography.fontSize.sm,
             color: tokens.colors.text.tertiary,
-            padding: `${tokens.spacing[3]} 0`,
+            padding: `${tokens.spacing[4]} 0 ${tokens.spacing[3]}`,
+            fontWeight: tokens.typography.fontWeight.medium,
           }}>
-            {t('searchResults')}: &quot;{query}&quot;
+            {t('searchResults')}: <span style={{ color: tokens.colors.text.primary, fontWeight: tokens.typography.fontWeight.semibold }}>&quot;{query}&quot;</span>
           </div>
         )}
 
@@ -673,6 +676,7 @@ function SearchContent() {
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
+                    className="touch-target"
                     style={{
                       padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                       background: 'transparent',
@@ -685,6 +689,7 @@ function SearchContent() {
                       transition: tokens.transition.fast,
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
+                      minHeight: 44,
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) e.currentTarget.style.color = tokens.colors.text.secondary
@@ -765,10 +770,44 @@ function SearchContent() {
             description={t('pleaseTryAgainLater')}
           />
         ) : !query ? (
-          <EmptyState
-            title={t('startSearching')}
-            description={t('startSearchingDesc')}
-          />
+          <div style={{
+            textAlign: 'center',
+            padding: `${tokens.spacing[20]} ${tokens.spacing[4]}`,
+          }}>
+            <div style={{
+              width: 64,
+              height: 64,
+              borderRadius: tokens.radius.full,
+              background: tokens.gradient.primarySubtle,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+              marginBottom: tokens.spacing[5],
+            }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </div>
+            <div style={{
+              fontSize: tokens.typography.fontSize.lg,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              color: tokens.colors.text.primary,
+              marginBottom: tokens.spacing[2],
+            }}>
+              {t('startSearching')}
+            </div>
+            <div style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.tertiary,
+              lineHeight: tokens.typography.lineHeight.relaxed,
+              maxWidth: 320,
+              margin: '0 auto',
+            }}>
+              {t('startSearchingDesc')}
+            </div>
+          </div>
         ) : filteredResults.length === 0 ? (
           <div style={{
             textAlign: 'center',
@@ -827,6 +866,9 @@ function SearchContent() {
       <style>{`
         .search-result-card:last-child {
           border-bottom: none !important;
+        }
+        .search-result-card {
+          min-height: 56px;
         }
         @media (max-width: 640px) {
           main {
