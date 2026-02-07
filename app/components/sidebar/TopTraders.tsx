@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -11,8 +12,41 @@ type Trader = {
   source: string
   source_trader_id: string
   handle: string | null
+  avatar_url: string | null
   roi: number | null
-  win_rate: number | null
+  arena_score: number | null
+}
+
+const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32']
+
+const PLATFORM_LABELS: Record<string, string> = {
+  binance: 'Binance',
+  okx: 'OKX',
+  bitget: 'Bitget',
+  bybit: 'Bybit',
+}
+
+function AvatarFallback({ name, size = 36 }: { name: string; size?: number }) {
+  const initial = (name || '?').charAt(0).toUpperCase()
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        minWidth: size,
+        borderRadius: tokens.radius.full,
+        background: 'linear-gradient(135deg, rgba(139,111,168,0.3), rgba(212,168,67,0.3))',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: size * 0.4,
+        fontWeight: tokens.typography.fontWeight.semibold,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      {initial}
+    </div>
+  )
 }
 
 export default function TopTraders() {
@@ -26,11 +60,26 @@ export default function TopTraders() {
     async function load() {
       try {
         const { data } = await supabase
-          .from('trader_sources')
-          .select('source, source_trader_id, handle, roi, win_rate')
+          .from('trader_snapshots')
+          .select(`
+            source, source_trader_id, roi, arena_score,
+            trader_sources!trader_snapshots_source_source_trader_id_fkey(handle, avatar_url)
+          `)
+          .eq('season_id', '90D')
           .order('roi', { ascending: false })
           .limit(10)
-        setTraders((data as Trader[]) || [])
+        const mapped = (data || []).map((d: any) => {
+          const ts = Array.isArray(d.trader_sources) ? d.trader_sources[0] : d.trader_sources
+          return {
+            source: d.source,
+            source_trader_id: d.source_trader_id,
+            handle: ts?.handle ?? null,
+            avatar_url: ts?.avatar_url ?? null,
+            roi: d.roi,
+            arena_score: d.arena_score,
+          }
+        })
+        setTraders(mapped)
       } catch {
         setError(true)
       } finally {
@@ -45,7 +94,7 @@ export default function TopTraders() {
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="skeleton" style={{ height: 40, borderRadius: tokens.radius.md }} />
+            <div key={i} className="skeleton" style={{ height: 48, borderRadius: tokens.radius.md }} />
           ))}
         </div>
       ) : error ? (
@@ -58,44 +107,102 @@ export default function TopTraders() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {traders.map((t, idx) => (
-            <Link
-              key={`${t.source}-${t.source_trader_id}`}
-              href={`/trader/${t.source}/${t.source_trader_id}`}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 6px', textDecoration: 'none', borderRadius: tokens.radius.md,
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <span style={{
-                fontSize: 14, fontWeight: 800, minWidth: 20, textAlign: 'right',
-                color: idx === 0 ? '#ffd700' : idx === 1 ? '#c0c0c0' : idx === 2 ? '#cd7f32' : tokens.colors.text.secondary,
-              }}>
-                {idx + 1}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary,
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {t.handle || t.source_trader_id.slice(0, 10)}
+          {traders.map((t, idx) => {
+            const displayName = t.handle || t.source_trader_id.slice(0, 10)
+            return (
+              <Link
+                key={`${t.source}-${t.source_trader_id}`}
+                href={`/trader/${t.source}/${t.source_trader_id}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 6px',
+                  textDecoration: 'none',
+                  borderRadius: tokens.radius.md,
+                  transition: `background ${tokens.transition.fast}`,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                {/* Rank */}
+                <span
+                  style={{
+                    fontSize: tokens.typography.fontSize.base,
+                    fontWeight: tokens.typography.fontWeight.extrabold,
+                    minWidth: 20,
+                    textAlign: 'right',
+                    color: idx < 3 ? RANK_COLORS[idx] : tokens.colors.text.tertiary,
+                  }}
+                >
+                  {idx + 1}
+                </span>
+
+                {/* Avatar */}
+                {t.avatar_url ? (
+                  <Image
+                    src={t.avatar_url}
+                    alt={displayName}
+                    width={36}
+                    height={36}
+                    style={{
+                      borderRadius: tokens.radius.full,
+                      objectFit: 'cover',
+                      minWidth: 36,
+                    }}
+                  />
+                ) : (
+                  <AvatarFallback name={displayName} size={36} />
+                )}
+
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.semibold,
+                      color: tokens.colors.text.primary,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {displayName}
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      fontSize: tokens.typography.fontSize.xs,
+                      color: tokens.colors.text.tertiary,
+                      marginTop: 1,
+                    }}
+                  >
+                    <span>{PLATFORM_LABELS[t.source.toLowerCase()] || t.source}</span>
+                    {t.arena_score != null && (
+                      <span style={{ color: tokens.colors.text.secondary }}>
+                        {isZh ? '积分' : 'Score'} {t.arena_score.toFixed(0)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 11, color: tokens.colors.text.secondary }}>
-                  {t.roi != null && (
-                    <span style={{ color: t.roi >= 0 ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
-                      ROI {t.roi >= 0 ? '+' : ''}{t.roi.toFixed(1)}%
-                    </span>
-                  )}
-                  {t.win_rate != null && (
-                    <span>{isZh ? '胜率' : 'WR'} {t.win_rate.toFixed(0)}%</span>
-                  )}
-                </div>
-              </div>
-            </Link>
-          ))}
+
+                {/* ROI */}
+                {t.roi != null && (
+                  <span
+                    style={{
+                      fontSize: tokens.typography.fontSize.xs,
+                      fontWeight: tokens.typography.fontWeight.semibold,
+                      color: t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {t.roi >= 0 ? '+' : ''}{t.roi.toFixed(1)}%
+                  </span>
+                )}
+              </Link>
+            )
+          })}
         </div>
       )}
     </SidebarCard>
