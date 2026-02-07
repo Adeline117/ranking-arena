@@ -72,15 +72,15 @@ export default function LibraryPage() {
   const isZh = language === 'zh'
 
   return (
-    <div style={{ minHeight: '100vh', background: tokens.colors.background }}>
+    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <TopNav />
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 16px 100px' }}>
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: tokens.colors.text, marginBottom: 4 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 4 }}>
             {isZh ? '📚 加密研究库' : '📚 Crypto Library'}
           </h1>
-          <p style={{ color: tokens.colors.textSecondary, fontSize: 14 }}>
+          <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
             {isZh ? `${total.toLocaleString()} 篇白皮书、研报、书籍与论文` : `${total.toLocaleString()} whitepapers, research reports, books & papers`}
           </p>
         </div>
@@ -94,8 +94,8 @@ export default function LibraryPage() {
             placeholder={isZh ? '搜索标题、作者、描述...' : 'Search titles, authors, descriptions...'}
             style={{
               width: '100%', maxWidth: 500, padding: '10px 14px',
-              borderRadius: 8, border: `1px solid ${tokens.colors.border}`,
-              background: tokens.colors.cardBg, color: tokens.colors.text,
+              borderRadius: 8, border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.secondary, color: tokens.colors.text.primary,
               fontSize: 14, outline: 'none',
             }}
           />
@@ -109,9 +109,9 @@ export default function LibraryPage() {
               onClick={() => { setCategory(cat.key); setPage(1) }}
               style={{
                 padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 500,
-                border: category === cat.key ? 'none' : `1px solid ${tokens.colors.border}`,
-                background: category === cat.key ? tokens.colors.accent : 'transparent',
-                color: category === cat.key ? '#fff' : tokens.colors.textSecondary,
+                border: category === cat.key ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+                background: category === cat.key ? tokens.colors.accent.brand : 'transparent',
+                color: category === cat.key ? '#fff' : tokens.colors.text.secondary,
                 cursor: 'pointer', transition: 'all 0.2s',
               }}
             >
@@ -125,13 +125,13 @@ export default function LibraryPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} style={{
-                height: 280, borderRadius: 12, background: tokens.colors.cardBg,
+                height: 280, borderRadius: 12, background: tokens.colors.bg.secondary,
                 animation: 'pulse 1.5s ease-in-out infinite',
               }} />
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 60, color: tokens.colors.textSecondary }}>
+          <div style={{ textAlign: 'center', padding: 60, color: tokens.colors.text.secondary }}>
             {isZh ? '暂无内容，请先运行收集脚本' : 'No items yet. Run collection scripts first.'}
           </div>
         ) : (
@@ -144,7 +144,7 @@ export default function LibraryPage() {
                 rel="noopener noreferrer"
                 style={{
                   borderRadius: 12, overflow: 'hidden', textDecoration: 'none',
-                  background: tokens.colors.cardBg, border: `1px solid ${tokens.colors.border}`,
+                  background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
                   transition: 'transform 0.2s, box-shadow 0.2s', cursor: 'pointer',
                   display: 'flex', flexDirection: 'column',
                 }}
@@ -153,7 +153,7 @@ export default function LibraryPage() {
               >
                 {/* Cover */}
                 <div style={{
-                  height: 140, background: `linear-gradient(135deg, ${tokens.colors.accent}22, ${tokens.colors.accent}44)`,
+                  height: 140, background: `linear-gradient(135deg, ${tokens.colors.accent.brand}22, ${tokens.colors.accent.brand}44)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
                 }}>
                   {item.cover_url ? (
@@ -170,7 +170,7 @@ export default function LibraryPage() {
                   <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
                     <span style={{
                       fontSize: 10, padding: '2px 8px', borderRadius: 10,
-                      background: tokens.colors.accent + '22', color: tokens.colors.accent,
+                      background: tokens.colors.accent.brand + '22', color: tokens.colors.accent.brand,
                       fontWeight: 600, textTransform: 'uppercase',
                     }}>
                       {item.category}
@@ -182,7 +182,7 @@ export default function LibraryPage() {
                     )}
                   </div>
                   <h3 style={{
-                    fontSize: 14, fontWeight: 600, color: tokens.colors.text,
+                    fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary,
                     lineHeight: 1.3, marginBottom: 4,
                     overflow: 'hidden', textOverflow: 'ellipsis',
                     display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any,
@@ -190,18 +190,18 @@ export default function LibraryPage() {
                     {item.title}
                   </h3>
                   {item.author && (
-                    <p style={{ fontSize: 12, color: tokens.colors.textSecondary, marginBottom: 4 }}>
+                    <p style={{ fontSize: 12, color: tokens.colors.text.secondary, marginBottom: 4 }}>
                       {item.author.length > 50 ? item.author.slice(0, 50) + '...' : item.author}
                     </p>
                   )}
                   <div style={{ marginTop: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
                     {item.crypto_symbols?.slice(0, 3).map(s => (
-                      <span key={s} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: tokens.colors.border, color: tokens.colors.textSecondary }}>
+                      <span key={s} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, background: tokens.colors.border.primary, color: tokens.colors.text.secondary }}>
                         {s}
                       </span>
                     ))}
                     {item.pdf_url && (
-                      <span style={{ fontSize: 10, color: tokens.colors.accent, marginLeft: 'auto' }}>PDF ↗</span>
+                      <span style={{ fontSize: 10, color: tokens.colors.accent.brand, marginLeft: 'auto' }}>PDF ↗</span>
                     )}
                   </div>
                 </div>
@@ -217,22 +217,22 @@ export default function LibraryPage() {
               disabled={page <= 1}
               onClick={() => setPage(p => p - 1)}
               style={{
-                padding: '8px 16px', borderRadius: 8, border: `1px solid ${tokens.colors.border}`,
-                background: 'transparent', color: tokens.colors.text, cursor: page <= 1 ? 'default' : 'pointer',
+                padding: '8px 16px', borderRadius: 8, border: `1px solid ${tokens.colors.border.primary}`,
+                background: 'transparent', color: tokens.colors.text.primary, cursor: page <= 1 ? 'default' : 'pointer',
                 opacity: page <= 1 ? 0.4 : 1,
               }}
             >
               ← {isZh ? '上一页' : 'Prev'}
             </button>
-            <span style={{ padding: '8px 12px', color: tokens.colors.textSecondary, fontSize: 14 }}>
+            <span style={{ padding: '8px 12px', color: tokens.colors.text.secondary, fontSize: 14 }}>
               {page} / {Math.ceil(total / 24)}
             </span>
             <button
               disabled={page >= Math.ceil(total / 24)}
               onClick={() => setPage(p => p + 1)}
               style={{
-                padding: '8px 16px', borderRadius: 8, border: `1px solid ${tokens.colors.border}`,
-                background: 'transparent', color: tokens.colors.text, cursor: 'pointer',
+                padding: '8px 16px', borderRadius: 8, border: `1px solid ${tokens.colors.border.primary}`,
+                background: 'transparent', color: tokens.colors.text.primary, cursor: 'pointer',
                 opacity: page >= Math.ceil(total / 24) ? 0.4 : 1,
               }}
             >
