@@ -1233,7 +1233,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                                 gap: 4,
                               }}
                             >
-                              📌 {t('pinnedLabel')}
+                              PIN {t('pinnedLabel')}
                             </span>
                           )}
                           <Text weight="bold" style={{ textDecoration: post.deleted_at ? 'line-through' : 'none' }}>

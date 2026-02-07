@@ -31,7 +31,7 @@ export default function NewsFlash() {
   return (
     <div>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        ⚡ {isZh ? '快讯' : 'News Flash'}
+        {isZh ? '快讯' : 'News Flash'}
       </h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {news.map(item => (

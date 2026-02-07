@@ -39,7 +39,7 @@ export default function OfflinePage() {
             marginBottom: '1.5rem',
           }}
         >
-          📡
+          --
         </div>
 
         <h1

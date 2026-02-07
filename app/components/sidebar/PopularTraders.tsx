@@ -36,7 +36,7 @@ export default function PopularTraders() {
   return (
     <div>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        🏆 {isZh ? '热门交易员' : 'Popular Traders'}
+        {isZh ? '热门交易员' : 'Popular Traders'}
       </h3>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

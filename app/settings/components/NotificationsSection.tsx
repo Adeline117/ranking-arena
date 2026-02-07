@@ -82,7 +82,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(pro
             }}
           >
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <span style={{ fontSize: 20 }}>📳</span>
+              <span style={{ fontSize: 20 }}>V</span>
               <Text size="sm" weight="medium">
                 {language === 'zh' ? '交易提醒震动' : 'Trade Alert Vibration'}
               </Text>

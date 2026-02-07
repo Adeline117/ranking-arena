@@ -174,19 +174,19 @@ export default function SystemMetrics({ data }: SystemMetricsProps) {
                 title="Fresh (<12h)"
                 value={data.scraperHealth.fresh}
                 color={tokens.colors.accent.success}
-                icon="✓"
+                icon="OK"
               />
               <HealthCard
                 title="Stale (12-24h)"
                 value={data.scraperHealth.stale}
                 color={tokens.colors.accent.warning}
-                icon="⚠"
+                icon="WARN"
               />
               <HealthCard
                 title="Critical (>24h)"
                 value={data.scraperHealth.critical}
                 color={tokens.colors.accent.error}
-                icon="✗"
+                icon="ERR"
               />
             </Box>
           </Box>

@@ -28,7 +28,7 @@ export default function WatchlistMarket() {
   return (
     <div>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        📈 {isZh ? '自选行情' : 'Watchlist'}
+        {isZh ? '自选行情' : 'Watchlist'}
       </h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {coins.map(coin => (

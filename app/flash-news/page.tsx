@@ -56,14 +56,14 @@ const IMPORTANCE_CONFIG = {
     bg: '#fef2f2', 
     label: '突发', 
     label_en: 'Breaking',
-    icon: '🔥'
+    icon: ''
   },
   important: { 
     color: '#f97316', 
     bg: '#fff7ed', 
     label: '重要', 
     label_en: 'Important',
-    icon: '⚡'
+    icon: ''
   },
   normal: { 
     color: '#6b7280', 

@@ -359,7 +359,7 @@ export default function TraderAboutCard({
           {socialLinks.website && (
             <SocialLink
               href={socialLinks.website.startsWith('http') ? socialLinks.website : `https://${socialLinks.website}`}
-              icon="🌐"
+              icon="W"
               text={socialLinks.website.replace(/^https?:\/\//, '').slice(0, 20)}
               title={socialLinks.website}
             />
