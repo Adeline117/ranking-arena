@@ -2505,6 +2505,70 @@ const en = {
     rateThisBook: 'Rate this book',
     ratings: 'Ratings',
 
+    // Membership page
+    membershipTitle: 'Membership',
+    membershipSubtitle: 'Manage your subscription and view membership benefits',
+    currentPlan: 'Current Plan',
+    subscriptionStatus: 'Subscription Status',
+    subscriptionActive: 'Active',
+    subscriptionCanceled: 'Canceled',
+    subscriptionPastDue: 'Past Due',
+    billingCycle: 'Billing Cycle',
+    billingYearly: 'Yearly',
+    billingMonthly: 'Monthly',
+    expirationDate: 'Expiration Date',
+    nextRenewal: 'Next Renewal',
+    nftMembershipCard: 'NFT Membership Card',
+    nftValidUntil: 'Valid until:',
+    nftNotMintedPro: 'You are a Pro member, but have not minted your NFT membership card yet.',
+    nftLinkWalletHint: 'Your NFT membership card will be automatically minted after linking a wallet.',
+    nftLinkWallet: 'Link Wallet',
+    nftUpgradeHint: 'Upgrade to Pro to get an NFT membership card.',
+    benefitsComparison: 'Benefits Comparison',
+    benefitFeature: 'Feature',
+    benefitFollowTraders: 'Follow Traders',
+    benefitHistoricalData: 'Historical Data',
+    benefitTraderAlerts: 'Trader Change Alerts',
+    benefitTraderCompare: 'Trader Compare',
+    benefitArenaScore: 'Arena Score Details',
+    benefitApiAccess: 'API Access',
+    benefitProGroups: 'Pro Groups',
+    benefitAdvancedFilter: 'Advanced Filters',
+    benefitNft: 'NFT Membership',
+    benefitLimited: 'Limited',
+    benefitUnlimited: 'Unlimited',
+    benefitUnit: '',
+    benefitDays: 'days',
+    benefitTimesPerDay: '/day',
+    usageStats: 'Usage Stats',
+    usageFollowedTraders: 'Followed Traders',
+    usageApiCallsToday: 'API Calls Today',
+    manageSubscription: 'Manage Subscription',
+
+    // Position history
+    positionPerpetual: 'Perpetual',
+    positionDelivery: 'Delivery',
+    positionLong: 'Long',
+    positionShort: 'Short',
+    positionOpen: 'Open',
+    positionOpenPrice: 'Entry Price',
+    positionClosePrice: 'Exit Price',
+    positionPnl: 'PnL',
+    positionCollapse: 'Collapse',
+    positionExpandAll: 'Expand All',
+    positionCount: '',
+
+    // Compare portfolio
+    noComparisonData: 'No comparison data',
+    noComparisonDataHint: 'More on-chain history needed to generate comparison chart',
+    loadingChart: 'Loading chart...',
+
+    // Search
+    noRelatedResults: 'No related results found',
+
+    // Groups
+    noPostsYet: 'No posts yet. Be the first to post!',
+
 } as const
 
 export default en

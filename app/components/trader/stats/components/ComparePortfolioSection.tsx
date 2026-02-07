@@ -106,10 +106,10 @@ export function ComparePortfolioSection({
           borderRadius: tokens.radius.lg,
         }}>
           <Text size="sm" color="tertiary">
-            {language === 'zh' ? '暂无对比数据' : 'No comparison data'}
+            {t('noComparisonData')}
           </Text>
           <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-            {language === 'zh' ? '需要更多链上历史数据才能生成对比图表' : 'More on-chain history needed to generate comparison chart'}
+            {t('noComparisonDataHint')}
           </Text>
         </Box>
       )}
@@ -130,6 +130,7 @@ function CompareChart({
   traderData: Array<{ date: string; roi: number; pnl: number }>
   traderHandle: string
 }) {
+  const { t } = useLanguage()
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = useState(false)
 
@@ -285,7 +286,7 @@ function CompareChart({
           justifyContent: 'center',
         }}
       >
-        <Text size="sm" color="tertiary">加载图表中...</Text>
+        <Text size="sm" color="tertiary">{t('loadingChart')}</Text>
       </Box>
     )
   }
