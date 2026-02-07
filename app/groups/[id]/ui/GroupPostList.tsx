@@ -468,7 +468,7 @@ function PostListItem(props: PostListItemProps) {
         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flex: 1 }}>
             {post.is_pinned && (
-              <span title={language === 'zh' ? '置顶' : 'Pinned'} style={{ fontSize: 14, color: tokens.colors.accent?.primary || ARENA_PURPLE }}>📌</span>
+              <span title={language === 'zh' ? '置顶' : 'Pinned'} style={{ fontSize: 14, color: tokens.colors.accent?.primary || ARENA_PURPLE }}>PIN</span>
             )}
             {editingPost === post.id ? (
               <input
@@ -503,14 +503,14 @@ function PostListItem(props: PostListItemProps) {
                     onClick={(e) => { e.stopPropagation(); setEditingPost(post.id); setEditTitle(post.title); setEditContent(post.content || '') }}
                     title={language === 'zh' ? '编辑' : 'Edit'}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: tokens.colors.text.tertiary }}
-                  >✏️</button>
+                  >Edit</button>
                 )}
                 {(userRole === 'owner' || userRole === 'admin') && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handlePinPost(post.id) }}
                     title={post.is_pinned ? (language === 'zh' ? '取消置顶' : 'Unpin') : (language === 'zh' ? '置顶' : 'Pin')}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: post.is_pinned ? (tokens.colors.accent?.primary || ARENA_PURPLE) : tokens.colors.text.tertiary }}
-                  >📌</button>
+                  >Pin</button>
                 )}
                 {post.author_id === userId && (
                   <button
@@ -518,7 +518,7 @@ function PostListItem(props: PostListItemProps) {
                     title={language === 'zh' ? '删除' : 'Delete'}
                     disabled={deletingPost === post.id}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: '#ff6b6b', opacity: deletingPost === post.id ? 0.5 : 1 }}
-                  >🗑️</button>
+                  >Del</button>
                 )}
               </Box>
             )}

@@ -494,7 +494,7 @@ export default function CommentsModal({
                   }}
                   title={language === 'zh' ? '表情' : 'Emoji'}
                 >
-                  😊
+                  :)
                 </button>
                 {showEmojiPicker && (
                   <div style={{
@@ -512,10 +512,10 @@ export default function CommentsModal({
                     boxShadow: tokens.shadow.lg,
                     width: 280,
                   }}>
-                    {['😀','😂','🤣','😍','🥰','😎','🤔','😏',
-                      '👍','👎','🔥','💯','🚀','💰','📈','📉',
-                      '🐂','🐻','💎','🙌','😱','🤑','💪','❤️',
-                      '👀','🎯','⚡','🌙','☀️','🤝','🎉','💀'].map(emoji => (
+                    {[':)',':D','XD','<3',';)',':P','B)',':/',
+                      '+1','-1','hot','100','go','$','up','dn',
+                      'bull','bear','gem','hi','!?','$$','strong','luv',
+                      'eye','aim','zap','moon','sun','deal','yay','rip'].map(emoji => (
                       <button
                         key={emoji}
                         onClick={() => {
@@ -526,7 +526,7 @@ export default function CommentsModal({
                         style={{
                           background: 'transparent',
                           border: 'none',
-                          fontSize: 20,
+                          fontSize: 13,
                           cursor: 'pointer',
                           padding: 4,
                           borderRadius: 4,

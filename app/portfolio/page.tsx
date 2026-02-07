@@ -135,9 +135,9 @@ function PortfolioContent() {
     : []
 
   const tabs: { key: RiskTab; label: string; desc: string; icon: string }[] = [
-    { key: 'conservative', label: t('portfolioConservative'), desc: t('portfolioConservativeDesc'), icon: '🛡️' },
-    { key: 'balanced', label: t('portfolioBalanced'), desc: t('portfolioBalancedDesc'), icon: '⚖️' },
-    { key: 'aggressive', label: t('portfolioAggressive'), desc: t('portfolioAggressiveDesc'), icon: '🚀' },
+    { key: 'conservative', label: t('portfolioConservative'), desc: t('portfolioConservativeDesc'), icon: 'S' },
+    { key: 'balanced', label: t('portfolioBalanced'), desc: t('portfolioBalancedDesc'), icon: 'B' },
+    { key: 'aggressive', label: t('portfolioAggressive'), desc: t('portfolioAggressiveDesc'), icon: 'A' },
   ]
 
   if (loading) {

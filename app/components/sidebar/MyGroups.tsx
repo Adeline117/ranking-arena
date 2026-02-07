@@ -39,7 +39,7 @@ export default function MyGroups() {
     return (
       <div>
         <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 8 }}>
-          📁 {isZh ? '我的小组' : 'My Groups'}
+          {isZh ? '我的小组' : 'My Groups'}
         </h3>
         <p style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
           {isZh ? '登录后查看' : 'Login to view'}
@@ -51,7 +51,7 @@ export default function MyGroups() {
   return (
     <div>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        📁 {isZh ? '我的小组' : 'My Groups'}
+        {isZh ? '我的小组' : 'My Groups'}
       </h3>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

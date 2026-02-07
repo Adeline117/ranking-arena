@@ -137,7 +137,7 @@ const RankBadge = memo(function RankBadge({
   rankChange?: number | null
 }) {
   const isTop3 = rank <= 3
-  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
+  const medal = rank === 1 ? '#1' : rank === 2 ? '#2' : rank === 3 ? '#3' : null
 
   return (
     <div

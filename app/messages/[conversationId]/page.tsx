@@ -569,7 +569,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
 
   const handleVoiceSent = useCallback(async (voiceUrl: string, duration: number) => {
     if (!userId || !otherUser) return
-    const content = `🎤 ${t('voiceMessage')} (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`
+    const content = `[Voice] ${t('voiceMessage')} (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`
     const auth = await getAuthSession()
     if (!auth) return
     const tempId = `voice-${Date.now()}`
@@ -1243,7 +1243,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                         </Box>
                       </Box>
                     )}
-                    {msg.media_url && msg.media_type === 'file' && msg.media_name?.endsWith('.webm') && msg.content?.startsWith('🎤') && (
+                    {msg.media_url && msg.media_type === 'file' && msg.media_name?.endsWith('.webm') && msg.content?.startsWith('[Voice]') && (
                       <VoiceMessage
                         url={msg.media_url}
                         duration={(() => {
@@ -1252,7 +1252,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                         })()}
                       />
                     )}
-                    {msg.media_url && msg.media_type === 'file' && !(msg.media_name?.endsWith('.webm') && msg.content?.startsWith('🎤')) && (
+                    {msg.media_url && msg.media_type === 'file' && !(msg.media_name?.endsWith('.webm') && msg.content?.startsWith('[Voice]')) && (
                       <Box
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()

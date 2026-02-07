@@ -400,7 +400,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
     >
       <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary }}>
         {trader.rank <= 3 ? (
-          <span className="text-lg">{trader.rank === 1 ? '🥇' : trader.rank === 2 ? '🥈' : '🥉'}</span>
+          <span className="text-lg">{trader.rank === 1 ? '#1' : trader.rank === 2 ? '#2' : '#3'}</span>
         ) : (
           trader.rank
         )}

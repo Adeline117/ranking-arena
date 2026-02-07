@@ -36,7 +36,7 @@ export default function TopTraders() {
   return (
     <div>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        🥇 {isZh ? 'Top 10 交易员' : 'Top 10 Traders'}
+        Top 10 {isZh ? '交易员' : 'Traders'}
       </h3>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

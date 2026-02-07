@@ -109,7 +109,7 @@ export default function BookDetailModal({ item, onClose }: BookDetailModalProps)
               <Image src={item.cover_url} alt={item.title || ''} fill style={{ objectFit: 'cover' }} unoptimized />
             ) : (
               <span style={{ fontSize: 48 }}>
-                {item.category === 'book' ? '📖' : item.category === 'whitepaper' ? '📄' : item.category === 'paper' ? '📝' : '📊'}
+                {item.category === 'book' ? 'BK' : item.category === 'whitepaper' ? 'WP' : item.category === 'paper' ? 'PP' : 'RS'}
               </span>
             )}
           </div>

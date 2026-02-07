@@ -61,7 +61,7 @@ export default function FollowingFeed() {
         textAlign: 'center', padding: '60px 20px',
         color: tokens.colors.text.secondary,
       }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>--</div>
         <p style={{ fontSize: 16, marginBottom: 12 }}>
           {isZh ? '登录后查看关注动态' : 'Login to see your following feed'}
         </p>
@@ -93,7 +93,7 @@ export default function FollowingFeed() {
         textAlign: 'center', padding: '60px 20px',
         color: tokens.colors.text.secondary,
       }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>👀</div>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>--</div>
         <p style={{ fontSize: 16, marginBottom: 8 }}>
           {isZh ? '你还没有关注任何人' : "You haven't followed anyone yet"}
         </p>
@@ -117,7 +117,7 @@ export default function FollowingFeed() {
         textAlign: 'center', padding: '60px 20px',
         color: tokens.colors.text.secondary,
       }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>--</div>
         <p>{isZh ? '关注的人还没有发布内容' : 'No posts from people you follow yet'}</p>
       </div>
     )

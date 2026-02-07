@@ -73,7 +73,7 @@ export default function LibraryPage() {
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 4 }}>
-            {isZh ? '📚 加密研究库' : '📚 Crypto Library'}
+            {isZh ? 'Crypto Library' : 'Crypto Library'}
           </h1>
           <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
             {isZh ? `${total.toLocaleString()} 篇白皮书、研报、书籍与论文` : `${total.toLocaleString()} whitepapers, research reports, books & papers`}
@@ -157,7 +157,7 @@ export default function LibraryPage() {
                   ) : item.category === 'event' ? (
                     <div style={{ textAlign: 'center' }}>
                       <span style={{ fontSize: 36 }}>
-                        {item.subcategory === 'hack' ? '🔓' : item.subcategory === 'regulation' ? '⚖️' : item.subcategory === 'quote' ? '💬' : item.subcategory === 'milestone' ? '🏆' : '📅'}
+                        {item.subcategory === 'hack' ? 'H' : item.subcategory === 'regulation' ? 'R' : item.subcategory === 'quote' ? 'Q' : item.subcategory === 'milestone' ? 'M' : 'E'}
                       </span>
                       {item.publish_date && (
                         <div style={{ marginTop: 4, fontSize: 11, fontWeight: 700, color: tokens.colors.accent.brand }}>
@@ -167,7 +167,7 @@ export default function LibraryPage() {
                     </div>
                   ) : (
                     <span style={{ fontSize: 40 }}>
-                      {item.category === 'whitepaper' ? '📄' : item.category === 'book' ? '📖' : item.category === 'paper' ? '📝' : '📊'}
+                      {item.category === 'whitepaper' ? 'WP' : item.category === 'book' ? 'BK' : item.category === 'paper' ? 'PP' : 'RS'}
                     </span>
                   )}
                 </div>
@@ -193,7 +193,7 @@ export default function LibraryPage() {
                     )}
                     {!item.is_free && (
                       <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#f59e0b22', color: '#f59e0b', fontWeight: 600 }}>
-                        💰 Paid
+                        $ Paid
                       </span>
                     )}
                   </div>

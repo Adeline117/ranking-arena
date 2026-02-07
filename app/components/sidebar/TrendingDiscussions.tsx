@@ -40,7 +40,7 @@ export default function TrendingDiscussions() {
   return (
     <div>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        🔥 {isZh ? '热门讨论' : 'Trending Discussions'}
+        {isZh ? '热门讨论' : 'Trending Discussions'}
       </h3>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -76,8 +76,8 @@ export default function TrendingDiscussions() {
                   {post.title}
                 </p>
                 <div style={{ display: 'flex', gap: 8, fontSize: 11, color: tokens.colors.text.secondary, marginTop: 2 }}>
-                  <span>💬 {post.comment_count || 0}</span>
-                  <span>👍 {post.like_count || 0}</span>
+                  <span>{post.comment_count || 0} comments</span>
+                  <span>{post.like_count || 0} likes</span>
                   <span>{formatTimeAgo(post.created_at, language)}</span>
                 </div>
               </div>

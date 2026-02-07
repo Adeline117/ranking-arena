@@ -35,7 +35,7 @@ export default function RecommendedGroups() {
   return (
     <div>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 12 }}>
-        📋 {isZh ? '推荐小组' : 'Recommended Groups'}
+        {isZh ? '推荐小组' : 'Recommended Groups'}
       </h3>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -61,7 +61,7 @@ export default function RecommendedGroups() {
                 {isZh ? g.name : (g.name_en || g.name)}
               </span>
               <span style={{ fontSize: 11, color: tokens.colors.text.secondary }}>
-                {g.member_count || 0} 👥
+                {g.member_count || 0} members
               </span>
             </Link>
           ))}
