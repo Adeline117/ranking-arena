@@ -33,89 +33,78 @@ export async function POST(request: NextRequest, _context: RouteContext) {
       required: true,
       fieldName: 'comment ID',
     })!
+    const actionType = body.type === 'dislike' ? 'dislike' : 'like'
 
-    // 检查是否已经点赞
-    const { data: existing } = await supabase
+    // 检查是否已有 like 或 dislike
+    const { data: existingLike } = await supabase
       .from('comment_likes')
-      .select('id')
+      .select('id, reaction_type')
       .eq('comment_id', commentId)
       .eq('user_id', user.id)
       .maybeSingle()
 
     let liked = false
+    let disliked = false
     let likeCount = 0
+    let dislikeCount = 0
 
-    if (existing) {
-      // 取消点赞：使用原子操作
-      const { error: deleteError } = await supabase
-        .from('comment_likes')
-        .delete()
-        .eq('id', existing.id)
-      
-      if (deleteError) throw deleteError
+    // Get current counts
+    const { data: currentComment } = await supabase
+      .from('comments')
+      .select('like_count, dislike_count')
+      .eq('id', commentId)
+      .single()
 
-      // 原子减少点赞数（使用 RPC 函数）
-      const { data: result, error: rpcError } = await supabase
-        .rpc('decrement_comment_like_count', { p_comment_id: commentId })
-      
-      if (rpcError) {
-        // 如果 RPC 函数不存在，回退到普通更新
-        logger.warn(`RPC unavailable, using fallback: ${rpcError.message}`)
-        const { data: comment } = await supabase
-          .from('comments')
-          .select('like_count')
-          .eq('id', commentId)
-          .single()
-        
-        likeCount = Math.max(0, (comment?.like_count || 1) - 1)
-        
-        await supabase
-          .from('comments')
-          .update({ like_count: likeCount })
-          .eq('id', commentId)
+    likeCount = currentComment?.like_count || 0
+    dislikeCount = currentComment?.dislike_count || 0
+
+    if (existingLike) {
+      const existingType = existingLike.reaction_type || 'like'
+
+      if (existingType === actionType) {
+        // Toggle off: remove the reaction
+        await supabase.from('comment_likes').delete().eq('id', existingLike.id)
+        if (actionType === 'like') {
+          likeCount = Math.max(0, likeCount - 1)
+        } else {
+          dislikeCount = Math.max(0, dislikeCount - 1)
+        }
       } else {
-        likeCount = result ?? 0
+        // Switch: change reaction type
+        await supabase.from('comment_likes').update({ reaction_type: actionType }).eq('id', existingLike.id)
+        if (actionType === 'like') {
+          likeCount += 1
+          dislikeCount = Math.max(0, dislikeCount - 1)
+          liked = true
+        } else {
+          dislikeCount += 1
+          likeCount = Math.max(0, likeCount - 1)
+          disliked = true
+        }
       }
-      
-      liked = false
     } else {
-      // 添加点赞
-      const { error: insertError } = await supabase
-        .from('comment_likes')
-        .insert({
-          comment_id: commentId,
-          user_id: user.id,
-        })
-      
-      if (insertError) throw insertError
-
-      // 原子增加点赞数（使用 RPC 函数）
-      const { data: result, error: rpcError } = await supabase
-        .rpc('increment_comment_like_count', { p_comment_id: commentId })
-      
-      if (rpcError) {
-        // 如果 RPC 函数不存在，回退到普通更新
-        logger.warn(`RPC unavailable, using fallback: ${rpcError.message}`)
-        const { data: comment } = await supabase
-          .from('comments')
-          .select('like_count')
-          .eq('id', commentId)
-          .single()
-        
-        likeCount = (comment?.like_count || 0) + 1
-        
-        await supabase
-          .from('comments')
-          .update({ like_count: likeCount })
-          .eq('id', commentId)
+      // New reaction
+      await supabase.from('comment_likes').insert({
+        comment_id: commentId,
+        user_id: user.id,
+        reaction_type: actionType,
+      })
+      if (actionType === 'like') {
+        likeCount += 1
+        liked = true
       } else {
-        likeCount = result ?? 0
+        dislikeCount += 1
+        disliked = true
       }
-      
-      liked = true
     }
 
-    return success({ liked, like_count: likeCount })
+    // Update counts
+    await supabase
+      .from('comments')
+      .update({ like_count: likeCount, dislike_count: dislikeCount })
+      .eq('id', commentId)
+
+    return success({ liked, disliked, like_count: likeCount, dislike_count: dislikeCount })
   } catch (error: unknown) {
     return handleError(error, 'posts/[id]/comments/like POST')
   }

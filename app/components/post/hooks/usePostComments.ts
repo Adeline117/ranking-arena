@@ -14,7 +14,9 @@ export type Comment = {
   author_show_pro_badge?: boolean
   created_at: string
   like_count?: number
+  dislike_count?: number
   user_liked?: boolean
+  user_disliked?: boolean
   replies?: Comment[]
 }
 
@@ -135,9 +137,15 @@ export function usePostComments({
       )
 
       if (ok && data?.success) {
+        const d = data.data!
         const updateCommentLike = (comment: Comment): Comment => {
           if (comment.id === commentId) {
-            return { ...comment, like_count: data.data!.like_count, user_liked: data.data!.liked }
+            return {
+              ...comment,
+              like_count: d.like_count,
+              user_liked: d.liked,
+              ...('dislike_count' in d ? { dislike_count: (d as Record<string, unknown>).dislike_count as number, user_disliked: (d as Record<string, unknown>).disliked as boolean } : {}),
+            }
           }
           if (comment.replies) {
             return { ...comment, replies: comment.replies.map(updateCommentLike) }
@@ -147,6 +155,45 @@ export function usePostComments({
         setComments(prev => prev.map(updateCommentLike))
       } else {
         showToast(getHttpErrorMessage(status, data?.error || '点赞失败'), status === 429 ? 'warning' : 'error')
+      }
+    } catch {
+      showToast('网络错误', 'error')
+    } finally {
+      setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
+    }
+  }, [accessToken, commentLikeLoading, requireAuth, showToast])
+
+  const toggleCommentDislike = useCallback(async (postId: string, commentId: string): Promise<void> => {
+    if (!requireAuth() || commentLikeLoading[commentId]) return
+
+    setCommentLikeLoading(prev => ({ ...prev, [commentId]: true }))
+    try {
+      const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { dislike_count: number; disliked: boolean; like_count: number; liked: boolean } }>(
+        `/api/posts/${postId}/comments/like`,
+        'POST',
+        accessToken,
+        { comment_id: commentId, type: 'dislike' }
+      )
+
+      if (ok && data?.success) {
+        const updateComment = (comment: Comment): Comment => {
+          if (comment.id === commentId) {
+            return {
+              ...comment,
+              dislike_count: data.data!.dislike_count,
+              user_disliked: data.data!.disliked,
+              like_count: data.data!.like_count,
+              user_liked: data.data!.liked,
+            }
+          }
+          if (comment.replies) {
+            return { ...comment, replies: comment.replies.map(updateComment) }
+          }
+          return comment
+        }
+        setComments(prev => prev.map(updateComment))
+      } else {
+        showToast(getHttpErrorMessage(status, data?.error || '操作失败'), status === 429 ? 'warning' : 'error')
       }
     } catch {
       showToast('网络错误', 'error')
@@ -247,6 +294,7 @@ export function usePostComments({
     loadComments,
     submitComment,
     toggleCommentLike,
+    toggleCommentDislike,
     submitReply,
     deleteComment,
   }

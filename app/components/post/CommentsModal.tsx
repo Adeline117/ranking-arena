@@ -3,7 +3,7 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { ThumbsUpIcon } from '../ui/icons'
+import { ThumbsUpIcon, ThumbsDownIcon } from '../ui/icons'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -84,6 +84,7 @@ interface CommentsModalProps {
   // Like
   commentLikeLoading: Record<string, boolean>
   onToggleCommentLike: (postId: string, commentId: string) => void
+  onToggleCommentDislike?: (postId: string, commentId: string) => void
   // Delete
   deletingCommentId: string | null
   onDeleteComment: (postId: string, commentId: string) => void
@@ -200,6 +201,7 @@ export default function CommentsModal({
   onSubmitReply,
   commentLikeLoading,
   onToggleCommentLike,
+  onToggleCommentDislike,
   deletingCommentId,
   onDeleteComment,
   expandedReplies,
@@ -289,6 +291,22 @@ export default function CommentsModal({
               >
                 <ThumbsUpIcon size={14} />
                 {(comment.like_count || 0) > 0 && <span>{comment.like_count}</span>}
+              </button>
+
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleCommentDislike?.(postId, comment.id) }}
+                disabled={commentLikeLoading[comment.id]}
+                style={{
+                  ...styles.actionButton,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  borderRadius: 4,
+                  color: comment.user_disliked ? '#ef4444' : tokens.colors.text.tertiary,
+                }}
+              >
+                <ThumbsDownIcon size={14} />
+                {(comment.dislike_count || 0) > 0 && <span>{comment.dislike_count}</span>}
               </button>
 
               {!isReply && (
