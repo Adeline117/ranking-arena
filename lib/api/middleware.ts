@@ -131,23 +131,7 @@ export function withApiMiddleware<T>(
         }
       }
 
-      // 2. CSRF 验证（仅针对写操作）
-      const method = request.method.toUpperCase()
-      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
-        const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
-        const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
-
-        if (!validateCsrfToken(cookieToken, headerToken)) {
-          logger.warn(`CSRF validation failed for ${name}`)
-          const csrfErrorResponse = createErrorResponse('CSRF 验证失败', 403)
-          if (versioning) {
-            addVersionHeaders(csrfErrorResponse, versionContext)
-          }
-          return csrfErrorResponse
-        }
-      }
-
-      // 3. 认证检查
+      // 2. 认证检查（在 CSRF 之前，确保未登录返回 401 而非 403）
       let user: User | null = null
       if (needsAuth) {
         user = await getAuthUser(request)
@@ -161,6 +145,22 @@ export function withApiMiddleware<T>(
       } else {
         // 即使不需要认证，也尝试获取用户信息
         user = await getAuthUser(request)
+      }
+
+      // 3. CSRF 验证（仅针对写操作）
+      const method = request.method.toUpperCase()
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
+        const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
+
+        if (!validateCsrfToken(cookieToken, headerToken)) {
+          logger.warn(`CSRF validation failed for ${name}`)
+          const csrfErrorResponse = createErrorResponse('CSRF 验证失败', 403)
+          if (versioning) {
+            addVersionHeaders(csrfErrorResponse, versionContext)
+          }
+          return csrfErrorResponse
+        }
       }
 
       // 4. 获取 Supabase 客户端
