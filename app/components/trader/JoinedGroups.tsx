@@ -19,6 +19,7 @@ type Group = {
 
 type JoinedGroupsProps = {
   userId: string
+  expanded?: boolean
 }
 
 export default function JoinedGroups({ userId }: JoinedGroupsProps) {

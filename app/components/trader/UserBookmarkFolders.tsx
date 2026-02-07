@@ -24,6 +24,7 @@ type BookmarkFolder = {
 type UserBookmarkFoldersProps = {
   userId: string
   isOwnProfile?: boolean
+  expanded?: boolean
 }
 
 /**

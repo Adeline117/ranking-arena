@@ -480,6 +480,9 @@ export const PLATFORM_RATE_LIMITS: Record<GranularPlatform, RateLimiterConfig> =
   mux: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
   lbank: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
   blofin: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
+  bybit_spot: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
+  jupiter_perps: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
+  aevo: { max_requests: 20, window_ms: 60_000, min_delay_ms: 2500, max_delay_ms: 5000, max_concurrent: 2 },
   // Dune API rate limits (Free tier: 10 queries/day, Plus tier: 1000 queries/month)
   dune_gmx: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
   dune_hyperliquid: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
