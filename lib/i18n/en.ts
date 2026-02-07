@@ -2494,6 +2494,15 @@ const en = {
     // Common UI text (reduce hardcoding)
     viewLiveLeaderboard: 'View Live Leaderboard',
     popularTraders: 'Popular Traders',
+    followingTab: 'Following',
+    recommendedTab: 'Recommended',
+    bookshelfTab: 'Library',
+    loginToSeeFollowing: 'Login to see your following feed',
+    noFollowing: "You haven't followed anyone yet",
+    discoverTraders: 'Discover interesting traders on the leaderboard',
+    noFollowingPosts: 'No posts from people you follow yet',
+    rateThisBook: 'Rate this book',
+    ratings: 'Ratings',
 
 } as const
 
