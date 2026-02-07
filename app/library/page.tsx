@@ -55,6 +55,7 @@ export default function LibraryPage() {
       if (search) params.set('search', search)
       params.set('page', String(page))
       params.set('limit', '24')
+      params.set('language', language)
       
       const res = await fetch(`/api/library?${params}`)
       const data = await res.json()
@@ -65,7 +66,7 @@ export default function LibraryPage() {
     } finally {
       setLoading(false)
     }
-  }, [category, search, page])
+  }, [category, search, page, language])
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
