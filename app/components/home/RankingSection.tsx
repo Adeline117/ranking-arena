@@ -527,14 +527,7 @@ export default function RankingSection({
             onChange={onTimeRangeChange}
             disabled={loading}
           />
-          <FilterPresets activePreset={activePreset} onPresetChange={handlePresetChange} />
-          {!loading && dataSources.length > 1 && (
-            <ExchangeFilter
-              availableSources={dataSources}
-              selectedExchange={selectedExchange}
-              onExchangeChange={handleExchangeChange}
-            />
-          )}
+          {/* FilterPresets and ExchangeFilter removed — CategoryRankingTabs in RankingTable handles type filtering */}
         </Box>
         {/* 右侧: 操作按钮 */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
