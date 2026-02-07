@@ -258,7 +258,7 @@ export default function Error({
             height="44" 
             viewBox="0 0 24 24" 
             fill="none" 
-            stroke="#ff7c7c" 
+            stroke="var(--color-accent-error, #ff7c7c)" 
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -276,7 +276,7 @@ export default function Error({
             fontSize: 30, 
             fontWeight: 700,
             marginBottom: 12,
-            background: `linear-gradient(135deg, #EDEDED 0%, ${ARENA_PURPLE} 100%)`,
+            background: `linear-gradient(135deg, var(--color-text-primary, #EDEDED) 0%, ${ARENA_PURPLE} 100%)`,
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             animationDelay: '0.1s',
