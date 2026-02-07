@@ -334,16 +334,23 @@ export function SettingsIcon({ size = 16, style, ...props }: IconProps) {
 
 // Ranking Badge
 export function RankingBadge({ rank, size = 24 }: { rank: 1 | 2 | 3; size?: number }): React.ReactElement {
-  const colors = {
-    1: '#FFD700', // Gold
-    2: '#C0C0C0', // Silver
-    3: '#CD7F32', // Bronze
+  const gradientIds = {
+    1: { start: '#FFD700', end: '#FFA500', text: '#1a1200' }, // Gold
+    2: { start: '#C0C0C0', end: '#A0A0A0', text: '#ffffff' }, // Silver
+    3: { start: '#CD7F32', end: '#A0522D', text: '#ffffff' }, // Bronze
   }
+  const g = gradientIds[rank]
 
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
-      <circle cx="12" cy="12" r="10" fill={colors[rank]} stroke="currentColor" strokeWidth="1.5" />
-      <text x="12" y="16" textAnchor="middle" fontSize="12" fontWeight="bold" fill="currentColor">
+      <defs>
+        <linearGradient id={`rank-grad-${rank}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={g.start} />
+          <stop offset="100%" stopColor={g.end} />
+        </linearGradient>
+      </defs>
+      <circle cx="12" cy="12" r="10" fill={`url(#rank-grad-${rank})`} />
+      <text x="12" y="16.5" textAnchor="middle" fontSize="12" fontWeight="bold" fill={g.text}>
         {rank}
       </text>
     </svg>

@@ -150,7 +150,28 @@ const RankBadge = memo(function RankBadge({
       }}
     >
       {medal ? (
-        <span style={{ fontSize: 18 }}>{medal}</span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 26, height: 26, borderRadius: '50%',
+            fontSize: 12, fontWeight: 700,
+            background: rank === 1
+              ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+              : rank === 2
+              ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
+              : 'linear-gradient(135deg, #CD7F32, #A0522D)',
+            color: rank === 1 ? '#1a1200' : '#fff',
+            boxShadow: rank === 1
+              ? '0 0 8px rgba(255,215,0,0.4)'
+              : rank === 2
+              ? '0 0 6px rgba(192,192,192,0.3)'
+              : '0 0 6px rgba(205,127,50,0.3)',
+          }}
+        >
+          {rank}
+        </span>
       ) : (
         <span
           style={{

@@ -55,6 +55,7 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
 
   return (
     <div
+      className="ranking-row-hover"
       style={{
         ...style,
         display: 'flex',
@@ -62,23 +63,34 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
         padding: `0 ${tokens.spacing[4]}`,
         borderBottom: `1px solid ${tokens.colors.border.secondary}`,
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'background-color 0.15s',
       }}
       onClick={() => onClick?.(trader)}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = tokens.colors.bg.hover
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'transparent'
-      }}
     >
       {/* Rank */}
-      <div style={{ 
-        width: 50, 
-        fontWeight: trader.rank <= 3 ? 700 : 400,
-        color: trader.rank <= 3 ? tokens.colors.accent.primary : tokens.colors.text.secondary,
-      }}>
-        #{trader.rank}
+      <div style={{ width: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {trader.rank <= 3 ? (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28, height: 28, borderRadius: '50%',
+              fontSize: 13, fontWeight: 700,
+              background: trader.rank === 1
+                ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+                : trader.rank === 2
+                ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
+                : 'linear-gradient(135deg, #CD7F32, #A0522D)',
+              color: trader.rank === 1 ? '#1a1200' : '#fff',
+            }}
+          >
+            {trader.rank}
+          </span>
+        ) : (
+          <span style={{ fontWeight: 400, color: tokens.colors.text.secondary }}>
+            #{trader.rank}
+          </span>
+        )}
       </div>
 
       {/* Avatar & Name */}
