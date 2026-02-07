@@ -50,7 +50,7 @@ interface SearchResult {
  */
 export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
   const router = useRouter()
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
   const { userId, isLoggedIn, authChecked } = useAuthSession()
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
@@ -458,7 +458,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             </Box>
           ) : searchResults.length === 0 ? (
             <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">未找到相关结果</Text>
+              <Text size="sm" color="tertiary">{t('noRelatedResults')}</Text>
             </Box>
           ) : (
             searchResults.map((result, index) => (

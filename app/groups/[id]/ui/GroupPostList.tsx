@@ -273,7 +273,7 @@ export default function GroupPostList(props: GroupPostListProps) {
       {/* Empty masonry state */}
       {viewMode === 'masonry' && sortedPosts.length === 0 && (
         <Box style={{ color: tokens.colors.text.tertiary, padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`, textAlign: 'center' }}>
-          <Text size="sm" color="tertiary">还没有帖子，成为第一个发帖的人吧！</Text>
+          <Text size="sm" color="tertiary">{t('noPostsYet')}</Text>
         </Box>
       )}
 
