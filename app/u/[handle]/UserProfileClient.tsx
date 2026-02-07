@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
@@ -194,9 +194,42 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
   const isOwnProfile = currentUserId === profile.id
   const followingCount = (profile.following || 0) + (profile.followingTraders || 0)
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+
+  type ProfileTabKey = 'overview' | 'groups' | 'bookmarks'
+  const urlTab = searchParams.get('tab') as ProfileTabKey | null
+  const [activeTab, setActiveTab] = useState<ProfileTabKey>(
+    urlTab && ['overview', 'groups', 'bookmarks'].includes(urlTab) ? urlTab : 'overview'
+  )
+
+  const handleTabChange = useCallback((tab: ProfileTabKey) => {
+    setActiveTab(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'overview') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const qs = params.toString()
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+  }, [searchParams, pathname, router])
+
+  const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
+    { key: 'overview', label: t('overview') || '概览' },
+    { key: 'groups', label: t('groups') || '群组' },
+    { key: 'bookmarks', label: t('bookmarks') || '收藏' },
+  ]
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box
+      className="user-profile-page"
+      style={{
+        minHeight: '100vh',
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <TopNav email={email} />
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
@@ -509,47 +542,127 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           </Box>
         </Box>
 
-        {/* Content area - two column layout */}
+        {/* Tabs - matching trader page style */}
         <Box
-          className="profile-content"
+          className="profile-tabs"
+          role="tablist"
           style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 320px',
-            gap: tokens.spacing[6],
+            display: 'flex',
+            gap: tokens.spacing[2],
+            marginBottom: tokens.spacing[4],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            paddingBottom: tokens.spacing[3],
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
           }}
         >
-          {/* Posts */}
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-            <Box bg="secondary" p={4} radius="lg" border="primary">
-              <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
-                <Text size="lg" weight="black">{t('posts')}</Text>
-                {isOwnProfile && (
-                  <button
-                    onClick={() => router.push(`/u/${handle}/new`)}
-                    style={{
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                      borderRadius: tokens.radius.md,
-                      border: 'none',
-                      background: tokens.colors.accent.brand,
-                      color: tokens.colors.white,
-                      fontSize: tokens.typography.fontSize.sm,
-                      fontWeight: tokens.typography.fontWeight.black,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {t('newPost')}
-                  </button>
-                )}
-              </Box>
-              <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
-            </Box>
-          </Box>
+          {profileTabs.map((tab) => (
+            <button
+              key={tab.key}
+              className="profile-tab-button interactive-scale"
+              onClick={() => handleTabChange(tab.key)}
+              role="tab"
+              aria-selected={activeTab === tab.key}
+              tabIndex={activeTab === tab.key ? 0 : -1}
+              style={{
+                background: activeTab === tab.key
+                  ? `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.primary}08)`
+                  : 'transparent',
+                border: activeTab === tab.key
+                  ? `1px solid ${tokens.colors.accent.primary}30`
+                  : '1px solid transparent',
+                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                minHeight: 44,
+                cursor: 'pointer',
+                borderRadius: tokens.radius.lg,
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== tab.key) {
+                  e.currentTarget.style.background = `${tokens.colors.bg.tertiary}80`
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== tab.key) {
+                  e.currentTarget.style.background = 'transparent'
+                }
+              }}
+            >
+              <Text
+                size="sm"
+                weight={activeTab === tab.key ? 'black' : 'medium'}
+                style={{
+                  color: activeTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                  transition: 'color 0.3s ease',
+                }}
+              >
+                {tab.label}
+              </Text>
+            </button>
+          ))}
+        </Box>
 
-          {/* Sidebar - joined groups + bookmarks */}
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-            <JoinedGroups userId={profile.id} />
-            <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
-          </Box>
+        {/* Tab Content with animation */}
+        <Box
+          key={activeTab}
+          style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
+        >
+          {activeTab === 'overview' && (
+            <Box
+              className="profile-content"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 320px',
+                gap: tokens.spacing[6],
+              }}
+            >
+              {/* Posts */}
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                <Box bg="secondary" p={4} radius="lg" border="primary">
+                  <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+                    <Text size="lg" weight="black">{t('posts')}</Text>
+                    {isOwnProfile && (
+                      <button
+                        onClick={() => router.push(`/u/${handle}/new`)}
+                        style={{
+                          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                          borderRadius: tokens.radius.md,
+                          border: 'none',
+                          background: tokens.colors.accent.brand,
+                          color: tokens.colors.white,
+                          fontSize: tokens.typography.fontSize.sm,
+                          fontWeight: tokens.typography.fontWeight.black,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t('newPost')}
+                      </button>
+                    )}
+                  </Box>
+                  <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
+                </Box>
+              </Box>
+
+              {/* Sidebar - joined groups + bookmarks summary */}
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                <JoinedGroups userId={profile.id} />
+                <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
+              </Box>
+            </Box>
+          )}
+
+          {activeTab === 'groups' && (
+            <Box style={{ maxWidth: 800 }}>
+              <JoinedGroups userId={profile.id} expanded />
+            </Box>
+          )}
+
+          {activeTab === 'bookmarks' && (
+            <Box style={{ maxWidth: 800 }}>
+              <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} expanded />
+            </Box>
+          )}
         </Box>
 
         {/* Followers modal */}
