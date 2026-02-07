@@ -13,10 +13,13 @@ import Image from 'next/image'
 
 const CATEGORIES = [
   { key: 'all', en: 'All', zh: '全部' },
-  { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书' },
-  { key: 'research', en: 'Research', zh: '研报' },
   { key: 'book', en: 'Books', zh: '书籍' },
+  { key: 'academic_paper', en: 'Academic Papers', zh: '学术论文' },
+  { key: 'research', en: 'Research', zh: '研报' },
+  { key: 'finance', en: 'Finance', zh: '金融' },
   { key: 'paper', en: 'Papers', zh: '论文' },
+  { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书' },
+  { key: 'regulatory', en: 'Regulatory', zh: '监管' },
   { key: 'event', en: 'Events', zh: '事件' },
 ]
 
