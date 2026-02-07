@@ -114,8 +114,9 @@ $$ LANGUAGE plpgsql STABLE;
 -- 3. Recalculate hot scores
 -- ============================================
 
-SELECT update_post_velocity();
-SELECT update_post_report_counts();
+-- Skip velocity/report recalc (functions may not exist yet)
+-- SELECT update_post_velocity();
+-- SELECT update_post_report_counts();
 
 UPDATE posts SET
   hot_score = calculate_hot_score(
