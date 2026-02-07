@@ -32,15 +32,15 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
   const containerStyle: CSSProperties = {
     position: 'absolute',
     bottom: 36,
-    left: 0,
+    right: 0,
     background: tokens.colors.bg.secondary,
     border: `1px solid ${tokens.colors.border.primary}`,
     borderRadius: 12,
     padding: 8,
     zIndex: 100,
     boxShadow: tokens.shadow.lg,
-    width: 240,
-    maxHeight: 280,
+    width: 260,
+    maxHeight: 320,
     overflowY: 'auto',
   }
 
@@ -52,6 +52,7 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
 
   const itemStyle: CSSProperties = {
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 6,
@@ -60,30 +61,46 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
     background: 'transparent',
     border: 'none',
     transition: 'background 0.15s',
+    gap: 2,
   }
 
   return (
     <div ref={panelRef} style={containerStyle}>
       <div style={gridStyle}>
-        {STICKERS.map((sticker) => (
-          <button
-            key={sticker.id}
-            onClick={() => { onSelect(sticker); onClose() }}
-            title={language === 'zh' ? sticker.name_zh : sticker.name_en}
-            style={itemStyle}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-          >
-            <Image
-              src={sticker.path}
-              alt={language === 'zh' ? sticker.name_zh : sticker.name_en}
-              width={48}
-              height={48}
-              unoptimized
-              style={{ objectFit: 'contain' }}
-            />
-          </button>
-        ))}
+        {STICKERS.map((sticker) => {
+          const label = language === 'zh' ? sticker.label_zh : sticker.label_en
+          return (
+            <button
+              key={sticker.id}
+              onClick={() => { onSelect(sticker); onClose() }}
+              title={label}
+              style={itemStyle}
+              onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <Image
+                src={sticker.path}
+                alt={label}
+                width={48}
+                height={48}
+                unoptimized
+                style={{ objectFit: 'contain' }}
+              />
+              <span style={{
+                fontSize: 10,
+                color: tokens.colors.text.tertiary,
+                lineHeight: 1.2,
+                textAlign: 'center',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '100%',
+              }}>
+                {language === 'zh' ? sticker.name_zh : sticker.name_en}
+              </span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
