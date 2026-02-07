@@ -2,22 +2,25 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useEffect, useState, Suspense, lazy, useCallback } from 'react'
+import { useEffect, useState, Suspense, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
+import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
+import PopularTradersWidget from '@/app/components/sidebar/PopularTraders'
+import RecommendedGroupsWidget from '@/app/components/sidebar/RecommendedGroups'
+import MyGroupsWidget from '@/app/components/sidebar/MyGroups'
+import NewsFlashWidget from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { RankingSkeleton, SkeletonCard } from '@/app/components/ui/Skeleton'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useToast } from '@/app/components/ui/Toast'
-import { ErrorBoundary } from '@/app/components/Providers/ErrorBoundary'
-import ProFeaturesPanel from '@/app/components/premium/ProFeaturesPanel'
-import { useSubscription } from '@/app/components/home/hooks/useSubscription'
+import NewsFlash from '@/app/components/sidebar/NewsFlash'
 
-const MarketPanel = lazy(() => import('@/app/components/home/MarketPanel'))
+// MarketPanel removed — now using sidebar widgets
 
 interface Group {
   id: string
@@ -536,8 +539,6 @@ function GroupsContent() {
   const initialPostId = searchParams.get('post')
   const [email, setEmail] = useState<string | null>(null)
   const [loggedIn, setLoggedIn] = useState(false)
-  const { isPro } = useSubscription()
-
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
@@ -550,69 +551,25 @@ function GroupsContent() {
       <TopNav email={email} />
 
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
-        <Box className="main-grid">
-          {/* 左：热门交易员 + 小组推荐（仅桌面端显示） */}
-          <Box as="section" className="hide-tablet" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-            {/* 热门交易员 */}
-            <Card title={language === 'zh' ? '热门交易员' : 'Popular Traders'}>
-              <PopularTraders />
-            </Card>
-
-            {/* 小组推荐 */}
-            <Card title={t('groupRecommendations')}>
-              <GroupsList />
-              <Link href="/groups/apply" style={{ display: 'block', marginTop: tokens.spacing[3] }}>
-                <Button
-                  variant="secondary"
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: tokens.spacing[2],
-                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                    borderRadius: tokens.radius.lg,
-                    border: `1px dashed ${tokens.colors.border.primary}`,
-                    background: 'transparent',
-                    color: tokens.colors.text.secondary,
-                    cursor: 'pointer',
-                    fontSize: tokens.typography.fontSize.xs,
-                  }}
-                >
-                  <span style={{ fontSize: '14px' }}>+</span>
-                  {t('applyCreateGroup')}
-                </Button>
-              </Link>
-            </Card>
-          </Box>
-
+        <ThreeColumnLayout
+          leftSidebar={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <PopularTradersWidget />
+              <RecommendedGroupsWidget />
+            </div>
+          }
+          rightSidebar={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <MyGroupsWidget />
+              <NewsFlashWidget />
+            </div>
+          }
+        >
           {/* 中：帖子瀑布流 */}
-          <Box as="section" style={{ minWidth: 0 }}>
-            <Card title={language === 'zh' ? '推荐动态' : 'Recommended'}>
-              <PostFeed layout="masonry" variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} showRefreshButton />
-            </Card>
-          </Box>
-
-          {/* 右：Pro功能 + 我的小组 + 市场数据（平板及以上显示） */}
-          <Box as="section" className="hide-mobile" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-            {/* Pro功能 - pro会员不显示 */}
-            {!isPro && (
-              <ProFeaturesPanel compact />
-            )}
-
-            {/* 我的小组 */}
-            <Card title={language === 'zh' ? '我的小组' : 'My Groups'}>
-              <MyGroups />
-            </Card>
-
-            {/* 市场数据 */}
-            <ErrorBoundary>
-              <Suspense fallback={<SkeletonCard />}>
-                <MarketPanel />
-              </Suspense>
-            </ErrorBoundary>
-          </Box>
-        </Box>
+          <Card title={language === 'zh' ? '推荐动态' : 'Recommended'}>
+            <PostFeed layout="masonry" variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} showRefreshButton />
+          </Card>
+        </ThreeColumnLayout>
       </Box>
     </Box>
   )

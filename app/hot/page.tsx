@@ -7,9 +7,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import MarketPanel from '@/app/components/home/MarketPanel'
+import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
+import TopTraders from '@/app/components/sidebar/TopTraders'
+import WatchlistMarket from '@/app/components/sidebar/WatchlistMarket'
+import NewsFlash from '@/app/components/sidebar/NewsFlash'
+// MarketPanel replaced by sidebar widgets
 import Card from '@/app/components/ui/Card'
-import RankingTableCompact from '@/app/components/ranking/RankingTableCompact'
+// RankingTableCompact replaced by TopTraders sidebar widget
 import { Box, Text } from '@/app/components/base'
 import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/ui/icons'
 import { useToast } from '@/app/components/ui/Toast'
@@ -744,14 +748,15 @@ function HotContent() {
       <TopNav email={email} />
 
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
-        <Box className="main-grid">
-          {/* 左：排名前十（仅桌面端显示） */}
-          <Box as="section" className="hide-tablet">
-            <Card title={t('top10')}>
-              <RankingTableCompact traders={traders} loading={loadingTraders} loggedIn={loggedIn} />
-            </Card>
-          </Box>
-
+        <ThreeColumnLayout
+          leftSidebar={<TopTraders />}
+          rightSidebar={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <WatchlistMarket />
+              <NewsFlash />
+            </div>
+          }
+        >
           {/* 中：热榜 */}
           <Box as="section" style={{ minWidth: 0 }}>
             <Card title={t('hotList')}>
@@ -1094,11 +1099,7 @@ function HotContent() {
             </Card>
           </Box>
 
-          {/* 右：市场（平板及以上显示） */}
-          <Box as="section" className="hide-mobile">
-            <MarketPanel />
-          </Box>
-        </Box>
+        </ThreeColumnLayout>
       </Box>
 
       {/* 帖子详情弹窗 - Portal to body to avoid stacking context issues */}

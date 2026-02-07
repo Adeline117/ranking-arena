@@ -393,10 +393,49 @@ body {
 }
 
 /* ============================================
+   Three-Column Layout
+   ============================================ */
+
+.three-col-layout {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.three-col-left,
+.three-col-right {
+  position: sticky;
+  top: 60px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.three-col-left::-webkit-scrollbar,
+.three-col-right::-webkit-scrollbar {
+  width: 4px;
+}
+
+.three-col-left::-webkit-scrollbar-thumb,
+.three-col-right::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+}
+
+.three-col-center {
+  min-height: calc(100vh - 60px);
+}
+
+/* ============================================
    Responsive Utilities
    ============================================ */
 
 @media (max-width: 1024px) {
+  .three-col-layout {
+    display: block;
+  }
+
   .main-grid,
   .profile-grid {
     grid-template-columns: 1fr !important;
@@ -657,4 +696,11 @@ body {
 /* Individual trader cards in card view */
 .trader-card-contained {
   contain: layout style;
+}
+
+
+/* Three-column layout responsive */
+@media (max-width: 1023px) {
+  .hide-mobile { display: none !important; }
+  .hide-tablet { display: none !important; }
 }

@@ -22,6 +22,8 @@ type LibraryItem = {
   view_count: number
   is_free: boolean
   buy_url: string | null
+  language: string | null
+  language_group_id: string | null
 }
 
 const CATEGORIES = [
@@ -41,6 +43,7 @@ export default function BookshelfTab() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
+  const [langFilter, setLangFilter] = useState<'all' | 'zh' | 'en'>('all')
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -48,6 +51,7 @@ export default function BookshelfTab() {
       const params = new URLSearchParams()
       if (category !== 'all') params.set('category', category)
       if (search) params.set('search', search)
+      if (langFilter !== 'all') params.set('language', langFilter)
       params.set('limit', '24')
       const res = await fetch(`/api/library?${params}`)
       const data = await res.json()
@@ -58,7 +62,7 @@ export default function BookshelfTab() {
     } finally {
       setLoading(false)
     }
-  }, [category, search])
+  }, [category, search, langFilter])
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
@@ -113,6 +117,29 @@ export default function BookshelfTab() {
         ))}
       </div>
 
+      {/* Language filter */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+        {([
+          { key: 'all' as const, label: isZh ? '全部语言' : 'All Languages' },
+          { key: 'zh' as const, label: '🇨🇳 中文' },
+          { key: 'en' as const, label: '🇺🇸 English' },
+        ]).map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => setLangFilter(opt.key)}
+            style={{
+              padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+              border: langFilter === opt.key ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+              background: langFilter === opt.key ? tokens.colors.accent.brand : 'transparent',
+              color: langFilter === opt.key ? '#fff' : tokens.colors.text.secondary,
+              cursor: 'pointer', transition: 'all 0.2s',
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {/* Grid */}
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
@@ -155,13 +182,33 @@ export default function BookshelfTab() {
 
               {/* Info */}
               <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <span style={{
-                  fontSize: 10, padding: '1px 7px', borderRadius: 10,
-                  background: tokens.colors.accent.brand + '22', color: tokens.colors.accent.brand,
-                  fontWeight: 600, textTransform: 'uppercase', alignSelf: 'flex-start', marginBottom: 6,
-                }}>
-                  {item.category}
-                </span>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                  <span style={{
+                    fontSize: 10, padding: '1px 7px', borderRadius: 10,
+                    background: tokens.colors.accent.brand + '22', color: tokens.colors.accent.brand,
+                    fontWeight: 600, textTransform: 'uppercase',
+                  }}>
+                    {item.category}
+                  </span>
+                  {item.language && (
+                    <span style={{
+                      fontSize: 10, padding: '1px 7px', borderRadius: 10,
+                      background: 'rgba(255,255,255,0.08)', color: tokens.colors.text.secondary,
+                      fontWeight: 500,
+                    }}>
+                      {item.language === 'zh' ? '🇨🇳' : item.language === 'en' ? '🇺🇸' : item.language}
+                    </span>
+                  )}
+                  {item.language_group_id && (
+                    <span style={{
+                      fontSize: 10, padding: '1px 7px', borderRadius: 10,
+                      background: 'rgba(59,130,246,0.15)', color: '#60a5fa',
+                      fontWeight: 500,
+                    }}>
+                      {isZh ? '多语言' : 'Multi-lang'}
+                    </span>
+                  )}
+                </div>
                 <h3 style={{
                   fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary,
                   lineHeight: 1.3, marginBottom: 4,
