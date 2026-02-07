@@ -353,19 +353,33 @@ export default function ReportModal({
                         }
                         setUploading(true)
                         try {
-                          // Convert to base64 data URL for simplicity
+                          const formData = new FormData()
+                          formData.append('file', file)
+                          formData.append('bucket', 'reports')
+                          const res = await fetch('/api/upload', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${accessToken}` },
+                            body: formData,
+                          })
+                          if (res.ok) {
+                            const { url } = await res.json()
+                            setImages(prev => [...prev, url])
+                          } else {
+                            // Fallback to base64 if upload API not available
+                            const reader = new FileReader()
+                            reader.onload = () => {
+                              setImages(prev => [...prev, reader.result as string])
+                            }
+                            reader.readAsDataURL(file)
+                          }
+                        } catch {
+                          // Fallback to base64
                           const reader = new FileReader()
                           reader.onload = () => {
                             setImages(prev => [...prev, reader.result as string])
-                            setUploading(false)
-                          }
-                          reader.onerror = () => {
-                            showToast(t('uploadFailed') || '上传失败', 'error')
-                            setUploading(false)
                           }
                           reader.readAsDataURL(file)
-                        } catch {
-                          showToast(t('uploadFailed') || '上传失败', 'error')
+                        } finally {
                           setUploading(false)
                         }
                         e.target.value = ''
