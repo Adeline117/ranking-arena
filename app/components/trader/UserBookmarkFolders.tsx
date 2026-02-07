@@ -264,12 +264,12 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
                   '...'
                 ) : subscriptions[folder.id] ? (
                   <>
-                    <span>★</span>
+                    <span>[S]</span>
                     {t('saved')}
                   </>
                 ) : (
                   <>
-                    <span>☆</span>
+                    <span>[+]</span>
                     {t('saveBookmark')}
                   </>
                 )}

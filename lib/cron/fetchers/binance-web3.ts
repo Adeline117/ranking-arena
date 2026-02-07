@@ -8,7 +8,7 @@
  * Binance bapi patterns. If none work, we return gracefully with zero results
  * (the cron scheduler will retry on the next run).
  *
- * ⚠️  GEO-BLOCKED from US IPs (HTTP 451).
+ * [WARN] GEO-BLOCKED from US IPs (HTTP 451).
  * Works correctly from Vercel Japan/Singapore datacenters.
  *
  * Known API patterns tried:

@@ -14,7 +14,7 @@ type MarketRow = {
 
 const TTL_MS = 60_000
 
-// ✅ 你想展示的币（你可以随时加）
+// Coins to display（你可以随时加）
 type Pair = {
   symbol: string
   cgId: string

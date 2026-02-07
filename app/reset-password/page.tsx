@@ -653,7 +653,7 @@ function ResetPasswordContent() {
               </div>
               {confirmPassword && confirmPassword === newPassword && (
                 <div style={{ marginTop: 6, fontSize: 12 }}>
-                  <span style={{ color: '#2fe57d' }}>✓ {t('loginPasswordsMatch')}</span>
+                  <span style={{ color: '#2fe57d' }}>OK - {t('loginPasswordsMatch')}</span>
                 </div>
               )}
             </div>

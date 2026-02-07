@@ -2,7 +2,7 @@
  * BingX — Inline fetcher for Vercel serverless
  * Original: scripts/import/import_bingx.mjs (Playwright-based with API interception)
  *
- * ⚠️  CF-PROTECTED: All API endpoints are behind Cloudflare challenge.
+ * [WARN] CF-PROTECTED: All API endpoints are behind Cloudflare challenge.
  * The original script uses Playwright to bypass CF and intercept internal API calls.
  * Needs browser/proxy infrastructure to work.
  */

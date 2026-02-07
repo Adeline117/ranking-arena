@@ -192,7 +192,7 @@ export class AntiManipulationDetector {
     if (uniqueTraders.size >= CONFIG.sameMs.minTraders) {
       const traders = Array.from(uniqueTraders)
       
-      logger.warn(`🚨 Same-MS trades detected: ${traders.length} traders in ${CONFIG.sameMs.windowMs}ms`, {
+      logger.warn(`[ALERT] Same-MS trades detected: ${traders.length} traders in ${CONFIG.sameMs.windowMs}ms`, {
         traders,
         symbol: trade.symbol,
         platform: trade.platform,
@@ -239,7 +239,7 @@ export class AntiManipulationDetector {
     if (oppositeTrades.length > 0) {
       const traders = [trade.traderId, ...oppositeTrades.map(t => t.traderId)]
       
-      logger.error(`🚨 Wash trading detected`, {
+      logger.error(`[ALERT] Wash trading detected`, {
         traders,
         symbol: trade.symbol,
         price: trade.price,
@@ -286,7 +286,7 @@ export class AntiManipulationDetector {
     if (uniqueTraders.size >= CONFIG.coordinated.minTraders) {
       const traders = Array.from(uniqueTraders)
       
-      logger.warn(`🚨 Coordinated trades detected: ${traders.length} traders, same ${trade.side}`, {
+      logger.warn(`[ALERT] Coordinated trades detected: ${traders.length} traders, same ${trade.side}`, {
         traders,
         symbol: trade.symbol,
       })
@@ -319,15 +319,15 @@ export class AntiManipulationDetector {
       switch (alert.autoAction) {
         case 'flag':
           this.flaggedTraders.add(traderId)
-          logger.info(`🚩 Flagged trader: ${traderId}`)
+          logger.info(`[FLAG] Flagged trader: ${traderId}`)
           break
         case 'suspend':
           this.suspendedTraders.add(traderId)
-          logger.warn(`⏸️ Suspended trader: ${traderId}`)
+          logger.warn(`[PAUSE] Suspended trader: ${traderId}`)
           break
         case 'ban':
           this.bannedTraders.add(traderId)
-          logger.error(`🚫 Banned trader: ${traderId}`)
+          logger.error(`[BAN] Banned trader: ${traderId}`)
           break
       }
     }
@@ -408,7 +408,7 @@ export class AntiManipulationDetector {
     this.bannedTraders.delete(traderId)
     this.suspendedTraders.delete(traderId)
     this.flaggedTraders.delete(traderId)
-    logger.info(`✅ Unbanned trader: ${traderId}`)
+    logger.info(`[OK] Unbanned trader: ${traderId}`)
   }
 }
 

@@ -109,7 +109,7 @@ export function TraderSearchFilter({
           transition: tokens.transition.base,
         }}
       >
-        <span style={{ fontSize: 14 }}>⚙</span>
+        <span style={{ fontSize: 14 }}>Settings</span>
         <span>{isZh ? '高级筛选' : 'Advanced Filter'}</span>
         {activeFilterCount > 0 && (
           <span

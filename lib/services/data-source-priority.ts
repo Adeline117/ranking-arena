@@ -169,7 +169,7 @@ export function getDataSourceBadge(
     return {
       label: 'Verified',
       color: '#10b981', // green
-      icon: '✓',
+      icon: '[OK]',
     }
   }
 
@@ -178,19 +178,19 @@ export function getDataSourceBadge(
       return {
         label: 'Official',
         color: '#3b82f6', // blue
-        icon: '◆',
+        icon: '[+]',
       }
     case DataSource.WEB_SCRAPER:
       return {
         label: 'Public',
         color: '#8b5cf6', // purple
-        icon: '○',
+        icon: '[-]',
       }
     case DataSource.CACHED:
       return {
         label: 'Cached',
         color: '#6b7280', // gray
-        icon: '◌',
+        icon: '[?]',
       }
     default:
       return {

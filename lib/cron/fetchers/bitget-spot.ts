@@ -4,7 +4,7 @@
  * Same authentication strategy as bitget-futures.ts.
  * See that file for detailed notes on API status.
  *
- * ⚠️  Public endpoints return 404 as of 2025.
+ * [WARN] Public endpoints return 404 as of 2025.
  * Requires BITGET_API_KEY, BITGET_API_SECRET, BITGET_API_PASSPHRASE for broker API.
  *
  * Original: scripts/import/import_bitget_spot_v2.mjs (Puppeteer-based)

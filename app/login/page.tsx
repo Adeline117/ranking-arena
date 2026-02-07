@@ -817,7 +817,7 @@ export default function LoginPage() {
           />
           {touchedFields.email && email && !emailValidation.valid && (
             <div style={{ marginTop: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ color: '#ff7c7c' }}>✕ {t(emailValidation.messageKey)}</span>
+              <span style={{ color: '#ff7c7c' }}>X - {t(emailValidation.messageKey)}</span>
             </div>
           )}
         </div>
@@ -965,7 +965,7 @@ export default function LoginPage() {
                   />
                   {touchedFields.handle && handle && !handleValidation.valid && (
                     <div style={{ marginTop: 6, fontSize: 12 }}>
-                      <span style={{ color: '#ff7c7c' }}>✕ {t(handleValidation.messageKey)}</span>
+                      <span style={{ color: '#ff7c7c' }}>X - {t(handleValidation.messageKey)}</span>
                     </div>
                   )}
                 </div>
