@@ -118,33 +118,53 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     loadHotPosts()
   }, [loadHotPosts])
 
-  // Auto-translate hot post titles when language is English
+  // Auto-translate hot post titles to match current language
   useEffect(() => {
-    if (language !== 'en' || hotPosts.length === 0 || translating) return
+    if (hotPosts.length === 0 || translating) return
 
-    // Check if we already have translations
-    const needsTranslation = hotPosts.some(post => !translatedTitles[post.id])
+    // Check if we already have translations for current language
+    const langKey = (id: string) => `${language}:${id}`
+    const needsTranslation = hotPosts.some(post => !translatedTitles[langKey(post.id)])
     if (!needsTranslation) return
+
+    // Detect if title needs translation (simple heuristic: check if mostly CJK or Latin)
+    const isCJK = (text: string) => /[\u4e00-\u9fff\u3000-\u303f]/.test(text)
+    const postsToTranslate = hotPosts.filter(post => {
+      if (translatedTitles[langKey(post.id)]) return false
+      const titleIsCJK = isCJK(post.title)
+      // If language is zh and title is already Chinese, skip
+      if (language === 'zh' && titleIsCJK) return false
+      // If language is en and title is already English, skip
+      if (language === 'en' && !titleIsCJK) return false
+      return true
+    })
+
+    if (postsToTranslate.length === 0) {
+      // Mark non-needing posts as already "translated" (identity)
+      const newTranslations = { ...translatedTitles }
+      hotPosts.forEach(post => {
+        if (!newTranslations[langKey(post.id)]) {
+          newTranslations[langKey(post.id)] = post.title
+        }
+      })
+      setTranslatedTitles(newTranslations)
+      return
+    }
 
     const translateTitles = async () => {
       setTranslating(true)
       try {
-        const titlesToTranslate = hotPosts
-          .filter(post => !translatedTitles[post.id])
-          .map(post => ({ id: post.id, title: post.title }))
-
-        if (titlesToTranslate.length === 0) return
-
-        // Batch translate all titles
-        const textsToTranslate = titlesToTranslate.map(p => p.title).join('\n---SPLIT---\n')
+        const textsToTranslate = postsToTranslate.map(p => p.title).join('\n---SPLIT---\n')
+        const targetLang = language === 'zh' ? 'zh' : 'en'
+        const sourceLang = language === 'zh' ? 'en' : 'zh'
 
         const res = await fetch('/api/translate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             text: textsToTranslate,
-            targetLang: 'en',
-            sourceLang: 'zh',
+            targetLang,
+            sourceLang,
           }),
         })
 
@@ -153,9 +173,15 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           const translatedTexts = (data.translatedText || '').split('\n---SPLIT---\n')
 
           const newTranslations: Record<string, string> = { ...translatedTitles }
-          titlesToTranslate.forEach((post, idx) => {
+          postsToTranslate.forEach((post, idx) => {
             if (translatedTexts[idx]) {
-              newTranslations[post.id] = translatedTexts[idx].trim()
+              newTranslations[langKey(post.id)] = translatedTexts[idx].trim()
+            }
+          })
+          // Also mark untranslated posts
+          hotPosts.forEach(post => {
+            if (!newTranslations[langKey(post.id)]) {
+              newTranslations[langKey(post.id)] = post.title
             }
           })
           setTranslatedTitles(newTranslations)
@@ -697,9 +723,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                           lineHeight: 1.5,
                         }}
                       >
-                        {language === 'en' && translatedTitles[post.id]
-                          ? translatedTitles[post.id]
-                          : post.title}
+                        {translatedTitles[`${language}:${post.id}`] || post.title}
                       </Text>
                       {post.view_count !== undefined && post.view_count > 0 && (
                         <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
