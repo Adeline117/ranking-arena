@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
@@ -68,18 +68,21 @@ export default function FlashNewsPage() {
 
   const [news, setNews] = useState<FlashNews[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [hasMore, setHasMore] = useState(true)
   const [pagination, setPagination] = useState({
     page: 1, limit: 20, total: 0, totalPages: 1, hasNext: false, hasPrev: false,
   })
+  const sentinelRef = useRef<HTMLDivElement>(null)
   // Translation cache for content: { [newsId]: translatedContent }
   const [translatedContent, setTranslatedContent] = useState<Record<string, string>>({})
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set())
 
-  const fetchNews = useCallback(async (page = 1, category = 'all') => {
+  const fetchNews = useCallback(async (page = 1, category = 'all', append = false) => {
     try {
-      setLoading(true)
+      if (append) setLoadingMore(true); else setLoading(true)
       const params = new URLSearchParams({ page: page.toString(), limit: '20' })
       if (category !== 'all') params.append('category', category)
 
@@ -87,18 +90,45 @@ export default function FlashNewsPage() {
       if (!response.ok) throw new Error('Failed to fetch news')
 
       const data: FlashNewsResponse = await response.json()
-      setNews(data.news)
+      if (append) {
+        setNews(prev => [...prev, ...data.news])
+      } else {
+        setNews(data.news)
+      }
       setPagination(data.pagination)
+      setHasMore(data.pagination.hasNext)
     } catch {
       showToast(language === 'zh' ? '获取快讯失败' : 'Failed to load news', 'error')
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }, [showToast, language])
 
+  // Initial load + category change
   useEffect(() => {
-    fetchNews(currentPage, selectedCategory)
-  }, [fetchNews, currentPage, selectedCategory])
+    setCurrentPage(1)
+    setNews([])
+    setHasMore(true)
+    fetchNews(1, selectedCategory)
+  }, [fetchNews, selectedCategory])
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    if (!sentinelRef.current) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          const nextPage = currentPage + 1
+          setCurrentPage(nextPage)
+          fetchNews(nextPage, selectedCategory, true)
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, loading, loadingMore, currentPage, selectedCategory, fetchNews])
 
   // Translate content for items that need it
   const translateNewsContent = useCallback(async (items: FlashNews[]) => {
@@ -375,12 +405,17 @@ export default function FlashNewsPage() {
                 })}
               </Box>
 
-              {pagination.totalPages > 1 && (
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={pagination.totalPages}
-                  onPageChange={(page: number) => setCurrentPage(page)}
-                />
+              {/* Infinite scroll sentinel */}
+              <div ref={sentinelRef} style={{ height: 1 }} />
+              {loadingMore && (
+                <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
+                  <Text size="sm" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+                </Box>
+              )}
+              {!hasMore && news.length > 0 && (
+                <Box style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
+                  <Text size="sm" color="tertiary">{language === 'zh' ? '没有更多了' : 'No more news'}</Text>
+                </Box>
               )}
             </Box>
           )}
