@@ -99,12 +99,12 @@ function ExchangeAuthContent() {
             style={{
               padding: tokens.spacing[4],
               borderRadius: tokens.radius.md,
-              background: '#ff7c7c20',
-              border: '1px solid #ff7c7c',
+              background: `${tokens.colors.accent.error}20`,
+              border: `1px solid ${tokens.colors.accent.error}`,
               marginBottom: tokens.spacing[4],
             }}
           >
-            <Text size="sm" style={{ color: '#ff7c7c' }}>
+            <Text size="sm" style={{ color: tokens.colors.accent.error }}>
               {error}
             </Text>
           </Box>

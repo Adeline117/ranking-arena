@@ -5,8 +5,9 @@ export const dynamic = 'force-dynamic'
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { t } from '@/lib/i18n'
+import { tokens } from '@/lib/design-tokens'
 
-const ARENA_PURPLE = '#8b6fa8'
+// Using tokens.colors.accent.brand instead of hardcoded color
 
 // CSS styles
 const injectStyles = () => {
@@ -140,8 +141,8 @@ const injectStyles = () => {
     
     .action-button.secondary:hover {
       transform: translateY(-2px);
-      border-color: ${ARENA_PURPLE} !important;
-      color: ${ARENA_PURPLE} !important;
+      border-color: ${tokens.colors.accent.brand} !important;
+      color: ${tokens.colors.accent.brand} !important;
       box-shadow: 0 4px 20px rgba(139, 111, 168, 0.2);
     }
     
@@ -177,7 +178,7 @@ export default function NotFoundPage() {
     return (
       <div style={{ 
         minHeight: '100vh',
-        background: '#0a0a0f',
+        background: tokens.colors.bg.primary,
       }} />
     )
   }
@@ -190,7 +191,7 @@ export default function NotFoundPage() {
       alignItems: 'center',
       justifyContent: 'center',
       padding: 24,
-      color: '#EDEDED',
+      color: tokens.colors.text.primary,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       position: 'relative',
       overflow: 'hidden',
@@ -273,7 +274,7 @@ export default function NotFoundPage() {
               fontSize: 140,
               fontWeight: 900,
               lineHeight: 1,
-              background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, rgba(139, 111, 168, 0.3) 100%)`,
+              background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, rgba(139, 111, 168, 0.3) 100%)`,
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               position: 'relative',
@@ -337,7 +338,7 @@ export default function NotFoundPage() {
             className="action-button primary"
             style={{ 
               padding: '14px 28px', 
-              background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, #6b4f88 100%)`,
+              background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #6b4f88 100%)`,
               color: '#fff', 
               borderRadius: 12,
               textDecoration: 'none',
@@ -354,7 +355,7 @@ export default function NotFoundPage() {
             style={{ 
               padding: '14px 28px', 
               background: 'transparent',
-              color: '#EDEDED', 
+              color: tokens.colors.text.primary, 
               borderRadius: 12,
               border: '1px solid rgba(255,255,255,0.15)',
               textDecoration: 'none',
@@ -375,7 +376,7 @@ export default function NotFoundPage() {
         >
           <p style={{ 
             fontSize: 13, 
-            color: '#6a6a6a', 
+            color: tokens.colors.text.tertiary, 
             marginBottom: 16,
             fontWeight: 500,
           }}>
@@ -403,7 +404,7 @@ export default function NotFoundPage() {
                   border: '1px solid rgba(255,255,255,0.08)',
                   borderRadius: 10,
                   textDecoration: 'none',
-                  color: '#9a9a9a',
+                  color: tokens.colors.text.secondary,
                   fontSize: 13,
                   fontWeight: 500,
                   display: 'flex',

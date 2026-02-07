@@ -99,7 +99,7 @@ function ExchangeAuthCallbackContent() {
 
         {status === 'success' && (
           <>
-            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4], color: '#7CFFB2' }}>
+            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4], color: tokens.colors.accent.success }}>
               [OK] {t('authorizationSuccess')}
             </Text>
             <Text size="sm" color="secondary">
@@ -110,7 +110,7 @@ function ExchangeAuthCallbackContent() {
 
         {status === 'error' && (
           <>
-            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4], color: '#ff7c7c' }}>
+            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4], color: tokens.colors.accent.error }}>
               [FAIL] {t('authorizationFailed')}
             </Text>
             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>

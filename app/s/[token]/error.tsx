@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect } from 'react'
+import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function SnapshotError({
@@ -31,11 +32,11 @@ export default function SnapshotError({
       <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
         {t('errorLoadingSnapshot') || 'Error loading snapshot'}
       </h2>
-      <p style={{ color: '#888', marginBottom: 24, maxWidth: 400 }}>
+      <p style={{ color: tokens.colors.text.secondary, marginBottom: 24, maxWidth: 400 }}>
         {t('errorRefresh')}
       </p>
       {error.digest && (
-        <p style={{ color: '#666', fontSize: 12, marginBottom: 16, fontFamily: 'monospace' }}>
+        <p style={{ color: tokens.colors.text.tertiary, fontSize: 12, marginBottom: 16, fontFamily: 'monospace' }}>
           {t('errorCode')}: {error.digest}
         </p>
       )}
@@ -44,7 +45,7 @@ export default function SnapshotError({
           onClick={reset}
           style={{
             padding: '10px 24px',
-            background: '#8b6fa8',
+            background: tokens.colors.accent.brand,
             color: '#fff',
             border: 'none',
             borderRadius: 8,
@@ -60,7 +61,7 @@ export default function SnapshotError({
           style={{
             padding: '10px 24px',
             background: 'transparent',
-            color: '#ccc',
+            color: tokens.colors.text.tertiary,
             border: '1px solid rgba(255,255,255,0.15)',
             borderRadius: 8,
             textDecoration: 'none',

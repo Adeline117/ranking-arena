@@ -121,7 +121,7 @@ function ExchangeCallbackPageContent() {
                 marginBottom: tokens.spacing[4],
               }}
             >
-              <Text size="sm" style={{ color: '#ff6b6b' }}>{error}</Text>
+              <Text size="sm" style={{ color: tokens.colors.accent.error }}>{error}</Text>
             </Box>
           )}
 

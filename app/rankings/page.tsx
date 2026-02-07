@@ -358,7 +358,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
                 : trader.rank === 2
                 ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
                 : 'linear-gradient(135deg, #CD7F32, #A0522D)',
-              color: trader.rank === 1 ? '#1a1200' : '#fff',
+              color: trader.rank === 1 ? tokens.colors.bg.primary : tokens.colors.text.primary,
               boxShadow: trader.rank === 1
                 ? '0 0 8px rgba(255,215,0,0.4)'
                 : trader.rank === 2
