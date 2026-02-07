@@ -5,7 +5,7 @@
  * - Anonymous users: localStorage only
  * - Logged-in users: Supabase sync with localStorage fallback
  *
- * Storage key: 'ranking-arena-recent-searches'
+ * Storage key: 'arena_search_history'
  */
 
 import { supabase } from '@/lib/supabase/client'
