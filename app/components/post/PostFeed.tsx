@@ -87,7 +87,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { comments, setComments, loadingComments, newComment, setNewComment, submittingComment,
     replyingTo, setReplyingTo, replyContent, setReplyContent, submittingReply,
     commentLikeLoading, expandedReplies, setExpandedReplies, deletingCommentId,
-    loadComments, submitComment, toggleCommentLike, submitReply, deleteComment } = commentsHook
+    loadComments, submitComment, toggleCommentLike, toggleCommentDislike, submitReply, deleteComment } = commentsHook
 
   // 翻译相关状态
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
@@ -1720,6 +1720,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               onSubmitReply={submitReply}
               commentLikeLoading={commentLikeLoading}
               onToggleCommentLike={toggleCommentLike}
+              onToggleCommentDislike={toggleCommentDislike}
               deletingCommentId={deletingCommentId}
               onDeleteComment={deleteComment}
               expandedReplies={expandedReplies}
