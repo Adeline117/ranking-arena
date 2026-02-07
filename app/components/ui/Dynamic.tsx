@@ -48,6 +48,12 @@ export const DynamicReportModal = dynamic(
   { ssr: false }
 )
 
+// Sticker Picker - Only shown when sticker button clicked
+export const DynamicStickerPicker = dynamic(
+  () => import('./StickerPicker'),
+  { ssr: false }
+)
+
 // Post Create/Edit Modal (named export)
 export const DynamicPostModal = dynamic(
   () => import('../post/components/PostModal').then(mod => ({ default: mod.PostModal })),

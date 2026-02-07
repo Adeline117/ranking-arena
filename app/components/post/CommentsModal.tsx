@@ -12,6 +12,9 @@ import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import { useToast } from '../ui/Toast'
 import type { Comment } from './hooks/usePostComments'
 import { ProBadgeOverlay } from '../ui/ProBadge'
+import { renderWithStickers, hasStickers } from '../ui/StickerRenderer'
+import { DynamicStickerPicker } from '../ui/Dynamic'
+import type { Sticker } from '@/lib/stickers'
 
 const REPLIES_PREVIEW_COUNT = 2
 
@@ -212,6 +215,7 @@ export default function CommentsModal({
 }: CommentsModalProps) {
   const { language, t } = useLanguage()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showStickerPicker, setShowStickerPicker] = useState(false)
   const { showToast } = useToast()
 
   // Close emoji picker on outside click
@@ -221,6 +225,13 @@ export default function CommentsModal({
     const timer = setTimeout(() => document.addEventListener('click', handler), 0)
     return () => { clearTimeout(timer); document.removeEventListener('click', handler) }
   }, [showEmojiPicker])
+
+  const handleStickerSelect = (sticker: Sticker) => {
+    const stickerText = `[sticker:${sticker.id}]`
+    setNewComment(newComment + stickerText)
+    setShowStickerPicker(false)
+    commentInputRef.current?.focus()
+  }
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-focus reply input
