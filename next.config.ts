@@ -1,8 +1,5 @@
 import type { NextConfig } from "next";
-// Performance: withSentryConfig 会将 ~700KB Sentry SDK 注入每个页面的关键路径
-// 改为纯客户端动态加载（instrumentation-client.ts），仅保留服务端 instrumentation
-// Source map 上传改用 @sentry/cli 或 CI pipeline 单独处理
-// import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs";
 
 // Bundle Analyzer 条件导入
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -391,12 +388,13 @@ const nextConfig: NextConfig = {
   // Next.js 16 默认启用 SWC 压缩，无需配置
 };
 
-// Sentry 配置说明：
-// withSentryConfig 已移除以减少 ~700KB 客户端 JS
-// 服务端错误捕获通过 instrumentation.ts 保留
-// 客户端错误捕获通过 instrumentation-client.ts 动态加载
-// Source map 上传需在 CI 中通过 @sentry/cli 单独处理：
-//   npx sentry-cli sourcemaps upload --org=ORG --project=PROJECT .next/static
-
-// 导出配置（仅 Bundle Analyzer）
-export default withBundleAnalyzer(nextConfig);
+// 导出配置（Sentry + Bundle Analyzer）
+export default withSentryConfig(withBundleAnalyzer(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: true,
+  hideSourceMaps: true,
+  widenClientFileUpload: true,
+  disableLogger: true,
+  automaticVercelMonitors: true,
+});
