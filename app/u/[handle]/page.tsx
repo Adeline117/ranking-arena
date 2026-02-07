@@ -17,6 +17,7 @@ interface UserProfileData {
   following: number
   followingTraders: number
   isRegistered: boolean
+  isVerifiedTrader?: boolean
   proBadgeTier: 'pro' | null
 }
 
