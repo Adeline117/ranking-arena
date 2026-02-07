@@ -629,6 +629,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
 
       const res = await fetch('/api/chat/upload', {
         method: 'POST',
+        headers: getCsrfHeaders(),
         body: formData,
       })
 
