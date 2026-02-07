@@ -356,6 +356,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               { href: '/', labelKey: 'home' as const },
               { href: '/groups', labelKey: 'groups' as const },
               { href: '/hot', labelKey: 'hot' as const },
+              { href: '/library', labelKey: 'library' as const },
             ].map((item) => {
               const label = t(item.labelKey)
               const isActive = pathname === item.href || (item.href === '/' && pathname === '/')
