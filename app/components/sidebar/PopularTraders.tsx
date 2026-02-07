@@ -52,22 +52,38 @@ export default function PopularTraders() {
   useEffect(() => {
     async function load() {
       try {
-        const { data } = await supabase
+        // Try trader_sources first, fall back to trader_snapshots
+        let mapped: Trader[] = []
+        const { data, error: qErr } = await supabase
           .from('trader_sources')
-          .select(`
-            source, source_trader_id, handle, followers, roi,
-            trader_snapshots!trader_snapshots_source_source_trader_id_fkey(avatar_url)
-          `)
+          .select('source, source_trader_id, handle, followers, roi')
           .order('followers', { ascending: false })
           .limit(10)
-        const mapped = (data || []).map((d: any) => ({
-          source: d.source,
-          source_trader_id: d.source_trader_id,
-          handle: d.handle,
-          followers: d.followers,
-          roi: d.roi,
-          avatar_url: d.trader_snapshots?.[0]?.avatar_url ?? d.trader_snapshots?.avatar_url ?? null,
-        }))
+        if (qErr || !data || data.length === 0) {
+          // Fallback: query trader_snapshots directly
+          const { data: snapData } = await supabase
+            .from('trader_snapshots')
+            .select('source, source_trader_id, handle, followers, roi, avatar_url, arena_score')
+            .order('arena_score', { ascending: false })
+            .limit(10)
+          mapped = (snapData || []).map((d: any) => ({
+            source: d.source,
+            source_trader_id: d.source_trader_id,
+            handle: d.handle,
+            followers: d.followers,
+            roi: d.roi,
+            avatar_url: d.avatar_url ?? null,
+          }))
+        } else {
+          mapped = (data || []).map((d: any) => ({
+            source: d.source,
+            source_trader_id: d.source_trader_id,
+            handle: d.handle,
+            followers: d.followers,
+            roi: d.roi,
+            avatar_url: null,
+          }))
+        }
         setTraders(mapped)
       } catch {
         setError(true)
