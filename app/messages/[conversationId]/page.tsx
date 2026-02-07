@@ -741,7 +741,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               margin: '0 auto',
               marginBottom: tokens.spacing[4],
             }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9575cd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
             </Box>
@@ -756,7 +756,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               style={{
                 display: 'inline-block',
                 padding: '12px 24px',
-                background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
+                background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`,
                 color: '#fff',
                 borderRadius: 12,
                 textDecoration: 'none',
@@ -1006,7 +1006,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
         <Box style={{
           padding: '6px 16px',
           background: connectionStatus === 'reconnecting' ? 'rgba(255, 152, 0, 0.15)' : 'rgba(244, 67, 54, 0.15)',
-          color: connectionStatus === 'reconnecting' ? '#ff9800' : '#f44336',
+          color: connectionStatus === 'reconnecting' ? tokens.colors.accent.warning : tokens.colors.accent.error,
           textAlign: 'center',
           fontSize: 12,
           fontWeight: 600,
@@ -1168,7 +1168,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                       padding: (msg.media_url && msg.media_type !== 'file') ? '4px' : '10px 14px',
                       borderRadius: getBubbleBorderRadius(isMine, isSameSenderAsPrev, isSameSenderAsNext),
                       background: isMine
-                        ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
+                        ? `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`
                         : tokens.colors.bg.secondary,
                       color: isMine ? '#fff' : tokens.colors.text.primary,
                       border: isMine
@@ -1236,7 +1236,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#333">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill={tokens.colors.text.secondary}>
                               <polygon points="5 3 19 12 5 21 5 3" />
                             </svg>
                           </Box>
@@ -1331,7 +1331,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                   {isMine && msg._status === 'failed' && (
                     <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, marginTop: 4 }}>
                       {/* 显示具体错误原因 */}
-                      <Text size="xs" style={{ color: '#f44336', fontSize: 11, fontWeight: 500 }}>
+                      <Text size="xs" style={{ color: tokens.colors.accent.error, fontSize: 11, fontWeight: 500 }}>
                         {msg._errorMessage || t('sendFailed')}
                       </Text>
                       {/* 重试按钮 - 对于权限错误不显示重试 */}
@@ -1343,7 +1343,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                             background: 'rgba(244, 67, 54, 0.15)',
                             border: '1px solid rgba(244, 67, 54, 0.4)',
                             borderRadius: 6,
-                            color: '#f44336',
+                            color: tokens.colors.accent.error,
                             fontSize: 11,
                             fontWeight: 600,
                             cursor: 'pointer',
@@ -1415,7 +1415,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9575cd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
             </Box>
@@ -1602,7 +1602,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     alignItems: 'center',
                     gap: 8,
                     padding: '12px 24px',
-                    background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
+                    background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`,
                     color: '#fff',
                     borderRadius: 12,
                     textDecoration: 'none',
@@ -1725,7 +1725,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 borderRadius: '50%',
                 border: 'none',
                 background: 'rgba(244, 67, 54, 0.15)',
-                color: '#f44336',
+                color: tokens.colors.accent.error,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1750,7 +1750,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
             paddingRight: 8,
           }}>
             <Text size="xs" style={{
-              color: newMessage.length > 2000 ? '#f44336' : newMessage.length > 1900 ? '#ff9800' : tokens.colors.text.tertiary,
+              color: newMessage.length > 2000 ? tokens.colors.accent.error : newMessage.length > 1900 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
               fontSize: 11,
               fontWeight: newMessage.length > 2000 ? 700 : 400,
             }}>
@@ -1830,7 +1830,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
             onFocus={(e) => {
               const container = e.currentTarget.parentElement
               if (container) {
-                container.style.borderColor = '#9575cd'
+                container.style.borderColor = tokens.colors.accent.brand
                 container.style.boxShadow = '0 0 0 2px rgba(149, 117, 205, 0.2)'
               }
             }}
@@ -1852,7 +1852,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               borderRadius: '50%',
               border: 'none',
               background: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000
-                ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)'
+                ? `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`
                 : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
               color: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000 ? '#fff' : tokens.colors.text.tertiary,
               cursor: (newMessage.trim() || pendingAttachment) && !sending && newMessage.length <= 2000 ? 'pointer' : 'default',
