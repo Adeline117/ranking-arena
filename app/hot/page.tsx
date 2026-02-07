@@ -265,7 +265,7 @@ function HotContent() {
     loadPosts()
   }, [loadPosts])
 
-  // Load groups when groups tab is active
+  // Load groups when groups tab is active (merged with polling)
   useEffect(() => {
     if (activeHotTab !== 'groups') return
     const loadGroups = async () => {
@@ -577,8 +577,9 @@ function HotContent() {
     }
   }, [searchParams, router])
 
-  // 从 URL 参数恢复帖子详情弹窗状态
+  // Post modal: URL restore, ESC key, body scroll lock, and browser back button
   useEffect(() => {
+    // Restore post detail from URL params
     const postId = searchParams.get('post')
     if (postId && posts.length > 0 && !openPost) {
       const post = posts.find(p => p.id === postId)
@@ -586,11 +587,9 @@ function HotContent() {
         handleOpenPost(post, true) // fromUrlRestore: don't push history again
       }
     }
-  }, [searchParams, posts, openPost, handleOpenPost])
 
-  // ESC key handler, body scroll lock, and browser back button support for modal
-  useEffect(() => {
     if (!openPost) return
+
     // Lock body scroll
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -602,7 +601,6 @@ function HotContent() {
     }
 
     const handlePopState = () => {
-      // When user presses back, close modal if URL no longer has post param
       const urlParams = new URLSearchParams(window.location.search)
       if (!urlParams.get('post') && openPost) {
         setOpenPost(null)
@@ -617,7 +615,7 @@ function HotContent() {
       document.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [openPost, handleClosePost])
+  }, [searchParams, posts, openPost, handleOpenPost, handleClosePost])
 
   // 语言切换时重新翻译当前打开的帖子
   useEffect(() => {

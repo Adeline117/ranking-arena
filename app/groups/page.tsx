@@ -308,22 +308,20 @@ function GroupsList(): React.ReactElement {
 
   const escapeIlike = useCallback((s: string) => s.replace(/[%_\\]/g, c => `\\${c}`), [])
 
-  // Get user for "Mine" tab
+  // Get user and load group memberships
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
+      const uid = data.user?.id ?? null
+      setUserId(uid)
+      if (uid) {
+        supabase
+          .from('group_members')
+          .select('group_id')
+          .eq('user_id', uid)
+          .then(({ data: memberships }) => setMyGroupIds((memberships || []).map(m => m.group_id)))
+      }
     })
   }, [])
-
-  // Load user's group memberships
-  useEffect(() => {
-    if (!userId) return
-    supabase
-      .from('group_members')
-      .select('group_id')
-      .eq('user_id', userId)
-      .then(({ data }) => setMyGroupIds((data || []).map(m => m.group_id)))
-  }, [userId])
 
   // Debounce search query
   useEffect(() => {
