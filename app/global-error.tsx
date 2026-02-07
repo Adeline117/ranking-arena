@@ -215,7 +215,7 @@ export default function GlobalError({
                 height="40" 
                 viewBox="0 0 24 24" 
                 fill="none" 
-                stroke="#ff7c7c" 
+                stroke="var(--color-accent-error, #ff7c7c)" 
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -233,7 +233,7 @@ export default function GlobalError({
                 fontSize: '1.75rem',
                 fontWeight: 700,
                 marginBottom: '0.75rem',
-                background: `linear-gradient(135deg, #ff7c7c 0%, ${ARENA_PURPLE} 100%)`,
+                background: `linear-gradient(135deg, var(--color-accent-error, #ff7c7c) 0%, ${ARENA_PURPLE} 100%)`,
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 animationDelay: '0.1s',
