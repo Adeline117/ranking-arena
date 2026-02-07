@@ -13,6 +13,7 @@ import RecommendedGroupsWidget from '@/app/components/sidebar/RecommendedGroups'
 import MyGroupsWidget from '@/app/components/sidebar/MyGroups'
 import NewsFlashWidget from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
+import HomePageWithSubNav from '@/app/components/home/HomePageWithSubNav'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -563,10 +564,10 @@ function GroupsContent() {
             </div>
           }
         >
-          {/* 中：帖子瀑布流 */}
-          <Card title={language === 'zh' ? '推荐动态' : 'Recommended'}>
-            <PostFeed layout="masonry" variant={loggedIn ? 'full' : 'compact'} initialPostId={initialPostId} showRefreshButton />
-          </Card>
+          {/* 中：关注/推荐/书架 tab */}
+          <HomePageWithSubNav
+            rankingContent={null}
+          />
         </ThreeColumnLayout>
       </Box>
     </Box>
