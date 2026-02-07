@@ -2495,6 +2495,15 @@ const zh = {
     // 通用 UI 文本（减少硬编码）
     viewLiveLeaderboard: '查看实时排行榜',
     popularTraders: '热门交易员',
+    followingTab: '关注',
+    recommendedTab: '推荐',
+    bookshelfTab: '书架',
+    loginToSeeFollowing: '登录后查看关注动态',
+    noFollowing: '你还没有关注任何人',
+    discoverTraders: '去排行榜发现有趣的交易员吧',
+    noFollowingPosts: '关注的人还没有发布内容',
+    rateThisBook: '评价这本书',
+    ratings: '评分',
 
 } as const
 
