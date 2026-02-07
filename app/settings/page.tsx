@@ -906,7 +906,7 @@ function SettingsContent() {
           </SectionCard>
 
           {/* Exchange Connections */}
-          <Box id="exchanges" style={{ marginBottom: tokens.spacing[6], padding: tokens.spacing[6], borderRadius: tokens.radius.xl, background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}` }}>
+          <Box id="exchanges" style={{ marginBottom: tokens.spacing[6], padding: tokens.spacing[6], borderRadius: tokens.radius['2xl'], background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`, boxShadow: tokens.shadow.sm }}>
             {userId && <ExchangeConnectionManager userId={userId} />}
           </Box>
 
