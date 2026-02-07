@@ -147,7 +147,7 @@ async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'alerts@ranking-arena.com'
 
   const levelEmoji = {
-    info: 'ℹ️',
+    info: '[i]',
     warning: '[WARN]',
     critical: '[CRIT]',
   }
