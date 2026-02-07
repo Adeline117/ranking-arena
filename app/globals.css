@@ -501,6 +501,18 @@ body {
   .page-container {
     padding: 16px 12px 100px !important;
   }
+  /* Book detail responsive */
+  .book-detail-top {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center;
+  }
+  .book-detail-cover {
+    width: 160px !important;
+  }
+  .book-detail-top .profile-content {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* Small mobile: tighter spacing */
