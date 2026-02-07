@@ -1114,7 +1114,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     </Box>
                   ) : (
                     <>
-                      <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>🎬</Text>
+                      <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>Video</Text>
                       <Text size="xs" color="secondary" style={{ marginTop: 4 }}>{t('addVideo')}</Text>
                       <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>MP4, WebM, MOV</Text>
                     </>

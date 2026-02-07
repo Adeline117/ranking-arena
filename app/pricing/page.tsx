@@ -58,19 +58,19 @@ const CloseIcon = ({ size = 16 }: { size?: number }) => (
 const TESTIMONIALS = [
   {
     name: 'Alex T.',
-    avatar: '🧑‍💻',
+    avatar: 'D',
     roleKey: 'testimonialRole1',
     contentKey: 'testimonialContent1',
   },
   {
     name: 'Michael K.',
-    avatar: '👨‍💼',
+    avatar: 'P',
     roleKey: 'testimonialRole2',
     contentKey: 'testimonialContent2',
   },
   {
     name: 'Sarah L.',
-    avatar: '👩‍🦰',
+    avatar: 'T',
     roleKey: 'testimonialRole3',
     contentKey: 'testimonialContent3',
   },

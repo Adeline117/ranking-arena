@@ -190,7 +190,7 @@ export default function LivePositionsPanel({
             </Box>
           ) : positions.length === 0 ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[5] }}>
-              <Text size="lg" style={{ marginBottom: tokens.spacing[2] }}>📭</Text>
+              <Text size="lg" style={{ marginBottom: tokens.spacing[2] }}>--</Text>
               <Text color="secondary">
                 {t('noOpenPositions') || 'No open positions'}
               </Text>
@@ -387,7 +387,7 @@ function PositionRow({ position }: { position: TraderPositionLive }) {
  */
 function UpdateNotification({ update }: { update: { type: string; position: TraderPositionLive } }) {
   const { type, position } = update
-  const icons = { open: '🟢', update: '🔄', close: '🔴' }
+  const icons = { open: 'O', update: 'U', close: 'C' }
   const labels = { open: 'Opened', update: 'Updated', close: 'Closed' }
 
   return (

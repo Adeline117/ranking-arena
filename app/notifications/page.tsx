@@ -71,9 +71,9 @@ const severityColors = {
 }
 
 const severityIcons = {
-  critical: '🔴',
-  warning: '🟡',
-  info: '🔵',
+  critical: '!',
+  warning: '~',
+  info: 'i',
 }
 
 // ============================================
@@ -299,7 +299,7 @@ export default function NotificationsPage() {
                       : tokens.colors.bg.tertiary,
                     fontSize: 14,
                   }}>
-                    {n.type === 'trader_alert' ? severityIcons[severity] : '🔔'}
+                    {n.type === 'trader_alert' ? severityIcons[severity] : 'N'}
                   </Box>
 
                   {/* 内容 */}

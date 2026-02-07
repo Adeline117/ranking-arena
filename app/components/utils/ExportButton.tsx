@@ -67,7 +67,7 @@ export default function ExportButton({ data, filename, format = 'csv' }: ExportB
         e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
       }}
     >
-      📥 {t('export')} {format.toUpperCase()}
+      {t('export')} {format.toUpperCase()}
     </button>
   )
 }

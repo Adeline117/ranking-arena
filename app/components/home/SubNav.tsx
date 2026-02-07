@@ -11,9 +11,9 @@ interface SubNavProps {
 }
 
 const TABS: { key: SubNavTab; zhLabel: string; enLabel: string; icon: string }[] = [
-  { key: 'following', zhLabel: '关注', enLabel: 'Following', icon: '👥' },
-  { key: 'recommended', zhLabel: '推荐', enLabel: 'Recommended', icon: '🔥' },
-  { key: 'bookshelf', zhLabel: '书架', enLabel: 'Library', icon: '📚' },
+  { key: 'following', zhLabel: '关注', enLabel: 'Following', icon: '' },
+  { key: 'recommended', zhLabel: '推荐', enLabel: 'Recommended', icon: '' },
+  { key: 'bookshelf', zhLabel: '书架', enLabel: 'Library', icon: '' },
 ]
 
 export default function SubNav({ activeTab, onTabChange }: SubNavProps) {

@@ -209,7 +209,7 @@ export default function BookDetailPage() {
             ) : book.category === 'event' ? (
               <div style={{ textAlign: 'center' }}>
                 <span style={{ fontSize: 48 }}>
-                  {book.subcategory === 'hack' ? '🔓' : book.subcategory === 'regulation' ? '⚖️' : book.subcategory === 'quote' ? '💬' : '📅'}
+                  {book.subcategory === 'hack' ? 'H' : book.subcategory === 'regulation' ? 'R' : book.subcategory === 'quote' ? 'Q' : 'E'}
                 </span>
                 {book.publish_date && (
                   <div style={{ marginTop: 8, fontSize: 14, fontWeight: 700, color: tokens.colors.accent.brand }}>
@@ -218,7 +218,7 @@ export default function BookDetailPage() {
                 )}
               </div>
             ) : (
-              <span style={{ fontSize: 64 }}>📖</span>
+              <span style={{ fontSize: 64 }}>BK</span>
             )}
           </div>
 
@@ -250,7 +250,7 @@ export default function BookDetailPage() {
                   transition: 'all 0.2s',
                 }}
               >
-                {isZh ? '📌 想看' : '📌 Want to Read'}
+                {isZh ? 'Want to Read' : 'Want to Read'}
               </button>
               <button
                 onClick={() => handleStatus('read')}
@@ -262,7 +262,7 @@ export default function BookDetailPage() {
                   transition: 'all 0.2s',
                 }}
               >
-                {isZh ? '✅ 看过' : '✅ Read'}
+                {isZh ? 'Read' : 'Read'}
               </button>
             </div>
 
@@ -315,7 +315,7 @@ export default function BookDetailPage() {
                   padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
                   background: tokens.colors.accent.brand, color: '#fff', textDecoration: 'none',
                 }}>
-                  {isZh ? '📄 阅读原文' : '📄 Read PDF'}
+                  {isZh ? 'Read PDF' : 'Read PDF'}
                 </a>
               )}
               {book.buy_url && (
@@ -324,7 +324,7 @@ export default function BookDetailPage() {
                   border: `1px solid ${tokens.colors.accent.brand}`, color: tokens.colors.accent.brand,
                   textDecoration: 'none', background: 'transparent',
                 }}>
-                  {isZh ? '🛒 购买' : '🛒 Buy'}
+                  {isZh ? 'Buy' : 'Buy'}
                 </a>
               )}
             </div>
@@ -473,7 +473,7 @@ export default function BookDetailPage() {
                       {item.cover_url ? (
                         <Image src={item.cover_url} alt={item.title || ''} fill style={{ objectFit: 'cover' }} unoptimized />
                       ) : (
-                        <span style={{ fontSize: 32 }}>📖</span>
+                        <span style={{ fontSize: 32 }}>BK</span>
                       )}
                     </div>
                     <div style={{ padding: '8px 10px' }}>

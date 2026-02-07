@@ -51,10 +51,10 @@ export default function BookshelfTab() {
   useEffect(() => { fetchItems() }, [fetchItems])
 
   const categoryEmoji = (cat: string) => {
-    if (cat === 'whitepaper') return '📄'
-    if (cat === 'book') return '📖'
-    if (cat === 'paper') return '📝'
-    return '📊'
+    if (cat === 'whitepaper') return 'WP'
+    if (cat === 'book') return 'BK'
+    if (cat === 'paper') return 'PP'
+    return 'RS'
   }
 
   return (
