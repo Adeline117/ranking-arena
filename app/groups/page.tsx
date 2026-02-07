@@ -566,7 +566,7 @@ function GroupsContent() {
         >
           {/* 中：关注/推荐/书架 tab */}
           <HomePageWithSubNav
-            rankingContent={null}
+            recommendedContent={<PostFeed />}
           />
         </ThreeColumnLayout>
       </Box>
