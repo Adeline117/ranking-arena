@@ -10,6 +10,8 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
+import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
+import type { Sticker } from '@/lib/stickers'
 
 interface UploadedImage {
   url: string
@@ -151,6 +153,7 @@ export default function NewGroupPostPage(): React.ReactElement {
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+  const [showStickerPicker, setShowStickerPicker] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
 
   // Media state
@@ -684,6 +687,39 @@ export default function NewGroupPostPage(): React.ReactElement {
                 style={{ ...inputStyle, padding: tokens.spacing[4], resize: 'vertical', lineHeight: 1.6 }}
               />
             )}
+            {/* Sticker button */}
+            <div style={{ position: 'relative', marginTop: tokens.spacing[2] }}>
+              <button
+                type="button"
+                onClick={() => setShowStickerPicker(prev => !prev)}
+                style={{
+                  background: 'transparent',
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  cursor: 'pointer',
+                  padding: '4px 10px',
+                  borderRadius: 8,
+                  color: showStickerPicker ? '#8b6fa8' : tokens.colors.text.tertiary,
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
+                  <path d="M14 3v4a2 2 0 0 0 2 2h4" />
+                </svg>
+                {language === 'zh' ? '贴纸' : 'Sticker'}
+              </button>
+              <DynamicStickerPicker
+                isOpen={showStickerPicker}
+                onClose={() => setShowStickerPicker(false)}
+                onSelect={(sticker: Sticker) => {
+                  setContent(prev => prev + `[sticker:${sticker.id}]`)
+                  setShowStickerPicker(false)
+                }}
+              />
+            </div>
             <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
               {t('mentionTip')}
             </Text>

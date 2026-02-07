@@ -4,6 +4,7 @@
  */
 
 import { ReactNode, createElement } from 'react'
+import { getStickerById, isPureSticker, extractStickerId, STICKER_PATTERN } from '@/lib/stickers'
 
 // Arena 主题色
 export const ARENA_PURPLE = '#8b6fa8'
@@ -301,13 +302,78 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
 }
 
 /**
+ * Render inline sticker tokens within a text string.
+ * Returns an array of ReactNodes with sticker images replacing [sticker:xxx].
+ */
+function renderTextWithStickers(text: string, keyPrefix: string): ReactNode[] {
+  STICKER_PATTERN.lastIndex = 0
+  if (!STICKER_PATTERN.test(text)) {
+    return [createElement('span', { key: keyPrefix }, text)]
+  }
+
+  const nodes: ReactNode[] = []
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+  STICKER_PATTERN.lastIndex = 0
+  while ((match = STICKER_PATTERN.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      nodes.push(createElement('span', { key: `${keyPrefix}-t${lastIdx}` }, text.slice(lastIdx, match.index)))
+    }
+    const sticker = getStickerById(match[1])
+    if (sticker) {
+      nodes.push(createElement('img', {
+        key: `${keyPrefix}-s${match.index}`,
+        src: sticker.path,
+        alt: sticker.name_en,
+        width: 32,
+        height: 32,
+        loading: 'lazy',
+        style: { display: 'inline-block', verticalAlign: 'middle', objectFit: 'contain' },
+      }))
+    } else {
+      nodes.push(createElement('span', { key: `${keyPrefix}-u${match.index}` }, match[0]))
+    }
+    lastIdx = match.index + match[0].length
+  }
+  if (lastIdx < text.length) {
+    nodes.push(createElement('span', { key: `${keyPrefix}-t${lastIdx}` }, text.slice(lastIdx)))
+  }
+  return nodes
+}
+
+/**
  * 渲染带链接和图片的内容
  * 组合 parseContent 和 renderContentParts
+ * Also handles [sticker:xxx] patterns
  */
 export function renderContentWithLinks(text: string): ReactNode[] | null {
   if (!text) return null
+
+  // Pure sticker - render large
+  if (isPureSticker(text)) {
+    const id = extractStickerId(text)
+    const sticker = id ? getStickerById(id) : null
+    if (sticker) {
+      return [createElement('img', {
+        key: 'sticker',
+        src: sticker.path,
+        alt: sticker.name_en,
+        width: 128,
+        height: 128,
+        loading: 'lazy',
+        style: { display: 'block', objectFit: 'contain' },
+      })]
+    }
+  }
+
   const parts = parseContent(text)
-  return renderContentParts(parts)
+  // Post-process: expand sticker tokens within text parts
+  return parts.flatMap((part, index) => {
+    if (part.type === 'text') {
+      return renderTextWithStickers(part.content, `p${index}`)
+    }
+    return renderContentParts([part])
+  })
 }
 
 /**
