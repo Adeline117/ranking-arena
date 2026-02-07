@@ -310,6 +310,29 @@ function HotContent() {
     return sorted
   }, [posts])
 
+  // 热度标签: 新(刚上榜) / 热(热度攀升) / 沸(广泛讨论)
+  const getHotTag = useCallback((post: Post, _rank: number): { label: string; color: string } | null => {
+    const isZh = language === 'zh'
+    const createdAt = post.created_at ? new Date(post.created_at) : null
+    const hoursAgo = createdAt ? (Date.now() - createdAt.getTime()) / 3600000 : 999
+    const score = post.hotScore ?? 0
+    const comments = post.comments ?? 0
+
+    // 沸: 热度达到特定高度，受到用户广泛讨论 (score>50 且 comments>=10)
+    if (score >= 50 && comments >= 10) {
+      return { label: isZh ? '沸' : 'BOOM', color: '#FF4500' }
+    }
+    // 热: 短时间内热度持续攀升 (score>20 且不到24小时)
+    if (score >= 20 && hoursAgo < 24) {
+      return { label: isZh ? '热' : 'HOT', color: '#FF8C00' }
+    }
+    // 新: 最近上榜的新鲜内容 (不到6小时)
+    if (hoursAgo < 6) {
+      return { label: isZh ? '新' : 'NEW', color: '#00BFFF' }
+    }
+    return null
+  }, [language])
+
   const visibleHot = useMemo(() => {
     return loggedIn ? hotPosts : hotPosts.slice(0, 20)
   }, [loggedIn, hotPosts])
@@ -842,6 +865,22 @@ function HotContent() {
                               <Text className="hot-post-rank" size="sm" weight="black" style={{ color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
                                 #{rank}
                               </Text>
+                              {(() => {
+                                const tag = getHotTag(p, rank)
+                                return tag ? (
+                                  <span style={{
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    color: '#fff',
+                                    background: tag.color,
+                                    padding: '1px 6px',
+                                    borderRadius: 4,
+                                    lineHeight: '18px',
+                                  }}>
+                                    {tag.label}
+                                  </span>
+                                ) : null
+                              })()}
                               {p.group_id ? (
                                 <Link
                                   href={`/groups/${p.group_id}`}
