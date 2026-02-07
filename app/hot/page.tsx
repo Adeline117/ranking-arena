@@ -228,7 +228,7 @@ function HotContent() {
             group_en: groupNameEn,
             group_id: (post.group_id as string) || undefined,
             title: (post.title as string) || t('noTitle'),
-            author: (post.author_handle as string) || t('anonymous'),
+            author: (post.author_handle as string) || 'user',
             author_handle: post.author_handle as string,
             time: timeStr,
             body: (post.content as string) || '',
@@ -1364,7 +1364,7 @@ function HotContent() {
                           </Link>
                         ) : (
                           <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
-                            {t('anonymous')}
+                            {'user'}
                           </span>
                         )}
                         <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>

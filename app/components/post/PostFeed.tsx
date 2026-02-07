@@ -211,7 +211,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         id: p.id,
         title: p.title || '',
         content: p.content || '',
-        author_handle: p.author_handle || t('anonymous'),
+        author_handle: p.author_handle || 'user',
         group_id: p.group_id,
         group_name: p.group_name,
         created_at: p.created_at,
@@ -451,7 +451,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 title: post.title || t('noTitle'),
                 content: post.content || '',
                 author_id: post.author_id,
-                author_handle: post.author_handle || t('anonymous'),
+                author_handle: post.author_handle || 'user',
                 author_avatar_url: post.author_avatar_url,
                 group_id: post.group_id,
                 group_name: post.group_name,
@@ -1525,7 +1525,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 @{openPost.author_handle}
               </Link>
             ) : (
-              <span>{t('anonymous')}</span>
+              <span>user</span>
             )}
             <span>·</span>
             <span>{formatTimeAgo(openPost.created_at, language)}</span>

@@ -293,7 +293,7 @@ function ReviewCard({
               href={review.author_handle ? `/u/${encodeURIComponent(review.author_handle)}` : '#'}
               style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, textDecoration: 'none' }}
             >
-              {review.author_handle || t('anonymous')}
+              {review.author_handle || 'user'}
             </Link>
             {showProBadge && (
               <Box style={{
