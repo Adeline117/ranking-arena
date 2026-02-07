@@ -114,13 +114,13 @@ export default function MembershipPage() {
         fontWeight: 900,
         marginBottom: 8,
       }}>
-        {t('membershipTitle') || '会员中心'}
+        {t('membershipTitle')}
       </h1>
       <p style={{
         color: tokens.colors.text.secondary,
         marginBottom: 32,
       }}>
-        {t('membershipSubtitle') || '管理您的订阅和查看会员权益'}
+        {t('membershipSubtitle')}
       </p>
 
       {/* Current Status Card */}
@@ -139,7 +139,7 @@ export default function MembershipPage() {
         }}>
           <div>
             <div style={{ fontSize: 14, color: tokens.colors.text.tertiary, marginBottom: 4 }}>
-              {t('currentPlan') || '当前等级'}
+              {t('currentPlan')}
             </div>
             <div style={{
               fontSize: 32,
@@ -163,7 +163,7 @@ export default function MembershipPage() {
                 cursor: 'pointer',
               }}
             >
-              {t('upgradeToPro') || '升级 Pro'}
+              {t('upgradeToPro')}
             </button>
           )}
         </div>
@@ -179,28 +179,28 @@ export default function MembershipPage() {
           }}>
             <div>
               <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                {t('subscriptionStatus') || '订阅状态'}
+                {t('subscriptionStatus')}
               </div>
               <div style={{ fontWeight: 600, marginTop: 4 }}>
-                {info.subscription.status === 'active' ? '活跃' :
-                  info.subscription.status === 'canceled' ? '已取消' :
-                    info.subscription.status === 'past_due' ? '逾期' : info.subscription.status}
+                {info.subscription.status === 'active' ? t('subscriptionActive') :
+                  info.subscription.status === 'canceled' ? t('subscriptionCanceled') :
+                    info.subscription.status === 'past_due' ? t('subscriptionPastDue') : info.subscription.status}
               </div>
             </div>
             {info.subscription.plan && (
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                  {t('billingCycle') || '计费周期'}
+                  {t('billingCycle')}
                 </div>
                 <div style={{ fontWeight: 600, marginTop: 4 }}>
-                  {info.subscription.plan === 'yearly' ? '年付' : '月付'}
+                  {info.subscription.plan === 'yearly' ? t('billingYearly') : t('billingMonthly')}
                 </div>
               </div>
             )}
             {info.subscription.currentPeriodEnd && (
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                  {info.subscription.cancelAtPeriodEnd ? '到期日期' : '下次续费'}
+                  {info.subscription.cancelAtPeriodEnd ? t('expirationDate') : t('nextRenewal')}
                 </div>
                 <div style={{ fontWeight: 600, marginTop: 4 }}>
                   {new Date(info.subscription.currentPeriodEnd).toLocaleDateString(
@@ -222,7 +222,7 @@ export default function MembershipPage() {
         marginBottom: 24,
       }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
-          NFT 会员证
+          {t('nftMembershipCard')}
         </h2>
 
         {info?.nft?.hasNft ? (
@@ -254,7 +254,7 @@ export default function MembershipPage() {
             </div>
             {info.nft.expiresAt && (
               <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-                有效期至: {new Date(info.nft.expiresAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                {t('nftValidUntil')} {new Date(info.nft.expiresAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
               </div>
             )}
           </div>
@@ -262,8 +262,8 @@ export default function MembershipPage() {
           <div style={{ color: tokens.colors.text.tertiary }}>
             {isPro ? (
               <div>
-                <p style={{ marginBottom: 12 }}>您是 Pro 会员，但尚未铸造 NFT 会员证。</p>
-                <p style={{ fontSize: 13 }}>链接钱包后将自动铸造 NFT 会员证明。</p>
+                <p style={{ marginBottom: 12 }}>{t('nftNotMintedPro')}</p>
+                <p style={{ fontSize: 13 }}>{t('nftLinkWalletHint')}</p>
                 <button
                   onClick={() => router.push('/settings')}
                   style={{
@@ -277,11 +277,11 @@ export default function MembershipPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  链接钱包
+                  {t('nftLinkWallet')}
                 </button>
               </div>
             ) : (
-              <p>升级 Pro 会员后可获得 NFT 会员证明。</p>
+              <p>{t('nftUpgradeHint')}</p>
             )}
           </div>
         )}
@@ -296,7 +296,7 @@ export default function MembershipPage() {
         marginBottom: 24,
       }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
-          {t('benefitsComparison') || '权益对比'}
+          {t('benefitsComparison')}
         </h2>
 
         <div style={{ overflowX: 'auto' }}>
@@ -308,7 +308,7 @@ export default function MembershipPage() {
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '12px 8px', borderBottom: `1px solid ${tokens.colors.border.secondary}` }}>
-                  功能
+                  {t('benefitFeature')}
                 </th>
                 <th style={{ textAlign: 'center', padding: '12px 8px', borderBottom: `1px solid ${tokens.colors.border.secondary}` }}>
                   Free
@@ -324,15 +324,15 @@ export default function MembershipPage() {
               </tr>
             </thead>
             <tbody>
-              <BenefitRow feature="关注交易员" free={`${FEATURE_LIMITS.free.maxFollows} 个`} pro={`${FEATURE_LIMITS.pro.maxFollows} 个`} />
-              <BenefitRow feature="历史数据" free={`${FEATURE_LIMITS.free.historicalDays} 天`} pro={`${FEATURE_LIMITS.pro.historicalDays} 天`} />
-              <BenefitRow feature="交易员变动提醒" free="--" pro="Yes" isPro />
-              <BenefitRow feature="交易员对比" free="有限制" pro="无限制" isPro />
-              <BenefitRow feature="Arena Score 详情" free="--" pro="Yes" isPro />
-              <BenefitRow feature="API 访问" free="--" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay} 次/天`} isPro />
-              <BenefitRow feature="Pro 专属群组" free="--" pro="Yes" isPro />
-              <BenefitRow feature="高级筛选" free="--" pro="Yes" isPro />
-              <BenefitRow feature="NFT 会员证" free="--" pro="Yes" isPro />
+              <BenefitRow feature={t('benefitFollowTraders')} free={`${FEATURE_LIMITS.free.maxFollows} ${t('benefitUnit')}`} pro={`${FEATURE_LIMITS.pro.maxFollows} ${t('benefitUnit')}`} />
+              <BenefitRow feature={t('benefitHistoricalData')} free={`${FEATURE_LIMITS.free.historicalDays} ${t('benefitDays')}`} pro={`${FEATURE_LIMITS.pro.historicalDays} ${t('benefitDays')}`} />
+              <BenefitRow feature={t('benefitTraderAlerts')} free="--" pro="Yes" isPro />
+              <BenefitRow feature={t('benefitTraderCompare')} free={t('benefitLimited')} pro={t('benefitUnlimited')} isPro />
+              <BenefitRow feature={t('benefitArenaScore')} free="--" pro="Yes" isPro />
+              <BenefitRow feature={t('benefitApiAccess')} free="--" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay} ${t('benefitTimesPerDay')}`} isPro />
+              <BenefitRow feature={t('benefitProGroups')} free="--" pro="Yes" isPro />
+              <BenefitRow feature={t('benefitAdvancedFilter')} free="--" pro="Yes" isPro />
+              <BenefitRow feature={t('benefitNft')} free="--" pro="Yes" isPro />
             </tbody>
           </table>
         </div>
@@ -346,7 +346,7 @@ export default function MembershipPage() {
         padding: 24,
       }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
-          {t('usageStats') || '使用统计'}
+          {t('usageStats')}
         </h2>
 
         <div style={{
@@ -355,13 +355,13 @@ export default function MembershipPage() {
           gap: 16,
         }}>
           <UsageStat
-            label="已关注交易员"
+            label={t('usageFollowedTraders')}
             value={info?.usage?.followedTraders || 0}
             max={isPro ? FEATURE_LIMITS.pro.maxFollows : FEATURE_LIMITS.free.maxFollows}
           />
           {isPro && (
             <UsageStat
-              label="今日 API 调用"
+              label={t('usageApiCallsToday')}
               value={info?.usage?.apiCallsToday || 0}
               max={FEATURE_LIMITS.pro.apiCallsPerDay}
             />
@@ -394,7 +394,7 @@ export default function MembershipPage() {
               cursor: 'pointer',
             }}
           >
-            {t('manageSubscription') || '管理订阅'}
+            {t('manageSubscription')}
           </button>
         </div>
       )}

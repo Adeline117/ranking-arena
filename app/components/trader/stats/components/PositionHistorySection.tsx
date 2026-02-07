@@ -69,7 +69,7 @@ export function PositionHistorySection({ positionHistory, t }: PositionHistorySe
 
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
         {displayedHistory.map((item, idx) => (
-          <PositionHistoryCard key={idx} position={item} />
+          <PositionHistoryCard key={idx} position={item} t={t} />
         ))}
       </Box>
 
@@ -92,7 +92,7 @@ export function PositionHistorySection({ positionHistory, t }: PositionHistorySe
             textAlign: 'center',
           }}
         >
-          {expanded ? '收起' : `展开全部 (${sortedHistory.length} 条)`}
+          {expanded ? t('positionCollapse') : `${t('positionExpandAll')} (${sortedHistory.length} ${t('positionCount')})`}
         </button>
       )}
     </Box>
@@ -100,7 +100,7 @@ export function PositionHistorySection({ positionHistory, t }: PositionHistorySe
 }
 
 // Position History Card
-function PositionHistoryCard({ position }: { position: PositionHistoryItem }) {
+function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t: (key: string) => string }) {
   const isLong = position.direction === 'long'
   const isProfit = position.pnlUsd >= 0
 
@@ -154,7 +154,7 @@ function PositionHistoryCard({ position }: { position: PositionHistoryItem }) {
             background: tokens.colors.bg.tertiary,
           }}>
             <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-              {position.positionType === 'perpetual' ? '永续' : '交割'}
+              {position.positionType === 'perpetual' ? t('positionPerpetual') : t('positionDelivery')}
             </Text>
           </Box>
           <Box style={{
@@ -167,7 +167,7 @@ function PositionHistoryCard({ position }: { position: PositionHistoryItem }) {
               color: isLong ? tokens.colors.accent.success : tokens.colors.accent.error,
               fontWeight: 600,
             }}>
-              {isLong ? '做多' : '做空'}
+              {isLong ? t('positionLong') : t('positionShort')}
             </Text>
           </Box>
         </Box>
@@ -179,25 +179,25 @@ function PositionHistoryCard({ position }: { position: PositionHistoryItem }) {
         gap: tokens.spacing[4],
       }}>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>开仓</Text>
+          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>{t('positionOpen')}</Text>
           <Text size="sm" weight="bold" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
             {formatTime(position.openTime)}
           </Text>
         </Box>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>开仓价</Text>
+          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>{t('positionOpenPrice')}</Text>
           <Text size="sm" weight="bold" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
             ${formatPrice(position.entryPrice)}
           </Text>
         </Box>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>平仓价</Text>
+          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>{t('positionClosePrice')}</Text>
           <Text size="sm" style={{ color: tokens.colors.text.secondary, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
             ${formatPrice(position.exitPrice)}
           </Text>
         </Box>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>盈亏</Text>
+          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>{t('positionPnl')}</Text>
           <Text
             size="sm"
             weight="black"

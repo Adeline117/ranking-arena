@@ -2506,6 +2506,70 @@ const zh = {
     rateThisBook: '评价这本书',
     ratings: '评分',
 
+    // Membership page
+    membershipTitle: '会员中心',
+    membershipSubtitle: '管理您的订阅和查看会员权益',
+    currentPlan: '当前等级',
+    subscriptionStatus: '订阅状态',
+    subscriptionActive: '活跃',
+    subscriptionCanceled: '已取消',
+    subscriptionPastDue: '逾期',
+    billingCycle: '计费周期',
+    billingYearly: '年付',
+    billingMonthly: '月付',
+    expirationDate: '到期日期',
+    nextRenewal: '下次续费',
+    nftMembershipCard: 'NFT 会员证',
+    nftValidUntil: '有效期至:',
+    nftNotMintedPro: '您是 Pro 会员，但尚未铸造 NFT 会员证。',
+    nftLinkWalletHint: '链接钱包后将自动铸造 NFT 会员证明。',
+    nftLinkWallet: '链接钱包',
+    nftUpgradeHint: '升级 Pro 会员后可获得 NFT 会员证明。',
+    benefitsComparison: '权益对比',
+    benefitFeature: '功能',
+    benefitFollowTraders: '关注交易员',
+    benefitHistoricalData: '历史数据',
+    benefitTraderAlerts: '交易员变动提醒',
+    benefitTraderCompare: '交易员对比',
+    benefitArenaScore: 'Arena Score 详情',
+    benefitApiAccess: 'API 访问',
+    benefitProGroups: 'Pro 专属群组',
+    benefitAdvancedFilter: '高级筛选',
+    benefitNft: 'NFT 会员证',
+    benefitLimited: '有限制',
+    benefitUnlimited: '无限制',
+    benefitUnit: '个',
+    benefitDays: '天',
+    benefitTimesPerDay: '次/天',
+    usageStats: '使用统计',
+    usageFollowedTraders: '已关注交易员',
+    usageApiCallsToday: '今日 API 调用',
+    manageSubscription: '管理订阅',
+
+    // Position history
+    positionPerpetual: '永续',
+    positionDelivery: '交割',
+    positionLong: '做多',
+    positionShort: '做空',
+    positionOpen: '开仓',
+    positionOpenPrice: '开仓价',
+    positionClosePrice: '平仓价',
+    positionPnl: '盈亏',
+    positionCollapse: '收起',
+    positionExpandAll: '展开全部',
+    positionCount: '条',
+
+    // Compare portfolio
+    noComparisonData: '暂无对比数据',
+    noComparisonDataHint: '需要更多链上历史数据才能生成对比图表',
+    loadingChart: '加载图表中...',
+
+    // Search
+    noRelatedResults: '未找到相关结果',
+
+    // Groups
+    noPostsYet: '还没有帖子，成为第一个发帖的人吧！',
+
 } as const
 
 export default zh
