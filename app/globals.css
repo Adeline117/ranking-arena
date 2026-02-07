@@ -398,9 +398,11 @@ body {
 
 .three-col-layout {
   display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-columns: 220px 1fr 240px;
   gap: 16px;
   align-items: start;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .three-col-left,
