@@ -10,10 +10,38 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const category = searchParams.get('category') || ''
   const search = searchParams.get('search') || ''
-  const lang = searchParams.get('language') || ''
+  const lang = searchParams.get('language') || ''  // user's UI language preference
   const page = parseInt(searchParams.get('page') || '1')
   const limit = Math.min(parseInt(searchParams.get('limit') || '24'), 100)
   const offset = (page - 1) * limit
+
+  // Use RPC for language-priority sorting when user has a language preference
+  if (lang && !search) {
+    // Preferred language items first, then others, both sorted by view_count
+    const preferredLang = lang === 'zh' ? 'zh' : 'en'
+    const { data, error, count } = await supabase.rpc('library_items_by_lang', {
+      p_category: category && category !== 'all' ? category : null,
+      p_preferred_lang: preferredLang,
+      p_limit: limit,
+      p_offset: offset,
+    })
+
+    if (error) {
+      // Fallback to simple query if RPC doesn't exist
+      console.warn('RPC fallback:', error.message)
+    } else {
+      // Get total count separately
+      let countQuery = supabase.from('library_items').select('*', { count: 'exact', head: true })
+      if (category && category !== 'all') countQuery = countQuery.eq('category', category)
+      const { count: total } = await countQuery
+      return NextResponse.json({
+        items: data || [],
+        total: total || 0,
+        page,
+        totalPages: Math.ceil((total || 0) / limit),
+      })
+    }
+  }
 
   let query = supabase
     .from('library_items')
@@ -21,10 +49,6 @@ export async function GET(req: NextRequest) {
 
   if (category && category !== 'all') {
     query = query.eq('category', category)
-  }
-
-  if (lang) {
-    query = query.eq('language', lang)
   }
 
   if (search) {
