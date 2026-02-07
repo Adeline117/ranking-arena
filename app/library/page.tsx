@@ -6,26 +6,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
-
-type LibraryItem = {
-  id: string
-  title: string
-  author: string | null
-  description: string | null
-  category: string
-  subcategory: string | null
-  source: string | null
-  source_url: string | null
-  pdf_url: string | null
-  cover_url: string | null
-  tags: string[] | null
-  crypto_symbols: string[] | null
-  publish_date: string | null
-  view_count: number
-  download_count: number
-  is_free: boolean
-  buy_url: string | null
-}
+import type { LibraryItem } from '@/lib/types/library'
 
 const CATEGORIES = [
   { key: 'all', en: 'All', zh: '全部' },

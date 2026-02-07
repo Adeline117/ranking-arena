@@ -4,33 +4,9 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
+import type { LibraryItem } from '@/lib/types/library'
 
 const BookDetailModal = lazy(() => import('./BookDetailModal'))
-
-type LibraryItem = {
-  id: string
-  title: string
-  author: string | null
-  description: string | null
-  publisher: string | null
-  category: string
-  subcategory: string | null
-  publish_date: string | null
-  isbn: string | null
-  page_count: number | null
-  source_url: string | null
-  pdf_url: string | null
-  cover_url: string | null
-  tags: string[] | null
-  crypto_symbols: string[] | null
-  rating: number | null
-  rating_count: number | null
-  view_count: number
-  is_free: boolean
-  buy_url: string | null
-  language: string | null
-  language_group_id: string | null
-}
 
 const CATEGORIES = [
   { key: 'all', en: 'All', zh: '全部' },

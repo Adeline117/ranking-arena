@@ -5,31 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import StarRating from '@/app/components/ui/StarRating'
-
-type LibraryItem = {
-  id: string
-  title: string
-  author: string | null
-  publisher: string | null
-  description: string | null
-  category: string
-  subcategory: string | null
-  source_url: string | null
-  pdf_url: string | null
-  cover_url: string | null
-  tags: string[] | null
-  crypto_symbols: string[] | null
-  publish_date: string | null
-  isbn: string | null
-  page_count: number | null
-  language: string | null
-  language_group_id: string | null
-  rating: number | null
-  rating_count: number | null
-  view_count: number
-  is_free: boolean
-  buy_url: string | null
-}
+import type { LibraryItem } from '@/lib/types/library'
 
 interface BookDetailModalProps {
   item: LibraryItem

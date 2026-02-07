@@ -7,12 +7,13 @@ const supabase = createClient(
 )
 
 export async function GET(req: NextRequest) {
+  try {
   const { searchParams } = new URL(req.url)
   const category = searchParams.get('category') || ''
-  const search = searchParams.get('search') || ''
+  const search = (searchParams.get('search') || '').slice(0, 200) // cap search length
   const lang = searchParams.get('language') || ''  // user's UI language preference
-  const page = parseInt(searchParams.get('page') || '1')
-  const limit = Math.min(parseInt(searchParams.get('limit') || '24'), 100)
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1)
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '24') || 24), 100)
   const offset = (page - 1) * limit
 
   // Use RPC for language-priority sorting when user has a language preference
@@ -70,4 +71,8 @@ export async function GET(req: NextRequest) {
     page,
     totalPages: Math.ceil((count || 0) / limit),
   })
+  } catch (e) {
+    console.error('Library API error:', e)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }
