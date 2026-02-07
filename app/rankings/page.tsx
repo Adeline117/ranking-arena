@@ -350,7 +350,26 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
     >
       <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary }}>
         {trader.rank <= 3 ? (
-          <span className="text-lg">{trader.rank === 1 ? '#1' : trader.rank === 2 ? '#2' : '#3'}</span>
+          <span
+            className="inline-flex items-center justify-center"
+            style={{
+              width: 28, height: 28, borderRadius: '50%',
+              fontSize: 13, fontWeight: 700,
+              background: trader.rank === 1
+                ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+                : trader.rank === 2
+                ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
+                : 'linear-gradient(135deg, #CD7F32, #A0522D)',
+              color: trader.rank === 1 ? '#1a1200' : '#fff',
+              boxShadow: trader.rank === 1
+                ? '0 0 8px rgba(255,215,0,0.4)'
+                : trader.rank === 2
+                ? '0 0 6px rgba(192,192,192,0.3)'
+                : '0 0 6px rgba(205,127,50,0.3)',
+            }}
+          >
+            {trader.rank}
+          </span>
         ) : (
           trader.rank
         )}
