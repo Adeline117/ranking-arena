@@ -105,6 +105,26 @@ npm run scrape:details:force  # Force fetch all details
 9. **Wallet-Account Binding** - Support Web3 wallet binding to Arena user accounts for unified authentication
 10. **Fast Account Switching** - Implement quick account switching functionality for users with multiple Arena accounts
 
+## ⚠️ Deployment Rules (CRITICAL)
+
+**Every commit MUST pass type checking before push.** Before running `git push`, ALWAYS run:
+
+```bash
+npx tsc --noEmit 2>&1 | head -50
+```
+
+If there are TypeScript errors, **fix them before pushing**. Do NOT push code with type errors.
+
+**Pre-push checklist:**
+1. `npx tsc --noEmit` — zero type errors
+2. `git add -A && git commit -m "..."` — commit with clear message
+3. `git push` — push to main
+4. Verify Vercel deployment succeeds (check build logs if needed)
+
+**If build fails on Vercel:** Fix immediately, do not leave broken deployments.
+
+Note: `next.config.ts` has `ignoreBuildErrors: true` as a safety net, but this does NOT mean type errors are acceptable. Always fix them.
+
 ---
 
 # 优化任务清单 (Optimization Task List)
