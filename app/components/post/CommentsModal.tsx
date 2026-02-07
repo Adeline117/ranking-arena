@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useState, useEffect, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon } from '../ui/icons'
@@ -8,6 +8,7 @@ import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
+import { useToast } from '../ui/Toast'
 import type { Comment } from './hooks/usePostComments'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 
@@ -209,6 +210,16 @@ export default function CommentsModal({
   translatedComments = {},
 }: CommentsModalProps) {
   const { language, t } = useLanguage()
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const { showToast } = useToast()
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmojiPicker) return
+    const handler = () => setShowEmojiPicker(false)
+    const timer = setTimeout(() => document.addEventListener('click', handler), 0)
+    return () => { clearTimeout(timer); document.removeEventListener('click', handler) }
+  }, [showEmojiPicker])
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-focus reply input
@@ -334,19 +345,45 @@ export default function CommentsModal({
 
             {/* Reply input */}
             {replyingTo?.commentId === comment.id && (
-              <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                <input
-                  type="text"
+              <div style={{ marginTop: 8, position: 'relative' }}>
+                <textarea
                   value={replyContent}
-                  onChange={(e) => setReplyContent(e.target.value)}
+                  onChange={(e) => {
+                    setReplyContent(e.target.value)
+                    const ta = e.target
+                    ta.style.height = 'auto'
+                    ta.style.height = Math.min(ta.scrollHeight, 100) + 'px'
+                  }}
                   placeholder={`${t('reply')} @${replyingTo.handle}`}
                   onKeyDown={handleKeyDown}
-                  style={styles.input}
+                  rows={1}
+                  style={{
+                    ...styles.input,
+                    width: '100%',
+                    resize: 'none',
+                    minHeight: 36,
+                    maxHeight: 100,
+                    paddingRight: 60,
+                    overflow: 'hidden',
+                    fontFamily: 'inherit',
+                  }}
                 />
                 <button
                   onClick={() => onSubmitReply(postId, comment.id)}
                   disabled={submittingReply || !replyContent.trim()}
-                  style={styles.submitButton(submittingReply || !replyContent.trim())}
+                  style={{
+                    position: 'absolute',
+                    right: 6,
+                    bottom: 6,
+                    padding: '3px 10px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: replyContent.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: submittingReply || !replyContent.trim() ? 'default' : 'pointer',
+                  }
                 >
                   {submittingReply ? '...' : t('send')}
                 </button>
@@ -375,54 +412,218 @@ export default function CommentsModal({
 
   return (
     <div style={{ marginTop: 16 }}>
-      {/* Comment input */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <textarea
-          ref={commentInputRef}
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          placeholder={t('writeComment')}
-          rows={1}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              // Prevent double-submission
-              if (submittingComment || !newComment.trim()) return
-              onSubmitComment(postId)
-            }
-          }}
+      {/* Comment input - auto-expanding with inline actions */}
+      <div style={{ marginBottom: 16, position: 'relative' }}>
+        <div
           style={{
-            flex: 1,
-            padding: '10px 14px',
-            borderRadius: 12,
             border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: 16,
             background: tokens.colors.bg.tertiary,
-            color: tokens.colors.text.primary,
-            fontSize: 14,
-            resize: 'none',
-            outline: 'none',
-            minHeight: 40,
-            fontFamily: 'inherit',
+            padding: '10px 14px',
+            paddingBottom: 38,
+            transition: 'border-color 0.2s',
           }}
-        />
-        <button
-          onClick={() => onSubmitComment(postId)}
-          disabled={submittingComment || !newComment.trim()}
-          style={{
-            padding: '10px 16px',
-            borderRadius: 12,
-            border: 'none',
-            background: ARENA_PURPLE,
-            color: '#fff',
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: submittingComment ? 'not-allowed' : 'pointer',
-            opacity: (submittingComment || !newComment.trim()) ? 0.6 : 1,
-            alignSelf: 'flex-end',
-          }}
+          onFocus={(e) => { e.currentTarget.style.borderColor = ARENA_PURPLE }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary }}
         >
-          {submittingComment ? '...' : t('send')}
-        </button>
+          <textarea
+            ref={commentInputRef}
+            value={newComment}
+            onChange={(e) => {
+              setNewComment(e.target.value)
+              // Auto-expand
+              const ta = e.target
+              ta.style.height = 'auto'
+              ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
+            }}
+            placeholder={t('writeComment')}
+            rows={1}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                if (submittingComment || !newComment.trim()) return
+                onSubmitComment(postId)
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: tokens.colors.text.primary,
+              fontSize: 14,
+              resize: 'none',
+              outline: 'none',
+              minHeight: 22,
+              maxHeight: 160,
+              lineHeight: '22px',
+              fontFamily: 'inherit',
+              overflow: 'hidden',
+            }}
+          />
+
+          {/* Toolbar row - bottom of input box */}
+          <div style={{
+            position: 'absolute',
+            bottom: 6,
+            left: 10,
+            right: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            {/* Left: action buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {/* Emoji picker */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(prev => !prev)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 4,
+                    borderRadius: 6,
+                    color: tokens.colors.text.tertiary,
+                    fontSize: 18,
+                    lineHeight: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title={language === 'zh' ? '表情' : 'Emoji'}
+                >
+                  😊
+                </button>
+                {showEmojiPicker && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 32,
+                    left: 0,
+                    background: tokens.colors.bg.secondary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    borderRadius: 12,
+                    padding: 8,
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(8, 1fr)',
+                    gap: 2,
+                    zIndex: 100,
+                    boxShadow: tokens.shadow.lg,
+                    width: 280,
+                  }}>
+                    {['😀','😂','🤣','😍','🥰','😎','🤔','😏',
+                      '👍','👎','🔥','💯','🚀','💰','📈','📉',
+                      '🐂','🐻','💎','🙌','😱','🤑','💪','❤️',
+                      '👀','🎯','⚡','🌙','☀️','🤝','🎉','💀'].map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => {
+                          setNewComment(prev => prev + emoji)
+                          setShowEmojiPicker(false)
+                          commentInputRef.current?.focus()
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          fontSize: 20,
+                          cursor: 'pointer',
+                          padding: 4,
+                          borderRadius: 4,
+                          lineHeight: 1,
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* @ mention */}
+              <button
+                type="button"
+                onClick={() => {
+                  setNewComment(prev => prev + '@')
+                  commentInputRef.current?.focus()
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  borderRadius: 6,
+                  color: tokens.colors.text.tertiary,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                }}
+                title={language === 'zh' ? '@提及用户' : '@Mention'}
+              >
+                @
+              </button>
+
+              {/* Image (placeholder for future) */}
+              <button
+                type="button"
+                onClick={() => {
+                  // TODO: implement image upload in comments
+                  if (typeof window !== 'undefined') {
+                    const input = document.createElement('input')
+                    input.type = 'file'
+                    input.accept = 'image/*'
+                    input.onchange = () => {
+                      // Future: upload and attach image
+                      showToast(language === 'zh' ? '评论图片功能即将上线' : 'Comment images coming soon', 'info' as 'success')
+                    }
+                    input.click()
+                  }
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  borderRadius: 6,
+                  color: tokens.colors.text.tertiary,
+                  fontSize: 15,
+                  lineHeight: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                title={language === 'zh' ? '图片' : 'Image'}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Right: send button */}
+            <button
+              onClick={() => onSubmitComment(postId)}
+              disabled={submittingComment || !newComment.trim()}
+              style={{
+                padding: '4px 12px',
+                borderRadius: 8,
+                border: 'none',
+                background: newComment.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: submittingComment || !newComment.trim() ? 'default' : 'pointer',
+                opacity: submittingComment ? 0.6 : 1,
+                transition: 'all 0.2s',
+                lineHeight: '22px',
+              }}
+            >
+              {submittingComment ? '...' : t('send')}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Comments list */}
