@@ -997,6 +997,7 @@ body {
 .glass-card:hover {
   box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle);
   border-color: var(--glass-border-medium);
+  transform: translateY(-2px);
 }
 
 /* ============================================
@@ -1109,6 +1110,33 @@ body {
 @media (min-width: 1280px) {
   .waterfall-grid {
     columns: 4;
+    column-gap: 16px;
+  }
+}
+
+/* Post feed masonry layout (Xiaohongshu/Pinterest style) */
+.post-feed-masonry {
+  columns: 2;
+  column-gap: 12px;
+}
+.post-feed-masonry > * {
+  break-inside: avoid;
+  margin-bottom: 12px;
+  display: inline-block;
+  width: 100%;
+}
+@media (min-width: 768px) {
+  .post-feed-masonry {
+    columns: 2;
+    column-gap: 16px;
+  }
+  .post-feed-masonry > * {
+    margin-bottom: 16px;
+  }
+}
+@media (min-width: 1024px) {
+  .post-feed-masonry {
+    columns: 3;
     column-gap: 16px;
   }
 }
