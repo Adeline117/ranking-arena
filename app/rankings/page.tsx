@@ -24,7 +24,7 @@ import { formatROI, formatPnL } from '@/app/components/ranking/utils'
 import { VirtualLeaderboard, type TraderRow as VirtualTraderRow } from '@/app/components/ranking/VirtualLeaderboard'
 import { MetricTooltip } from '@/app/components/ui/MetricTooltip'
 import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/trading-platform'
-import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 
 // Threshold for using virtual scrolling (for large datasets)
@@ -65,8 +65,19 @@ const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
 // LocalStorage key for filter preferences
 const FILTER_PREFS_KEY = 'arena_ranking_filters'
 
+// Category presets for quick filtering
+type CategoryPreset = 'all' | 'cex_futures' | 'cex_spot' | 'onchain_dex'
+
+const CATEGORY_LABELS: Record<CategoryPreset, { zh: string; en: string }> = {
+  all: { zh: '全部', en: 'All' },
+  cex_futures: { zh: 'CEX合约', en: 'CEX Futures' },
+  cex_spot: { zh: 'CEX现货', en: 'CEX Spot' },
+  onchain_dex: { zh: '链上DEX', en: 'On-chain DEX' },
+}
+
 interface FilterPrefs {
   window?: SnapshotWindow
+  category?: CategoryPreset
   platform?: string
 }
 
@@ -101,12 +112,13 @@ function RankingsContent() {
   useEffect(() => {
     if (hasRestoredPrefs) return
 
-    const hasUrlParams = searchParams.has('window') || searchParams.has('platform')
+    const hasUrlParams = searchParams.has('window') || searchParams.has('category') || searchParams.has('platform')
     if (!hasUrlParams) {
       const prefs = loadFilterPrefs()
-      if (prefs.window || prefs.platform) {
+      if (prefs.window || prefs.category || prefs.platform) {
         const params = new URLSearchParams()
         if (prefs.window && prefs.window !== '90D') params.set('window', prefs.window)
+        if (prefs.category && prefs.category !== 'all') params.set('category', prefs.category)
         if (prefs.platform) params.set('platform', prefs.platform)
         if (params.toString()) {
           router.replace(`${pathname}?${params.toString()}`, { scroll: false })
@@ -118,6 +130,7 @@ function RankingsContent() {
 
   const activeWindow = (searchParams.get('window') as SnapshotWindow) || '90D'
   const activePlatform = searchParams.get('platform') || undefined
+  const activeCategory = (searchParams.get('category') as CategoryPreset) || 'all'
 
   const { data, error, isLoading, isStale } = useRankingsV2({
     window: activeWindow,
@@ -128,9 +141,10 @@ function RankingsContent() {
   const saveCurrentPrefs = useCallback(() => {
     saveFilterPrefs({
       window: activeWindow,
+      category: activeCategory,
       platform: activePlatform,
     })
-  }, [activeWindow, activePlatform])
+  }, [activeWindow, activeCategory, activePlatform])
 
   useEffect(() => {
     if (hasRestoredPrefs) {
@@ -144,11 +158,30 @@ function RankingsContent() {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
-  // All traders shown (no category filter)
+  const handleCategoryChange = (cat: CategoryPreset) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (cat === 'all') {
+      params.delete('category')
+    } else {
+      params.set('category', cat)
+    }
+    // Clear platform when category changes
+    params.delete('platform')
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  // Filter data by category if no specific platform selected
   const filteredTraders = useMemo(() => {
     if (!data) return []
-    return data.traders
-  }, [data])
+    if (activeCategory === 'all' || activePlatform) return data.traders
+    return data.traders.filter(t => {
+      const sourceType = SOURCE_TYPE_MAP[t.platform]
+      if (activeCategory === 'cex_futures') return sourceType === 'futures'
+      if (activeCategory === 'cex_spot') return sourceType === 'spot'
+      if (activeCategory === 'onchain_dex') return sourceType === 'web3'
+      return true
+    })
+  }, [data, activeCategory, activePlatform])
   
   // Defer expensive list rendering to keep UI responsive during filter changes
   const deferredTraders = useDeferredValue(filteredTraders)
@@ -200,7 +233,22 @@ function RankingsContent() {
           ))}
         </div>
 
-        {/* Filters removed - use filter panel instead */}
+        {/* Category filter */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {(['all', 'cex_futures', 'cex_spot', 'onchain_dex'] as CategoryPreset[]).map(cat => (
+            <button
+              key={cat}
+              onClick={() => handleCategoryChange(cat)}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              style={{
+                background: activeCategory === cat ? tokens.gradient.purpleGold : tokens.colors.bg.secondary,
+                color: activeCategory === cat ? '#fff' : tokens.colors.text.secondary,
+              }}
+            >
+              {isZh ? CATEGORY_LABELS[cat].zh : CATEGORY_LABELS[cat].en}
+            </button>
+          ))}
+        </div>
 
         <DataStateWrapper
           isLoading={isLoading}
