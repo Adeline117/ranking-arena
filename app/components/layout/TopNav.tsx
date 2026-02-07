@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { tokens } from '@/lib/design-tokens'
 import ThemeToggle from '../ui/ThemeToggle'
 import LanguageSwitcher from '../ui/LanguageToggle'
@@ -41,6 +42,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
   const { t } = useLanguage()
   const pathname = usePathname()
   const router = useRouter()
+  const { userId: authUserId, isLoggedIn: authLoggedIn, authChecked } = useAuthSession()
   const [isReady, setIsReady] = useState(false)
   const [myId, setMyId] = useState<string | null>(null)
   const [myHandle, setMyHandle] = useState<string | null>(null)
@@ -56,7 +58,14 @@ export default function TopNav({ email = null }: { email?: string | null }) {
 
   const totalUnread = unreadCount + unreadMessageCount
 
-  // Performance: Defer auth initialization to reduce TBT - not LCP-critical
+  // Sync auth state from global hook immediately (prevents login flicker on navigation)
+  useEffect(() => {
+    if (authChecked && authUserId && !myId) {
+      setMyId(authUserId)
+    }
+  }, [authChecked, authUserId, myId])
+
+  // Performance: Defer profile/notification fetching - not LCP-critical
   useEffect(() => {
     if ('requestIdleCallback' in window) {
       const idleId = (window as unknown as { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(() => setIsReady(true), { timeout: 2000 })
