@@ -381,18 +381,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     }
   }, [accessToken])
 
+  // Load posts on key dependency changes and feed refresh trigger
   useEffect(() => {
     loadPosts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.groupId, props.authorHandle, accessToken, sortType])
-
-  // Listen to feed refresh trigger from store (triggered by TopNav groups click)
-  useEffect(() => {
-    if (feedRefreshTrigger > 0) {
-      loadPosts()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedRefreshTrigger])
+  }, [props.groupId, props.authorHandle, accessToken, sortType, feedRefreshTrigger])
 
   // Infinite scroll observer
   useEffect(() => {
@@ -1138,13 +1131,6 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     }
   }, [translatingList, translatedListPosts, isChineseText, removeImagesFromContent])
 
-  // 当语言变化时翻译列表帖子
-  useEffect(() => {
-    if (posts.length > 0) {
-      translateListPosts(posts, language as 'zh' | 'en')
-    }
-  }, [language, posts, translateListPosts])
-
   // 批量翻译评论（使用批量API）
   const translateComments = useCallback(async (commentsToTranslate: Comment[], targetLang: 'zh' | 'en') => {
     if (translatingComments) return
@@ -1215,13 +1201,17 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     }
   }, [translatingComments, translatedComments, isChineseText])
 
-  // 当评论加载或语言变化时翻译评论
+  // 当语言变化时翻译列表帖子和评论
   useEffect(() => {
+    if (posts.length > 0) {
+      translateListPosts(posts, language as 'zh' | 'en')
+    }
     if (comments.length > 0 && openPost) {
       const targetLang = language === 'en' ? 'en' : 'zh'
       translateComments(comments, targetLang)
     }
-  }, [comments, language, openPost, translateComments])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language, posts, translateListPosts, comments, openPost, translateComments])
 
   // 打开帖子详情
   const handleOpenPost = useCallback((post: Post) => {
