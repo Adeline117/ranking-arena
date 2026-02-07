@@ -66,10 +66,6 @@ const DataFreshnessIndicator = dynamic(() => import('../ui/DataFreshnessIndicato
   ssr: false,
 })
 
-const ShareTop10Button = dynamic(() => import('../ranking/ShareTop10Button'), {
-  ssr: false,
-})
-
 interface RankingSectionProps {
   traders: Trader[]
   loading: boolean
@@ -542,13 +538,6 @@ export default function RankingSection({
         </Box>
         {/* 右侧: 操作按钮 */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
-          {!loading && filteredTraders.length > 0 && (
-            <ShareTop10Button
-              traders={filteredTraders}
-              timeRange={activeTimeRange}
-              disabled={loading}
-            />
-          )}
           {/* Copy Filter Link Button */}
           {!loading && (
             <button
