@@ -924,6 +924,17 @@ function HotContent() {
                               fontSize: '15px',
                             }}>
                               {translatedListPosts[p.id]?.title || p.title}
+                              {translatedListPosts[p.id]?.title && (
+                                <span style={{
+                                  fontSize: 10, fontWeight: 500, marginLeft: 6,
+                                  padding: '1px 6px', borderRadius: tokens.radius.sm,
+                                  background: `${tokens.colors.accent.translated || '#6b7280'}15`,
+                                  color: tokens.colors.accent.translated || '#6b7280',
+                                  verticalAlign: 'middle',
+                                }}>
+                                  {language === 'zh' ? '译' : 'TR'}
+                                </span>
+                              )}
                             </Text>
 
                             {/* Body preview */}
