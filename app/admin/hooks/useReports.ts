@@ -13,6 +13,7 @@ export interface ContentReport {
   content_id: string
   reason: string
   description: string | null
+  images: string[] | null
   status: 'pending' | 'resolved' | 'dismissed'
   resolved_by: string | null
   resolved_at: string | null

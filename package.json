@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=3584' next dev",
-    "build": "next build --webpack",
-    "analyze": "ANALYZE=true next build --webpack",
+    "build": "next build",
+    "build:webpack": "TURBOPACK=0 next build",
+    "analyze": "ANALYZE=true TURBOPACK=0 next build",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

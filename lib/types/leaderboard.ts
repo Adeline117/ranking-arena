@@ -108,6 +108,13 @@ export const GRANULAR_PLATFORMS = [
   'mux',
   'lbank',
   'blofin',
+  'bybit_spot',
+  'jupiter_perps',
+  'aevo',
+  'dune_gmx',
+  'dune_hyperliquid',
+  'dune_uniswap',
+  'dune_defi',
   // Dune on-chain leaderboards
   'dune_gmx',
   'dune_hyperliquid',
@@ -149,6 +156,9 @@ export const PLATFORM_CATEGORY: Record<GranularPlatform, TradingCategory> = {
   mux: 'onchain',
   lbank: 'futures',
   blofin: 'futures',
+  bybit_spot: 'spot',
+  jupiter_perps: 'onchain',
+  aevo: 'onchain',
   // Dune on-chain leaderboards
   dune_gmx: 'onchain',
   dune_hyperliquid: 'onchain',
