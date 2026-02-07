@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 
-type TabKey = 'overview' | 'reviews' | 'stats' | 'portfolio'
+type TabKey = 'overview' | 'stats' | 'portfolio'
 
 interface TraderTabsProps {
   activeTab: TabKey
@@ -21,7 +21,6 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
 
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'overview', label: t('overview') },
-    { key: 'reviews', label: t('reviews') },
     { key: 'stats', label: t('stats') },
     { key: 'portfolio', label: t('portfolio') },
   ]
