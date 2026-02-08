@@ -881,7 +881,7 @@ function HotContent() {
                               e.currentTarget.style.transform = 'translateY(-1px)'
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.boxShadow = tokens.shadow.sm
+                              e.currentTarget.style.boxShadow = 'none'
                               e.currentTarget.style.borderColor = 'var(--color-border-primary)'
                               e.currentTarget.style.transform = 'translateY(0)'
                             }}
@@ -1151,7 +1151,7 @@ function HotContent() {
                             e.currentTarget.style.transform = 'translateY(-1px)'
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.boxShadow = tokens.shadow.sm
+                            e.currentTarget.style.boxShadow = 'none'
                             e.currentTarget.style.borderColor = 'var(--color-border-primary)'
                             e.currentTarget.style.transform = 'translateY(0)'
                           }}

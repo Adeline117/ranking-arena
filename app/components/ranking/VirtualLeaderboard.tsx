@@ -50,6 +50,67 @@ interface RowProps {
   onClick?: (trader: TraderRow) => void
 }
 
+// Trust tier badge with i18n
+const TrustBadge = memo(({ tier }: { tier: 'high' | 'medium' | 'low' }) => {
+  const { language } = useLanguage()
+  const labels: Record<string, Record<string, string>> = {
+    high: { zh: '可信', en: 'Trusted' },
+    medium: { zh: '一般', en: 'Medium' },
+    low: { zh: '低信任', en: 'Low' },
+  }
+  return (
+    <span style={{
+      fontSize: 9,
+      padding: '1px 5px',
+      borderRadius: 3,
+      backgroundColor: tier === 'high' ? `${tokens.colors.accent.success}18`
+        : tier === 'medium' ? `${tokens.colors.accent.warning}18`
+        : `${tokens.colors.accent.error}18`,
+      color: tier === 'high' ? tokens.colors.accent.success
+        : tier === 'medium' ? tokens.colors.accent.warning
+        : tokens.colors.accent.error,
+      fontWeight: 500,
+    }}>
+      {labels[tier][language] || labels[tier].en}
+    </span>
+  )
+})
+TrustBadge.displayName = 'TrustBadge'
+
+// Column header row for virtual leaderboard
+const HEADER_HEIGHT = 40
+
+const HeaderRow = memo(() => {
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: `0 ${tokens.spacing[4]}`,
+        height: HEADER_HEIGHT,
+        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        fontSize: tokens.typography.fontSize.xs,
+        fontWeight: 600,
+        color: tokens.colors.text.secondary,
+        position: 'sticky',
+        top: 0,
+        zIndex: 2,
+        backgroundColor: tokens.colors.bg.primary,
+      }}
+    >
+      <div style={{ width: 50, textAlign: 'center' }}>#</div>
+      <div style={{ flex: 1 }}>{isZh ? '交易员' : 'Trader'}</div>
+      <div style={{ width: 100, textAlign: 'right' }}>ROI</div>
+      <div style={{ width: 100, textAlign: 'right' }}>PnL</div>
+      <div style={{ width: 80, textAlign: 'right' }}>{isZh ? '胜率' : 'Win%'}</div>
+      <div style={{ width: 80, textAlign: 'right' }}>{isZh ? '来源' : 'Source'}</div>
+    </div>
+  )
+})
+HeaderRow.displayName = 'HeaderRow'
+
 // 默认行渲染
 const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
   const roiColor = trader.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
@@ -190,20 +251,7 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
           {trader.source}
         </span>
         {trader.trustTier && (
-          <span style={{
-            fontSize: 9,
-            padding: '1px 5px',
-            borderRadius: 3,
-            backgroundColor: trader.trustTier === 'high' ? `${tokens.colors.accent.success}18`
-              : trader.trustTier === 'medium' ? `${tokens.colors.accent.warning}18`
-              : `${tokens.colors.accent.error}18`,
-            color: trader.trustTier === 'high' ? tokens.colors.accent.success
-              : trader.trustTier === 'medium' ? tokens.colors.accent.warning
-              : tokens.colors.accent.error,
-            fontWeight: 500,
-          }}>
-            {trader.trustTier === 'high' ? '可信' : trader.trustTier === 'medium' ? '一般' : '低信任'}
-          </span>
+          <TrustBadge tier={trader.trustTier} />
         )}
       </div>
     </div>
@@ -343,6 +391,7 @@ export function VirtualLeaderboard({
         backgroundColor: tokens.colors.bg.primary,
       }}
     >
+      <HeaderRow />
       {/* 撑起总高度的占位元素 */}
       <div style={{ height: totalHeight, position: 'relative' }}>
         {/* 只渲染可见行 */}
