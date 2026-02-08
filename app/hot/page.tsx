@@ -331,12 +331,12 @@ function HotContent() {
     const score = post.hotScore ?? 0
     const comments = post.comments ?? 0
 
-    // 沸: 热度达到特定高度，受到用户广泛讨论 (score>50 且 comments>=10)
-    if (score >= 50 && comments >= 10) {
+    // 沸: 极高热度，真正的广泛讨论 (top 3 only, score>95 且 comments>=150)
+    if (score >= 95 && comments >= 150) {
       return { label: isZh ? '沸' : 'BOOM', color: '#FF4500' }
     }
-    // 热: 短时间内热度持续攀升 (score>20 且不到24小时)
-    if (score >= 20 && hoursAgo < 24) {
+    // 热: 短时间内热度持续攀升 (score>80 且不到24小时)
+    if (score >= 80 && hoursAgo < 24) {
       return { label: isZh ? '热' : 'HOT', color: '#FF8C00' }
     }
     // 新: 最近上榜的新鲜内容 (不到6小时)

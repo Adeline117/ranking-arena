@@ -11,6 +11,8 @@ const en = {
     logout: 'Logout',
     follow: 'Follow',
     following: 'Following',
+    recommended: 'Recommended',
+    bookshelf: 'Bookshelf',
     followers: 'Followers',
     bio: 'Bio',
     performance: 'Performance',
