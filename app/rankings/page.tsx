@@ -25,6 +25,7 @@ import { VirtualLeaderboard, type TraderRow as VirtualTraderRow } from '@/app/co
 import { MetricTooltip } from '@/app/components/ui/MetricTooltip'
 import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/trading-platform'
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { Web3VerifiedBadge } from '@/app/components/trader/Web3VerifiedBadge'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 
 // Threshold for using virtual scrolling (for large datasets)
@@ -98,6 +99,91 @@ function saveFilterPrefs(prefs: FilterPrefs): void {
   } catch {
     // Ignore storage errors
   }
+}
+
+/** Quick exchange filter chips shown above the leaderboard */
+const QUICK_FILTER_EXCHANGES: { value: string; label: string }[] = [
+  { value: 'binance_futures', label: 'Binance' },
+  { value: 'bitget_futures', label: 'Bitget' },
+  { value: 'okx_futures', label: 'OKX' },
+  { value: 'bybit', label: 'Bybit' },
+  { value: 'mexc', label: 'MEXC' },
+  { value: 'htx_futures', label: 'HTX' },
+  { value: 'hyperliquid', label: 'Hyperliquid' },
+  { value: 'gmx', label: 'GMX' },
+]
+
+function ExchangeQuickFilter({
+  activeCategory,
+  activePlatform,
+  isZh,
+  onPlatformChange,
+}: {
+  activeCategory: CategoryPreset
+  activePlatform: string | undefined
+  isZh: boolean
+  onPlatformChange: (platform: string | null) => void
+}) {
+  // Filter chips based on active category
+  const visibleExchanges = useMemo(() => {
+    if (activeCategory === 'all') return QUICK_FILTER_EXCHANGES
+    return QUICK_FILTER_EXCHANGES.filter(ex => {
+      const sourceType = SOURCE_TYPE_MAP[ex.value]
+      if (activeCategory === 'cex_futures') return sourceType === 'futures'
+      if (activeCategory === 'cex_spot') return sourceType === 'spot'
+      if (activeCategory === 'onchain_dex') return sourceType === 'web3'
+      return true
+    })
+  }, [activeCategory])
+
+  if (visibleExchanges.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap gap-2 mb-4">
+      {visibleExchanges.map(ex => {
+        const isActive = activePlatform === ex.value
+        return (
+          <button
+            key={ex.value}
+            onClick={() => onPlatformChange(isActive ? null : ex.value)}
+            style={{
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.full,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+              background: isActive ? `${tokens.colors.accent.primary}20` : tokens.glass.bg.light,
+              color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+              border: `1px solid ${isActive ? tokens.colors.accent.primary + '50' : tokens.colors.border.primary}`,
+              cursor: 'pointer',
+              transition: `all ${tokens.transition.fast}`,
+              outline: 'none',
+            }}
+          >
+            {ex.label}
+          </button>
+        )
+      })}
+      {activePlatform && (
+        <button
+          onClick={() => onPlatformChange(null)}
+          style={{
+            padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+            borderRadius: tokens.radius.full,
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: tokens.typography.fontWeight.medium,
+            background: 'transparent',
+            color: tokens.colors.text.tertiary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            cursor: 'pointer',
+            transition: `all ${tokens.transition.fast}`,
+            outline: 'none',
+          }}
+        >
+          {isZh ? '清除' : 'Clear'}
+        </button>
+      )}
+    </div>
+  )
 }
 
 function RankingsContent() {
@@ -312,6 +398,22 @@ function RankingsContent() {
           ))}
         </div>
 
+        {/* Exchange quick filter chips */}
+        <ExchangeQuickFilter
+          activeCategory={activeCategory}
+          activePlatform={activePlatform}
+          isZh={isZh}
+          onPlatformChange={(platform) => {
+            const params = new URLSearchParams(searchParams.toString())
+            if (platform) {
+              params.set('platform', platform)
+            } else {
+              params.delete('platform')
+            }
+            router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+          }}
+        />
+
         <DataStateWrapper
           isLoading={isLoading}
           error={error}
@@ -502,8 +604,9 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
           <div className="text-sm font-medium truncate" style={{ color: tokens.colors.text.primary }}>
             {getTraderDisplayName(trader)}
           </div>
-          <div className="text-xs" style={{ color: tokens.colors.text.tertiary }}>
+          <div className="text-xs flex items-center gap-1" style={{ color: tokens.colors.text.tertiary }}>
             {trader.platform.replace('_', ' ')}
+            {SOURCE_TYPE_MAP[trader.platform] === 'web3' && <Web3VerifiedBadge size="sm" />}
           </div>
         </div>
       </div>

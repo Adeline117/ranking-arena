@@ -23,7 +23,7 @@ const SOURCE = 'dydx'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const INDEXER_URL = 'https://indexer.dydx.trade'
 const TARGET = 500
-const ENRICH_LIMIT = 100
+const ENRICH_LIMIT = 300
 const ENRICH_CONCURRENCY = 5
 const ENRICH_DELAY_MS = 300
 

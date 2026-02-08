@@ -16,6 +16,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
 const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
+const Web3VerifiedBadge = dynamic(() => import('./Web3VerifiedBadge').then(m => ({ default: m.Web3VerifiedBadge })), { ssr: false })
 const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
 
 interface TraderHeaderProps {
@@ -518,6 +519,7 @@ export default function TraderHeader({
               </Box>
             )}
 
+            {getSourceCategory(source) === 'web3' && <Web3VerifiedBadge size="md" />}
             <OnChainBadge traderHandle={handle} size="sm" />
 
             <BadgeDisplay traderHandle={handle} size="sm" maxDisplay={3} />

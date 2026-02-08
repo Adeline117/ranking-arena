@@ -33,7 +33,7 @@ const TARGET = 500
 const PAGE_SIZE = 50
 
 // Phase 2: Enrichment settings - increased coverage from 50 to 100
-const ENRICH_LIMIT = 100
+const ENRICH_LIMIT = 300
 const ENRICH_CONCURRENCY = 5 // Increased concurrency
 const ENRICH_DELAY_MS = 1000
 

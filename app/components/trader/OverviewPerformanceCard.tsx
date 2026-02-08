@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TraderPerformance } from '@/lib/data/trader'
+import { Sparkline } from '@/app/components/ui/Sparkline'
 
 // 扩展 TraderPerformance 类型
 interface ExtendedPerformance extends TraderPerformance {
@@ -59,47 +60,6 @@ export interface OverviewPerformanceCardProps {
 }
 
 type Period = '7D' | '30D' | '90D'
-
-/**
- * 迷你趋势图 Sparkline
- */
-function MiniSparkline({ data, color, width = 80, height = 28 }: { data: number[]; color: string; width?: number; height?: number }) {
-  if (!data || data.length < 2) return null
-
-  const min = Math.min(...data)
-  const max = Math.max(...data)
-  const range = max - min || 1
-
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width
-    const y = height - ((v - min) / range) * (height - 4) - 2
-    return `${x},${y}`
-  }).join(' ')
-
-  return (
-    <svg width={width} height={height} style={{ display: 'block' }}>
-      <defs>
-        <linearGradient id={`sparkGrad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* 填充区域 */}
-      <polygon
-        points={`0,${height} ${points} ${width},${height}`}
-        fill={`url(#sparkGrad-${color.replace('#', '')})`}
-      />
-    </svg>
-  )
-}
 
 /**
  * Performance卡片 - 交易员主页核心指标
@@ -420,8 +380,10 @@ export default function OverviewPerformanceCard({
                   {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : '—'}
                 </Text>
                 {sparklineData.length > 2 && (
-                  <MiniSparkline
+                  <Sparkline
                     data={sparklineData}
+                    width={80}
+                    height={28}
                     color={roi !== undefined && roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error}
                   />
                 )}

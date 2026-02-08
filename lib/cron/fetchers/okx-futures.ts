@@ -22,7 +22,7 @@ const PAGE_SIZE = 10
 const MAX_PAGES = 50
 
 // Phase 2: Enrichment settings - increased coverage from 100 to 150
-const ENRICH_LIMIT = 150 // OKX already has pnlRatios data, no extra API calls needed
+const ENRICH_LIMIT = 300 // OKX already has pnlRatios data, no extra API calls needed
 
 const WINDOW_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
 

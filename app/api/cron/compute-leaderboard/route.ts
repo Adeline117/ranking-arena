@@ -137,9 +137,12 @@ async function computeSeason(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   season: Period
 ): Promise<number> {
-  const freshnessThreshold = new Date()
-  freshnessThreshold.setHours(freshnessThreshold.getHours() - DATA_FRESHNESS_HOURS)
-  const freshnessISO = freshnessThreshold.toISOString()
+  // Per-source freshness thresholds
+  const freshnessISOBySource = (source: string): string => {
+    const threshold = new Date()
+    threshold.setHours(threshold.getHours() - getFreshnessHours(source))
+    return threshold.toISOString()
+  }
 
   // Collect all traders across all sources
   interface TraderRow {
@@ -174,7 +177,7 @@ async function computeSeason(
             .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at')
             .eq('source', source)
             .eq('season_id', season)
-            .gte('captured_at', freshnessISO)
+            .gte('captured_at', freshnessISOBySource(source))
             .order('captured_at', { ascending: false })
             .range(page * pageSize, (page + 1) * pageSize - 1)
 
@@ -208,6 +211,7 @@ async function computeSeason(
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const uniqueTraders = Array.from(traderMap.values())
     .filter(t => Math.abs(t.roi ?? 0) <= roiThreshold)
+    .filter(t => (t.roi ?? 0) > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
     .filter(t => (t.trades_count ?? 0) >= MIN_TRADES_COUNT) // P1-2: minimum trades
 
   if (!uniqueTraders.length) return 0
