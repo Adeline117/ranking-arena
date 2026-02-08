@@ -172,14 +172,18 @@ function HotContent() {
             .in('source_trader_id', traderKeys)
           if (sources) {
             for (const s of sources) {
-              handleMap[s.source_trader_id] = s.handle || s.source_trader_id
+              const h = s.handle
+              const sid = s.source_trader_id
+              const isAddr = (v: string) => /^0x[0-9a-fA-F]{10,}$/.test(v)
+              const fmtAddr = (v: string) => `${v.slice(0, 6)}...${v.slice(-4)}`
+              handleMap[sid] = h && !isAddr(h) ? h : h ? fmtAddr(h) : fmtAddr(sid)
             }
           }
         }
 
         setTraders(uniqueData.map(item => ({
           id: item.source_trader_id || '',
-          handle: handleMap[item.source_trader_id] || item.source_trader_id?.slice(0, 8) || null,
+          handle: handleMap[item.source_trader_id] || (item.source_trader_id ? `${item.source_trader_id.slice(0, 6)}...${item.source_trader_id.slice(-4)}` : null),
           roi: typeof item.roi === 'string' ? parseFloat(item.roi) : (item.roi || 0),
           win_rate: typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : (item.win_rate || 0),
           followers: item.followers || 0,
@@ -745,9 +749,13 @@ function HotContent() {
         <ThreeColumnLayout
           leftSidebar={<TopTraders />}
           rightSidebar={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <WatchlistMarket />
-              <NewsFlash />
+            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
+              <div style={{ flex: '0 0 33.3%', overflow: 'hidden' }}>
+                <WatchlistMarket />
+              </div>
+              <div style={{ flex: '0 0 66.7%', overflow: 'auto' }}>
+                <NewsFlash />
+              </div>
             </div>
           }
         >

@@ -130,7 +130,14 @@ export default function PopularTraders() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {traders.map((t, idx) => {
-            const displayName = t.handle || t.source_trader_id.slice(0, 8)
+            // Show handle if available and not an address; otherwise format address nicely
+            const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
+            const formatAddr = (s: string) => `${s.slice(0, 6)}...${s.slice(-4)}`
+            const displayName = t.handle && !isAddress(t.handle)
+              ? t.handle
+              : t.handle
+                ? formatAddr(t.handle)
+                : formatAddr(t.source_trader_id)
             return (
               <Link
                 key={`${t.source}-${t.source_trader_id}`}

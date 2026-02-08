@@ -300,16 +300,23 @@ function GroupsContent() {
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
         <ThreeColumnLayout
           leftSidebar={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <PopularTradersWidget />
-              <RecommendedGroupsWidget />
+            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
+              <div style={{ flex: '0 0 33.3%', overflow: 'hidden' }}>
+                <PopularTradersWidget />
+              </div>
+              <div style={{ flex: '0 0 66.7%', overflow: 'auto' }}>
+                <RecommendedGroupsWidget />
+              </div>
             </div>
           }
           rightSidebar={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <GroupsWaterfall />
-              <MyGroupsWidget />
-              <NewsFlashWidget />
+            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
+              <div style={{ flex: '0 0 33.3%', overflow: 'hidden' }}>
+                <MyGroupsWidget />
+              </div>
+              <div style={{ flex: '0 0 66.7%', overflow: 'auto' }}>
+                <NewsFlashWidget />
+              </div>
             </div>
           }
         >
