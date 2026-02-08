@@ -59,6 +59,20 @@ export default function NewsFlash() {
     return item.title_en || item.title
   }
 
+  /** Detect if title language mismatches the UI language */
+  const getLangBadge = (item: NewsItem): string | null => {
+    const title = getTitle(item)
+    if (!title) return null
+    const cjkChars = (title.match(/[\u4e00-\u9fff]/g) || []).length
+    const latinChars = (title.match(/[a-zA-Z]/g) || []).length
+    const total = cjkChars + latinChars
+    if (total < 4) return null
+    const cjkRatio = cjkChars / total
+    if (isZh && cjkRatio < 0.3) return 'EN'
+    if (!isZh && cjkRatio > 0.7) return '\u4E2D'
+    return null
+  }
+
   return (
     <SidebarCard title={isZh ? '快讯' : 'News Flash'}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -106,6 +120,20 @@ export default function NewsFlash() {
                 </div>
                 <p style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.4, marginBottom: 4 }}>
                   {getTitle(item)}
+                  {(() => {
+                    const badge = getLangBadge(item)
+                    if (!badge) return null
+                    return (
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, color: '#8888a0',
+                        background: 'rgba(136,136,160,0.15)', padding: '1px 4px',
+                        borderRadius: 3, marginLeft: 4, verticalAlign: 'middle',
+                        lineHeight: '14px', display: 'inline-block',
+                      }}>
+                        {badge}
+                      </span>
+                    )
+                  })()}
                 </p>
                 <div style={{ display: 'flex', gap: 8, fontSize: 11, color: tokens.colors.text.secondary }}>
                   <span>{item.source}</span>
