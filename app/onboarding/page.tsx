@@ -60,7 +60,7 @@ const injectStyles = () => {
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { _showToast } = useToast()
+  const { showToast } = useToast()
   const [language, setLang] = useState<Language>('zh')
   const [theme, setTheme] = useState<Theme>('dark')
   const [mounted, setMounted] = useState(false)

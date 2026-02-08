@@ -398,21 +398,6 @@ export default function ReadPage() {
     setShowToc(false)
   }, [totalPages])
 
-  // Keyboard navigation
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement) return
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); goNext() }
-      if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goPrev() }
-      if (e.key === 'Home') { e.preventDefault(); goToPage(1) }
-      if (e.key === 'End') { e.preventDefault(); goToPage(totalPages) }
-      if (e.key === 'Escape') { setShowToc(false); setShowSettings(false) }
-      if (e.key === 'f' && !e.metaKey && !e.ctrlKey) toggleFullscreen()
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [goNext, goPrev, goToPage, totalPages, toggleFullscreen])
-
   // Touch swipe
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX
@@ -444,6 +429,21 @@ export default function ReadPage() {
     if (document.fullscreenElement) document.exitFullscreen()
     else document.documentElement.requestFullscreen()
   }, [])
+
+  // Keyboard navigation
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement) return
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); goNext() }
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goPrev() }
+      if (e.key === 'Home') { e.preventDefault(); goToPage(1) }
+      if (e.key === 'End') { e.preventDefault(); goToPage(totalPages) }
+      if (e.key === 'Escape') { setShowToc(false); setShowSettings(false) }
+      if (e.key === 'f' && !e.metaKey && !e.ctrlKey) toggleFullscreen()
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [goNext, goPrev, goToPage, totalPages, toggleFullscreen])
 
   // Auto-hide toolbar
   useEffect(() => {
