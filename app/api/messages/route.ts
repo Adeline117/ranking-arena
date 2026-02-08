@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
         receiver_id,
         content,
         read,
+        read_at,
         created_at,
         media_url,
         media_type,
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
     if (!before) {
       const { data: updatedMessages, error: readUpdateError } = await supabase
         .from('direct_messages')
-        .update({ read: true })
+        .update({ read: true, read_at: new Date().toISOString() })
         .eq('conversation_id', conversationId)
         .eq('receiver_id', userId)
         .eq('read', false)

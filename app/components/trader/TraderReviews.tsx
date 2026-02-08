@@ -255,7 +255,7 @@ function ReviewCard({
   review,
   currentUserId,
   accessToken,
-  _traderHandle,
+  traderHandle: _traderHandle,
   translations,
   onTranslated,
   onLike,
@@ -374,12 +374,12 @@ function ReviewForm({
   traderHandle,
   onSubmitted,
   t,
-  _language,
+  language: _language,
 }: {
   traderHandle: string
   onSubmitted: () => void
   t: (key: string) => string
-  _language: string
+  language: string
 }) {
   const { showToast } = useToast()
   const [rating, setRating] = useState(0)

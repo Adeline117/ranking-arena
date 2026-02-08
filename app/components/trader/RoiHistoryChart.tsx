@@ -517,7 +517,7 @@ function StatItem({
 function InteractiveLineChart({ 
   data, 
   dataType,
-  _height,
+  height: _height,
   onHover,
   hoveredPoint,
 }: { 
