@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -91,77 +91,47 @@ export default function WatchlistMarket() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
   const [watchIds, setWatchIds] = useState<string[]>(DEFAULT_COINS)
-  const [coins, setCoins] = useState<CoinPrice[]>([])
-  const [loading, setLoading] = useState(true)
   const [showPicker, setShowPicker] = useState(false)
   const [search, setSearch] = useState('')
-  const [coinOptions, setCoinOptions] = useState<CoinOption[]>(FALLBACK_COIN_OPTIONS)
+  const coinOptions = FALLBACK_COIN_OPTIONS
 
   useEffect(() => {
     setWatchIds(getWatchlist())
-    // Fetch top 50 coins from CoinGecko for picker
-    fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then((data: any[]) => {
-        const opts = data.map(c => ({ id: c.id, symbol: (c.symbol as string).toUpperCase(), name: c.name }))
-        if (opts.length > 0) setCoinOptions(opts)
-      })
-      .catch(() => { /* keep fallback */ })
   }, [])
 
-  const fetchPrices = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) { setCoins([]); setLoading(false); return }
-    try {
-      // Use our own /api/market proxy to avoid CoinGecko rate limits
-      const pairsParam = ids.map(id => {
-        const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
-        return opt ? `${opt.symbol}-USD` : null
-      }).filter(Boolean).join(',')
+  // Build pairs param for SWR key
+  const pairsParam = watchIds.map(id => {
+    const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
+    return opt ? `${opt.symbol}-USD` : null
+  }).filter(Boolean).join(',')
 
-      const res = await fetch(`/api/market?pairs=${encodeURIComponent(pairsParam)}`)
-      if (!res.ok) throw new Error('fetch failed')
-      const data = await res.json()
-      const rows = data.rows || []
+  const marketFetcher = async (url: string): Promise<CoinPrice[]> => {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error('fetch failed')
+    const data = await res.json()
+    const rows = data.rows || []
 
-      const results: CoinPrice[] = ids.map(id => {
-        const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
-        if (!opt) return null
-        const row = rows.find((r: { symbol: string }) => r.symbol === `${opt.symbol}-USD`)
-        if (!row) return null
-        const price = parseFloat(row.price.replace(/,/g, '')) || 0
-        const change = parseFloat(row.changePct) || 0
-        return { id, symbol: opt.symbol, price, change24h: change }
-      }).filter((r): r is CoinPrice => r !== null)
+    return watchIds.map(id => {
+      const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
+      if (!opt) return null
+      const row = rows.find((r: { symbol: string }) => r.symbol === `${opt.symbol}-USD`)
+      if (!row) return null
+      const price = parseFloat(row.price.replace(/,/g, '')) || 0
+      const change = parseFloat(row.changePct) || 0
+      return { id, symbol: opt.symbol, price, change24h: change }
+    }).filter((r): r is CoinPrice => r !== null)
+  }
 
-      setCoins(results)
-    } catch {
-      // Fallback: try CoinGecko directly
-      try {
-        const res = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true`
-        )
-        if (!res.ok) throw new Error('fallback failed')
-        const data = await res.json()
-        const results: CoinPrice[] = ids
-          .filter(id => data[id])
-          .map(id => {
-            const opt = coinOptions.find(c => c.id === id)
-            return { id, symbol: opt?.symbol || id.toUpperCase(), price: data[id].usd || 0, change24h: data[id].usd_24h_change || 0 }
-          })
-        setCoins(results)
-      } catch {
-        // silent fail, keep old data
-      }
-    } finally {
-      setLoading(false)
+  const { data: coins = [], isLoading: loading } = useSWR(
+    pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null,
+    marketFetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 30000,
+      refreshInterval: 60000, // Refresh every 60s
+      keepPreviousData: true,
     }
-  }, [coinOptions])
-
-  useEffect(() => {
-    fetchPrices(watchIds)
-    const interval = setInterval(() => fetchPrices(watchIds), 60000) // refresh every 60s
-    return () => clearInterval(interval)
-  }, [watchIds, fetchPrices])
+  )
 
   const toggleCoin = (coinId: string) => {
     setWatchIds(prev => {
