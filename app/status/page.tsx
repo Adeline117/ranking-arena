@@ -41,10 +41,10 @@ function formatAgo(iso: string): string {
 function StatusDot({ status }: { status: string }) {
   const color =
     status === 'pass' || status === 'healthy' || status === 'ok'
-      ? tokens.colors.success
+      ? "#22c55e"
       : status === 'degraded' || status === 'skip'
-        ? tokens.colors.warning
-        : tokens.colors.error
+        ? "#f59e0b"
+        : "#ef4444"
   return (
     <span
       style={{
@@ -89,8 +89,8 @@ export default function StatusPage() {
   }, [fetchData])
 
   const cardStyle: React.CSSProperties = {
-    background: tokens.colors.bgSecondary,
-    border: `1px solid ${tokens.colors.border}`,
+    background: tokens.colors.bg.secondary,
+    border: `1px solid ${tokens.colors.border.primary}`,
     borderRadius: tokens.radius.lg,
     padding: tokens.spacing[5],
     marginBottom: tokens.spacing[4],
@@ -100,8 +100,8 @@ export default function StatusPage() {
     <div
       style={{
         minHeight: '100vh',
-        background: tokens.colors.bgPrimary,
-        color: tokens.colors.textPrimary,
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
         fontFamily: tokens.typography.fontFamily.sans.join(', '),
         padding: tokens.spacing[6],
       }}
@@ -117,7 +117,7 @@ export default function StatusPage() {
           >
             System Status
           </h1>
-          <p style={{ color: tokens.colors.textSecondary, fontSize: tokens.typography.fontSize.sm }}>
+          <p style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm }}>
             {loading
               ? 'Checking...'
               : error
@@ -172,7 +172,7 @@ export default function StatusPage() {
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: tokens.typography.fontWeight.semibold,
                 marginBottom: tokens.spacing[4],
-                color: tokens.colors.textSecondary,
+                color: tokens.colors.text.secondary,
               }}
             >
               Services
@@ -185,7 +185,7 @@ export default function StatusPage() {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: `${tokens.spacing[2]} 0`,
-                  borderBottom: `1px solid ${tokens.colors.border}`,
+                  borderBottom: `1px solid ${tokens.colors.border.primary}`,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -226,7 +226,7 @@ export default function StatusPage() {
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: tokens.typography.fontWeight.semibold,
                 marginBottom: tokens.spacing[4],
-                color: tokens.colors.textSecondary,
+                color: tokens.colors.text.secondary,
               }}
             >
               Data Freshness
@@ -244,7 +244,7 @@ export default function StatusPage() {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: `${tokens.spacing[2]} 0`,
-                      borderBottom: `1px solid ${tokens.colors.border}`,
+                      borderBottom: `1px solid ${tokens.colors.border.primary}`,
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -254,7 +254,7 @@ export default function StatusPage() {
                     <span
                       style={{
                         fontSize: tokens.typography.fontSize.xs,
-                        color: isStale ? tokens.colors.warning : tokens.colors.text.tertiary,
+                        color: isStale ? "#f59e0b" : tokens.colors.text.tertiary,
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >
