@@ -500,14 +500,15 @@ function SettingsContent() {
 
       const { error: saveError } = await supabase
         .from('user_profiles')
-        .upsert({
-          id: userId, handle: handle || null, bio: bio || null,
+        .update({
+          handle: handle || null, bio: bio || null,
           avatar_url: finalAvatarUrl || null, cover_url: finalCoverUrl || null,
           notify_follow: notifyFollow, notify_like: notifyLike, notify_comment: notifyComment,
           notify_mention: notifyMention, notify_message: notifyMessage,
           show_followers: showFollowers, show_following: showFollowing,
           dm_permission: dmPermission, show_pro_badge: showProBadge,
-        }, { onConflict: 'id' })
+        })
+        .eq('id', userId)
 
       if (saveError) {
         uiLogger.error('Error saving profile:', JSON.stringify(saveError, null, 2))

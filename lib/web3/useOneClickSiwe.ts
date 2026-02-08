@@ -106,7 +106,13 @@ function normalizeWalletError(err: unknown, t: TranslationFunction): string {
     return t('siweNoWallet')
   }
 
-  return msg || t('siweSignInFailed')
+  // SIWE message validation errors (invalid message format)
+  if (msg.includes('invalid message') || msg.includes('Invalid message') || msg.includes('max line number')) {
+    return t('siweSignInFailed')
+  }
+
+  // Generic fallback — never show raw error to user
+  return t('siweSignInFailed')
 }
 
 // ============================================
