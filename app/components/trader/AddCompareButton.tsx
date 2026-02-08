@@ -164,7 +164,7 @@ export default function AddCompareButton({
         gap: '8px',
         cursor: 'pointer',
         transition: tokens.transition.all,
-        fontSize: size === 'sm' ? '13px' : '14px',
+        fontSize: size === 'sm' ? tokens.typography.fontSize.sm : tokens.typography.fontSize.base,
         fontWeight: 600,
       }}
     >

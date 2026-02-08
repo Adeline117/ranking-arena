@@ -57,7 +57,7 @@ export default function ExportButton({ data, filename, format = 'csv' }: ExportB
         background: 'rgba(255,255,255,0.05)',
         color: tokens.colors.text.primary,
         fontWeight: 700,
-        fontSize: '13px',
+        fontSize: tokens.typography.fontSize.sm,
         cursor: 'pointer',
         transition: 'all 200ms ease',
       }}
