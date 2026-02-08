@@ -16,6 +16,7 @@
 import { useAccount } from 'wagmi'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
+import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { isCopyTradingAvailable } from '@/lib/web3/copy-trading'
 import { ChainIndicator } from './ChainIndicator'
@@ -82,6 +83,7 @@ const ChainIcon = ({ size = 16 }: { size?: number }) => (
 export function OnChainCopyTrading({ traderHandle, traderAddress, className = '' }: OnChainCopyTradingProps) {
   const { isConnected, chainId } = useAccount()
   const { t } = useLanguage()
+  const { showToast } = useToast()
 
   // Check if copy trading is available on current chain
   const isAvailable = chainId ? isCopyTradingAvailable(chainId) : false
@@ -246,7 +248,7 @@ export function OnChainCopyTrading({ traderHandle, traderAddress, className = ''
             }}
             onClick={() => {
               // TODO: Implement notification signup
-              alert('Notification signup coming soon!')
+              showToast(t('onChainCopyTradingComingSoon') || 'Coming soon!', 'info')
             }}
           >
             Notify Me When Available

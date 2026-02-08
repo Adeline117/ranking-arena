@@ -20,9 +20,9 @@ export default function Footer() {
   const legalLinks = [
     { href: '/about', label: isZh ? '关于' : 'About' },
     { href: '/help', label: isZh ? '帮助' : 'Help' },
-    { href: '/legal/terms', label: isZh ? '服务条款' : 'Terms of Service' },
-    { href: '/legal/privacy', label: isZh ? '隐私政策' : 'Privacy Policy' },
-    { href: '/legal/disclaimer', label: isZh ? '免责声明' : 'Disclaimer' },
+    { href: '/terms', label: isZh ? '服务条款' : 'Terms of Service' },
+    { href: '/privacy', label: isZh ? '隐私政策' : 'Privacy Policy' },
+    { href: '/disclaimer', label: isZh ? '免责声明' : 'Disclaimer' },
   ]
 
   const socialLinks = [
