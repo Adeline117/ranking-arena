@@ -39,34 +39,22 @@ interface LibraryClientProps {
 }
 
 export default function LibraryClient({ initialItems, initialFeatured, initialTotal }: LibraryClientProps) {
-  const { language, t } = useLanguage()
+  const { language } = useLanguage()
   const searchParams = useSearchParams()
 
   const [items, setItems] = useState<LibraryItem[]>(initialItems)
   const [featured, setFeatured] = useState<LibraryItem[]>(initialFeatured)
   const [total, setTotal] = useState(initialTotal)
   const [loading, setLoading] = useState(false)
-  const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
-  const [search, setSearch] = useState(searchParams.get('search') || '')
   const [category, setCategory] = useState(searchParams.get('category') || 'all')
   const [sort, setSort] = useState('recent')
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1'))
-  const debounceRef = useRef<NodeJS.Timeout>(undefined)
   const categoryScrollRef = useRef<HTMLDivElement>(null)
   const isInitialRender = useRef(true)
 
   const isZh = language === 'zh'
 
-  // Debounce search input
-  useEffect(() => {
-    debounceRef.current = setTimeout(() => {
-      setSearch(searchInput)
-      setPage(1)
-    }, 400)
-    return () => clearTimeout(debounceRef.current)
-  }, [searchInput])
-
-  // Fetch featured books when language changes (skip initial — we have server data)
+  // Fetch featured books when language changes (skip initial -- we have server data)
   useEffect(() => {
     if (isInitialRender.current) return
     fetch(`/api/library?sort=rating&limit=6&language=${language}`)
@@ -80,12 +68,11 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
     try {
       const params = new URLSearchParams()
       if (category !== 'all') params.set('category', category)
-      if (search) params.set('search', search)
       if (sort !== 'recent') params.set('sort', sort)
       params.set('page', String(page))
       params.set('limit', String(PAGE_SIZE))
       params.set('language', language)
-      
+
       const res = await fetch(`/api/library?${params}`)
       const data = await res.json()
       setItems(data.items || [])
@@ -95,7 +82,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
     } finally {
       setLoading(false)
     }
-  }, [category, search, sort, page, language])
+  }, [category, sort, page, language])
 
   // Fetch when filters change, but skip initial render (we have server data)
   useEffect(() => {
@@ -111,94 +98,76 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <TopNav />
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 16px 100px' }}>
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 20px 100px' }}>
 
         {/* ===== Hero Section ===== */}
         <div style={{
-          marginBottom: 32,
-          padding: '32px 28px',
-          borderRadius: tokens.radius.xl,
+          marginBottom: 40,
+          padding: '40px 32px',
+          borderRadius: 16,
           background: tokens.gradient.mesh + ', ' + tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
           position: 'relative',
           overflow: 'hidden',
         }}>
-          {/* Decorative accent */}
           <div style={{
-            position: 'absolute', top: -60, right: -60,
-            width: 200, height: 200, borderRadius: '50%',
+            position: 'absolute', top: -80, right: -80,
+            width: 240, height: 240, borderRadius: '50%',
             background: tokens.gradient.primarySubtle,
+            filter: 'blur(80px)', pointerEvents: 'none',
+          }} />
+          <div style={{
+            position: 'absolute', bottom: -60, left: -40,
+            width: 180, height: 180, borderRadius: '50%',
+            background: 'rgba(139, 111, 168, 0.08)',
             filter: 'blur(60px)', pointerEvents: 'none',
           }} />
 
           <div style={{ position: 'relative', zIndex: 1 }}>
             <h1 style={{
-              fontSize: tokens.typography.fontSize['3xl'],
-              fontWeight: tokens.typography.fontWeight.bold,
+              fontSize: 28,
+              fontWeight: 700,
               color: tokens.colors.text.primary,
-              marginBottom: 6,
-              lineHeight: tokens.typography.lineHeight.tight,
+              marginBottom: 8,
+              lineHeight: 1.2,
+              letterSpacing: '-0.02em',
             }}>
-              {t('cryptoLibrary')}
+              {isZh ? '加密书库' : 'Crypto Library'}
             </h1>
             <p style={{
               color: tokens.colors.text.secondary,
-              fontSize: tokens.typography.fontSize.md,
-              marginBottom: 24,
+              fontSize: 15,
+              lineHeight: 1.5,
+              maxWidth: 480,
             }}>
               {isZh
-                ? `${total.toLocaleString()} 篇白皮书、研报、书籍与论文`
+                ? `收录 ${total.toLocaleString()} 篇白皮书、研报、书籍与论文`
                 : `${total.toLocaleString()} whitepapers, research reports, books & papers`}
             </p>
-
-            {/* Search Bar */}
-            <div style={{ position: 'relative', maxWidth: 560 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
-              </svg>
-              <input
-                type="text"
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                placeholder={isZh ? '搜索标题、作者、描述...' : 'Search titles, authors, descriptions...'}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px 12px 42px',
-                  borderRadius: tokens.radius.lg,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.base,
-                  outline: 'none',
-                  transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
-                }}
-                onFocus={e => {
-                  e.currentTarget.style.borderColor = tokens.colors.accent.brand
-                  e.currentTarget.style.boxShadow = 'var(--shadow-input-focus)'
-                }}
-                onBlur={e => {
-                  e.currentTarget.style.borderColor = tokens.colors.border.primary
-                  e.currentTarget.style.boxShadow = 'none'
-                }}
-              />
-            </div>
           </div>
         </div>
 
-        {/* ===== Featured Carousel (only when no search) ===== */}
-        {!search && featured.length > 0 && (
-          <div style={{ marginBottom: 32 }}>
-            <h2 style={{
-              fontSize: tokens.typography.fontSize.lg,
-              fontWeight: tokens.typography.fontWeight.semibold,
-              color: tokens.colors.text.primary,
-              marginBottom: 14,
-            }}>
-              {isZh ? '精选推荐' : 'Featured'}
-            </h2>
+        {/* ===== Featured Carousel ===== */}
+        {featured.length > 0 && (
+          <section style={{ marginBottom: 40 }}>
             <div style={{
-              display: 'flex', gap: 16, overflowX: 'auto',
-              paddingBottom: 8,
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              marginBottom: 16,
+            }}>
+              <h2 style={{
+                fontSize: 18,
+                fontWeight: 600,
+                color: tokens.colors.text.primary,
+                letterSpacing: '-0.01em',
+              }}>
+                {isZh ? '精选推荐' : 'Featured'}
+              </h2>
+            </div>
+            <div style={{
+              display: 'flex', gap: 20, overflowX: 'auto',
+              paddingBottom: 12,
               scrollbarWidth: 'thin',
               scrollSnapType: 'x mandatory',
             }}>
@@ -207,18 +176,18 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                   key={item.id}
                   href={`/library/${item.id}`}
                   style={{
-                    flexShrink: 0, width: 150, textDecoration: 'none',
+                    flexShrink: 0, width: 160, textDecoration: 'none',
                     scrollSnapAlign: 'start',
-                    transition: `transform ${tokens.transition.base}`,
+                    transition: 'transform 0.2s ease',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
-                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-4px)')}
+                  onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
                 >
                   <div style={{
-                    width: 150, height: 225, borderRadius: tokens.radius.lg,
+                    width: 160, height: 240, borderRadius: 12,
                     overflow: 'hidden',
-                    boxShadow: '4px 4px 12px rgba(0,0,0,0.3), 8px 8px 24px rgba(0,0,0,0.15), -1px 0 2px rgba(0,0,0,0.1)',
-                    marginBottom: 8,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15)',
+                    marginBottom: 10,
                   }}>
                     <BookCover
                       title={item.title}
@@ -229,22 +198,31 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                     />
                   </div>
                   <p style={{
-                    fontSize: 12, fontWeight: 600, color: tokens.colors.text.primary,
-                    lineHeight: 1.3, margin: 0,
+                    fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary,
+                    lineHeight: 1.35, margin: 0,
                     overflow: 'hidden', textOverflow: 'ellipsis',
-                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any,
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
                   }}>
                     {item.title}
                   </p>
+                  {item.author && (
+                    <p style={{
+                      fontSize: 11, color: tokens.colors.text.tertiary,
+                      margin: '3px 0 0', overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {item.author}
+                    </p>
+                  )}
                 </a>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
         {/* ===== Filters Row ===== */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20,
+          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24,
           flexWrap: 'wrap',
         }}>
           <div
@@ -252,7 +230,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
             role="tablist"
             aria-label={isZh ? '书城分类' : 'Library categories'}
             style={{
-              display: 'flex', gap: 8, flex: 1,
+              display: 'flex', gap: 6, flex: 1,
               overflowX: 'auto', scrollbarWidth: 'none',
               paddingBottom: 2,
             }}
@@ -286,17 +264,18 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                     }
                   }}
                   style={{
-                    padding: '7px 18px',
-                    borderRadius: tokens.radius.full,
-                    fontSize: tokens.typography.fontSize.sm,
-                    fontWeight: active ? tokens.typography.fontWeight.semibold : tokens.typography.fontWeight.medium,
+                    padding: '8px 20px',
+                    borderRadius: 999,
+                    fontSize: 13,
+                    fontWeight: active ? 600 : 500,
                     border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                     background: active ? tokens.gradient.purpleGold : 'transparent',
                     color: active ? '#fff' : tokens.colors.text.secondary,
                     cursor: 'pointer',
-                    transition: `all ${tokens.transition.fast}`,
+                    transition: 'all 0.15s ease',
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
+                    lineHeight: '20px',
                   }}
                 >
                   {isZh ? cat.zh : cat.en}
@@ -309,12 +288,12 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
             value={sort}
             onChange={e => { setSort(e.target.value); setPage(1) }}
             style={{
-              padding: '7px 12px',
-              borderRadius: tokens.radius.md,
+              padding: '8px 14px',
+              borderRadius: 10,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: tokens.colors.bg.secondary,
               color: tokens.colors.text.primary,
-              fontSize: tokens.typography.fontSize.sm,
+              fontSize: 13,
               cursor: 'pointer',
               outline: 'none',
               flexShrink: 0,
@@ -333,39 +312,48 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-            gap: 20,
+            gap: 24,
           }}>
             {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, animationDelay: `${i * 50}ms` }}>
-                <div className="skeleton" style={{ aspectRatio: '2/3' }} />
-                <div className="skeleton" style={{ height: 14, width: '80%' }} />
-                <div className="skeleton" style={{ height: 12, width: '50%' }} />
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10, animationDelay: `${i * 40}ms` }}>
+                <div className="skeleton" style={{ aspectRatio: '2/3', borderRadius: 12 }} />
+                <div className="skeleton" style={{ height: 14, width: '80%', borderRadius: 6 }} />
+                <div className="skeleton" style={{ height: 12, width: '50%', borderRadius: 6 }} />
               </div>
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div className="empty-state" style={{ padding: '80px 24px' }}>
-            <div className="empty-state-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <div style={{
+            textAlign: 'center',
+            padding: '80px 24px',
+          }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: '50%',
+              background: tokens.gradient.primarySubtle,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5">
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
               </svg>
             </div>
-            <p className="empty-state-title">
-              {search
-                ? (isZh ? `未找到与"${search}"相关的内容` : `No results for "${search}"`)
-                : (isZh ? '该分类暂无内容' : 'No items in this category yet')}
+            <p style={{
+              fontSize: 16, fontWeight: 600,
+              color: tokens.colors.text.primary, marginBottom: 6,
+            }}>
+              {isZh ? '该分类暂无内容' : 'No items in this category yet'}
             </p>
-            <p className="empty-state-message">
-              {search
-                ? (isZh ? '试试其他关键词' : 'Try different keywords')
-                : ''}
+            <p style={{
+              fontSize: 13, color: tokens.colors.text.tertiary,
+            }}>
+              {isZh ? '试试其他分类' : 'Try a different category'}
             </p>
           </div>
         ) : (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-            gap: 20,
+            gap: 24,
           }}>
             {items.map((item, idx) => (
               <BookCard key={item.id} item={item} isZh={isZh} priority={idx < 6} />
@@ -377,7 +365,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
         {totalPages > 1 && (
           <div style={{
             display: 'flex', justifyContent: 'center', alignItems: 'center',
-            gap: 6, marginTop: 40,
+            gap: 6, marginTop: 48,
           }}>
             <PaginationButton
               disabled={page <= 1}
@@ -398,12 +386,12 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                   key={p}
                   onClick={() => setPage(p)}
                   style={{
-                    width: 36, height: 36, borderRadius: tokens.radius.md,
+                    width: 36, height: 36, borderRadius: 10,
                     border: p === page ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                     background: p === page ? tokens.gradient.purpleGold : 'transparent',
                     color: p === page ? '#fff' : tokens.colors.text.primary,
                     cursor: 'pointer', fontSize: 13, fontWeight: p === page ? 600 : 400,
-                    transition: `all ${tokens.transition.fast}`,
+                    transition: 'all 0.15s ease',
                   }}
                 >
                   {p}
@@ -436,13 +424,13 @@ function PaginationButton({ disabled, onClick, label }: { disabled: boolean; onC
       disabled={disabled}
       onClick={onClick}
       style={{
-        padding: '8px 14px', borderRadius: tokens.radius.md,
+        padding: '8px 14px', borderRadius: 10,
         border: `1px solid ${tokens.colors.border.primary}`,
         background: 'transparent', color: tokens.colors.text.primary,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.35 : 1,
         fontSize: 13, fontWeight: 500,
-        transition: `all ${tokens.transition.fast}`,
+        transition: 'all 0.15s ease',
       }}
     >
       {label}

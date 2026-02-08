@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
+import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -36,6 +36,7 @@ function TraderAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl:
         alt={name}
         width={size}
         height={size}
+        loading="lazy"
         style={{
           borderRadius: tokens.radius.full,
           objectFit: 'cover',
@@ -69,66 +70,24 @@ function TraderAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl:
   )
 }
 
+const fetcher = (url: string) => fetch(url).then(r => r.json())
+
 export default function TopTraders() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
-  const [traders, setTraders] = useState<Trader[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        // Step 1: Get top traders from snapshots (by arena_score, with ROI threshold)
-        const { data: snapData, error: snapErr } = await supabase
-          .from('trader_snapshots')
-          .select('source, source_trader_id, roi, arena_score')
-          .eq('season_id', '90D')
-          .not('arena_score', 'is', null)
-          .gt('arena_score', 0)
-          .lt('roi', 10000)  // Filter out anomalous ROI (>10000%)
-          .order('arena_score', { ascending: false })
-          .limit(10)
-
-        if (snapErr || !snapData || snapData.length === 0) {
-          setTraders([])
-          setLoading(false)
-          return
-        }
-
-        // Step 2: Batch fetch handles/avatars from trader_sources
-        const { data: sourceData } = await supabase
-          .from('trader_sources')
-          .select('source, source_trader_id, handle, avatar_url')
-          .eq('is_active', true)
-          .in('source', snapData.map(d => d.source))
-          .in('source_trader_id', snapData.map(d => d.source_trader_id))
-
-        const sourceMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
-        if (sourceData) {
-          sourceData.forEach(s => sourceMap.set(`${s.source}:${s.source_trader_id}`, { handle: s.handle, avatar_url: s.avatar_url }))
-        }
-
-        const mapped: Trader[] = snapData.map(d => {
-          const src = sourceMap.get(`${d.source}:${d.source_trader_id}`)
-          return {
-            source: d.source,
-            source_trader_id: d.source_trader_id,
-            handle: src?.handle || null,
-            avatar_url: src?.avatar_url || null,
-            roi: d.roi,
-            arena_score: d.arena_score,
-          }
-        })
-        setTraders(mapped)
-      } catch {
-        setError(true)
-      } finally {
-        setLoading(false)
-      }
+  const { data, error, isLoading } = useSWR<{ traders: Trader[] }>(
+    '/api/sidebar/top-traders',
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000, // 1 minute dedup
+      refreshInterval: 300000, // Refresh every 5 minutes
     }
-    load()
-  }, [])
+  )
+
+  const traders = data?.traders || []
+  const loading = isLoading
 
   return (
     <SidebarCard title={`Top 10 ${isZh ? '交易员' : 'Traders'}`}>
