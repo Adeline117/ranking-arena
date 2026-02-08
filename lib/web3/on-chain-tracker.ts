@@ -116,10 +116,13 @@ export async function getTokenHoldings(address: string, chainId: number = 1): Pr
     })
   )
 
-  return results
-    .filter((r): r is PromiseFulfilledResult<TokenHolding> => r.status === 'fulfilled')
-    .map((r) => r.value)
-    .filter((t) => t.balanceRaw > 0n)
+  const fulfilled: TokenHolding[] = []
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value.balanceRaw > 0n) {
+      fulfilled.push(r.value)
+    }
+  }
+  return fulfilled
 }
 
 /**
