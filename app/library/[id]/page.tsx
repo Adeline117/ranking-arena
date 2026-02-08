@@ -312,23 +312,44 @@ export default function BookDetailPage() {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {/* Read - always in-app, never external */}
               {hasReadableContent ? (
-                <Link
-                  href={`/library/${book.id}/read`}
-                  style={{
-                    padding: '10px 24px', borderRadius: tokens.radius.lg,
-                    fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
-                    background: tokens.gradient.primary, color: '#fff',
-                    textDecoration: 'none',
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                    transition: `all ${tokens.transition.fast}`,
-                    boxShadow: tokens.shadow.glow,
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-                  </svg>
-                  {isZh ? '阅读' : 'Read'}
-                </Link>
+                book.is_free || session ? (
+                  <Link
+                    href={`/library/${book.id}/read`}
+                    style={{
+                      padding: '10px 24px', borderRadius: tokens.radius.lg,
+                      fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
+                      background: tokens.gradient.primary, color: '#fff',
+                      textDecoration: 'none',
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      transition: `all ${tokens.transition.fast}`,
+                      boxShadow: tokens.shadow.glow,
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                    </svg>
+                    {isZh ? '开始阅读' : 'Start Reading'}
+                  </Link>
+                ) : (
+                  <Link
+                    href="/login"
+                    style={{
+                      padding: '10px 24px', borderRadius: tokens.radius.lg,
+                      fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
+                      background: tokens.gradient.primary, color: '#fff',
+                      textDecoration: 'none',
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      transition: `all ${tokens.transition.fast}`,
+                      boxShadow: tokens.shadow.glow,
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    {isZh ? '登录后阅读' : 'Login to Read'}
+                  </Link>
+                )
               ) : (
                 <span style={{
                   padding: '10px 24px', borderRadius: tokens.radius.lg,
@@ -339,7 +360,7 @@ export default function BookDetailPage() {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                   </svg>
-                  {isZh ? '即将上线' : 'Coming Soon'}
+                  {isZh ? '暂无电子版' : 'No digital version'}
                 </span>
               )}
 
