@@ -18,6 +18,30 @@ interface SearchResult {
 }
 
 const SECTION_LIMIT = 5
+const SEARCH_HISTORY_KEY = 'ranking-arena-search-history'
+const MAX_HISTORY = 10
+
+function getSearchHistory(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(SEARCH_HISTORY_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveSearchHistory(query: string) {
+  if (typeof window === 'undefined' || !query.trim()) return
+  try {
+    const history = getSearchHistory().filter(h => h !== query.trim())
+    history.unshift(query.trim())
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)))
+  } catch { /* ignore */ }
+}
+
+function clearSearchHistory() {
+  if (typeof window === 'undefined') return
+  try { localStorage.removeItem(SEARCH_HISTORY_KEY) } catch { /* ignore */ }
+}
 
 function SearchContent() {
   const searchParams = useSearchParams()
@@ -28,6 +52,7 @@ function SearchContent() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [searchError, setSearchError] = useState(false)
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
   const { showToast } = useToast()
 
   const [libraryResults, setLibraryResults] = useState<SearchResult[]>([])
@@ -44,7 +69,20 @@ function SearchContent() {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
     })
+    setSearchHistory(getSearchHistory())
   }, [])
+
+  // Save successful searches to history
+  useEffect(() => {
+    if (query.trim() && !loading && !searchError) {
+      const total = libraryResults.length + groupResults.length + postResults.length + traderResults.length
+      if (total > 0) {
+        saveSearchHistory(query.trim())
+        setSearchHistory(getSearchHistory())
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
 
   const highlightText = useCallback((text: string, q: string): React.ReactNode => {
     if (!text || !q.trim()) return text
@@ -364,6 +402,55 @@ function SearchContent() {
               {isZh ? '搜索书库、小组、帖子、交易员...' : 'Search library, groups, posts, traders...'}
             </div>
 
+            {/* Search history */}
+            {searchHistory.length > 0 && (
+              <div style={{ maxWidth: 480, margin: '0 auto 24px', textAlign: 'left' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: 600, color: tokens.colors.text.secondary,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                  }}>
+                    {isZh ? '搜索历史' : 'Recent searches'}
+                  </div>
+                  <button
+                    onClick={() => { clearSearchHistory(); setSearchHistory([]) }}
+                    style={{
+                      fontSize: 11, color: tokens.colors.text.tertiary, background: 'none',
+                      border: 'none', cursor: 'pointer', padding: '2px 6px',
+                    }}
+                  >
+                    {isZh ? '清除' : 'Clear'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {searchHistory.map(term => (
+                    <Link
+                      key={term}
+                      href={`/search?q=${encodeURIComponent(term)}`}
+                      style={{
+                        padding: '8px 18px', borderRadius: 10,
+                        background: tokens.colors.bg.secondary,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        color: tokens.colors.text.secondary,
+                        fontSize: 13, fontWeight: 500,
+                        textDecoration: 'none', transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = tokens.colors.accent.brand
+                        e.currentTarget.style.color = tokens.colors.text.primary
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = tokens.colors.border.primary
+                        e.currentTarget.style.color = tokens.colors.text.secondary
+                      }}
+                    >
+                      {term}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Hot searches */}
             <div style={{ maxWidth: 480, margin: '0 auto', textAlign: 'left' }}>
               <div style={{
@@ -415,9 +502,38 @@ function SearchContent() {
             <div style={{ fontSize: 17, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 6 }}>
               {isZh ? '未找到结果' : 'No results'}
             </div>
-            <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
+            <div style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 24 }}>
               {isZh ? `未找到与"${query}"相关的内容` : `No results for "${query}"`}
             </div>
+            <div style={{ maxWidth: 360, margin: '0 auto', textAlign: 'left' }}>
+              <div style={{ fontSize: 12, color: tokens.colors.text.secondary, marginBottom: 10, fontWeight: 600 }}>
+                {isZh ? '建议' : 'Suggestions'}:
+              </div>
+              <ul style={{ fontSize: 13, color: tokens.colors.text.tertiary, lineHeight: 2, paddingLeft: 18, margin: 0 }}>
+                <li>{isZh ? '检查是否有拼写错误' : 'Check for typos'}</li>
+                <li>{isZh ? '尝试使用更短或更通用的关键词' : 'Try shorter or more general keywords'}</li>
+                <li>{isZh ? '尝试使用交易员的handle或平台名称搜索' : 'Try searching by trader handle or platform name'}</li>
+              </ul>
+            </div>
+            {searchHistory.length > 0 && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: tokens.colors.text.secondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                  {isZh ? '最近搜索' : 'Recent searches'}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                  {searchHistory.slice(0, 5).map(term => (
+                    <Link key={term} href={`/search?q=${encodeURIComponent(term)}`}
+                      style={{
+                        padding: '6px 14px', borderRadius: 8,
+                        background: tokens.colors.bg.secondary,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        color: tokens.colors.text.secondary, fontSize: 12, textDecoration: 'none',
+                      }}
+                    >{term}</Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div style={{
