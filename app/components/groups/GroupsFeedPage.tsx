@@ -148,16 +148,18 @@ export default function GroupsFeedPage() {
           paddingBottom: 100,
         }}
       >
-        {/* Tabs */}
+        {/* Header with tabs and create button */}
         <Box
           style={{
             display: 'flex',
-            gap: tokens.spacing[1],
+            justifyContent: 'space-between',
+            alignItems: 'center',
             marginBottom: tokens.spacing[3],
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
             paddingBottom: tokens.spacing[2],
           }}
         >
+          <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
           {([
             { key: 'feed' as TabKey, label: t('groupFeed') },
             { key: 'discover' as TabKey, label: t('discoverGroups') },
@@ -192,6 +194,23 @@ export default function GroupsFeedPage() {
               {tab.label}
             </button>
           ))}
+          </Box>
+          <Link
+            href="/groups/apply"
+            style={{
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              borderRadius: tokens.radius.lg,
+              background: tokens.gradient.primary,
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: tokens.typography.fontSize.sm,
+              textDecoration: 'none',
+              transition: `all ${tokens.transition.base}`,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            + {t('createGroup')}
+          </Link>
         </Box>
 
         {activeTab === 'feed' ? (
