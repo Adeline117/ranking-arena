@@ -19,7 +19,7 @@ import {
   areTraderPropsEqual,
 } from './shared/TraderDisplay'
 import { CopyButton } from './HeroSection'
-import { useComparisonStore, type CompareTrader } from '@/lib/stores'
+import { useComparisonStore } from '@/lib/stores'
 
 const ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),

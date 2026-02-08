@@ -527,16 +527,18 @@ export default function RankingSection({
             onChange={onTimeRangeChange}
             disabled={loading}
           />
-          {!loading && dataSources.length > 1 && (
-            <ExchangeFilter
-              availableSources={dataSources}
-              selectedExchange={selectedExchange}
-              onExchangeChange={handleExchangeChange}
-              isPro={isPro}
-              onProRequired={() => router.push('/pricing')}
-            />
-          )}
         </Box>
+
+        {/* Exchange horizontal scroll filter */}
+        {!loading && dataSources.length > 1 && (
+          <ExchangeFilter
+            availableSources={dataSources}
+            selectedExchange={selectedExchange}
+            onExchangeChange={handleExchangeChange}
+            isPro={isPro}
+            onProRequired={() => router.push('/pricing')}
+          />
+        )}
         {/* 右侧: 操作按钮 */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
           {/* Copy Filter Link Button */}
@@ -624,10 +626,7 @@ export default function RankingSection({
         </Box>
       )}
 
-      {/* Top 10 Hero Section */}
-      {!loading && advancedFiltered.length >= 3 && (
-        <HeroSection traders={advancedFiltered.slice(0, 10)} />
-      )}
+      {/* Hero section removed per Adeline's request */}
 
       {/* Exchange trader count hint */}
       {!loading && selectedExchange && advancedFiltered.length > 0 && advancedFiltered.length < 20 && (
