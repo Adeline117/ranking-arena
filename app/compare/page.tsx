@@ -53,6 +53,16 @@ function CompareContent() {
   }>>([])
   const [searching, setSearching] = useState(false)
   const [isPro, setIsPro] = useState(false)
+  const [followedTraders, setFollowedTraders] = useState<Array<{
+    id: string
+    handle: string
+    type: string
+    avatar_url?: string
+    roi?: number
+    source?: string
+    arena_score?: number
+  }>>([])
+  const [followedLoading, setFollowedLoading] = useState(false)
 
   // Check auth
   useEffect(() => {
@@ -90,6 +100,34 @@ function CompareContent() {
     init()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, searchParams])
+
+  // Fetch followed traders
+  useEffect(() => {
+    if (!accessToken) return
+
+    const fetchFollowed = async () => {
+      setFollowedLoading(true)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        const res = await fetch(`/api/following?userId=${user.id}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const traders = (data.items || []).filter((item: { type: string }) => item.type === 'trader')
+          setFollowedTraders(traders)
+        }
+      } catch (err) {
+        console.error('Fetch followed traders failed:', err)
+      } finally {
+        setFollowedLoading(false)
+      }
+    }
+
+    fetchFollowed()
+  }, [accessToken])
 
   // Load traders with equity curve data
   const loadTraders = async (traderIds: string[]) => {
@@ -270,6 +308,126 @@ function CompareContent() {
             }}
           >
             <Text size="sm" style={{ color: tokens.colors.accent.error }}>{error}</Text>
+          </Box>
+        )}
+
+        {/* Followed traders */}
+        {isPro && (
+          <Box
+            style={{
+              marginBottom: tokens.spacing[4],
+              padding: tokens.spacing[4],
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.xl,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
+            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+              {t('compareFromFollowing') || '从关注列表选择'}
+            </Text>
+
+            {!accessToken ? (
+              <Text size="sm" color="tertiary">
+                登录后可从关注列表选择
+              </Text>
+            ) : followedLoading ? (
+              <Text size="sm" color="tertiary">{t('loading')}</Text>
+            ) : followedTraders.length === 0 ? (
+              <Text size="sm" color="tertiary">
+                {t('compareNoFollowed') || '暂无关注的交易员'}
+              </Text>
+            ) : (
+              <Box
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                  gap: tokens.spacing[2],
+                }}
+              >
+                {followedTraders.map((ft) => {
+                  const isAdded = traders.some(t => t.id === ft.id)
+                  return (
+                    <Box
+                      key={ft.id}
+                      onClick={() => !isAdded && handleAddTrader(ft.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[2],
+                        padding: tokens.spacing[3],
+                        borderRadius: tokens.radius.lg,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        background: isAdded ? `${tokens.colors.bg.tertiary}` : tokens.colors.bg.primary,
+                        cursor: isAdded ? 'not-allowed' : 'pointer',
+                        opacity: isAdded ? 0.45 : 1,
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={e => {
+                        if (!isAdded) e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = tokens.colors.border.primary
+                      }}
+                    >
+                      {ft.avatar_url ? (
+                        <img
+                          src={ft.avatar_url}
+                          alt=""
+                          style={{
+                            width: 32, height: 32,
+                            borderRadius: tokens.radius.full,
+                            objectFit: 'cover',
+                            flexShrink: 0,
+                          }}
+                        />
+                      ) : (
+                        <Box
+                          style={{
+                            width: 32, height: 32,
+                            borderRadius: tokens.radius.full,
+                            background: tokens.colors.bg.tertiary,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Text size="xs" color="tertiary">
+                            {(ft.handle || '?')[0].toUpperCase()}
+                          </Text>
+                        </Box>
+                      )}
+                      <Box style={{ minWidth: 0, flex: 1 }}>
+                        <Text size="xs" weight="semibold" style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {ft.handle || ft.id.slice(0, 8)}
+                        </Text>
+                        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+                          <Text size="xs" color="tertiary">{ft.source || ''}</Text>
+                          <Text
+                            size="xs"
+                            weight="bold"
+                            style={{
+                              color: (ft.roi ?? 0) >= 0
+                                ? tokens.colors.accent.success
+                                : tokens.colors.accent.error,
+                            }}
+                          >
+                            {(ft.roi ?? 0) >= 0 ? '+' : ''}{(ft.roi ?? 0).toFixed(1)}%
+                          </Text>
+                        </Box>
+                      </Box>
+                      {isAdded && (
+                        <Text size="xs" color="tertiary" style={{ flexShrink: 0 }}>
+                          {t('compareAdded') || '已添加'}
+                        </Text>
+                      )}
+                    </Box>
+                  )
+                })}
+              </Box>
+            )}
           </Box>
         )}
 
