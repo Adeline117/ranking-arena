@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -22,10 +22,19 @@ interface NotificationsSectionProps {
   setHapticEnabled: (v: boolean) => void
   emailDigest: 'none' | 'daily' | 'weekly'
   onEmailDigestChange: (v: 'none' | 'daily' | 'weekly') => void
+  onToast?: (message: string, type: 'success' | 'error') => void
 }
 
 export const NotificationsSection = React.memo(function NotificationsSection(props: NotificationsSectionProps) {
   const { t } = useLanguage()
+  const onToast = props.onToast || ((msg: string) => { console.log(msg) })
+  const [pushEnabled, setPushEnabled] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPushEnabled(Notification.permission === 'granted')
+    }
+  }, [])
 
   const items = [
     { key: 'follow', labelKey: 'newFollowerNotify', value: props.notifyFollow, setter: props.setNotifyFollow },
@@ -88,25 +97,30 @@ export const NotificationsSection = React.memo(function NotificationsSection(pro
             </Text>
           </Box>
           <ToggleSwitch
-            checked={false}
+            checked={pushEnabled}
             onChange={async (enabled) => {
-              if (!enabled) return
+              if (!enabled) {
+                setPushEnabled(false)
+                return
+              }
               try {
                 if (!('Notification' in window)) {
-                  alert(t('browserNotSupported'))
+                  onToast(t('browserNotSupported'), 'error')
                   return
                 }
                 const permission = await Notification.requestPermission()
                 if (permission === 'granted') {
                   const reg = await navigator.serviceWorker?.ready
                   if (reg) {
-                    alert(t('pushNotificationsEnabled'))
+                    setPushEnabled(true)
+                    onToast(t('pushNotificationsEnabled'), 'success')
                   }
                 } else {
-                  alert(t('allowNotificationPermission'))
+                  onToast(t('allowNotificationPermission'), 'error')
                 }
               } catch (err) {
                 console.error('Push notification error:', err)
+                onToast(t('pushNotificationError') || 'Failed', 'error')
               }
             }}
           />

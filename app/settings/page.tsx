@@ -1003,6 +1003,7 @@ function SettingsContent() {
             notifyMessage={notifyMessage} setNotifyMessage={setNotifyMessage}
             hapticEnabled={hapticEnabled} setHapticEnabled={setHapticEnabled}
             emailDigest={emailDigest} onEmailDigestChange={handleEmailDigestChange}
+            onToast={showToast}
           />
 
           <PrivacySection
