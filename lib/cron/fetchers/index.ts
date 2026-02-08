@@ -28,6 +28,11 @@ import { fetchPhemex } from './phemex'
 import { fetchWeex } from './weex'
 import { fetchLbank } from './lbank'
 import { fetchBlofin } from './blofin'
+import { fetchCryptocom } from './cryptocom'
+import { fetchBitfinex } from './bitfinex'
+import { fetchWhitebit } from './whitebit'
+import { fetchBtse } from './btse'
+import { fetchToobit } from './toobit'
 
 // DEX - On-chain / Subgraph
 import { fetchHyperliquid } from './hyperliquid'
@@ -41,6 +46,8 @@ import { fetchJupiterPerps } from './jupiter-perps'
 import { fetchAevo } from './aevo'
 import { fetchSynthetix } from './synthetix'
 import { fetchDydx } from './dydx'
+import { fetchUniswap } from './uniswap'
+import { fetchPancakeSwap } from './pancakeswap'
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -66,6 +73,11 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   weex: fetchWeex,
   lbank: fetchLbank,
   blofin: fetchBlofin,
+  cryptocom: fetchCryptocom,
+  bitfinex: fetchBitfinex,
+  whitebit: fetchWhitebit,
+  btse: fetchBtse,
+  toobit: fetchToobit,
 
   // DEX
   hyperliquid: fetchHyperliquid,
@@ -79,6 +91,8 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   aevo: fetchAevo,
   synthetix: fetchSynthetix,
   dydx: fetchDydx,
+  uniswap: fetchUniswap,
+  pancakeswap: fetchPancakeSwap,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {
