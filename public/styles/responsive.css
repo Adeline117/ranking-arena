@@ -1267,3 +1267,15 @@
     animation: none;
   }
 }
+
+/* ============================================
+   Hero section mobile responsive
+   ============================================ */
+@media (max-width: 639px) {
+  .hero-title {
+    font-size: 32px !important;
+  }
+  .hero-subtitle {
+    font-size: 14px !important;
+  }
+}

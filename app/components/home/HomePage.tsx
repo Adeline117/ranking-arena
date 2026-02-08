@@ -4,15 +4,17 @@ import { Box } from '../base'
 import TopNav from '../layout/TopNav'
 import MobileBottomNav from '../layout/MobileBottomNav'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
+import Footer from '../layout/Footer'
 import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 import StatsBar from './StatsBar'
+import HeroStats from './HeroStats'
 import HomePageClient from './HomePageClient'
 // HomePageWithSubNav removed from homepage - only used in groups page
 import type { InitialTrader } from '@/lib/getInitialTraders'
 
 // Lazy-load sidebar widgets
-const TrendingDiscussions = lazy(() => import('../sidebar/TrendingDiscussions'))
+const PopularTraders = lazy(() => import('../sidebar/PopularTraders'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 
@@ -71,6 +73,7 @@ export default function HomePage({
           }}
         >
           <h1
+            className="hero-title"
             style={{
               fontSize: 48,
               fontWeight: 900,
@@ -83,6 +86,7 @@ export default function HomePage({
             Arena
           </h1>
           <p
+            className="hero-subtitle"
             style={{
               fontSize: 16,
               color: tokens.colors.text.secondary,
@@ -92,42 +96,9 @@ export default function HomePage({
           >
             聚合全网交易员排名，发现最强交易者
           </p>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: 32,
-              flexWrap: 'wrap',
-            }}
-          >
-            {[
-              { value: '31,000+', label: '交易员' },
-              { value: '11', label: '交易所' },
-              { value: '24/7', label: '实时排名' },
-            ].map((stat) => (
-              <div key={stat.label} style={{ textAlign: 'center' }}>
-                <div
-                  style={{
-                    fontSize: 24,
-                    fontWeight: 800,
-                    color: tokens.colors.accent.brand,
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {stat.value}
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: tokens.colors.text.tertiary,
-                    marginTop: 2,
-                  }}
-                >
-                  {stat.label}
-                </div>
-              </div>
-            ))}
-          </div>
+          <Suspense fallback={null}>
+            <HeroStats />
+          </Suspense>
         </Box>
 
         <Suspense fallback={<div style={{ height: 40 }} />}>
@@ -137,7 +108,7 @@ export default function HomePage({
         <ThreeColumnLayout
           leftSidebar={
             <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
-              <TrendingDiscussions />
+              <PopularTraders />
             </Suspense>
           }
           rightSidebar={
@@ -168,6 +139,7 @@ export default function HomePage({
         </ThreeColumnLayout>
       </Box>
 
+      <Footer />
       <MobileBottomNav />
     </Box>
   )
