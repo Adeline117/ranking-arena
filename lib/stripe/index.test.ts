@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Stripe Integration Tests
  * 测试 Stripe 支付集成

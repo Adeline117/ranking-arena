@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Admin Auth Tests
  * 测试管理员认证工具
