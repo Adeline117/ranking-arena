@@ -88,6 +88,8 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
  * Format display name - truncate wallet addresses
  */
 export function formatDisplayName(name: string): string {
+  if (!name) return 'Unknown'
+  if (name.length > 60) return name.slice(0, 57) + '...'
   if (name.startsWith('0x') && name.length > 20) {
     return `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
   }

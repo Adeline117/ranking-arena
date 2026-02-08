@@ -165,12 +165,23 @@ export function useProgress() {
     setProgress(Math.min(Math.max(value, 0), 100))
   }, [])
 
+  const completeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const complete = useCallback(() => {
     setProgress(100)
-    setTimeout(() => {
+    if (completeTimerRef.current) clearTimeout(completeTimerRef.current)
+    completeTimerRef.current = setTimeout(() => {
       setIsLoading(false)
       setProgress(0)
+      completeTimerRef.current = null
     }, 300)
+  }, [])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (completeTimerRef.current) clearTimeout(completeTimerRef.current)
+    }
   }, [])
 
   return { progress, isLoading, start, set, complete }

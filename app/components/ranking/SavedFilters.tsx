@@ -35,6 +35,7 @@ export default function SavedFilters({
   const [filterName, setFilterName] = useState('')
   const [showConfirmDelete, setShowConfirmDelete] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
   const {
     savedFilters,
@@ -58,7 +59,10 @@ export default function SavedFilters({
     }
     
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
+    }
   }, [])
   
   // 保存筛选
@@ -87,7 +91,8 @@ export default function SavedFilters({
     } else {
       setShowConfirmDelete(id)
       // 3秒后自动取消确认状态
-      setTimeout(() => setShowConfirmDelete(null), 3000)
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = setTimeout(() => setShowConfirmDelete(null), 3000)
     }
   }
   
