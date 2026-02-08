@@ -93,3 +93,5 @@ export type {
   Notification,
   NotificationsResponse,
 } from './useSWR'
+
+export { usePWAInstall } from './usePWAInstall'
