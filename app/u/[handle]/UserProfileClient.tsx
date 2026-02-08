@@ -20,6 +20,9 @@ const MessageButton = dynamic(() => import('@/app/components/ui/MessageButton'),
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 
+const ActivityHeatmap = dynamic(() => import('@/app/components/profile/ActivityHeatmap'), { ssr: false })
+const UserStreaks = dynamic(() => import('@/app/components/profile/UserStreaks'), { ssr: false })
+
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
   loading: () => (
@@ -846,6 +849,12 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
               {/* Sidebar - joined groups + bookmarks summary */}
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                <Box bg="secondary" p={4} radius="lg" border="primary">
+                  <UserStreaks userId={profile.id} />
+                </Box>
+                <Box bg="secondary" p={4} radius="lg" border="primary">
+                  <ActivityHeatmap userId={profile.id} />
+                </Box>
                 <JoinedGroups userId={profile.id} />
                 <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
               </Box>
