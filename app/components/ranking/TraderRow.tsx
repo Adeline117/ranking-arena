@@ -3,6 +3,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useCountUp } from '@/lib/hooks/useCountUp'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import type { Trader } from './RankingTable'
@@ -49,6 +50,22 @@ function NaIndicator({ source, metricType }: { source?: string; metricType: 'win
     >
       N/A
     </span>
+  )
+}
+
+// Animated ROI value with count-up effect
+function AnimatedROI({ roi, roiColor }: { roi: number; roiColor: string }) {
+  const animatedValue = useCountUp(roi, 500)
+  return (
+    <Text
+      size="md"
+      weight="black"
+      className="roi-value"
+      style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+      title={`${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
+    >
+      {formatROI(animatedValue)}
+    </Text>
   )
 }
 
@@ -232,15 +249,7 @@ export const TraderRow = memo(function TraderRow({
 
           return (
             <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-              <Text
-                size="md"
-                weight="black"
-                className="roi-value"
-                style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                title={`${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
-              >
-                {formatROI(roi)}
-              </Text>
+              <AnimatedROI roi={roi} roiColor={roiColor} />
               <Text
                 size="xs"
                 weight="semibold"
