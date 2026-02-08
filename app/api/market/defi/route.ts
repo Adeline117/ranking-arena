@@ -1,0 +1,18 @@
+import { NextResponse } from 'next/server'
+import { fetchDefiOverview } from '@/lib/utils/defillama'
+
+export async function GET() {
+  try {
+    const data = await fetchDefiOverview()
+    return NextResponse.json(data, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=900',
+      },
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to fetch DeFi overview' },
+      { status: 500 }
+    )
+  }
+}
