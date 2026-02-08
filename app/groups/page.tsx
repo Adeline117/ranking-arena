@@ -15,6 +15,8 @@ import NewsFlashWidget from '@/app/components/sidebar/NewsFlash'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import HomePageWithSubNav from '@/app/components/home/HomePageWithSubNav'
+import PostFeed from '@/app/components/post/PostFeed'
 
 interface Group {
   id: string
@@ -306,6 +308,7 @@ function GroupsWaterfall() {
 
 function GroupsContent() {
   const [email, setEmail] = useState<string | null>(null)
+  const { language } = useLanguage()
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
   }, [])
@@ -324,12 +327,20 @@ function GroupsContent() {
           }
           rightSidebar={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <GroupsWaterfall />
               <MyGroupsWidget />
               <NewsFlashWidget />
             </div>
           }
         >
-          <GroupsWaterfall />
+          {/* Main content: Post feed with tabs */}
+          <HomePageWithSubNav
+            recommendedContent={
+              <Suspense fallback={<RankingSkeleton />}>
+                <PostFeed sortBy="hot_score" />
+              </Suspense>
+            }
+          />
         </ThreeColumnLayout>
       </Box>
     </Box>
