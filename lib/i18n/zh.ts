@@ -2128,7 +2128,7 @@ const zh = {
 
     // Terms of service page
     termsTitle: '服务条款',
-    termsLastUpdated: '最后更新日期：2024年1月',
+    termsLastUpdated: '最后更新日期：2026年2月',
     termsAcceptTitle: '1. 接受条款',
     termsAcceptP1: '欢迎使用 Arena（以下简称"本平台"或"我们"）。通过访问或使用我们的服务，您同意受本服务条款（以下简称"条款"）的约束。如果您不同意这些条款的任何部分，请不要使用我们的服务。',
     termsServiceTitle: '2. 服务描述',
@@ -2178,7 +2178,7 @@ const zh = {
     termsChanges2: '因任何原因暂停或终止您的账户访问',
     termsChanges3: '修改本条款，修改后的条款将在发布后立即生效',
     termsGoverningLawTitle: '10. 适用法律',
-    termsGoverningLawP1: '本条款受中华人民共和国法律管辖并按其解释。与本条款相关的任何争议应提交至有管辖权的人民法院解决。',
+    termsGoverningLawP1: '本条款受美国加利福尼亚州法律管辖并按其解释，不考虑法律冲突条款。与本条款相关的任何争议应通过具有约束力的仲裁解决，仲裁地点位于加利福尼亚州。在提起仲裁之前，双方同意先通过友好协商尝试解决争议。',
     termsContactTitle: '11. 联系我们',
     termsContactP1: '如果您对本服务条款有任何问题，请通过站内私信联系我们：',
     termsSendMessageToSupport: '发送私信给客服',
@@ -2802,6 +2802,29 @@ ethGas: 'Gas',
 topGainers: '涨幅榜',
 topLosers: '跌幅榜',
 priceChange24h: '24h涨跌',
+
+// DEX Trader Tracking
+dexTraders: 'DEX 交易者',
+onChainVolume: '链上交易量',
+swapCount: '交易次数',
+estimatedPnl: '预估盈亏',
+walletAddress: '钱包地址',
+viewOnExplorer: '在浏览器查看',
+dexLeaderboard: 'DEX 排行榜',
+
+// Voice & Video Calls
+voiceCall: '语音通话',
+videoCall: '视频通话',
+calling: '呼叫中...',
+ringing: '响铃中...',
+callEnded: '通话已结束',
+callDuration: '通话时长',
+muteAudio: '静音',
+toggleCamera: '切换摄像头',
+endCall: '挂断',
+incomingCall: '来电',
+acceptCall: '接听',
+rejectCall: '拒绝',
 
 } as const
 
