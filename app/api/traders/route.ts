@@ -62,7 +62,7 @@ export const GET = withPublic(
     )
 
     const response = NextResponse.json(cachedData)
-    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
     return response
   },
   { name: 'traders', rateLimit: 'read' }
