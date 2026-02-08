@@ -2,7 +2,7 @@
  * 通知相关类型定义
  */
 
-export type NotificationType = 'follow' | 'like' | 'comment' | 'system' | 'mention'
+export type NotificationType = 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'copy_trade' | 'trader_alert' | 'message' | 'post_reply' | 'new_follower' | 'group_update'
 
 export interface Notification {
   id: string
