@@ -92,6 +92,22 @@ npm run scrape:details:force  # Force fetch all details
 - **API Routes**: kebab-case (`fetch-traders/route.ts`)
 - **Types**: PascalCase for interfaces/types
 
+## Development Workflow
+
+### Sub-Agent Driven Development
+- Each task dispatched to a sub-agent for execution; main agent reviews
+- Sub-agents can run autonomously for extended periods
+
+### Mandatory TDD: Red-Green-Refactor
+1. **Red**: Write a failing test first
+2. **Green**: Write minimum code to make it pass
+3. **Refactor**: Clean up while tests stay green
+4. Only commit when all tests pass (`npx jest --passWithNoTests`)
+
+### Built-in Code Review
+- Auto-review between tasks; severe issues block the pipeline
+- Checklist: TypeScript 0 errors, design token usage, no hardcoded colors, no emoji in UI, Chinese-first labels
+
 ## Code Style Guidelines
 
 1. Use TypeScript strict mode - no `any` types
