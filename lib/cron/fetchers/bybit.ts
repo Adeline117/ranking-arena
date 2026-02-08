@@ -24,7 +24,8 @@ import {
   normalizeWinRate,
 } from './shared'
 import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment'
-import { bypassCloudflare, cookiesToHeader } from '../scrapers/cloudflare-bypass'
+// Dynamic import to avoid bundling puppeteer on Vercel
+const getCloudflareBypass = () => import('../scrapers/cloudflare-bypass')
 
 const SOURCE = 'bybit'
 const DIRECT_API_URL =
@@ -117,6 +118,7 @@ async function fetchBybitPage(
   // Strategy 3: Stealth browser bypass (extract cookies then retry direct API)
   try {
     console.warn(`[bybit] Trying stealth browser to bypass Akamai WAF...`)
+    const { bypassCloudflare, cookiesToHeader } = await getCloudflareBypass()
     const { cookies } = await bypassCloudflare('https://www.bybit.com/en/copy-trading', {
       proxy: process.env.STEALTH_PROXY || undefined,
     })
