@@ -1210,7 +1210,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       const targetLang = language === 'en' ? 'en' : 'zh'
       translateComments(comments, targetLang)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [language, posts, translateListPosts, comments, openPost, translateComments])
 
   // 打开帖子详情

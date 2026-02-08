@@ -40,7 +40,7 @@ function fixConsole(file) {
   const warnings = (fileWarnings[file] || []).filter(w => w.rule === 'no-console');
   if (!warnings.length) return;
   
-  let content = readFile(file);
+  const content = readFile(file);
   const lines = content.split('\n');
   let fixed = 0;
   
@@ -70,7 +70,7 @@ function fixConsole(file) {
 
 // Fix unused imports - remove entire import line or remove specific named import
 function fixUnusedImport(file, varName, lineNum) {
-  let content = readFile(file);
+  const content = readFile(file);
   const lines = content.split('\n');
   const idx = lineNum - 1;
   if (idx >= lines.length) return false;
@@ -121,7 +121,7 @@ function escapeRegExp(s) {
 
 // Fix unused variables (not imports)
 function fixUnusedVar(file, varName, lineNum) {
-  let content = readFile(file);
+  const content = readFile(file);
   const lines = content.split('\n');
   const idx = lineNum - 1;
   if (idx >= lines.length) return false;
@@ -159,7 +159,7 @@ function fixUnusedVar(file, varName, lineNum) {
 
 // Fix unused function params - prefix with _
 function fixUnusedParam(file, varName, lineNum) {
-  let content = readFile(file);
+  const content = readFile(file);
   const lines = content.split('\n');
   const idx = lineNum - 1;
   if (idx >= lines.length) return false;
@@ -179,7 +179,7 @@ function fixUnusedParam(file, varName, lineNum) {
 
 // Fix unused catch errors
 function fixUnusedCatchError(file, varName, lineNum) {
-  let content = readFile(file);
+  const content = readFile(file);
   const lines = content.split('\n');
   const idx = lineNum - 1;
   if (idx >= lines.length) return false;
@@ -192,7 +192,7 @@ function fixUnusedCatchError(file, varName, lineNum) {
 
 // Fix empty blocks - add comment
 function fixEmptyBlock(file, lineNum) {
-  let content = readFile(file);
+  const content = readFile(file);
   const lines = content.split('\n');
   const idx = lineNum - 1;
   if (idx >= lines.length) return false;
@@ -220,7 +220,7 @@ function fixEmptyBlock(file, lineNum) {
 
 // Fix prefer-const
 function fixPreferConst(file, lineNum) {
-  let content = readFile(file);
+  const content = readFile(file);
   const lines = content.split('\n');
   const idx = lineNum - 1;
   if (idx >= lines.length) return false;

@@ -6,7 +6,7 @@ import Avatar, { SimpleAvatar } from '../Avatar'
 jest.mock('next/image', () => ({
   __esModule: true,
   default: ({ src, alt, onLoad, onError, style, unoptimized: _unoptimized, ...props }: React.ImgHTMLAttributes<HTMLImageElement> & { onLoad?: () => void; onError?: () => void; unoptimized?: boolean }) => (
-    // eslint-disable-next-line @next/next/no-img-element
+     
     <img
       src={src as string}
       alt={alt}

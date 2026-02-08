@@ -44,7 +44,7 @@ describe('getAdminEmails', () => {
     // Need to reset modules and re-import with env set
     jest.resetModules()
     process.env.ADMIN_EMAILS = 'admin@example.com,superadmin@example.com'
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const { getAdminEmails: freshGetAdminEmails } = require('./auth')
     const emails = freshGetAdminEmails()
     expect(emails).toContain('admin@example.com')
@@ -55,7 +55,7 @@ describe('getAdminEmails', () => {
     delete process.env.ADMIN_EMAILS
     // Need to reimport to get fresh module
     jest.resetModules()
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const { getAdminEmails: freshGetAdminEmails } = require('./auth')
     const emails = freshGetAdminEmails()
     // Secure default: empty array (no default admins)
@@ -140,7 +140,7 @@ describe('verifyAdmin', () => {
     // Reset modules to load with proper ADMIN_EMAILS
     jest.resetModules()
     process.env.ADMIN_EMAILS = 'admin@example.com,superadmin@example.com'
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const { verifyAdmin: freshVerifyAdmin } = require('./auth')
 
     const mockUser = {

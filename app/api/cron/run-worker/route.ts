@@ -162,7 +162,7 @@ export async function GET(request: Request) {
 }
 
 async function upsertLeaderboardData(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   supabase: ReturnType<typeof createClient<any>>,
   platform: Platform,
   market_type: MarketType,

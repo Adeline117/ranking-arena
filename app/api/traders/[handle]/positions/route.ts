@@ -49,7 +49,7 @@ interface _TraderSourceResult {
 }
 
 // 查找交易员来源 - 使用单个查询替代 N+1 循环
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function findTraderSource(
   supabase: ReturnType<typeof createClient<any>>,
   handle: string
