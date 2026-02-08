@@ -76,6 +76,15 @@ function NewsIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
+function LibraryIcon({ active }: IconProps): React.ReactElement {
+  return (
+    <NavIcon active={active}>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </NavIcon>
+  )
+}
+
 interface NotificationBadgeProps {
   count: number
   ariaLabel: string
@@ -201,6 +210,7 @@ export default function MobileBottomNav(): React.ReactElement {
     { href: '/', labelKey: 'home', Icon: HomeIcon },
     { href: '/rankings', labelKey: 'rankings', Icon: TrophyIcon },
     { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
+    { href: '/library', labelKey: 'library', Icon: LibraryIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
   ], [userHandle])
 
