@@ -40,11 +40,9 @@ interface FlashNewsResponse {
 
 const CATEGORIES = [
   { key: 'all', label: '全部', label_en: 'All' },
-  { key: 'crypto', label: '加密货币', label_en: 'Crypto' },
-  { key: 'macro', label: '宏观经济', label_en: 'Macro' },
+  { key: 'breaking', label: '突发', label_en: 'Breaking', isImportance: true },
+  { key: 'important', label: '重要', label_en: 'Important', isImportance: true },
   { key: 'defi', label: 'DeFi', label_en: 'DeFi' },
-  { key: 'regulation', label: '监管政策', label_en: 'Regulation' },
-  { key: 'market', label: '市场动态', label_en: 'Market' },
 ]
 
 const IMPORTANCE_CONFIG = {
@@ -83,7 +81,15 @@ export default function FlashNewsPage() {
     try {
       if (append) setLoadingMore(true); else setLoading(true)
       const params = new URLSearchParams({ page: page.toString(), limit: '20' })
-      if (category !== 'all') params.append('category', category)
+      // Check if this is an importance-based filter or category filter
+      const catDef = CATEGORIES.find(c => c.key === category)
+      if (category !== 'all') {
+        if (catDef && 'isImportance' in catDef && catDef.isImportance) {
+          params.append('importance', category)
+        } else {
+          params.append('category', category)
+        }
+      }
 
       const response = await fetch(`/api/flash-news?${params}`)
       if (!response.ok) throw new Error('Failed to fetch news')
@@ -243,7 +249,7 @@ export default function FlashNewsPage() {
           </Text>
           <Text style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: tokens.typography.lineHeight.relaxed }}>
             {language === 'zh'
-              ? '实时跟踪加密货币、宏观经济、金融市场动态'
+              ? '实时跟踪加密货币与金融市场快讯'
               : 'Real-time updates on crypto, macro, and financial markets'}
           </Text>
         </Box>
