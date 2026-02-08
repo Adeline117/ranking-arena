@@ -133,13 +133,13 @@ export function SkeletonCard() {
   )
 }
 
-export function RankingSkeleton() {
+export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
   return (
     <Box 
       className="stagger-children"
       style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}
     >
-      {Array.from({ length: 5 }).map((_, i) => (
+      {Array.from({ length: rows }).map((_, i) => (
         <Box
           key={i}
           className="glass-card-hover"

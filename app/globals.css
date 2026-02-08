@@ -53,6 +53,10 @@ html.theme-transition *::after {
   --color-success: #2fe57d;
   --color-error: #ff7c7c;
   --color-warning: #ffc107;
+  
+  /* Transition tokens */
+  --transition-fast: 0.15s;
+  --transition-base: 0.25s;
 }
 
 /* Dark theme (default) */
@@ -1233,4 +1237,89 @@ body {
 .pro-feature-teaser-cta:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 20px var(--color-pro-badge-shadow);
+}
+
+/* ============================================
+   Mobile Performance Optimizations
+   ============================================ */
+
+/* Mobile nav height CSS variable */
+:root {
+  --mobile-nav-height: 60px;
+}
+
+/* Touch target minimum size (WCAG 2.5.8) */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Avatar fixed-size container to prevent CLS */
+.avatar-container {
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  contain: strict;
+}
+
+/* Book cover aspect-ratio container to prevent CLS */
+.book-cover-container {
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+/* Pull-to-refresh */
+.pull-to-refresh-wrapper {
+  position: relative;
+  overflow: visible;
+}
+
+.pull-to-refresh-indicator {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border-primary);
+  border-top-color: var(--color-accent-primary);
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+
+.pull-to-refresh-indicator.pulling {
+  opacity: 1;
+}
+
+.pull-to-refresh-indicator.refreshing {
+  opacity: 1;
+  animation: ptr-spin 0.8s linear infinite;
+}
+
+@keyframes ptr-spin {
+  to { transform: translateX(-50%) rotate(360deg); }
+}
+
+/* Chinese font optimization */
+@font-face {
+  font-family: 'PingFang SC';
+  font-display: swap;
+  src: local('PingFang SC');
+}
+
+@font-face {
+  font-family: 'Microsoft YaHei';
+  font-display: swap;
+  src: local('Microsoft YaHei');
+}
+
+@font-face {
+  font-family: 'Noto Sans CJK SC';
+  font-display: swap;
+  src: local('Noto Sans CJK SC');
 }

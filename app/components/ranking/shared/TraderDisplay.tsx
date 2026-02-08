@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { RankingBadge } from '../../ui/icons'
 import { Box, Text } from '../../base'
@@ -110,14 +111,14 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
         {getAvatarInitial(displayName)}
       </span>
       {proxyAvatarUrl && (
-        <img
+        <Image
           src={proxyAvatarUrl}
           alt={displayName}
           width={size}
           height={size}
           loading={rank <= 3 ? 'eager' : 'lazy'}
-          decoding="async"
-          fetchPriority={rank <= 3 ? 'high' : 'auto'}
+          priority={rank <= 3}
+          unoptimized
           style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1 }}
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
         />
