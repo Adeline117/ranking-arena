@@ -196,8 +196,8 @@ function RankingsContent() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={null} />
       <div className="feed-main-content max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 80 }}>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold" style={{ color: tokens.colors.text.primary }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: tokens.spacing[6] }}>
+          <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: tokens.typography.fontWeight.black, color: tokens.colors.text.primary, letterSpacing: '-0.3px' }}>
             {isZh ? '交易员排行榜' : 'Trader Rankings'}
           </h1>
           <div className="flex items-center gap-3">
@@ -222,10 +222,41 @@ function RankingsContent() {
             <button
               key={w}
               onClick={() => handleWindowChange(w)}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              className="ranking-filter-btn"
               style={{
-                background: activeWindow === w ? tokens.gradient.purpleGold : tokens.colors.bg.secondary,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.lg,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: activeWindow === w ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                background: activeWindow === w ? tokens.gradient.purpleGold : tokens.glass.bg.light,
+                backdropFilter: activeWindow === w ? 'none' : tokens.glass.blur.sm,
+                WebkitBackdropFilter: activeWindow === w ? 'none' : tokens.glass.blur.sm,
                 color: activeWindow === w ? '#fff' : tokens.colors.text.secondary,
+                border: activeWindow === w ? 'none' : tokens.glass.border.light,
+                cursor: 'pointer',
+                transition: `all ${tokens.transition.base}`,
+                boxShadow: activeWindow === w ? `0 4px 16px ${tokens.colors.accent.primary}40` : 'none',
+                outline: 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (activeWindow !== w) {
+                  e.currentTarget.style.background = tokens.glass.bg.medium
+                  e.currentTarget.style.color = tokens.colors.text.primary
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeWindow !== w) {
+                  e.currentTarget.style.background = tokens.glass.bg.light
+                  e.currentTarget.style.color = tokens.colors.text.secondary
+                  e.currentTarget.style.transform = 'translateY(0)'
+                }
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 ${tokens.focusRing.width} ${tokens.focusRing.color}`
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = activeWindow === w ? `0 4px 16px ${tokens.colors.accent.primary}40` : 'none'
               }}
             >
               {w}
@@ -239,10 +270,41 @@ function RankingsContent() {
             <button
               key={cat}
               onClick={() => handleCategoryChange(cat)}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              className="ranking-filter-btn"
               style={{
-                background: activeCategory === cat ? tokens.gradient.purpleGold : tokens.colors.bg.secondary,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.lg,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: activeCategory === cat ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                background: activeCategory === cat ? tokens.gradient.purpleGold : tokens.glass.bg.light,
+                backdropFilter: activeCategory === cat ? 'none' : tokens.glass.blur.sm,
+                WebkitBackdropFilter: activeCategory === cat ? 'none' : tokens.glass.blur.sm,
                 color: activeCategory === cat ? '#fff' : tokens.colors.text.secondary,
+                border: activeCategory === cat ? 'none' : tokens.glass.border.light,
+                cursor: 'pointer',
+                transition: `all ${tokens.transition.base}`,
+                boxShadow: activeCategory === cat ? `0 4px 16px ${tokens.colors.accent.primary}40` : 'none',
+                outline: 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (activeCategory !== cat) {
+                  e.currentTarget.style.background = tokens.glass.bg.medium
+                  e.currentTarget.style.color = tokens.colors.text.primary
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeCategory !== cat) {
+                  e.currentTarget.style.background = tokens.glass.bg.light
+                  e.currentTarget.style.color = tokens.colors.text.secondary
+                  e.currentTarget.style.transform = 'translateY(0)'
+                }
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.boxShadow = `0 0 0 ${tokens.focusRing.width} ${tokens.focusRing.color}`
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.boxShadow = activeCategory === cat ? `0 4px 16px ${tokens.colors.accent.primary}40` : 'none'
               }}
             >
               {isZh ? CATEGORY_LABELS[cat].zh : CATEGORY_LABELS[cat].en}
@@ -321,9 +383,13 @@ function TraderList({
       <div 
         className="rounded-xl overflow-hidden" 
         style={{ 
-          backgroundColor: tokens.colors.bg.secondary,
+          background: tokens.glass.bg.secondary,
+          backdropFilter: tokens.glass.blur.md,
+          WebkitBackdropFilter: tokens.glass.blur.md,
+          border: tokens.glass.border.light,
           height: 'calc(100vh - 280px)',
           minHeight: 400,
+          boxShadow: tokens.shadow.md,
         }}
       >
         <VirtualLeaderboard
@@ -343,7 +409,7 @@ function TraderList({
   
   // Regular rendering for small datasets
   return (
-    <div className="rounded-xl overflow-x-auto" style={{ backgroundColor: tokens.colors.bg.secondary }}>
+    <div className="rounded-xl overflow-x-auto" style={{ background: tokens.glass.bg.secondary, backdropFilter: tokens.glass.blur.md, WebkitBackdropFilter: tokens.glass.blur.md, border: tokens.glass.border.light, boxShadow: tokens.shadow.md }}>
       <div>
         <div
           className="grid ranking-table-grid gap-2 px-4 py-3 text-xs font-medium border-b"
@@ -392,7 +458,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
     <Link
       href={traderUrl}
       className="grid ranking-table-grid gap-2 px-4 py-3 items-center border-b last:border-b-0 ranking-row-hover"
-      style={{ borderColor: tokens.colors.border.primary + '40', textDecoration: 'none' }}
+      style={{ borderColor: tokens.colors.border.primary + '40', textDecoration: 'none', transition: `all ${tokens.transition.base}` }}
     >
       <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary }}>
         {trader.rank <= 3 ? (
