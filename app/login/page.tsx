@@ -586,7 +586,17 @@ export default function LoginPage() {
         })
 
         if (loginError) {
-          setError(loginError.message)
+          // Translate common Supabase errors to user-friendly messages
+          const msg = loginError.message
+          if (msg.includes('Invalid login credentials')) {
+            setError(lang === 'zh' ? '邮箱或密码不正确，请重试' : 'Incorrect email or password. Please try again.')
+          } else if (msg.includes('Email not confirmed')) {
+            setError(lang === 'zh' ? '邮箱尚未验证，请检查收件箱' : 'Email not yet verified. Please check your inbox.')
+          } else if (msg.includes('Too many requests') || msg.includes('rate limit')) {
+            setError(lang === 'zh' ? '操作过于频繁，请稍后重试' : 'Too many attempts. Please wait a moment and try again.')
+          } else {
+            setError(msg)
+          }
           setLoading(false)
           return
         }
@@ -832,9 +842,20 @@ export default function LoginPage() {
             fontSize: 14,
             color: '#7a7a7a',
             fontWeight: 500,
+            marginBottom: 16,
           }}>
             {t('loginSubtitle')}
           </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left', maxWidth: 320, margin: '0 auto' }}>
+            {['loginValueProp1', 'loginValueProp2', 'loginValueProp3'].map((key) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#9a9a9a' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                {t(key)}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Email input */}

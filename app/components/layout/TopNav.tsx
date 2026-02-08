@@ -752,6 +752,18 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     <span>{t('inbox')}</span>
                   </Link>
                   <Link
+                    href="/membership"
+                    role="menuitem"
+                    className="top-nav-menu-link"
+                    style={{ ...MENU_LINK_STYLE, cursor: 'pointer' }}
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#8B5CF6' }}>
+                      <path d="M5 16L3 5L8.5 10L12 4L15.5 10L21 5L19 16H5ZM19 19C19 19.6 18.6 20 18 20H6C5.4 20 5 19.6 5 19V18H19V19Z" />
+                    </svg>
+                    <span style={{ color: '#8B5CF6', fontWeight: 700 }}>{t('loginProUpgradeCta')}</span>
+                  </Link>
+                  <Link
                     href="/settings"
                     role="menuitem"
                     className="top-nav-menu-link"
