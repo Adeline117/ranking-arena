@@ -28,16 +28,12 @@ export function logError(error: unknown, context?: ErrorContext): ParsedError {
   const actionInfo = context?.action ? ` (${context.action})` : ''
 
   if (isDev) {
-    // eslint-disable-next-line no-console
     console.group(`${label}${actionInfo} ${parsed.type}`)
     console.error('原始错误:', error)
-    // eslint-disable-next-line no-console
     console.log('解析结果:', parsed)
     if (context?.meta) {
-      // eslint-disable-next-line no-console
       console.log('上下文:', context.meta)
     }
-    // eslint-disable-next-line no-console
     console.groupEnd()
   } else {
     console.error(`${label}${actionInfo}`, parsed.type, parsed.message)
