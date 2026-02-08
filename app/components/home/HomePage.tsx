@@ -17,7 +17,7 @@ import HomePageClient from './HomePageClient'
 import type { InitialTrader } from '@/lib/getInitialTraders'
 
 // Lazy-load sidebar widgets
-const PopularTraders = lazy(() => import('../sidebar/PopularTraders'))
+const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 
@@ -83,7 +83,7 @@ export default function HomePage({
         <ThreeColumnLayout
           leftSidebar={
             <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
-              <PopularTraders />
+              <HotDiscussions />
             </Suspense>
           }
           rightSidebar={
