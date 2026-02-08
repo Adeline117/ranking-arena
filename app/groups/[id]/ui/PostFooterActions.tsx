@@ -24,7 +24,7 @@ const TIP_AMOUNTS = [
 
 export default function PostFooterActions({ post }: { post: Post }) {
   const { showToast } = useToast()
-  const { _language, t } = useLanguage()
+  const { language, t } = useLanguage()
   const [showTipModal, setShowTipModal] = useState(false)
   const [selectedAmount, setSelectedAmount] = useState(100)
   const [loading, setLoading] = useState(false)
