@@ -9,6 +9,7 @@ import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 import StatsBar from './StatsBar'
 import HeroStats from './HeroStats'
+import ExchangePartners from './ExchangePartners'
 import HomePageClient from './HomePageClient'
 // HomePageWithSubNav removed from homepage - only used in groups page
 import type { InitialTrader } from '@/lib/getInitialTraders'
@@ -98,6 +99,9 @@ export default function HomePage({
           </p>
           <Suspense fallback={null}>
             <HeroStats />
+          </Suspense>
+          <Suspense fallback={null}>
+            <ExchangePartners />
           </Suspense>
         </Box>
 

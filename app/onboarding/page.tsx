@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/app/components/ui/Toast'
 
 type Theme = 'dark' | 'light'
-type Step = 'welcome' | 'interests' | 'complete'
+type Step = 'welcome' | 'features' | 'interests' | 'complete'
 
 const interests = [
   { id: 'btc', labelKey: 'btcTrading', icon: '₿' },
@@ -103,10 +103,14 @@ export default function OnboardingPage() {
     document.documentElement.setAttribute('data-theme', newTheme)
   }
 
-  const goToInterests = () => {
+  const goToFeatures = () => {
     setLanguage(language)
     localStorage.setItem('theme', theme)
     document.documentElement.setAttribute('data-theme', theme)
+    setStep('features')
+  }
+
+  const goToInterests = () => {
     setStep('interests')
   }
 
@@ -166,7 +170,7 @@ export default function OnboardingPage() {
     : 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)'
   const selectedBorder = 'rgba(139, 111, 168, 0.5)'
 
-  const stepIndex = step === 'welcome' ? 0 : step === 'interests' ? 1 : 2
+  const stepIndex = step === 'welcome' ? 0 : step === 'features' ? 1 : step === 'interests' ? 2 : 3
 
   return (
     <Box style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, position: 'relative', overflow: 'hidden' }}>
@@ -189,7 +193,7 @@ export default function OnboardingPage() {
       }}>
         {/* Progress dots */}
         <Box style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 40 }}>
-          {['welcome', 'interests', 'complete'].map((s, i) => (
+          {['welcome', 'features', 'interests', 'complete'].map((s, i) => (
             <Box key={s} className={`progress-dot ${stepIndex === i ? 'active' : ''}`} style={{
               width: stepIndex === i ? 28 : 10, height: 10, borderRadius: 5,
               background: i <= stepIndex
@@ -283,7 +287,7 @@ export default function OnboardingPage() {
               </Box>
             </Box>
 
-            <button className="continue-btn" onClick={goToInterests} style={{
+            <button className="continue-btn" onClick={goToFeatures} style={{
               width: '100%', padding: '16px 24px', borderRadius: 14, border: 'none',
               background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
               color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer',
@@ -293,7 +297,83 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 2: Interest selection */}
+        {/* Step 2: Feature introduction */}
+        {step === 'features' && (
+          <div key="features" className="step-content">
+            <Text size="2xl" weight="black" style={{
+              marginBottom: 8, textAlign: 'center',
+              background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>
+              {tr('onboardingFeatureTitle')}
+            </Text>
+            <Text style={{ marginBottom: 28, textAlign: 'center', color: textSecondary }}>
+              {tr('onboardingFeatureSubtitle')}
+            </Text>
+
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
+              {[
+                { titleKey: 'onboardingFeature1Title', descKey: 'onboardingFeature1Desc', icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </svg>
+                )},
+                { titleKey: 'onboardingFeature2Title', descKey: 'onboardingFeature2Desc', icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="1" y="3" width="8" height="18" rx="2" />
+                    <rect x="15" y="3" width="8" height="18" rx="2" />
+                  </svg>
+                )},
+                { titleKey: 'onboardingFeature3Title', descKey: 'onboardingFeature3Desc', icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                )},
+              ].map((feature) => (
+                <Box key={feature.titleKey} style={{
+                  display: 'flex', gap: 14, padding: '16px 18px', borderRadius: 14,
+                  border: `1px solid ${optionBorder}`, background: optionBg,
+                }}>
+                  <Box style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(139, 111, 168, 0.1)' }}>
+                    {feature.icon}
+                  </Box>
+                  <Box>
+                    <Text size="sm" weight="bold" style={{ color: textPrimary, marginBottom: 4 }}>
+                      {tr(feature.titleKey)}
+                    </Text>
+                    <Text size="xs" style={{ color: textSecondary, lineHeight: 1.4 }}>
+                      {tr(feature.descKey)}
+                    </Text>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+
+            <Box style={{ display: 'flex', gap: 14 }}>
+              <button className="continue-btn" onClick={() => { saveAndComplete(false) }} disabled={saving}
+                style={{
+                  flex: 1, padding: '14px 20px', borderRadius: 12,
+                  border: `1px solid ${optionBorder}`, background: 'transparent',
+                  color: textSecondary, fontWeight: 600, fontSize: 15,
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                }}>
+                {tr('skip') || 'Skip'}
+              </button>
+              <button className="continue-btn" onClick={goToInterests} style={{
+                flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
+                background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer',
+              }}>
+                {tr('continueButton')}
+              </button>
+            </Box>
+          </div>
+        )}
+
+        {/* Step 3: Interest selection */}
         {step === 'interests' && (
           <div key="interests" className="step-content">
             <Text size="2xl" weight="black" style={{
