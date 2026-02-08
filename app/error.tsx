@@ -401,7 +401,7 @@ export default function Error({
               background: 'transparent',
               color: 'var(--color-text-primary, #EDEDED)', 
               borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.15)',
+              border: '1px solid var(--color-border-primary, rgba(255,255,255,0.15))',
               textDecoration: 'none',
               fontSize: 15,
               fontWeight: 500,

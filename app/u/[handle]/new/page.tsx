@@ -933,7 +933,7 @@ export default function NewPostPage() {
                   </button>
                 </Box>
                 {draftSaved && (
-                  <Text size="xs" color="tertiary" style={{ color: '#2fe57d' }}>
+                  <Text size="xs" color="tertiary" style={{ color: tokens.colors.accent.success }}>
                     [Saved] {t('draftSaved')}
                   </Text>
                 )}
@@ -1147,7 +1147,7 @@ export default function NewPostPage() {
                             height: 28,
                             border: 'none',
                             background: 'rgba(255,77,77,0.2)',
-                            color: '#ff4d4d',
+                            color: tokens.colors.accent.error,
                             borderRadius: tokens.radius.md,
                             cursor: 'pointer',
                             fontSize: 16,

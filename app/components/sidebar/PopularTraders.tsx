@@ -205,20 +205,17 @@ export default function PopularTraders() {
                   >
                     {displayName}
                   </div>
-                  <div
-                    style={{
-                      fontSize: tokens.typography.fontSize.xs,
-                      color: tokens.colors.text.tertiary,
-                      marginTop: 1,
-                    }}
-                  >
-                    {platformLabel(t.source)}
-                    {t.followers != null && (
-                      <span style={{ marginLeft: 6 }}>
-                        {t.followers.toLocaleString()} {isZh ? '关注' : 'followers'}
-                      </span>
-                    )}
-                  </div>
+                  {t.followers != null && (
+                    <div
+                      style={{
+                        fontSize: tokens.typography.fontSize.xs,
+                        color: tokens.colors.text.tertiary,
+                        marginTop: 1,
+                      }}
+                    >
+                      {t.followers.toLocaleString()} {isZh ? '关注' : 'followers'}
+                    </div>
+                  )}
                 </div>
 
                 {/* ROI */}

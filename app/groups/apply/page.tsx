@@ -819,7 +819,7 @@ export default function ApplyGroupPage() {
                           width: 24,
                           height: 24,
                           borderRadius: '50%',
-                          background: '#DC2626',
+                          background: tokens.colors.accent.error,
                           color: '#fff',
                           display: 'flex',
                           alignItems: 'center',
@@ -1068,12 +1068,12 @@ export default function ApplyGroupPage() {
                 <Box
                   style={{
                     padding: tokens.spacing[3],
-                    background: '#FEE2E2',
+                    background: `${tokens.colors.accent.error}15`,
                     borderRadius: tokens.radius.lg,
-                    border: '1px solid #FECACA',
+                    border: `1px solid ${tokens.colors.accent.error}30`,
                   }}
                 >
-                  <Text size="sm" style={{ color: '#DC2626' }}>
+                  <Text size="sm" style={{ color: tokens.colors.accent.error }}>
                     {error}
                   </Text>
                 </Box>

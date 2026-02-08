@@ -518,7 +518,7 @@ function PostListItem(props: PostListItemProps) {
                     onClick={(e) => { e.stopPropagation(); handleDeletePost(post.id) }}
                     title={language === 'zh' ? '删除' : 'Delete'}
                     disabled={deletingPost === post.id}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: '#ff6b6b', opacity: deletingPost === post.id ? 0.5 : 1 }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: tokens.colors.accent.error, opacity: deletingPost === post.id ? 0.5 : 1 }}
                   >Del</button>
                 )}
               </Box>
