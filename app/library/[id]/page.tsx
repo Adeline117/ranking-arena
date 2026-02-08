@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase/client'
 import { usePremium } from '@/lib/premium/hooks'
 import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '../BookCover'
+import ShareButton from '@/app/components/common/ShareButton'
 
 type BookDetail = {
   id: string
@@ -420,7 +421,16 @@ export default function BookDetailPage() {
                 {isZh ? '已读' : 'Read'}
               </button>
 
-              {/* Buy - kept as internal reference only, no external navigation */}
+              {/* Share */}
+              <ShareButton
+                data={{
+                  type: 'library',
+                  url: typeof window !== 'undefined' ? window.location.href : '',
+                  title: book.title,
+                  author: book.author || '',
+                }}
+                variant="outline"
+              />
             </div>
 
             {/* User rating when marked as read */}
