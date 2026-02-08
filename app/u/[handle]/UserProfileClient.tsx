@@ -14,8 +14,8 @@ import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/Dynamic'
-import UserFollowButton from '@/app/components/ui/UserFollowButton'
-import MessageButton from '@/app/components/ui/MessageButton'
+const UserFollowButton = dynamic(() => import('@/app/components/ui/UserFollowButton'), { ssr: false })
+const MessageButton = dynamic(() => import('@/app/components/ui/MessageButton'), { ssr: false })
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 
