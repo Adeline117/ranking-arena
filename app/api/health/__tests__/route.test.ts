@@ -1,11 +1,7 @@
 /**
- * /api/health 路由测试
- * 
- * 由于 NextResponse.json 在 jsdom 环境中不完全兼容，
- * 我们 mock next/server 来确保测试稳定性
+ * /api/health 路由测试 (轻量版)
  */
 
-// Mock next/server
 const mockJsonFn = jest.fn()
 jest.mock('next/server', () => {
   class MockNextResponse {
@@ -42,25 +38,16 @@ jest.mock('next/server', () => {
   }
 })
 
-// Mock Supabase
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn(() => ({
       select: jest.fn(() => ({
         limit: jest.fn(() => Promise.resolve({ data: [{ id: 1 }], error: null })),
-        order: jest.fn(() => ({
-          limit: jest.fn(() => Promise.resolve({ data: [], error: null })),
-        })),
-        not: jest.fn(() => Promise.resolve({ data: [], error: null })),
       })),
-    })),
-    rpc: jest.fn(() => ({
-      select: jest.fn(() => Promise.resolve({ data: [], error: null })),
     })),
   })),
 }))
 
-// Mock Redis
 jest.mock('@upstash/redis', () => ({
   Redis: jest.fn(() => ({
     ping: jest.fn(() => Promise.resolve('PONG')),
@@ -88,38 +75,19 @@ describe('GET /api/health', () => {
     expect(body).toHaveProperty('uptime')
     expect(body).toHaveProperty('responseTimeMs')
     expect(body).toHaveProperty('checks')
-    expect(body).toHaveProperty('platformFreshness')
   })
 
-  it('should include all check categories', async () => {
+  it('should include database and redis checks', async () => {
     const { GET } = await import('../route')
     const response = await GET()
     const body = await response.json()
 
     expect(body.checks).toHaveProperty('database')
     expect(body.checks).toHaveProperty('redis')
-    expect(body.checks).toHaveProperty('memory')
-    expect(body.checks).toHaveProperty('cronStatus')
 
     for (const check of Object.values(body.checks) as Array<{ status: string }>) {
       expect(['pass', 'fail', 'skip']).toContain(check.status)
     }
-  })
-
-  it('should include platformFreshness summary with correct fields', async () => {
-    const { GET } = await import('../route')
-    const response = await GET()
-    const body = await response.json()
-
-    expect(body.platformFreshness.summary).toEqual(
-      expect.objectContaining({
-        total: expect.any(Number),
-        fresh: expect.any(Number),
-        stale: expect.any(Number),
-        critical: expect.any(Number),
-      })
-    )
-    expect(Array.isArray(body.platformFreshness.platforms)).toBe(true)
   })
 
   it('should set no-cache headers', async () => {
@@ -145,6 +113,14 @@ describe('GET /api/health', () => {
 
     expect(body.uptime).toBeGreaterThanOrEqual(0)
     expect(body.responseTimeMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('should include _detail link', async () => {
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(body._detail).toBe('/api/health/detailed')
   })
 })
 
