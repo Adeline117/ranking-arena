@@ -2822,6 +2822,10 @@ walletAddress: '钱包地址',
 viewOnExplorer: '在浏览器查看',
 dexLeaderboard: 'DEX 排行榜',
 
+// Sector & Exchange Widgets
+sectorPerformance: '板块表现',
+exchangeVolume: '交易所成交量',
+
 // Voice & Video Calls
 voiceCall: '语音通话',
 videoCall: '视频通话',
