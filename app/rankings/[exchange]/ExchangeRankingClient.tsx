@@ -163,7 +163,7 @@ export default function ExchangeRankingClient({
   exchange,
 }: {
   traders: TraderData[]
-  _exchange: string
+  exchange: string
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
 
