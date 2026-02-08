@@ -41,12 +41,11 @@ export default function ExchangePartners() {
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: tokens.colors.text.tertiary,
-              opacity: 0.6,
+              color: tokens.colors.text.secondary,
               padding: '4px 8px',
               borderRadius: 6,
               border: `1px solid ${tokens.colors.border.primary}`,
-              background: 'rgba(255,255,255,0.02)',
+              background: tokens.colors.bg.secondary,
             }}
           >
             {name}

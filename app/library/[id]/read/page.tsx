@@ -466,9 +466,9 @@ export default function ReadPage() {
 
   if (loading || pdfLoading || premiumLoading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f1a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <div style={{ width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: tokens.colors.accent.brand, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>
+        <p style={{ color: tokens.colors.text.tertiary, fontSize: 14 }}>
           {pdfLoading ? (isZh ? '正在加载文档...' : 'Loading document...') : (isZh ? '加载中...' : 'Loading...')}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
@@ -478,11 +478,11 @@ export default function ReadPage() {
 
   if (error || !book) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f1a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" style={{ marginBottom: 16 }}>
+      <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" style={{ marginBottom: 16 }}>
           <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
         </svg>
-        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 16, marginBottom: 16, textAlign: 'center' }}>{error}</p>
+        <p style={{ color: tokens.colors.text.secondary, fontSize: 16, marginBottom: 16, textAlign: 'center' }}>{error}</p>
         <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: 12, background: tokens.colors.accent.brand, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
           {isZh ? '返回书籍详情' : 'Back to Book'}
         </Link>
@@ -492,21 +492,21 @@ export default function ReadPage() {
 
   if (needsUpgrade) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f1a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="1.5" style={{ marginBottom: 16 }}>
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+        <h2 style={{ color: tokens.colors.text.primary, fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
           {isZh ? '升级会员解锁阅读' : 'Upgrade to unlock reading'}
         </h2>
-        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400 }}>
+        <p style={{ color: tokens.colors.text.tertiary, fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400 }}>
           {isZh ? '该书籍仅对会员开放，升级会员即可畅读所有付费内容。' : 'This book is available to members only.'}
         </p>
         <div style={{ display: 'flex', gap: 12 }}>
           <Link href="/membership" style={{ padding: '10px 24px', borderRadius: 12, background: tokens.gradient.primary, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
             {isZh ? '升级会员' : 'Upgrade'}
           </Link>
-          <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+          <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: 12, border: `1px solid ${tokens.colors.border.primary}`, color: tokens.colors.text.primary, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
             {isZh ? '返回' : 'Back'}
           </Link>
         </div>
