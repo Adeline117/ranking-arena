@@ -145,6 +145,7 @@ export default function TopTraders() {
                     alt={displayName}
                     width={36}
                     height={36}
+                    sizes="36px"
                     style={{
                       borderRadius: tokens.radius.full,
                       objectFit: 'cover',

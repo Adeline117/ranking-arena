@@ -46,13 +46,6 @@ export function SWRConfigProvider({ children }: { children: ReactNode }) {
           }
         },
         
-        // 成功回调（可选，用于调试）
-        onSuccess: (data, key, _config) => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('SWR Success:', { key, data })
-          }
-        },
-        
         // 加载慢速网络检测
         loadingTimeout: 3000, // 3 秒后认为加载过慢
         

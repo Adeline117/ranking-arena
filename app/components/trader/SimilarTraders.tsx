@@ -67,6 +67,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
           src={avatarUrl} 
           alt={handle} 
           fill
+          sizes="40px"
           unoptimized
           style={{ 
             objectFit: 'cover',

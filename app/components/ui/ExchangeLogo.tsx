@@ -102,6 +102,7 @@ export default function ExchangeLogo({ exchange, size = 24, className }: Exchang
           alt={`${exchange} logo`}
           width={size}
           height={size}
+          sizes={`${size}px`}
           unoptimized={true} // 禁用 Next.js 图片优化以避免私有IP解析警告
           style={{
             objectFit: 'contain',

@@ -160,6 +160,7 @@ export default function PopularTraders() {
                     alt={displayName}
                     width={40}
                     height={40}
+                    sizes="40px"
                     style={{
                       borderRadius: tokens.radius.full,
                       objectFit: 'cover',
