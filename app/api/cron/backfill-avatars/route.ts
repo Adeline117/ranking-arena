@@ -475,3 +475,4 @@ export async function GET(request: Request) {
 
   return NextResponse.json(result)
 }
+// Avatar backfill trigger - Sat Feb  7 18:04:52 PST 2026
