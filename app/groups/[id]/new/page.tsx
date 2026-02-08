@@ -39,12 +39,12 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska']
 
 const POLL_DURATION_OPTIONS = [
-  { label: '1小时', value: 1 },
-  { label: '6小时', value: 6 },
-  { label: '12小时', value: 12 },
-  { label: '1天', value: 24 },
-  { label: '3天', value: 72 },
-  { label: '7天', value: 168 },
+  { label_zh: '1小时', label_en: '1 hour', value: 1 },
+  { label_zh: '6小时', label_en: '6 hours', value: 6 },
+  { label_zh: '12小时', label_en: '12 hours', value: 12 },
+  { label_zh: '1天', label_en: '1 day', value: 24 },
+  { label_zh: '3天', label_en: '3 days', value: 72 },
+  { label_zh: '7天', label_en: '7 days', value: 168 },
 ]
 
 // Shared input style
@@ -583,6 +583,10 @@ export default function NewGroupPostPage(): React.ReactElement {
       console.warn('Post created successfully:', postData?.id)
 
       clearDraft()
+      // Remember last-used group for CreatePostFAB quick access
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('last_post_group_id', groupId)
+      }
       showToast(t('publishSuccess'), 'success')
       router.push(`/groups/${groupId}`)
     } catch (error) {
@@ -668,7 +672,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                 </Box>
                 {draftSaved && (
                   <Text size="xs" color="tertiary" style={{ color: tokens.colors.accent.success }}>
-                    [Saved] {t('draftSaved')}
+                    {t('draftSaved')}
                   </Text>
                 )}
               </Box>
@@ -923,7 +927,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     }}
                   >
                     {POLL_DURATION_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      <option key={opt.value} value={opt.value}>{language === 'zh' ? opt.label_zh : opt.label_en}</option>
                     ))}
                   </select>
                 </Box>

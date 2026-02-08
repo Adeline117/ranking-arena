@@ -165,7 +165,7 @@ const zh = {
     source: '来源',
     allExchanges: '全部',
     // 交易员主页
-    similarTraders: '相似交易员',
+    similarTraders: '查看更多类似交易员',
     traderNotRegistered: '交易员未入驻',
     traderNotRegisteredDesc: '该交易员尚未认领此账号',
     jumpToExchange: '跳转至交易所跟单',

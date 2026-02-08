@@ -139,7 +139,7 @@ function SearchContent() {
             .or(`title.ilike.%${sanitized}%,content.ilike.%${sanitized}%`)
             .limit(SECTION_LIMIT),
           supabase.from('trader_sources')
-            .select('source_trader_id, handle, source', { count: 'exact' })
+            .select('source_trader_id, handle, source, roi, arena_score, win_rate', { count: 'exact' })
             .or(`handle.ilike.%${sanitized}%,source_trader_id.ilike.%${sanitized}%`)
             .limit(SECTION_LIMIT),
         ])
@@ -186,12 +186,21 @@ function SearchContent() {
         if (traderRes.status === 'fulfilled') {
           const { data, count } = traderRes.value
           setTraderTotal(count || 0)
-          setTraderResults((data || []).map((t: Record<string, unknown>) => ({
-            type: 'trader' as const,
-            id: t.source_trader_id as string,
-            title: (t.handle as string) || (t.source_trader_id as string),
-            subtitle: ((t.source as string) || '').replace(/_/g, ' ').toUpperCase() || undefined,
-          })))
+          setTraderResults((data || []).map((t: Record<string, unknown>) => {
+            const roi = t.roi as number | null
+            const score = t.arena_score as number | null
+            const winRate = t.win_rate as number | null
+            const parts: string[] = [((t.source as string) || '').replace(/_/g, ' ').toUpperCase()]
+            if (roi != null) parts.push(`ROI: ${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`)
+            if (score != null) parts.push(`Score: ${score.toFixed(0)}`)
+            if (winRate != null) parts.push(`${isZh ? '胜率' : 'Win'}: ${winRate.toFixed(0)}%`)
+            return {
+              type: 'trader' as const,
+              id: t.source_trader_id as string,
+              title: (t.handle as string) || (t.source_trader_id as string),
+              subtitle: parts.join(' · ') || undefined,
+            }
+          }))
         }
       } catch (error) {
         console.error('Search error:', error)

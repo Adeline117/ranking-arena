@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -11,6 +12,8 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -144,6 +147,42 @@ export default function FollowingPage() {
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
   const [sortMode, setSortMode] = useState<SortMode>('recent')
+  const [unfollowingId, setUnfollowingId] = useState<string | null>(null)
+  const { getAuthHeadersAsync } = useAuthSession()
+
+  // Inline unfollow with optimistic UI
+  const handleUnfollow = useCallback(async (item: FollowItem, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (unfollowingId) return
+    setUnfollowingId(item.id)
+
+    // Optimistic removal
+    setItems(prev => prev.filter(i => i.id !== item.id))
+
+    try {
+      const authHeaders = await getAuthHeadersAsync()
+      const csrfHeaders = getCsrfHeaders()
+      const response = await fetch('/api/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders, ...csrfHeaders },
+        body: JSON.stringify({ traderId: item.id, action: 'unfollow' }),
+      })
+
+      if (!response.ok) {
+        // Rollback
+        setItems(prev => [...prev, item])
+        showToast(t('operationFailed'), 'error')
+      } else {
+        showToast(language === 'zh' ? '已取消关注' : 'Unfollowed', 'success')
+      }
+    } catch {
+      // Rollback
+      setItems(prev => [...prev, item])
+      showToast(t('operationFailed'), 'error')
+    } finally {
+      setUnfollowingId(null)
+    }
+  }, [unfollowingId, getAuthHeadersAsync, showToast, t, language])
 
   useEffect(() => {
     // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
@@ -258,7 +297,47 @@ export default function FollowingPage() {
           </Text>
           <EmptyState
             title={t('loginRequired')}
-            description={t('loginRequiredDesc')}
+            description={t('loginToFollow')}
+            action={
+              <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Link
+                  href="/login?redirect=/following"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 44,
+                    padding: '10px 24px',
+                    background: tokens.colors.accent.brand,
+                    color: tokens.colors.white,
+                    borderRadius: tokens.radius.md,
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    fontSize: 14,
+                  }}
+                >
+                  {t('goToLogin')}
+                </Link>
+                <Link
+                  href="/rankings"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 44,
+                    padding: '10px 24px',
+                    background: tokens.colors.bg.tertiary,
+                    color: tokens.colors.text.primary,
+                    borderRadius: tokens.radius.md,
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    fontSize: 14,
+                  }}
+                >
+                  {t('goToRankings')}
+                </Link>
+              </Box>
+            }
           />
         </Box>
       </Box>
@@ -279,7 +358,27 @@ export default function FollowingPage() {
         ) : items.length === 0 ? (
           <EmptyState
             title={t('noFollowing')}
-            description={t('noFollowingDesc')}
+            description={t('noFollowingCta')}
+            action={
+              <Link
+                href="/rankings"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 44,
+                  padding: '10px 24px',
+                  background: tokens.colors.accent.brand,
+                  color: tokens.colors.white,
+                  borderRadius: tokens.radius.md,
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                  fontSize: 14,
+                }}
+              >
+                {t('goToRankings')}
+              </Link>
+            }
           />
         ) : (
           <>
@@ -464,7 +563,7 @@ export default function FollowingPage() {
                     ) : null}
                   </Box>
 
-                  {/* 右侧：Arena Score 或箭头 */}
+                  {/* 右侧：Arena Score + 取消关注 + 箭头 */}
                   <Box style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -487,6 +586,36 @@ export default function FollowingPage() {
                         </Text>
                       </Box>
                     )}
+                    <button
+                      onClick={(e) => handleUnfollow(item, e)}
+                      disabled={unfollowingId === item.id}
+                      title={language === 'zh' ? '取消关注' : 'Unfollow'}
+                      style={{
+                        padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                        borderRadius: tokens.radius.md,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        background: 'transparent',
+                        color: tokens.colors.text.tertiary,
+                        fontSize: tokens.typography.fontSize.xs,
+                        cursor: unfollowingId === item.id ? 'not-allowed' : 'pointer',
+                        opacity: unfollowingId === item.id ? 0.5 : 1,
+                        transition: `all ${tokens.transition.base}`,
+                        whiteSpace: 'nowrap',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = tokens.colors.accent.error
+                        e.currentTarget.style.color = tokens.colors.accent.error
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = tokens.colors.border.primary
+                        e.currentTarget.style.color = tokens.colors.text.tertiary
+                      }}
+                    >
+                      {unfollowingId === item.id
+                        ? (language === 'zh' ? '取消中...' : 'Removing...')
+                        : (language === 'zh' ? '取消关注' : 'Unfollow')
+                      }
+                    </button>
                     <Box style={{ color: tokens.colors.text.tertiary }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="9 18 15 12 9 6"></polyline>
@@ -495,6 +624,40 @@ export default function FollowingPage() {
                   </Box>
                 </Box>
               ))}
+            </Box>
+
+            {/* ============= 发现更多交易员 ============= */}
+            <Box style={{
+              marginTop: tokens.spacing[6],
+              padding: tokens.spacing[5],
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.lg,
+              textAlign: 'center',
+            }}>
+              <Text size="base" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
+                {language === 'zh' ? '发现更多优秀交易员' : 'Discover more traders'}
+              </Text>
+              <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+                {language === 'zh'
+                  ? '浏览排行榜，找到更多值得关注的交易员'
+                  : 'Browse the leaderboard to find more traders worth following'}
+              </Text>
+              <Link
+                href="/rankings"
+                style={{
+                  display: 'inline-block',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                  borderRadius: tokens.radius.lg,
+                  background: tokens.colors.accent.brand,
+                  color: tokens.colors.white,
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  fontSize: tokens.typography.fontSize.sm,
+                  transition: `opacity ${tokens.transition.base}`,
+                }}
+              >
+                {language === 'zh' ? '浏览排行榜' : 'View Rankings'}
+              </Link>
             </Box>
           </>
         )}
