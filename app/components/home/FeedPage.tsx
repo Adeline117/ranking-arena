@@ -8,7 +8,8 @@ import PostFeed from '@/app/components/post/PostFeed'
 import TopNav from '@/app/components/layout/TopNav'
 import DesktopSidebar from '@/app/components/layout/DesktopSidebar'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+import dynamic from 'next/dynamic'
+const MobileBottomNav = dynamic(() => import('@/app/components/layout/MobileBottomNav'), { ssr: false })
 import { Box } from '@/app/components/base'
 
 type FeedTab = 'hot' | 'latest'

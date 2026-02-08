@@ -909,7 +909,10 @@ export async function GET(
       setServerCache(cacheKey, data, CacheTTL.MEDIUM)
       
       const duration = Date.now() - startTime
-      return NextResponse.json({ ...data, cached: false, fetchTime: duration })
+      const response = NextResponse.json({ ...data, cached: false, fetchTime: duration })
+      // Allow CDN/browser to cache for 60s, serve stale for 5min while revalidating
+      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+      return response
     }
     
     // trader_sources 没找到，尝试从 trader_snapshots 获取基本数据
@@ -917,10 +920,13 @@ export async function GET(
     
     if (!snapshotFound) {
       logger.warn(`No trader found for handle: ${decodedHandle}`)
-      return NextResponse.json({ 
+      const notFoundResponse = NextResponse.json({ 
         error: 'Trader not found',
         handle: decodedHandle,
       }, { status: 404 })
+      // Cache 404s for 5 minutes to avoid hammering DB
+      notFoundResponse.headers.set('Cache-Control', 'public, s-maxage=300')
+      return notFoundResponse
     }
     
     // 从快照获取基本数据
@@ -930,7 +936,9 @@ export async function GET(
     setServerCache(cacheKey, data, CacheTTL.MEDIUM)
     
     const duration = Date.now() - startTime
-    return NextResponse.json({ ...data, cached: false, fetchTime: duration })
+    const response = NextResponse.json({ ...data, cached: false, fetchTime: duration })
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    return response
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
