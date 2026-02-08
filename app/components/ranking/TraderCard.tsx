@@ -186,12 +186,12 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label={language === 'zh' ? '胜率' : 'Win%'}
-            value={trader.win_rate ? `${trader.win_rate.toFixed(0)}%` : 'N/A'}
+            value={trader.win_rate ? `${trader.win_rate.toFixed(0)}%` : '—'}
             color={trader.win_rate && trader.win_rate > 50 ? tokens.colors.accent.success : undefined}
           />
           <MetricStat
             label="MDD"
-            value={trader.max_drawdown ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : 'N/A'}
+            value={trader.max_drawdown ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : '—'}
             color={trader.max_drawdown ? TRADER_ACCENT_ERROR : undefined}
           />
         </Box>

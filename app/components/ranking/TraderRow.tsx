@@ -48,7 +48,7 @@ function NaIndicator({ source, metricType }: { source?: string; metricType: 'win
         cursor: 'help',
       }}
     >
-      N/A
+      &mdash;
     </span>
   )
 }

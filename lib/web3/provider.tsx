@@ -1,40 +1,44 @@
 'use client'
 
 /**
- * Web3Provider
+ * Web3Provider — Lazy-loaded wallet SDK boundary
  *
- * Wraps the app with wagmi + RainbowKit + TanStack Query providers.
- * Uses dynamic import with ssr:false to prevent @walletconnect/core
- * from calling localStorage during SSR.
+ * NOT loaded at app root. Instead, wrap individual wallet-using sections:
+ *   <Web3Provider><WalletSection /></Web3Provider>
+ *
+ * The ~3.7MB wallet SDK (wagmi, RainbowKit, WalletConnect, MetaMask, Coinbase)
+ * is only loaded when this component mounts — i.e., when the user navigates
+ * to a page that actually needs wallet features.
  */
 
-import { ReactNode, useState, useEffect } from 'react'
+import { ReactNode, useState, useEffect, createContext, useContext } from 'react'
+
+// Context to detect whether we're inside a Web3Provider
+const Web3ReadyContext = createContext(false)
+export const useWeb3Ready = () => useContext(Web3ReadyContext)
 
 interface Web3ProviderProps {
   children: ReactNode
 }
 
-// Lazy-load the actual provider to avoid SSR localStorage crash
-function Web3ProviderInner({ children }: Web3ProviderProps) {
-  const [mounted, setMounted] = useState(false)
+export function Web3Provider({ children }: Web3ProviderProps) {
   const [Provider, setProvider] = useState<React.ComponentType<{ children: ReactNode }> | null>(null)
 
   useEffect(() => {
-    setMounted(true)
-    // Dynamic import only on client
+    // Dynamic import — only loads the ~3.7MB wallet SDK bundle on mount
     import('./Web3ProviderClient').then(mod => {
       setProvider(() => mod.Web3ProviderClient)
     })
   }, [])
 
-  if (!mounted || !Provider) {
-    // Render children without web3 context during SSR / loading
-    return <>{children}</>
+  if (!Provider) {
+    // Render children without web3 context while loading
+    return <Web3ReadyContext.Provider value={false}>{children}</Web3ReadyContext.Provider>
   }
 
-  return <Provider>{children}</Provider>
-}
-
-export function Web3Provider({ children }: Web3ProviderProps) {
-  return <Web3ProviderInner>{children}</Web3ProviderInner>
+  return (
+    <Web3ReadyContext.Provider value={true}>
+      <Provider>{children}</Provider>
+    </Web3ReadyContext.Provider>
+  )
 }

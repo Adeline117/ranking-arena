@@ -2622,6 +2622,18 @@ const en = {
     faqSearchPlaceholder: 'Search frequently asked questions...',
     faqNoResults: 'No matching questions found. Try different keywords.',
 
+    // Hero section
+    heroSubtitle: 'Aggregate trader rankings across platforms. Discover the best traders.',
+    heroCTABrowse: 'Browse Rankings',
+    heroCTASignUp: 'Sign Up Free',
+
+    // Rankings search
+    rankingsSearchPlaceholder: 'Search traders by name...',
+
+    // Pricing
+    earlyBirdOffer: 'Early Bird Pricing',
+    sampleTestimonialLabel: 'Sample review',
+
 } as const
 
 export default en
