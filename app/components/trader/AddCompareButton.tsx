@@ -117,7 +117,7 @@ export default function AddCompareButton({
           gap: '6px',
           cursor: 'pointer',
           transition: tokens.transition.all,
-          fontSize: '12px',
+          fontSize: tokens.typography.fontSize.sm,
           fontWeight: 600,
         }}
       >
@@ -138,7 +138,7 @@ export default function AddCompareButton({
             borderRadius: tokens.radius.sm,
             background: tokens.colors.accent.primary,
             color: tokens.colors.white,
-            fontSize: '10px',
+            fontSize: tokens.typography.fontSize.xs,
             fontWeight: 700,
           }}>
             {count}/5

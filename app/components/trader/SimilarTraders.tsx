@@ -216,7 +216,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                         weight="bold"
                         style={{
                           color: trader.roi_90d >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                          fontSize: '10px',
+                          fontSize: tokens.typography.fontSize.xs,
                         }}
                       >
                         {trader.roi_90d >= 0 ? '+' : ''}{trader.roi_90d.toFixed(1)}%
@@ -237,7 +237,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                         weight="bold"
                         style={{
                           color: tokens.colors.accent.primary,
-                          fontSize: '10px',
+                          fontSize: tokens.typography.fontSize.xs,
                         }}
                       >
                         {trader.arena_score.toFixed(0)}

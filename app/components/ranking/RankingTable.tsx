@@ -483,7 +483,7 @@ function RankingTableInner(props: {
                   onClick={resetViewModeToAuto}
                   title={t('resetAutoLayout')}
                   className="view-toggle-btn touch-target-sm"
-                  style={{ fontSize: '10px', opacity: 0.6 }}
+                  style={{ fontSize: tokens.typography.fontSize.xs, opacity: 0.6 }}
                 >
                   Auto
                 </button>
@@ -573,9 +573,9 @@ function RankingTableInner(props: {
       {viewMode === 'table' && (
       <Box className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
         style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'rgba(15,15,30,0.98)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 0, zIndex: 20, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>{t('rank')}</Text>
+        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.sm }}>{t('rank')}</Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>{t('trader')}</Text>
+          <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.sm }}>{t('trader')}</Text>
           <button onClick={() => setShowRules(!showRules)}
             className="info-btn-circle"
             title={t('rankingRules')}
@@ -605,7 +605,7 @@ function RankingTableInner(props: {
         )}
         {visibleColumns.includes('style') && (
           <Box className="col-style" style={{ textAlign: 'center' }}>
-            <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '12px' }}>
+            <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: tokens.typography.fontSize.sm }}>
               {t('tradingStyle') || 'Style'}
             </Text>
           </Box>

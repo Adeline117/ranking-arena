@@ -515,7 +515,7 @@ export function DataSourceBadge({
           background: statusColor,
         }}
       />
-      <Text size="xs" style={{ color: statusColor, fontWeight: 500, fontSize: '10px' }}>
+      <Text size="xs" style={{ color: statusColor, fontWeight: 500, fontSize: tokens.typography.fontSize.xs }}>
         {exchange?.toUpperCase()}
       </Text>
       {lastUpdated && (

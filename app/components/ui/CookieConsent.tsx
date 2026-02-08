@@ -107,7 +107,7 @@ const styles = {
     marginBottom: '4px',
   },
   categoryDescription: {
-    fontSize: '12px',
+    fontSize: tokens.typography.fontSize.sm,
     color: tokens.colors.text.tertiary,
     lineHeight: 1.5,
   },
@@ -326,7 +326,7 @@ export function CookieConsent() {
           </div>
         )}
 
-        <div style={{ marginTop: '12px', fontSize: '12px', color: tokens.colors.text.tertiary }}>
+        <div style={{ marginTop: '12px', fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
           {t('learnMorePrivacy')}{' '}
           <a href="/privacy" style={{ color: tokens.colors.accent.brandHover }}>{t('privacyPolicy')}</a>
           {' '}{t('andWord')}{' '}

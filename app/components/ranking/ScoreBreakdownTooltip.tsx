@@ -115,7 +115,7 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
         boxShadow: tokens.shadow.lg,
         zIndex: tokens.zIndex.tooltip,
         whiteSpace: 'nowrap',
-        fontSize: '11px',
+        fontSize: tokens.typography.fontSize.xs,
         lineHeight: 1.6,
         color: tokens.colors.text.secondary,
         pointerEvents: 'none',
@@ -128,11 +128,11 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
       <div>{language === 'zh' ? '盈亏' : 'PnL'}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.pnl_score?.toFixed(1) ?? '—'}</span>/15</div>
       <div>
         {language === 'zh' ? '回撤' : 'Drawdown'}: <span style={{ color: tokens.colors.accent.warning, fontWeight: 700 }}>{trader.drawdown_score?.toFixed(1) ?? '—'}</span>/8
-        {!trader.max_drawdown && <span style={{ opacity: 0.6, fontSize: '10px' }}> *</span>}
+        {!trader.max_drawdown && <span style={{ opacity: 0.6, fontSize: tokens.typography.fontSize.xs }}> *</span>}
       </div>
       <div>
         {language === 'zh' ? '稳定' : 'Stability'}: <span style={{ color: tokens.colors.accent.primary, fontWeight: 700 }}>{trader.stability_score?.toFixed(1) ?? '—'}</span>/7
-        {!trader.win_rate && <span style={{ opacity: 0.6, fontSize: '10px' }}> *</span>}
+        {!trader.win_rate && <span style={{ opacity: 0.6, fontSize: tokens.typography.fontSize.xs }}> *</span>}
       </div>
       {confidenceInfo && (
         <div
@@ -141,14 +141,14 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
             paddingTop: 4,
             borderTop: `1px solid ${tokens.colors.border.primary}`,
             color: confidenceInfo.color,
-            fontSize: '10px',
+            fontSize: tokens.typography.fontSize.xs,
             whiteSpace: 'normal',
             maxWidth: 220,
           }}
         >
           {language === 'zh' ? confidenceInfo.zh : confidenceInfo.en}
           {/* Show which fields are missing */}
-          <div style={{ marginTop: 2, opacity: 0.8, fontSize: '9px', color: tokens.colors.text.tertiary }}>
+          <div style={{ marginTop: 2, opacity: 0.8, fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
             {language === 'zh' ? '缺失: ' : 'Missing: '}
             {[
               !trader.win_rate && (language === 'zh' ? '胜率' : 'Win Rate'),

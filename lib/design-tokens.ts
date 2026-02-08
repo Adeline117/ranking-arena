@@ -15,19 +15,72 @@ function getCurrentTheme(): Theme {
   return 'dark'
 }
 
-// Get theme-specific tokens
-function getThemeColors() {
+/**
+ * CSS-variable-based colors — these resolve at paint time so inline styles
+ * automatically update when data-theme changes (no React re-render needed).
+ * For values that don't have a CSS variable counterpart we fall back to
+ * the JS theme-tokens (read once at call time).
+ */
+function getCssVarColors() {
+  // Fallback for values without CSS vars (medals, overlay, etc.)
   const theme = getCurrentTheme()
-  return getThemeTokens(theme).colors
+  const fallback = getThemeTokens(theme).colors
+
+  return {
+    white: '#FFFFFF',
+    black: '#000000',
+
+    bg: {
+      primary: 'var(--color-bg-primary)',
+      secondary: 'var(--color-bg-secondary)',
+      tertiary: 'var(--color-bg-tertiary)',
+      hover: 'var(--color-bg-hover)',
+    },
+
+    text: {
+      primary: 'var(--color-text-primary)',
+      secondary: 'var(--color-text-secondary)',
+      tertiary: 'var(--color-text-tertiary)',
+      disabled: fallback.text.disabled,
+    },
+
+    border: {
+      primary: 'var(--color-border-primary)',
+      secondary: 'var(--color-border-secondary)',
+      focus: fallback.border.focus,
+    },
+
+    accent: {
+      primary: 'var(--color-accent-primary)',
+      success: 'var(--color-accent-success)',
+      warning: 'var(--color-accent-warning, #FFB800)',
+      error: 'var(--color-accent-error)',
+      brand: 'var(--color-brand)',
+      brandHover: 'var(--color-brand-hover)',
+      brandMuted: 'var(--color-brand-muted)',
+      brandLight: 'var(--color-brand-accent, #c9b8db)',
+      translated: fallback.accent.translated,
+    },
+
+    sentiment: fallback.sentiment,
+    medal: fallback.medal,
+    interactive: fallback.interactive,
+    rating: fallback.rating,
+    verified: {
+      onchain: 'var(--color-verified-onchain)',
+      web3: 'var(--color-verified-web3)',
+    },
+    overlay: fallback.overlay,
+  }
 }
 
 // Export tokens object that dynamically reads theme
-// Note: colors is a getter that reads from document.documentElement
-// This allows components to access tokens.colors directly
+// Note: colors getter returns CSS variable references so inline styles
+// automatically track theme changes without re-render
 export const tokens = {
-  // Colors are dynamically loaded based on theme
+  // Colors use CSS variables for automatic theme tracking
   get colors() {
-    return getThemeColors()
+    return getCssVarColors()
   },
   
   // Spacing scale (8px base unit)

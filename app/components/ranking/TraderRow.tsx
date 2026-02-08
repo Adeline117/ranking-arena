@@ -41,7 +41,7 @@ function NaIndicator({ source, metricType }: { source?: string; metricType: 'win
     <span
       title={platformNote || defaultNote}
       style={{ 
-        fontSize: '11px', 
+        fontSize: tokens.typography.fontSize.xs, 
         color: TRADER_TEXT_TERTIARY, 
         opacity: 0.4, 
         letterSpacing: 1,
@@ -210,18 +210,18 @@ export const TraderRow = memo(function TraderRow({
                     width: 6, height: 6, borderRadius: '50%',
                     background: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : TRADER_TEXT_TERTIARY,
                   }} />
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: TRADER_TEXT_TERTIARY }}>{trader.arena_score.toFixed(0)}</span>
+                  <span style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: TRADER_TEXT_TERTIARY }}>{trader.arena_score.toFixed(0)}</span>
                 </span>
               )}
             </Box>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <Box className="source-tag" style={{ background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
-                <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: '10px', lineHeight: 1.2 }}>
+                <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: tokens.typography.fontSize.xs, lineHeight: 1.2 }}>
                   {sourceInfo.type}
                 </Text>
               </Box>
               {trader.also_on && trader.also_on.length > 0 && (
-                <Text size="xs" style={{ fontSize: '9px', color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }}>
+                <Text size="xs" style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }}>
                   also on: {trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
                 </Text>
               )}
@@ -255,7 +255,7 @@ export const TraderRow = memo(function TraderRow({
                 size="xs"
                 weight="semibold"
                 className="pnl-value"
-                style={{ color: pnlColor, lineHeight: 1.2, fontSize: '12px', opacity: hasPnl ? 0.85 : 0.5, cursor: hasPnl ? 'help' : 'default' }}
+                style={{ color: pnlColor, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, opacity: hasPnl ? 0.85 : 0.5, cursor: hasPnl ? 'help' : 'default' }}
                 title={hasPnl ? getPnLTooltipFn(trader.source || source || '', language) : undefined}
               >
                 {pnlText}
@@ -267,7 +267,7 @@ export const TraderRow = memo(function TraderRow({
         {/* Win% */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.win_rate ? (
-            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1, fontSize: '13px' }}>
+            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1, fontSize: tokens.typography.fontSize.sm }}>
               {trader.win_rate.toFixed(0)}%
             </Text>
           ) : (
@@ -278,7 +278,7 @@ export const TraderRow = memo(function TraderRow({
         {/* MDD */}
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.max_drawdown ? (
-            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1, fontSize: '13px' }}>
+            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1, fontSize: tokens.typography.fontSize.sm }}>
               -{Math.abs(trader.max_drawdown).toFixed(0)}%
             </Text>
           ) : (

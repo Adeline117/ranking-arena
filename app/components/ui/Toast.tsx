@@ -191,7 +191,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
               rel="noopener noreferrer"
               style={{
                 display: 'block',
-                fontSize: '11px',
+                fontSize: tokens.typography.fontSize.xs,
                 color: tokens.colors.accent.brand,
                 marginTop: 4,
                 textDecoration: 'none',

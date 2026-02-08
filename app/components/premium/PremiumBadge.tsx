@@ -63,21 +63,21 @@ const TIER_CONFIG: Record<SubscriptionTier, {
 const SIZE_CONFIG = {
   xs: {
     padding: '2px 6px',
-    fontSize: '10px',
+    fontSize: tokens.typography.fontSize.xs,
     iconSize: '12px',
     gap: '2px',
     borderRadius: '4px',
   },
   sm: {
     padding: '3px 8px',
-    fontSize: '12px',
+    fontSize: tokens.typography.fontSize.sm,
     iconSize: '14px',
     gap: '4px',
     borderRadius: '6px',
   },
   md: {
     padding: '4px 10px',
-    fontSize: '13px',
+    fontSize: tokens.typography.fontSize.sm,
     iconSize: '16px',
     gap: '5px',
     borderRadius: '8px',
