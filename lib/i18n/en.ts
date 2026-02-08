@@ -2771,6 +2771,34 @@ const en = {
   epubReaderTableOfContents: 'Table of Contents',
   epubReaderNotes: 'Notes',
 
+walletBalance: 'Wallet Balance',
+tokenHoldings: 'Token Holdings',
+recentTransactions: 'Recent Transactions',
+chainName: 'Chain',
+transactionHash: 'Transaction Hash',
+blockNumber: 'Block Number',
+gasUsed: 'Gas Used',
+
+// Market Overview
+marketOverview: 'Market',
+marketCap: 'Market Cap',
+tradingVolume24h: '24h Vol',
+btcDominance: 'BTC.D',
+ethGas: 'Gas',
+topGainers: 'Top Gainers',
+topLosers: 'Top Losers',
+priceChange24h: '24h Change',
+
+// DeFi / DefiLlama
+defiOverview: 'DeFi Overview',
+totalTVL: 'Total TVL',
+tvlChange24h: '24h Change',
+topProtocols: 'Top Protocols',
+chainBreakdown: 'Chain Breakdown',
+dexVolume: 'DEX Volume',
+yieldPools: 'Yield Pools',
+stablecoinMarketCap: 'Stablecoin Market Cap',
+
 } as const
 
 export default en

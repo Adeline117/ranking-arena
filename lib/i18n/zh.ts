@@ -2775,6 +2775,34 @@ fearGreedExtremeGreed: '极度贪婪',
   epubReaderTableOfContents: '目录',
   epubReaderNotes: '笔记',
 
+walletBalance: '钱包余额',
+tokenHoldings: '代币持仓',
+recentTransactions: '最近交易',
+chainName: '链',
+transactionHash: '交易哈希',
+blockNumber: '区块号',
+gasUsed: '燃料消耗',
+
+// DeFi / DefiLlama
+defiOverview: 'DeFi 概览',
+totalTVL: '总锁仓量',
+tvlChange24h: '24h 变化',
+topProtocols: 'Top 协议',
+chainBreakdown: '链分布',
+dexVolume: 'DEX 交易量',
+yieldPools: '收益池',
+stablecoinMarketCap: '稳定币市值',
+
+// Market Overview
+marketOverview: '行情',
+marketCap: '总市值',
+tradingVolume24h: '24h成交量',
+btcDominance: 'BTC占比',
+ethGas: 'Gas',
+topGainers: '涨幅榜',
+topLosers: '跌幅榜',
+priceChange24h: '24h涨跌',
+
 } as const
 
 export default zh

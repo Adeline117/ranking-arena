@@ -21,6 +21,9 @@ const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 const FearGreedGauge = lazy(() => import('../market/FearGreedGauge'))
+const DefiOverview = lazy(() => import('../market/DefiOverview'))
+const TopMovers = lazy(() => import('../market/TopMovers'))
+const MarketOverviewBar = lazy(() => import('../market/MarketOverviewBar'))
 
 interface HomePageProps {
   initialTraders?: InitialTrader[]
@@ -68,6 +71,9 @@ export default function HomePage({
           padding: '16px 16px',
         }}
       >
+        <Suspense fallback={null}>
+          <MarketOverviewBar />
+        </Suspense>
         <ThreeColumnLayout
           leftSidebar={
             <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
@@ -79,6 +85,16 @@ export default function HomePage({
               <div style={{ flexShrink: 0 }}>
                 <Suspense fallback={<div className="skeleton" style={{ height: 120, borderRadius: 12 }} />}>
                   <FearGreedGauge />
+                </Suspense>
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <Suspense fallback={<div className="skeleton" style={{ height: 160, borderRadius: 12 }} />}>
+                  <TopMovers />
+                </Suspense>
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <Suspense fallback={<div className="skeleton" style={{ height: 160, borderRadius: 12 }} />}>
+                  <DefiOverview />
                 </Suspense>
               </div>
               <div style={{ flexShrink: 0, maxHeight: '35%', overflow: 'auto' }}>
