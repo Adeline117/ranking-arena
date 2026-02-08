@@ -318,7 +318,7 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
                           padding: '2px 6px',
                           borderRadius: 4,
                           background: tokens.colors.accent?.primary || tokens.colors.accent.brand,
-                          color: '#fff',
+                          color: tokens.colors.white,
                         }}>
                           TOP
                         </span>

@@ -27,7 +27,7 @@ export default function UserNotFound() {
           padding: '10px 28px',
           borderRadius: 8,
           background: tokens.colors.accent.brand,
-          color: '#fff',
+          color: tokens.colors.white,
           textDecoration: 'none',
           fontWeight: 600,
           fontSize: 14,

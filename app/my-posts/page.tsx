@@ -164,7 +164,7 @@ export default function MyPostsPage() {
                 style={{
                   padding: '12px 24px',
                   background: tokens.colors.accent.primary,
-                  color: '#fff',
+                  color: tokens.colors.white,
                   borderRadius: tokens.radius.md,
                   textDecoration: 'none',
                   fontWeight: 900,

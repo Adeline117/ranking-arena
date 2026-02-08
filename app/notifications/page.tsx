@@ -226,7 +226,7 @@ export default function NotificationsPage() {
                 height: 20,
                 borderRadius: 10,
                 background: tokens.colors.accent.error,
-                color: '#fff',
+                color: tokens.colors.white,
                 fontSize: 11,
                 fontWeight: 600,
                 padding: '0 6px',

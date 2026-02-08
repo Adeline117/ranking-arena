@@ -120,7 +120,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                             : report.content_type === 'user'
                               ? '#f44336'
                               : tokens.colors.accent.warning,
-                        color: '#fff',
+                        color: tokens.colors.white,
                         fontSize: tokens.typography.fontSize.xs,
                       }}
                     >

@@ -270,7 +270,7 @@ export function RepostModal({
               borderRadius: 10,
               border: 'none',
               background: loading ? 'rgba(139,111,168,0.3)' : tokens.colors.accent.brand,
-              color: '#fff',
+              color: tokens.colors.white,
               fontWeight: 900,
               fontSize: 14,
               cursor: loading ? 'not-allowed' : 'pointer',

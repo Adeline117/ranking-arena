@@ -156,7 +156,7 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
                   background: 'var(--color-pro-badge-bg)',
                   fontSize: 10,
                   fontWeight: 700,
-                  color: '#fff',
+                  color: tokens.colors.white,
                 }}
               >
                 {t('upgrade')}

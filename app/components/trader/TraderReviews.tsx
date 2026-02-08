@@ -171,7 +171,7 @@ function ReviewAvatar({ handle, avatarUrl }: { handle?: string; avatarUrl?: stri
           justifyContent: 'center',
           fontSize: 14,
           fontWeight: 700,
-          color: '#fff',
+          color: tokens.colors.white,
         }}>
           {getAvatarInitial(handle || 'A')}
         </Box>

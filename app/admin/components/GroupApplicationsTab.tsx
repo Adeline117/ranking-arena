@@ -171,7 +171,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                           size="sm"
                           onClick={() => handleReject(app.id)}
                           disabled={actionLoading[app.id]}
-                          style={{ background: tokens.colors.accent?.error || '#EF4444', color: '#fff' }}
+                          style={{ background: tokens.colors.accent?.error || '#EF4444', color: tokens.colors.white }}
                         >
                           {t('adminConfirmReject')}
                         </Button>

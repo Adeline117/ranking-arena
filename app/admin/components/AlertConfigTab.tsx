@@ -81,7 +81,7 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
               width: 20,
               height: 20,
               borderRadius: '50%',
-              background: '#fff',
+              background: tokens.colors.white,
               position: 'absolute',
               top: 2,
               left: enabled ? 26 : 2,

@@ -204,7 +204,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
               borderRadius: tokens.radius.lg,
               background: tokens.gradient.primary,
-              color: '#fff',
+              color: tokens.colors.white,
               textDecoration: 'none',
               fontWeight: 600,
             }}
@@ -288,7 +288,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               borderRadius: tokens.radius.lg,
               background: copied ? tokens.colors.accent.success : tokens.gradient.primary,
               border: 'none',
-              color: '#fff',
+              color: tokens.colors.white,
               cursor: 'pointer',
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: 600,
@@ -426,7 +426,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                   >
                     <span
                       style={{
-                        color: '#fff',
+                        color: tokens.colors.white,
                         fontSize: '12px',
                         fontWeight: 900,
                         textShadow: '0 1px 3px rgba(0,0,0,0.8)',
@@ -586,7 +586,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
               borderRadius: tokens.radius.lg,
               background: tokens.gradient.primary,
-              color: '#fff',
+              color: tokens.colors.white,
               textDecoration: 'none',
               fontWeight: 600,
               boxShadow: tokens.shadow.md,

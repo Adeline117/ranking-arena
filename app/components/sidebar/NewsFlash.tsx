@@ -95,7 +95,7 @@ export default function NewsFlash() {
                 <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                   {impConfig && (
                     <span style={{
-                      fontSize: 10, fontWeight: 700, color: '#fff',
+                      fontSize: 10, fontWeight: 700, color: tokens.colors.white,
                       background: impConfig.color, padding: '1px 6px',
                       borderRadius: 4, lineHeight: '16px',
                     }}>

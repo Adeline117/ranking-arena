@@ -105,7 +105,7 @@ function FollowersList({ profileId }: { profileId: string }) {
                 {f.avatar_url ? (
                   <Image src={`/api/avatar?url=${encodeURIComponent(f.avatar_url)}`} alt={f.handle} width={40} height={40} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <Text size="sm" weight="bold" style={{ color: '#fff' }}>{getAvatarInitial(f.handle)}</Text>
+                  <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>{getAvatarInitial(f.handle)}</Text>
                 )}
               </Box>
               <Text size="sm" weight="semibold" style={{ color: tokens.colors.text.primary }}>
@@ -417,7 +417,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                   placeItems: 'center',
                   fontWeight: tokens.typography.fontWeight.black,
                   fontSize: tokens.typography.fontSize.xl,
-                  color: '#ffffff',
+                  color: tokens.colors.white,
                   overflow: 'hidden',
                   boxShadow: avatarHovered
                     ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
@@ -445,7 +445,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                     size="2xl"
                     weight="black"
                     style={{
-                      color: '#ffffff',
+                      color: tokens.colors.white,
                       textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
                       fontSize: '32px',
                       lineHeight: '1',

@@ -137,7 +137,7 @@ export default function AddCompareButton({
             padding: '1px 5px',
             borderRadius: tokens.radius.sm,
             background: tokens.colors.accent.primary,
-            color: '#fff',
+            color: tokens.colors.white,
             fontSize: '10px',
             fontWeight: 700,
           }}>

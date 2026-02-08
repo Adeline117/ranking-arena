@@ -339,7 +339,7 @@ export default function NotFoundPage() {
             style={{ 
               padding: '14px 28px', 
               background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #6b4f88 100%)`,
-              color: '#fff', 
+              color: tokens.colors.white, 
               borderRadius: 12,
               textDecoration: 'none',
               fontSize: 15,

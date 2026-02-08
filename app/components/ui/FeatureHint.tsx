@@ -310,7 +310,7 @@ export function FeatureHint({
                 onClick={handleDismiss}
                 style={{
                   background: tokens.colors.accent.brand,
-                  color: '#fff',
+                  color: tokens.colors.white,
                   border: 'none',
                   borderRadius: tokens.radius.md,
                   padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,

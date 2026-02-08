@@ -103,7 +103,7 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
       return {
         label: t('admin'),
         bg: tokens.colors.accent?.primary,
-        color: '#fff'
+        color: tokens.colors.white
       }
     }
     return null

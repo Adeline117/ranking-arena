@@ -153,7 +153,7 @@ function renderContentWithControls(
                 height: 24,
                 border: 'none',
                 background: isFirst ? 'rgba(100,100,100,0.5)' : 'rgba(139,111,168,0.9)',
-                color: '#fff',
+                color: tokens.colors.white,
                 cursor: isFirst ? 'not-allowed' : 'pointer',
                 fontSize: 14,
                 borderRadius: 4,
@@ -173,7 +173,7 @@ function renderContentWithControls(
                 height: 24,
                 border: 'none',
                 background: isLast ? 'rgba(100,100,100,0.5)' : 'rgba(139,111,168,0.9)',
-                color: '#fff',
+                color: tokens.colors.white,
                 cursor: isLast ? 'not-allowed' : 'pointer',
                 fontSize: 14,
                 borderRadius: 4,
@@ -192,7 +192,7 @@ function renderContentWithControls(
                 height: 24,
                 border: 'none',
                 background: 'rgba(255,77,77,0.9)',
-                color: '#fff',
+                color: tokens.colors.white,
                 cursor: 'pointer',
                 fontSize: 14,
                 borderRadius: 4,
@@ -678,7 +678,7 @@ export default function EditPostPage() {
                     top: -12,
                     left: 12,
                     background: tokens.colors.accent.brand,
-                    color: '#fff',
+                    color: tokens.colors.white,
                     padding: '2px 10px',
                     borderRadius: 999,
                     fontSize: 11,
@@ -756,7 +756,7 @@ export default function EditPostPage() {
               </Text>
               <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
                 {t('imageInsertStep1')}<br />
-                {t('imageInsertStep2')} <span style={{ background: tokens.colors.accent.brand, color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
+                {t('imageInsertStep2')} <span style={{ background: tokens.colors.accent.brand, color: tokens.colors.white, padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
                 {t('imageInsertStep3')}
               </Text>
             </Box>
@@ -805,7 +805,7 @@ export default function EditPostPage() {
                         left: 0,
                         right: 0,
                         background: 'rgba(139,111,168,0.9)',
-                        color: '#fff',
+                        color: tokens.colors.white,
                         fontSize: 10,
                         textAlign: 'center',
                         padding: '2px 0',
@@ -832,7 +832,7 @@ export default function EditPostPage() {
                         borderRadius: '50%',
                         border: 'none',
                         background: 'rgba(139,111,168,0.9)',
-                        color: '#fff',
+                        color: tokens.colors.white,
                         fontSize: 12,
                         cursor: 'pointer',
                         display: 'flex',
@@ -852,7 +852,7 @@ export default function EditPostPage() {
                         borderRadius: '50%',
                         border: 'none',
                         background: 'rgba(255,77,77,0.9)',
-                        color: '#fff',
+                        color: tokens.colors.white,
                         fontSize: 12,
                         cursor: 'pointer',
                         display: 'flex',

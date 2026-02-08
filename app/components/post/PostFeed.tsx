@@ -1304,7 +1304,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           style={{
             padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
             background: tokens.colors.accent.primary,
-            color: '#fff',
+            color: tokens.colors.white,
             border: 'none',
             borderRadius: tokens.radius.md,
             cursor: 'pointer',

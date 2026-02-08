@@ -152,7 +152,7 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
                       size="sm"
                       onClick={() => handleReject(app.id)}
                       disabled={actionLoading[`edit_${app.id}`]}
-                      style={{ background: tokens.colors.accent?.error || '#EF4444', color: '#fff' }}
+                      style={{ background: tokens.colors.accent?.error || '#EF4444', color: tokens.colors.white }}
                     >
                       {t('adminConfirmReject')}
                     </Button>

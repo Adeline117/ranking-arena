@@ -3,6 +3,7 @@
 import React, { Component, ReactNode } from 'react'
 import Link from 'next/link'
 import { t } from '@/lib/i18n'
+import { tokens } from '@/lib/design-tokens'
 
 interface Props {
   children: ReactNode
@@ -207,7 +208,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 style={{
                   padding: '12px 24px',
                   background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                  color: '#fff',
+                  color: tokens.colors.white,
                   borderRadius: 8,
                   border: 'none',
                   cursor: 'pointer',

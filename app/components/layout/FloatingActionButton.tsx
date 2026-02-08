@@ -146,7 +146,7 @@ export default function FloatingActionButton() {
           borderRadius: '50%',
           border: 'none',
           background: tokens.gradient.primary,
-          color: '#fff',
+          color: tokens.colors.white,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',

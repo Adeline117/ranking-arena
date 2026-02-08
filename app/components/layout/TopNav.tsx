@@ -526,7 +526,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
-                color: '#fff',
+                color: tokens.colors.white,
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.black,
                 fontSize: tokens.typography.fontSize.sm,
@@ -599,7 +599,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       boxShadow: tokens.shadow.glowError,
                     }}
                   >
-                    <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', lineHeight: 1 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: tokens.colors.white, lineHeight: 1 }}>
                       {totalUnread > 99 ? '99+' : totalUnread}
                     </span>
                   </Box>
@@ -813,7 +813,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
-                color: '#fff',
+                color: tokens.colors.white,
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.black,
                 fontSize: tokens.typography.fontSize.sm,

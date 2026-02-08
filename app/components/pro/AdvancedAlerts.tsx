@@ -363,7 +363,7 @@ export default function AdvancedAlerts({
                         width: 20,
                         height: 20,
                         borderRadius: tokens.radius.full,
-                        background: '#fff',
+                        background: tokens.colors.white,
                         transition: tokens.transition.fast,
                         boxShadow: tokens.shadow.sm,
                       }}
@@ -584,7 +584,7 @@ export default function AdvancedAlerts({
                 borderRadius: tokens.radius.md,
                 border: 'none',
                 background: tokens.gradient.primary,
-                color: '#fff',
+                color: tokens.colors.white,
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: 600,

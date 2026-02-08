@@ -173,7 +173,7 @@ export function OnChainCopyTrading({ traderHandle, traderAddress, className = ''
             }}
           >
             <RocketIcon size={16} />
-            <Text size="sm" weight="bold" style={{ color: '#fff' }}>
+            <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>
               {t('onChainCopyTradingComingSoon') || 'Coming Soon'}
             </Text>
           </Box>

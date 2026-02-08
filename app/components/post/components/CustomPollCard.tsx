@@ -177,7 +177,7 @@ export function CustomPollCard({
             background: selectedOptions.length > 0 && !votingInProgress
               ? ARENA_PURPLE
               : 'rgba(139, 111, 168, 0.3)',
-            color: '#fff',
+            color: tokens.colors.white,
             border: 'none',
             borderRadius: 8,
             cursor: selectedOptions.length > 0 && !votingInProgress ? 'pointer' : 'not-allowed',

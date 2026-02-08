@@ -293,7 +293,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                   width: 180, height: 180,
                   borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
-                  background: '#fff',
+                  background: tokens.colors.white,
                   padding: tokens.spacing[2],
                 }}
                 unoptimized

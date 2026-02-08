@@ -36,7 +36,7 @@ export function areTraderPropsEqual(
 
 // Rank change indicator below the rank badge
 function RankChangeIndicator({ rankChange, isNew }: { rankChange?: number | null; isNew?: boolean }) {
-  const indicatorStyle = { fontSize: '9px', fontWeight: 700, lineHeight: 1 } as const
+  const indicatorStyle = { fontSize: tokens.typography.fontSize.xs, fontWeight: 700, lineHeight: 1 } as const
 
   if (isNew) {
     return <span style={{ ...indicatorStyle, color: tokens.colors.accent.primary }}>NEW</span>
@@ -230,7 +230,7 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
       <Text size="sm" weight="black" style={{
         position: 'relative',
         color: textColor,
-        fontSize: '12px', lineHeight: 1
+        fontSize: tokens.typography.fontSize.sm, lineHeight: 1
       }}>
         {score.toFixed(1)}
       </Text>

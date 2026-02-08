@@ -77,7 +77,7 @@ function CompareFloatingBar() {
                 padding: '2px 6px',
                 borderRadius: tokens.radius.sm,
                 background: tokens.colors.accent.primary,
-                color: '#fff',
+                color: tokens.colors.white,
                 fontSize: 11,
                 fontWeight: 700,
               }}>
@@ -212,7 +212,7 @@ function CompareFloatingBar() {
                 borderRadius: tokens.radius.md,
                 border: 'none',
                 background: tokens.gradient.primary,
-                color: '#fff',
+                color: tokens.colors.white,
                 fontSize: 13,
                 fontWeight: 700,
                 cursor: 'pointer',

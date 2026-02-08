@@ -88,10 +88,10 @@ export const TraderCard = memo(function TraderCard({
           onClick={handleCompareToggle}
           style={{
             position: 'absolute',
-            top: 8,
-            right: 8,
-            width: 28,
-            height: 28,
+            top: 4,
+            right: 4,
+            width: tokens.touchTarget.min,
+            height: tokens.touchTarget.min,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -137,12 +137,12 @@ export const TraderCard = memo(function TraderCard({
             </Text>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Box className="source-tag" style={{ background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
-                <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: '10px', lineHeight: 1.2 }}>
+                <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: tokens.typography.fontSize.xs, lineHeight: 1.2 }}>
                   {sourceInfo.type}
                 </Text>
               </Box>
               {trader.also_on && trader.also_on.length > 0 && (
-                <Text size="xs" style={{ fontSize: '9px', color: TRADER_TEXT_TERTIARY }}>
+                <Text size="xs" style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY }}>
                   +{trader.also_on.length}
                 </Text>
               )}
@@ -160,7 +160,7 @@ export const TraderCard = memo(function TraderCard({
                 border: `1px solid ${borderColor}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <Text size="sm" weight="black" style={{ color: textColor, fontSize: '13px' }}>
+                <Text size="sm" weight="black" style={{ color: textColor, fontSize: tokens.typography.fontSize.sm }}>
                   {trader.arena_score.toFixed(0)}
                 </Text>
                 <ScoreConfidenceIndicator trader={trader} />

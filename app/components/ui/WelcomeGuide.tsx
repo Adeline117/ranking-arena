@@ -219,7 +219,7 @@ export function WelcomeGuide(): ReactElement | null {
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
               borderRadius: tokens.radius.lg,
               background: tokens.colors.accent.brand,
-              color: '#fff',
+              color: tokens.colors.white,
               border: 'none',
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.semibold,

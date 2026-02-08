@@ -466,7 +466,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 style={{
                   padding: '12px 24px',
                   background: tokens.colors.accent.primary,
-                  color: '#fff',
+                  color: tokens.colors.white,
                   borderRadius: tokens.radius.md,
                   textDecoration: 'none',
                   fontWeight: 900,
@@ -532,7 +532,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
             }}
           >
             {!folder.avatar_url && (
-              <Text size="2xl" weight="bold" style={{ color: '#fff' }}>
+              <Text size="2xl" weight="bold" style={{ color: tokens.colors.white }}>
                 {folder.name.charAt(0).toUpperCase()}
               </Text>
             )}

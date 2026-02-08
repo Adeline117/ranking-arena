@@ -142,7 +142,7 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
           justifyContent: 'center',
           boxShadow: '0 2px 8px rgba(247, 147, 26, 0.3)',
         }}>
-          <Text size="xs" weight="bold" style={{ color: '#fff' }}>{position.symbol.slice(0, 2)}</Text>
+          <Text size="xs" weight="bold" style={{ color: tokens.colors.white }}>{position.symbol.slice(0, 2)}</Text>
         </Box>
 
         <Text size="base" weight="black" style={{ color: tokens.colors.text.primary }}>{position.symbol}</Text>

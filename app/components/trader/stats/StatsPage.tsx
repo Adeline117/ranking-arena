@@ -177,7 +177,7 @@ export default function StatsPage({
                   borderRadius: tokens.radius.lg,
                   border: 'none',
                   background: `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
-                  color: '#fff',
+                  color: tokens.colors.white,
                   fontWeight: tokens.typography.fontWeight.bold,
                   fontSize: tokens.typography.fontSize.sm,
                   cursor: 'pointer',

@@ -60,7 +60,7 @@ function RiskBadge({ level, t }: { level: string; t: (k: string) => string }) {
         borderRadius: tokens.radius.full,
         fontSize: 11,
         fontWeight: 600,
-        color: '#fff',
+        color: tokens.colors.white,
         background: RISK_COLORS[level] ?? tokens.colors.text.tertiary,
       }}
     >

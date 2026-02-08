@@ -199,7 +199,7 @@ export default function NotificationsList() {
                 padding: '1px 6px',
                 borderRadius: 10,
                 background: tokens.colors.accent.primary,
-                color: '#fff',
+                color: tokens.colors.white,
                 fontSize: 11,
                 fontWeight: 700,
               }}

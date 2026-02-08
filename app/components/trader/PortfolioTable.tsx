@@ -141,7 +141,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                     borderRadius: tokens.radius.lg,
                     border: 'none',
                     background: `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
-                    color: '#fff',
+                    color: tokens.colors.white,
                     fontWeight: tokens.typography.fontWeight.bold,
                     fontSize: tokens.typography.fontSize.sm,
                     cursor: 'pointer',
@@ -683,7 +683,7 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
           flexShrink: 0,
           boxShadow: '0 2px 8px rgba(247, 147, 26, 0.3)',
         }}>
-          <Text size="sm" weight="bold" style={{ color: '#fff' }}>
+          <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>
             {coinName.slice(0, 1)}
           </Text>
         </Box>

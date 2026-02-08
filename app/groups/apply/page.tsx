@@ -820,7 +820,7 @@ export default function ApplyGroupPage() {
                           height: 24,
                           borderRadius: '50%',
                           background: tokens.colors.accent.error,
-                          color: '#fff',
+                          color: tokens.colors.white,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -932,7 +932,7 @@ export default function ApplyGroupPage() {
                             background: 'var(--color-pro-badge-bg)',
                             fontSize: 10,
                             fontWeight: 700,
-                            color: '#fff',
+                            color: tokens.colors.white,
                           }}
                         >
                           Pro
