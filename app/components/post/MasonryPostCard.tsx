@@ -48,7 +48,7 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
           <Box style={{ position: 'relative', width: '100%', aspectRatio: '4/3', overflow: 'hidden' }}>
             <img
               src={post.images[0]}
-              alt=""
+              alt="Post image"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               loading="lazy"
             />
