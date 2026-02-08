@@ -2716,6 +2716,14 @@ const en = {
   noSearchResults: 'No messages found',
   jumpToMessage: 'Jump to message',
 
+  // Timeframes
+  timeframe1m: '1 Minute',
+  timeframe5m: '5 Minutes',
+  timeframe15m: '15 Minutes',
+  timeframe1h: '1 Hour',
+  timeframe4h: '4 Hours',
+  timeframe1d: '1 Day',
+
 } as const
 
 export default en

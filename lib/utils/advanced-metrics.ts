@@ -1,3 +1,5 @@
+import { moneySum, round2 } from '@/lib/utils/currency'
+
 /**
  * Advanced Trading Metrics Calculations
  *
@@ -161,9 +163,9 @@ export function calculateCalmarRatio(
 export function calculateProfitFactor(trades: TradeData[]): number | null {
   if (!trades || trades.length === 0) return null
 
-  const grossProfit = trades.filter((t) => t.pnl > 0).reduce((sum, t) => sum + t.pnl, 0)
+  const grossProfit = moneySum(trades.filter((t) => t.pnl > 0).map((t) => t.pnl))
 
-  const grossLoss = Math.abs(trades.filter((t) => t.pnl < 0).reduce((sum, t) => sum + t.pnl, 0))
+  const grossLoss = Math.abs(moneySum(trades.filter((t) => t.pnl < 0).map((t) => t.pnl)))
 
   if (grossLoss === 0) {
     // No losses = infinite profit factor, cap at 10
