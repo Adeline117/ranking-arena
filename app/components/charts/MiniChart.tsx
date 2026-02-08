@@ -7,6 +7,7 @@ import {
   type LineData,
   type Time,
   ColorType,
+  AreaSeries,
 } from 'lightweight-charts'
 
 export interface MiniChartProps {
@@ -57,9 +58,9 @@ export default function MiniChart({
       },
     })
 
-    const series = chart.addAreaSeries({
+    const series = chart.addSeries(AreaSeries, {
       lineColor,
-      topColor: lineColor.replace(')', ', 0.2)').replace('rgb', 'rgba').replace('#', ''),
+      topColor: 'transparent',
       bottomColor: 'transparent',
       lineWidth: 1,
       crosshairMarkerVisible: false,

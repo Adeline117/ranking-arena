@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   createChart,
   type IChartApi,
@@ -10,9 +10,14 @@ import {
   type LineData,
   type CandlestickData,
   type Time,
+  type SeriesType,
   ColorType,
   CrosshairMode,
   LineStyle,
+  CandlestickSeries,
+  LineSeries,
+  AreaSeries,
+  HistogramSeries,
 } from 'lightweight-charts'
 
 // ============================================
@@ -36,25 +41,15 @@ export interface LineDataPoint {
 export type ChartType = 'candlestick' | 'line' | 'area'
 
 export interface TradingViewChartProps {
-  /** Chart data — OHLCV for candlestick, or { time, value } for line/area */
   data: OHLCVDataPoint[] | LineDataPoint[]
-  /** Chart type */
   type?: ChartType
-  /** Chart height in pixels */
   height?: number
-  /** Theme: 'dark' | 'light' */
   theme?: 'dark' | 'light'
-  /** Line/area color override */
   color?: string
-  /** Top area color override (for area charts) */
   topColor?: string
-  /** Bottom area color override (for area charts) */
   bottomColor?: string
-  /** Show volume sub-chart (only for candlestick) */
   showVolume?: boolean
-  /** Locale for tooltip labels */
   locale?: 'zh' | 'en'
-  /** Additional chart options */
   chartOptions?: DeepPartial<ChartOptions>
 }
 
@@ -95,10 +90,6 @@ function getChartColors(theme: 'dark' | 'light') {
   }
 }
 
-// ============================================
-// Tooltip labels
-// ============================================
-
 const LABELS = {
   zh: { open: '开盘', close: '收盘', high: '最高', low: '最低', volume: '成交量', value: '数值' },
   en: { open: 'Open', close: 'Close', high: 'High', low: 'Low', volume: 'Volume', value: 'Value' },
@@ -122,14 +113,13 @@ export default function TradingViewChart({
 }: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const seriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | ISeriesApi<'Area'> | null>(null)
-  const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null)
+  const volumeRef = useRef<ISeriesApi<SeriesType> | null>(null)
   const tooltipRef = useRef<HTMLDivElement | null>(null)
 
   const labels = LABELS[locale]
   const colors = getChartColors(theme)
 
-  // Create chart
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -164,9 +154,9 @@ export default function TradingViewChart({
 
     chartRef.current = chart
 
-    // Create series based on type
+    // Create series
     if (type === 'candlestick') {
-      const series = chart.addCandlestickSeries({
+      const series = chart.addSeries(CandlestickSeries, {
         upColor: colors.upColor,
         downColor: colors.downColor,
         borderUpColor: colors.upColor,
@@ -178,9 +168,9 @@ export default function TradingViewChart({
       seriesRef.current = series
 
       if (showVolume) {
-        const volumeSeries = chart.addHistogramSeries({
+        const volumeSeries = chart.addSeries(HistogramSeries, {
           priceFormat: { type: 'volume' },
-          priceScaleId: '',
+          priceScaleId: 'volume',
         })
         volumeSeries.priceScale().applyOptions({
           scaleMargins: { top: 0.8, bottom: 0 },
@@ -196,7 +186,7 @@ export default function TradingViewChart({
         volumeRef.current = volumeSeries
       }
     } else if (type === 'area') {
-      const series = chart.addAreaSeries({
+      const series = chart.addSeries(AreaSeries, {
         lineColor: color || colors.lineColor,
         topColor: topColor || colors.areaTop,
         bottomColor: bottomColor || colors.areaBottom,
@@ -205,7 +195,7 @@ export default function TradingViewChart({
       series.setData(data as LineData<Time>[])
       seriesRef.current = series
     } else {
-      const series = chart.addLineSeries({
+      const series = chart.addSeries(LineSeries, {
         color: color || colors.lineColor,
         lineWidth: 2,
         crosshairMarkerVisible: true,
@@ -234,12 +224,12 @@ export default function TradingViewChart({
         return
       }
 
-      const seriesData = param.seriesData.get(seriesRef.current!)
-      if (!seriesData) { tooltip.style.display = 'none'; return }
+      const mainData = param.seriesData.get(seriesRef.current!)
+      if (!mainData) { tooltip.style.display = 'none'; return }
 
       let html = ''
-      if (type === 'candlestick' && 'open' in seriesData) {
-        const d = seriesData as CandlestickData
+      if (type === 'candlestick' && 'open' in mainData) {
+        const d = mainData as CandlestickData
         const volData = volumeRef.current ? param.seriesData.get(volumeRef.current) : null
         html = `
           <div style="margin-bottom:4px;color:${colors.text}">${String(param.time)}</div>
@@ -249,8 +239,8 @@ export default function TradingViewChart({
           <div>${labels.close}: <b style="color:${d.close >= d.open ? colors.upColor : colors.downColor}">${d.close.toFixed(2)}</b></div>
           ${volData && 'value' in volData ? `<div>${labels.volume}: <b>${(volData as LineData).value.toLocaleString()}</b></div>` : ''}
         `
-      } else if ('value' in seriesData) {
-        const d = seriesData as LineData
+      } else if ('value' in mainData) {
+        const d = mainData as LineData
         html = `
           <div style="margin-bottom:4px;color:${colors.text}">${String(param.time)}</div>
           <div>${labels.value}: <b>${d.value.toFixed(2)}</b></div>
