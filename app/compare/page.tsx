@@ -12,6 +12,7 @@ import TraderComparison from '@/app/components/premium/TraderComparison'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import ExportButton from '@/app/components/common/ExportButton'
 
 interface TraderCompareData {
   id: string
@@ -204,13 +205,38 @@ function CompareContent() {
 
       <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], position: 'relative', zIndex: 1 }}>
         {/* Title */}
-        <Box style={{ marginBottom: tokens.spacing[6] }}>
-          <Text size="2xl" weight="black" className="gradient-text">
-            {t('compareTraders')}
-          </Text>
-          <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-            {t('compareDesc')}
-          </Text>
+        <Box style={{ marginBottom: tokens.spacing[6], display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box>
+            <Text size="2xl" weight="black" className="gradient-text">
+              {t('compareTraders')}
+            </Text>
+            <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
+              {t('compareDesc')}
+            </Text>
+          </Box>
+          {traders.length > 0 && (
+            <ExportButton
+              hidePDF
+              onExport={async (format) => {
+                const { exportToCSV, exportToJSON } = await import('@/lib/utils/export')
+                const rows = traders.map(t => ({
+                  handle: t.handle || t.id,
+                  source: t.source,
+                  roi: t.roi,
+                  roi_7d: t.roi_7d ?? '',
+                  roi_30d: t.roi_30d ?? '',
+                  pnl: t.pnl ?? '',
+                  win_rate: t.win_rate ?? '',
+                  max_drawdown: t.max_drawdown ?? '',
+                  arena_score: t.arena_score ?? '',
+                  trades_count: t.trades_count ?? '',
+                }))
+                const filename = `compare-${traders.map(t => t.handle || t.id).join('-')}`
+                if (format === 'json') exportToJSON(rows, filename)
+                else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
+              }}
+            />
+          )}
         </Box>
 
         {/* Pro gate */}

@@ -1495,6 +1495,17 @@ const en = {
     alertEmailChannel: 'Email',
     alertPushChannel: 'Push',
     alertAddCondition: 'Add Alert Condition',
+    alertSetReminder: 'Set Alert',
+    alertPriceAboveLabel: 'Price Above',
+    alertPriceAboveDesc: 'Alert when price breaks above target',
+    alertPriceBelowLabel: 'Price Below',
+    alertPriceBelowDesc: 'Alert when price drops below target',
+    alertRankUnit: 'ranks',
+    alertOneTime: 'One-time alert (auto-disable after trigger)',
+    alertNoAlerts: 'No alerts configured',
+    alertLastTriggered: 'Last triggered',
+    alertNewPositionLabel: 'New Position Alert',
+    alertNewPositionDesc: 'Alert when trader opens a new position',
 
     // ProFeaturesPanel
     proFeaturesTitle: 'Pro Features',
@@ -2929,6 +2940,14 @@ rejectCall: 'Reject',
     playSpeed: 'Play Speed',
     voiceSelect: 'Select Voice',
     reading: 'Reading',
+
+    // Data export
+    export: 'Export',
+    exportCSV: 'Export CSV',
+    exportJSON: 'Export JSON',
+    exportPDF: 'Export PDF',
+    exportSuccess: 'Export successful',
+    preparing: 'Preparing...',
 
     // Social sharing
     copyLink: 'Copy Link',

@@ -144,27 +144,33 @@ function ExportRankingButton({ traders, source, timeRange, language }: {
     return () => document.removeEventListener('mousedown', handler)
   }, [showMenu])
 
-  const doExport = (count: number) => {
-    setShowMenu(false)
-    const slice = traders.slice(0, count)
-    const headers = ['rank', 'id', 'source', 'arena_score', 'roi', 'pnl', 'win_rate', 'max_drawdown', 'followers']
-    const rows = slice.map((t, i) => [
-      i + 1, t.handle || t.id, t.source || '', t.arena_score ?? '', t.roi, t.pnl ?? '',
-      t.win_rate ?? '', t.max_drawdown ?? '', t.followers,
-    ])
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => {
-      if (v == null) return ''
-      const s = String(v)
-      return /[,"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-    }).join(','))].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `ranking-${source || 'all'}-top${count}-${timeRange || '90D'}.csv`
-    link.click()
+  const buildRows = (count: number) => {
+    return traders.slice(0, count).map((t, i) => ({
+      rank: i + 1,
+      handle: t.handle || t.id,
+      source: t.source || '',
+      arena_score: t.arena_score ?? '',
+      roi: t.roi,
+      pnl: t.pnl ?? '',
+      win_rate: t.win_rate ?? '',
+      max_drawdown: t.max_drawdown ?? '',
+      followers: t.followers,
+    }))
   }
 
-  const options = [10, 50, 100].filter(n => n <= traders.length || n === 10)
+  const doExport = async (count: number, format: 'csv' | 'json') => {
+    setShowMenu(false)
+    const rows = buildRows(count)
+    const filename = `ranking-${source || 'all'}-top${count}-${timeRange || '90D'}`
+    const { exportToCSV, exportToJSON } = await import('@/lib/utils/export')
+    if (format === 'json') {
+      exportToJSON(rows, filename)
+    } else {
+      exportToCSV(rows as unknown as Record<string, unknown>[], filename)
+    }
+  }
+
+  const counts = [10, 50, 100].filter(n => n <= traders.length || n === 10)
 
   return (
     <div ref={menuRef} style={{ position: 'relative' }}>
@@ -187,24 +193,25 @@ function ExportRankingButton({ traders, source, timeRange, language }: {
         <div style={{
           position: 'absolute', top: '100%', right: 0, marginTop: 4,
           background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: 8, overflow: 'hidden', zIndex: 100, minWidth: 120,
+          borderRadius: 8, overflow: 'hidden', zIndex: 100, minWidth: 160,
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         }}>
-          {options.map(n => (
-            <button
-              key={n}
-              onClick={() => doExport(n)}
-              style={{
-                display: 'block', width: '100%', padding: '8px 16px',
-                background: 'transparent', border: 'none',
-                color: tokens.colors.text.primary, fontSize: 13, fontWeight: 500,
-                cursor: 'pointer', textAlign: 'left',
-              }}
+          <div style={{ padding: '6px 12px', fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600 }}>CSV</div>
+          {counts.map(n => (
+            <button key={`csv-${n}`} onClick={() => doExport(n, 'csv')}
+              style={{ display: 'block', width: '100%', padding: '6px 16px', background: 'transparent', border: 'none', color: tokens.colors.text.primary, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
               onMouseEnter={e => e.currentTarget.style.background = tokens.colors.bg.tertiary}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              Top {n}
-            </button>
+            >Top {n}</button>
+          ))}
+          <div style={{ borderTop: `1px solid ${tokens.colors.border.primary}`, margin: '4px 0' }} />
+          <div style={{ padding: '6px 12px', fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600 }}>JSON</div>
+          {counts.map(n => (
+            <button key={`json-${n}`} onClick={() => doExport(n, 'json')}
+              style={{ display: 'block', width: '100%', padding: '6px 16px', background: 'transparent', border: 'none', color: tokens.colors.text.primary, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
+              onMouseEnter={e => e.currentTarget.style.background = tokens.colors.bg.tertiary}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >Top {n}</button>
           ))}
         </div>
       )}

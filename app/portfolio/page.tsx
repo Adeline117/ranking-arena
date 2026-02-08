@@ -10,6 +10,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import RadarChart from '@/app/components/premium/RadarChart'
+import ExportButton from '@/app/components/common/ExportButton'
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -179,9 +180,23 @@ function PortfolioContent() {
               )}
             </Text>
           </Box>
-          <Button variant="secondary" size="sm" onClick={fetchSuggestions}>
-            {t('portfolioRefresh')}
-          </Button>
+          <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
+            {activeSuggestion && activeSuggestion.traders.length > 0 && (
+              <ExportButton
+                hidePDF
+                onExport={async (format) => {
+                  const { exportToCSV, exportToJSON, formatPortfolioData } = await import('@/lib/utils/export')
+                  const rows = formatPortfolioData(activeSuggestion.traders as unknown as Record<string, unknown>[])
+                  const filename = `portfolio-${activeSuggestion.risk_level}`
+                  if (format === 'json') exportToJSON(rows, filename)
+                  else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
+                }}
+              />
+            )}
+            <Button variant="secondary" size="sm" onClick={fetchSuggestions}>
+              {t('portfolioRefresh')}
+            </Button>
+          </Box>
         </Box>
 
         {/* Error */}

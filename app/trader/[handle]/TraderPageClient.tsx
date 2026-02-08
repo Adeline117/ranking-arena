@@ -13,6 +13,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
+import ExportButton from '@/app/components/common/ExportButton'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
 // Phase 3A: Lazy-load heavy tab components (StatsPage imports lightweight-charts ~300KB)
@@ -260,7 +261,29 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
           { label: language === 'zh' ? '排行榜' : 'Leaderboard', href: '/rankings' },
           { label: profile.handle || handle },
         ]} />
-        {/* Header */}
+        {/* Header + Export */}
+        <Box style={{ position: 'relative' }}>
+          <Box style={{ position: 'absolute', top: 0, right: 0, zIndex: 2 }}>
+            <ExportButton
+              hidePDF
+              onExport={async (format) => {
+                const { exportToCSV, exportToJSON } = await import('@/lib/utils/export')
+                const row = [{
+                  handle: profile.handle || handle,
+                  source: profile.source || '',
+                  followers: profile.followers ?? '',
+                  copiers: profile.copiers ?? '',
+                  roi_90d: performance?.roi_90d ?? '',
+                  max_drawdown: performance?.max_drawdown ?? '',
+                  win_rate: performance?.win_rate ?? '',
+                }]
+                const filename = `trader-${profile.handle || handle}`
+                if (format === 'json') exportToJSON(row[0], filename)
+                else exportToCSV(row as unknown as Record<string, unknown>[], filename)
+              }}
+            />
+          </Box>
+        </Box>
         <TraderHeader
           handle={profile.handle}
           traderId={profile.id}
