@@ -24,6 +24,7 @@ import {
   normalizeWinRate,
 } from './shared'
 import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment'
+import { bypassCloudflare, cookiesToHeader } from '../scrapers/cloudflare-bypass'
 
 const SOURCE = 'bybit'
 const DIRECT_API_URL =
@@ -111,6 +112,27 @@ async function fetchBybitPage(
     }
   } catch (err) {
     console.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
+  }
+
+  // Strategy 3: Stealth browser bypass (extract cookies then retry direct API)
+  try {
+    console.warn(`[bybit] Trying stealth browser to bypass Akamai WAF...`)
+    const { cookies } = await bypassCloudflare('https://www.bybit.com/en/copy-trading', {
+      proxy: process.env.STEALTH_PROXY || undefined,
+    })
+    const cookieHeader = cookiesToHeader(cookies)
+    const data = await fetchJson<BybitApiResponse>(directUrl, {
+      headers: {
+        Cookie: cookieHeader,
+        Referer: 'https://www.bybit.com/en/copy-trading',
+        Origin: 'https://www.bybit.com',
+      },
+    })
+    if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+      return data
+    }
+  } catch (err) {
+    console.warn(`[bybit] Stealth browser fallback failed: ${err instanceof Error ? err.message : err}`)
   }
 
   return null

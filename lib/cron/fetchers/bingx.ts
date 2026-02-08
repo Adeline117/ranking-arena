@@ -19,6 +19,7 @@ import {
   normalizeWinRate,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { interceptApiResponses } from '../scrapers/cloudflare-bypass'
 
 const SOURCE = 'bingx'
 const TARGET = 500
@@ -190,6 +191,33 @@ async function fetchPeriod(
 
     // If this endpoint returned some data, stop trying others
     if (allTraders.size > 0) break
+  }
+
+  // Stealth browser fallback when HTTP fetch fails
+  if (allTraders.size === 0) {
+    console.warn(`[${SOURCE}] HTTP fetch failed, trying stealth browser fallback...`)
+    try {
+      const { responses } = await interceptApiResponses(
+        'https://bingx.com/en/CopyTrading/leaderBoard',
+        ['copy', 'trader', 'ranking', 'leaderboard', 'leaderBoard'],
+        { proxy: process.env.STEALTH_PROXY || undefined, maxWaitMs: 20_000 }
+      )
+      for (const resp of responses) {
+        try {
+          const data = JSON.parse(resp.body) as BingxResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+          }
+        } catch { /* skip unparseable */ }
+      }
+      if (allTraders.size > 0) {
+        console.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
+      }
+    } catch (err) {
+      console.warn(`[${SOURCE}] Stealth browser fallback failed:`, err)
+    }
   }
 
   if (allTraders.size === 0) {
