@@ -96,12 +96,8 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
 
         {/* Bottom row: rating + indicators */}
         <div style={{ marginTop: 'auto', paddingTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-          {(item.rating != null && item.rating > 0) ? (
+          {(item.rating != null && item.rating > 0) && (
             <StarRating rating={item.rating} ratingCount={item.rating_count || 0} size={13} readonly />
-          ) : (
-            <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-              {item.view_count > 0 ? `${item.view_count.toLocaleString()} views` : ''}
-            </span>
           )}
           {item.pdf_url && (
             <span style={{

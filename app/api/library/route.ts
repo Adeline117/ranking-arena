@@ -44,7 +44,7 @@ async function fetchLibraryData({ category, search, lang, page, limit, offset }:
 }) {
   // Use RPC for language-priority sorting when user has a language preference
   if (lang && !search) {
-    // Preferred language items first, then others, both sorted by view_count
+    // Preferred language items first, then others, sorted by creation date
     const preferredLang = lang === 'zh' ? 'zh' : 'en'
     const { data, error, count } = await supabase.rpc('library_items_by_lang', {
       p_category: category && category !== 'all' ? category : null,
@@ -81,7 +81,7 @@ async function fetchLibraryData({ category, search, lang, page, limit, offset }:
     query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,author.ilike.%${search}%`)
   }
 
-  query = query.order('view_count', { ascending: false })
+  query = query.order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
   const { data, error, count } = await query
