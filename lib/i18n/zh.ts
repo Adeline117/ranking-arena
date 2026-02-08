@@ -2645,6 +2645,28 @@ const zh = {
     noPostsCta: '还没有帖子，去社区发布第一篇',
     loginToFollow: '登录后关注交易员，追踪最新表现',
 
+    // Exchange binding banner
+    bindExchangeBannerTitle: '绑定你的交易所账号',
+    bindExchangeBannerDesc: '绑定后可自动同步交易数据，参与排行榜，展示真实业绩',
+    goToBind: '去绑定',
+
+    // Search dropdown
+    searchDropdownResults: '搜索结果',
+    viewAllSearchResults: '查看全部搜索结果',
+    traderTypeLabel: '交易员',
+    postTypeLabel: '帖子',
+    groupTypeLabel: '群组',
+    noHotPosts: '暂无热门帖子',
+    enablePushNotifications: '开启推送通知',
+    pushNotificationsTitle: '推送通知',
+    pushNotificationsDesc: '在浏览器或手机上接收实时推送通知',
+    browserNotSupported: '你的浏览器不支持推送通知',
+    allowNotificationPermission: '请在浏览器设置中允许通知权限',
+    pushNotificationsEnabled: '推送通知已开启！',
+    hapticFeedbackTitle: '震动反馈',
+    hapticFeedbackDesc: '当关注的交易员开仓时，手机会有特定节奏的震动',
+    tradeAlertVibration: '交易提醒震动',
+
 } as const
 
 export default zh
