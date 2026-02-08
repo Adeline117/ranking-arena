@@ -11,7 +11,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type {
-  Platform,
   JobType,
   RefreshResponse,
   RefreshJobSummary,

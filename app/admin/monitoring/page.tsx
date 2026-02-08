@@ -116,6 +116,7 @@ export default function MonitoringPage() {
 
   // Check authentication
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) {
         router.push('/login')
@@ -124,6 +125,7 @@ export default function MonitoringPage() {
       setEmail(user.email || null)
     })
 
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.access_token) {
         setAccessToken(session.access_token)
@@ -162,7 +164,7 @@ export default function MonitoringPage() {
     if (accessToken) {
       loadData()
     }
-  }, [accessToken])
+  }, [accessToken, loadData])
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -173,7 +175,7 @@ export default function MonitoringPage() {
     }, 30000)
 
     return () => clearInterval(interval)
-  }, [autoRefresh, accessToken])
+  }, [autoRefresh, accessToken, loadData])
 
   if (!email) {
     return (

@@ -16,7 +16,6 @@ import type {
   DailyPnlPoint,
   AssetBreakdownPoint,
   RefreshJobSummary,
-  SUPPORTED_PLATFORMS,
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
 

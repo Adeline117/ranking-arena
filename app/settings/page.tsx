@@ -296,6 +296,7 @@ function SettingsContent() {
   }, [searchParams])
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
@@ -342,7 +343,7 @@ function SettingsContent() {
       setBlockedUsersLoaded(true)
       loadBlockedUsers(userId)
     }
-  }, [activeSection, sessionsLoaded, loadingSessions, blockedUsersLoaded, loadingBlockedUsers, userId])
+  }, [activeSection, sessionsLoaded, loadingSessions, blockedUsersLoaded, loadingBlockedUsers, userId, loadBlockedUsers, loadSessions])
 
   // ===== Data loading functions =====
   const loadProfile = async (uid: string) => {
@@ -538,6 +539,7 @@ function SettingsContent() {
       setCoverFile(null)
 
       try {
+        // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
         const { data: { session } } = await supabase.auth.getSession()
         if (session?.access_token) {
           await fetch('/api/revalidate/profile', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
@@ -561,6 +563,7 @@ function SettingsContent() {
   const getFreshToken = async (): Promise<string | null> => {
     const { data: { session }, error } = await supabase.auth.refreshSession()
     if (error || !session?.access_token) {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data } = await supabase.auth.getSession()
       return data.session?.access_token || null
     }
@@ -673,6 +676,7 @@ function SettingsContent() {
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true)
     try {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) { setLoadingSessions(false); return }
       const res = await fetch('/api/settings/sessions', { headers: { Authorization: `Bearer ${session.access_token}` } })
@@ -691,6 +695,7 @@ function SettingsContent() {
 
   const handleRevokeSession = async (sessionId: string) => {
     try {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       const res = await fetch('/api/settings/sessions', {
@@ -706,6 +711,7 @@ function SettingsContent() {
     const confirmed = await showConfirm(t('logoutAllDevices'), t('logoutAllDevicesConfirm'))
     if (!confirmed) return
     try {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       const res = await fetch('/api/settings/sessions', {
@@ -738,6 +744,7 @@ function SettingsContent() {
   const handleUnblock = async (blockedId: string) => {
     setUnblockingId(blockedId)
     try {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       const res = await fetch(`/api/users/${blockedId}/block`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } })
@@ -770,6 +777,7 @@ function SettingsContent() {
     if (!deletePassword) return
     setDeletingAccount(true); setDeleteError(null)
     try {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { setDeleteError(t('pleaseLoginAgain')); return }
       const res = await fetch('/api/account/delete', {

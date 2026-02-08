@@ -3,7 +3,6 @@
  */
 
 import {
-  ActivityTier,
   TraderActivity,
   classifyActivityTier,
   scheduleTraderBatch,

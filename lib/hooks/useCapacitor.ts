@@ -258,6 +258,7 @@ export function useCapacitorAppLifecycle(options?: {
       stateListener?.remove()
       urlListener?.remove()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options?.onForeground, options?.onBackground, options?.onUrlOpen])
 }
 

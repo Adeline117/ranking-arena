@@ -167,6 +167,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     } finally {
       setIsLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traderId, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange])
 
   // UF8: Resume pending follow action after login

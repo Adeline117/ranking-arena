@@ -118,7 +118,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       // Restore focus when dialog closes
       previousFocusRef.current?.focus()
     }
-  }, [state.isOpen])
+  }, [state.isOpen, handleCancel])
 
   const showDialog = useCallback((options: DialogOptions): Promise<boolean> => {
     return new Promise((resolve) => {

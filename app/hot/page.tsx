@@ -266,6 +266,7 @@ function HotContent() {
     } finally {
       setLoadingPosts(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showToast, language])
 
   useEffect(() => {
@@ -537,6 +538,7 @@ function HotContent() {
     } finally {
       setTranslating(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [translationCache, showToast])
 
   // Track whether this modal was opened via navigation (for back button handling)

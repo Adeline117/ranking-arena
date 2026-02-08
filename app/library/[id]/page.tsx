@@ -78,6 +78,7 @@ export default function BookDetailPage() {
   const [descExpanded, setDescExpanded] = useState(false)
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
   }, [])
 

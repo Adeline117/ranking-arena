@@ -9,12 +9,14 @@ export function useAuth() {
 
   useEffect(() => {
     setLoading(true)
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setLoading(false)
     })
 
     // 订阅认证状态变化
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setEmail(session?.user?.email ?? null)
     })

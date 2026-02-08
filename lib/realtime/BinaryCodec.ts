@@ -372,7 +372,7 @@ export function calculateCompressionRatio(
   return { jsonSize, binarySize, ratio }
 }
 
-export default {
+const BinaryCodec = {
   encodeTraderUpdate,
   decodeTraderUpdate,
   encodeBatchUpdate,
@@ -380,3 +380,4 @@ export default {
   fromTraderBinary,
   calculateCompressionRatio,
 }
+export default BinaryCodec;

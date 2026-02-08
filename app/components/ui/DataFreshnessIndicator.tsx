@@ -118,7 +118,7 @@ export default function DataFreshnessIndicator({
           icon: <ClockIcon size={size === 'sm' ? 10 : 12} />,
         }
     }
-  }, [updateTier, language, size, t])
+  }, [updateTier, size, t])
 
   // 确定显示颜色
   const displayColor = isCritical

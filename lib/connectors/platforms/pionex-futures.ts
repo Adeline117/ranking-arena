@@ -14,7 +14,7 @@
 import { BaseConnector } from '../base'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
-  TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
+  TraderSource,
   PlatformCapabilities, Window,
 } from '../../types/leaderboard'
 

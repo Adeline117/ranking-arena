@@ -143,7 +143,7 @@ export function useAsyncAction<T, Args extends unknown[] = []>(
         abortControllerRef.current = null
       }
     },
-    [action, timeout, onSuccess, onError, optimisticUpdate, rollback, clearError]
+    [action, timeout, onSuccess, onError, optimisticUpdate, rollback]
   )
 
   return {

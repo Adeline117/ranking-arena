@@ -312,8 +312,9 @@ export function getExchangeErrorProps(
   }
 }
 
-export default {
+const gracefulDegradation = {
   withGracefulDegradation,
   exchangeStatusManager,
   getExchangeErrorProps,
 }
+export default gracefulDegradation;

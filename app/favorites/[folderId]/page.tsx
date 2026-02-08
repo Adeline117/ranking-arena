@@ -131,7 +131,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     }
 
     loadFolder()
-  }, [folderId, accessToken])
+  }, [folderId, accessToken, t])
 
   const handleSave = async () => {
     if (!accessToken || !folder) return

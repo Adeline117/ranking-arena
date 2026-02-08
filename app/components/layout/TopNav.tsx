@@ -87,6 +87,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
 
     const initAuth = async () => {
       try {
+        // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
         const { data, error } = await supabase.auth.getUser()
         if (!alive || error || !data.user) return
 

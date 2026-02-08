@@ -7,7 +7,6 @@ import { createClient } from '@supabase/supabase-js'
 import {
   calculateArenaScore,
   debouncedConfidence,
-  getScoreConfidence,
   ARENA_CONFIG,
   type Period,
   type ScoreConfidence,

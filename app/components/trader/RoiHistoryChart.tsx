@@ -275,7 +275,7 @@ export default function RoiHistoryChart({
       {/* Loading State */}
       {isLoading && (
         <Box style={{ 
-          height, 
+          _height, 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',

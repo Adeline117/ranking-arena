@@ -143,7 +143,7 @@ export function useOneClickSiwe(options: UseOneClickSiweOptions = {}): UseOneCli
         return () => clearTimeout(timer)
       }
     }
-  }, [isConnected, address, autoSign])
+  }, [isConnected, address, autoSign, performSignIn])
 
   // ── Update status based on connection state ──
   useEffect(() => {

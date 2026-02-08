@@ -249,7 +249,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         setLoading(false)
       }
     }
-  }, [props.groupId, props.authorHandle, accessToken, sortType, pageSize])
+  }, [props.groupId, props.authorHandle, accessToken, sortType, pageSize, props.groupIds, props.sortBy, storeSetPosts])
 
   // 加载更多帖子（无限滚动）
   const loadMorePosts = useCallback(async () => {
@@ -325,6 +325,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } finally {
       setLoadingMore(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingMore, hasMore, loading, offset, pageSize, props.sortBy, sortType, props.authorHandle, props.groupId, props.groupIds, accessToken, posts])
   
   // 组件卸载时取消所有请求
@@ -342,6 +343,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     await loadPosts()
     setRefreshing(false)
     showToast(t('refreshed'), 'success')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadPosts, showToast, language])
 
   // 加载用户收藏状态 - 必须在使用它的 useEffect 之前定义
@@ -478,7 +480,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         loadSinglePost()
       }
     }
-  }, [props.initialPostId, posts, openPost])
+  }, [props.initialPostId, posts, openPost, setComments])
 
   // 点赞/踩 - per-postId lock (waits for API response before allowing next action)
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
@@ -547,6 +549,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } finally {
       lockRef.current.delete(key)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, openPost?.id, showToast])
 
   // Built-in poll voting (bull/bear/wait) - preserved for future use
@@ -612,6 +615,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } finally {
       lockRef.current.delete(key)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, openPost?.id, showToast])
 
   // 加载自定义投票
@@ -726,6 +730,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     }
     setBookmarkingPostId(postId)
     setShowBookmarkModal(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, showToast])
 
   // 收藏到指定收藏夹
@@ -761,6 +766,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       setShowBookmarkModal(false)
       setBookmarkingPostId(null)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, bookmarkingPostId, showToast])
 
   // 转发帖子
@@ -804,6 +810,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } finally {
       setRepostLoading(prev => ({ ...prev, [postId]: false }))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, posts, openPost, currentUserId, showToast])
 
   // 路由
@@ -864,6 +871,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } finally {
       setSavingEdit(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingPost, accessToken, editTitle, editContent, openPost?.id, showToast])
 
   // 删除帖子
@@ -905,6 +913,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } catch (_err) {
       showToast(t('deleteFailed'), 'error')
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, openPost?.id, showDangerConfirm, showToast])
 
   // 置顶帖子
@@ -1035,7 +1044,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } finally {
       setTranslating(false)
     }
-  }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent])
+  }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken])
 
   // 批量翻译帖子标题和内容预览（使用批量API，减少请求次数）
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {

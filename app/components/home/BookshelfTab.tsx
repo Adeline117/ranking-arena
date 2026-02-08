@@ -29,6 +29,7 @@ export default function BookshelfTab() {
   const [filter, setFilter] = useState<'all' | 'want_to_read' | 'read'>('all')
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
       if (!data.user) setLoading(false)

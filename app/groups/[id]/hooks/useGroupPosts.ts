@@ -42,7 +42,7 @@ interface UseGroupPostsOptions {
   userId: string | null
   accessToken: string | null
   isMember: boolean
-  language: string
+  _language: string
   t: (key: string) => string
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
@@ -203,7 +203,7 @@ export function useGroupPosts({
       const error = err instanceof Error ? err.message : 'Failed to load posts'
       showToast(error, 'error')
     }
-  }, [groupId, isMember, fetchPosts, enrichPosts, showToast])
+  }, [groupId, fetchPosts, enrichPosts, showToast])
 
   // Infinite scroll: load more
   const loadMorePosts = useCallback(async () => {
@@ -226,7 +226,7 @@ export function useGroupPosts({
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore, hasMorePosts, posts, isMember, fetchPosts, enrichPosts])
+  }, [loadingMore, hasMorePosts, posts, fetchPosts, enrichPosts])
 
   // IntersectionObserver for infinite scroll
   useEffect(() => {

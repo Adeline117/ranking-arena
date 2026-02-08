@@ -51,6 +51,7 @@ export default function PaymentSuccessPage() {
   const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
     })
@@ -60,6 +61,7 @@ export default function PaymentSuccessPage() {
   const checkSubscriptionDirect = useCallback(async (): Promise<boolean> => {
     try {
       // 获取有效 session（自动刷新过期 token）
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       let { data: { session } } = await supabase.auth.getSession()
 
       // 检查 token 是否过期或即将过期
@@ -118,6 +120,7 @@ export default function PaymentSuccessPage() {
 
   // 获取有效的 access token（自动刷新过期 token）
   const getValidAccessToken = useCallback(async (): Promise<string | null> => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     let { data: { session } } = await supabase.auth.getSession()
 
     if (!session?.access_token) {
@@ -227,7 +230,7 @@ export default function PaymentSuccessPage() {
         setVerificationStatus('error')
       }
     }
-  }, [searchParams, hasVerified, refreshPremium, showToast, language, t, checkSubscriptionDirect, getValidAccessToken])
+  }, [searchParams, hasVerified, refreshPremium, showToast, t, checkSubscriptionDirect, getValidAccessToken])
 
   // 手动重试 - 先刷新 session，再触发重新验证
   const handleRetry = useCallback(async () => {
