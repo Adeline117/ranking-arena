@@ -27,7 +27,7 @@ export default function Footer() {
 
   const socialLinks = [
     { href: 'https://x.com/ArenaFi_com', label: 'X / Twitter', icon: 'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z' },
-    // TODO: Add contact email and social links when ready
+    { href: '/u/Adeline', label: isZh ? '联系我们' : 'Contact Us', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
   ]
 
   return (

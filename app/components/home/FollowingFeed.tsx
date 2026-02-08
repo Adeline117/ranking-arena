@@ -93,7 +93,7 @@ export default function FollowingFeed() {
         textAlign: 'center', padding: '60px 20px',
         color: tokens.colors.text.secondary,
       }}>
-        <img src="/stickers/happy.png" alt="" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
+        <img src="/stickers/happy.png" alt="No posts yet" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
         <p style={{ fontSize: 16, marginBottom: 8 }}>
           {isZh ? '关注你感兴趣的交易员' : "You haven't followed anyone yet"}
         </p>
