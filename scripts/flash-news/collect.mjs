@@ -66,7 +66,52 @@ const RSS_SOURCES = [
     category: 'crypto',
     language: 'en',
     importance: 'normal',
-  }
+  },
+  // ─── Macro sources ───
+  {
+    name: 'Bloomberg Crypto',
+    url: 'https://www.bloomberg.com/crypto/feed',
+    category: 'macro',
+    language: 'en',
+    importance: 'important',
+  },
+  {
+    name: 'Reuters Fintech',
+    url: 'https://www.reutersagency.com/feed/?best-topics=tech',
+    category: 'macro',
+    language: 'en',
+    importance: 'important',
+  },
+  // ─── DeFi sources ───
+  {
+    name: 'DeFi Llama',
+    url: 'https://defillama.com/rss',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Bankless',
+    url: 'https://feeds.banklesshq.com/rss',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  // ─── Regulation sources ───
+  {
+    name: 'SEC Press Releases',
+    url: 'https://www.sec.gov/rss/news/press.xml',
+    category: 'regulation',
+    language: 'en',
+    importance: 'important',
+  },
+  {
+    name: 'CFTC Press Room',
+    url: 'https://www.cftc.gov/Newsroom/PressRoom/RSS',
+    category: 'regulation',
+    language: 'en',
+    importance: 'important',
+  },
 ]
 
 // XML 解析器配置
