@@ -116,8 +116,9 @@ export function usePostTranslation(options: UsePostTranslationOptions): UsePostT
 
       setTranslatedContent(finalTranslated)
       setShowingOriginal(false)
-    } catch (err: any) {
-      onToast?.(err.message || 'Translation failed', 'error')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Translation failed'
+      onToast?.(message, 'error')
     } finally {
       setTranslating(false)
     }
@@ -217,7 +218,7 @@ export function usePostTranslation(options: UsePostTranslationOptions): UsePostT
       }
 
       setTranslatedListPosts(prev => ({ ...prev, ...translatedMap }))
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Silent fail for batch translation
       console.error('Batch translation failed:', err)
     } finally {
@@ -255,12 +256,12 @@ export function usePostTranslation(options: UsePostTranslationOptions): UsePostT
       const translations = data.translations || []
 
       const translatedMap: Record<string, string> = {}
-      translations.forEach((t: any, i: number) => {
+      translations.forEach((t: { translated_text?: string }, i: number) => {
         translatedMap[comments[i].id] = t.translated_text || ''
       })
 
       setTranslatedComments(prev => ({ ...prev, ...translatedMap }))
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Silent fail for comment translation
       console.error('Comment translation failed:', err)
     } finally {

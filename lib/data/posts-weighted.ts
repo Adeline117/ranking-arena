@@ -6,6 +6,57 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { PostWithAuthor, PostListOptions } from './posts'
 
+/** Raw post row returned from the weighted query join */
+interface WeightedPostRow {
+  id: string
+  title: string | null
+  content: string | null
+  author_id: string
+  author_handle: string | null
+  group_id: string | null
+  poll_enabled: boolean | null
+  poll_id: string | null
+  poll_bull: number | null
+  poll_bear: number | null
+  poll_wait: number | null
+  like_count: number | null
+  dislike_count: number | null
+  comment_count: number | null
+  bookmark_count: number | null
+  repost_count: number | null
+  view_count: number | null
+  hot_score: number | null
+  is_pinned: boolean | null
+  images: string[] | null
+  created_at: string
+  updated_at: string | null
+  original_post_id: string | null
+  group_name: string | null
+  group_name_en: string | null
+  author_weight: number | null
+  weighted_score?: number
+  groups?: { name: string; name_en: string } | null
+}
+
+/** Author profile info used in mapping */
+interface AuthorProfile {
+  handle: string | null
+  avatar_url: string | null
+  is_pro: boolean
+  show_pro_badge: boolean
+}
+
+/** Original post summary for reposts */
+interface OriginalPostSummary {
+  id: string
+  title: string | null
+  content: string | null
+  author_handle: string | null
+  author_avatar_url: string | null
+  images: string[] | null
+  created_at: string
+}
+
 export interface WeightedPostListOptions extends PostListOptions {
   /**
    * 是否启用权重排序
@@ -121,7 +172,7 @@ export async function getWeightedPosts(
   if (!postsData || postsData.length === 0) return []
 
   // 计算权重增强的排序分数
-  const postsWithWeightedScore = (postsData as any[]).map((post: any) => {
+  const postsWithWeightedScore = (postsData as WeightedPostRow[]).map((post: WeightedPostRow) => {
     const baseScore = post.hot_score || 0
     const authorWeight = post.author_weight || 0
     
@@ -142,7 +193,7 @@ export async function getWeightedPosts(
   })
 
   // 按权重增强分数排序
-  postsWithWeightedScore.sort((a: any, b: any) => {
+  postsWithWeightedScore.sort((a: WeightedPostRow, b: WeightedPostRow) => {
     if (sort_order === 'asc') {
       return a.weighted_score - b.weighted_score
     } else {
@@ -151,8 +202,8 @@ export async function getWeightedPosts(
   })
 
   // 转换为标准格式并获取作者信息
-  const authorIds = [...new Set(postsWithWeightedScore.map((p: any) => p.author_id).filter(Boolean))]
-  const originalPostIds = [...new Set(postsWithWeightedScore.map((p: any) => p.original_post_id).filter((id: any): id is string => !!id))]
+  const authorIds = [...new Set(postsWithWeightedScore.map((p) => p.author_id).filter(Boolean))]
+  const originalPostIds = [...new Set(postsWithWeightedScore.map((p) => p.original_post_id).filter((id): id is string => !!id))]
 
   const [profilesResult, originalPostsResult] = await Promise.all([
     authorIds.length > 0
@@ -164,7 +215,7 @@ export async function getWeightedPosts(
   ])
 
   // 构建作者资料映射
-  const authorProfileMap = new Map<string, any>()
+  const authorProfileMap = new Map<string, AuthorProfile>()
   if (profilesResult.data) {
     for (const p of profilesResult.data) {
       authorProfileMap.set(p.id, {
@@ -177,7 +228,7 @@ export async function getWeightedPosts(
   }
 
   // 处理原始帖子
-  const originalPostMap = new Map<string, any>()
+  const originalPostMap = new Map<string, OriginalPostSummary>()
   if (originalPostsResult.data && originalPostsResult.data.length > 0) {
     const originalAuthorIds = [...new Set(originalPostsResult.data.map((p: any) => p.author_id).filter(Boolean))]
     const missingIds = originalAuthorIds.filter(id => !authorProfileMap.has(id))

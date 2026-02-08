@@ -87,8 +87,9 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
           user_reaction: data.user_vote_type ?? data.user_reaction,
         })
       }
-    } catch (err: any) {
-      onToast?.(err.message || 'Failed to upvote', 'error')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to upvote'
+      onToast?.(message, 'error')
     } finally {
       // Release lock
       lockRef.current.delete(postId)
@@ -136,8 +137,9 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
           user_reaction: data.user_vote_type ?? data.user_reaction,
         })
       }
-    } catch (err: any) {
-      onToast?.(err.message || 'Failed to downvote', 'error')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to downvote'
+      onToast?.(message, 'error')
     } finally {
       // Release lock
       lockRef.current.delete(postId)
@@ -169,14 +171,14 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       const bookmarkMap: Record<string, boolean> = {}
       const countMap: Record<string, number> = {}
 
-      data.bookmarks?.forEach((bookmark: any) => {
+      data.bookmarks?.forEach((bookmark: { post_id: string; is_bookmarked: boolean; bookmark_count?: number }) => {
         bookmarkMap[bookmark.post_id] = bookmark.is_bookmarked
         countMap[bookmark.post_id] = bookmark.bookmark_count || 0
       })
 
       setUserBookmarks(prev => ({ ...prev, ...bookmarkMap }))
       setBookmarkCounts(prev => ({ ...prev, ...countMap }))
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Silent fail for bookmark status fetch
       console.error('Failed to fetch bookmark status:', err)
     }
@@ -222,14 +224,15 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
         isCurrentlyBookmarked ? 'Bookmark removed' : 'Bookmarked successfully',
         'success'
       )
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Revert optimistic update
       setUserBookmarks(prev => ({ ...prev, [postId]: isCurrentlyBookmarked }))
       setBookmarkCounts(prev => ({
         ...prev,
         [postId]: (prev[postId] || 0) + (isCurrentlyBookmarked ? 1 : -1),
       }))
-      onToast?.(err.message || 'Failed to bookmark', 'error')
+      const message = err instanceof Error ? err.message : 'Failed to bookmark'
+      onToast?.(message, 'error')
     }
   }, [accessToken, userBookmarks, onToast])
 
@@ -259,8 +262,9 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       }
 
       onToast?.('Reposted successfully', 'success')
-    } catch (err: any) {
-      onToast?.(err.message || 'Failed to repost', 'error')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to repost'
+      onToast?.(message, 'error')
     } finally {
       setRepostLoading(prev => ({ ...prev, [postId]: false }))
     }
