@@ -189,10 +189,10 @@ export default function ReadPage() {
       .finally(() => setLoading(false))
   }, [id, isZh])
 
-  // Check membership
+  // Check membership - free books are accessible to everyone
   useEffect(() => {
     if (premiumLoading) return
-    if (!isPremium && book) {
+    if (!isPremium && book && !book.is_free) {
       setNeedsUpgrade(true)
     } else {
       setNeedsUpgrade(false)
