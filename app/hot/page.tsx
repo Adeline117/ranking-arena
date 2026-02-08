@@ -22,6 +22,7 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import CreatePostFAB from '@/app/components/ui/CreatePostFAB'
 
 // Use design token for brand color
 const ARENA_PURPLE = tokens.colors.accent.brand
@@ -1496,6 +1497,7 @@ function HotContent() {
         </div>,
         document.body
       )}
+      <CreatePostFAB />
     </Box>
   )
 }
