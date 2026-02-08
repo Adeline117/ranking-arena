@@ -62,7 +62,7 @@ function TraderAvatar({ name, avatarUrl, size = 40 }: { name: string; avatarUrl:
   )
 }
 
-export default function PopularTraders() {
+export default function PopularTraders({ limit = 10 }: { limit?: number } = {}) {
   const { language } = useLanguage()
   const isZh = language === 'zh'
   const [traders, setTraders] = useState<Trader[]>([])
@@ -79,7 +79,7 @@ export default function PopularTraders() {
           .not('arena_score', 'is', null)
           .lt('roi', 10000)
           .order('arena_score', { ascending: false, nullsFirst: false })
-          .limit(10)
+          .limit(limit)
 
         if (snapErr || !snapData || snapData.length === 0) {
           setTraders([])
