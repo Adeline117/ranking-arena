@@ -1240,6 +1240,7 @@ export default function NewGroupPostPage(): React.ReactElement {
               size="md"
               onClick={handleSubmit}
               disabled={loading || !title.trim()}
+              loading={loading}
             >
               {loading ? t('publishing') : t('publish')}
             </Button>

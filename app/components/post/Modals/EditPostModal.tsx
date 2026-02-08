@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 
 interface EditPostModalProps {
   title: string
@@ -127,6 +128,7 @@ export function EditPostModal({
               cursor: saving || !title.trim() ? 'not-allowed' : 'pointer',
             }}
           >
+            {saving && <ButtonSpinner size="xs" />}
             {saving ? t('saving') : t('save')}
           </button>
         </div>
