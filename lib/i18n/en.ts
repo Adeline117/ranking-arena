@@ -1341,7 +1341,6 @@ const en = {
     translationServiceError: 'Translation service error',
 
     // GroupsFeedPage
-    createGroup: 'Create Group',
     groupFeed: 'Feed',
     discoverGroups: 'Discover',
     myGroups: 'My Groups',
@@ -2635,24 +2634,15 @@ const en = {
     earlyBirdOffer: 'Early Bird Pricing',
     sampleTestimonialLabel: 'Sample review',
 
-    // Search dropdown
-    searchDropdownResults: 'Search Results',
-    viewAllSearchResults: 'View all search results',
-    searchHistory: 'Search History',
-    clearSearchHistory: 'Clear',
-    traderTypeLabel: 'Trader',
-    postTypeLabel: 'Post',
-    groupTypeLabel: 'Group',
-    noHotPosts: 'No hot posts yet',
-    enablePushNotifications: 'Enable Push Notifications',
-    pushNotificationsTitle: 'Push Notifications',
-    pushNotificationsDesc: 'Receive real-time push notifications on your browser or phone',
-    browserNotSupported: 'Your browser does not support push notifications',
-    allowNotificationPermission: 'Please allow notification permission in browser settings',
-    pushNotificationsEnabled: 'Push notifications enabled!',
-    hapticFeedbackTitle: 'Haptic Feedback',
-    hapticFeedbackDesc: 'Feel vibrations when followed traders open positions',
-    tradeAlertVibration: 'Trade Alert Vibration',
+    // Empty state CTAs
+    goToRankings: 'Browse Rankings',
+    goToLibrary: 'Browse Library',
+    goToGroups: 'Browse Community',
+    writeFirstPost: 'Write Your First Post',
+    noFollowingCta: 'No traders followed yet. Check the rankings!',
+    noFoldersCta: 'No folders yet. Create one above!',
+    noPostsCta: 'No posts yet. Share your first trading insight!',
+    loginToFollow: 'Log in to follow traders and track their performance',
 
 } as const
 
