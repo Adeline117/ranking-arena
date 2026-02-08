@@ -359,9 +359,10 @@ function RankingsContent() {
             <button
               key={w}
               onClick={() => handleWindowChange(w)}
-              className="ranking-filter-btn"
+              className="ranking-filter-btn touch-target"
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                minHeight: 44,
                 borderRadius: tokens.radius.lg,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: activeWindow === w ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
@@ -407,9 +408,10 @@ function RankingsContent() {
             <button
               key={cat}
               onClick={() => handleCategoryChange(cat)}
-              className="ranking-filter-btn"
+              className="ranking-filter-btn touch-target"
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                minHeight: 44,
                 borderRadius: tokens.radius.lg,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: activeCategory === cat ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
