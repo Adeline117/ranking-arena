@@ -116,7 +116,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
   }, [loadGroup])
 
   // Join group
-  const handleJoin = useCallback(async (bypassPro = false) => {
+  const handleJoin = useCallback(async (_bypassPro = false) => {
     if (!userId || !accessToken) {
       showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
       return

@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSystemHealth, getAllPlatformStats, getRecentAlerts } from '@/lib/scraper/telemetry'
 import { getCronCircuitBreakerStats } from '@/lib/cron/utils'
-import { PLATFORM_CONFIGS, getEnabledPlatforms } from '@/lib/scraper/config'
+import { getEnabledPlatforms } from '@/lib/scraper/config'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

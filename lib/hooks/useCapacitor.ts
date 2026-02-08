@@ -201,7 +201,7 @@ export function useCapacitorBrowser() {
       await Browser.open({
         url,
         presentationStyle: 'popover',
-        toolbarColor: '#0B0A10',
+        toolbarColor: document.documentElement.getAttribute('data-theme') === 'light' ? '#FFFFFF' : '#0B0A10',
       })
     } catch {
       window.open(url, '_blank')

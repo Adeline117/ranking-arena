@@ -13,7 +13,7 @@
 
 import { supabase } from '@/lib/supabase/client'
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
-import { REALTIME_LISTEN_TYPES, REALTIME_POSTGRES_CHANGES_LISTEN_EVENT } from '@supabase/realtime-js'
+import { REALTIME_POSTGRES_CHANGES_LISTEN_EVENT } from '@supabase/realtime-js'
 
 // ============================================
 // Types

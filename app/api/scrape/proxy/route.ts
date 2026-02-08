@@ -53,7 +53,7 @@ async function fetchBinanceViaProxy(period: string): Promise<TraderData[]> {
       const data = await response.json()
 
       if (data.code !== '000000') {
-        console.log(`[Binance] Page ${page} API error: ${data.code}`)
+        console.warn(`[Binance] Page ${page} API error: ${data.code}`)
         break
       }
 

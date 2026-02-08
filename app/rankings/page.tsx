@@ -6,7 +6,7 @@
  * Pure DB read, fast rendering, stale indicators.
  */
 
-import { Suspense, useState, useRef, useEffect, useCallback, useMemo, useDeferredValue } from 'react'
+import { Suspense, useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'

@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
     let totalAnomalies = 0
     let criticalCount = 0
 
-    for (const [traderId, anomalies] of anomaliesMap) {
+    for (const [_traderId, anomalies] of anomaliesMap) {
       if (anomalies.length > 0) {
         await saveAnomalies(anomalies)
         totalAnomalies += anomalies.length

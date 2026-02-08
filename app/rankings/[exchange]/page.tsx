@@ -1,7 +1,6 @@
 import { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { EXCHANGE_NAMES, SOURCES_WITH_DATA, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
-import type { TraderSource } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'

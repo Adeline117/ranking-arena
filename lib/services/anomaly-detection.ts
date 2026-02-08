@@ -162,7 +162,7 @@ export function calculateQuartiles(values: number[]): {
 export function classifySeverity(
   zScore: number | null,
   anomalyTypes: AnomalyType[],
-  details: AnomalyDetail[]
+  _details: AnomalyDetail[]
 ): SeverityLevel {
   const absZScore = Math.abs(zScore || 0)
 

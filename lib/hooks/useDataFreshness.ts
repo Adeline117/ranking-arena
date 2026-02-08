@@ -73,7 +73,7 @@ export function getOverallHealth(data: FreshnessData | undefined): {
     return { status: 'healthy', message: '' }
   }
 
-  const { healthy, warning, critical, noData, totalPlatforms } = data.summary
+  const { healthy, warning, critical, _noData, _totalPlatforms } = data.summary
   
   if (critical > 0) {
     return {

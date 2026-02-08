@@ -50,7 +50,7 @@ test.describe('小组功能', () => {
     const groupLink = page.locator('a[href^="/groups/"]').first()
 
     if (await groupLink.isVisible({ timeout: 10_000 }).catch(() => false)) {
-      const href = await groupLink.getAttribute('href')
+      const _href = await groupLink.getAttribute('href')
       await groupLink.click()
       await page.waitForTimeout(2000) // Wait for navigation
 

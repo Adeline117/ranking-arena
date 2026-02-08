@@ -66,7 +66,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('[SW] 预缓存静态资源');
+        console.warn('[SW] 预缓存静态资源');
         return cache.addAll(PRECACHE_ASSETS);
       })
       .then(() => {
@@ -85,7 +85,7 @@ self.addEventListener('activate', (event) => {
           cacheNames
             .filter((name) => name !== CACHE_NAME)
             .map((name) => {
-              console.log('[SW] 删除旧缓存:', name);
+              console.warn('[SW] 删除旧缓存:', name);
               return caches.delete(name);
             })
         );
@@ -112,7 +112,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .catch(async (error) => {
-          console.log('[SW] 导航请求失败，尝试使用缓存:', error.message);
+          console.warn('[SW] 导航请求失败，尝试使用缓存:', error.message);
           const cachedResponse = await caches.match(OFFLINE_URL);
           // 确保始终返回有效的 Response
           if (cachedResponse) {
@@ -180,10 +180,10 @@ self.addEventListener('fetch', (event) => {
             }
 
             return response;
-          } catch (error) {
+          } catch (_error) {
             // 网络请求失败，返回过期缓存（如果有的话）
             if (cachedResponse) {
-              console.log('[SW] 网络请求失败，返回过期缓存:', url.pathname);
+              console.warn('[SW] 网络请求失败，返回过期缓存:', url.pathname);
               return cachedResponse;
             }
 
@@ -300,5 +300,5 @@ self.addEventListener('notificationclick', (event) => {
 // 同步帖子函数（示例）
 async function syncPosts() {
   // 实现离线时保存的帖子同步逻辑
-  console.log('[SW] 同步帖子');
+  console.warn('[SW] 同步帖子');
 }

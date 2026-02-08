@@ -73,7 +73,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   const [subscription, setSubscription] = useState<UserSubscription | null>(initialSubscription || null)
   const [isLoading, setIsLoading] = useState(!initialSubscription)
   const [hasNFT, setHasNFT] = useState(false)
-  const [source, setSource] = useState<'stripe' | 'nft' | 'admin' | 'free'>('free')
+  const [_source, setSource] = useState<'stripe' | 'nft' | 'admin' | 'free'>('free')
 
   // 加载订阅状态
   const loadSubscription = useCallback(async () => {

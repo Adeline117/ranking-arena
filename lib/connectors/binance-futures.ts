@@ -6,7 +6,7 @@
  * Rate limits: Conservative 30 req/min with 2-5s jitter.
  */
 
-import { BaseConnectorLegacy, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,

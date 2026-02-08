@@ -9,8 +9,7 @@
  */
 
 import { INLINE_FETCHERS, getInlineFetcher, getSupportedInlinePlatforms } from '../index'
-import { calculateArenaScore, parseNum, normalizeWinRate, fetchJson } from '../shared'
-import type { PlatformFetcher, FetchResult } from '../shared'
+import { calculateArenaScore, parseNum, normalizeWinRate } from '../shared'
 
 // ============================================
 // Registry Tests
@@ -32,7 +31,7 @@ describe('Fetcher Registry', () => {
   })
 
   test('all fetcher values are functions', () => {
-    for (const [key, fetcher] of Object.entries(INLINE_FETCHERS)) {
+    for (const [_key, fetcher] of Object.entries(INLINE_FETCHERS)) {
       expect(typeof fetcher).toBe('function')
       // Each fetcher should accept (supabase, periods) and return Promise<FetchResult>
       expect(fetcher.length).toBeGreaterThanOrEqual(1) // at least 1 param (supabase)
@@ -220,7 +219,7 @@ describe('Shared Utilities', () => {
 // Mock Supabase Client for Fetcher Tests
 // ============================================
 
-function createMockSupabase() {
+function _createMockSupabase() {
   const upsertFn = jest.fn().mockResolvedValue({ error: null })
   const fromFn = jest.fn().mockReturnValue({
     upsert: upsertFn,

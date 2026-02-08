@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -77,7 +77,7 @@ const CATEGORY_KEYS = [
 ]
 
 // 周期选项 - 使用 i18n key
-const PERIOD_KEYS = [
+const _PERIOD_KEYS = [
   { value: '7D', labelKey: 'period7D' as const },
   { value: '30D', labelKey: 'period30D' as const },
   { value: '90D', labelKey: 'period90D' as const },

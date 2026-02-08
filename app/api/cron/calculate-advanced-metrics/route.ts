@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
  * Generate synthetic daily returns from total ROI
  * In production, use actual daily snapshots
  */
-function generateSyntheticReturns(totalRoi: number, days: number): number[] {
+function _generateSyntheticReturns(totalRoi: number, days: number): number[] {
   if (days <= 0) return []
 
   const avgDailyReturn = totalRoi / days

@@ -46,7 +46,7 @@ class Logger {
    */
   info(message: string, context?: LogContext): void {
     if (this.isDevelopment) {
-      console.log(`[INFO] ${message}`, context || '')
+      console.warn(`[INFO] ${message}`, context || '')
     }
   }
 
@@ -55,7 +55,7 @@ class Logger {
    */
   debug(message: string, context?: LogContext): void {
     if (this.isDevelopment) {
-      console.debug(`[DEBUG] ${message}`, context || '')
+      console.warn(`[DEBUG] ${message}`, context || '')
     }
   }
 

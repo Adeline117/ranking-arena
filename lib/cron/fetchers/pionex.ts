@@ -44,7 +44,7 @@ const HEADERS: Record<string, string> = {
 
 /** All known Pionex API endpoints with their parameter styles */
 const ENDPOINTS = [
-  { path: '/kol-apis/tapi/v1/kol/list', params: (p: number, period: number) => `sort_field=roi&page_num=${p}&page_size=100&sort_type=desc` },
+  { path: '/kol-apis/tapi/v1/kol/list', params: (p: number, _period: number) => `sort_field=roi&page_num=${p}&page_size=100&sort_type=desc` },
   { path: '/kol-apis/tapi/v1/future/copy_trading/kol_list', params: (p: number, period: number) => `sort_field=roi&page_num=${p}&page_size=100&sort_type=desc&period=${period}` },
   { path: '/kol-apis/tapi/v1/copy_trading_rank_list', params: (p: number, _period: number) => `sort_field=roi&page_num=${p}&page_size=100` },
   { path: '/kol-apis/tapi/v1/future/kol_rank_list', params: (p: number, period: number) => `sort_field=roi&page_num=${p}&page_size=100&period=${period}` },

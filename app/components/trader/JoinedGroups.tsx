@@ -64,6 +64,7 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
           .order('member_count', { ascending: false })
 
         if (groupsError) {
+          // intentionally empty
         }
 
         const groupsWithRole = (groupsData || []).map(g => ({

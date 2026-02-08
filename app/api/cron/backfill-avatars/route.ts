@@ -185,7 +185,7 @@ async function fetchXTBulk(): Promise<Map<string, string>> {
         
         if (!data || data.returnCode !== 0) break
         
-        let items: Array<{ accountId?: string | number; avatar?: string }> = []
+        const items: Array<{ accountId?: string | number; avatar?: string }> = []
         if (Array.isArray(data.result)) {
           for (const group of data.result) {
             if (group.items) items.push(...group.items)
@@ -442,7 +442,7 @@ export async function GET(request: Request) {
 
   // Fall back to individual fetching for remaining
   if (mode !== 'bulk' && INDIVIDUAL_FETCHERS[platform]) {
-    const remaining = traders.filter(t => {
+    const remaining = traders.filter(_t => {
       // Skip already updated
       return true // We'll check via a simpler approach
     })

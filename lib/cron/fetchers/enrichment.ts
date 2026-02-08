@@ -826,7 +826,7 @@ export function calculateMaxDrawdown(curve: EquityCurvePoint[]): number | null {
  * @param period Period for annualization ('7D', '30D', '90D')
  * @returns Sharpe ratio, or null if insufficient data
  */
-export function calculateSharpeRatio(curve: EquityCurvePoint[], period: string): number | null {
+export function calculateSharpeRatio(curve: EquityCurvePoint[], _period: string): number | null {
   if (curve.length < 7) return null
 
   // Calculate daily returns

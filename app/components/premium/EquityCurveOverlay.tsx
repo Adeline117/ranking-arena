@@ -65,7 +65,7 @@ export default function EquityCurveOverlay({ traders, height = 280 }: EquityCurv
     const chartWidth = width - padding.left - padding.right
     const chartHeight = height - padding.top - padding.bottom
 
-    let allValues: number[] = []
+    const allValues: number[] = []
     let maxLen = 0
     for (const trader of traders) {
       if (trader.data.length > maxLen) maxLen = trader.data.length
@@ -210,7 +210,7 @@ export default function EquityCurveOverlay({ traders, height = 280 }: EquityCurv
       </div>
       {/* Legend */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center', marginTop: 12 }}>
-        {traders.map((trader, i) => (
+        {traders.map((trader, _i) => (
           <div key={trader.traderId} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div
               style={{

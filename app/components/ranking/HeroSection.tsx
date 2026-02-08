@@ -2,8 +2,6 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../base'
 import { TraderAvatar } from './shared/TraderDisplay'
 import { formatROI, formatDisplayName } from './utils'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'

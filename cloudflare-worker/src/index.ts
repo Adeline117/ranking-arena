@@ -123,7 +123,7 @@ export default {
   },
 };
 
-function handleCORS(request: Request, env: Env): Response {
+function handleCORS(request: Request, _env: Env): Response {
   const origin = request.headers.get('Origin') || '*';
   return new Response(null, {
     headers: {
@@ -135,7 +135,7 @@ function handleCORS(request: Request, env: Env): Response {
   });
 }
 
-async function handleProxy(request: Request, env: Env): Promise<Response> {
+async function handleProxy(request: Request, _env: Env): Promise<Response> {
   const url = new URL(request.url);
   const targetUrl = url.searchParams.get('url');
 
@@ -294,7 +294,7 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
   const period = url.searchParams.get('period') || 'THIRTY_DAYS';
   const pageNo = parseInt(url.searchParams.get('pageNo') || url.searchParams.get('page') || '1');
   const pageSize = parseInt(url.searchParams.get('pageSize') || '20');
-  const type = url.searchParams.get('type') || 'futures'; // futures or spot
+  const _type = url.searchParams.get('type') || 'futures'; // futures or spot
 
   // Period mapping for Bitget V2 API
   const periodMap: Record<string, string> = {
@@ -355,7 +355,7 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
       return Response.json(data, {
         headers: { 'Access-Control-Allow-Origin': '*' },
       });
-    } catch (err) {
+    } catch (_err) {
       // Try next endpoint
       continue;
     }

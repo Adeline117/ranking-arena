@@ -14,7 +14,7 @@ import { ProLabel } from '../premium/PremiumGate'
 // Lazy-load non-LCP components to reduce initial bundle
 const ExportButton = dynamic(() => import('../utils/ExportButton'), { ssr: false })
 const Pagination = dynamic(() => import('../ui/Pagination'), { ssr: false })
-const ScoreBreakdownTooltip = dynamic(
+const _ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
   { ssr: false }
 )
@@ -166,7 +166,7 @@ function RankingTableInner(props: {
   const [internalSortColumn, setInternalSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
-  const [sortAnimationKey, setSortAnimationKey] = useState(0)
+  const [_sortAnimationKey, setSortAnimationKey] = useState(0)
   const itemsPerPage = 20
 
   // Mobile card view: load more instead of pagination

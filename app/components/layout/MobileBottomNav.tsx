@@ -32,7 +32,7 @@ function HomeIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
-function TrophyIcon({ active }: IconProps): React.ReactElement {
+function _TrophyIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
       <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
@@ -65,7 +65,7 @@ function UserIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
-function NewsIcon({ active }: IconProps): React.ReactElement {
+function _NewsIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
       <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />

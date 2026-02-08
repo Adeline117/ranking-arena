@@ -42,7 +42,7 @@ test.describe('i18n Language Toggle', () => {
     await rankingSection.isVisible({ timeout: 15_000 }).catch(() => {})
 
     // Capture initial text
-    const initialText = await page.textContent('body')
+    const _initialText = await page.textContent('body')
 
     // Find and click language toggle
     const langToggle = page.locator(

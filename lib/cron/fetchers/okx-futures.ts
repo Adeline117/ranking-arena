@@ -13,12 +13,12 @@ import {
   fetchJson,
   sleep,
 } from './shared'
-import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, fetchOkxStatsDetail, upsertStatsDetail } from './enrichment'
+import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'okx_futures'
 const API_URL = 'https://www.okx.com/api/v5/copytrading/public-lead-traders'
 const TARGET = 1000
-const PAGE_SIZE = 10
+const _PAGE_SIZE = 10
 const MAX_PAGES = 120
 
 // Phase 2: Enrichment settings - increased coverage from 100 to 150

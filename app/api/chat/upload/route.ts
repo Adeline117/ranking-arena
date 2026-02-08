@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     // Generate unique filename
     const timestamp = Date.now()
     const randomStr = Math.random().toString(36).substring(2, 15)
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin'
+    const _fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin'
     const safeOriginalName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_').substring(0, 50)
     const fileName = `${conversationId}/${fileCategory}/${timestamp}-${randomStr}-${safeOriginalName}`
 

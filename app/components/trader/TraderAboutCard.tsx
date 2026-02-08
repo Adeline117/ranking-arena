@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
-import { Box, Text, Button } from '../base'
+import { Box, Text } from '../base'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import MessageButton from '../ui/MessageButton'
@@ -196,7 +196,7 @@ export default function TraderAboutCard({
   const [modalType, setModalType] = useState<'followers' | null>(null)
   const [mounted, setMounted] = useState(false)
   const [followersCount, setFollowersCount] = useState(followers)
-  const router = useRouter()
+  const _router = useRouter()
   const { t } = useLanguage()
 
   useEffect(() => {

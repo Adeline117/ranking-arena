@@ -42,7 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Get user post counts for weighting
     const userIds = readRatings.map((r: any) => r.user_id)
-    let postCounts: Record<string, number> = {}
+    const postCounts: Record<string, number> = {}
     if (userIds.length > 0) {
       const { data: posts } = await supabase
         .from('posts')

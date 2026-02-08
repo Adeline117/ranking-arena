@@ -3,7 +3,7 @@
 import { lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../base'
+import { Box } from '../base'
 import Card from '../ui/Card'
 import { ErrorBoundary } from '../Providers/ErrorBoundary'
 import { SkeletonCard } from '../ui/Skeleton'

@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 
 /**
  * System State Management E2E Tests - Comprehensive Suite
@@ -660,7 +660,7 @@ test.describe('E) Cross-Entry Consistency', () => {
     expect(page.url()).toContain('/hot')
 
     // Both should work without errors
-    const posts = page.locator('.hot-post-item')
+    const _posts = page.locator('.hot-post-item')
     // At least the page structure should be intact
     await page.waitForTimeout(1000)
   })

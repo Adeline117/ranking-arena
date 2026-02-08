@@ -25,6 +25,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   bybit: 'Bybit',
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function TraderAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: string | null; size?: number }) {
   const [imgError, setImgError] = useState(false)
   const initial = (name || '?').charAt(0).toUpperCase()

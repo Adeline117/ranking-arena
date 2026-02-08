@@ -88,7 +88,7 @@ export default function PopularTraders() {
         }
 
         // Batch fetch handles and avatars from trader_sources
-        const keys = snapData.map(d => `${d.source}:${d.source_trader_id}`)
+        const _keys = snapData.map(d => `${d.source}:${d.source_trader_id}`)
         const { data: sourceData } = await supabase
           .from('trader_sources')
           .select('source, source_trader_id, handle, avatar_url')

@@ -251,7 +251,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
 
         // Check if proxy returned an error object
         if ((data as unknown as { error?: string }).error) {
-          console.log(`[bitget-futures] Proxy error: ${(data as unknown as { error: string }).error}`)
+          console.warn(`[bitget-futures] Proxy error: ${(data as unknown as { error: string }).error}`)
           break
         }
 
@@ -264,7 +264,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(300)
       } catch (err) {
-        console.log(`[bitget-futures] Proxy fetch error: ${err}`)
+        console.warn(`[bitget-futures] Proxy fetch error: ${err}`)
         break
       }
     }

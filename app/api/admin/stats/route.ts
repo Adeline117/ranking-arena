@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
       .eq('status', 'pending')
     
     // Scraper health summary - query directly instead of self-fetch
-    let scraperHealth = { fresh: 0, stale: 0, critical: 0 }
+    const scraperHealth = { fresh: 0, stale: 0, critical: 0 }
     try {
       const { data: sources } = await supabase
         .from('trader_sources')

@@ -17,7 +17,7 @@ html{-webkit-text-size-adjust:100%;tab-size:4;scroll-behavior:smooth}
 body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden}
 
 /* 关键布局样式 */
-.top-nav{position:sticky;top:0;z-index:100;background:rgba(11,10,16,0.85);backdrop-filter:blur(12px);height:56px;border-bottom:1px solid rgba(255,255,255,0.08)}
+.top-nav{position:sticky;top:0;z-index:100;background:var(--glass-bg,rgba(11,10,16,0.85));backdrop-filter:blur(12px);height:56px;border-bottom:1px solid var(--glass-border,rgba(255,255,255,0.08))}
 main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 
 /* 字体变量 */

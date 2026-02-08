@@ -17,7 +17,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const sortBy = searchParams.get('sort_by') || 'member_count'
+    const _sortBy = searchParams.get('sort_by') || 'member_count'
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
     const offset = parseInt(searchParams.get('offset') || '0')
 

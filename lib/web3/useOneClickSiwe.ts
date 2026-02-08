@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAccount, useConnect, useSignMessage } from 'wagmi'
+import { useAccount, useSignMessage } from 'wagmi'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { SiweMessage } from 'siwe'
 import { supabase } from '@/lib/supabase/client'

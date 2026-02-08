@@ -7,7 +7,7 @@
  * Snapshot is off-chain: signatures are free, no gas costs.
  */
 
-const SNAPSHOT_HUB = 'https://hub.snapshot.org'
+const _SNAPSHOT_HUB = 'https://hub.snapshot.org'
 const SNAPSHOT_GRAPHQL = 'https://hub.snapshot.org/graphql'
 
 // ── Types ──

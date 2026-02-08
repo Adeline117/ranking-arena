@@ -43,7 +43,7 @@ describe('Web3 Integration', () => {
   describe('NFT Contract', () => {
     it('should have valid contract address format if configured', () => {
       if (!CONTRACT_ADDRESSES.membershipNFT) {
-        console.log('NFT contract not deployed, skipping')
+        console.warn('NFT contract not deployed, skipping')
         return
       }
       expect(CONTRACT_ADDRESSES.membershipNFT).toMatch(/^0x[a-fA-F0-9]{40}$/)
@@ -51,7 +51,7 @@ describe('Web3 Integration', () => {
 
     it('should verify contract exists on chain if configured', async () => {
       if (!CONTRACT_ADDRESSES.membershipNFT) {
-        console.log('NFT contract not deployed, skipping')
+        console.warn('NFT contract not deployed, skipping')
         return
       }
 
@@ -61,7 +61,7 @@ describe('Web3 Integration', () => {
 
       // Contract might not be deployed yet in test environment
       if (code === undefined) {
-        console.log('NFT contract not found on chain (not deployed yet), skipping validation')
+        console.warn('NFT contract not found on chain (not deployed yet), skipping validation')
         return
       }
 

@@ -57,7 +57,7 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'bybit',
     url: 'https://api.bybit.com/v5/market/funding/history',
     symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
-    responseMapper: (data: any, symbol: string) => {
+    responseMapper: (data: any, _symbol: string) => {
       if (!data.result?.list || data.result.list.length === 0) return []
       const latest = data.result.list[0]
       return [{
@@ -72,7 +72,7 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'okx',
     url: 'https://www.okx.com/api/v5/public/funding-rate',
     symbols: ['BTC-USDT-SWAP', 'ETH-USDT-SWAP', 'SOL-USDT-SWAP'],
-    responseMapper: (data: any, symbol: string) => {
+    responseMapper: (data: any, _symbol: string) => {
       if (!data.data || data.data.length === 0) return []
       const latest = data.data[0]
       return [{

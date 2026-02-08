@@ -120,7 +120,7 @@ const getProFeatures = (t: (key: string) => string) => [
 
 export default function PricingPage() {
   const router = useRouter()
-  const { language, t } = useLanguage()
+  const { _language, t } = useLanguage()
   const { showToast } = useToast()
   
   const [email, setEmail] = useState<string | null>(null)

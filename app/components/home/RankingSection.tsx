@@ -16,10 +16,9 @@ import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
-import FilterPresets, { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
+import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import ExchangeFilter from '../ranking/ExchangeFilter'
 import HeroSection from '../ranking/HeroSection'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 
@@ -105,7 +104,7 @@ export default function RankingSection({
   const router = useRouter()
   const searchParams = useSearchParams()
   const { showToast } = useToast()
-  const { language, t } = useLanguage()
+  const { _language, t } = useLanguage()
   const { isPro, isLoading: premiumLoading } = useSubscription()
   const { getAuthHeaders } = useAuthSession()
 
@@ -320,7 +319,7 @@ export default function RankingSection({
   }, [syncStateToUrl])
 
   // Feature 6: Preset change handler with localStorage persistence
-  const handlePresetChange = useCallback((preset: PresetId | null) => {
+  const _handlePresetChange = useCallback((preset: PresetId | null) => {
     setActivePreset(preset)
     setCurrentPage(1)
     syncStateToUrl({ preset, page: 1 })

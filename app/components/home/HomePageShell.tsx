@@ -6,7 +6,6 @@
 
 import { ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box } from '../base'
 import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 

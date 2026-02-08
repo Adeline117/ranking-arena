@@ -23,7 +23,7 @@ export function ComparePortfolioSection({
   equityCurve,
   delay
 }: ComparePortfolioSectionProps) {
-  const { t, language } = useLanguage()
+  const { t, _language } = useLanguage()
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
   const [compareWith, setCompareWith] = useState<'BTC' | 'SPX500'>('BTC')
   const [mounted, setMounted] = useState(false)

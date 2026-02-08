@@ -659,14 +659,14 @@ describe('ARENA_CONFIG', () => {
     const content = fs.readFileSync(sharedPath, 'utf-8')
 
     // Verify PARAMS match canonical
-    for (const [period, params] of Object.entries(ARENA_CONFIG.PARAMS)) {
+    for (const [_period, params] of Object.entries(ARENA_CONFIG.PARAMS)) {
       const p = params as { tanhCoeff: number; roiExponent: number; mddThreshold: number; winRateCap: number }
       expect(content).toContain(`tanhCoeff: ${p.tanhCoeff}`)
       expect(content).toContain(`roiExponent: ${p.roiExponent}`)
     }
 
     // Verify PNL_PARAMS match canonical
-    for (const [period, params] of Object.entries(ARENA_CONFIG.PNL_PARAMS)) {
+    for (const [_period, params] of Object.entries(ARENA_CONFIG.PNL_PARAMS)) {
       const p = params as { base: number; coeff: number }
       expect(content).toContain(`base: ${p.base}`)
       expect(content).toContain(`coeff: ${p.coeff}`)

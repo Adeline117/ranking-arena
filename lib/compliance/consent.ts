@@ -226,7 +226,7 @@ class ConsentManager {
           detail: { enabled: false } 
         })
         window.dispatchEvent(event)
-      } catch {}
+      } catch { /* intentionally empty */ }
     } else {
       // 启用分析
       // @ts-expect-error - GA disable flag on window
@@ -237,7 +237,7 @@ class ConsentManager {
           detail: { enabled: true } 
         })
         window.dispatchEvent(event)
-      } catch {}
+      } catch { /* intentionally empty */ }
     }
   }
 

@@ -42,7 +42,7 @@ export default function MembershipPage() {
   const { t, language } = useLanguage()
   const router = useRouter()
   const { isLoggedIn, loading: authLoading, getAuthHeadersAsync } = useAuthSession()
-  const { subscription, isPremium: isPro } = usePremium()
+  const { _subscription, isPremium: isPro } = usePremium()
 
   const [info, setInfo] = useState<MembershipInfo | null>(null)
   const [loading, setLoading] = useState(true)

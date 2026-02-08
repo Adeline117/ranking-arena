@@ -1,5 +1,4 @@
 import { Suspense } from 'react'
-import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import UserProfileClient from './UserProfileClient'
 

@@ -15,7 +15,7 @@ import {
 } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
 
-const logger = createLogger('comment-like')
+const _logger = createLogger('comment-like')
 
 type RouteContext = { params: Promise<{ id: string }> }
 

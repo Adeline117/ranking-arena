@@ -39,7 +39,7 @@ export function AsyncStylesheets() {
     // Use requestIdleCallback to load CSS during browser idle time
     const loadStyles = () => {
       NON_CRITICAL_STYLESHEETS.forEach(href => {
-        loadStylesheet(href).catch(err => {
+        loadStylesheet(href).catch(_err => {
         })
       })
     }
@@ -61,7 +61,7 @@ export function AsyncStylesheets() {
  */
 export function TraderPageStylesheets() {
   useEffect(() => {
-    loadStylesheet('/styles/trader-animations.css').catch(err => {
+    loadStylesheet('/styles/trader-animations.css').catch(_err => {
     })
   }, [])
 

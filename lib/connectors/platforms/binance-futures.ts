@@ -102,7 +102,7 @@ interface BinancePositionResponse {
   success: boolean
 }
 
-interface BinancePerformanceDetailResponse {
+interface _BinancePerformanceDetailResponse {
   data: Array<{
     periodType: string
     value: number

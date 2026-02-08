@@ -46,7 +46,7 @@ interface GroupMember {
 }
 
 // Inline bilingual text helper (for one-off strings not in the i18n dictionary)
-function bilingualText(zh: string, en: string, language: string): string {
+function _bilingualText(zh: string, en: string, language: string): string {
   return language === 'zh' ? zh : en
 }
 

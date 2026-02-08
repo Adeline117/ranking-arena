@@ -6,7 +6,7 @@
 'use client'
 
 import useSWR from 'swr'
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import type {
   RankingsResponse,
   SnapshotWindow,

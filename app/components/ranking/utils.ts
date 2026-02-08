@@ -1,4 +1,3 @@
-import { tokens } from '@/lib/design-tokens'
 import { SOURCE_TYPE_MAP, EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
 /**

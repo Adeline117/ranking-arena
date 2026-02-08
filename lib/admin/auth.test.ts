@@ -4,7 +4,7 @@
  * 测试管理员认证工具
  */
 
-import { verifyAdmin, getAdminEmails, getSupabaseAdmin } from './auth'
+import { verifyAdmin, getSupabaseAdmin } from './auth'
 
 // Mock createClient
 jest.mock('@supabase/supabase-js', () => ({

@@ -9,7 +9,7 @@
  * 质量分可作为 Arena Score 的权重因子
  */
 
-import { SOURCE_RELIABILITY, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { SOURCE_RELIABILITY } from '@/lib/constants/exchanges'
 
 // ============================================
 // 类型定义

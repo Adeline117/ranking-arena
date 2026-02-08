@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { publishAttestation, createDataHash } from '@/lib/web3/eas'
 import { ARENA_SCORE_SCHEMA_UID } from '@/lib/web3/contracts'
-import type { Address, Hex } from 'viem'
+import type { Address } from 'viem'
 import { logger } from '@/lib/logger'
 
 const CRON_SECRET = process.env.CRON_SECRET

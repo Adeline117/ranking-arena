@@ -71,7 +71,7 @@ export default function FlashNewsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [hasMore, setHasMore] = useState(true)
-  const [pagination, setPagination] = useState({
+  const [_pagination, setPagination] = useState({
     page: 1, limit: 20, total: 0, totalPages: 1, hasNext: false, hasPrev: false,
   })
   const sentinelRef = useRef<HTMLDivElement>(null)

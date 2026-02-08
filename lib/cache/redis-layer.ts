@@ -359,10 +359,10 @@ export async function tieredGetOrSet<T>(
   tier: CacheTier = 'warm',
   tags?: string[]
 ): Promise<T> {
-  const config = CACHE_TIERS[tier]
+  const _config = CACHE_TIERS[tier]
   
   // 尝试获取缓存
-  const { data, layer } = await tieredGet<T>(key, tier)
+  const { data, _layer } = await tieredGet<T>(key, tier)
   
   if (data !== null) {
     return data

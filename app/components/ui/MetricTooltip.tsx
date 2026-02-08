@@ -153,7 +153,7 @@ export function MetricTooltip({
     if (isVisible && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
       const spaceAbove = rect.top
-      const spaceBelow = window.innerHeight - rect.bottom
+      const _spaceBelow = window.innerHeight - rect.bottom
       setPosition(spaceAbove > 200 ? 'top' : 'bottom')
     }
   }, [isVisible])

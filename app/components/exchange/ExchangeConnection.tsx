@@ -55,6 +55,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       // 确保使用正确的用户ID
       const actualUserId = user.id
       if (userId !== actualUserId) {
+        // intentionally empty
       }
 
       const { data, error: fetchError } = await supabase

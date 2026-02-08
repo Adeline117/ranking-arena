@@ -163,11 +163,11 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [debouncedMemberSearch, setDebouncedMemberSearch] = useState('')
   const [memberPage, setMemberPage] = useState(0)
   const [memberRoleFilter, setMemberRoleFilter] = useState<'all' | 'owner' | 'admin' | 'member'>('all')
-  const [memberTotal, setMemberTotal] = useState(0)
+  const [_memberTotal, _setMemberTotal] = useState(0)
   const MEMBERS_PER_PAGE = 20
 
   // Post pagination
-  const [postsPage, setPostsPage] = useState(0)
+  const [_postsPage, _setPostsPage] = useState(0)
   const [hasMorePosts, setHasMorePosts] = useState(false)
   const [loadingMorePosts, setLoadingMorePosts] = useState(false)
   const POSTS_PER_PAGE = 20

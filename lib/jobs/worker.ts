@@ -34,7 +34,7 @@ const processor = new JobProcessor({
 // Graceful shutdown
 let shutdownRequested = false
 
-function handleShutdown(signal: string): void {
+function handleShutdown(_signal: string): void {
   if (shutdownRequested) {
     process.exit(1)
   }
@@ -48,8 +48,8 @@ process.on('SIGTERM', () => handleShutdown('SIGTERM'))
 process.on('SIGINT', () => handleShutdown('SIGINT'))
 
 // Start processing
-console.log('[Worker] Starting job processor...')
-console.log(`[Worker] Config: batch=${batchSize}, poll=${pollInterval}ms, platforms=${platforms || 'all'}`)
+console.warn('[Worker] Starting job processor...')
+console.warn(`[Worker] Config: batch=${batchSize}, poll=${pollInterval}ms, platforms=${platforms || 'all'}`)
 
 processor.start().catch(error => {
   console.error('[Worker] Fatal error:', error)
