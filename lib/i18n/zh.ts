@@ -2873,6 +2873,10 @@ rejectCall: '拒绝',
     copyTrade_deleteSuccess: '跟单配置已删除',
     copyTrade_deleteFailed: '删除跟单配置失败',
     copyTrade_loginRequired: '请先登录',
+    audioReader: '朗读模式',
+    playSpeed: '播放速度',
+    voiceSelect: '选择语音',
+    reading: '朗读中',
 
 } as const
 

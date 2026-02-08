@@ -2868,6 +2868,10 @@ rejectCall: 'Reject',
     copyTrade_deleteSuccess: 'Copy trade config deleted',
     copyTrade_deleteFailed: 'Failed to delete config',
     copyTrade_loginRequired: 'Please login first',
+    audioReader: 'Audio Reader',
+    playSpeed: 'Play Speed',
+    voiceSelect: 'Select Voice',
+    reading: 'Reading',
 
 } as const
 
