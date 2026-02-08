@@ -36,7 +36,6 @@ export async function POST(request: NextRequest) {
   let errors = 0
 
   try {
-    console.log('[Fetch Bybit Traders] Starting...')
 
     // Initialize Bybit adapter
     const adapter = new BybitAdapter({
@@ -62,7 +61,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[Fetch Bybit Traders] Health check passed')
 
     // Fetch leaderboard
     const leaderboard = await limiter.execute(
@@ -75,7 +73,6 @@ export async function POST(request: NextRequest) {
       'cron-fetch-leaderboard'
     )
 
-    console.log(`[Fetch Bybit Traders] Fetched ${leaderboard.traders.length} traders from API`)
 
     // Process traders in batches
     for (let i = 0; i < leaderboard.traders.length; i += BATCH_SIZE) {
@@ -181,14 +178,12 @@ export async function POST(request: NextRequest) {
       }
 
       // Log progress
-      console.log(`[Fetch Bybit Traders] Progress: ${fetched}/${leaderboard.traders.length} processed`)
     }
 
     const duration = Date.now() - startTime
 
     // Log rate limiter status
     const limiterStatus = await limiter.getStatus('cron-fetch-leaderboard')
-    console.log('[Fetch Bybit Traders] Rate limiter status:', limiterStatus)
 
     return NextResponse.json({
       success: true,

@@ -36,11 +36,9 @@ let shutdownRequested = false
 
 function handleShutdown(signal: string): void {
   if (shutdownRequested) {
-    console.log('[Worker] Force exit')
     process.exit(1)
   }
   shutdownRequested = true
-  console.log(`[Worker] Received ${signal}, shutting down gracefully...`)
   processor.stop()
   // Give 10s for in-flight jobs to complete
   setTimeout(() => process.exit(0), 10000)

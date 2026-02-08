@@ -212,7 +212,6 @@ async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
 export async function sendAlert(payload: AlertPayload): Promise<{ sent: boolean; channels: string[] }> {
   const config = await getAlertConfig()
   if (!config) {
-    console.log('[Alert] No config found, skipping alerts')
     return { sent: false, channels: [] }
   }
   

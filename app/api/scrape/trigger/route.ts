@@ -209,7 +209,6 @@ export async function GET(request: Request) {
   const period = searchParams.get('period') || '90D'
   const results: Array<{ source: string; fetched: number; avatars: number; saved: number }> = []
   
-  console.log(`[Scrape Trigger] Starting for ${period}...`)
   
   // 并行获取所有来源
   const [binance, bitgetSpot, bitgetFutures, mexc] = await Promise.all([
@@ -228,7 +227,6 @@ export async function GET(request: Request) {
       avatars: data.avatarCount,
       saved,
     })
-    console.log(`[${data.source}] Fetched: ${data.traders.length}, Avatars: ${data.avatarCount}, Saved: ${saved}`)
   }
   
   const totalAvatars = results.reduce((sum, r) => sum + r.avatars, 0)

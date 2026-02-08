@@ -97,7 +97,6 @@ async function fetchBybitPage(
   try {
     const data = await fetchJson<BybitApiResponse>(directUrl)
     if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
-      console.log(`[bybit] Direct API success, page ${pageNo}`)
       return data
     }
   } catch (err) {
@@ -108,7 +107,6 @@ async function fetchBybitPage(
   try {
     const data = await fetchJson<BybitApiResponse>(proxyUrl)
     if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
-      console.log(`[bybit] Proxy success, page ${pageNo}`)
       return data
     }
   } catch (err) {

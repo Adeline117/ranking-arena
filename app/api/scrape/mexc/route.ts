@@ -63,7 +63,6 @@ async function fetchMexcData(period: string): Promise<MexcTrader[]> {
       })
       
       if (!response.ok) {
-        console.log(`Page ${page} failed: ${response.status}`)
         break
       }
       
@@ -73,7 +72,6 @@ async function fetchMexcData(period: string): Promise<MexcTrader[]> {
       if (!Array.isArray(list) || list.length === 0) break
       
       traders.push(...list)
-      console.log(`Page ${page}: ${list.length} traders`)
       
       if (traders.length >= 100) break
       
@@ -150,7 +148,6 @@ export async function GET(request: Request) {
   }
   
   try {
-    console.log(`[MEXC Scrape] Starting for ${period}...`)
     
     const traders = await fetchMexcData(period)
     
@@ -164,7 +161,6 @@ export async function GET(request: Request) {
     
     const { saved, avatarCount } = await saveTraders(traders, period)
     
-    console.log(`[MEXC Scrape] Done: ${saved} saved, ${avatarCount} with avatars`)
     
     return NextResponse.json({
       success: true,

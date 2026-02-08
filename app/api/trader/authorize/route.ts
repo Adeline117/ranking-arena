@@ -85,7 +85,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[Authorize] Validating API key for ${platform}...`)
 
     // Validate API key with exchange
     const validationResult = await validateExchangeApiKey(platform, {
@@ -110,7 +109,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`[Authorize] API key validated successfully for ${platform}`)
 
     // Encrypt credentials
     const encryptedApiKey = encrypt(apiKey)
@@ -166,7 +164,6 @@ export async function POST(request: NextRequest) {
       }
 
       authorizationId = updated!.id
-      console.log(`[Authorize] Updated existing authorization: ${authorizationId}`)
     } else {
       // Create new authorization
       const { data: created, error: createError } = await supabaseService
@@ -199,7 +196,6 @@ export async function POST(request: NextRequest) {
       }
 
       authorizationId = created!.id
-      console.log(`[Authorize] Created new authorization: ${authorizationId}`)
     }
 
     // Trigger initial data sync (async, don't wait)

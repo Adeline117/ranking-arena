@@ -440,9 +440,6 @@ export async function runTraderAlertDetection(
   // 5. 写入通知
   const { inserted, errors } = await saveAlertsAsNotifications(supabase, allAlerts)
 
-  console.log(
-    `[TraderAlerts] 检测完成: ${traderIds.length} 交易员, ${allAlerts.length} 告警, ${inserted} 通知已保存, ${errors} 错误`
-  )
 
   return {
     tradersChecked: traderIds.length,

@@ -70,7 +70,6 @@ async function fetchBinanceData(period: string): Promise<BinanceTrader[]> {
       })
       
       if (!response.ok) {
-        console.log(`[${period}] Page ${page} failed: ${response.status}`)
         break
       }
       
@@ -84,12 +83,10 @@ async function fetchBinanceData(period: string): Promise<BinanceTrader[]> {
       const list = data?.data?.list || []
       
       if (list.length === 0) {
-        console.log(`[${period}] Page ${page}: empty`)
         break
       }
       
       traders.push(...list)
-      console.log(`[${period}] Page ${page}: ${list.length} traders, total: ${traders.length}`)
       
       if (traders.length >= 100) break
       
@@ -219,9 +216,7 @@ async function saveTraders(traders: BinanceTrader[], period: string) {
   }
   
   // 打印 TOP 5 用于验证
-  console.log(`[${period}] TOP 5:`)
   topTraders.forEach((t, i) => {
-    console.log(`  ${i + 1}. ${t.nickname}: ROI ${t.roi.toFixed(2)}%, PnL $${t.pnl.toFixed(2)}`)
   })
   
   return { saved, avatarCount, topTraders }
@@ -251,7 +246,6 @@ export async function GET(request: Request) {
   }
   
   try {
-    console.log(`[Binance Scrape] Starting for ${period}...`)
     
     // 获取数据
     const traders = await fetchBinanceData(period)
@@ -267,7 +261,6 @@ export async function GET(request: Request) {
     // 保存数据
     const { saved, avatarCount, topTraders } = await saveTraders(traders, period)
     
-    console.log(`[Binance Scrape] Done: ${saved} saved, ${avatarCount} with avatars`)
     
     return NextResponse.json({
       success: true,
@@ -316,11 +309,9 @@ async function scrapeAllPeriods() {
     error?: string
   }> = []
   
-  console.log(`[Binance Scrape] Starting ALL periods: ${ALL_PERIODS.join(', ')}`)
   
   for (const period of ALL_PERIODS) {
     try {
-      console.log(`\n[Binance Scrape] === ${period} ===`)
       const traders = await fetchBinanceData(period)
       
       if (traders.length === 0) {
@@ -338,7 +329,6 @@ async function scrapeAllPeriods() {
         top5: topTraders,
       })
       
-      console.log(`[Binance Scrape] ${period} done: ${saved} saved`)
       
       // 时间段之间延迟，避免限流
       await new Promise(resolve => setTimeout(resolve, 1000))
@@ -351,7 +341,6 @@ async function scrapeAllPeriods() {
   const duration = Date.now() - startTime
   const successCount = results.filter(r => r.success).length
   
-  console.log(`\n[Binance Scrape] ALL DONE in ${(duration/1000).toFixed(1)}s: ${successCount}/${ALL_PERIODS.length} successful`)
   
   return NextResponse.json({
     success: successCount === ALL_PERIODS.length,

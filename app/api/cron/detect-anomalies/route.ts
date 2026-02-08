@@ -115,11 +115,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log('[Anomaly Detection] Starting cron job...')
 
     // 1. Fetch active traders
     const traders = await getActiveTraders()
-    console.log(`[Anomaly Detection] Fetched ${traders.length} active traders`)
 
     if (traders.length === 0) {
       return NextResponse.json({
@@ -136,7 +134,6 @@ export async function GET(request: NextRequest) {
 
     // 2. Batch detect anomalies
     const anomaliesMap = await batchDetectAnomalies(traders)
-    console.log(`[Anomaly Detection] Detected anomalies for ${anomaliesMap.size} traders`)
 
     // 3. Save anomalies to database
     let totalAnomalies = 0
@@ -151,14 +148,11 @@ export async function GET(request: NextRequest) {
         const critical = anomalies.filter(a => a.severity === 'critical' || a.severity === 'high')
         criticalCount += critical.length
 
-        console.log(`[Anomaly Detection] Saved ${anomalies.length} anomalies for trader ${traderId}`)
       }
     }
 
     const duration = Date.now() - startTime
 
-    console.log(`[Anomaly Detection] Completed in ${duration}ms`)
-    console.log(`[Anomaly Detection] Summary: ${totalAnomalies} anomalies (${criticalCount} critical)`)
 
     return NextResponse.json({
       success: true,

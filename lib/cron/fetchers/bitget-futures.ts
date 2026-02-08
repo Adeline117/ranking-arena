@@ -244,7 +244,6 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
 
   // Strategy 2: Try Cloudflare Worker proxy if direct APIs failed
   if (allTraders.length === 0) {
-    console.log('[bitget-futures] Trying Cloudflare Worker proxy...')
     for (let page = 1; page <= maxPages; page++) {
       try {
         const proxyUrl = `${PROXY_URL}/bitget/copy-trading?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}&type=futures`

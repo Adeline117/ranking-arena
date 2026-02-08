@@ -81,7 +81,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Log the action
-    console.log(`[ADMIN] User ${user.id} triggered weight recalculation. Affected: ${affectedCount} users`)
 
     return NextResponse.json({
       success: true,

@@ -66,7 +66,6 @@ export async function scheduleDiscovery(): Promise<number> {
     }
   }
 
-  console.log(`[Scheduler] Created ${created} discovery jobs`)
   return created
 }
 
@@ -87,7 +86,6 @@ export async function schedulePreheat(topN: number = 500): Promise<number> {
     }
   }
 
-  console.log(`[Scheduler] Created ${total} preheat jobs`)
   return total
 }
 
@@ -136,7 +134,6 @@ export async function scheduleLongTailRefresh(
     }
   }
 
-  console.log(`[Scheduler] Created ${created} long-tail refresh jobs for ${platform}/${marketType}`)
   return created
 }
 

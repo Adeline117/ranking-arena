@@ -34,7 +34,6 @@ interface TraderData {
  */
 async function fetchBinanceViaProxy(period: string): Promise<TraderData[]> {
   if (!PROXY_URL) {
-    console.log('[Proxy] CLOUDFLARE_PROXY_URL not configured')
     return []
   }
 
@@ -48,7 +47,6 @@ async function fetchBinanceViaProxy(period: string): Promise<TraderData[]> {
       })
 
       if (!response.ok) {
-        console.log(`[Binance] Page ${page} failed: ${response.status}`)
         break
       }
 
@@ -269,7 +267,6 @@ export async function GET(request: Request) {
   for (const p of periods) {
     // Binance
     if (platform === 'all' || platform === 'binance') {
-      console.log(`[Proxy] Fetching Binance ${p}...`)
       const traders = await fetchBinanceViaProxy(p)
       const saved = await saveTraders('binance_futures', traders, p)
       results.push({ platform: 'binance_futures', period: p, fetched: traders.length, saved })
@@ -277,7 +274,6 @@ export async function GET(request: Request) {
 
     // Bybit
     if (platform === 'all' || platform === 'bybit') {
-      console.log(`[Proxy] Fetching Bybit ${p}...`)
       const traders = await fetchBybitViaProxy(p)
       const saved = await saveTraders('bybit', traders, p)
       results.push({ platform: 'bybit', period: p, fetched: traders.length, saved })
@@ -285,7 +281,6 @@ export async function GET(request: Request) {
 
     // Bitget Futures
     if (platform === 'all' || platform === 'bitget') {
-      console.log(`[Proxy] Fetching Bitget Futures ${p}...`)
       const traders = await fetchBitgetViaProxy(p, 'futures')
       const saved = await saveTraders('bitget_futures', traders, p)
       results.push({ platform: 'bitget_futures', period: p, fetched: traders.length, saved })
@@ -293,7 +288,6 @@ export async function GET(request: Request) {
 
     // Bitget Spot
     if (platform === 'all' || platform === 'bitget_spot') {
-      console.log(`[Proxy] Fetching Bitget Spot ${p}...`)
       const traders = await fetchBitgetViaProxy(p, 'spot')
       const saved = await saveTraders('bitget_spot', traders, p)
       results.push({ platform: 'bitget_spot', period: p, fetched: traders.length, saved })

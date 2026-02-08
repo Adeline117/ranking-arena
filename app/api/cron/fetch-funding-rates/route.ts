@@ -174,10 +174,8 @@ export async function POST(request: NextRequest) {
   let errors = 0
 
   try {
-    console.log('[Fetch Funding Rates] Starting fetch from all exchanges...')
 
     for (const exchange of EXCHANGES) {
-      console.log(`[Fetch Funding Rates] Processing ${exchange.name}...`)
 
       for (const symbol of exchange.symbols) {
         try {
