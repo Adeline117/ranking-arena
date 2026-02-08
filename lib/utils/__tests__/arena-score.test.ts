@@ -20,6 +20,7 @@ import {
   ARENA_CONFIG,
   type TraderScoreInput,
   type ScoreConfidence,
+  getScoreConfidence,
 } from '../arena-score'
 
 // ============================================
