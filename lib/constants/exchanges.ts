@@ -120,52 +120,10 @@ export const ALL_SOURCES: TraderSource[] = [
 // SOURCE_TYPE_MAP – classifies each source as futures / spot / web3
 // ---------------------------------------------------------------------------
 
-export const SOURCE_TYPE_MAP: Record<string, SourceType> = {
-  // CEX futures
-  binance_futures: 'futures',
-  bybit: 'futures',
-  bitget_futures: 'futures',
-  mexc: 'futures',
-  coinex: 'futures',
-  okx_futures: 'futures',
-  kucoin: 'futures',
-  bitmart: 'futures',
-  phemex: 'futures',
-  htx_futures: 'futures',
-  weex: 'futures',
-  bingx: 'futures',
-  gateio: 'futures',
-  xt: 'futures',
-  pionex: 'futures',
-  lbank: 'futures',
-  blofin: 'futures',
-  // CEX spot
-  binance_spot: 'spot',
-  bitget_spot: 'spot',
-  bybit_spot: 'spot',
-  okx_spot: 'spot',
-  // CEX web3 / wallets & on-chain
-  binance_web3: 'web3',
-  okx_web3: 'web3',
-  okx_wallet: 'web3',
-  // DEX / on-chain perpetuals
-  gmx: 'web3',
-  dydx: 'web3',
-  hyperliquid: 'web3',
-  kwenta: 'web3',
-  gains: 'web3',
-  mux: 'web3',
-  vertex: 'web3',
-  drift: 'web3',
-  jupiter_perps: 'web3',
-  aevo: 'web3',
-  synthetix: 'web3',
-  // Dune on-chain data
-  dune_gmx: 'web3',
-  dune_hyperliquid: 'web3',
-  dune_uniswap: 'spot', // Uniswap is DEX spot
-  dune_defi: 'web3',
-}
+// SOURCE_TYPE_MAP is derived from EXCHANGE_CONFIG at the bottom of this file.
+// Declared here for backward compatibility with existing imports.
+// Actual value assigned after EXCHANGE_CONFIG definition.
+export const SOURCE_TYPE_MAP: Record<string, SourceType> = {} as Record<string, SourceType>
 
 // ---------------------------------------------------------------------------
 // PRIORITY_SOURCES – ordered subset used for SSR initial render
@@ -235,157 +193,83 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// EXCHANGE_NAMES – human-readable display names for UI badges
+// EXCHANGE_CONFIG – unified configuration object per source
 // ---------------------------------------------------------------------------
 
-export const EXCHANGE_NAMES: Record<string, string> = {
-  binance_futures: 'Binance',
-  binance_spot: 'Binance Spot',
-  binance_web3: 'Binance Web3',
-  bybit: 'Bybit',
-  bybit_spot: 'Bybit Spot',
-  bitget_futures: 'Bitget',
-  bitget_spot: 'Bitget Spot',
-  okx_futures: 'OKX',
-  okx_spot: 'OKX Spot',
-  okx_web3: 'OKX Web3',
-  okx_wallet: 'OKX Wallet',
-  mexc: 'MEXC',
-  coinex: 'CoinEx',
-  kucoin: 'KuCoin',
-  bitmart: 'BitMart',
-  phemex: 'Phemex',
-  htx_futures: 'HTX',
-  weex: 'WEEX',
-  bingx: 'BingX',
-  gateio: 'Gate.io',
-  xt: 'XT.COM',
-  pionex: 'Pionex',
-  lbank: 'LBank',
-  blofin: 'BloFin',
-  gmx: 'GMX',
-  dydx: 'dYdX',
-  hyperliquid: 'Hyperliquid',
-  kwenta: 'Kwenta',
-  gains: 'Gains Network',
-  mux: 'MUX',
-  vertex: 'Vertex',
-  drift: 'Drift',
-  jupiter_perps: 'Jupiter Perps',
-  aevo: 'Aevo',
-  synthetix: 'Synthetix',
-  dune_gmx: 'GMX (Dune)',
-  dune_hyperliquid: 'Hyperliquid (Dune)',
-  dune_uniswap: 'Uniswap (Dune)',
-  dune_defi: 'DeFi (Dune)',
+export interface ExchangeConfig {
+  name: string
+  sourceType: SourceType
+  reliability: number
+  trustWeight: number
+}
+
+export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
+  // CEX futures
+  binance_futures: { name: 'Binance', sourceType: 'futures', reliability: 88, trustWeight: 1.0 },
+  bybit: { name: 'Bybit', sourceType: 'futures', reliability: 45, trustWeight: 0.85 },
+  bitget_futures: { name: 'Bitget', sourceType: 'futures', reliability: 68, trustWeight: 0.85 },
+  okx_futures: { name: 'OKX', sourceType: 'futures', reliability: 95, trustWeight: 1.0 },
+  mexc: { name: 'MEXC', sourceType: 'futures', reliability: 75, trustWeight: 0.80 },
+  kucoin: { name: 'KuCoin', sourceType: 'futures', reliability: 72, trustWeight: 0.80 },
+  coinex: { name: 'CoinEx', sourceType: 'futures', reliability: 72, trustWeight: 0.80 },
+  htx_futures: { name: 'HTX', sourceType: 'futures', reliability: 95, trustWeight: 0.95 },
+  weex: { name: 'WEEX', sourceType: 'futures', reliability: 70, trustWeight: 0.70 },
+  phemex: { name: 'Phemex', sourceType: 'futures', reliability: 70, trustWeight: 0.75 },
+  bingx: { name: 'BingX', sourceType: 'futures', reliability: 40, trustWeight: 0.65 },
+  gateio: { name: 'Gate.io', sourceType: 'futures', reliability: 68, trustWeight: 0.80 },
+  xt: { name: 'XT.COM', sourceType: 'futures', reliability: 55, trustWeight: 0.65 },
+  pionex: { name: 'Pionex', sourceType: 'futures', reliability: 60, trustWeight: 0.65 },
+  lbank: { name: 'LBank', sourceType: 'futures', reliability: 35, trustWeight: 0.60 },
+  blofin: { name: 'BloFin', sourceType: 'futures', reliability: 40, trustWeight: 0.65 },
+  bitmart: { name: 'BitMart', sourceType: 'futures', reliability: 65, trustWeight: 0.65 },
+  // CEX spot
+  binance_spot: { name: 'Binance Spot', sourceType: 'spot', reliability: 88, trustWeight: 1.0 },
+  bitget_spot: { name: 'Bitget Spot', sourceType: 'spot', reliability: 65, trustWeight: 0.80 },
+  bybit_spot: { name: 'Bybit Spot', sourceType: 'spot', reliability: 45, trustWeight: 0.85 },
+  okx_spot: { name: 'OKX Spot', sourceType: 'spot', reliability: 90, trustWeight: 0.80 },
+  // CEX web3 / wallets
+  binance_web3: { name: 'Binance Web3', sourceType: 'web3', reliability: 85, trustWeight: 0.85 },
+  okx_web3: { name: 'OKX Web3', sourceType: 'web3', reliability: 90, trustWeight: 1.0 },
+  okx_wallet: { name: 'OKX Wallet', sourceType: 'web3', reliability: 90, trustWeight: 1.0 },
+  // DEX / on-chain perpetuals
+  gmx: { name: 'GMX', sourceType: 'web3', reliability: 95, trustWeight: 1.0 },
+  dydx: { name: 'dYdX', sourceType: 'web3', reliability: 90, trustWeight: 0.95 },
+  hyperliquid: { name: 'Hyperliquid', sourceType: 'web3', reliability: 95, trustWeight: 1.0 },
+  kwenta: { name: 'Kwenta', sourceType: 'web3', reliability: 88, trustWeight: 0.90 },
+  gains: { name: 'Gains Network', sourceType: 'web3', reliability: 95, trustWeight: 0.95 },
+  mux: { name: 'MUX', sourceType: 'web3', reliability: 88, trustWeight: 0.85 },
+  vertex: { name: 'Vertex', sourceType: 'web3', reliability: 85, trustWeight: 0.85 },
+  drift: { name: 'Drift', sourceType: 'web3', reliability: 85, trustWeight: 0.90 },
+  jupiter_perps: { name: 'Jupiter Perps', sourceType: 'web3', reliability: 85, trustWeight: 0.95 },
+  aevo: { name: 'Aevo', sourceType: 'web3', reliability: 85, trustWeight: 0.90 },
+  synthetix: { name: 'Synthetix', sourceType: 'web3', reliability: 85, trustWeight: 0.90 },
+  // Dune on-chain data
+  dune_gmx: { name: 'GMX (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95 },
+  dune_hyperliquid: { name: 'Hyperliquid (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95 },
+  dune_uniswap: { name: 'Uniswap (Dune)', sourceType: 'spot', reliability: 85, trustWeight: 0.85 },
+  dune_defi: { name: 'DeFi (Dune)', sourceType: 'web3', reliability: 80, trustWeight: 0.80 },
 }
 
 // ---------------------------------------------------------------------------
-// SOURCE_RELIABILITY – data reliability scores for each platform (0-100)
-// Used by data-quality scoring system
+// Backward-compatible derived exports from EXCHANGE_CONFIG
 // ---------------------------------------------------------------------------
 
-export const SOURCE_RELIABILITY: Record<string, number> = {
-  // [5-star] 稳定平台 (90-100) - 纯 API，无反爬
-  okx_futures: 95,
-  okx_web3: 90,
-  okx_wallet: 90,
-  htx_futures: 95,
-  gains: 95,
-  hyperliquid: 95,
-  gmx: 95,
-  dydx: 90,
-  kwenta: 88,
-  mux: 88,
-  vertex: 85,
-  drift: 85,
-  jupiter_perps: 85,
-  aevo: 85,
-  synthetix: 85,
-  
-  // [4-star] 需代理但稳定 (80-89)
-  binance_futures: 88,
-  binance_spot: 88,
-  binance_web3: 85,
-  
-  // [3-star] 需浏览器/有限制 (60-79)
-  mexc: 75,
-  kucoin: 72,
-  coinex: 72,
-  weex: 70,
-  phemex: 70,
-  bitget_futures: 68,
-  bitget_spot: 65,
-  bitmart: 65,
-  gateio: 68,
-  xt: 55,
-  pionex: 60,
-  
-  // [2-star] 不稳定/数据少 (40-59)
-  bybit: 45,
-  bybit_spot: 45,
-  bingx: 40,
-  blofin: 40,
-  lbank: 35,
-  
-  // Dune 数据源
-  dune_gmx: 90,
-  dune_hyperliquid: 90,
-  dune_uniswap: 85,
-  dune_defi: 80,
+/** @deprecated Use EXCHANGE_CONFIG[source].name instead */
+export const EXCHANGE_NAMES: Record<string, string> = Object.fromEntries(
+  Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.name])
+)
+
+// Populate SOURCE_TYPE_MAP from EXCHANGE_CONFIG
+for (const [key, config] of Object.entries(EXCHANGE_CONFIG)) {
+  SOURCE_TYPE_MAP[key] = config.sourceType
 }
 
-// ---------------------------------------------------------------------------
-// SOURCE_TRUST_WEIGHT – trust multiplier applied to Arena Score calculations
-// Higher weight = more trusted data source, score counts more.
-// Range: 0.0 (untrusted) to 1.0 (fully trusted)
-// ---------------------------------------------------------------------------
+/** @deprecated Use EXCHANGE_CONFIG[source].reliability instead */
+export const SOURCE_RELIABILITY: Record<string, number> = Object.fromEntries(
+  Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.reliability])
+)
 
-export const SOURCE_TRUST_WEIGHT: Record<string, number> = {
-  // Tier 1: Fully trusted – transparent on-chain or top-tier CEX APIs
-  binance_futures: 1.0,
-  binance_spot: 1.0,
-  okx_futures: 1.0,
-  okx_web3: 1.0,
-  okx_wallet: 1.0,
-  htx_futures: 0.95,
-  hyperliquid: 1.0,
-  gmx: 1.0,
-  dydx: 0.95,
-  gains: 0.95,
-  jupiter_perps: 0.95,
-  aevo: 0.90,
-  synthetix: 0.90,
-  kwenta: 0.90,
-  drift: 0.90,
-  vertex: 0.85,
-  mux: 0.85,
-
-  // Tier 2: Mostly trusted – good APIs but some data gaps
-  bybit: 0.85,
-  bybit_spot: 0.85,
-  bitget_futures: 0.85,
-  bitget_spot: 0.80,
-  binance_web3: 0.85,
-  kucoin: 0.80,
-  mexc: 0.80,
-  coinex: 0.80,
-  gateio: 0.80,
-  phemex: 0.75,
-
-  // Tier 3: Lower trust – unstable APIs, limited data, or scraping required
-  weex: 0.70,
-  bingx: 0.65,
-  xt: 0.65,
-  pionex: 0.65,
-  lbank: 0.60,
-  blofin: 0.65,
-  bitmart: 0.65,
-  okx_spot: 0.80,
-
-  // Dune data sources
-  dune_gmx: 0.95,
-  dune_hyperliquid: 0.95,
-  dune_uniswap: 0.85,
-  dune_defi: 0.80,
-}
+/** @deprecated Use EXCHANGE_CONFIG[source].trustWeight instead */
+export const SOURCE_TRUST_WEIGHT: Record<string, number> = Object.fromEntries(
+  Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.trustWeight])
+)

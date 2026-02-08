@@ -41,7 +41,7 @@ const TARGET = 500
 const PAGE_SIZE = 20
 
 // Phase 2: Enrichment settings - increased coverage from 50 to 100
-const ENRICH_LIMIT = 100 // Top N traders to enrich with equity curve/position history
+const ENRICH_LIMIT = 300 // Top N traders to enrich with equity curve/position history
 const ENRICH_CONCURRENCY = 5 // Increased concurrency
 const ENRICH_DELAY_MS = 1000
 

@@ -19,7 +19,7 @@ const SOURCE = 'gmx'
 const SUBSQUID_URL =
   'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
 const TARGET = 500
-const ENRICH_LIMIT = 200 // Increased for better MDD coverage
+const ENRICH_LIMIT = 300 // Increased for better MDD coverage
 const CONCURRENCY = 5
 const DELAY_MS = 200
 const VALUE_SCALE = 1e30
