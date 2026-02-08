@@ -8,6 +8,8 @@ import { createClient } from '@supabase/supabase-js'
 import { toDataURL } from 'qrcode'
 import { generateTotpSecret } from '@/lib/services/totp'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { getAuthUser } from '@/lib/supabase/server'
+import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,16 +26,19 @@ export async function POST(request: NextRequest) {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
     if (rateLimitResponse) return rateLimitResponse
 
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
+    const user = await getAuthUser(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const token = authHeader.substring(7)
+
+    // CSRF validation
+    const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
+    const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
+    if (!validateCsrfToken(cookieToken, headerToken)) {
+      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+    }
+
     const supabase = getSupabaseAdmin()
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // Check if 2FA is already enabled
     const { data: profile, error: profileError } = await supabase

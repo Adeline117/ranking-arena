@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { getAuthUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,16 +24,12 @@ export async function GET(request: NextRequest) {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
     if (rateLimitResponse) return rateLimitResponse
 
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
+    const user = await getAuthUser(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const token = authHeader.substring(7)
+
     const supabase = getSupabaseAdmin()
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // Check that 2FA is enabled
     const { data: profile, error: profileError } = await supabase
