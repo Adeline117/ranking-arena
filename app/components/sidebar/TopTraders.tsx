@@ -147,9 +147,8 @@ export default function TopTraders() {
           {isZh ? '暂无数据' : 'No data available'}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {traders.map((t, idx) => {
-            // Show handle if available and not an address; otherwise format address nicely
             const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
             const isLongNumeric = (s: string) => /^\d{10,}$/.test(s)
             const formatAddr = (s: string) => `${s.slice(0, 6)}...${s.slice(-4)}`
@@ -159,6 +158,9 @@ export default function TopTraders() {
               : t.handle
                 ? formatId(t.handle)
                 : formatId(t.source_trader_id)
+            const roiStr = t.roi != null
+              ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%`
+              : null
             return (
               <Link
                 key={`${t.source}-${t.source_trader_id}`}
@@ -166,10 +168,10 @@ export default function TopTraders() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
-                  padding: '8px 6px',
+                  gap: 8,
+                  padding: '6px 4px',
                   textDecoration: 'none',
-                  borderRadius: tokens.radius.md,
+                  borderRadius: tokens.radius.sm,
                   transition: `background ${tokens.transition.fast}`,
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
@@ -178,64 +180,57 @@ export default function TopTraders() {
                 {/* Rank */}
                 <span
                   style={{
-                    fontSize: tokens.typography.fontSize.base,
-                    fontWeight: tokens.typography.fontWeight.extrabold,
-                    minWidth: 20,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    minWidth: 16,
                     textAlign: 'right',
                     color: idx < 3 ? RANK_COLORS[idx] : tokens.colors.text.tertiary,
+                    flexShrink: 0,
                   }}
                 >
                   {idx + 1}
                 </span>
 
-                {/* Avatar */}
-                <TraderAvatar name={displayName} avatarUrl={t.avatar_url} size={36} />
-
-                {/* Info */}
+                {/* Name + platform */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
-                      fontSize: tokens.typography.fontSize.sm,
-                      fontWeight: tokens.typography.fontWeight.semibold,
+                      fontSize: 12,
+                      fontWeight: 600,
                       color: tokens.colors.text.primary,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
+                      lineHeight: 1.3,
                     }}
                   >
                     {displayName}
                   </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 8,
-                      fontSize: tokens.typography.fontSize.xs,
-                      color: tokens.colors.text.tertiary,
-                      marginTop: 1,
-                    }}
-                  >
-                    <span>{PLATFORM_LABELS[t.source.toLowerCase()] || t.source}</span>
-                    {t.arena_score != null && (
-                      <span style={{ color: tokens.colors.text.secondary }}>
-                        {isZh ? '积分' : 'Score'} {t.arena_score.toFixed(0)}
-                      </span>
-                    )}
+                  <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, lineHeight: 1.3 }}>
+                    {PLATFORM_LABELS[t.source.toLowerCase()] || t.source}
                   </div>
                 </div>
 
-                {/* ROI */}
-                {t.roi != null && (
-                  <span
-                    style={{
-                      fontSize: tokens.typography.fontSize.xs,
-                      fontWeight: tokens.typography.fontWeight.semibold,
-                      color: t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {t.roi >= 0 ? '+' : ''}{t.roi.toFixed(1)}%
-                  </span>
-                )}
+                {/* ROI + Score (right aligned, stacked) */}
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  {roiStr && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: t.roi! >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {roiStr}
+                    </div>
+                  )}
+                  {t.arena_score != null && (
+                    <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, lineHeight: 1.3 }}>
+                      {isZh ? '分' : 'Pts'} {t.arena_score.toFixed(0)}
+                    </div>
+                  )}
+                </div>
               </Link>
             )
           })}
