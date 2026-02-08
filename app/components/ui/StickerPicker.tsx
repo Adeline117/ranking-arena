@@ -30,16 +30,17 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
   if (!isOpen) return null
 
   const containerStyle: CSSProperties = {
-    position: 'absolute',
-    bottom: 36,
-    right: 0,
+    position: 'fixed',
+    bottom: 80,
+    left: '50%',
+    transform: 'translateX(-50%)',
     background: tokens.colors.bg.secondary,
     border: `1px solid ${tokens.colors.border.primary}`,
     borderRadius: 12,
     padding: 8,
-    zIndex: 100,
-    boxShadow: tokens.shadow.lg,
-    width: 260,
+    zIndex: 9999,
+    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+    width: 300,
     maxHeight: 320,
     overflowY: 'auto',
   }

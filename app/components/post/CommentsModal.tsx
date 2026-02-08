@@ -560,9 +560,10 @@ export default function CommentsModal({
                 </button>
                 {showEmojiPicker && (
                   <div style={{
-                    position: 'absolute',
-                    bottom: 32,
-                    left: 0,
+                    position: 'fixed',
+                    bottom: 80,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
                     background: tokens.colors.bg.secondary,
                     border: `1px solid ${tokens.colors.border.primary}`,
                     borderRadius: 12,
@@ -570,10 +571,10 @@ export default function CommentsModal({
                     display: 'grid',
                     gridTemplateColumns: 'repeat(5, 1fr)',
                     gap: 4,
-                    zIndex: 100,
-                    boxShadow: tokens.shadow.lg,
-                    width: 280,
-                    maxHeight: 240,
+                    zIndex: 9999,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                    width: 300,
+                    maxHeight: 280,
                     overflowY: 'auto',
                   }}>
                     {STICKERS.map(sticker => (
