@@ -529,16 +529,6 @@ export default function RankingSection({
           />
         </Box>
 
-        {/* Exchange horizontal scroll filter */}
-        {!loading && dataSources.length > 1 && (
-          <ExchangeFilter
-            availableSources={dataSources}
-            selectedExchange={selectedExchange}
-            onExchangeChange={handleExchangeChange}
-            isPro={isPro}
-            onProRequired={() => router.push('/pricing')}
-          />
-        )}
         {/* 右侧: 操作按钮 */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
           {/* Copy Filter Link Button */}
