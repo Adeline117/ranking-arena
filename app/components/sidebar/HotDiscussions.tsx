@@ -19,7 +19,7 @@ type HotPost = {
 }
 
 export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
-  const { t, language } = useLanguage()
+  const { language } = useLanguage()
   const isZh = language === 'zh'
   const [posts, setPosts] = useState<HotPost[]>([])
   const [loading, setLoading] = useState(true)
