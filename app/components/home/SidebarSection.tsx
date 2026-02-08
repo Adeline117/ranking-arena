@@ -16,6 +16,7 @@ const PostFeed = lazy(() => import('../post/PostFeed'))
 const MarketPanel = lazy(() => import('./MarketPanel'))
 const SectorPerformance = lazy(() => import('../market/SectorPerformance'))
 const ExchangeVolume = lazy(() => import('../market/ExchangeVolume'))
+const LiveTradesFeed = lazy(() => import('../market/LiveTradesFeed'))
 
 interface SidebarSectionProps {
   position: 'left' | 'right'
@@ -105,6 +106,13 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
       <ErrorBoundary>
         <Suspense fallback={<SkeletonCard />}>
           <ExchangeVolume />
+        </Suspense>
+      </ErrorBoundary>
+
+      {/* 实时交易流 */}
+      <ErrorBoundary>
+        <Suspense fallback={<SkeletonCard />}>
+          <LiveTradesFeed />
         </Suspense>
       </ErrorBoundary>
     </Box>
