@@ -43,9 +43,16 @@ function RankChangeIndicator({ rankChange, isNew }: { rankChange?: number | null
   }
 
   if (rankChange != null && rankChange !== 0) {
-    const color = rankChange > 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR
-    const text = rankChange > 0 ? `+${rankChange}` : String(rankChange)
-    return <span style={{ ...indicatorStyle, color }}>{text}</span>
+    // Positive rankChange = moved up in ranking (green arrow up)
+    // Negative rankChange = moved down (red arrow down)
+    const isUp = rankChange > 0
+    const color = isUp ? tokens.colors.accent.success : TRADER_ACCENT_ERROR
+    const arrow = isUp ? '\u25B2' : '\u25BC'
+    return (
+      <span style={{ ...indicatorStyle, color, display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+        {arrow}{Math.abs(rankChange)}
+      </span>
+    )
   }
 
   return null

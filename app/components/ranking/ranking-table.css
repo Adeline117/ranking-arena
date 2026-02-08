@@ -41,6 +41,33 @@
   animation: medalGlowBronze 2s ease-in-out infinite;
 }
 
+/* Sort reorder animation — rows fade in when sort changes */
+@keyframes rowFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ranking-row-link {
+  animation: rowFadeIn 0.3s ease-out both;
+}
+
+/* Staggered delay for first 20 rows */
+.ranking-row-link:nth-child(1) { animation-delay: 0ms; }
+.ranking-row-link:nth-child(2) { animation-delay: 15ms; }
+.ranking-row-link:nth-child(3) { animation-delay: 30ms; }
+.ranking-row-link:nth-child(4) { animation-delay: 45ms; }
+.ranking-row-link:nth-child(5) { animation-delay: 60ms; }
+.ranking-row-link:nth-child(6) { animation-delay: 75ms; }
+.ranking-row-link:nth-child(7) { animation-delay: 90ms; }
+.ranking-row-link:nth-child(8) { animation-delay: 105ms; }
+.ranking-row-link:nth-child(9) { animation-delay: 120ms; }
+.ranking-row-link:nth-child(10) { animation-delay: 135ms; }
+
+/* Sort header flash feedback */
+.sort-header.just-sorted {
+  color: var(--color-accent-primary, #6366f1) !important;
+}
+
 /* 普通行样式 */
 /* Compare checkbox: show on row hover */
 .ranking-row:hover .compare-checkbox-cell,
