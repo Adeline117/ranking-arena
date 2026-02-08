@@ -506,6 +506,56 @@ export default function OverviewPerformanceCard({
                 <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary }}>
                   {t('scoreBreakdown')}
                 </Text>
+                {/* Score explanation tooltip */}
+                <Box
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: tokens.colors.bg.tertiary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    cursor: 'help',
+                    flexShrink: 0,
+                  }}
+                  className="score-tooltip-trigger"
+                >
+                  <Text size="xs" style={{ color: tokens.colors.text.tertiary, fontSize: 11, fontWeight: 700, lineHeight: 1 }}>?</Text>
+                  <Box
+                    className="score-tooltip-content"
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      marginTop: 8,
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      background: tokens.colors.bg.primary,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      borderRadius: tokens.radius.lg,
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                      width: 280,
+                      zIndex: 50,
+                      display: 'none',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <Text size="xs" weight="bold" style={{ color: tokens.colors.text.secondary, marginBottom: 4, display: 'block' }}>
+                      {t('scoreGuide')}
+                    </Text>
+                    <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
+                      {t('scoreGuideDetail')}
+                    </Text>
+                  </Box>
+                  <style>{`
+                    .score-tooltip-trigger:hover .score-tooltip-content {
+                      display: block !important;
+                    }
+                  `}</style>
+                </Box>
                 {/* Arena Score 总分 */}
                 <Box style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                   {arenaScoreV3 != null && (
@@ -628,23 +678,7 @@ export default function OverviewPerformanceCard({
                 </Box>
               )}
 
-              {/* 评分说明 */}
-              <Box
-                style={{
-                  marginTop: tokens.spacing[4],
-                  padding: tokens.spacing[3],
-                  background: tokens.colors.bg.tertiary,
-                  borderRadius: tokens.radius.md,
-                  borderLeft: `3px solid ${tokens.colors.accent.warning}40`,
-                }}
-              >
-                <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
-                  <strong style={{ color: tokens.colors.text.secondary }}>
-                    {t('scoreGuide')}
-                  </strong><br />
-                  {t('scoreGuideDetail')}
-                </Text>
-              </Box>
+              {/* Score explanation removed - now in tooltip on header */}
             </Box>
           )}
         </Box>

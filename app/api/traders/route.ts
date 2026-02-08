@@ -166,10 +166,10 @@ async function fetchFromLeaderboard(
 
   // Available sources (for UI filter)
   // Only fetch distinct sources once per timeRange (cached via outer cache)
+  // Fetch sources across all seasons so newly-computed platforms always appear
   const { data: sourceRows } = await supabase
     .from('leaderboard_ranks')
     .select('source')
-    .eq('season_id', timeRange)
 
   const availableSources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort()
 
