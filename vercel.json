@@ -46,10 +46,6 @@
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/cron/refresh-hot-scores",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/calculate-tiers",
       "schedule": "*/15 * * * *"
     },
@@ -80,10 +76,6 @@
     {
       "path": "/api/cron/aggregate-daily-snapshots",
       "schedule": "5 0 * * *"
-    },
-    {
-      "path": "/api/trader/sync",
-      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/fetch-funding-rates",

@@ -93,9 +93,9 @@ export default function FollowingFeed() {
         textAlign: 'center', padding: '60px 20px',
         color: tokens.colors.text.secondary,
       }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>--</div>
+        <img src="/stickers/happy.png" alt="" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
         <p style={{ fontSize: 16, marginBottom: 8 }}>
-          {isZh ? '你还没有关注任何人' : "You haven't followed anyone yet"}
+          {isZh ? '关注你感兴趣的交易员' : "You haven't followed anyone yet"}
         </p>
         <p style={{ fontSize: 13 }}>
           {isZh ? '去排行榜发现有趣的交易员吧' : 'Discover interesting traders on the leaderboard'}

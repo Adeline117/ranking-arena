@@ -94,8 +94,11 @@ export default function RecommendedGroups() {
           {isZh ? '加载失败' : 'Failed to load'}
         </div>
       ) : groups.length === 0 ? (
-        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {isZh ? '暂无小组' : 'No groups available'}
+        <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+          <img src="/stickers/confused.png" alt="" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
+          <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
+            {isZh ? '暂无小组' : 'No groups available'}
+          </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
