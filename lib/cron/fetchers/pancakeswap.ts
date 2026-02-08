@@ -92,17 +92,12 @@ export const fetchPancakeSwap: (
         win_rate: null,
         max_drawdown: null,
         trades_count: d.count,
-        arena_score: calculateArenaScore({
-          roi: null,
-          pnl: null,
-          win_rate: null,
-          max_drawdown: null,
-        }),
+        arena_score: calculateArenaScore(0, null, null, null, period),
         captured_at: new Date().toISOString(),
       }))
 
-      const saved = await upsertTraders(supabase, traders)
-      result.periods[period] = { total: traders.length, saved }
+      const upsertResult = await upsertTraders(supabase, traders)
+      result.periods[period] = { total: traders.length, saved: upsertResult.saved }
     } catch (err) {
       result.periods[period] = {
         total: 0,
