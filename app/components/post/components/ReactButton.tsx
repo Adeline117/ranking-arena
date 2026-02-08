@@ -75,8 +75,8 @@ export function ReactButton({
       <span
         style={{
           display: 'inline-flex',
-          transition: 'transform 0.2s ease',
-          transform: active ? 'scale(1.15)' : isAnimating ? 'scale(1.3)' : 'scale(1)',
+          transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          transform: isAnimating ? 'scale(1.5)' : active ? 'scale(1.15)' : 'scale(1)',
         }}
       >
         {icon}

@@ -10,9 +10,9 @@ interface SubNavProps {
   onTabChange: (tab: SubNavTab) => void
 }
 
-const TABS: { key: SubNavTab; zhLabel: string; enLabel: string; icon: string }[] = [
+const TABS: { key: SubNavTab; zhLabel: string; enLabel: string; icon: string; zhSub?: string; enSub?: string }[] = [
   { key: 'following', zhLabel: '关注', enLabel: 'Following', icon: '' },
-  { key: 'recommended', zhLabel: '推荐', enLabel: 'Recommended', icon: '' },
+  { key: 'recommended', zhLabel: '热榜', enLabel: 'Hot', icon: '', zhSub: '全站热门帖子', enSub: 'Trending posts' },
   { key: 'bookshelf', zhLabel: '书架', enLabel: 'Library', icon: '' },
 ]
 
@@ -48,6 +48,18 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
             }}
           >
             {tab.icon} {isZh ? tab.zhLabel : tab.enLabel}
+            {tab.zhSub && (
+              <span style={{
+                display: 'block',
+                fontSize: 10,
+                fontWeight: 400,
+                color: isActive ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+                marginTop: 1,
+                opacity: 0.8,
+              }}>
+                {isZh ? tab.zhSub : tab.enSub}
+              </span>
+            )}
           </button>
         )
       })}

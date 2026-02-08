@@ -163,6 +163,11 @@ export default function NewGroupPostPage(): React.ReactElement {
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoUploadProgress, setVideoUploadProgress] = useState(0)
 
+  // Link preview state (UF15)
+  const [linkPreview, setLinkPreview] = useState<{ url: string; title: string; description: string; image: string } | null>(null)
+  const [linkPreviewLoading, setLinkPreviewLoading] = useState(false)
+  const linkPreviewUrlRef = useRef<string | null>(null)
+
   // Poll state
   const [pollEnabled, setPollEnabled] = useState(false)
   const [pollOptions, setPollOptions] = useState<PollOption[]>([

@@ -42,6 +42,12 @@
 }
 
 /* 普通行样式 */
+/* Compare checkbox: show on row hover */
+.ranking-row:hover .compare-checkbox-cell,
+.ranking-row .compare-checkbox-cell[style*="opacity: 1"] {
+  opacity: 1 !important;
+}
+
 .ranking-row {
   transition: all 0.2s ease;
 }

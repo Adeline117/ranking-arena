@@ -44,6 +44,24 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           fontSize="md"
           priority={priority}
         />
+        {/* Permission badge */}
+        <span style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          fontSize: 10,
+          fontWeight: 700,
+          padding: '2px 8px',
+          borderRadius: tokens.radius.full,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          ...(item.is_free
+            ? { background: 'rgba(16, 185, 129, 0.85)', color: '#fff' }
+            : { background: 'rgba(139, 92, 246, 0.85)', color: '#fff' }),
+          zIndex: 1,
+        }}>
+          {item.is_free ? (isZh ? '免费' : 'Free') : 'Pro'}
+        </span>
       </div>
 
       {/* Info */}
@@ -70,11 +88,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
                 : item.subcategory}
             </span>
           )}
-          {!item.is_free && (
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: tokens.radius.full, background: '#f59e0b18', color: '#f59e0b', fontWeight: 600 }}>
-              Paid
-            </span>
-          )}
+          {/* Permission label moved to cover badge */}
         </div>
 
         {/* Title */}

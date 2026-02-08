@@ -40,7 +40,7 @@ const MENU_LINK_STYLE: React.CSSProperties = {
 }
 
 export default function TopNav({ email = null }: { email?: string | null }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const pathname = usePathname()
   const router = useRouter()
   const { userId: authUserId, isLoggedIn: authLoggedIn, authChecked } = useAuthSession()
@@ -361,11 +361,11 @@ export default function TopNav({ email = null }: { email?: string | null }) {
           {/* 导航链接 - 移动端隐藏 */}
           <Box as="nav" className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             {[
-              { href: '/', labelKey: 'rankings' as const },
-              { href: '/groups', labelKey: 'groups' as const },
-              { href: '/hot', labelKey: 'hot' as const },
-              { href: '/library', labelKey: 'library' as const },
-              { href: '/compare', labelKey: 'compare' as const },
+              { href: '/', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
+              { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
+              { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
+              { href: '/library', labelKey: 'library' as const, tooltip: undefined as string | undefined },
+              { href: '/compare', labelKey: 'compare' as const, tooltip: undefined as string | undefined },
             ].map((item) => {
               const label = t(item.labelKey)
               const isActive = pathname === item.href || (item.href === '/' && pathname === '/')
@@ -374,6 +374,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   key={item.href}
                   href={item.href}
                   className={`top-nav-link${isActive ? ' top-nav-link-active' : ''}`}
+                  title={item.tooltip}
                   onClick={() => {
                     // Trigger feed refresh when clicking groups link while already on groups page
                     if (item.href === '/groups' && isActive) {

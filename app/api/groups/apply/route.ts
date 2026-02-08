@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       member: { ...defaultRoleNames.member, ...role_names.member }
     } : defaultRoleNames
 
-    // 创建申请
+    // 创建申请 (auto-approved)
     const { data: application, error: insertError } = await supabase
       .from('group_applications')
       .insert({
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         rules_json: rules_json || null,
         rules: rules?.trim() || null,
         is_premium_only: is_premium_only || false,
-        status: 'pending'
+        status: 'approved'
       })
       .select()
       .single()
@@ -131,10 +131,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '申请提交失败' }, { status: 500 })
     }
 
+    // Auto-create the group immediately
+    const slug = name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-|-$/g, '') || `group-${Date.now()}`
+    const { data: newGroup, error: groupError } = await supabase
+      .from('groups')
+      .insert({
+        name: name.trim(),
+        name_en: name_en?.trim() || null,
+        description: description?.trim() || null,
+        description_en: description_en?.trim() || null,
+        avatar_url: avatar_url || null,
+        slug,
+        created_by: user.id,
+        role_names: finalRoleNames,
+        rules_json: rules_json || null,
+        rules: rules?.trim() || null,
+        is_premium_only: is_premium_only || false,
+      })
+      .select('id')
+      .single()
+
+    if (!groupError && newGroup) {
+      // Add creator as admin member
+      await supabase.from('group_members').insert({
+        group_id: newGroup.id,
+        user_id: user.id,
+        role: 'admin',
+      })
+    }
+
     return NextResponse.json({
       success: true,
-      message: '申请已提交，请等待管理员审核',
-      application
+      message: '小组创建成功！',
+      application,
+      group: newGroup || null,
     })
 
   } catch (error: unknown) {
