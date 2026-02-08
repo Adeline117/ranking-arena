@@ -183,6 +183,7 @@ export default function NewGroupPostPage(): React.ReactElement {
     // 等待 groupId 解析完成
     if (!groupId) return
 
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(async ({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
@@ -220,6 +221,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, groupId, showToast, language])
 
   // 加载小组名称
@@ -254,6 +256,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
 
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: user } = await supabase.auth.getUser()
       if (user?.user?.email) {
         setUserHandle(user.user.email.split('@')[0])

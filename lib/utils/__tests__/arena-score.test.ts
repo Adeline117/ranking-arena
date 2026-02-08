@@ -17,7 +17,7 @@ import {
   calculateOverallScore,
   calculateMomentumBonus,
   rankByArenaScore,
-  getScoreConfidence,
+  get
   ARENA_CONFIG,
   type TraderScoreInput,
   type ScoreConfidence,

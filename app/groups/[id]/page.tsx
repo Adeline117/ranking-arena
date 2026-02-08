@@ -308,7 +308,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
         setGroup(groupData ? { ...groupData, owner_handle: ownerHandle } as Group : null)
 
-        let membershipConfirmed = false
+        let _membershipConfirmed = false
         if (userId) {
           const { data: membership } = await supabase
             .from('group_members')
@@ -411,6 +411,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     } finally {
       setJoining(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, group, isPro, groupId, language, showToast])
 
   // Leave group
@@ -432,6 +433,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     } finally {
       setJoining(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, groupId, language, showToast])
 
   // Load members

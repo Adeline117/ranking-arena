@@ -45,6 +45,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       setError(null)
 
       // 检查用户是否已登录
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         setError(t('pleaseLogin'))
@@ -96,6 +97,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     setSyncing(exchange)
 
     try {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLogin'), 'warning')
@@ -135,6 +137,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     }
 
     try {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLogin'), 'warning')

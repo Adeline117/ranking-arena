@@ -29,7 +29,7 @@ export const options = {
 
 const BASE_URL = 'https://ranking-arena.vercel.app';
 
-export default function () {
+export default function main() {
   // 1. 首页
   let res = http.get(`${BASE_URL}/`);
   let success = check(res, {

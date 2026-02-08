@@ -31,6 +31,7 @@ export default function MarketPanel() {
   const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
       if (data.user?.id) {
@@ -38,7 +39,7 @@ export default function MarketPanel() {
         loadCustomPairs(data.user.id)
       }
     })
-  }, [])
+  }, [loadCustomPairs])
 
   const loadCustomPairs = async (uid: string) => {
     try {

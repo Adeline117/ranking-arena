@@ -39,6 +39,7 @@ export default function MessageButton({
   const { mutate, isLoading } = useApiMutation<StartMessageResponse, void>(
     async () => {
       // Get fresh access token for auth
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       const headers: Record<string, string> = {}

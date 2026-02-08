@@ -85,7 +85,7 @@ const params = {
 };
 
 // 高频访问场景 - 模拟行情暴涨时用户疯狂刷新
-export default function () {
+export default function main() {
   const scenarios = [
     // 50% 用户疯狂刷新首页
     { weight: 50, fn: refreshHomepage },

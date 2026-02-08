@@ -41,7 +41,7 @@ export const options = {
 const BASE_URL = 'https://ranking-arena.vercel.app';
 
 // 模拟真实用户行为
-export default function () {
+export default function main() {
   // 场景 1: 新用户访问首页并浏览排行榜
   group('新用户浏览', () => {
     // 访问首页

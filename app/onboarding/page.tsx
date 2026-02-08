@@ -84,6 +84,7 @@ export default function OnboardingPage() {
     }
 
     // Check if logged in user has completed onboarding
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
         setUserId(data.user.id)

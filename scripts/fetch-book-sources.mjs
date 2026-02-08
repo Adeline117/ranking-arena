@@ -8,7 +8,7 @@ const HEADERS = { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type
 
 import fs from 'fs';
 const PROGRESS_FILE = '/Users/adelinewen/ranking-arena/scripts/.book-source-progress.json';
-const CONCURRENCY = 5; // parallel Google Books requests
+const CONCURRENCY = 10; // parallel Google Books requests
 
 function loadProgress() {
   try { return JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8')); }
@@ -72,38 +72,47 @@ async function processOne(book, hasIsbn, stats) {
   }
 }
 
+async function fetchAllBookIds(hasIsbn) {
+  // Fetch ALL book IDs first, then process them
+  const all = [];
+  let offset = 0;
+  const BATCH = 1000;
+  while (true) {
+    let url = `${SUPABASE_URL}/rest/v1/library_items?category=eq.book&pdf_url=is.null&select=id,title,author,isbn&order=id&offset=${offset}&limit=${BATCH}`;
+    url += hasIsbn ? '&isbn=not.is.null' : '&isbn=is.null';
+    const res = await fetch(url, { headers: HEADERS });
+    const books = await res.json();
+    if (!books.length) break;
+    all.push(...books);
+    offset += BATCH;
+    console.log(`  Fetched ${all.length} book IDs...`);
+  }
+  return all;
+}
+
 async function processBooks(hasIsbn) {
   const progress = loadProgress();
   const processedSet = new Set(progress.processedSet);
   const stats = progress.stats;
   const label = hasIsbn ? 'ISBN' : 'TITLE';
-  const BATCH = 500;
-  let offset = 0;
 
-  while (true) {
-    const books = await fetchBooks(offset, BATCH, hasIsbn);
-    if (!books.length) break;
+  console.log(`  Loading all book IDs...`);
+  const allBooks = await fetchAllBookIds(hasIsbn);
+  const todo = allBooks.filter(b => !processedSet.has(b.id));
+  console.log(`  ${todo.length} books to process (${allBooks.length} total, ${processedSet.size} already done)`);
+
+  for (let i = 0; i < todo.length; i += CONCURRENCY) {
+    const chunk = todo.slice(i, i + CONCURRENCY);
+    await Promise.all(chunk.map(b => processOne(b, hasIsbn, stats)));
+    chunk.forEach(b => processedSet.add(b.id));
     
-    // Filter already processed
-    const todo = books.filter(b => !processedSet.has(b.id));
-    if (!todo.length) { offset += BATCH; continue; }
-    
-    // Process in chunks of CONCURRENCY
-    for (let i = 0; i < todo.length; i += CONCURRENCY) {
-      const chunk = todo.slice(i, i + CONCURRENCY);
-      await Promise.all(chunk.map(b => processOne(b, hasIsbn, stats)));
-      chunk.forEach(b => processedSet.add(b.id));
-      
-      if (stats.total % 100 === 0) {
-        progress.processedSet = processedSet;
-        saveProgress(progress);
-        console.log(`[${label}] ${stats.total} processed | Found: ${stats.found} | Partial: ${stats.partial} | All: ${stats.all_pages} | NoMatch: ${stats.not_found} | Err: ${stats.errors}`);
-      }
-      
-      await sleep(200); // ~5 req per 200ms = effective rate limit
+    if (stats.total % 50 === 0) {
+      progress.processedSet = processedSet;
+      saveProgress(progress);
+      console.log(`[${label}] ${stats.total} processed | Found: ${stats.found} | Partial: ${stats.partial} | All: ${stats.all_pages} | NoMatch: ${stats.not_found} | Err: ${stats.errors}`);
     }
     
-    offset += BATCH;
+    await sleep(200);
   }
   
   progress.processedSet = processedSet;
@@ -127,10 +136,7 @@ async function verifyArxivPdfs() {
 }
 
 async function main() {
-  // Remove old progress to start fresh since we changed the approach
-  try { fs.unlinkSync(PROGRESS_FILE); } catch {}
-  
-  console.log('=== Phase 1: Books with ISBN (851) ===');
+  console.log('=== Phase 1: Books with ISBN ===');
   await processBooks(true);
   
   console.log('\n=== Phase 2: Books by title+author (28,697) ===');

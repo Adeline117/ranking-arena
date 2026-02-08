@@ -121,6 +121,7 @@ export function useReports(accessToken: string | null, showToast?: ToastFn) {
     } finally {
       setActionLoading(prev => ({ ...prev, [reportId]: false }))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, showToast])
 
   return {

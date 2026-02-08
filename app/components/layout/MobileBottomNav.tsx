@@ -141,6 +141,7 @@ function useUserHandle(): string | null {
   useEffect(() => {
     let alive = true
 
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser()
       .then(({ data, error }) => {
         if (!alive || error) return

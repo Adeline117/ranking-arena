@@ -10,12 +10,9 @@ import {
   ActivityTier,
   TraderActivity,
   ScheduledJob,
-  classifyActivityTier,
   scheduleTraderBatch,
-  shouldRefresh,
   getNextScheduledTime,
   getTierStats,
-  TIER_SCHEDULES,
 } from './smart-scheduler'
 import { createLogger } from '../utils/logger'
 

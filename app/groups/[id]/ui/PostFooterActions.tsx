@@ -33,6 +33,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
     setLoading(true)
     try {
       // 获取用户 session
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
 

@@ -24,10 +24,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   type FetchResult,
   type TraderData,
-  calculateArenaScore,
-  upsertTraders,
-  fetchJson,
-  sleep,
 } from './shared'
 
 const SOURCE = 'vertex'

@@ -56,6 +56,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
   const isZh = language === 'zh'
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
     })

@@ -36,6 +36,7 @@ function ExchangeAuthCallbackContent() {
       }
 
       try {
+        // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
           setStatus('error')

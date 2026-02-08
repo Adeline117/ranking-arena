@@ -62,6 +62,7 @@ function lsSet(key: string, value: unknown) {
 // UF20: Server-side reading progress sync
 async function syncProgressToServer(bookId: string, page: number, totalPages: number) {
   try {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) return
     await supabase.from('reading_progress').upsert({
@@ -76,6 +77,7 @@ async function syncProgressToServer(bookId: string, page: number, totalPages: nu
 
 async function loadProgressFromServer(bookId: string): Promise<{ page: number; total: number } | null> {
   try {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) return null
     const { data } = await supabase
@@ -169,6 +171,7 @@ export default function ReadPage() {
   useEffect(() => {
     if (!id) return
     setLoading(true)
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user))
 
     fetch(`/api/library/${id}`)
@@ -211,6 +214,7 @@ export default function ReadPage() {
   const handleAddToShelf = useCallback(async () => {
     if (!id || !isLoggedIn) return
     try {
+      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       const res = await fetch(`/api/library/${id}/status`, {
@@ -270,7 +274,7 @@ export default function ReadPage() {
 
     loadPdf()
     return () => { cancelled = true }
-  }, [book, isZh, id])
+  }, [book, isZh, id, extractToc])
 
   async function extractToc(doc: any, outline: any[], level: number): Promise<TocItem[]> {
     const items: TocItem[] = []
@@ -407,7 +411,7 @@ export default function ReadPage() {
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [goNext, goPrev, goToPage, totalPages])
+  }, [goNext, goPrev, goToPage, totalPages, toggleFullscreen])
 
   // Touch swipe
   const handleTouchStart = useCallback((e: React.TouchEvent) => {

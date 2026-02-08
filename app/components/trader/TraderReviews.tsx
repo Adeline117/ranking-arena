@@ -18,7 +18,7 @@ import type { Review, ReviewSummary } from '@/lib/data/reviews'
 
 interface TraderReviewsProps {
   traderId: string
-  traderHandle: string
+  _traderHandle: string
 }
 
 type SortMode = 'newest' | 'top'
@@ -388,6 +388,7 @@ function ReviewForm({
   const [accessToken, setAccessToken] = useState<string | null>(null)
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getSession().then(({ data }) => {
       setAccessToken(data.session?.access_token ?? null)
     })
@@ -514,9 +515,11 @@ export default function TraderReviews({ _traderId, traderHandle }: TraderReviews
 
   // Auth
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getSession().then(({ data }) => {
       setAccessToken(data.session?.access_token ?? null)
     })
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setCurrentUserId(data.user?.id ?? null)
     })

@@ -223,7 +223,7 @@ export function usePostTranslation(options: UsePostTranslationOptions): UsePostT
     } finally {
       setTranslatingList(false)
     }
-  }, [accessToken, targetLanguage, onToast, removeImageMarkdown])
+  }, [accessToken, targetLanguage, removeImageMarkdown])
 
   // Translate comments (batch)
   const translateComments = useCallback(async (

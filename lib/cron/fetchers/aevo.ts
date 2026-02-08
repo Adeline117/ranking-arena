@@ -11,7 +11,6 @@ import {
   calculateArenaScore,
   upsertTraders,
   fetchJson,
-  sleep,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 

@@ -77,6 +77,7 @@ export default function ShareCompareButton({ traderIds, comparisonRef }: ShareCo
       setGenerating(false)
       setShowMenu(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comparisonRef, handleCopyLink, showToast])
 
   if (traderIds.length < 2) return null

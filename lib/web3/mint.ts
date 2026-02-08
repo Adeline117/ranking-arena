@@ -10,7 +10,6 @@ import {
   http,
   type Address,
   type Hash,
-  parseEther,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { baseChain, baseRpcUrl, CONTRACT_ADDRESSES, basePublicClient } from './contracts'

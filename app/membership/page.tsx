@@ -56,7 +56,7 @@ export default function MembershipPage() {
     }
 
     fetchMembershipInfo()
-  }, [isLoggedIn, authLoading])
+  }, [isLoggedIn, authLoading, fetchMembershipInfo, router])
 
   async function fetchMembershipInfo() {
     try {

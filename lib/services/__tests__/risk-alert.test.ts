@@ -4,10 +4,6 @@
 
 import {
   RiskAlertService,
-  AlertType,
-  AlertSeverity,
-  RiskAlert,
-  AlertConfig,
   DEFAULT_THRESHOLDS,
   getSeverity,
   formatAlertMessage,

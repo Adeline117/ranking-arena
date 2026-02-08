@@ -220,6 +220,7 @@ function ResetPasswordContent() {
       setIsResetMode(true)
     }
 
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsResetMode(true)

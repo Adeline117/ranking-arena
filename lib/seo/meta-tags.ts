@@ -335,7 +335,7 @@ export function generateTraderJsonLd(trader: NonNullable<PageMetaOptions['trader
   }
 }
 
-export default {
+const metaTags = {
   generateHomeMetadata,
   generateRankingsMetadata,
   generateTraderMetadata,
@@ -344,3 +344,5 @@ export default {
   generateWebsiteJsonLd,
   generateTraderJsonLd,
 }
+
+export default metaTags;

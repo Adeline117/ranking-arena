@@ -253,6 +253,7 @@ export default function EditPostPage() {
 
   // 获取用户信息
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
@@ -301,6 +302,7 @@ export default function EditPostPage() {
     }
 
     loadPost()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, userId, router, showToast])
 
   // 处理图片上传

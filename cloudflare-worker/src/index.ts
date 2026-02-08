@@ -40,7 +40,8 @@ const ALLOWED_HOSTS = [
   'indexer.v4testnet.dydx.exchange',
 ];
 
-export default {
+const worker = {
+
   async fetch(request: Request, env: Env): Promise<Response> {
     // CORS 预检
     if (request.method === 'OPTIONS') {
@@ -567,3 +568,5 @@ async function handleDydxSubaccount(request: Request, url: URL): Promise<Respons
     });
   }
 }
+
+export default worker;

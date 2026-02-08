@@ -40,6 +40,7 @@ function SearchContent() {
   const [traderTotal, setTraderTotal] = useState(0)
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
     })

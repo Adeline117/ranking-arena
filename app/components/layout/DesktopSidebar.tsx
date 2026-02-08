@@ -56,6 +56,7 @@ export default function DesktopSidebar() {
 
   useEffect(() => {
     let alive = true
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       if (!alive) return
       const userId = data.user?.id

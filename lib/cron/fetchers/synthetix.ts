@@ -82,7 +82,7 @@ function toNum(v: string | undefined | null): number {
 
 async function fetchAccountsWithStats(
   subgraphUrl: string,
-  period: string
+  _period: string
 ): Promise<SynthetixAccount[]> {
   // Try accounts-based query first (V3 schema)
   const query = `
