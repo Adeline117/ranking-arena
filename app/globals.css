@@ -1426,3 +1426,234 @@ input[type="search"]::-webkit-search-cancel-button {
 input[type="search"]::-webkit-search-cancel-button:hover {
   opacity: 1;
 }
+
+/* ============================================
+   Print Styles
+   ============================================ */
+
+@media print {
+  /* Hide non-essential UI */
+  nav,
+  header,
+  footer,
+  .three-col-left,
+  .three-col-right,
+  .top-nav,
+  .fixed-header,
+  .fixed-nav,
+  .mobile-nav,
+  .scroll-to-top,
+  .cookie-consent,
+  .compare-floating-bar,
+  .network-status-banner,
+  .welcome-guide,
+  .pro-feature-teaser,
+  .pull-to-refresh-indicator,
+  [role="navigation"],
+  [role="complementary"] {
+    display: none !important;
+  }
+
+  /* Reset backgrounds and colors for print */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12pt;
+    line-height: 1.4;
+  }
+
+  /* Full-width center column */
+  .three-col-layout {
+    display: block !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .three-col-center {
+    min-height: auto !important;
+  }
+
+  /* Table-friendly ranking styles */
+  .ranking-table-container {
+    overflow: visible !important;
+  }
+
+  .ranking-row,
+  .ranking-table-grid {
+    contain: initial !important;
+    content-visibility: visible !important;
+    break-inside: avoid;
+  }
+
+  .glass-card,
+  .sidebar-card,
+  .card-hover {
+    background: #fff !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    break-inside: avoid;
+  }
+
+  /* Links show URL */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 10pt;
+    color: #666;
+    word-break: break-all;
+  }
+
+  /* Remove decorative elements */
+  .texture-noise::before,
+  .skeleton {
+    display: none !important;
+  }
+
+  /* No shadows or transforms */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================
+   Reduced Motion — comprehensive
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Ensure view transitions are instant */
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-old(page-content),
+  ::view-transition-new(page-content) {
+    animation: none !important;
+  }
+
+  /* Theme transition override */
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition: none !important;
+  }
+
+  /* Skeleton should not shimmer */
+  .skeleton {
+    animation: none !important;
+    background-image: none !important;
+  }
+
+  /* Scroll ticker stays still */
+  .scroll-ticker {
+    animation: none !important;
+    will-change: auto !important;
+  }
+}
+
+/* ============================================
+   System Theme Detection
+   ============================================ */
+
+/* When no data-theme is set, follow system preference */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+  }
+  html:not([data-theme]) body {
+    background: #0B0A10;
+    color: #EDEDED;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  html:not([data-theme]) {
+    color-scheme: light;
+  }
+  html:not([data-theme]) body {
+    background: #FFFFFF;
+    color: #1A1A1A;
+  }
+}
+
+/* Explicit theme color-scheme hints for browser UI */
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* ============================================
+   Touch Device Optimization
+   ============================================ */
+
+@media (hover: none) {
+  /* Remove hover effects that cause sticky states on touch */
+  .hover-lift:hover {
+    transform: none !important;
+    box-shadow: var(--shadow-card) !important;
+  }
+
+  .glass-card:hover {
+    transform: none !important;
+    box-shadow: var(--shadow-card), var(--shadow-inset-subtle) !important;
+    border-color: var(--glass-border-light) !important;
+  }
+
+  .card-hover:hover {
+    transform: none !important;
+    box-shadow: var(--shadow-card), var(--shadow-border-glow) !important;
+  }
+
+  .sidebar-card:hover {
+    border-color: var(--color-border-primary) !important;
+    box-shadow: var(--shadow-card), var(--shadow-inset-subtle) !important;
+  }
+
+  .book-shadow:hover {
+    transform: none !important;
+  }
+
+  .top-nav-logo-link:hover,
+  .top-nav-link:not(.top-nav-link-active):hover,
+  .top-nav-login-link:hover {
+    transform: none !important;
+  }
+
+  .top-nav-search-input:focus {
+    transform: none !important;
+  }
+
+  .btn-base:not(:disabled):hover {
+    transform: none !important;
+  }
+
+  .pro-feature-teaser-cta:hover {
+    transform: none !important;
+  }
+
+  .ranking-row-hover:hover {
+    background-color: transparent !important;
+  }
+
+  /* Keep active/press feedback for touch — it's intentional */
+  .btn-base:not(:disabled):active {
+    transform: scale(0.97) !important;
+  }
+
+  .glass-card:active {
+    transform: scale(0.98) !important;
+  }
+}
