@@ -215,28 +215,8 @@ function GroupsWaterfall() {
 
   return (
     <div>
-      {/* Search + Tabs */}
+      {/* Tabs */}
       <div style={{ marginBottom: tokens.spacing[5] }}>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={language === 'zh' ? '搜索小组...' : 'Search groups...'}
-          className="touch-target"
-          style={{
-            width: '100%',
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            borderRadius: tokens.radius.lg,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            background: tokens.glass.bg.light,
-            color: tokens.colors.text.primary,
-            fontSize: tokens.typography.fontSize.base,
-            marginBottom: tokens.spacing[3],
-            outline: 'none',
-            minHeight: 44,
-          }}
-        />
-
         <div style={{ display: 'flex', gap: tokens.spacing[1], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, padding: 3 }}>
           {(['all', 'mine', 'hot'] as const).map(tab => (
             <button
