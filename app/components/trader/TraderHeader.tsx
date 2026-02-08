@@ -13,6 +13,7 @@ import { EXCHANGE_NAMES, EXCHANGE_CONFIG, type RoiType } from '@/lib/constants/e
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
@@ -308,6 +309,7 @@ export default function TraderHeader({
   const [avatarHovered, setAvatarHovered] = useState(false)
   const router = useRouter()
   const { t } = useLanguage()
+  const { showToast } = useToast()
 
   useEffect(() => {
     setMounted(true)
@@ -645,6 +647,20 @@ export default function TraderHeader({
           />
         )}
 
+        {!isOwnProfile && (
+          <ActionButton
+            onClick={() => router.push(`/compare?ids=${traderId}`)}
+            variant="ghost"
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+            }
+          >
+            {t('compare')}
+          </ActionButton>
+        )}
+
         <ActionButton
           onClick={() => {
             const url = `${window.location.origin}/trader/${encodeURIComponent(handle)}`
@@ -652,7 +668,7 @@ export default function TraderHeader({
               navigator.share({ title: `${handle} - Arena`, url }).catch(() => {})
             } else {
               navigator.clipboard.writeText(url).then(() => {
-                // Brief visual feedback handled by button text
+                showToast(t('linkCopied'), 'success')
               }).catch(() => {})
             }
           }}

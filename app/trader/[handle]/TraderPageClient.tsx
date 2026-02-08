@@ -329,7 +329,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                             textAlign: 'center',
                           }}>
                             <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                              🔒 {language === 'zh' ? '注册查看完整历史数据' : 'Sign up to view full history'}
+                              {language === 'zh' ? '注册查看完整历史数据' : 'Sign up to view full history'}
                             </Text>
                           </Box>
                         </Link>

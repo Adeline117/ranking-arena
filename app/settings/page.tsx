@@ -75,7 +75,7 @@ function ExchangeBindingBanner({ userId }: { userId: string | null }) {
       </Box>
       <Box style={{ flex: 1 }}>
         <Text size="sm" weight="bold" style={{ marginBottom: 4 }}>
-          {language === 'zh' ? '🔗 绑定你的交易所账号' : '🔗 Connect your exchange account'}
+          {language === 'zh' ? '绑定你的交易所账号' : 'Connect your exchange account'}
         </Text>
         <Text size="xs" color="tertiary">
           {language === 'zh'

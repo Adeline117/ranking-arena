@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import { ButtonSpinner } from '../ui/LoadingSpinner'
 import { ThumbsUpIcon, ThumbsDownIcon } from '../ui/icons'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -677,7 +678,7 @@ export default function CommentsModal({
                 lineHeight: '22px',
               }}
             >
-              {submittingComment ? '...' : t('send')}
+              {submittingComment ? <ButtonSpinner size="xs" /> : t('send')}
             </button>
           </div>
         </div>
