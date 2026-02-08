@@ -2184,7 +2184,7 @@ const en = {
     termsChanges2: 'To suspend or terminate your account access for any reason',
     termsChanges3: 'To modify these terms, with modified terms taking effect immediately upon posting',
     termsGoverningLawTitle: '10. Governing Law',
-    termsGoverningLawP1: 'These terms are governed by and construed in accordance with the laws of the State of California, United States, without regard to conflict of law provisions. Any disputes arising from these terms shall be resolved through binding arbitration in California. Before initiating arbitration, both parties agree to first attempt to resolve disputes through good-faith negotiation.',
+    termsGoverningLawP1: 'These terms are governed by and construed in accordance with the laws of the Republic of Singapore. Any disputes arising from these terms shall be resolved through arbitration administered by the Singapore International Arbitration Centre (SIAC) in accordance with its prevailing rules. The seat of arbitration shall be Singapore and the language of arbitration shall be English. Before initiating arbitration, both parties agree to first attempt to resolve disputes through good-faith negotiation.',
     termsContactTitle: '11. Contact Us',
     termsContactP1: 'If you have any questions about these Terms of Service, please contact us via direct message:',
     termsSendMessageToSupport: 'Send Message to Support',
