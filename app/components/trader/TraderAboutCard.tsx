@@ -142,7 +142,7 @@ function SocialLink({
 }): React.ReactElement {
   const content = (
     <>
-      <span style={{ fontSize: '11px' }}>{icon}</span>
+      <span style={{ fontSize: tokens.typography.fontSize.xs }}>{icon}</span>
       <span>{text}</span>
     </>
   )

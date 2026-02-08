@@ -156,7 +156,7 @@ export default function DataFreshnessIndicator({
           weight="bold"
           style={{
             color: tierInfo.color,
-            fontSize: size === 'sm' ? '10px' : '11px',
+            fontSize: size === 'sm' ? tokens.typography.fontSize.xs : tokens.typography.fontSize.xs,
             lineHeight: 1,
           }}
         >
@@ -170,7 +170,7 @@ export default function DataFreshnessIndicator({
           size="xs"
           style={{
             color: displayColor,
-            fontSize: size === 'sm' ? '10px' : '11px',
+            fontSize: size === 'sm' ? tokens.typography.fontSize.xs : tokens.typography.fontSize.xs,
           }}
         >
           {t('updatedAgo')}{ageText}
@@ -184,7 +184,7 @@ export default function DataFreshnessIndicator({
           weight="bold"
           style={{
             color: tokens.colors.accent.error,
-            fontSize: size === 'sm' ? '10px' : '11px',
+            fontSize: size === 'sm' ? tokens.typography.fontSize.xs : tokens.typography.fontSize.xs,
           }}
         >
           {t('dataMayBeStale')}
@@ -240,7 +240,7 @@ export function UpdateTierBadge({
         weight="semibold"
         style={{
           color,
-          fontSize: size === 'xs' ? '9px' : '10px',
+          fontSize: tokens.typography.fontSize.xs,
           lineHeight: 1,
         }}
       >
