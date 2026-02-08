@@ -994,10 +994,15 @@ body {
   box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
   transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms ease;
 }
-.glass-card:hover {
-  box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle);
-  border-color: var(--glass-border-medium);
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .glass-card:hover {
+    box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle);
+    border-color: var(--glass-border-medium);
+    transform: translateY(-2px);
+  }
+}
+.glass-card:active {
+  transform: scale(0.98);
 }
 
 /* ============================================
@@ -1096,6 +1101,8 @@ body {
 }
 .waterfall-grid > * {
   break-inside: avoid;
+  display: inline-block;
+  width: 100%;
   margin-bottom: 12px;
 }
 @media (min-width: 768px) {
@@ -1105,12 +1112,6 @@ body {
   }
   .waterfall-grid > * {
     margin-bottom: 16px;
-  }
-}
-@media (min-width: 1280px) {
-  .waterfall-grid {
-    columns: 4;
-    column-gap: 16px;
   }
 }
 

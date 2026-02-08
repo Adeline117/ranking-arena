@@ -49,8 +49,8 @@ function GroupWaterfallCard({ group, language }: { group: Group; language: strin
       {/* Cover / Avatar area */}
       <div style={{
         width: '100%',
-        aspectRatio: group.cover_url ? undefined : '1 / 0.75',
-        minHeight: 80,
+        aspectRatio: group.cover_url ? undefined : '1 / 0.8',
+        minHeight: 90,
         background: tokens.gradient.primarySubtle,
         display: 'flex',
         alignItems: 'center',
@@ -235,23 +235,24 @@ function GroupsWaterfall() {
           }}
         />
 
-        <div style={{ display: 'flex', gap: tokens.spacing[2] }}>
+        <div style={{ display: 'flex', gap: tokens.spacing[1], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, padding: 3 }}>
           {(['all', 'mine', 'hot'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className="touch-target"
               style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                borderRadius: tokens.radius.full,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.md,
                 border: 'none',
                 cursor: 'pointer',
-                background: activeTab === tab ? `${tokens.colors.accent.primary}20` : 'transparent',
-                color: activeTab === tab ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                background: activeTab === tab ? tokens.colors.accent.primary : 'transparent',
+                color: activeTab === tab ? '#fff' : tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: activeTab === tab ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
                 transition: tokens.transition.fast,
                 minHeight: 44,
+                flex: 1,
               }}
             >
               {tabLabels[tab]}
@@ -263,10 +264,10 @@ function GroupsWaterfall() {
       {/* Waterfall Grid */}
       {loading ? (
         <div className="waterfall-grid">
-          {[1, 2, 3, 4, 5, 6].map(i => (
+          {[160, 200, 140, 180, 220, 150, 190, 170].map((h, i) => (
             <div key={i} className="skeleton" style={{
               borderRadius: tokens.radius.xl,
-              height: 120 + (i % 3) * 40,
+              height: h,
             }} />
           ))}
         </div>
