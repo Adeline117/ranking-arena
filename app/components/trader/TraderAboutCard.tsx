@@ -218,8 +218,6 @@ export default function TraderAboutCard({
     <Box
       className="about-card glass-card"
       style={{
-        position: 'sticky',
-        top: 80,
         background: `linear-gradient(165deg, ${tokens.colors.bg.secondary}F0 0%, ${tokens.colors.bg.primary}E8 100%)`,
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
