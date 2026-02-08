@@ -19,7 +19,8 @@ import {
   normalizeWinRate,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
-import { interceptApiResponses } from '../scrapers/cloudflare-bypass'
+// Dynamic import to avoid bundling puppeteer on Vercel
+const getInterceptApiResponses = () => import('../scrapers/cloudflare-bypass').then(m => m.interceptApiResponses)
 
 const SOURCE = 'bingx'
 const TARGET = 500
@@ -197,6 +198,7 @@ async function fetchPeriod(
   if (allTraders.size === 0) {
     console.warn(`[${SOURCE}] HTTP fetch failed, trying stealth browser fallback...`)
     try {
+      const interceptApiResponses = await getInterceptApiResponses()
       const { responses } = await interceptApiResponses(
         'https://bingx.com/en/CopyTrading/leaderBoard',
         ['copy', 'trader', 'ranking', 'leaderboard', 'leaderBoard'],
