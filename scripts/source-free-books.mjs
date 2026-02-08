@@ -354,20 +354,8 @@ async function main() {
   console.log(`\nTotal unique books found: ${allBooks.size}`);
   console.log(`Duplicates skipped: ${duplicateCount}`);
 
-  // Fetch detail pages for top books (first 100 to get ISBN/description)
+  // Skip detail page fetching to save time - search results have sufficient metadata
   const books = Array.from(allBooks.values());
-  console.log(`\nFetching detail pages for up to 100 books...`);
-  let detailCount = 0;
-  for (const book of books.slice(0, 100)) {
-    const detail = await fetchDetailPage(book.md5);
-    if (detail.isbn) book.isbn = detail.isbn;
-    if (detail.description) book.description = detail.description;
-    if (detail.publisher) book.publisher = detail.publisher;
-    if (detail.pages) book.pages = detail.pages;
-    detailCount++;
-    if (detailCount % 10 === 0) console.log(`  Fetched ${detailCount}/100 detail pages`);
-    await sleep(DELAY_MS);
-  }
 
   // Insert into Supabase
   console.log(`\nInserting ${books.length} books into library_items...`);

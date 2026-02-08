@@ -170,6 +170,9 @@ function ExportRankingButton({ traders, source, timeRange, language }: {
     <div ref={menuRef} style={{ position: 'relative' }}>
       <button
         onClick={() => setShowMenu(!showMenu)}
+        aria-expanded={showMenu}
+        aria-haspopup="true"
+        aria-label={isZh ? '导出排名' : 'Export Ranking'}
         style={{
           padding: '6px 12px', borderRadius: 6,
           border: `1px solid ${tokens.colors.border.primary}`,
@@ -490,7 +493,7 @@ function RankingTableInner(props: {
             </Box>
 
             {/* Filter button */}
-            <Box onClick={onFilterToggle} title={t('advancedFilter')} className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}
+            <Box onClick={onFilterToggle} title={t('advancedFilter')} aria-label={t('advancedFilter')} role="button" tabIndex={0} className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}
               style={{ position: 'relative' }}
             >
               <FilterIcon size={11} />
@@ -511,7 +514,7 @@ function RankingTableInner(props: {
 
             {/* Column settings */}
             <div ref={columnSettingsRef} style={{ position: 'relative' }}>
-              <Box onClick={() => setShowColumnSettings(!showColumnSettings)} title={t('columnSettingsTitle')} className={`toolbar-btn touch-target-sm${showColumnSettings ? ' toolbar-btn-active' : ''}`}>
+              <Box onClick={() => setShowColumnSettings(!showColumnSettings)} title={t('columnSettingsTitle')} aria-label={t('columnSettingsTitle')} aria-expanded={showColumnSettings} role="button" tabIndex={0} className={`toolbar-btn touch-target-sm${showColumnSettings ? ' toolbar-btn-active' : ''}`}>
                 <SettingsIcon size={11} />
               </Box>
               {showColumnSettings && (
@@ -578,6 +581,8 @@ function RankingTableInner(props: {
           <button onClick={() => setShowRules(!showRules)}
             className="info-btn-circle"
             title={t('rankingRules')}
+            aria-label={t('rankingRules')}
+            aria-expanded={showRules}
           >?</button>
         </Box>
         <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} title={t('arenaScoreTooltip')} aria-sort={sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>

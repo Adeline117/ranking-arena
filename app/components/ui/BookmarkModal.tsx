@@ -176,6 +176,9 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
       onClick={onClose}
     >
       <Box
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('bookmarkSelectFolder')}
         style={{
           background: tokens.colors.bg.primary,
           borderRadius: tokens.radius.xl,

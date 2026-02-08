@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
         .maybeSingle()
       
       if (profile) {
-        const title = `${profile.handle} · Arena`
+        const title = `${profile.handle}`
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
         const canonicalUrl = `${baseUrl}/u/${encodeURIComponent(handle)}`
         const description = profile.bio 
@@ -59,8 +59,11 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   
   // 默认metadata
   return {
-    title: `${handle} · Arena`,
-    description: `查看 ${handle} 的个人资料`,
+    title: handle,
+    description: `查看 ${handle} 的个人资料和交易动态。`,
+    alternates: {
+      canonical: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/u/${encodeURIComponent(handle)}`,
+    },
   }
 }
 

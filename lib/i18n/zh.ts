@@ -3,6 +3,7 @@ const zh = {
     home: '首页',
     rankings: '排名',
     groups: '小组',
+    market: '市场',
     hot: '热榜',
     flashNews: '快讯',
     library: '书库',

@@ -137,6 +137,8 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
   return (
     <Box 
       className="stagger-children"
+      role="status"
+      aria-label="Loading rankings"
       style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}
     >
       {Array.from({ length: rows }).map((_, i) => (

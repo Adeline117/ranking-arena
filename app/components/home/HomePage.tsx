@@ -20,10 +20,6 @@ import type { InitialTrader } from '@/lib/getInitialTraders'
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
-const FearGreedGauge = lazy(() => import('../market/FearGreedGauge'))
-const DefiOverview = lazy(() => import('../market/DefiOverview'))
-const TopMovers = lazy(() => import('../market/TopMovers'))
-const ArbitrageOpportunities = lazy(() => import('../market/ArbitrageOpportunities'))
 const MarketOverviewBar = lazy(() => import('../market/MarketOverviewBar'))
 
 interface HomePageProps {
@@ -83,27 +79,7 @@ export default function HomePage({
           }
           rightSidebar={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 72px)' }}>
-              <div style={{ flexShrink: 0 }}>
-                <Suspense fallback={<div className="skeleton" style={{ height: 120, borderRadius: 12 }} />}>
-                  <FearGreedGauge />
-                </Suspense>
-              </div>
-              <div style={{ flexShrink: 0 }}>
-                <Suspense fallback={<div className="skeleton" style={{ height: 160, borderRadius: 12 }} />}>
-                  <TopMovers />
-                </Suspense>
-              </div>
-              <div style={{ flexShrink: 0 }}>
-                <Suspense fallback={<div className="skeleton" style={{ height: 160, borderRadius: 12 }} />}>
-                  <ArbitrageOpportunities />
-                </Suspense>
-              </div>
-              <div style={{ flexShrink: 0 }}>
-                <Suspense fallback={<div className="skeleton" style={{ height: 160, borderRadius: 12 }} />}>
-                  <DefiOverview />
-                </Suspense>
-              </div>
-              <div style={{ flexShrink: 0, maxHeight: '35%', overflow: 'auto' }}>
+              <div style={{ flexShrink: 0, maxHeight: '40%', overflow: 'auto' }}>
                 <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
                   <WatchlistMarket />
                 </Suspense>
