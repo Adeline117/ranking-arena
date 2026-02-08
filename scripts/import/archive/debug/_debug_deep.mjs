@@ -4,13 +4,15 @@
  */
 import { execSync, spawn } from 'child_process'
 import { chromium } from 'playwright'
+
+const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/snap/bin/chromium')
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const PORT = 9336
 
 async function launchChrome() {
   try { execSync('pkill -f "remote-debugging-port=9336"', { stdio: 'ignore' }) } catch {}
   await sleep(1000)
-  spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+  spawn(CHROME_PATH, [
     `--remote-debugging-port=${PORT}`, '--user-data-dir=/tmp/chrome-debug2-profile',
     '--no-first-run','--disable-extensions','--disable-sync','--disable-gpu',
     '--window-size=1200,900','--window-position=9999,9999',

@@ -11,6 +11,8 @@ import { chromium } from 'playwright'
 
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+
+const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/snap/bin/chromium')
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envPath = join(__dirname, '../../.env.local')
 try { for (const l of readFileSync(envPath,'utf8').split('\n')) {
@@ -26,7 +28,7 @@ const PORT = 9337
 async function launchChrome() {
   try { execSync('pkill -f "remote-debugging-port=9337"', { stdio: 'ignore' }) } catch {}
   await sleep(1000)
-  spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+  spawn(CHROME_PATH, [
     `--remote-debugging-port=${PORT}`, '--user-data-dir=/tmp/chrome-xt-profile',
     '--no-first-run','--disable-extensions','--disable-sync','--disable-gpu',
     '--window-size=400,300','--window-position=9999,9999',

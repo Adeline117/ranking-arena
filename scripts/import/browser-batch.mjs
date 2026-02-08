@@ -161,7 +161,7 @@ async function main() {
   await sleep(500)
   
   const browser = await chromium.launch({
-    headless: false, channel: 'chrome',
+    headless: false, executablePath: process.env.CHROME_PATH || undefined, channel: process.env.CHROME_PATH ? undefined : 'chrome',
     proxy: { server: 'http://127.0.0.1:7890' },
     args: ['--window-size=400,300','--window-position=9999,9999','--disable-gpu','--disable-extensions','--disable-dev-shm-usage'],
   })
