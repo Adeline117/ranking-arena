@@ -2590,6 +2590,38 @@ const zh = {
     groupNotFoundDesc: '该小组不存在或已被删除。',
     backToGroups2: '返回小组列表',
 
+    // About page
+    aboutTitle: '关于 ArenaFi',
+    aboutSubtitle: '开放的加密货币交易员排名平台',
+    aboutIntroTitle: '什么是 ArenaFi？',
+    aboutIntroP1: 'ArenaFi 是一个数据驱动的加密货币交易员排名平台。我们从 30+ 家中心化和去中心化交易所聚合链上及交易所数据，构建透明、可验证的绩效排行榜。',
+    aboutIntroP2: '无论你是在寻找值得关注的优秀交易员、比较不同交易所的策略表现，还是展示自己的交易记录，ArenaFi 都能提供所需的工具和数据。',
+    aboutFeaturesTitle: '核心功能',
+    aboutFeature1Title: '实时排行榜',
+    aboutFeature1Desc: '持续更新的排名数据，涵盖已验证的盈亏、ROI、胜率和风险指标，支持多个时间维度。',
+    aboutFeature2Title: '多交易所覆盖',
+    aboutFeature2Desc: '聚合来自 Binance、Bybit、OKX、Bitget、dYdX、Hyperliquid 等 30+ 家交易所的数据。',
+    aboutFeature3Title: '交易员对比',
+    aboutFeature3Desc: '最多 4 位交易员并排对比，提供详细的指标分解和绩效图表。',
+    aboutFeature4Title: '社区与小组',
+    aboutFeature4Desc: '加入或创建交易员小组，分享洞察，构建你的交易社区。',
+    aboutFeature5Title: '智能提醒',
+    aboutFeature5Desc: '当你关注的交易员达成里程碑、调整仓位或进入排行榜前列时，及时收到通知。',
+    aboutFeature6Title: '知识库',
+    aboutFeature6Desc: '精选的交易策略、风险管理和市场分析教育内容。',
+    aboutDataTitle: '数据来源',
+    aboutDataDesc: '我们对接了 30 多家中心化和去中心化交易所，提供加密货币交易领域的全面覆盖。所有排名数据均来源于已验证的交易记录，不接受自报数据。',
+    aboutDataCEX: 'CEX：Binance、Bybit、OKX、Bitget、Gate.io、KuCoin、MEXC、BingX 等',
+    aboutDataDEX: 'DEX：Hyperliquid、dYdX、GMX、Jupiter、Drift 等',
+    aboutDataOnChain: '链上数据通过区块链浏览器和 API 集成验证',
+    aboutVisionTitle: '我们的愿景',
+    aboutVisionDesc: '我们相信透明带来信任。在一个充斥着虚假截图和伪造盈亏的行业中，ArenaFi 提供一个中立的、数据支撑的竞技场，让实力说话。我们的目标是成为全球加密交易员评估的标准。',
+    aboutLink: '关于',
+
+    // FAQ search
+    faqSearchPlaceholder: '搜索常见问题...',
+    faqNoResults: '未找到匹配的问题，请尝试其他关键词。',
+
 } as const
 
 export default zh
