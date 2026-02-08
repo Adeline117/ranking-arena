@@ -178,11 +178,16 @@ export const TraderCard = memo(function TraderCard({
         </Box>
 
         {/* Stats row */}
-        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
+        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: tokens.spacing[2] }}>
           <MetricStat
             label="ROI"
             value={formatROI(trader.roi || 0)}
             color={(trader.roi || 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR}
+          />
+          <MetricStat
+            label="PnL"
+            value={trader.pnl != null ? `$${Math.abs(trader.pnl) >= 1000 ? `${(trader.pnl / 1000).toFixed(1)}K` : trader.pnl.toFixed(0)}` : '—'}
+            color={trader.pnl != null ? ((trader.pnl >= 0) ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : undefined}
           />
           <MetricStat
             label={language === 'zh' ? '胜率' : 'Win%'}
