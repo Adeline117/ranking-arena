@@ -62,6 +62,74 @@ export default function HomePage({
           padding: '16px 16px',
         }}
       >
+        {/* Hero Section */}
+        <Box
+          style={{
+            textAlign: 'center',
+            padding: '32px 16px 24px',
+            marginBottom: 8,
+          }}
+        >
+          <h1
+            style={{
+              fontSize: 48,
+              fontWeight: 900,
+              color: tokens.colors.text.primary,
+              margin: '0 0 8px',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.1,
+            }}
+          >
+            Arena
+          </h1>
+          <p
+            style={{
+              fontSize: 16,
+              color: tokens.colors.text.secondary,
+              margin: '0 0 20px',
+              lineHeight: 1.5,
+            }}
+          >
+            聚合全网交易员排名，发现最强交易者
+          </p>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 32,
+              flexWrap: 'wrap',
+            }}
+          >
+            {[
+              { value: '31,000+', label: '交易员' },
+              { value: '11', label: '交易所' },
+              { value: '24/7', label: '实时排名' },
+            ].map((stat) => (
+              <div key={stat.label} style={{ textAlign: 'center' }}>
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 800,
+                    color: tokens.colors.accent.brand,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {stat.value}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: tokens.colors.text.tertiary,
+                    marginTop: 2,
+                  }}
+                >
+                  {stat.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Box>
+
         <Suspense fallback={<div style={{ height: 40 }} />}>
           <StatsBar />
         </Suspense>

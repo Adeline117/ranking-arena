@@ -182,6 +182,38 @@ function ExchangeAuthContent() {
           </Box>
         )}
 
+        {/* Security Assurance */}
+        <Box
+          bg="secondary"
+          p={6}
+          radius="xl"
+          border="primary"
+          style={{ marginBottom: tokens.spacing[4] }}
+        >
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            <Text size="lg" weight="bold">
+              安全承诺
+            </Text>
+          </Box>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            {[
+              '仅需只读权限 (Read-Only)',
+              'API密钥加密存储',
+              '不会执行任何交易操作',
+            ].map((item) => (
+              <Box key={item} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17L4 12" />
+                </svg>
+                <Text size="sm" color="secondary">{item}</Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+
         <Button
           variant="text"
           onClick={() => router.push('/settings')}

@@ -18,7 +18,7 @@ import {
   areTraderPropsEqual,
 } from './shared/TraderDisplay'
 import { CopyButton } from './HeroSection'
-// AddCompareButton removed — compare accessible via toolbar only
+import { useComparisonStore, type CompareTrader } from '@/lib/stores'
 
 const ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
@@ -79,6 +79,27 @@ export const TraderRow = memo(function TraderRow({
   const isAddress = traderHandle.startsWith('0x') && traderHandle.length > 20
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
+  // Compare checkbox state
+  const isSelected = useComparisonStore(s => s.isSelected(trader.id))
+  const addTrader = useComparisonStore(s => s.addTrader)
+  const removeTrader = useComparisonStore(s => s.removeTrader)
+  const canAddMore = useComparisonStore(s => s.canAddMore)
+
+  const handleCompareToggle = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (isSelected) {
+      removeTrader(trader.id)
+    } else {
+      addTrader({
+        id: trader.id,
+        handle: traderHandle,
+        source: trader.source || source || '',
+        avatarUrl: trader.avatar_url || undefined,
+      })
+    }
+  }
+
   // Top 3 background gradients
   const top3Bg = rank === 1
     ? 'linear-gradient(90deg, rgba(255,215,0,0.08) 0%, transparent 100%)'
@@ -113,6 +134,34 @@ export const TraderRow = memo(function TraderRow({
           background: top3Bg || zebraBg || 'transparent',
         }}
       >
+        {/* Compare checkbox */}
+        <Box
+          className="compare-checkbox-cell"
+          onClick={handleCompareToggle}
+          style={{
+            position: 'absolute',
+            left: -4,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 28,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: isSelected ? 1 : 0,
+            transition: 'opacity 0.15s ease',
+            zIndex: 2,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={isSelected}
+            disabled={!isSelected && !canAddMore()}
+            readOnly
+            style={{ cursor: 'pointer', width: 16, height: 16, accentColor: tokens.colors.accent.primary }}
+          />
+        </Box>
+
         {/* Rank */}
         <RankDisplay
           rank={rank}

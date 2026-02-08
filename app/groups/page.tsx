@@ -10,6 +10,7 @@ import RecommendedGroupsWidget from '@/app/components/sidebar/RecommendedGroups'
 import MyGroupsWidget from '@/app/components/sidebar/MyGroups'
 import NewsFlashWidget from '@/app/components/sidebar/NewsFlash'
 import { Box } from '@/app/components/base'
+import CreatePostFAB from '@/app/components/ui/CreatePostFAB'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import HomePageWithSubNav from '@/app/components/home/HomePageWithSubNav'
 import PostFeed from '@/app/components/post/PostFeed'
@@ -57,6 +58,7 @@ function GroupsContent() {
           />
         </ThreeColumnLayout>
       </Box>
+      <CreatePostFAB />
     </Box>
   )
 }
