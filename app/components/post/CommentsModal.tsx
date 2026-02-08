@@ -15,7 +15,7 @@ import type { Comment } from './hooks/usePostComments'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { renderWithStickers, hasStickers } from '../ui/StickerRenderer'
 import { DynamicStickerPicker } from '../ui/Dynamic'
-import type { Sticker } from '@/lib/stickers'
+import { STICKERS, type Sticker } from '@/lib/stickers'
 
 const REPLIES_PREVIEW_COUNT = 2
 
@@ -532,7 +532,7 @@ export default function CommentsModal({
                 />
               </div>
 
-              {/* Emoji picker */}
+              {/* Emoji/Sticker picker - uses custom orca stickers */}
               <div style={{ position: 'relative' }}>
                 <button
                   type="button"
@@ -543,15 +543,20 @@ export default function CommentsModal({
                     cursor: 'pointer',
                     padding: 4,
                     borderRadius: 6,
-                    color: tokens.colors.text.tertiary,
-                    fontSize: 18,
+                    color: showEmojiPicker ? ARENA_PURPLE : tokens.colors.text.tertiary,
+                    fontSize: 15,
                     lineHeight: 1,
                     display: 'flex',
                     alignItems: 'center',
                   }}
                   title={language === 'zh' ? '表情' : 'Emoji'}
                 >
-                  :)
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                    <line x1="9" y1="9" x2="9.01" y2="9" />
+                    <line x1="15" y1="9" x2="15.01" y2="9" />
+                  </svg>
                 </button>
                 {showEmojiPicker && (
                   <div style={{
@@ -563,36 +568,41 @@ export default function CommentsModal({
                     borderRadius: 12,
                     padding: 8,
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(8, 1fr)',
-                    gap: 2,
+                    gridTemplateColumns: 'repeat(5, 1fr)',
+                    gap: 4,
                     zIndex: 100,
                     boxShadow: tokens.shadow.lg,
                     width: 280,
+                    maxHeight: 240,
+                    overflowY: 'auto',
                   }}>
-                    {[':)',':D','XD','<3',';)',':P','B)',':/',
-                      '+1','-1','hot','100','go','$','up','dn',
-                      'bull','bear','gem','hi','!?','$$','strong','luv',
-                      'eye','aim','zap','moon','sun','deal','yay','rip'].map(emoji => (
+                    {STICKERS.map(sticker => (
                       <button
-                        key={emoji}
+                        key={sticker.id}
                         onClick={() => {
-                          setNewComment(newComment + emoji)
+                          setNewComment(newComment + `[sticker:${sticker.id}]`)
                           setShowEmojiPicker(false)
                           commentInputRef.current?.focus()
                         }}
                         style={{
                           background: 'transparent',
                           border: 'none',
-                          fontSize: 13,
                           cursor: 'pointer',
                           padding: 4,
-                          borderRadius: 4,
-                          lineHeight: 1,
+                          borderRadius: 6,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 2,
                         }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                        title={language === 'zh' ? sticker.name_zh : sticker.name_en}
                       >
-                        {emoji}
+                        <img src={sticker.path} alt={sticker.name_en} width={36} height={36} style={{ objectFit: 'contain' }} />
+                        <span style={{ fontSize: 9, color: tokens.colors.text.tertiary, lineHeight: 1 }}>
+                          {language === 'zh' ? sticker.name_zh : sticker.name_en}
+                        </span>
                       </button>
                     ))}
                   </div>
