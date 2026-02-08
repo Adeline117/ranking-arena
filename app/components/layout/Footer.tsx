@@ -15,7 +15,6 @@ export default function Footer() {
     { href: '/groups', label: isZh ? '社区' : 'Groups' },
     { href: '/hot', label: isZh ? '热门' : 'Hot' },
     { href: '/library', label: isZh ? '知识库' : 'Library' },
-    { href: '/compare', label: isZh ? '对比' : 'Compare' },
   ]
 
   const legalLinks = [

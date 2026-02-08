@@ -366,7 +366,6 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
               { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
               { href: '/library', labelKey: 'library' as const, tooltip: undefined as string | undefined },
-              { href: '/compare', labelKey: 'compare' as const, tooltip: undefined as string | undefined },
             ].map((item) => {
               const label = t(item.labelKey)
               const isActive = pathname === item.href || (item.href === '/' && pathname === '/')
