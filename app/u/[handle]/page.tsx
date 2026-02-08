@@ -5,6 +5,25 @@ import UserProfileClient from './UserProfileClient'
 
 export const revalidate = 60
 
+// Pre-render top user profiles at build time for instant TTFB
+export async function generateStaticParams() {
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('handle')
+      .not('handle', 'is', null)
+      .order('created_at', { ascending: true })
+      .limit(30)
+    
+    return (data || [])
+      .filter((u: { handle: string | null }) => u.handle)
+      .map((u: { handle: string }) => ({ handle: u.handle }))
+  } catch {
+    return []
+  }
+}
+
 interface UserProfileData {
   id: string
   handle: string

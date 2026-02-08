@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -7,6 +8,28 @@ import TraderPageClient from './TraderPageClient'
 
 // ISR: cache page for 60s — data updates via cron, client-side SWR handles freshness
 export const revalidate = 60
+
+// Pre-render top 50 trader pages at build time for instant TTFB
+export async function generateStaticParams() {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    if (!supabaseUrl || !supabaseKey) return []
+    
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    const { data } = await supabase
+      .from('traders')
+      .select('handle')
+      .order('followers', { ascending: false })
+      .limit(50)
+    
+    return (data || [])
+      .filter((t: { handle: string | null }) => t.handle)
+      .map((t: { handle: string }) => ({ handle: encodeURIComponent(t.handle) }))
+  } catch {
+    return []
+  }
+}
 
 async function fetchTraderData(handle: string) {
   try {

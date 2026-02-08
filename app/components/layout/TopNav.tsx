@@ -619,6 +619,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     alt={t('avatar')}
                     width={36}
                     height={36}
+                    sizes="36px"
                     style={{
                       width: 36,
                       height: 36,
