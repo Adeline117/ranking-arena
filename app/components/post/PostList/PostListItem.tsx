@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../../ui/icons'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
-import { ARENA_PURPLE } from '@/lib/utils/content'
+import { ARENA_PURPLE, renderContentWithLinks, truncateText } from '@/lib/utils/content'
 import { AvatarLink, ReactButton } from '../components'
 import { type PostWithUserState } from '@/lib/types'
 
@@ -157,7 +157,7 @@ export const PostListItem = memo(function PostListItem({
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
         }}>
-          {removeImagesFromContent(translatedListPosts[p.id]?.body || p.content).slice(0, 150)}
+          {renderContentWithLinks(truncateText(removeImagesFromContent(translatedListPosts[p.id]?.body || p.content), 150))}
         </div>
       )}
 

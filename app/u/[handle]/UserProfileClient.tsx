@@ -43,7 +43,7 @@ function FollowersList({ profileId }: { profileId: string }) {
         const { data: follows } = await supabase
           .from('user_follows')
           .select('follower_id')
-          .eq('followed_id', profileId)
+          .eq('following_id', profileId)
           .limit(100)
         if (follows && follows.length > 0) {
           const ids = follows.map((f: { follower_id: string }) => f.follower_id)

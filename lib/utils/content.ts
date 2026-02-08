@@ -366,14 +366,101 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
     }
   }
 
-  const parts = parseContent(text)
-  // Post-process: expand sticker tokens within text parts
-  return parts.flatMap((part, index) => {
-    if (part.type === 'text') {
-      return renderTextWithStickers(part.content, `p${index}`)
+  // Split by fenced code blocks first, then process each segment
+  const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g
+  const segments: Array<{ type: 'text' | 'codeblock'; content: string; lang?: string }> = []
+  let lastIdx = 0
+  let codeMatch: RegExpExecArray | null
+  while ((codeMatch = codeBlockRegex.exec(text)) !== null) {
+    if (codeMatch.index > lastIdx) {
+      segments.push({ type: 'text', content: text.slice(lastIdx, codeMatch.index) })
     }
-    return renderContentParts([part])
-  })
+    segments.push({ type: 'codeblock', content: codeMatch[2], lang: codeMatch[1] || undefined })
+    lastIdx = codeMatch.index + codeMatch[0].length
+  }
+  if (lastIdx < text.length) {
+    segments.push({ type: 'text', content: text.slice(lastIdx) })
+  }
+  if (segments.length === 0) {
+    segments.push({ type: 'text', content: text })
+  }
+
+  const result: ReactNode[] = []
+  let keyIdx = 0
+
+  for (const seg of segments) {
+    if (seg.type === 'codeblock') {
+      result.push(createElement('pre', {
+        key: `cb-${keyIdx++}`,
+        style: {
+          background: 'rgba(0, 0, 0, 0.3)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: 8,
+          padding: '12px 16px',
+          margin: '8px 0',
+          overflow: 'auto',
+          fontSize: 13,
+          lineHeight: 1.5,
+          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+          color: '#e0e0e0',
+        },
+      }, createElement('code', null, seg.content)))
+      continue
+    }
+
+    // For text segments, handle inline code then parse normally
+    const inlineCodeRegex = /`([^`\n]+)`/g
+    const inlineParts: Array<{ type: 'text' | 'inlinecode'; content: string }> = []
+    let inlineLastIdx = 0
+    let inlineMatch: RegExpExecArray | null
+    while ((inlineMatch = inlineCodeRegex.exec(seg.content)) !== null) {
+      if (inlineMatch.index > inlineLastIdx) {
+        inlineParts.push({ type: 'text', content: seg.content.slice(inlineLastIdx, inlineMatch.index) })
+      }
+      inlineParts.push({ type: 'inlinecode', content: inlineMatch[1] })
+      inlineLastIdx = inlineMatch.index + inlineMatch[0].length
+    }
+    if (inlineLastIdx < seg.content.length) {
+      inlineParts.push({ type: 'text', content: seg.content.slice(inlineLastIdx) })
+    }
+    if (inlineParts.length === 0) {
+      inlineParts.push({ type: 'text', content: seg.content })
+    }
+
+    for (const ip of inlineParts) {
+      if (ip.type === 'inlinecode') {
+        result.push(createElement('code', {
+          key: `ic-${keyIdx++}`,
+          style: {
+            background: 'rgba(139, 111, 168, 0.15)',
+            border: '1px solid rgba(139, 111, 168, 0.25)',
+            borderRadius: 4,
+            padding: '2px 6px',
+            fontSize: '0.9em',
+            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+          },
+        }, ip.content))
+        continue
+      }
+
+      const parts = parseContent(ip.content)
+      for (const part of parts) {
+        if (part.type === 'text') {
+          result.push(...renderTextWithStickers(part.content, `p${keyIdx++}`))
+        } else {
+          result.push(...renderContentParts([part]).map((node, i) => {
+            // Re-key to avoid collisions
+            if (node && typeof node === 'object' && 'key' in node) {
+              return { ...node as object, key: `rk-${keyIdx++}-${i}` } as ReactNode
+            }
+            return node
+          }))
+        }
+      }
+    }
+  }
+
+  return result
 }
 
 /**
