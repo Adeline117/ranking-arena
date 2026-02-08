@@ -17,9 +17,9 @@ import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, fetchOkxSta
 
 const SOURCE = 'okx_futures'
 const API_URL = 'https://www.okx.com/api/v5/copytrading/public-lead-traders'
-const TARGET = 500
+const TARGET = 1000
 const PAGE_SIZE = 10
-const MAX_PAGES = 50
+const MAX_PAGES = 120
 
 // Phase 2: Enrichment settings - increased coverage from 100 to 150
 const ENRICH_LIMIT = 300 // OKX already has pnlRatios data, no extra API calls needed

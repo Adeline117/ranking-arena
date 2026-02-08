@@ -24,7 +24,7 @@ import { formatROI, formatPnL } from '@/app/components/ranking/utils'
 import { VirtualLeaderboard, type TraderRow as VirtualTraderRow } from '@/app/components/ranking/VirtualLeaderboard'
 import { MetricTooltip } from '@/app/components/ui/MetricTooltip'
 import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/trading-platform'
-import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { Web3VerifiedBadge } from '@/app/components/trader/Web3VerifiedBadge'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 
@@ -46,6 +46,13 @@ function getTraderDisplayName(trader: { display_name: string | null; trader_key:
   return name
 }
 
+function getTrustTier(platform: string): 'high' | 'medium' | 'low' {
+  const w = SOURCE_TRUST_WEIGHT[platform] ?? 0.5
+  if (w >= 1.0) return 'high'
+  if (w >= 0.8) return 'medium'
+  return 'low'
+}
+
 function toVirtualRow(trader: RankedTraderV2, rank: number): VirtualTraderRow {
   return {
     id: `${trader.platform}:${trader.trader_key}`,
@@ -58,6 +65,7 @@ function toVirtualRow(trader: RankedTraderV2, rank: number): VirtualTraderRow {
     drawdown: trader.metrics.max_drawdown ?? undefined,
     followers: trader.metrics.followers ?? undefined,
     source: EXCHANGE_NAMES[trader.platform] || trader.platform,
+    trustTier: getTrustTier(trader.platform),
   }
 }
 
@@ -301,6 +309,29 @@ function RankingsContent() {
             <DataFreshnessIndicator />
           </div>
         </div>
+
+        {/* Data coverage & update time */}
+        {data && (
+          <div className="flex flex-wrap items-center gap-4 mb-3" style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+            <span>
+              {isZh
+                ? `数据更新于 ${(() => {
+                    const mins = Math.round((Date.now() - new Date(data.as_of).getTime()) / 60000)
+                    return mins < 60 ? `${mins} 分钟前` : `${Math.round(mins / 60)} 小时前`
+                  })()}`
+                : `Updated ${(() => {
+                    const mins = Math.round((Date.now() - new Date(data.as_of).getTime()) / 60000)
+                    return mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`
+                  })()}`}
+            </span>
+            <span style={{ color: tokens.colors.border.primary }}>|</span>
+            <span>
+              {isZh
+                ? `覆盖 ${new Set(data.traders.map(t => t.platform)).size} 个平台 · 共 ${data.total_count} 名交易员`
+                : `${new Set(data.traders.map(t => t.platform)).size} platforms · ${data.total_count} traders`}
+            </span>
+          </div>
+        )}
 
         {/* Time range selector */}
         <div className="flex flex-wrap gap-2 mb-4">

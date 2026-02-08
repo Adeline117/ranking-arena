@@ -154,6 +154,10 @@
       "schedule": "27 */6 * * *"
     },
     {
+      "path": "/api/cron/fetch-traders/vertex",
+      "schedule": "30 */6 * * *"
+    },
+    {
       "path": "/api/cron/enrich?platform=binance_futures&period=90D&limit=100",
       "schedule": "10 */4 * * *"
     },
