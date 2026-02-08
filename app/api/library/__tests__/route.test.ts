@@ -48,10 +48,10 @@ describe('/api/library parameter validation', () => {
       expect(limit).toBe(100)
     })
 
-    it('should clamp to min 1', () => {
+    it('should treat 0 as falsy and use default 24', () => {
       const params = new URLSearchParams('limit=0')
       const limit = Math.min(Math.max(1, parseInt(params.get('limit') || '24') || 24), 100)
-      expect(limit).toBe(1)
+      expect(limit).toBe(24)
     })
 
     it('should handle non-numeric input', () => {

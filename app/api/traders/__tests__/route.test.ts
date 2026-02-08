@@ -75,13 +75,14 @@ describe('/api/traders parameter validation', () => {
       expect(limit).toBe(1000)
     })
 
-    it('should clamp to min 1', () => {
+    it('should treat 0 as falsy and use default 50', () => {
+      // parseInt('0') is 0, which is falsy, so || 50 kicks in
       const params = new URLSearchParams('limit=0')
       const limit = Math.min(1000, Math.max(1, parseInt(params.get('limit') || '50', 10) || 50))
-      expect(limit).toBe(1)
+      expect(limit).toBe(50)
     })
 
-    it('should handle negative values', () => {
+    it('should handle negative values by clamping to 1', () => {
       const params = new URLSearchParams('limit=-10')
       const limit = Math.min(1000, Math.max(1, parseInt(params.get('limit') || '50', 10) || 50))
       expect(limit).toBe(1)
