@@ -540,7 +540,7 @@ export default function LoginPage() {
       })
 
       if (updateError) {
-        setError(updateError.message)
+        setError(t('loginVerificationFailed'))
         setLoading(false)
         return
       }

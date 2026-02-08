@@ -2634,6 +2634,25 @@ const zh = {
     earlyBirdOffer: '早鸟优惠',
     sampleTestimonialLabel: '示例评价',
 
+    // Search dropdown
+    searchDropdownResults: '搜索结果',
+    viewAllSearchResults: '查看全部搜索结果',
+    searchHistory: '搜索历史',
+    clearSearchHistory: '清空',
+    traderTypeLabel: '交易员',
+    postTypeLabel: '帖子',
+    groupTypeLabel: '群组',
+    noHotPosts: '暂无热门帖子',
+    enablePushNotifications: '开启推送通知',
+    pushNotificationsTitle: '推送通知',
+    pushNotificationsDesc: '在浏览器或手机上接收实时推送通知',
+    browserNotSupported: '你的浏览器不支持推送通知',
+    allowNotificationPermission: '请在浏览器设置中允许通知权限',
+    pushNotificationsEnabled: '推送通知已开启！',
+    hapticFeedbackTitle: '震动反馈',
+    hapticFeedbackDesc: '当关注的交易员开仓时，手机会有特定节奏的震动',
+    tradeAlertVibration: '交易提醒震动',
+
 } as const
 
 export default zh

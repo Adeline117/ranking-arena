@@ -1341,6 +1341,7 @@ const en = {
     translationServiceError: 'Translation service error',
 
     // GroupsFeedPage
+    createGroup: 'Create Group',
     groupFeed: 'Feed',
     discoverGroups: 'Discover',
     myGroups: 'My Groups',
@@ -2633,6 +2634,25 @@ const en = {
     // Pricing
     earlyBirdOffer: 'Early Bird Pricing',
     sampleTestimonialLabel: 'Sample review',
+
+    // Search dropdown
+    searchDropdownResults: 'Search Results',
+    viewAllSearchResults: 'View all search results',
+    searchHistory: 'Search History',
+    clearSearchHistory: 'Clear',
+    traderTypeLabel: 'Trader',
+    postTypeLabel: 'Post',
+    groupTypeLabel: 'Group',
+    noHotPosts: 'No hot posts yet',
+    enablePushNotifications: 'Enable Push Notifications',
+    pushNotificationsTitle: 'Push Notifications',
+    pushNotificationsDesc: 'Receive real-time push notifications on your browser or phone',
+    browserNotSupported: 'Your browser does not support push notifications',
+    allowNotificationPermission: 'Please allow notification permission in browser settings',
+    pushNotificationsEnabled: 'Push notifications enabled!',
+    hapticFeedbackTitle: 'Haptic Feedback',
+    hapticFeedbackDesc: 'Feel vibrations when followed traders open positions',
+    tradeAlertVibration: 'Trade Alert Vibration',
 
 } as const
 
