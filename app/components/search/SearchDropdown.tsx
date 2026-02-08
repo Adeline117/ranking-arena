@@ -728,11 +728,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                       >
                         {translatedTitles[`${language}:${post.id}`] || post.title}
                       </Text>
-                      {post.view_count !== undefined && post.view_count > 0 && (
-                        <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-                          {post.view_count.toLocaleString()} {language === 'en' ? 'views' : '浏览'}
-                        </Text>
-                      )}
+{/* view_count display removed */}
                     </Box>
                   </Box>
                 </Link>
