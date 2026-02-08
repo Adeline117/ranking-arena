@@ -238,7 +238,7 @@ export default function GroupsFeedPage() {
 
         {subTab === 'following' && (
           myGroups.length > 0 ? (
-            <PostFeed layout="list" groupIds={myGroupIds} />
+            <PostFeed layout="masonry" groupIds={myGroupIds} />
           ) : (
             <Box style={{ padding: tokens.spacing[6], textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
               <Text size="sm" color="tertiary">{t('joinGroupsToSeePosts')}</Text>
@@ -247,7 +247,7 @@ export default function GroupsFeedPage() {
         )}
 
         {subTab === 'recommended' && (
-          <PostFeed layout="list" />
+          <PostFeed layout="masonry" />
         )}
 
         {subTab === 'bookshelf' && (
