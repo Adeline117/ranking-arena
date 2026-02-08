@@ -238,7 +238,7 @@ export default function MobileBottomNav(): React.ReactElement {
           background: tokens.glass.bg.primary,
           backdropFilter: tokens.glass.blur.lg,
           WebkitBackdropFilter: tokens.glass.blur.lg,
-          borderTop: `1px solid ${'var(--color-border-primary)'}`,
+          borderTop: `1px solid var(--color-border-primary)`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-around',
@@ -293,7 +293,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         position: 'relative',
         minWidth: 60,
         minHeight: tokens.touchTarget.comfortable,
-        background: active ? `${'var(--color-accent-primary)'}08` : 'transparent',
+        background: active ? `var(--color-accent-primary-08)` : 'transparent',
       }}
     >
       {active && <ActiveIndicator />}
@@ -345,7 +345,7 @@ function ActiveIndicator(): React.ReactElement {
         height: 3,
         borderRadius: '0 0 4px 4px',
         background: tokens.gradient.primary,
-        boxShadow: `0 2px 8px ${'var(--color-accent-primary)'}60`,
+        boxShadow: `0 2px 8px var(--color-accent-primary-60)`,
       }}
       aria-hidden="true"
     />

@@ -267,7 +267,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
         top: 0,
         zIndex: tokens.zIndex.sticky,
         background: tokens.glass.bg.primary,
-        borderBottom: `1px solid ${'var(--color-border-primary)'}`,
+        borderBottom: `1px solid var(--color-border-primary)`,
         height: 56,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
@@ -491,10 +491,10 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               width: 44,
               height: 44,
               borderRadius: tokens.radius.full,
-              background: `${'var(--color-accent-primary)'}12`,
+              background: `var(--color-accent-primary-12)`,
               color: 'var(--color-text-secondary)',
               transition: `all ${tokens.transition.base}`,
-              border: `1px solid ${'var(--color-accent-primary)'}30`,
+              border: `1px solid var(--color-accent-primary-30)`,
               cursor: 'pointer',
             }}
           >
@@ -536,7 +536,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 minWidth: 72,
                 height: 44,
                 border: 'none',
-                boxShadow: `0 4px 12px ${'var(--color-accent-primary)'}40`,
+                boxShadow: `0 4px 12px var(--color-accent-primary-40)`,
               }}
             >
               {t('login')}
@@ -591,7 +591,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       height: 18,
                       borderRadius: 9,
                       background: tokens.gradient.error,
-                      border: `2px solid ${'var(--color-bg-primary)'}`,
+                      border: `2px solid var(--color-bg-primary)`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -648,7 +648,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       width: 36,
                       height: 36,
                       borderRadius: tokens.radius.full,
-                      border: `1px solid ${'var(--color-border-primary)'}`,
+                      border: `1px solid var(--color-border-primary)`,
                       objectFit: 'cover',
                     }}
                     unoptimized={myAvatarUrl?.startsWith('data:')}
@@ -659,7 +659,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       width: 36,
                       height: 36,
                       borderRadius: tokens.radius.full,
-                      border: `1px solid ${'var(--color-border-primary)'}`,
+                      border: `1px solid var(--color-border-primary)`,
                       background: 'var(--color-bg-secondary)',
                       display: 'grid',
                       placeItems: 'center',
@@ -811,7 +811,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 minWidth: 72,
                 height: 44,
                 border: 'none',
-                boxShadow: `0 4px 12px ${'var(--color-accent-primary)'}40`,
+                boxShadow: `0 4px 12px var(--color-accent-primary-40)`,
               }}
             >
               {t('login')}
