@@ -12,8 +12,8 @@ import { useDialog } from '@/app/components/ui/Dialog'
 import { uiLogger } from '@/lib/utils/logger'
 import AdvancedAlerts from '@/app/components/pro/AdvancedAlerts'
 import dynamic from 'next/dynamic'
-const WalletSection = dynamic(() => import('@/app/components/settings/WalletSection').then(m => ({ default: m.WalletSection })), { ssr: false })
-const Web3Boundary = dynamic(() => import('@/lib/web3/withWeb3').then(m => ({ default: m.Web3Boundary })), { ssr: false })
+const WalletSection = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.WalletSection })), { ssr: false })
+const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.Web3Boundary })), { ssr: false })
 import { ImageCropper } from '@/app/components/ui/ImageCropper'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -976,9 +976,9 @@ function SettingsContent() {
 
           {/* Wallet Section */}
           <SectionCard id="wallet" title={t('walletSection')} description={t('walletDescription')}>
-            <Web3Boundary>
+            <LazyWeb3Boundary>
               <WalletSection onToast={(msg, type) => showToast(msg, type)} onConfirm={(title, msg) => showConfirm(title, msg)} />
-            </Web3Boundary>
+            </LazyWeb3Boundary>
           </SectionCard>
 
           {/* Exchange Connections */}
