@@ -294,7 +294,10 @@ export default function BookDetailPage() {
 
             {/* Metadata pills */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-              {book.category && <MetaPill label={book.category} />}
+              {book.category && <MetaPill label={isZh ? ({
+                book: '书籍', paper: '论文', whitepaper: '白皮书', event: '事件',
+                research: '研报', academic_paper: '学术论文', finance: '金融', regulatory: '监管',
+              } as Record<string, string>)[book.category] || book.category : book.category} />}
               {book.publisher && <MetaPill label={book.publisher} />}
               {book.publish_date && <MetaPill label={book.publish_date} />}
               {book.language && <MetaPill label={book.language === 'zh' ? 'Chinese' : book.language === 'en' ? 'English' : book.language} />}

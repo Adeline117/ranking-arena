@@ -717,6 +717,26 @@ export default function ReadPage() {
       userSelect: contentMode === 'html' ? 'text' : 'none', overflow: 'hidden',
     }}>
 
+      {/* ─── Breadcrumb (visible when toolbar shown) ──────── */}
+      <div style={{
+        position: 'absolute', top: 3, left: 0, right: 0, zIndex: 99,
+        transform: showToolbar ? 'translateY(52px)' : 'translateY(-100%)',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        pointerEvents: showToolbar ? 'auto' : 'none',
+      }}>
+        <div style={{
+          padding: '2px 16px',
+          background: theme === 'dark' ? 'rgba(15,15,26,0.9)' : 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        }}>
+          <Breadcrumb items={[
+            { label: isZh ? '书库' : 'Library', href: '/library' },
+            { label: book.title, href: `/library/${id}` },
+            { label: isZh ? '阅读' : 'Reading' },
+          ]} />
+        </div>
+      </div>
+
       {/* ─── Progress Bar (top, always visible) ──────────── */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: 3, zIndex: 150,
