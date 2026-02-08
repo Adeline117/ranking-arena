@@ -30,7 +30,6 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
       const { data } = await supabase
         .from('posts')
         .select('id, title, content, hot_score, like_count, comment_count, created_at, author_id')
-        .is('deleted_at', null)
         .order('hot_score', { ascending: false })
         .limit(limit)
 
