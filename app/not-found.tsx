@@ -357,7 +357,7 @@ export default function NotFoundPage() {
               background: 'transparent',
               color: tokens.colors.text.primary, 
               borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.15)',
+              border: `1px solid ${tokens.colors.border.primary}`,
               textDecoration: 'none',
               fontSize: 15,
               fontWeight: 500,
@@ -400,8 +400,8 @@ export default function NotFoundPage() {
                 className="suggestion-card"
                 style={{
                   padding: '10px 18px',
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: tokens.colors.bg.secondary,
+                  border: `1px solid ${tokens.colors.border.primary}`,
                   borderRadius: 10,
                   textDecoration: 'none',
                   color: tokens.colors.text.secondary,

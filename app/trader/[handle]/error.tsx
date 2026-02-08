@@ -62,7 +62,7 @@ export default function TraderError({
             padding: '10px 24px',
             background: 'transparent',
             color: tokens.colors.text.tertiary,
-            border: '1px solid rgba(255,255,255,0.15)',
+            border: `1px solid ${tokens.colors.border.primary}`,
             borderRadius: 8,
             textDecoration: 'none',
             fontSize: 14,
