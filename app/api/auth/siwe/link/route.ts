@@ -70,13 +70,37 @@ export async function POST(request: NextRequest) {
     }
 
     // Link wallet to current user
-    const { error: updateError } = await supabase
+    // First check if profile exists
+    const { data: profile } = await supabase
       .from('user_profiles')
-      .update({ wallet_address: walletAddress })
+      .select('id')
       .eq('id', user.id)
+      .maybeSingle()
 
-    if (updateError) {
-      return NextResponse.json({ error: 'Failed to link wallet' }, { status: 500 })
+    if (!profile) {
+      // Profile doesn't exist yet - create it with wallet address
+      const { error: insertError } = await supabase
+        .from('user_profiles')
+        .insert({
+          id: user.id,
+          email: user.email || `${walletAddress}@wallet.arena`,
+          wallet_address: walletAddress,
+        })
+
+      if (insertError) {
+        console.error('[SIWE link] Profile insert failed:', insertError)
+        return NextResponse.json({ error: 'Failed to create profile for wallet link' }, { status: 500 })
+      }
+    } else {
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({ wallet_address: walletAddress })
+        .eq('id', user.id)
+
+      if (updateError) {
+        console.error('[SIWE link] Wallet update failed:', updateError)
+        return NextResponse.json({ error: 'Failed to link wallet' }, { status: 500 })
+      }
     }
 
     return NextResponse.json({
