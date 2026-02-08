@@ -71,6 +71,19 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
+      - name: Bundle size check
+        run: |
+          echo "## Bundle Size Report" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          du -sh .next/static/ 2>/dev/null || true
+          find .next/static -name '*.js' -exec du -sh {} \; | sort -rh | head -20 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          # Fail if total JS bundle exceeds 5MB
+          TOTAL=$(find .next/static -name '*.js' -exec cat {} + | wc -c)
+          echo "Total JS size: $((TOTAL / 1024))KB"
+          if [ "$TOTAL" -gt 5242880 ]; then
+            echo "::warning::Bundle size exceeds 5MB threshold ($((TOTAL / 1024))KB)"
+          fi
       - uses: actions/upload-artifact@v6
         with:
           name: nextjs-build

@@ -11,6 +11,10 @@ updates:
       prefix: "deps"
     labels:
       - "dependencies"
+    # Only allow minor and patch updates (ignore major version bumps)
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     # Group security updates separately
     groups:
       security-updates:
@@ -22,6 +26,10 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    open-pull-requests-limit: 10
     commit-message:
       prefix: "ci"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
