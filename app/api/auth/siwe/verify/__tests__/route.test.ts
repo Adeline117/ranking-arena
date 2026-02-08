@@ -12,6 +12,12 @@ jest.mock('next/server', () => ({
   },
 }))
 
+// Mock rate-limit (uses @upstash/redis which has ESM issues in Jest)
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(null),
+  RateLimitPresets: { auth: {} },
+}))
+
 // ── Mocks ──
 
 const VALID_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678'

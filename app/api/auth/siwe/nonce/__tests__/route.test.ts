@@ -17,6 +17,12 @@ const mockSet = jest.fn()
 const mockCookies = jest.fn().mockResolvedValue({ set: mockSet })
 jest.mock('next/headers', () => ({ cookies: () => mockCookies() }))
 
+// Mock rate-limit (uses @upstash/redis which has ESM issues in Jest)
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(null),
+  RateLimitPresets: { auth: {} },
+}))
+
 // Mock crypto.randomBytes to return a deterministic value for testing
 const MOCK_HEX = 'a'.repeat(64)
 jest.mock('crypto', () => ({

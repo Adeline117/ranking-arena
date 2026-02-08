@@ -34,7 +34,7 @@
       "schedule": "30 3 * * *"
     },
     {
-      "path": "/api/cron/run-worker",
+      "path": "/api/cron/batch-5min",
       "schedule": "*/5 * * * *"
     },
     {

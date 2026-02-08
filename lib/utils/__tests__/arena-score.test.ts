@@ -281,18 +281,18 @@ describe('debouncedConfidence', () => {
   })
 
   test('partial with recent full upgrades to full (debounce)', () => {
-    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString()
-    expect(debouncedConfidence('partial', twoHoursAgo)).toBe('full')
+    const oneHourAgo = new Date(Date.now() - 1 * 3600 * 1000).toISOString()
+    expect(debouncedConfidence('partial', oneHourAgo)).toBe('full') // 1h < 2h default
   })
 
   test('minimal with recent full upgrades to full (debounce)', () => {
-    const fiveHoursAgo = new Date(Date.now() - 5 * 3600 * 1000).toISOString()
-    expect(debouncedConfidence('minimal', fiveHoursAgo)).toBe('full') // 5h < 8h default
+    const oneHourAgo = new Date(Date.now() - 1 * 3600 * 1000).toISOString()
+    expect(debouncedConfidence('minimal', oneHourAgo)).toBe('full') // 1h < 2h default
   })
 
   test('partial with old full stays partial (debounce expired)', () => {
-    const tenHoursAgo = new Date(Date.now() - 10 * 3600 * 1000).toISOString()
-    expect(debouncedConfidence('partial', tenHoursAgo)).toBe('partial') // 10h > 8h
+    const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+    expect(debouncedConfidence('partial', threeHoursAgo)).toBe('partial') // 3h > 2h default
   })
 
   test('custom debounce hours', () => {
@@ -694,6 +694,6 @@ describe('ARENA_CONFIG', () => {
   })
 
   test('置信度防抖配置正确', () => {
-    expect(ARENA_CONFIG.CONFIDENCE_DEBOUNCE_HOURS).toBe(8)
+    expect(ARENA_CONFIG.CONFIDENCE_DEBOUNCE_HOURS).toBe(2)
   })
 })
