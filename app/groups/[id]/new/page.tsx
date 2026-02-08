@@ -299,6 +299,30 @@ export default function NewGroupPostPage(): React.ReactElement {
     return () => clearTimeout(saveTimer)
   }, [title, content, images, pollEnabled, groupId, draftKey])
 
+  // UF15: Detect URLs in content and fetch link preview
+  useEffect(() => {
+    const urlMatch = content.match(/https?:\/\/[^\s)]+/)
+    const url = urlMatch ? urlMatch[0] : null
+    if (url && url !== linkPreviewUrlRef.current) {
+      linkPreviewUrlRef.current = url
+      setLinkPreviewLoading(true)
+      fetch(`/api/posts/link-preview?url=${encodeURIComponent(url)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data && (data.title || data.description)) {
+            setLinkPreview({ url, ...data })
+          } else {
+            setLinkPreview(null)
+          }
+        })
+        .catch(() => setLinkPreview(null))
+        .finally(() => setLinkPreviewLoading(false))
+    } else if (!url) {
+      linkPreviewUrlRef.current = null
+      setLinkPreview(null)
+    }
+  }, [content])
+
   // Clear draft after successful publish
   const clearDraft = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -691,6 +715,36 @@ export default function NewGroupPostPage(): React.ReactElement {
                 rows={12}
                 style={{ ...inputStyle, padding: tokens.spacing[4], resize: 'vertical', lineHeight: 1.6 }}
               />
+            )}
+            {/* UF15: Link Preview Card */}
+            {linkPreviewLoading && (
+              <Box style={{ marginTop: tokens.spacing[2], padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}` }}>
+                <Text size="xs" color="tertiary">{language === 'zh' ? '正在获取链接预览...' : 'Fetching link preview...'}</Text>
+              </Box>
+            )}
+            {linkPreview && !linkPreviewLoading && (
+              <Box style={{
+                marginTop: tokens.spacing[2], padding: tokens.spacing[3], borderRadius: tokens.radius.md,
+                background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
+                display: 'flex', gap: tokens.spacing[3], alignItems: 'flex-start',
+              }}>
+                {linkPreview.image && (
+                  <img src={linkPreview.image} alt="" style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                )}
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="sm" weight="bold" style={{ marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {linkPreview.title}
+                  </Text>
+                  {linkPreview.description && (
+                    <Text size="xs" color="secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+                      {linkPreview.description}
+                    </Text>
+                  )}
+                  <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>{new URL(linkPreview.url).hostname}</Text>
+                </Box>
+                <button onClick={() => { setLinkPreview(null); linkPreviewUrlRef.current = 'dismissed' }}
+                  style={{ background: 'none', border: 'none', color: tokens.colors.text.tertiary, cursor: 'pointer', fontSize: 16, padding: 2 }}>×</button>
+              </Box>
             )}
             {/* Sticker button */}
             <div style={{ position: 'relative', marginTop: tokens.spacing[2] }}>

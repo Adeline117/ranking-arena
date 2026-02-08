@@ -213,79 +213,75 @@ export default function MembershipPage() {
         )}
       </div>
 
-      {/* NFT Membership Card */}
-      <div style={{
-        background: tokens.glass.bg.light,
-        border: tokens.glass.border.light,
-        borderRadius: 16,
-        padding: 24,
-        marginBottom: 24,
-      }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
-          {t('nftMembershipCard')}
-        </h2>
+      {/* UF29: NFT Membership Card - only show when user has NFT or is Pro */}
+      {(info?.nft?.hasNft || isPro) && (
+        <div style={{
+          background: tokens.glass.bg.light,
+          border: tokens.glass.border.light,
+          borderRadius: 16,
+          padding: 24,
+          marginBottom: 24,
+        }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
+            {t('nftMembershipCard')}
+          </h2>
 
-        {info?.nft?.hasNft ? (
-          <div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              marginBottom: 16,
-            }}>
+          {info?.nft?.hasNft ? (
+            <div>
               <div style={{
-                width: 64,
-                height: 64,
-                borderRadius: 12,
-                background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, ${tokens.colors.accent.success})`,
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 24,
+                gap: 12,
+                marginBottom: 16,
               }}>
-                Yes
-              </div>
-              <div>
-                <div style={{ fontWeight: 700 }}>Arena Pro NFT #{info.nft.tokenId}</div>
-                <div style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
-                  {info.nft.walletAddress?.slice(0, 6)}...{info.nft.walletAddress?.slice(-4)}
+                <div style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 12,
+                  background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, ${tokens.colors.accent.success})`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 24,
+                }}>
+                  ✓
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Arena Pro NFT #{info.nft.tokenId}</div>
+                  <div style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
+                    {info.nft.walletAddress?.slice(0, 6)}...{info.nft.walletAddress?.slice(-4)}
+                  </div>
                 </div>
               </div>
+              {info.nft.expiresAt && (
+                <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
+                  {t('nftValidUntil')} {new Date(info.nft.expiresAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                </div>
+              )}
             </div>
-            {info.nft.expiresAt && (
-              <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-                {t('nftValidUntil')} {new Date(info.nft.expiresAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ color: tokens.colors.text.tertiary }}>
-            {isPro ? (
-              <div>
-                <p style={{ marginBottom: 12 }}>{t('nftNotMintedPro')}</p>
-                <p style={{ fontSize: 13 }}>{t('nftLinkWalletHint')}</p>
-                <button
-                  onClick={() => router.push('/settings')}
-                  style={{
-                    marginTop: 12,
-                    padding: '10px 20px',
-                    background: tokens.glass.bg.medium,
-                    border: tokens.glass.border.light,
-                    borderRadius: 8,
-                    color: tokens.colors.text.primary,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {t('nftLinkWallet')}
-                </button>
-              </div>
-            ) : (
-              <p>{t('nftUpgradeHint')}</p>
-            )}
-          </div>
-        )}
-      </div>
+          ) : (
+            <div style={{ color: tokens.colors.text.tertiary }}>
+              <p style={{ marginBottom: 12 }}>{t('nftNotMintedPro')}</p>
+              <p style={{ fontSize: 13 }}>{t('nftLinkWalletHint')}</p>
+              <button
+                onClick={() => router.push('/settings')}
+                style={{
+                  marginTop: 12,
+                  padding: '10px 20px',
+                  background: tokens.glass.bg.medium,
+                  border: tokens.glass.border.light,
+                  borderRadius: 8,
+                  color: tokens.colors.text.primary,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {t('nftLinkWallet')}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Benefits Comparison */}
       <div style={{
@@ -369,33 +365,110 @@ export default function MembershipPage() {
         </div>
       </div>
 
-      {/* Manage Subscription Button */}
+      {/* UF28: Subscription Management Actions */}
       {isPro && (
-        <div style={{ marginTop: 24, textAlign: 'center' }}>
-          <button
-            onClick={async () => {
-              const headers = await getAuthHeadersAsync()
-              const res = await fetch('/api/stripe/portal', {
-                method: 'POST',
-                headers,
-              })
-              if (res.ok) {
-                const { url } = await res.json()
-                window.location.href = url
-              }
-            }}
-            style={{
-              padding: '12px 24px',
-              background: 'transparent',
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: 12,
-              color: tokens.colors.text.secondary,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
+        <div style={{
+          marginTop: 24,
+          background: tokens.glass.bg.light,
+          border: tokens.glass.border.light,
+          borderRadius: 16,
+          padding: 24,
+        }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
             {t('manageSubscription')}
-          </button>
+          </h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            {/* Manage / Change Plan */}
+            <button
+              onClick={async () => {
+                const headers = await getAuthHeadersAsync()
+                const res = await fetch('/api/stripe/portal', {
+                  method: 'POST',
+                  headers,
+                })
+                if (res.ok) {
+                  const { url } = await res.json()
+                  window.location.href = url
+                }
+              }}
+              style={{
+                padding: '12px 24px',
+                background: tokens.colors.accent.brand,
+                border: 'none',
+                borderRadius: 12,
+                color: '#fff',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {language === 'zh' ? '升级/降级方案' : 'Change Plan'}
+            </button>
+            {/* Billing History */}
+            <button
+              onClick={async () => {
+                const headers = await getAuthHeadersAsync()
+                const res = await fetch('/api/stripe/portal', {
+                  method: 'POST',
+                  headers,
+                })
+                if (res.ok) {
+                  const { url } = await res.json()
+                  window.location.href = url + '/billing'
+                }
+              }}
+              style={{
+                padding: '12px 24px',
+                background: 'transparent',
+                border: `1px solid ${tokens.colors.border.primary}`,
+                borderRadius: 12,
+                color: tokens.colors.text.secondary,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {language === 'zh' ? '账单历史' : 'Billing History'}
+            </button>
+            {/* Cancel */}
+            {info?.subscription && !info.subscription.cancelAtPeriodEnd && (
+              <button
+                onClick={async () => {
+                  if (!confirm(language === 'zh' ? '确定要取消订阅吗？取消后将在当前周期结束时失效。' : 'Are you sure you want to cancel? Your subscription will remain active until the end of the current billing period.')) return
+                  const headers = await getAuthHeadersAsync()
+                  const res = await fetch('/api/stripe/portal', {
+                    method: 'POST',
+                    headers,
+                  })
+                  if (res.ok) {
+                    const { url } = await res.json()
+                    window.location.href = url
+                  }
+                }}
+                style={{
+                  padding: '12px 24px',
+                  background: 'transparent',
+                  border: `1px solid ${tokens.colors.accent.error}40`,
+                  borderRadius: 12,
+                  color: tokens.colors.accent.error,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {language === 'zh' ? '取消订阅' : 'Cancel Subscription'}
+              </button>
+            )}
+            {info?.subscription?.cancelAtPeriodEnd && (
+              <div style={{
+                padding: '12px 24px',
+                background: `${tokens.colors.accent.warning}15`,
+                border: `1px solid ${tokens.colors.accent.warning}40`,
+                borderRadius: 12,
+                color: tokens.colors.accent.warning,
+                fontWeight: 600,
+              }}>
+                {language === 'zh' ? '订阅将在到期后取消' : 'Subscription will cancel at period end'}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
