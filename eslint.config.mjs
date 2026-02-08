@@ -96,6 +96,7 @@ const eslintConfig = defineConfig([
     "docs/**",
     "public/**/*.mjs",
     "worker/**",
+    ".archived/**",
     // Claude skills (external, not part of project)
     ".claude/**",
     // Default ignores of eslint-config-next:
