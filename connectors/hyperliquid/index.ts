@@ -164,6 +164,7 @@ export class HyperliquidConnector extends BaseConnector {
         copiers: null,
         sharpe_ratio: null,
         aum: accountValue,
+        roi_type: 'mixed',
       };
 
       return this.success<CanonicalSnapshot>({

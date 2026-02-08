@@ -110,6 +110,8 @@ export interface SnapshotMetrics {
   copiers: number | null;
   sharpe_ratio: number | null;
   aum: number | null;
+  /** How ROI is calculated: realized (closed P&L only), unrealized (includes open), or mixed */
+  roi_type?: 'realized' | 'unrealized' | 'mixed';
   // Platform-specific extras stored here
   [key: string]: unknown;
 }
