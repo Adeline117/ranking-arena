@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
+import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -34,42 +33,24 @@ function formatTimeAgo(dateStr: string, isZh: boolean): string {
   return isZh ? '很久以前' : 'long ago'
 }
 
+const fetcher = (url: string) => fetch(url).then(r => r.json())
+
 export default function TrendingDiscussions() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
-  const [posts, setPosts] = useState<TrendingPost[]>([])
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function fetchPosts() {
-      const { data } = await supabase
-        .from('posts')
-        .select('id, title, content, author_handle, comment_count, like_count, view_count, hot_score, created_at, group_id')
-        .eq('status', 'active')
-        .order('hot_score', { ascending: false })
-        .limit(8)
-
-      // Fetch group names for posts with group_id
-      const postsData = (data as TrendingPost[]) || []
-      if (postsData.length > 0) {
-        const groupIds = postsData.map(p => p.group_id).filter(Boolean) as string[]
-        if (groupIds.length > 0) {
-          const { data: groupData } = await supabase
-            .from('groups')
-            .select('id, name')
-            .in('id', groupIds)
-          const groupMap = new Map((groupData || []).map(g => [g.id, g.name]))
-          postsData.forEach(p => {
-            p.group_name = p.group_id ? groupMap.get(p.group_id) || null : null
-          })
-        }
-      }
-
-      setPosts(postsData)
-      setLoading(false)
+  const { data, error, isLoading } = useSWR<{ posts: TrendingPost[] }>(
+    '/api/sidebar/trending',
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+      refreshInterval: 180000, // Refresh every 3 minutes
     }
-    fetchPosts()
-  }, [])
+  )
+
+  const posts = data?.posts || []
+  const loading = isLoading
 
   return (
     <SidebarCard title={isZh ? '热门讨论' : 'Trending'}>
@@ -79,7 +60,7 @@ export default function TrendingDiscussions() {
             <div key={i} className="skeleton" style={{ height: 72, borderRadius: 8 }} />
           ))}
         </div>
-      ) : posts.length === 0 ? (
+      ) : error || posts.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '24px 12px' }}>
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.25, color: tokens.colors.text.tertiary, marginBottom: 8 }}>
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -182,7 +163,6 @@ export default function TrendingDiscussions() {
                   </svg>
                   {post.comment_count}
                 </span>
-{/* view_count removed — not reliably tracked */}
               </div>
             </Link>
           ))}

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -31,35 +31,30 @@ const CATEGORY_CONFIG: Record<string, { color: string; label: string; label_en: 
   market: { color: '#06b6d4', label: '市场动态', label_en: 'Market' },
 }
 
+const fetcher = (url: string) => fetch(url).then(r => r.json())
+
 export default function NewsFlash() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
-  const [news, setNews] = useState<NewsItem[]>([])
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function fetchNews() {
-      try {
-        const res = await fetch('/api/flash-news?limit=5&sort=published_at')
-        if (!res.ok) return
-        const json = await res.json()
-        const newsData = json?.data?.news || json?.news || []
-        setNews(newsData)
-      } catch {
-        // silent fail
-      } finally {
-        setLoading(false)
-      }
+  const { data, isLoading } = useSWR(
+    '/api/flash-news?limit=5&sort=published_at',
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+      refreshInterval: 120000, // Refresh every 2 minutes
     }
-    fetchNews()
-  }, [])
+  )
+
+  const news: NewsItem[] = data?.data?.news || data?.news || []
+  const loading = isLoading
 
   const getTitle = (item: NewsItem) => {
     if (isZh) return item.title_zh || item.title
     return item.title_en || item.title
   }
 
-  /** Detect if title language mismatches the UI language */
   const getLangBadge = (item: NewsItem): string | null => {
     const title = getTitle(item)
     if (!title) return null
@@ -97,7 +92,6 @@ export default function NewsFlash() {
                   borderBottom: idx < news.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                 }}
               >
-                {/* Importance + Category badges */}
                 <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                   {impConfig && (
                     <span style={{
