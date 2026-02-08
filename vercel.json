@@ -1,5 +1,7 @@
 {
-  "regions": ["hnd1"],
+  "regions": [
+    "hnd1"
+  ],
   "crons": [
     {
       "path": "/api/cron/fetch-followed-traders",
@@ -34,10 +36,6 @@
       "schedule": "*/2 * * * *"
     },
     {
-      "path": "/api/cron/run-jobs?max=10&prewarm=true",
-      "schedule": "*/15 * * * *"
-    },
-    {
       "path": "/api/cron/cleanup-deleted-accounts",
       "schedule": "0 3 * * *"
     },
@@ -49,74 +47,114 @@
       "path": "/api/cron/calculate-tiers",
       "schedule": "*/15 * * * *"
     },
-    { "path": "/api/cron/fetch-traders/binance_futures", "schedule": "55 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/binance_spot",   "schedule": "56 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/binance_web3",   "schedule": "57 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/bybit",          "schedule": "58 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/bybit_spot",     "schedule": "59 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/bitget_futures",  "schedule": "0 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/fetch-traders/bitget_spot",   "schedule": "1 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/fetch-traders/hyperliquid",    "schedule": "2 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/fetch-traders/okx_futures",    "schedule": "3 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/okx_web3",       "schedule": "6 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/bingx",          "schedule": "9 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/gateio",         "schedule": "12 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/mexc",           "schedule": "15 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/coinex",         "schedule": "18 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/kucoin",         "schedule": "21 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/htx",            "schedule": "24 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/weex",           "schedule": "27 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/phemex",         "schedule": "30 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/xt",             "schedule": "33 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/pionex",         "schedule": "36 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/gmx",            "schedule": "39 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/kwenta",         "schedule": "42 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/gains",          "schedule": "45 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/mux",            "schedule": "48 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/lbank",          "schedule": "51 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/blofin",         "schedule": "54 */4 * * *" },
-    { "path": "/api/cron/fetch-traders/vertex",         "schedule": "4 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/fetch-traders/drift",          "schedule": "7 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/fetch-traders/jupiter_perps",  "schedule": "10 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/fetch-traders/aevo",           "schedule": "13 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/fetch-traders/synthetix",      "schedule": "16 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/fetch-traders/dydx",           "schedule": "19 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/discover-traders",    "schedule": "56 */4 * * *" },
-    { "path": "/api/cron/discover-rankings",   "schedule": "58 */4 * * *" },
-    { "path": "/api/scrape/proxy?period=all",  "schedule": "0 2,6,10,14,18,22 * * *" },
-    { "path": "/api/cron/subscription-expiry",  "schedule": "0 0 * * *" },
-    { "path": "/api/cron/publish-attestations",  "schedule": "0 1 * * *" },
-    { "path": "/api/cron/enrich?platform=binance_futures&period=90D&limit=100", "schedule": "10 0,4,8,12,16,20 * * *" },
-    { "path": "/api/cron/enrich?platform=bybit&period=90D&limit=100", "schedule": "15 0,4,8,12,16,20 * * *" },
-    { "path": "/api/cron/enrich?platform=okx_futures&period=90D&limit=150", "schedule": "20 0,4,8,12,16,20 * * *" },
-    { "path": "/api/cron/enrich?platform=binance_futures&period=30D&limit=50", "schedule": "25 0,8,16 * * *" },
-    { "path": "/api/cron/enrich?platform=bybit&period=30D&limit=50", "schedule": "30 0,8,16 * * *" },
-    { "path": "/api/cron/enrich?platform=binance_futures&period=7D&limit=30", "schedule": "35 0,12 * * *" },
-    { "path": "/api/cron/enrich?platform=bybit&period=7D&limit=30", "schedule": "40 0,12 * * *" },
-    { "path": "/api/cron/check-enrichment-freshness", "schedule": "45 */6 * * *" },
-    { "path": "/api/cron/detect-anomalies", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/fetch-market-data?type=prices", "schedule": "0 */1 * * *" },
-    { "path": "/api/cron/calculate-advanced-metrics", "schedule": "30 */4 * * *" },
-    { "path": "/api/cron/calculate-market-correlation", "schedule": "0 2 * * *" },
-    { "path": "/api/cron/aggregate-daily-snapshots", "schedule": "5 0 * * *" },
-    { "path": "/api/cron/fetch-bybit-traders", "schedule": "*/15 * * * *" },
-    { "path": "/api/trader/sync", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/fetch-funding-rates", "schedule": "0 */4 * * *" },
-    { "path": "/api/cron/fetch-open-interest", "schedule": "0 * * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=binance_futures&limit=200", "schedule": "5 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=binance_spot&limit=200", "schedule": "10 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=bybit&limit=200", "schedule": "15 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=bitget_futures&limit=200", "schedule": "20 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=bitget_spot&limit=200", "schedule": "25 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=mexc&limit=200", "schedule": "30 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=kucoin&limit=200", "schedule": "35 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=coinex&limit=200", "schedule": "40 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=xt&limit=200", "schedule": "45 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=weex&limit=200", "schedule": "50 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=lbank&limit=200", "schedule": "55 */2 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=bingx&limit=100", "schedule": "0 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=phemex&limit=50", "schedule": "5 1,5,9,13,17,21 * * *" },
-    { "path": "/api/cron/backfill-avatars?platform=blofin&limit=50", "schedule": "10 1,5,9,13,17,21 * * *" }
+    {
+      "path": "/api/cron/discover-traders",
+      "schedule": "56 */4 * * *"
+    },
+    {
+      "path": "/api/cron/discover-rankings",
+      "schedule": "58 */4 * * *"
+    },
+    {
+      "path": "/api/scrape/proxy?period=all",
+      "schedule": "0 2,6,10,14,18,22 * * *"
+    },
+    {
+      "path": "/api/cron/subscription-expiry",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-market-data?type=prices",
+      "schedule": "0 */1 * * *"
+    },
+    {
+      "path": "/api/cron/calculate-advanced-metrics",
+      "schedule": "30 */4 * * *"
+    },
+    {
+      "path": "/api/cron/aggregate-daily-snapshots",
+      "schedule": "5 0 * * *"
+    },
+    {
+      "path": "/api/trader/sync",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/fetch-funding-rates",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-open-interest",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/binance_futures",
+      "schedule": "55 */3 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/binance_spot",
+      "schedule": "56 */3 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bybit",
+      "schedule": "57 */3 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bitget_futures",
+      "schedule": "58 */3 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/okx_futures",
+      "schedule": "59 */3 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/mexc",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/kucoin",
+      "schedule": "3 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/okx_web3",
+      "schedule": "6 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/hyperliquid",
+      "schedule": "9 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/gmx",
+      "schedule": "12 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/jupiter_perps",
+      "schedule": "15 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/aevo",
+      "schedule": "18 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/coinex",
+      "schedule": "21 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bitget_spot",
+      "schedule": "24 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/xt",
+      "schedule": "27 */6 * * *"
+    },
+    {
+      "path": "/api/cron/enrich?platform=binance_futures&period=90D&limit=100",
+      "schedule": "10 */4 * * *"
+    },
+    {
+      "path": "/api/cron/enrich?platform=bybit&period=90D&limit=100",
+      "schedule": "20 */4 * * *"
+    }
   ],
   "headers": [
     {
