@@ -143,7 +143,7 @@ const injectStyles = () => {
     }
     
     .login-input:focus {
-      border-color: #8b6fa8 !important;
+      border-color: var(--color-brand) !important;
       animation: inputFocus 0.3s ease forwards;
       background: rgba(139, 111, 168, 0.05) !important;
     }
@@ -185,7 +185,7 @@ const injectStyles = () => {
     }
     
     .password-toggle:hover {
-      color: #8b6fa8 !important;
+      color: var(--color-brand) !important;
     }
     
     .strength-segment {
@@ -204,7 +204,7 @@ const injectStyles = () => {
       left: 0;
       width: 0;
       height: 1px;
-      background: #8b6fa8;
+      background: var(--color-brand);
       transition: width 0.3s ease;
     }
     
@@ -837,7 +837,7 @@ export default function LoginPage() {
                   border: 'none',
                   background: sendingCode || !email || countdown > 0 
                     ? 'rgba(139, 111, 168, 0.2)' 
-                    : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                    : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                   color: '#fff',
                   fontWeight: 700,
                   fontSize: 15,
@@ -898,7 +898,7 @@ export default function LoginPage() {
                     border: 'none',
                     background: loading || !code 
                       ? 'rgba(139, 111, 168, 0.2)' 
-                      : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                      : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                     color: '#fff',
                     fontWeight: 700,
                     fontSize: 15,
@@ -926,7 +926,7 @@ export default function LoginPage() {
                       style={{
                         background: 'transparent',
                         border: 'none',
-                        color: '#8b6fa8',
+                        color: 'var(--color-brand)',
                         fontSize: 13,
                         fontWeight: 600,
                         cursor: !email ? 'not-allowed' : 'pointer',
@@ -1057,7 +1057,7 @@ export default function LoginPage() {
                     border: 'none',
                     background: loading || !password || password.length < 6 || !handle || handle.length < 1 
                       ? 'rgba(139, 111, 168, 0.2)' 
-                      : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                      : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                     color: '#fff',
                     fontWeight: 700,
                     fontSize: 15,
@@ -1146,7 +1146,7 @@ export default function LoginPage() {
                     border: 'none',
                     background: loading || !email || !password 
                       ? 'rgba(139, 111, 168, 0.2)' 
-                      : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                      : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                     color: '#fff',
                     fontWeight: 700,
                     fontSize: 15,
@@ -1191,7 +1191,7 @@ export default function LoginPage() {
                     padding: '8px',
                     border: 'none',
                     background: 'transparent',
-                    color: '#8b6fa8',
+                    color: 'var(--color-brand)',
                     fontWeight: 600,
                     fontSize: 13,
                     cursor: 'pointer',
@@ -1216,7 +1216,7 @@ export default function LoginPage() {
                       border: 'none',
                       background: sendingCode || !email || countdown > 0 
                         ? 'rgba(139, 111, 168, 0.2)' 
-                        : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                        : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                       color: '#fff',
                       fontWeight: 700,
                       fontSize: 15,
@@ -1277,7 +1277,7 @@ export default function LoginPage() {
                         border: 'none',
                         background: loading || !code 
                           ? 'rgba(139, 111, 168, 0.2)' 
-                          : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                          : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                         color: '#fff',
                         fontWeight: 700,
                         fontSize: 15,
@@ -1305,7 +1305,7 @@ export default function LoginPage() {
                           style={{
                             background: 'transparent',
                             border: 'none',
-                            color: '#8b6fa8',
+                            color: 'var(--color-brand)',
                             fontSize: 13,
                             fontWeight: 600,
                             cursor: !email ? 'not-allowed' : 'pointer',
@@ -1329,7 +1329,7 @@ export default function LoginPage() {
                         padding: '8px',
                         border: 'none',
                         background: 'transparent',
-                        color: '#8b6fa8',
+                        color: 'var(--color-brand)',
                         fontWeight: 600,
                         fontSize: 13,
                         cursor: 'pointer',

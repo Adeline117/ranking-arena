@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-const ARENA_PURPLE = 'var(--color-accent-brand, #8b6fa8)'
+const ARENA_PURPLE = 'var(--color-brand, #8b6fa8)'
 
 // CSS styles
 const injectStyles = () => {

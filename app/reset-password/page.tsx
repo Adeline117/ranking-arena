@@ -93,7 +93,7 @@ const injectStyles = () => {
     }
     
     .reset-input:focus {
-      border-color: #8b6fa8 !important;
+      border-color: var(--color-brand) !important;
       animation: inputFocus 0.3s ease forwards;
       background: rgba(139, 111, 168, 0.05) !important;
     }
@@ -150,7 +150,7 @@ const injectStyles = () => {
       left: 0;
       width: 0;
       height: 1px;
-      background: #8b6fa8;
+      background: var(--color-brand);
       transition: width 0.3s ease;
     }
     
@@ -163,7 +163,7 @@ const injectStyles = () => {
     }
     
     .password-toggle:hover {
-      color: #8b6fa8 !important;
+      color: var(--color-brand) !important;
     }
   `
   document.head.appendChild(style)
@@ -509,7 +509,7 @@ function ResetPasswordContent() {
                 border: 'none',
                 background: loading || !email || countdown > 0 
                   ? 'rgba(139, 111, 168, 0.2)' 
-                  : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                  : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                 color: '#fff',
                 fontWeight: 700,
                 fontSize: 15,
@@ -669,7 +669,7 @@ function ResetPasswordContent() {
                 border: 'none',
                 background: loading || !newPassword || !confirmPassword 
                   ? 'rgba(139, 111, 168, 0.2)' 
-                  : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                  : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                 color: '#fff',
                 fontWeight: 700,
                 fontSize: 15,
@@ -696,7 +696,7 @@ function ResetPasswordContent() {
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
-            color: '#8b6fa8',
+            color: 'var(--color-brand)',
             fontSize: 14,
             fontWeight: 600,
             textDecoration: 'none',
@@ -780,7 +780,7 @@ export default function ResetPasswordPage() {
           width: 40,
           height: 40,
           border: '3px solid rgba(139, 111, 168, 0.2)',
-          borderTopColor: '#8b6fa8',
+          borderTopColor: 'var(--color-brand)',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
         }} />

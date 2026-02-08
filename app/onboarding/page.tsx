@@ -167,7 +167,7 @@ export default function OnboardingPage() {
           width: 40,
           height: 40,
           border: '3px solid rgba(139, 111, 168, 0.2)',
-          borderTopColor: '#8b6fa8',
+          borderTopColor: 'var(--color-brand)',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
         }} />
@@ -241,7 +241,7 @@ export default function OnboardingPage() {
             weight="black" 
             style={{ 
               marginBottom: 8,
-              background: 'linear-gradient(135deg, #8b6fa8 0%, #c9b8db 100%)',
+              background: 'linear-gradient(135deg, var(--color-brand) 0%, #c9b8db 100%)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
             }}
@@ -352,7 +352,7 @@ export default function OnboardingPage() {
                 margin: '0 auto 8px',
                 borderRadius: '50%',
                 background: '#1a1a2e',
-                border: '2px solid #8b6fa8',
+                border: '2px solid var(--color-brand)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -388,13 +388,13 @@ export default function OnboardingPage() {
                 margin: '0 auto 8px',
                 borderRadius: '50%',
                 background: '#f5f5f7',
-                border: '2px solid #8b6fa8',
+                border: '2px solid var(--color-brand)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
                 {/* 太阳图标 */}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b6fa8" strokeWidth="2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" strokeWidth="2">
                   <circle cx="12" cy="12" r="5" />
                   <line x1="12" y1="1" x2="12" y2="3" />
                   <line x1="12" y1="21" x2="12" y2="23" />
@@ -409,7 +409,7 @@ export default function OnboardingPage() {
               <Text 
                 size="sm" 
                 weight={theme === 'light' ? 'bold' : 'medium'}
-                style={{ color: theme === 'light' ? '#8b6fa8' : textSecondary }}
+                style={{ color: theme === 'light' ? 'var(--color-brand)' : textSecondary }}
               >
                 {tr('lightMode')}
               </Text>
@@ -426,7 +426,7 @@ export default function OnboardingPage() {
             padding: '16px 24px',
             borderRadius: 14,
             border: 'none',
-            background: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+            background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
             color: '#fff',
             fontWeight: 700,
             fontSize: 16,

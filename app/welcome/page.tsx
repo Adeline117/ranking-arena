@@ -195,7 +195,7 @@ const injectStyles = () => {
     }
     
     .welcome-input:focus {
-      border-color: #8b6fa8 !important;
+      border-color: var(--color-brand) !important;
       box-shadow: 0 0 0 4px rgba(139, 111, 168, 0.1);
       background: rgba(139, 111, 168, 0.05) !important;
     }
@@ -373,7 +373,7 @@ export default function WelcomePage() {
           width: 40,
           height: 40,
           border: '3px solid rgba(139, 111, 168, 0.2)',
-          borderTopColor: '#8b6fa8',
+          borderTopColor: tokens.colors.accent.brand,
           borderRadius: '50%',
           animation: 'spin 1s linear infinite',
         }} />
@@ -395,7 +395,7 @@ export default function WelcomePage() {
             width: 8,
             height: 8,
             borderRadius: Math.random() > 0.5 ? '50%' : '2px',
-            background: ['#8b6fa8', '#c9b8db', '#6b4f88', '#ff7c7c', '#2fe57d'][Math.floor(Math.random() * 5)],
+            background: [tokens.colors.accent.brand, '#c9b8db', '#6b4f88', '#ff7c7c', '#2fe57d'][Math.floor(Math.random() * 5)],
             animationDelay: `${i * 0.1}s`,
           }}
         />
@@ -469,7 +469,7 @@ export default function WelcomePage() {
                   height: 10,
                   borderRadius: 5,
                   background: isPast || isActive
-                    ? 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)'
+                    ? 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)'
                     : 'rgba(255, 255, 255, 0.1)',
                   transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
@@ -503,7 +503,7 @@ export default function WelcomePage() {
                 weight="black" 
                 style={{ 
                   marginBottom: 28,
-                  background: 'linear-gradient(135deg, #8b6fa8 0%, #c9b8db 100%)',
+                  background: 'linear-gradient(135deg, var(--color-brand) 0%, #c9b8db 100%)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}
@@ -571,7 +571,7 @@ export default function WelcomePage() {
                   padding: '16px 24px',
                   borderRadius: 14,
                   border: 'none',
-                  background: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                  background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                   color: '#fff',
                   fontWeight: 700,
                   fontSize: 16,
@@ -681,7 +681,7 @@ export default function WelcomePage() {
                     border: 'none',
                     background: saving 
                       ? 'rgba(139, 111, 168, 0.2)' 
-                      : 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                      : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                     color: '#fff',
                     fontWeight: 700,
                     fontSize: 15,
@@ -763,7 +763,7 @@ export default function WelcomePage() {
                     padding: '16px 24px',
                     borderRadius: 14,
                     border: 'none',
-                    background: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                    background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                     color: '#fff',
                     fontWeight: 700,
                     fontSize: 16,
