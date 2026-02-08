@@ -59,7 +59,7 @@ const injectStyles = () => {
     @keyframes progressPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139, 111, 168, 0.4); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(139, 111, 168, 0); } }
     @keyframes spin { to { transform: rotate(360deg); } }
     .onboarding-bg { position: fixed; inset: 0; z-index: 0; transition: background 0.5s ease; }
-    .onboarding-bg.dark { background: linear-gradient(135deg, #0a0a0f 0%, #13111a 50%, #0f0d14 100%); }
+    .onboarding-bg.dark { background: var(--color-bg-primary); }
     .onboarding-bg.light { background: linear-gradient(135deg, #f5f5f7 0%, #e8e8ed 50%, #f0f0f5 100%); }
     .onboarding-bg::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at center, rgba(139, 111, 168, 0.08) 0%, transparent 50%); }
     .onboarding-card { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }

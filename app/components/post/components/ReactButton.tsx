@@ -60,7 +60,7 @@ export function ReactButton({
       }}
       onMouseEnter={(e) => {
         if (!active) {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+          e.currentTarget.style.background = 'var(--overlay-hover)'
           e.currentTarget.style.color = 'var(--color-text-primary)'
         }
       }}

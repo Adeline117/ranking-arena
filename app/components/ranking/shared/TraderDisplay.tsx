@@ -198,7 +198,7 @@ export function getScoreStyle(score: number): { bgGradient: string; borderColor:
   }
   return {
     bgGradient: tokens.glass.bg.light,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'var(--glass-border-medium)',
     textColor: TRADER_TEXT_TERTIARY,
     fillColor: `${tokens.colors.accent.primary}15`,
   }

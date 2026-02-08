@@ -120,7 +120,7 @@ const injectStyles = () => {
     .login-page-bg {
       position: fixed;
       inset: 0;
-      background: linear-gradient(135deg, #0a0a0f 0%, #13111a 50%, #0f0d14 100%);
+      background: var(--color-bg-primary);
       z-index: 0;
     }
     
@@ -799,7 +799,7 @@ export default function LoginPage() {
             padding: '14px 16px',
             borderRadius: 12,
             border: '1px solid rgba(255, 255, 255, 0.15)',
-            background: 'rgba(255, 255, 255, 0.05)',
+            background: 'var(--glass-bg-light)',
             color: tokens.colors.text.primary,
             fontWeight: 600,
             fontSize: 15,
@@ -827,9 +827,9 @@ export default function LoginPage() {
           gap: 16,
           marginBottom: 24,
         }}>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
+          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
           <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{lang === 'zh' ? '或使用邮箱登录' : 'or use email'}</span>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
+          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
         </div>
 
         {/* Title */}
@@ -854,7 +854,7 @@ export default function LoginPage() {
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left', maxWidth: 320, margin: '0 auto' }}>
             {['loginValueProp1', 'loginValueProp2', 'loginValueProp3'].map((key) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#9a9a9a' }}>
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -871,7 +871,7 @@ export default function LoginPage() {
             marginBottom: 8, 
             fontSize: 13, 
             fontWeight: 600,
-            color: '#b0b0b0',
+            color: 'var(--color-text-secondary)',
           }}>
             {t('loginEmail')}
           </label>
@@ -882,8 +882,8 @@ export default function LoginPage() {
               width: '100%', 
               padding: '14px 16px', 
               borderRadius: 12,
-              border: `1px solid ${touchedFields.email && !emailValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
-              background: 'rgba(0, 0, 0, 0.3)',
+              border: `1px solid ${touchedFields.email && !emailValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
+              background: 'var(--color-bg-tertiary)',
               color: tokens.colors.text.primary,
               fontSize: 15,
               outline: 'none',
@@ -899,7 +899,7 @@ export default function LoginPage() {
           />
           {touchedFields.email && email && !emailValidation.valid && (
             <div style={{ marginTop: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ color: '#ff7c7c' }}>X - {t(emailValidation.messageKey)}</span>
+              <span style={{ color: 'var(--color-accent-error)' }}>X - {t(emailValidation.messageKey)}</span>
             </div>
           )}
         </div>
@@ -937,7 +937,7 @@ export default function LoginPage() {
             ) : !codeVerified ? (
               <>
                 <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
+                  <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
                     {t('loginVerificationCode')}
                   </label>
                   <input
@@ -948,7 +948,7 @@ export default function LoginPage() {
                       padding: '14px 16px', 
                       borderRadius: 12,
                       border: '1px solid rgba(255, 255, 255, 0.1)',
-                      background: 'rgba(0, 0, 0, 0.3)',
+                      background: 'var(--color-bg-tertiary)',
                       color: tokens.colors.text.primary,
                       fontSize: 15,
                       outline: 'none',
@@ -965,7 +965,7 @@ export default function LoginPage() {
                     }}
                     maxLength={6}
                   />
-                  <div style={{ marginTop: 6, fontSize: 11, color: '#6a6a6a' }}>
+                  <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                     {t('loginCodeValidFor')}
                   </div>
                 </div>
@@ -997,7 +997,7 @@ export default function LoginPage() {
                 </button>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
                   {countdown > 0 ? (
-                    <span style={{ fontSize: 13, color: '#6a6a6a' }}>
+                    <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
                       {countdown} {t('loginCountdown')}
                     </span>
                   ) : (
@@ -1024,7 +1024,7 @@ export default function LoginPage() {
               <>
                 {/* Username input */}
                 <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
+                  <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
                     {t('loginHandle')}
                   </label>
                   <input
@@ -1034,8 +1034,8 @@ export default function LoginPage() {
                       width: '100%', 
                       padding: '14px 16px', 
                       borderRadius: 12,
-                      border: `1px solid ${touchedFields.handle && !handleValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
-                      background: 'rgba(0, 0, 0, 0.3)',
+                      border: `1px solid ${touchedFields.handle && !handleValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
+                      background: 'var(--color-bg-tertiary)',
                       color: tokens.colors.text.primary,
                       fontSize: 15,
                       outline: 'none',
@@ -1047,14 +1047,14 @@ export default function LoginPage() {
                   />
                   {touchedFields.handle && handle && !handleValidation.valid && (
                     <div style={{ marginTop: 6, fontSize: 12 }}>
-                      <span style={{ color: '#ff7c7c' }}>X - {t(handleValidation.messageKey)}</span>
+                      <span style={{ color: 'var(--color-accent-error)' }}>X - {t(handleValidation.messageKey)}</span>
                     </div>
                   )}
                 </div>
                 
                 {/* Password input */}
                 <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
+                  <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
                     {t('loginPassword')}
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -1066,8 +1066,8 @@ export default function LoginPage() {
                         padding: '14px 16px', 
                         paddingRight: 50,
                         borderRadius: 12,
-                        border: `1px solid ${touchedFields.password && !passwordValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
-                        background: 'rgba(0, 0, 0, 0.3)',
+                        border: `1px solid ${touchedFields.password && !passwordValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
+                        background: 'var(--color-bg-tertiary)',
                         color: tokens.colors.text.primary,
                         fontSize: 15,
                         outline: 'none',
@@ -1090,7 +1090,7 @@ export default function LoginPage() {
                         border: 'none',
                         padding: 4,
                         cursor: 'pointer',
-                        color: '#6a6a6a',
+                        color: 'var(--color-text-tertiary)',
                         fontSize: 12,
                       }}
                       tabIndex={-1}
@@ -1111,7 +1111,7 @@ export default function LoginPage() {
                               flex: 1,
                               height: 4,
                               borderRadius: 2,
-                              background: level <= passwordStrength.level ? passwordStrength.color : 'rgba(255, 255, 255, 0.1)',
+                              background: level <= passwordStrength.level ? passwordStrength.color : 'var(--glass-border-light)',
                             }}
                           />
                         ))}
@@ -1166,7 +1166,7 @@ export default function LoginPage() {
               <>
                 {/* Password login */}
                 <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
+                  <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
                     {t('loginPassword')}
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -1178,8 +1178,8 @@ export default function LoginPage() {
                         padding: '14px 16px', 
                         paddingRight: 50,
                         borderRadius: 12,
-                        border: `1px solid ${touchedFields.password && password && !passwordValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
-                        background: 'rgba(0, 0, 0, 0.3)',
+                        border: `1px solid ${touchedFields.password && password && !passwordValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
+                        background: 'var(--color-bg-tertiary)',
                         color: tokens.colors.text.primary,
                         fontSize: 15,
                         outline: 'none',
@@ -1207,7 +1207,7 @@ export default function LoginPage() {
                         border: 'none',
                         padding: 4,
                         cursor: 'pointer',
-                        color: '#6a6a6a',
+                        color: 'var(--color-text-tertiary)',
                         fontSize: 12,
                       }}
                       tabIndex={-1}
@@ -1250,7 +1250,7 @@ export default function LoginPage() {
                     href="/reset-password"
                     className="link-hover"
                     style={{
-                      color: '#6a6a6a',
+                      color: 'var(--color-text-tertiary)',
                       fontSize: 13,
                       textDecoration: 'none',
                     }}
@@ -1316,7 +1316,7 @@ export default function LoginPage() {
                 ) : (
                   <>
                     <div style={{ marginBottom: 20 }}>
-                      <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
+                      <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
                         {t('loginVerificationCode')}
                       </label>
                       <input
@@ -1327,7 +1327,7 @@ export default function LoginPage() {
                           padding: '14px 16px', 
                           borderRadius: 12,
                           border: '1px solid rgba(255, 255, 255, 0.1)',
-                          background: 'rgba(0, 0, 0, 0.3)',
+                          background: 'var(--color-bg-tertiary)',
                           color: tokens.colors.text.primary,
                           fontSize: 15,
                           outline: 'none',
@@ -1344,7 +1344,7 @@ export default function LoginPage() {
                         }}
                         maxLength={6}
                       />
-                      <div style={{ marginTop: 6, fontSize: 11, color: '#6a6a6a' }}>
+                      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                         {t('loginCodeValidFor')}
                       </div>
                     </div>
@@ -1376,7 +1376,7 @@ export default function LoginPage() {
                     </button>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
                       {countdown > 0 ? (
-                        <span style={{ fontSize: 13, color: '#6a6a6a' }}>
+                        <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
                           {countdown} {t('loginCountdown')}
                         </span>
                       ) : (
@@ -1434,9 +1434,9 @@ export default function LoginPage() {
           gap: 16,
           margin: '20px 0',
         }}>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
+          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
           <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{t('loginOrDivider')}</span>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
+          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
         </div>
 
         {/* One-Click Wallet Sign-In */}
@@ -1465,7 +1465,7 @@ export default function LoginPage() {
             borderRadius: 12,
             border: '1px solid rgba(139, 111, 168, 0.3)',
             background: 'transparent',
-            color: '#b0b0b0',
+            color: 'var(--color-text-secondary)',
             fontWeight: 600,
             fontSize: 14,
             cursor: 'pointer',
@@ -1493,7 +1493,7 @@ export default function LoginPage() {
               borderRadius: 12,
               background: 'rgba(255, 77, 77, 0.1)',
               border: '1px solid rgba(255, 77, 77, 0.2)',
-              color: '#ff7c7c',
+              color: 'var(--color-accent-error)',
               fontSize: 13,
               fontWeight: 500,
               display: 'flex',
