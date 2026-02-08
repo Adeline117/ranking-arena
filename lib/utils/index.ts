@@ -40,6 +40,7 @@ export * from './content'
 export * from './server-cache'
 export * from './sanitize'
 export * from './csrf'
+export * from './currency'
 // 缓存功能请使用 @/lib/cache
 
 /**
