@@ -2728,6 +2728,20 @@ const zh = {
   timeframe4h: '4小时',
   timeframe1d: '1天',
 
+  // 技术分析指标
+  technicalIndicators: '技术指标',
+  indicatorRSI: '相对强弱指标 (RSI)',
+  indicatorMACD: '指数平滑异同移动平均线 (MACD)',
+  indicatorMACDLine: 'MACD 线',
+  indicatorMACDSignal: '信号线',
+  indicatorMACDHistogram: '柱状图',
+  indicatorBollingerBands: '布林带',
+  indicatorBollingerUpper: '上轨',
+  indicatorBollingerMiddle: '中轨',
+  indicatorBollingerLower: '下轨',
+  indicatorSMA: '简单移动平均线 (SMA)',
+  indicatorEMA: '指数移动平均线 (EMA)',
+
 } as const
 
 export default zh
