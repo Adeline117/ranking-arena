@@ -45,16 +45,45 @@ export async function POST(request: NextRequest) {
 
   try {
     // Get traders that need metrics calculation
-    // Prioritize those with null advanced metrics or stale data
-    const { data: traders, error: fetchError } = await supabase
+    // Try with advanced column filter first, fall back to simpler query
+    let traders: Array<{
+      id: string
+      source: string
+      source_trader_id: string
+      window: string | null
+      roi: string | null
+      pnl: string | null
+      max_drawdown: string | null
+      win_rate: string | null
+    }> | null = null
+
+    const { data: tradersResult, error: fetchError } = await supabase
       .from('trader_snapshots')
       .select('id, source, source_trader_id, window, roi, pnl, max_drawdown, win_rate')
       .or('sortino_ratio.is.null,arena_score_v3.is.null')
       .not('roi', 'is', null)
       .order('captured_at', { ascending: false })
-      .limit(BATCH_SIZE * 3) // Get more to account for different windows
+      .limit(BATCH_SIZE * 3)
 
-    if (fetchError) throw fetchError
+    if (fetchError) {
+      // If columns don't exist yet, fall back to simpler query
+      if (fetchError.message?.includes('sortino_ratio') || fetchError.message?.includes('arena_score_v3') || fetchError.code === '42703') {
+        logger.warn('Advanced metric columns not found, using fallback query', {})
+        const { data: fallback, error: fallbackError } = await supabase
+          .from('trader_snapshots')
+          .select('id, source, source_trader_id, window, roi, pnl, max_drawdown, win_rate')
+          .not('roi', 'is', null)
+          .order('captured_at', { ascending: false })
+          .limit(BATCH_SIZE * 3)
+
+        if (fallbackError) throw fallbackError
+        traders = fallback
+      } else {
+        throw fetchError
+      }
+    } else {
+      traders = tradersResult
+    }
 
     // Process in batches
     const windows: Period[] = ['7D', '30D', '90D']
@@ -92,17 +121,22 @@ export async function POST(request: NextRequest) {
           const startDate = new Date()
           startDate.setDate(startDate.getDate() - periodDays)
 
-          const { data: dailySnapshots } = await supabase
-            .from('trader_daily_snapshots')
-            .select('date, daily_return_pct')
-            .eq('platform', snapshot.source)
-            .eq('trader_key', snapshot.source_trader_id)
-            .gte('date', startDate.toISOString().split('T')[0])
-            .order('date', { ascending: true })
+          let dailyReturns: number[] = []
+          try {
+            const { data: dailySnapshots } = await supabase
+              .from('trader_daily_snapshots')
+              .select('date, daily_return_pct')
+              .eq('platform', snapshot.source)
+              .eq('trader_key', snapshot.source_trader_id)
+              .gte('date', startDate.toISOString().split('T')[0])
+              .order('date', { ascending: true })
 
-          const dailyReturns = dailySnapshots
-            ?.map(s => parseFloat(s.daily_return_pct || '0'))
-            .filter(r => !isNaN(r)) || []
+            dailyReturns = dailySnapshots
+              ?.map(s => parseFloat(s.daily_return_pct || '0'))
+              .filter(r => !isNaN(r)) || []
+          } catch {
+            // Table may not exist yet - use empty returns
+          }
 
           // Determine metrics quality based on data availability
           let metricsQuality: 'high' | 'medium' | 'low' | 'insufficient'
@@ -144,22 +178,40 @@ export async function POST(request: NextRequest) {
             maxConsecutiveLosses: null,
           }, window)
 
-          // Update snapshot
-          const { error: updateError } = await supabase
+          // Update snapshot - handle missing columns gracefully
+          const updatePayload: Record<string, unknown> = {
+            sortino_ratio: sortinoRatio,
+            calmar_ratio: calmarRatio,
+            volatility_pct: volatilityPct,
+            downside_volatility_pct: downsideVolatilityPct,
+            arena_score_v3: v3Result.totalScore,
+            alpha_score: v3Result.alphaScore,
+            consistency_score: v3Result.consistencyScore,
+            risk_adjusted_score_v3: v3Result.riskAdjustedScore,
+            metrics_quality: metricsQuality,
+            metrics_data_points: dailyReturns.length,
+          }
+
+          let { error: updateError } = await supabase
             .from('trader_snapshots')
-            .update({
-              sortino_ratio: sortinoRatio,
-              calmar_ratio: calmarRatio,
-              volatility_pct: volatilityPct,
-              downside_volatility_pct: downsideVolatilityPct,
-              arena_score_v3: v3Result.totalScore,
-              alpha_score: v3Result.alphaScore,
-              consistency_score: v3Result.consistencyScore,
-              risk_adjusted_score_v3: v3Result.riskAdjustedScore,
-              metrics_quality: metricsQuality,
-              metrics_data_points: dailyReturns.length,
-            })
+            .update(updatePayload)
             .eq('id', snapshot.id)
+
+          // If columns don't exist, try minimal update
+          if (updateError && (updateError.code === '42703' || updateError.message?.includes('column'))) {
+            const minimalPayload: Record<string, unknown> = {}
+            // Try only columns that are likely to exist
+            if (sortinoRatio !== null) minimalPayload.sortino_ratio = sortinoRatio
+            if (v3Result.totalScore !== null) minimalPayload.arena_score_v3 = v3Result.totalScore
+
+            if (Object.keys(minimalPayload).length > 0) {
+              const { error: retryError } = await supabase
+                .from('trader_snapshots')
+                .update(minimalPayload)
+                .eq('id', snapshot.id)
+              updateError = retryError
+            }
+          }
 
           if (updateError) {
             logger.dbError('update-advanced-metrics', updateError, { snapshotId: snapshot.id })
