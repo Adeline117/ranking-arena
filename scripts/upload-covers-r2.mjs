@@ -56,6 +56,7 @@ async function uploadToR2(key, buf, contentType) {
 }
 
 async function processBatch(items) {
+  // Process sequentially to avoid memory issues
   for (const item of items) {
     try {
       const img = await downloadImage(item.cover_url)
@@ -74,7 +75,7 @@ async function processBatch(items) {
     } catch (e) {
       failed++
     }
-    await sleep(100) // rate limit
+    await sleep(150) // rate limit
   }
 }
 
@@ -89,7 +90,7 @@ async function main() {
       .from('library_items')
       .select('id, cover_url')
       .not('cover_url', 'is', null)
-      .not('cover_url', 'like', '%cdn.arenafi.org%')
+      .not('cover_url', 'like', '%cdn.arenafi%')
       .range(offset, offset + batchSize - 1)
 
     if (error) { console.error('Fetch error:', error.message); break }
