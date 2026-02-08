@@ -39,7 +39,7 @@ describe('Footer', () => {
   it('contains social links', () => {
     render(<Footer />)
     const links = screen.getAllByRole('link')
-    const socialHrefs = links.map(l => l.getAttribute('href')).filter(h => h?.includes('x.com') || h?.includes('discord') || h?.includes('t.me'))
+    const socialHrefs = links.map(l => l.getAttribute('href')).filter(h => h?.includes('x.com') || h?.includes('mailto:'))
     expect(socialHrefs.length).toBeGreaterThan(0)
   })
 })
