@@ -8,6 +8,7 @@ import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
+import { usePremium } from '@/lib/premium/hooks'
 import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '../BookCover'
 
@@ -76,6 +77,7 @@ export default function BookDetailPage() {
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<any>(null)
   const [descExpanded, setDescExpanded] = useState(false)
+  const { isPremium } = usePremium()
 
   useEffect(() => {
     // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
@@ -312,7 +314,7 @@ export default function BookDetailPage() {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {/* Read - always in-app, never external */}
               {hasReadableContent ? (
-                book.is_free || session ? (
+                book.is_free || isPremium ? (
                   <Link
                     href={`/library/${book.id}/read`}
                     style={{
@@ -330,7 +332,7 @@ export default function BookDetailPage() {
                     </svg>
                     {isZh ? '开始阅读' : 'Start Reading'}
                   </Link>
-                ) : (
+                ) : !session ? (
                   <Link
                     href="/login"
                     style={{
@@ -348,6 +350,25 @@ export default function BookDetailPage() {
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
                     {isZh ? '登录后阅读' : 'Login to Read'}
+                  </Link>
+                ) : (
+                  <Link
+                    href="/pricing"
+                    style={{
+                      padding: '10px 24px', borderRadius: tokens.radius.lg,
+                      fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
+                      background: tokens.gradient.primary, color: '#fff',
+                      textDecoration: 'none',
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      transition: `all ${tokens.transition.fast}`,
+                      boxShadow: tokens.shadow.glow,
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    {isZh ? '升级 Pro 解锁' : 'Upgrade to Pro'}
                   </Link>
                 )
               ) : (
