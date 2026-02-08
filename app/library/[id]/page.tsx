@@ -279,7 +279,7 @@ export default function BookDetailPage() {
                 <span style={{
                   fontSize: tokens.typography.fontSize['2xl'],
                   fontWeight: tokens.typography.fontWeight.bold,
-                  color: '#f5c518',
+                  color: tokens.colors.rating.filled,
                 }}>
                   {avg.toFixed(1)}
                 </span>
@@ -405,7 +405,7 @@ export default function BookDetailPage() {
                   fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
                   cursor: 'pointer',
                   border: userStatus === 'read' ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-                  background: userStatus === 'read' ? '#10b981' : 'transparent',
+                  background: userStatus === 'read' ? tokens.colors.accent.success : 'transparent',
                   color: userStatus === 'read' ? '#fff' : tokens.colors.text.primary,
                   transition: `all ${tokens.transition.fast}`,
                   display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -486,7 +486,7 @@ export default function BookDetailPage() {
             }}>
               {/* Left: big number */}
               <div style={{ textAlign: 'center', minWidth: 80 }}>
-                <div style={{ fontSize: 48, fontWeight: 800, color: '#f5c518', lineHeight: 1 }}>
+                <div style={{ fontSize: 48, fontWeight: 800, color: tokens.colors.rating.filled, lineHeight: 1 }}>
                   {avg.toFixed(1)}
                 </div>
                 <StarRating rating={avg} size={16} readonly showCount={false} />
@@ -500,7 +500,7 @@ export default function BookDetailPage() {
                 {[5, 4, 3, 2, 1].map(star => (
                   <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 13, color: tokens.colors.text.secondary, width: 16, textAlign: 'right' }}>{star}</span>
-                    <span style={{ fontSize: 13, color: '#f5c518' }}>*</span>
+                    <span style={{ fontSize: 13, color: tokens.colors.rating.filled }}>*</span>
                     <div style={{ flex: 1, height: 10, borderRadius: 5, background: tokens.colors.bg.primary, overflow: 'hidden' }}>
                       <div style={{
                         width: `${(dist[star as keyof typeof dist] / maxDist) * 100}%`,

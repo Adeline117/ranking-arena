@@ -78,8 +78,8 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           {item.category === 'event' && item.subcategory && (
             <span style={{
               fontSize: 10, padding: '2px 8px', borderRadius: tokens.radius.full, fontWeight: 600,
-              background: item.subcategory === 'hack' ? '#ef444418' : item.subcategory === 'regulation' ? '#8b5cf618' : '#10b98118',
-              color: item.subcategory === 'hack' ? '#ef4444' : item.subcategory === 'regulation' ? '#8b5cf6' : '#10b981',
+              background: item.subcategory === 'hack' ? `${tokens.colors.accent.error}18` : item.subcategory === 'regulation' ? `${tokens.colors.accent.brand}18` : `${tokens.colors.accent.success}18`,
+              color: item.subcategory === 'hack' ? tokens.colors.accent.error : item.subcategory === 'regulation' ? tokens.colors.accent.brand : tokens.colors.accent.success,
             }}>
               {item.subcategory === 'hack' ? (isZh ? '安全事件' : 'Hack')
                 : item.subcategory === 'regulation' ? (isZh ? '监管' : 'Regulation')
