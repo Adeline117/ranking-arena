@@ -344,12 +344,11 @@ export default function FlashNewsPage() {
                       )}
 
                       <Box style={{ flex: 1 }}>
-                        <Card variant="glass" style={{
+                        <Card variant="glass" hoverable={false} style={{
                           padding: tokens.spacing[4],
                           borderRadius: tokens.radius.lg,
                           position: 'relative', overflow: 'hidden',
-                          transition: `all ${tokens.transition.base}`,
-                          boxShadow: tokens.shadow.sm,
+                          cursor: 'default',
                         }}>
                           {item.importance !== 'normal' && (
                             <Box style={{

@@ -83,7 +83,7 @@ export default function MyGroups() {
         .select('group_id, groups(id, name, name_en, avatar_url, updated_at)')
         .eq('user_id', user!.id)
         .limit(10)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const gs = (data || []).map((d: any) => d.groups as Group).filter(Boolean)
       setGroups(gs)
       setLoading(false)
