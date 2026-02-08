@@ -29,7 +29,7 @@ type BookInfo = {
 
 type ReadingTheme = 'white' | 'sepia' | 'dark' | 'green'
 type FontSize = 'small' | 'medium' | 'large'
-type FontFamily = 'sans' | 'serif'
+type FontFamily = 'sans' | 'serif' | 'mono' | 'kai'
 type ContentMode = 'pdf' | 'html' | 'epub' | 'none'
 
 type TocItem = {
@@ -62,6 +62,8 @@ const FONT_SIZES: Record<FontSize, { body: number; heading: number; labelZh: str
 const FONT_FAMILIES: Record<FontFamily, { css: string; labelZh: string; label: string }> = {
   sans:  { css: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", sans-serif', labelZh: '黑体', label: 'Sans' },
   serif: { css: 'Georgia, "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif', labelZh: '宋体', label: 'Serif' },
+  mono:  { css: '"SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace', labelZh: '等宽', label: 'Mono' },
+  kai:   { css: '"STKaiti", "KaiTi", "楷体", serif', labelZh: '楷体', label: 'Kai' },
 }
 
 const LS_PREFIX = 'reader_'
@@ -831,6 +833,18 @@ export default function ReadPage() {
                 ctrl?.toggleNotes()
               }} title={isZh ? '笔记' : 'Notes'}>
                 <IconNotes />
+              </ToolbarBtn>
+              <ToolbarBtn onClick={() => {
+                const ctrl = getEpubControls(epubContainerRef.current)
+                ctrl?.toggleStats()
+              }} title={isZh ? '统计' : 'Stats'}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="8" width="4" height="13"/><rect x="17" y="3" width="4" height="18"/></svg>
+              </ToolbarBtn>
+              <ToolbarBtn onClick={() => {
+                const ctrl = getEpubControls(epubContainerRef.current)
+                ctrl?.toggleTypography()
+              }} title={isZh ? '排版' : 'Typography'}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
               </ToolbarBtn>
             </>
           )}
