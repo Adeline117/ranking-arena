@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { usePremium } from '@/lib/premium/hooks'
 import { tokens } from '@/lib/design-tokens'
+import { supabase } from '@/lib/supabase/client'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -15,6 +17,7 @@ type BookInfo = {
   pdf_url: string | null
   source_url: string | null
   category: string
+  is_free: boolean
 }
 
 type ContentMode = 'pdf' | 'web' | 'none'
@@ -105,11 +108,19 @@ export default function ReadPage() {
   const router = useRouter()
   const { language } = useLanguage()
   const isZh = language === 'zh'
+  const { isPremium, isLoading: premiumLoading } = usePremium()
 
   // Book data
   const [book, setBook] = useState<BookInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [needsUpgrade, setNeedsUpgrade] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  // Bookshelf prompt state
+  const [showBookshelfPrompt, setShowBookshelfPrompt] = useState(false)
+  const [addedToShelf, setAddedToShelf] = useState(false)
+  const bookshelfPromptShown = useRef(false)
 
   // PDF state
   const [pdfDoc, setPdfDoc] = useState<any>(null)
@@ -151,6 +162,12 @@ export default function ReadPage() {
   useEffect(() => {
     if (!id) return
     setLoading(true)
+
+    // Check auth
+    supabase.auth.getUser().then(({ data }) => {
+      setIsLoggedIn(!!data.user)
+    })
+
     fetch(`/api/library/${id}`)
       .then(r => r.json())
       .then(data => {
@@ -162,6 +179,50 @@ export default function ReadPage() {
       .catch(() => setError(isZh ? '加载失败' : 'Failed to load'))
       .finally(() => setLoading(false))
   }, [id, isZh])
+
+  // Check membership after premium state is loaded
+  useEffect(() => {
+    if (premiumLoading) return
+    if (!isPremium && book) {
+      setNeedsUpgrade(true)
+    } else {
+      setNeedsUpgrade(false)
+    }
+  }, [isPremium, premiumLoading, book])
+
+  // Show bookshelf prompt after 2 minutes of reading
+  useEffect(() => {
+    if (!book || needsUpgrade || addedToShelf || bookshelfPromptShown.current) return
+    const timer = setTimeout(() => {
+      if (!bookshelfPromptShown.current) {
+        bookshelfPromptShown.current = true
+        setShowBookshelfPrompt(true)
+      }
+    }, 120000) // 2 minutes
+    return () => clearTimeout(timer)
+  }, [book, needsUpgrade, addedToShelf])
+
+  // Add to bookshelf handler
+  const handleAddToShelf = useCallback(async () => {
+    if (!id || !isLoggedIn) return
+    try {
+      const { supabase } = await import('@/lib/supabase/client')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+      const res = await fetch(`/api/library/${id}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ status: 'want_to_read' }),
+      })
+      if (res.ok) {
+        setAddedToShelf(true)
+        setShowBookshelfPrompt(false)
+      }
+    } catch {}
+  }, [id, isLoggedIn])
 
   // ─── Load PDF ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -410,6 +471,40 @@ export default function ReadPage() {
         <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: tokens.colors.accent.brand, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
           {isZh ? '返回书籍详情' : 'Back to Book'}
         </Link>
+      </div>
+    )
+  }
+
+  // ─── Membership gate ────────────────────────────────────────────────
+  if (needsUpgrade) {
+    return (
+      <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="1.5" style={{ marginBottom: 16 }}>
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <h2 style={{ color: tokens.colors.text.primary, fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+          {isZh ? '升级会员解锁阅读' : 'Upgrade to unlock reading'}
+        </h2>
+        <p style={{ color: tokens.colors.text.secondary, fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400 }}>
+          {isZh ? '该书籍仅对会员开放，升级会员即可畅读所有付费内容。' : 'This book is available to members only. Upgrade to read all premium content.'}
+        </p>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Link href="/membership" style={{
+            padding: '10px 24px', borderRadius: tokens.radius.lg,
+            background: tokens.gradient.primary, color: '#fff',
+            textDecoration: 'none', fontSize: 14, fontWeight: 600,
+            boxShadow: tokens.shadow.glow,
+          }}>
+            {isZh ? '升级会员' : 'Upgrade'}
+          </Link>
+          <Link href={`/library/${id}`} style={{
+            padding: '10px 24px', borderRadius: tokens.radius.lg,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            color: tokens.colors.text.primary, textDecoration: 'none', fontSize: 14, fontWeight: 600,
+          }}>
+            {isZh ? '返回' : 'Back'}
+          </Link>
+        </div>
       </div>
     )
   }
