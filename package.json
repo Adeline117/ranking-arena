@@ -100,6 +100,7 @@
     "pdfjs-dist": "^4.9.155",
     "peerjs": "^1.5.5",
     "pg": "^8.18.0",
+    "protobufjs": "^8.0.0",
     "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
