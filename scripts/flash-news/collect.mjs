@@ -120,37 +120,82 @@ function determineImportance(title, content = '') {
 }
 
 /**
- * 简单的英文到中文标题翻译（关键词映射）
+ * 使用 OpenAI GPT 翻译标题到中文
  */
-function translateTitle(englishTitle) {
-  const translations = {
-    'bitcoin': '比特币',
-    'ethereum': '以太坊',
-    'crypto': '加密货币',
-    'defi': 'DeFi',
-    'nft': 'NFT',
-    'regulation': '监管',
-    'sec': 'SEC',
-    'fed': '美联储',
-    'market': '市场',
-    'price': '价格',
-    'trading': '交易',
-    'exchange': '交易所',
-    'breaks': '突破',
-    'surge': '飙升',
-    'crash': '暴跌',
-    'ban': '禁止',
-    'launch': '推出',
-    'partnership': '合作',
+async function translateTitleWithGPT(englishTitle) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    console.warn('OPENAI_API_KEY not set, skipping translation')
+    return null
   }
-  
-  let chineseTitle = englishTitle
-  for (const [en, zh] of Object.entries(translations)) {
-    const regex = new RegExp(en, 'gi')
-    chineseTitle = chineseTitle.replace(regex, zh)
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional crypto/finance news translator. Translate the English headline to natural, fluent Simplified Chinese. Keep proper nouns, token symbols (BTC, ETH), and abbreviations (SEC, CFTC) as-is. Output ONLY the translated text.'
+          },
+          { role: 'user', content: englishTitle }
+        ],
+        temperature: 0.3,
+        max_tokens: 200,
+      }),
+    })
+
+    if (!response.ok) return null
+    const data = await response.json()
+    return data.choices?.[0]?.message?.content?.trim() || null
+  } catch (error) {
+    console.error('GPT translation failed:', error.message)
+    return null
   }
-  
-  return chineseTitle
+}
+
+/**
+ * 批量翻译标题（减少 API 调用次数）
+ */
+async function translateTitlesBatch(titles) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey || titles.length === 0) return titles.map(() => null)
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional crypto/finance news translator. Translate each English headline to natural, fluent Simplified Chinese. Keep proper nouns, token symbols (BTC, ETH), and abbreviations (SEC, CFTC) as-is. Output ONLY a JSON array of translated strings in the same order.'
+          },
+          { role: 'user', content: JSON.stringify(titles) }
+        ],
+        temperature: 0.3,
+        max_tokens: 4000,
+      }),
+    })
+
+    if (!response.ok) return titles.map(() => null)
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content?.trim() || '[]'
+    const jsonStr = content.replace(/^```json?\n?/, '').replace(/\n?```$/, '')
+    return JSON.parse(jsonStr)
+  } catch (error) {
+    console.error('Batch GPT translation failed:', error.message)
+    return titles.map(() => null)
+  }
 }
 
 /**
@@ -244,12 +289,9 @@ function processNewsItem(item, source) {
     // 判断重要性
     const importance = determineImportance(title, content)
     
-    // 生成中文标题（简单映射）
-    const titleZh = translateTitle(title)
-    
     return {
       title: title,
-      title_zh: titleZh !== title ? titleZh : null,
+      title_zh: null, // Will be translated via GPT in batch
       title_en: title,
       content: content || null,
       source: source.name,
@@ -349,6 +391,20 @@ async function main() {
       if (newsItems.length === 0) {
         console.log(`${source.name}: 处理后无有效数据`)
         continue
+      }
+      
+      // 批量翻译标题到中文
+      try {
+        const titles = newsItems.map(item => item.title)
+        const translations = await translateTitlesBatch(titles)
+        for (let i = 0; i < newsItems.length; i++) {
+          if (translations[i]) {
+            newsItems[i].title_zh = translations[i]
+          }
+        }
+        console.log(`${source.name}: 翻译了 ${translations.filter(Boolean).length} 条标题`)
+      } catch (err) {
+        console.error(`${source.name}: 批量翻译失败:`, err.message)
       }
       
       // 保存到数据库

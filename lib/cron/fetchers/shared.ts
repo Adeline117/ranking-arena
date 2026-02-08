@@ -27,6 +27,7 @@ export interface TraderData {
   // Phase 1 扩展字段
   sharpe_ratio?: number | null
   aum?: number | null
+  avatar_url?: string | null
 }
 
 export interface FetchResult {
@@ -139,13 +140,18 @@ export async function upsertTraders(
     const batch = traders.slice(i, i + BATCH)
 
     // Upsert trader_sources
-    const sources = batch.map((t) => ({
-      source: t.source,
-      source_trader_id: t.source_trader_id,
-      handle: t.handle,
-      profile_url: t.profile_url || null,
-      is_active: true,
-    }))
+    const sources = batch.map((t) => {
+      const row: Record<string, unknown> = {
+        source: t.source,
+        source_trader_id: t.source_trader_id,
+        handle: t.handle,
+        profile_url: t.profile_url || null,
+        is_active: true,
+      }
+      // Only include avatar_url if provided (don't overwrite existing with null)
+      if (t.avatar_url) row.avatar_url = t.avatar_url
+      return row
+    })
 
     const { error: srcErr } = await supabase
       .from('trader_sources')

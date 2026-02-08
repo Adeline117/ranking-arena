@@ -125,6 +125,7 @@ function parseTrader(item: BingxTrader, period: string, rank: number): TraderDat
     followers: followers ? Math.round(followers) : null,
     arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
     captured_at: new Date().toISOString(),
+      avatar_url: item.headUrl || item.avatar || item.avatarUrl || null,
   }
 }
 

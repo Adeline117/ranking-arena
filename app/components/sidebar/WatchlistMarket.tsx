@@ -111,25 +111,46 @@ export default function WatchlistMarket() {
   const fetchPrices = useCallback(async (ids: string[]) => {
     if (ids.length === 0) { setCoins([]); setLoading(false); return }
     try {
-      const res = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true`
-      )
+      // Use our own /api/market proxy to avoid CoinGecko rate limits
+      const pairsParam = ids.map(id => {
+        const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
+        return opt ? `${opt.symbol}-USD` : null
+      }).filter(Boolean).join(',')
+
+      const res = await fetch(`/api/market?pairs=${encodeURIComponent(pairsParam)}`)
       if (!res.ok) throw new Error('fetch failed')
       const data = await res.json()
-      const results: CoinPrice[] = ids
-        .filter(id => data[id])
-        .map(id => {
-          const opt = coinOptions.find(c => c.id === id)
-          return {
-            id,
-            symbol: opt?.symbol || id.toUpperCase(),
-            price: data[id].usd || 0,
-            change24h: data[id].usd_24h_change || 0,
-          }
-        })
+      const rows = data.rows || []
+
+      const results: CoinPrice[] = ids.map(id => {
+        const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
+        if (!opt) return null
+        const row = rows.find((r: { symbol: string }) => r.symbol === `${opt.symbol}-USD`)
+        if (!row) return null
+        const price = parseFloat(row.price.replace(/,/g, '')) || 0
+        const change = parseFloat(row.changePct) || 0
+        return { id, symbol: opt.symbol, price, change24h: change }
+      }).filter((r): r is CoinPrice => r !== null)
+
       setCoins(results)
     } catch {
-      // silent fail, keep old data
+      // Fallback: try CoinGecko directly
+      try {
+        const res = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd&include_24hr_change=true`
+        )
+        if (!res.ok) throw new Error('fallback failed')
+        const data = await res.json()
+        const results: CoinPrice[] = ids
+          .filter(id => data[id])
+          .map(id => {
+            const opt = coinOptions.find(c => c.id === id)
+            return { id, symbol: opt?.symbol || id.toUpperCase(), price: data[id].usd || 0, change24h: data[id].usd_24h_change || 0 }
+          })
+        setCoins(results)
+      } catch {
+        // silent fail, keep old data
+      }
     } finally {
       setLoading(false)
     }
