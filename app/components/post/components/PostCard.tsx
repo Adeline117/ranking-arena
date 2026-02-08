@@ -30,9 +30,9 @@ function pollLabel(choice: PollChoice | 'tie', t: (key: string) => string) {
 }
 
 function pollColor(choice: PollChoice | 'tie') {
-  if (choice === 'bull') return '#7CFFB2'
-  if (choice === 'bear') return '#FF7C7C'
-  return '#A9A9A9'
+  if (choice === 'bull') return tokens.colors.sentiment.bull
+  if (choice === 'bear') return tokens.colors.sentiment.bear
+  return tokens.colors.sentiment.neutral
 }
 
 export function PostCard({

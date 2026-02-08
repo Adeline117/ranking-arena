@@ -111,9 +111,9 @@ export default function CategoryRankingTabs({
                   ? 'var(--color-bg-secondary)'
                   : 'transparent',
               color: isActive
-                ? '#ffffff'
+                ? tokens.colors.white
                 : isLocked
-                  ? '#8a8a9e'
+                  ? tokens.colors.text.tertiary
                   : 'var(--color-text-secondary)',
               cursor: isLocked ? 'not-allowed' : 'pointer',
               fontSize: tokens.typography.fontSize.sm,

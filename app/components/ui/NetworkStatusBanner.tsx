@@ -46,8 +46,8 @@ export default function NetworkStatusBanner() {
         justifyContent: 'center',
         gap: 8,
         background: isOffline
-          ? tokens.colors.accent.error || '#ff4d4d'
-          : tokens.colors.accent.success || '#00C853',
+          ? tokens.colors.accent.error
+          : tokens.colors.accent.success,
         color: '#fff',
         transition: 'all 0.3s ease',
       }}

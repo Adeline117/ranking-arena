@@ -106,13 +106,13 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
           background: 'rgba(239, 68, 68, 0.15)',
           borderRadius: tokens.radius.full,
           fontSize: tokens.typography.fontSize.sm,
-          color: '#ff7c7c',
+          color: tokens.colors.accent.error,
         }}>
           <span style={{
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: '#ef4444',
+            background: tokens.colors.accent.error,
             animation: 'pulse 1s infinite',
           }} />
           {formatDuration(duration)}
@@ -126,7 +126,7 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
           height: 40,
           borderRadius: '50%',
           border: 'none',
-          background: recording ? '#ef4444' : tokens.colors.bg.secondary,
+          background: recording ? tokens.colors.accent.error : tokens.colors.bg.secondary,
           color: recording ? '#fff' : tokens.colors.text.secondary,
           cursor: disabled || uploading ? 'not-allowed' : 'pointer',
           display: 'flex',

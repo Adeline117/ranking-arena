@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 export interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, 'ref'> {
   size?: number
@@ -335,9 +336,9 @@ export function SettingsIcon({ size = 16, style, ...props }: IconProps) {
 // Ranking Badge
 export function RankingBadge({ rank, size = 24 }: { rank: 1 | 2 | 3; size?: number }): React.ReactElement {
   const gradientIds = {
-    1: { start: '#FFD700', end: '#FFA500', text: '#1a1200' }, // Gold
-    2: { start: '#C0C0C0', end: '#A0A0A0', text: '#ffffff' }, // Silver
-    3: { start: '#CD7F32', end: '#A0522D', text: '#ffffff' }, // Bronze
+    1: { start: tokens.colors.medal.gold, end: tokens.colors.medal.goldEnd, text: tokens.colors.medal.goldText }, // Gold
+    2: { start: tokens.colors.medal.silver, end: tokens.colors.medal.silverEnd, text: tokens.colors.white }, // Silver
+    3: { start: tokens.colors.medal.bronze, end: tokens.colors.medal.bronzeEnd, text: tokens.colors.white }, // Bronze
   }
   const g = gradientIds[rank]
 

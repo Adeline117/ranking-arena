@@ -188,7 +188,7 @@ export const PostListItem = memo(function PostListItem({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: '#fff',
+                  color: tokens.colors.white,
                   fontSize: 14,
                   fontWeight: 700,
                 }}>
@@ -358,7 +358,7 @@ export const PostListItem = memo(function PostListItem({
                 borderRadius: 4,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#ff4d4d'
+                e.currentTarget.style.color = tokens.colors.accent.error
                 e.currentTarget.style.background = 'rgba(255,77,77,0.1)'
               }}
               onMouseLeave={(e) => {

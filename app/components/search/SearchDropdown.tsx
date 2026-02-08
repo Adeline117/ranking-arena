@@ -503,7 +503,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                   {result.roi !== undefined && (
                     <Text
                       size="xs"
-                      style={{ color: result.roi >= 0 ? '#22c55e' : '#ef4444' }}
+                      style={{ color: result.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}
                     >
                       {result.roi >= 0 ? '+' : ''}{result.roi.toFixed(1)}%
                     </Text>
@@ -710,7 +710,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                       size="sm"
                       weight="black"
                       style={{
-                        color: post.rank <= 3 ? '#FF9800' : tokens.colors.text.tertiary,
+                        color: post.rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
                         minWidth: 24,
                         textAlign: 'right',
                       }}

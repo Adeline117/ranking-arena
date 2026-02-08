@@ -48,6 +48,9 @@ html.theme-transition *::after {
   --color-brand-hover: #9d84b5;
   --color-brand-muted: rgba(139, 111, 168, 0.15);
   --color-brand-light: rgba(139, 111, 168, 0.3);
+  --color-brand-accent: #c9b8db;
+  --color-verified-onchain: #2fe57d;
+  --color-verified-web3: #8B5CF6;
   
   /* Validation colors */
   --color-success: #2fe57d;

@@ -7,6 +7,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 interface WalletAddressProps {
   address: string
@@ -68,7 +69,7 @@ export function WalletAddress({ address, showCopy = true, className = '' }: Wall
           title={copied ? 'Copied!' : 'Copy address'}
         >
           {copied ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2fe57d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.verified.onchain} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           ) : (

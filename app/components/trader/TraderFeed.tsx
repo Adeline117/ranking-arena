@@ -161,7 +161,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                 borderRadius: tokens.radius.lg,
                 border: 'none',
                 background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, ${tokens.colors.accent.primary})`,
-                color: '#FFFFFF',
+                color: tokens.colors.white,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: tokens.typography.fontWeight.black,
                 cursor: 'pointer',

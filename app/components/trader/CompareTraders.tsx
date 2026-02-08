@@ -84,30 +84,30 @@ function getValueColor(value: number | undefined | null, metric: CompareMetric, 
   if (value == null || bestValue == null) return tokens.colors.text.secondary
 
   if (!metric.colorize) {
-    return value === bestValue ? tokens.colors.accent?.success || '#2fe57d' : tokens.colors.text.primary
+    return value === bestValue ? tokens.colors.accent?.success : tokens.colors.text.primary
   }
 
   // 对于有颜色的指标
   if (metric.key === 'max_drawdown') {
-    return tokens.colors.accent?.error || '#ff7c7c'
+    return tokens.colors.accent?.error
   }
 
   return value >= 0
-    ? (tokens.colors.accent?.success || '#2fe57d')
-    : (tokens.colors.accent?.error || '#ff7c7c')
+    ? (tokens.colors.accent?.success)
+    : (tokens.colors.accent?.error)
 }
 
 function TrendIcon({ value, metric }: { value: number | undefined | null; metric: CompareMetric }) {
   if (value == null) return <Minus size={12} style={{ opacity: 0.5 }} />
 
   if (metric.key === 'max_drawdown') {
-    return <TrendingDown size={12} style={{ color: tokens.colors.accent?.error || '#ff7c7c' }} />
+    return <TrendingDown size={12} style={{ color: tokens.colors.accent?.error }} />
   }
 
   if (value > 0) {
-    return <TrendingUp size={12} style={{ color: tokens.colors.accent?.success || '#2fe57d' }} />
+    return <TrendingUp size={12} style={{ color: tokens.colors.accent?.success }} />
   } else if (value < 0) {
-    return <TrendingDown size={12} style={{ color: tokens.colors.accent?.error || '#ff7c7c' }} />
+    return <TrendingDown size={12} style={{ color: tokens.colors.accent?.error }} />
   }
 
   return <Minus size={12} style={{ opacity: 0.5 }} />
@@ -359,7 +359,7 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
                             fontSize: 8,
                             padding: '1px 4px',
                             borderRadius: 3,
-                            background: tokens.colors.accent?.success || '#2fe57d',
+                            background: tokens.colors.accent?.success,
                             color: '#000',
                             fontWeight: 700,
                           }}>

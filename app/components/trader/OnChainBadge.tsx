@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 interface OnChainBadgeProps {
   traderHandle: string
@@ -70,7 +71,7 @@ export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
         height={s.icon}
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#2fe57d"
+        stroke={tokens.colors.verified.onchain}
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -79,13 +80,13 @@ export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
         <path d="M9 12l2 2 4-4" />
       </svg>
 
-      <span className={`${s.text} font-semibold text-[#2fe57d] whitespace-nowrap`}>
+      <span className={`${s.text} font-semibold text-[var(--color-verified-onchain)] whitespace-nowrap`}>
         {t('onChainVerified')}
       </span>
 
       {showTooltip && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3.5 py-2.5 bg-[rgba(15,15,20,0.95)] border border-[rgba(47,229,125,0.2)] rounded-[10px] text-xs text-neutral-300 whitespace-nowrap z-50 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
-          <div className="font-semibold text-[#2fe57d] mb-1">
+          <div className="font-semibold text-[var(--color-verified-onchain)] mb-1">
             {t('onChainAttestedOnBase')}
           </div>
           {attestation.arena_score != null && (

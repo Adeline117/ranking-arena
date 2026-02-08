@@ -237,7 +237,7 @@ export const TraderRow = memo(function TraderRow({
         {/* ROI */}
         {(() => {
           const roi = trader.roi || 0
-          const roiColor = roi >= 0 ? '#00D68F' : '#FF6B6B'
+          const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
           const pnl = trader.pnl
           const hasPnl = pnl != null
           const pnlColor = hasPnl

@@ -95,14 +95,14 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
     if (role === 'owner') {
       return {
         label: t('owner'),
-        bg: tokens.colors.accent?.warning || '#FFB020',
+        bg: tokens.colors.accent?.warning,
         color: '#000'
       }
     }
     if (role === 'admin') {
       return {
         label: t('admin'),
-        bg: tokens.colors.accent?.primary || '#8B6FA8',
+        bg: tokens.colors.accent?.primary,
         color: '#fff'
       }
     }

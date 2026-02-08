@@ -42,7 +42,45 @@ export const lightTokens = {
       brand: '#8b6fa8',        // Arena brand purple
       brandHover: '#9d84b5',   // Brand hover state
       brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
+      brandLight: '#c9b8db',   // Brand light for secondary text on brand bg
       translated: '#4A8A87',   // Translated text color (darker teal for light mode)
+    },
+
+    // Sentiment colors (bull/bear, positive/negative)
+    sentiment: {
+      bull: '#00C853',         // Bullish / positive
+      bear: '#F44336',         // Bearish / negative
+      neutral: '#9E9E9E',      // Neutral state
+    },
+
+    // Medal/rank colors
+    medal: {
+      gold: '#FFD700',
+      goldEnd: '#FFA500',
+      goldText: '#1a1200',
+      silver: '#C0C0C0',
+      silverEnd: '#A0A0A0',
+      bronze: '#CD7F32',
+      bronzeEnd: '#A0522D',
+    },
+
+    // Interactive state colors
+    interactive: {
+      inactive: '#9E9E9E',     // Inactive icons/text
+      hover: '#BDBDBD',        // Hover on inactive elements
+      favorite: '#F44336',     // Favorited/liked state
+    },
+
+    // Star/rating colors
+    rating: {
+      filled: '#f5c518',       // Active star
+      empty: '#D0D0D8',        // Empty star background
+    },
+
+    // On-chain / web3 verified
+    verified: {
+      onchain: '#2fe57d',      // On-chain verified green
+      web3: '#8B5CF6',         // Web3 verified purple
     },
     
     overlay: {
@@ -90,7 +128,45 @@ export const darkTokens = {
       brand: '#8b6fa8',        // Arena brand purple
       brandHover: '#9d84b5',   // Brand hover state
       brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
+      brandLight: '#c9b8db',   // Brand light for secondary text on brand bg
       translated: '#7CBBB8',   // Translated text color (soft teal for dark mode)
+    },
+
+    // Sentiment colors (bull/bear, positive/negative)
+    sentiment: {
+      bull: '#4DFF9A',         // Bullish / positive
+      bear: '#FF4D4D',         // Bearish / negative
+      neutral: '#898998',      // Neutral state
+    },
+
+    // Medal/rank colors
+    medal: {
+      gold: '#FFD700',
+      goldEnd: '#FFA500',
+      goldText: '#1a1200',
+      silver: '#C0C0C0',
+      silverEnd: '#A0A0A0',
+      bronze: '#CD7F32',
+      bronzeEnd: '#A0522D',
+    },
+
+    // Interactive state colors
+    interactive: {
+      inactive: '#9A9A9A',     // Inactive icons/text
+      hover: '#D6D6D6',        // Hover on inactive elements
+      favorite: '#ff7c7c',     // Favorited/liked state
+    },
+
+    // Star/rating colors
+    rating: {
+      filled: '#f5c518',       // Active star
+      empty: '#3a3a2a',        // Empty star background
+    },
+
+    // On-chain / web3 verified
+    verified: {
+      onchain: '#2fe57d',      // On-chain verified green
+      web3: '#8B5CF6',         // Web3 verified purple
     },
     
     overlay: {

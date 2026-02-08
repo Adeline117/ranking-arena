@@ -329,9 +329,9 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               >
                 <defs>
                   <linearGradient id="infGrad" x1="0%" y1="50%" x2="100%" y2="50%">
-                    <stop offset="0%" stopColor="#A78BFA" />
-                    <stop offset="50%" stopColor="#8B5CF6" />
-                    <stop offset="100%" stopColor="#7C3AED" />
+                    <stop offset="0%" stopColor="#b794d4" />
+                    <stop offset="50%" stopColor="#8b6fa8" />
+                    <stop offset="100%" stopColor="#6b4f88" />
                   </linearGradient>
                 </defs>
                 {/* 完整的 ∞：两个水滴，尖端在中心交叉 */}
@@ -735,8 +735,8 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                             minWidth: 16,
                             height: 16,
                             borderRadius: '50%',
-                            background: '#ef4444',
-                            color: '#ffffff',
+                            background: tokens.colors.accent.error,
+                            color: tokens.colors.white,
                             fontSize: 10,
                             fontWeight: 900,
                             display: 'flex',

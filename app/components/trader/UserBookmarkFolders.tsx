@@ -248,7 +248,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
                     ? 'rgba(255,215,0,0.15)' 
                     : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
                   color: subscriptions[folder.id] 
-                    ? '#FFD700' 
+                    ? tokens.colors.medal.gold 
                     : tokens.colors.text.secondary,
                   fontSize: 12,
                   cursor: subscribing[folder.id] ? 'wait' : 'pointer',

@@ -84,7 +84,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
           size="sm" 
           weight="black" 
           style={{ 
-            color: '#ffffff',
+            color: tokens.colors.white,
             textShadow: '0 1px 3px rgba(0, 0, 0, 0.4)',
             fontSize: `${Math.round(size * 0.4)}px`,
             lineHeight: '1',

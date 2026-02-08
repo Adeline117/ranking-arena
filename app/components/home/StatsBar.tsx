@@ -54,7 +54,7 @@ const dataSources: DataSource[] = [
 const getMarketConfig = (t: (key: string) => string): Record<string, { label: string; color: string; icon: React.ReactNode }> => ({
   futures: {
     label: t('futures'),
-    color: '#3b82f6',
+    color: tokens.colors.accent.brand,
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
@@ -64,7 +64,7 @@ const getMarketConfig = (t: (key: string) => string): Record<string, { label: st
   },
   spot: {
     label: t('spot'),
-    color: '#22c55e',
+    color: tokens.colors.accent.success,
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10" />
@@ -74,7 +74,7 @@ const getMarketConfig = (t: (key: string) => string): Record<string, { label: st
   },
   'on-chain': {
     label: t('onChain'),
-    color: '#a855f7',
+    color: tokens.colors.verified.web3,
     icon: (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />

@@ -31,8 +31,8 @@ function StarIcon({ filled, size = 16 }: { filled: boolean; size?: number }) {
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill={filled ? '#FFD700' : 'none'}
-      stroke={filled ? '#FFD700' : tokens.colors.text.tertiary}
+      fill={filled ? tokens.colors.medal.gold : 'none'}
+      stroke={filled ? tokens.colors.medal.gold : tokens.colors.text.tertiary}
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -99,7 +99,7 @@ function RatingDistributionBar({ stars, count, total }: { stars: number; count: 
           width: `${pct}%`,
           height: '100%',
           borderRadius: 3,
-          background: '#FFD700',
+          background: tokens.colors.medal.gold,
           transition: 'width 0.5s ease',
         }} />
       </Box>
@@ -449,7 +449,7 @@ function ReviewForm({
         <Text size="xs" color="tertiary">{t('yourRating')}:</Text>
         <StarRating rating={rating} interactive size={24} onChange={setRating} />
         {rating > 0 && (
-          <Text size="xs" style={{ color: '#FFD700' }}>{rating}/5</Text>
+          <Text size="xs" style={{ color: tokens.colors.medal.gold }}>{rating}/5</Text>
         )}
       </Box>
 

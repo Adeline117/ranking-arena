@@ -78,11 +78,11 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
               width: 28, height: 28, borderRadius: '50%',
               fontSize: 13, fontWeight: 700,
               background: trader.rank === 1
-                ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+                ? `linear-gradient(135deg, ${tokens.colors.medal.gold}, ${tokens.colors.medal.goldEnd})`
                 : trader.rank === 2
-                ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
-                : 'linear-gradient(135deg, #CD7F32, #A0522D)',
-              color: trader.rank === 1 ? '#1a1200' : '#fff',
+                ? `linear-gradient(135deg, ${tokens.colors.medal.silver}, ${tokens.colors.medal.silverEnd})`
+                : `linear-gradient(135deg, ${tokens.colors.medal.bronze}, ${tokens.colors.medal.bronzeEnd})`,
+              color: trader.rank === 1 ? tokens.colors.medal.goldText : tokens.colors.white,
             }}
           >
             {trader.rank}

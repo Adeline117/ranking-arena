@@ -117,7 +117,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                   justifyContent: 'center',
                 }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${tokens.colors.accent.brand}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="6" width="20" height="12" rx="2" />
                   <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
                 </svg>
@@ -196,7 +196,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.md,
                 border: 'none',
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                background: 'linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)',
                 color: '#fff',
                 fontWeight: 700,
                 fontSize: tokens.typography.fontSize.sm,
@@ -219,7 +219,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                     borderRadius: tokens.radius.md,
                     border: `1px solid rgba(139, 111, 168, 0.3)`,
                     background: 'rgba(139, 111, 168, 0.08)',
-                    color: '#c9b8db',
+                    color: tokens.colors.accent.brandLight,
                     fontWeight: 700,
                     fontSize: tokens.typography.fontSize.sm,
                     cursor: 'pointer',
@@ -264,13 +264,13 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 justifyContent: 'center',
               }}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={hasNFT ? '#2fe57d' : '#6a6a6a'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={hasNFT ? tokens.colors.verified.onchain : tokens.colors.text.disabled} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 {hasNFT && <path d="M9 12l2 2 4-4" />}
               </svg>
             </Box>
             <Box>
-              <Text size="sm" weight="bold" style={{ color: hasNFT ? '#2fe57d' : tokens.colors.text.secondary }}>
+              <Text size="sm" weight="bold" style={{ color: hasNFT ? tokens.colors.verified.onchain : tokens.colors.text.secondary }}>
                 {hasNFT ? t('walletProNft') : t('walletNoNft')}
               </Text>
               <Text size="xs" color="tertiary">

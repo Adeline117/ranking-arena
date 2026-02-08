@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 type ExportButtonProps = {
   data: Record<string, unknown>[]
@@ -54,7 +55,7 @@ export default function ExportButton({ data, filename, format = 'csv' }: ExportB
         borderRadius: '8px',
         border: '1px solid rgba(255,255,255,0.1)',
         background: 'rgba(255,255,255,0.05)',
-        color: '#eaeaea',
+        color: tokens.colors.text.primary,
         fontWeight: 700,
         fontSize: '13px',
         cursor: 'pointer',

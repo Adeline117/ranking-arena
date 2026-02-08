@@ -10,6 +10,7 @@
 import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { usePremium } from '@/lib/premium/hooks'
+import { tokens } from '@/lib/design-tokens'
 
 export function GovernanceHeader() {
   const { isConnected, address } = useAccount()
@@ -40,7 +41,7 @@ export function GovernanceHeader() {
             {/* Voting eligibility */}
             {isPremium || hasNFT ? (
               <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/5 border border-purple-500/20">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.verified.web3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   <path d="M9 12l2 2 4-4" />
                 </svg>

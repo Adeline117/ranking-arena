@@ -92,7 +92,7 @@ function AnimatedAvatar({
           size="2xl" 
           weight="black" 
           style={{ 
-            color: '#ffffff',
+            color: tokens.colors.white,
             textShadow: '0 2px 8px rgba(0, 0, 0, 0.5)',
             fontSize: `${Math.round(size * 0.42)}px`,
             lineHeight: '1',

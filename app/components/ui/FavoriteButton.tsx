@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from './Toast'
+import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type FavoriteButtonProps = {
@@ -98,7 +99,7 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
         borderRadius: '8px',
         border: 'none',
         background: 'transparent',
-        color: favorited ? '#ff7c7c' : '#9a9a9a',
+        color: favorited ? tokens.colors.interactive.favorite : tokens.colors.interactive.inactive,
         cursor: userId && !loading ? 'pointer' : 'not-allowed',
         fontSize: '20px',
         minHeight: '44px',

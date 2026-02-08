@@ -89,7 +89,7 @@ export default function BookshelfTab() {
         </p>
         <a href="/login" style={{
           display: 'inline-block', padding: '8px 24px', borderRadius: 8,
-          background: tokens.colors.accent.brand, color: '#fff',
+          background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
           {isZh ? '去登录' : 'Login'}
@@ -148,7 +148,7 @@ export default function BookshelfTab() {
           </p>
           <Link href="/library" style={{
             display: 'inline-block', padding: '10px 28px', borderRadius: 8,
-            background: tokens.colors.accent.brand, color: '#fff',
+            background: tokens.colors.accent.brand, color: tokens.colors.white,
             textDecoration: 'none', fontWeight: 600, fontSize: 14,
           }}>
             {isZh ? '去书城' : 'Browse Library'}
@@ -185,8 +185,8 @@ export default function BookshelfTab() {
               <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
                 <span style={{
                   fontSize: 10, padding: '1px 7px', borderRadius: tokens.radius.full,
-                  background: book.status === 'read' ? '#10b98118' : tokens.colors.accent.brandMuted,
-                  color: book.status === 'read' ? '#10b981' : tokens.colors.accent.brand,
+                  background: book.status === 'read' ? tokens.colors.accent.brandMuted : tokens.colors.accent.brandMuted,
+                  color: book.status === 'read' ? tokens.colors.accent.success : tokens.colors.accent.brand,
                   fontWeight: 600,
                 }}>
                   {book.status === 'read' ? (isZh ? '已读' : 'Read') : (isZh ? '想读' : 'Want to Read')}

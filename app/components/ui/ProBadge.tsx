@@ -17,7 +17,7 @@ const PRO_CONFIG = {
   labelZh: 'Pro',
   gradient: 'var(--color-pro-badge-bg)',
   glow: 'var(--color-pro-badge-shadow)',
-  iconColor: '#FFD700',
+  iconColor: tokens.colors.medal.gold,
 }
 
 // 淡淡发光动画样式（注入一次）
@@ -95,7 +95,7 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
         style={{
           fontSize: sizeConfig.font,
           fontWeight: 700,
-          color: '#ffffff',
+          color: tokens.colors.white,
           lineHeight: 1,
           letterSpacing: '0.5px',
           textTransform: 'uppercase',

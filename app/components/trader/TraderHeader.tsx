@@ -66,9 +66,9 @@ function getSourceCategory(source?: string): 'web3' | 'spot' | 'futures' | null 
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  web3: '#8B5CF6',
-  spot: '#06B6D4',
-  futures: '#F59E0B',
+  web3: tokens.colors.verified.web3,
+  spot: tokens.colors.accent.translated,
+  futures: tokens.colors.accent.warning,
 }
 
 const CATEGORY_I18N_KEYS: Record<string, string> = {
@@ -92,13 +92,13 @@ function getTradingStyleTags(
   }
 
   if (maxDrawdown !== undefined && Math.abs(maxDrawdown) < 10) {
-    tags.push({ label: t('tagLowDrawdown'), color: '#10B981' })
+    tags.push({ label: t('tagLowDrawdown'), color: tokens.colors.accent.success })
   }
   if (winRate !== undefined && winRate > 70) {
-    tags.push({ label: t('tagHighWinRate'), color: '#22C55E' })
+    tags.push({ label: t('tagHighWinRate'), color: tokens.colors.accent.success })
   }
   if (roi90d !== undefined && roi90d > 100) {
-    tags.push({ label: t('tagHighReturns'), color: '#EF4444' })
+    tags.push({ label: t('tagHighReturns'), color: tokens.colors.accent.error })
   }
 
   return tags.slice(0, 3)
@@ -261,7 +261,7 @@ interface StatItemProps {
 
 function StatItem({ icon, value, label, hasCover }: StatItemProps): React.ReactElement {
   const textColor = hasCover ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary
-  const valueColor = hasCover ? '#ffffff' : tokens.colors.text.primary
+  const valueColor = hasCover ? tokens.colors.white : tokens.colors.text.primary
   const textShadow = hasCover ? '0 1px 4px rgba(0,0,0,0.5)' : undefined
 
   return (
@@ -407,7 +407,7 @@ export default function TraderHeader({
               placeItems: 'center',
               fontWeight: tokens.typography.fontWeight.black,
               fontSize: tokens.typography.fontSize.xl,
-              color: '#ffffff',
+              color: tokens.colors.white,
               overflow: 'hidden',
               boxShadow: avatarHovered
                 ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
@@ -449,7 +449,7 @@ export default function TraderHeader({
                 size="2xl"
                 weight="black"
                 style={{
-                  color: '#ffffff',
+                  color: tokens.colors.white,
                   textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
                   fontSize: '32px',
                   lineHeight: '1',
@@ -472,7 +472,7 @@ export default function TraderHeader({
               size="2xl"
               weight="black"
               style={{
-                color: hasCover ? '#ffffff' : tokens.colors.text.primary,
+                color: hasCover ? tokens.colors.white : tokens.colors.text.primary,
                 lineHeight: tokens.typography.lineHeight.tight,
                 textShadow: hasCover ? '0 2px 8px rgba(0,0,0,0.5)' : undefined,
               }}
@@ -523,7 +523,7 @@ export default function TraderHeader({
                   justifyContent: 'center',
                   width: 22,
                   height: 22,
-                  background: `linear-gradient(135deg, ${tokens.colors.accent.success}, #00D4AA)`,
+                  background: `linear-gradient(135deg, ${tokens.colors.accent.success}, ${tokens.colors.accent.success})`,
                   borderRadius: tokens.radius.full,
                   boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
                 }}

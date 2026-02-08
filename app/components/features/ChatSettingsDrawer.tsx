@@ -326,7 +326,7 @@ export default function ChatSettingsDrawer({
                       padding: '8px 14px',
                       borderRadius: 8,
                       border: 'none',
-                      background: 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)',
+                      background: 'linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)',
                       color: '#fff',
                       fontSize: 13,
                       fontWeight: 600,
@@ -492,8 +492,8 @@ function SettingsButton({
   onClick: () => void
   danger?: boolean
 }) {
-  const textColor = danger ? '#f44336' : tokens.colors.text.primary
-  const iconColor = danger ? '#f44336' : tokens.colors.text.secondary
+  const textColor = danger ? tokens.colors.accent.error : tokens.colors.text.primary
+  const iconColor = danger ? tokens.colors.accent.error : tokens.colors.text.secondary
 
   return (
     <button
@@ -579,7 +579,7 @@ function SettingsToggle({
           width: 44,
           height: 24,
           borderRadius: 12,
-          background: checked ? 'linear-gradient(135deg, #9575cd 0%, #7e57c2 100%)' : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.15)',
+          background: checked ? 'linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)' : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.15)',
           position: 'relative',
           transition: 'background 0.2s',
           flexShrink: 0,

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { memo } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 interface SparklineProps {
   /** Array of numeric values (e.g. daily ROI snapshots) */
@@ -30,7 +31,7 @@ export const Sparkline = memo(function Sparkline({
   if (!data || data.length < 2) {
     const roiVal = roi ?? 0
     const isPositive = roiVal >= 0
-    const barColor = color || (isPositive ? '#4DFF9A' : '#FF4D4D')
+    const barColor = color || (isPositive ? tokens.colors.sentiment.bull : tokens.colors.sentiment.bear)
     const barWidth = Math.min(Math.abs(roiVal) / 100, 1) * (width - 4)
 
     return (
@@ -82,7 +83,7 @@ export const Sparkline = memo(function Sparkline({
   })
 
   const isUp = data[data.length - 1] >= data[0]
-  const strokeColor = color || (isUp ? '#4DFF9A' : '#FF4D4D')
+  const strokeColor = color || (isUp ? tokens.colors.sentiment.bull : tokens.colors.sentiment.bear)
 
   // Area fill path
   const areaPath = `M${points[0]} ${points.slice(1).map(p => `L${p}`).join(' ')} L${(padding + effectiveW).toFixed(1)},${(padding + effectiveH).toFixed(1)} L${padding},${(padding + effectiveH).toFixed(1)} Z`

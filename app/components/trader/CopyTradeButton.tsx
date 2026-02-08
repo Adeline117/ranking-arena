@@ -180,7 +180,7 @@ export default function CopyTradeButton({
         size="sm"
         onClick={() => setShowWarning(true)}
         style={{
-          background: `linear-gradient(135deg, #00C853 0%, #00E676 50%, #69F0AE 100%)`,
+          background: `linear-gradient(135deg, ${tokens.colors.accent.success} 0%, ${tokens.colors.accent.success} 50%, ${tokens.colors.accent.success} 100%)`,
           border: '2px solid rgba(255, 255, 255, 0.3)',
           padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
           borderRadius: tokens.radius.xl,
@@ -368,7 +368,7 @@ export default function CopyTradeButton({
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   background: acknowledged
-                    ? `linear-gradient(135deg, ${tokens.colors.accent.success} 0%, #00D4AA 100%)`
+                    ? `linear-gradient(135deg, ${tokens.colors.accent.success} 0%, ${tokens.colors.accent.success} 100%)`
                     : tokens.colors.bg.tertiary,
                   border: 'none',
                   opacity: acknowledged ? 1 : 0.5,
