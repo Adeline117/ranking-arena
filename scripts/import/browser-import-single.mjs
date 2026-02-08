@@ -154,7 +154,7 @@ async function scrape(platformKey) {
   
   const browser = await chromium.launch({
     headless: false,
-    channel: 'chrome',
+    executablePath: process.env.CHROME_PATH || undefined, channel: process.env.CHROME_PATH ? undefined : 'chrome',
     proxy: { server: 'http://127.0.0.1:7890' },
     args: ['--window-size=800,600', '--window-position=9999,9999', '--disable-gpu', '--disable-extensions'],
   })

@@ -11,6 +11,8 @@ import { createClient } from '@supabase/supabase-js'
 import { execSync, spawn } from 'child_process'
 import { chromium } from 'playwright'
 
+const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/snap/bin/chromium')
+
 const envPath = '.env.local'
 try { for (const l of readFileSync(envPath,'utf8').split('\n')) {
   const m=l.match(/^([^#=]+)=["']?(.+?)["']?$/); if(m&&!process.env[m[1]]) process.env[m[1]]=m[2]
@@ -25,7 +27,7 @@ const PORT = 9337
 async function launchChrome() {
   try { execSync('pkill -f "remote-debugging-port=9337"', { stdio: 'ignore' }) } catch {}
   await sleep(1000)
-  spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+  spawn(CHROME_PATH, [
     `--remote-debugging-port=${PORT}`, '--user-data-dir=/tmp/chrome-xt-v2',
     '--no-first-run','--disable-extensions','--disable-sync','--disable-gpu',
     '--window-size=1400,900','--window-position=50,50',

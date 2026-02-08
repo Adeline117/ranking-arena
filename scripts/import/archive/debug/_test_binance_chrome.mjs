@@ -1,6 +1,8 @@
 import { chromium } from 'playwright'
 import { execSync, spawn } from 'child_process'
 
+const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/snap/bin/chromium')
+
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const PORT = 9350
 
@@ -12,7 +14,7 @@ async function main() {
   await sleep(1000)
   
   // Launch Chrome with proxy
-  spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+  spawn(CHROME_PATH, [
     `--remote-debugging-port=${PORT}`,
     '--user-data-dir=/tmp/chrome-binance-test',
     '--no-first-run', '--disable-extensions',
