@@ -2185,7 +2185,7 @@ const zh = {
     termsChanges2: '因任何原因暂停或终止您的账户访问',
     termsChanges3: '修改本条款，修改后的条款将在发布后立即生效',
     termsGoverningLawTitle: '10. 适用法律',
-    termsGoverningLawP1: '本条款受美国加利福尼亚州法律管辖并按其解释，不考虑法律冲突条款。与本条款相关的任何争议应通过具有约束力的仲裁解决，仲裁地点位于加利福尼亚州。在提起仲裁之前，双方同意先通过友好协商尝试解决争议。',
+    termsGoverningLawP1: '本条款受新加坡共和国法律管辖并按其解释。与本条款相关的任何争议应通过新加坡国际仲裁中心（SIAC）按其现行规则进行仲裁解决。仲裁地点为新加坡，仲裁语言为英语。在提起仲裁之前，双方同意先通过友好协商尝试解决争议。',
     termsContactTitle: '11. 联系我们',
     termsContactP1: '如果您对本服务条款有任何问题，请通过站内私信联系我们：',
     termsSendMessageToSupport: '发送私信给客服',
