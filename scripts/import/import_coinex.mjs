@@ -194,7 +194,7 @@ async function saveTraders(traders, period) {
         is_active: true,
       }, { onConflict: 'source,source_trader_id' })
 
-      const { error } = await supabase.from('trader_snapshots').insert({
+      const { error } = await supabase.from('trader_snapshots').upsert({
         source: SOURCE,
         source_trader_id: trader.traderId,
         season_id: period,
@@ -206,7 +206,7 @@ async function saveTraders(traders, period) {
         followers: trader.followers || 0,
         arena_score: calculateArenaScore(trader.roi, trader.pnl, trader.maxDrawdown, trader.winRate, period).totalScore,
         captured_at: capturedAt,
-      })
+      }, { onConflict: 'source,source_trader_id,season_id' })
       if (error) errors++
       else saved++
     } catch (e) { errors++ }
