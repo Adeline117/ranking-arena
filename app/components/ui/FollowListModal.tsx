@@ -45,6 +45,8 @@ export default function FollowListModal({
   const [hidden, setHidden] = useState(false)
   const [hiddenMessage, setHiddenMessage] = useState('')
   const abortControllerRef = useRef<AbortController | null>(null)
+  const modalRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (isOpen && handle) {
@@ -58,6 +60,40 @@ export default function FollowListModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, handle, type])
+
+  // Focus trap + escape key
+  useEffect(() => {
+    if (!isOpen) return
+    previousFocusRef.current = document.activeElement as HTMLElement
+    const timer = setTimeout(() => {
+      if (modalRef.current) {
+        const firstBtn = modalRef.current.querySelector<HTMLElement>('button')
+        firstBtn?.focus()
+      }
+    }, 50)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocusRef.current?.focus()
+    }
+  }, [isOpen, onClose])
 
   const loadUsers = async () => {
     if (abortControllerRef.current) {
@@ -142,6 +178,10 @@ export default function FollowListModal({
       onClick={onClose}
     >
       <Box
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="follow-list-modal-title"
         style={{
           background: tokens.colors.bg.primary,
           borderRadius: tokens.radius.xl,
@@ -165,7 +205,7 @@ export default function FollowListModal({
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
         }}>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
-            <Text size="lg" weight="bold">{title}</Text>
+            <Text id="follow-list-modal-title" size="lg" weight="bold">{title}</Text>
             {isOwnProfile && (
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
                 <span style={{
@@ -182,6 +222,7 @@ export default function FollowListModal({
           </Box>
           <button
             onClick={onClose}
+            aria-label="Close"
             style={{
               background: 'transparent',
               border: 'none',
@@ -192,7 +233,7 @@ export default function FollowListModal({
               padding: 4,
             }}
           >
-            &times;
+            <span aria-hidden="true">&times;</span>
           </button>
         </Box>
 

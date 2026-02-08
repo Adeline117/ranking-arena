@@ -46,6 +46,8 @@ export function LoadingSpinner({
       height={dimension}
       viewBox={`0 0 ${dimension} ${dimension}`}
       fill="none"
+      role="status"
+      aria-label="Loading"
       className={className}
       style={{
         animation: 'spinner-rotate 1s linear infinite',

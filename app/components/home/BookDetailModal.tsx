@@ -88,6 +88,9 @@ export default function BookDetailModal({ item, onClose }: BookDetailModalProps)
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="book-detail-title"
         onClick={e => e.stopPropagation()}
         style={{
           background: tokens.colors.bg.primary,
@@ -116,7 +119,7 @@ export default function BookDetailModal({ item, onClose }: BookDetailModalProps)
 
           {/* Title + rating */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: tokens.colors.text.primary, lineHeight: 1.3, marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const }} title={item.title || ''}>
+            <h2 id="book-detail-title" style={{ fontSize: 20, fontWeight: 700, color: tokens.colors.text.primary, lineHeight: 1.3, marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const }} title={item.title || ''}>
               {item.title}
             </h2>
             {item.author && (

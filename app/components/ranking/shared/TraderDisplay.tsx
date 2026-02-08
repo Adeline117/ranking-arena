@@ -48,9 +48,11 @@ function RankChangeIndicator({ rankChange, isNew }: { rankChange?: number | null
     const isUp = rankChange > 0
     const color = isUp ? tokens.colors.accent.success : TRADER_ACCENT_ERROR
     const arrow = isUp ? '\u25B2' : '\u25BC'
+    const srText = isUp ? `Rank up ${Math.abs(rankChange)}` : `Rank down ${Math.abs(rankChange)}`
     return (
       <span style={{ ...indicatorStyle, color, display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-        {arrow}{Math.abs(rankChange)}
+        <span className="sr-only">{srText}</span>
+        <span aria-hidden="true">{arrow}{Math.abs(rankChange)}</span>
       </span>
     )
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -56,8 +56,49 @@ export default function ReportModal({
 
   const MIN_DESC_LENGTH = 15
   const MAX_IMAGES = 4
+  const modalRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   const contentTypeLabel = t(CONTENT_TYPE_KEYS[contentType] as keyof typeof import('@/lib/i18n/en').default)
+
+  // Focus trap + escape key for modal
+  useEffect(() => {
+    if (!isOpen) return
+    previousFocusRef.current = document.activeElement as HTMLElement
+
+    const timer = setTimeout(() => {
+      if (modalRef.current) {
+        const firstFocusable = modalRef.current.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        firstFocusable?.focus()
+      }
+    }, 50)
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocusRef.current?.focus()
+    }
+  }, [isOpen, onClose])
 
   const handleSubmit = async () => {
     if (!reason) {
@@ -134,6 +175,10 @@ export default function ReportModal({
       >
         {/* Modal */}
         <Box
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="report-modal-title"
           onClick={(e) => e.stopPropagation()}
           style={{
             width: '100%',
@@ -164,12 +209,13 @@ export default function ReportModal({
                   <line x1="4" y1="22" x2="4" y2="15" />
                 </svg>
               </Box>
-              <Text size="lg" weight="bold">
+              <Text id="report-modal-title" size="lg" weight="bold">
                 {t('reportTitle').replace('{type}', contentTypeLabel)}
               </Text>
             </Box>
             <button
               onClick={onClose}
+              aria-label={t('cancel')}
               style={{
                 width: 32,
                 height: 32,
@@ -183,7 +229,7 @@ export default function ReportModal({
                 justifyContent: 'center',
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -319,13 +365,14 @@ export default function ReportModal({
                     <Image src={img} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                     <button
                       onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
+                      aria-label={`Remove image ${i + 1}`}
                       style={{
                         position: 'absolute', top: 2, right: 2, width: 20, height: 20,
                         borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none',
                         color: '#fff', fontSize: 12, cursor: 'pointer', display: 'flex',
                         alignItems: 'center', justifyContent: 'center',
                       }}
-                    >X</button>
+                    ><span aria-hidden="true">X</span></button>
                   </Box>
                 ))}
 
