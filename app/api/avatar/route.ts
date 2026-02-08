@@ -75,6 +75,13 @@ export async function GET(request: Request) {
       'wexx.one',
       // Blofin
       'blofin.com',
+      // Our CDN
+      'arenafi.org',
+      // GitHub
+      'githubusercontent.com',
+      // Google
+      'googleusercontent.com',
+      'google.com',
     ]
     
     const urlObj = new URL(decodedUrl)
