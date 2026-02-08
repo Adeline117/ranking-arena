@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import TopNav from '@/app/components/layout/TopNav'
-import DesktopSidebar from '@/app/components/layout/DesktopSidebar'
+import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+import RecommendedGroups from '@/app/components/sidebar/RecommendedGroups'
+import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text, Button } from '@/app/components/base'
 import { Skeleton } from '@/app/components/ui/Skeleton'
@@ -132,21 +134,17 @@ export default function GroupsFeedPage() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      {/* Desktop sidebar */}
-      <div className="hide-mobile hide-tablet">
-        <DesktopSidebar />
-      </div>
-
-      {/* Main content */}
-      <Box
-        as="main"
-        className="feed-main-content"
-        style={{
-          maxWidth: 680,
-          margin: '0 auto',
-          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-          paddingBottom: 100,
-        }}
+      <ThreeColumnLayout
+        leftSidebar={
+          <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+            <RecommendedGroups />
+          </Suspense>
+        }
+        rightSidebar={
+          <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+            <NewsFlash />
+          </Suspense>
+        }
       >
         {/* Header with tabs and create button */}
         <Box
@@ -389,7 +387,7 @@ export default function GroupsFeedPage() {
             )}
           </Box>
         )}
-      </Box>
+      </ThreeColumnLayout>
 
       <FloatingActionButton />
       <MobileBottomNav />
