@@ -17,15 +17,16 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category') || ''
   const search = (searchParams.get('search') || '').slice(0, 200) // cap search length
   const lang = searchParams.get('language') || ''  // user's UI language preference
+  const sort = searchParams.get('sort') || 'recent'
   const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1)
   const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '24') || 24), 100)
   const offset = (page - 1) * limit
 
   // Use tiered cache (memory → Redis → DB)
-  const cacheKey = `api:library:${category}:${search}:${lang}:${page}:${limit}`
+  const cacheKey = `api:library:${category}:${search}:${lang}:${sort}:${page}:${limit}`
   const result = await tieredGetOrSet(
     cacheKey,
-    () => fetchLibraryData({ category, search, lang, page, limit, offset }),
+    () => fetchLibraryData({ category, search, lang, sort, page, limit, offset }),
     search ? 'warm' : 'cold',
     ['library']
   )
@@ -39,8 +40,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function fetchLibraryData({ category, search, lang, page, limit, offset }: {
-  category: string; search: string; lang: string; page: number; limit: number; offset: number
+async function fetchLibraryData({ category, search, lang, sort, page, limit, offset }: {
+  category: string; search: string; lang: string; sort: string; page: number; limit: number; offset: number
 }) {
   // Use RPC for language-priority sorting when user has a language preference
   if (lang && !search) {
@@ -81,8 +82,24 @@ async function fetchLibraryData({ category, search, lang, page, limit, offset }:
     query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,author.ilike.%${search}%`)
   }
 
-  query = query.order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1)
+  // Apply sort order
+  switch (sort) {
+    case 'popular':
+      query = query.order('view_count', { ascending: false, nullsFirst: false })
+      break
+    case 'rating':
+      query = query.order('rating', { ascending: false, nullsFirst: false })
+      break
+    case 'date':
+      query = query.order('publish_date', { ascending: false, nullsFirst: false })
+      break
+    case 'recent':
+    default:
+      query = query.order('created_at', { ascending: false })
+      break
+  }
+
+  query = query.range(offset, offset + limit - 1)
 
   const { data, error, count } = await query
 

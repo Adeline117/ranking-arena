@@ -62,7 +62,7 @@ interface TraderToEnrich {
  * Enrich a single trader based on platform
  */
 async function enrichTrader(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   trader: TraderToEnrich
 ): Promise<{ success: boolean; error?: string }> {
   const { source, source_trader_id: traderId } = trader
@@ -245,7 +245,7 @@ export async function GET(req: Request) {
 }
 
 async function processTraders(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   traders: TraderToEnrich[],
   concurrency: number,
   startTime: number,
@@ -287,7 +287,7 @@ async function processTraders(
     for (const trader of traders) {
       await supabase
         .from('traders')
-        .update({ details_fetched_at: now })
+        .update({ details_fetched_at: now } as any)
         .eq('source', trader.source)
         .eq('source_trader_id', trader.source_trader_id)
     }
