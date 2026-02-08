@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import PostFeed from '@/app/components/post/PostFeed'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -108,24 +109,11 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
         margin: '0 auto', 
         padding: tokens.spacing[6],
       }}>
-        {/* 返回按钮 */}
-        <button
-          onClick={() => router.back()}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 0',
-            marginBottom: 16,
-            background: 'transparent',
-            border: 'none',
-            color: tokens.colors.text.secondary,
-            cursor: 'pointer',
-            fontSize: 14,
-          }}
-        >
-          {'\u2190'} {t('goBack')}
-        </button>
+        {/* Breadcrumb */}
+        <Breadcrumb items={[
+          { label: language === 'zh' ? '热榜' : 'Hot', href: '/hot' },
+          { label: postData?.title?.slice(0, 30) || '...' },
+        ]} />
         
         {/* 帖子内容 - 使用 PostFeed 并设置 initialPostId 自动打开帖子详情 */}
         <PostFeed initialPostId={postId} variant="full" />

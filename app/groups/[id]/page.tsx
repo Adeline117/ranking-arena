@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
@@ -533,6 +534,10 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           gap: tokens.spacing[6],
         }}
       >
+        <Breadcrumb items={[
+          { label: language === 'zh' ? '小组' : 'Groups', href: '/groups' },
+          { label: (language === 'zh' ? group?.name : (group?.name_en || group?.name)) || '...' },
+        ]} />
         {/* Main Content */}
         <PullToRefreshWrapper
           onRefresh={async () => { await postsHook.loadPosts() }}

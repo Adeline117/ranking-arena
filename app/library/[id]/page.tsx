@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import TopNav from '@/app/components/layout/TopNav'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
@@ -223,20 +224,11 @@ export default function BookDetailPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(bookJsonLd) }} />
       <main style={{ maxWidth: 960, margin: '0 auto', padding: '80px 16px 100px' }}>
 
-        {/* Back link */}
-        <Link href="/library" style={{
-          color: tokens.colors.text.secondary, fontSize: 13, textDecoration: 'none',
-          marginBottom: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
-          transition: `color ${tokens.transition.fast}`,
-        }}
-          onMouseEnter={e => (e.currentTarget.style.color = tokens.colors.accent.brand)}
-          onMouseLeave={e => (e.currentTarget.style.color = tokens.colors.text.secondary)}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-          {isZh ? '返回书架' : 'Back to Library'}
-        </Link>
+        {/* Breadcrumb */}
+        <Breadcrumb items={[
+          { label: isZh ? '书库' : 'Library', href: '/library' },
+          { label: book.title },
+        ]} />
 
         {/* ===== Top Section: Cover + Info ===== */}
         <div className="book-detail-top" style={{ display: 'flex', gap: 28, marginBottom: 36, flexWrap: 'wrap' }}>
