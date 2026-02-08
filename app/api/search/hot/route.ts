@@ -24,7 +24,9 @@ export const GET = withPublic(
     // Try cache first
     const cached = await cacheGet<HotSearchItem[]>(CACHE_KEY)
     if (cached) {
-      return success({ hotSearches: cached })
+      return success({ hotSearches: cached }, 200, {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+      })
     }
 
     // Query top posts by hot_score for keywords
@@ -73,7 +75,9 @@ export const GET = withPublic(
     // Cache result
     await cacheSet(CACHE_KEY, hotSearches, { ttl: CACHE_TTL })
 
-    return success({ hotSearches })
+    return success({ hotSearches }, 200, {
+      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+    })
   }
 )
 

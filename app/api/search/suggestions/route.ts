@@ -174,7 +174,9 @@ export const GET = withPublic(
         })
     ).catch(() => {})
 
-    return success(result)
+    return success(result, 200, {
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+    })
   },
   { name: 'search-suggestions', rateLimit: 'read' }
 )
