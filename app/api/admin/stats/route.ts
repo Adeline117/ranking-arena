@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending')
     
-    // Scraper health summary - query directly instead of self-fetch
+    // Scraper health summary
     const scraperHealth = { fresh: 0, stale: 0, critical: 0 }
     try {
       const { data: sources } = await supabase
@@ -130,7 +130,38 @@ export async function GET(req: NextRequest) {
     } catch (e: unknown) {
       logger.warn('Error computing scraper health', { error: e })
     }
-    
+
+    // Trader statistics
+    const { count: totalTraders } = await supabase
+      .from('trader_sources')
+      .select('*', { count: 'exact', head: true })
+
+    // Traders per platform
+    const { data: tradersByPlatformRaw } = await supabase
+      .from('trader_sources')
+      .select('source')
+
+    const tradersByPlatform: Record<string, number> = {}
+    for (const row of tradersByPlatformRaw || []) {
+      tradersByPlatform[row.source] = (tradersByPlatform[row.source] || 0) + 1
+    }
+
+    // Snapshots in last 24h
+    const { count: snapshots24h } = await supabase
+      .from('trader_snapshots')
+      .select('*', { count: 'exact', head: true })
+      .gte('captured_at', yesterday.toISOString())
+
+    // Library items
+    const { count: totalLibraryItems } = await supabase
+      .from('library_items')
+      .select('*', { count: 'exact', head: true })
+
+    const { count: libraryWithPdf } = await supabase
+      .from('library_items')
+      .select('*', { count: 'exact', head: true })
+      .not('pdf_url', 'is', null)
+
     return NextResponse.json({
       ok: true,
       stats: {
@@ -158,6 +189,15 @@ export async function GET(req: NextRequest) {
           pendingApplications: pendingGroupApplications || 0,
         },
         scraperHealth,
+        traders: {
+          total: totalTraders || 0,
+          byPlatform: tradersByPlatform,
+          snapshots24h: snapshots24h || 0,
+        },
+        library: {
+          total: totalLibraryItems || 0,
+          withPdf: libraryWithPdf || 0,
+        },
       },
       generatedAt: now.toISOString(),
     })

@@ -320,7 +320,7 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     id: 'weex',
     name: 'Weex',
     type: 'cex',
-    enabled: true,
+    enabled: false, // 2026-02-08: API returns 521, copy-trading page requires browser scraping with proxy. Disabled until fixed.
     timeWindows: ['7D', '30D', '90D'],
     priority: 5,
     ...DEFAULT_CEX_CONFIG,
