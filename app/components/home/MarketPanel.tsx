@@ -30,17 +30,6 @@ export default function MarketPanel() {
   const [customPairs, setCustomPairs] = useState<string[]>(['BTC-USD', 'ETH-USD', 'SOL-USD', 'ARB-USD'])
   const [userId, setUserId] = useState<string | null>(null)
 
-  useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-      if (data.user?.id) {
-        // 加载用户自定义的币种
-        loadCustomPairs(data.user.id)
-      }
-    })
-  }, [loadCustomPairs])
-
   const loadCustomPairs = async (uid: string) => {
     try {
       const { data, error } = await supabase
@@ -74,6 +63,17 @@ export default function MarketPanel() {
       }
     } catch { /* localStorage unavailable */ }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
+      if (data.user?.id) {
+        loadCustomPairs(data.user.id)
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const saveCustomPairs = async (pairs: string[]) => {
     if (!userId) return

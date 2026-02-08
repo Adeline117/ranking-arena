@@ -14,7 +14,7 @@ interface HealthScoreCardProps {
   timestamp: string
 }
 
-export default function HealthScoreCard({ health, _timestamp }: HealthScoreCardProps) {
+export default function HealthScoreCard({ health, timestamp }: HealthScoreCardProps) {
   // Calculate progress for circular indicator
   const circumference = 2 * Math.PI * 45 // radius = 45
   const progress = (health.score / 100) * circumference

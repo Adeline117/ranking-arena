@@ -64,7 +64,7 @@ export default function RoiHistoryChart({
   externalData,
   dataType = 'roi',
 }: RoiHistoryChartProps) {
-  const { language, _t } = useLanguage()
+  const { language, t } = useLanguage()
   const [period, setPeriod] = useState<TimePeriod>(initialPeriod)
   const [mounted, setMounted] = useState(false)
   const [hoveredPoint, setHoveredPoint] = useState<HistoryDataPoint | null>(null)
@@ -275,7 +275,7 @@ export default function RoiHistoryChart({
       {/* Loading State */}
       {isLoading && (
         <Box style={{ 
-          _height, 
+          height, 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',

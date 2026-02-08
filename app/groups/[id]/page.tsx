@@ -308,7 +308,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
         setGroup(groupData ? { ...groupData, owner_handle: ownerHandle } as Group : null)
 
-        let _membershipConfirmed = false
+        let membershipConfirmed = false
         if (userId) {
           const { data: membership } = await supabase
             .from('group_members')

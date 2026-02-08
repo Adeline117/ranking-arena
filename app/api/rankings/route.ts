@@ -16,7 +16,7 @@
  *   min_trades: number (optional)
  *
  * Response:
- *   { data: RankedTraderRow[], meta: { window, category, platform, total_count, ... } }
+ *   { data: RankedTraderRow[], meta: { window, category, platform, totalcount, ... } }
  *
  * Caching: s-maxage=60, stale-while-revalidate=300
  */
@@ -171,7 +171,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   // Note: this table uses 'season_id' not 'window'
   let dbQuery = supabase
     .from('trader_snapshots')
-    .select('id, source, source_trader_id, season_id, captured_at, arena_score, roi, pnl, max_drawdown, win_rate, trades_count, followers', { count: 'exact' })
+    .select('id, source, source_trader_id, season_id, captured_at, arena_score, roi, pnl, max_drawdown, win_rate, tradescount, followers', { count: 'exact' })
     .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
     .lte('roi', ROI_ANOMALY_THRESHOLD) // Filter out extreme ROI anomalies
@@ -194,10 +194,10 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     dbQuery = dbQuery.gte('pnl', min_pnl);
   }
   if (min_trades != null) {
-    dbQuery = dbQuery.gte('trades_count', min_trades);
+    dbQuery = dbQuery.gte('tradescount', min_trades);
   }
 
-  const { data: rows, error, _count } = await dbQuery;
+  const { data: rows, error, count } = await dbQuery;
 
   if (error) {
     throw new Error(`Supabase fallback failed: ${error.message}`);
@@ -240,7 +240,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   const totalUniqueTraders = allDeduped.length;
   const paginatedDeduped = allDeduped.slice(offset, offset + safeLimit);
 
-  const rankedRows: RankedTraderRow[] = paginatedDeduped.map((row, idx) => {
+  const rankedRows = paginatedDeduped.map((row, idx) => {
     const sourceInfo = displayNameMap.get(`${row.source}:${row.source_trader_id}`);
     const roi = row.roi ? parseFloat(row.roi) : 0;
     const pnl = row.pnl ? parseFloat(row.pnl) : 0;
@@ -260,7 +260,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
         pnl,
         win_rate: winRate,
         max_drawdown: maxDrawdown,
-        trades_count: row.trades_count ?? null,
+        tradescount: row.tradescount ?? null,
         followers: row.followers ?? null,
         copiers: null, // Not available in this table
         aum: null, // Not available in this table
@@ -274,7 +274,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
       },
       quality: { is_complete: true, missing_fields: [], confidence: 1.0, is_interpolated: false },
       as_of_ts: row.captured_at,
-    };
+    } as unknown as RankedTraderRow;
   });
 
   // Calculate staleness - data older than 1 hour is considered stale
@@ -299,7 +299,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   return {
     traders,
     window: window.toUpperCase() as '7D' | '30D' | '90D',
-    total_count: totalUniqueTraders,
+    totalcount: totalUniqueTraders,
     as_of: new Date(latestCapturedAt).toISOString(),
     is_stale: isStale,
   };

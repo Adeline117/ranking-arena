@@ -66,6 +66,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Forward declaration ref for handleCancel (used in useEffect before declaration)
+  const handleCancelRef = useRef<() => void>(() => {})
+
   // Focus trap + escape key
   useEffect(() => {
     if (!state.isOpen) return
@@ -83,7 +86,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        handleCancel()
+        handleCancelRef.current()
         return
       }
 
@@ -118,7 +121,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       // Restore focus when dialog closes
       previousFocusRef.current?.focus()
     }
-  }, [state.isOpen, handleCancel])
+  }, [state.isOpen])
 
   const showDialog = useCallback((options: DialogOptions): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -218,6 +221,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     closeDialog()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.options, state.resolve, closeDialog])
+
+  // Keep ref in sync
+  handleCancelRef.current = handleCancel
 
   const getButtonConfig = () => {
     if (state.options?.type === 'danger') {

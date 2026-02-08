@@ -42,7 +42,7 @@ interface UseGroupPostsOptions {
   userId: string | null
   accessToken: string | null
   isMember: boolean
-  _language: string
+  language: string
   t: (key: string) => string
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
