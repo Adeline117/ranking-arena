@@ -137,6 +137,7 @@ export default function CategoryRankingTabs({
 // Onchain 平台列表（与 PLATFORM_CATEGORY 保持同步）
 const ONCHAIN_PLATFORMS = [
   'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
+  'aevo', 'vertex', 'jupiter_perps',
   'binance_web3', 'okx_web3', 'okx_wallet',
   'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
 ]

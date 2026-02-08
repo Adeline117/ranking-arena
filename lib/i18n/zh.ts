@@ -57,7 +57,7 @@ const zh = {
     winRate90d: '胜率 (90D)',
     volume90d: '交易量 (90D)',
     avgBuy90d: '平均买入 (90D)',
-    noTraderData: '暂无交易者链上记录',
+    noTraderData: '暂无交易者数据',
     prevPage: '上一页',
     nextPage: '下一页',
     unknownSource: '未知来源',

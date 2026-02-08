@@ -212,7 +212,7 @@ async function computeSeason(
   const uniqueTraders = Array.from(traderMap.values())
     .filter(t => Math.abs(t.roi ?? 0) <= roiThreshold)
     .filter(t => (t.roi ?? 0) > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
-    .filter(t => (t.trades_count ?? 0) >= MIN_TRADES_COUNT) // P1-2: minimum trades
+    .filter(t => t.trades_count == null || t.trades_count >= MIN_TRADES_COUNT) // P1-2: minimum trades (skip check if null)
 
   if (!uniqueTraders.length) return 0
 
