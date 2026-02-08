@@ -210,6 +210,7 @@ export class GmxConnector extends BaseConnector {
         copiers: null,
         sharpe_ratio: null,
         aum: netCapital > 0 ? netCapital : maxCapital,
+        roi_type: 'realized',
       };
 
       return this.success<CanonicalSnapshot>({
