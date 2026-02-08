@@ -96,7 +96,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       if (data && data.length > 0) {
         const posts: HotPost[] = data.map((post, index) => ({
           id: post.id,
-          title: post.title || '无标题',
+          title: post.title || t('noTitle'),
           hotScore: post.hot_score ||
             (post.view_count || 0) * 0.1 +
             (post.like_count || 0) * 2 +
@@ -389,9 +389,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'trader': return '交易员'
-      case 'post': return '帖子'
-      case 'group': return '群组'
+      case 'trader': return t('traderTypeLabel')
+      case 'post': return t('postTypeLabel')
+      case 'group': return t('groupTypeLabel')
       default: return ''
     }
   }
@@ -433,7 +433,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             }}
           >
             <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-              搜索结果
+              {t('searchDropdownResults')}
             </Text>
           </Box>
           {searching ? (
@@ -534,7 +534,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                 }}
               >
                 <Text size="xs" color="tertiary">
-                  查看全部搜索结果 →
+                  {t('viewAllSearchResults')} →
                 </Text>
               </Box>
             </Link>
@@ -555,11 +555,11 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             }}
           >
             <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-              {language === 'en' ? 'Search History' : '搜索历史'}
+              {t('searchHistory')}
             </Text>
             <button
               onClick={handleClearAllHistory}
-              aria-label={language === 'en' ? 'Clear search history' : '清空搜索历史'}
+              aria-label={t('clearSearchHistory')}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -569,7 +569,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                 padding: 0,
               }}
             >
-              {language === 'en' ? 'Clear' : '清空'}
+              {t('clearSearchHistory')}
             </button>
           </Box>
           <Box>
@@ -637,7 +637,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             }}
           >
             <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-              {language === 'en' ? 'Hot Posts' : '热榜帖子'}
+              {t('hotPosts')}
             </Text>
           </Box>
           <Box>
@@ -680,7 +680,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             ) : hotPosts.length === 0 ? (
               <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
                 <Text size="sm" color="tertiary">
-                  {language === 'en' ? 'No hot posts yet' : '暂无热门帖子'}
+                  {t('noHotPosts')}
                 </Text>
               </Box>
             ) : (

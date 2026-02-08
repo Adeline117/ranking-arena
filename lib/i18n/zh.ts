@@ -1342,6 +1342,7 @@ const zh = {
     translationServiceError: '翻译服务出错',
 
     // GroupsFeedPage
+    createGroup: '创建小组',
     groupFeed: '小组动态',
     discoverGroups: '发现小组',
     myGroups: '我的小组',
