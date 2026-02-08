@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
+import CryptoIcon from '@/app/components/common/CryptoIcon'
 
 interface CoinRow {
   symbol: string
@@ -82,7 +83,10 @@ function Section({ title, rows }: { title: string; rows: CoinRow[] }) {
               fontSize: 12,
             }}
           >
-            <span style={{ color: tokens.colors.text.primary, fontWeight: 500 }}>{symbol}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <CryptoIcon symbol={symbol} size={16} />
+              <span style={{ color: tokens.colors.text.primary, fontWeight: 500 }}>{symbol}</span>
+            </span>
             <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ color: tokens.colors.text.secondary }}>{row.price}</span>
               <span style={{ color, fontWeight: 600, minWidth: 60, textAlign: 'right' }}>

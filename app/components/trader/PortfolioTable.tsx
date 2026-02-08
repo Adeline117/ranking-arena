@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
+import CryptoIcon from '@/app/components/common/CryptoIcon'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 
 // 扩展的仓位历史类型
@@ -265,22 +266,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                         <td style={{ padding: tokens.spacing[4] }}>
                           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                             {/* 币种图标 */}
-                            <Box
-                              style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: tokens.radius.full,
-                                background: `linear-gradient(135deg, ${tokens.colors.accent.primary}30, ${tokens.colors.accent.brand}20)`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
-                              }}
-                            >
-                              <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                                {item.market.slice(0, 1)}
-                              </Text>
-                            </Box>
+                            <CryptoIcon symbol={item.market} size={28} />
                             <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
                               {item.market}
                             </Text>
@@ -465,9 +451,12 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                               onMouseLeave={() => setHoveredRow(null)}
                             >
                               <td style={{ padding: tokens.spacing[4] }}>
-                                <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
-                                  {item.symbol}
-                                </Text>
+                                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                                  <CryptoIcon symbol={item.symbol} size={20} />
+                                  <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                                    {item.symbol}
+                                  </Text>
+                                </Box>
                               </td>
                               <td style={{ padding: tokens.spacing[4] }}>
                                 <Box style={{ 
@@ -587,21 +576,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
           >
             <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[6] }}>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                <Box
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: tokens.radius.full,
-                    background: `linear-gradient(135deg, ${tokens.colors.accent.primary}30, ${tokens.colors.accent.brand}20)`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                    {selectedMarket.slice(0, 2)}
-                  </Text>
-                </Box>
+                <CryptoIcon symbol={selectedMarket} size={48} />
                 <Text size="xl" weight="black" style={{ color: tokens.colors.text.primary }}>
                   {selectedMarket}
                 </Text>
@@ -672,21 +647,7 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
         borderBottom: `1px solid ${tokens.colors.border.primary}40`,
       }}>
         {/* 币种图标 */}
-        <Box style={{ 
-          width: 32, 
-          height: 32, 
-          borderRadius: tokens.radius.full, 
-          background: `linear-gradient(135deg, #F7931A 0%, #E6A200 100%)`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          boxShadow: '0 2px 8px rgba(247, 147, 26, 0.3)',
-        }}>
-          <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>
-            {coinName.slice(0, 1)}
-          </Text>
-        </Box>
+        <CryptoIcon symbol={coinName} size={32} />
         
         {/* 币种名称 */}
         <Text size="base" weight="black" style={{ color: tokens.colors.text.primary }}>

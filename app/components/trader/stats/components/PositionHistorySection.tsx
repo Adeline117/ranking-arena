@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../../base'
+import CryptoIcon from '@/app/components/common/CryptoIcon'
 
 interface PositionHistoryItem {
   symbol: string
@@ -132,18 +133,7 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
     >
       {/* Header */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-        <Box style={{
-          width: 28,
-          height: 28,
-          borderRadius: tokens.radius.full,
-          background: `linear-gradient(135deg, #F7931A, #E6A200)`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 2px 8px rgba(247, 147, 26, 0.3)',
-        }}>
-          <Text size="xs" weight="bold" style={{ color: tokens.colors.white }}>{position.symbol.slice(0, 2)}</Text>
-        </Box>
+        <CryptoIcon symbol={position.symbol} size={28} />
 
         <Text size="base" weight="black" style={{ color: tokens.colors.text.primary }}>{position.symbol}</Text>
 

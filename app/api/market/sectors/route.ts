@@ -1,0 +1,18 @@
+import { NextResponse } from 'next/server'
+import { fetchSectorPerformance } from '@/lib/utils/coingecko'
+
+export async function GET() {
+  try {
+    const data = await fetchSectorPerformance()
+    return NextResponse.json(data, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=900',
+      },
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to fetch sector performance' },
+      { status: 500 }
+    )
+  }
+}
