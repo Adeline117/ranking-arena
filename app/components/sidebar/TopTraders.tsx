@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -127,7 +126,14 @@ export default function TopTraders() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {traders.map((t, idx) => {
-            const displayName = t.handle || t.source_trader_id.slice(0, 10)
+            // Show handle if available and not an address; otherwise format address nicely
+            const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
+            const formatAddr = (s: string) => `${s.slice(0, 6)}...${s.slice(-4)}`
+            const displayName = t.handle && !isAddress(t.handle)
+              ? t.handle
+              : t.handle
+                ? formatAddr(t.handle)
+                : formatAddr(t.source_trader_id)
             return (
               <Link
                 key={`${t.source}-${t.source_trader_id}`}
@@ -158,22 +164,7 @@ export default function TopTraders() {
                 </span>
 
                 {/* Avatar */}
-                {t.avatar_url ? (
-                  <Image
-                    src={t.avatar_url}
-                    alt={displayName}
-                    width={36}
-                    height={36}
-                    sizes="36px"
-                    style={{
-                      borderRadius: tokens.radius.full,
-                      objectFit: 'cover',
-                      minWidth: 36,
-                    }}
-                  />
-                ) : (
-                  <AvatarFallback name={displayName} size={36} />
-                )}
+                <TraderAvatar name={displayName} avatarUrl={t.avatar_url} size={36} />
 
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>

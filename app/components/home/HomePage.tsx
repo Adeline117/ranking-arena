@@ -73,13 +73,17 @@ export default function HomePage({
             </Suspense>
           }
           rightSidebar={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
-                <WatchlistMarket />
-              </Suspense>
-              <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
-                <NewsFlash />
-              </Suspense>
+            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
+              <div style={{ flex: '0 0 33.3%', overflow: 'hidden' }}>
+                <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
+                  <WatchlistMarket />
+                </Suspense>
+              </div>
+              <div style={{ flex: '0 0 66.7%', overflow: 'auto' }}>
+                <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+                  <NewsFlash />
+                </Suspense>
+              </div>
             </div>
           }
         >

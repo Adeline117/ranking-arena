@@ -189,7 +189,7 @@ export function useGroupPosts({
 
   // Load initial posts
   const loadPosts = useCallback(async (forceLoad = false) => {
-    if (!groupId || (!isMember && !forceLoad)) {
+    if (!groupId) {
       setPosts([])
       setHasMorePosts(false)
       return
@@ -208,7 +208,7 @@ export function useGroupPosts({
 
   // Infinite scroll: load more
   const loadMorePosts = useCallback(async () => {
-    if (loadingMore || !hasMorePosts || posts.length === 0 || !isMember) return
+    if (loadingMore || !hasMorePosts || posts.length === 0) return
 
     setLoadingMore(true)
     try {
