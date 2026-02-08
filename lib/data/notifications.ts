@@ -7,7 +7,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 export interface Notification {
   id: string
   user_id: string
-  type: 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'message' | 'trader_alert'
+  type: NotificationType
   title: string
   message: string
   link?: string
@@ -20,6 +20,18 @@ export interface Notification {
   actor_avatar_url?: string
 }
 
+export type NotificationType =
+  | 'follow'
+  | 'like'
+  | 'comment'
+  | 'system'
+  | 'mention'
+  | 'message'
+  | 'trader_alert'
+  | 'post_reply'
+  | 'new_follower'
+  | 'group_update'
+
 export interface NotificationListOptions {
   limit?: number
   offset?: number
@@ -30,7 +42,7 @@ export interface NotificationListOptions {
 interface NotificationRow {
   id: string
   user_id: string
-  type: 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'message' | 'trader_alert'
+  type: NotificationType
   title: string
   message: string
   link?: string

@@ -168,6 +168,27 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     }
   }, [traderId, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange])
 
+  // UF8: Resume pending follow action after login
+  useEffect(() => {
+    if (!userId || !traderId) return
+    try {
+      const pending = sessionStorage.getItem('pendingFollow')
+      if (pending) {
+        const { traderId: pendingTraderId, action } = JSON.parse(pending)
+        if (pendingTraderId === traderId && action === 'follow' && !following) {
+          sessionStorage.removeItem('pendingFollow')
+          // Auto-execute the follow
+          executeFollow('follow').then(() => {
+            setFollowing(true)
+            onFollowChange?.(true)
+          })
+        } else {
+          sessionStorage.removeItem('pendingFollow')
+        }
+      }
+    } catch {}
+  }, [userId, traderId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!userId) return
 
@@ -264,7 +285,13 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
   if (!userId) {
     return (
       <button
-        onClick={() => router.push('/login?redirect=' + encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/'))}
+        onClick={() => {
+          // UF8: Save pending follow action before redirecting to login
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('pendingFollow', JSON.stringify({ traderId, action: 'follow' }))
+          }
+          router.push('/login?redirect=' + encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/'))
+        }}
         style={{
           padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
           borderRadius: tokens.radius.md,

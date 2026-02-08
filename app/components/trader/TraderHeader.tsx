@@ -16,6 +16,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
+const MessageButton = dynamic(() => import('../ui/MessageButton'), { ssr: false })
 const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
 const Web3VerifiedBadge = dynamic(() => import('./Web3VerifiedBadge').then(m => ({ default: m.Web3VerifiedBadge })), { ssr: false })
 const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
@@ -624,6 +625,13 @@ export default function TraderHeader({
           <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
         )}
 
+        {!isOwnProfile && isRegistered && userId && (
+          <MessageButton
+            targetUserId={traderId}
+            currentUserId={userId}
+            size="sm"
+          />
+        )}
 
         <ActionButton
           onClick={() => {

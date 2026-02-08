@@ -76,6 +76,29 @@ const severityIcons = {
   info: 'i',
 }
 
+// Notification type display config
+const NOTIFICATION_TYPE_CONFIG: Record<string, { icon: string; color: string; filterLabel?: { zh: string; en: string } }> = {
+  trader_alert: { icon: '📊', color: '#3B82F6' },
+  post_reply: { icon: '💬', color: '#8B5CF6', filterLabel: { zh: '帖子回复', en: 'Replies' } },
+  new_follower: { icon: '👤', color: '#10B981', filterLabel: { zh: '新粉丝', en: 'Followers' } },
+  group_update: { icon: '📢', color: '#F59E0B', filterLabel: { zh: '群组更新', en: 'Groups' } },
+  follow: { icon: '👤', color: '#10B981' },
+  like: { icon: '❤️', color: '#EF4444' },
+  comment: { icon: '💬', color: '#8B5CF6' },
+  system: { icon: '🔔', color: '#6B7280' },
+  mention: { icon: '@', color: '#3B82F6' },
+  message: { icon: '✉️', color: '#6366F1' },
+}
+
+function getNotificationIcon(type: string): string {
+  return NOTIFICATION_TYPE_CONFIG[type]?.icon || 'N'
+}
+
+function getNotificationBorderColor(type: string, severity: 'critical' | 'warning' | 'info'): string {
+  if (type === 'trader_alert') return severityColors[severity]
+  return NOTIFICATION_TYPE_CONFIG[type]?.color || 'transparent'
+}
+
 // ============================================
 // 主组件
 // ============================================
@@ -87,7 +110,7 @@ export default function NotificationsPage() {
   const { email, accessToken, authChecked } = useAuthSession()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterType, setFilterType] = useState<'all' | 'trader_alert'>('all')
+  const [filterType, setFilterType] = useState<string>('all')
 
   // 未登录跳转
   useEffect(() => {
@@ -172,9 +195,12 @@ export default function NotificationsPage() {
   // 过滤后的列表
   const filtered = filterType === 'all'
     ? notifications
-    : notifications.filter((n) => n.type === 'trader_alert')
+    : notifications.filter((n) => n.type === filterType)
 
   const traderAlertCount = notifications.filter((n) => n.type === 'trader_alert').length
+  const postReplyCount = notifications.filter((n) => n.type === 'post_reply').length
+  const newFollowerCount = notifications.filter((n) => n.type === 'new_follower').length
+  const groupUpdateCount = notifications.filter((n) => n.type === 'group_update').length
   const unreadCount = notifications.filter((n) => !n.read).length
 
   return (
@@ -244,6 +270,30 @@ export default function NotificationsPage() {
             active={filterType === 'trader_alert'}
             onClick={() => setFilterType('trader_alert')}
           />
+          {postReplyCount > 0 && (
+            <FilterTab
+              label={language === 'zh' ? '帖子回复' : 'Replies'}
+              count={postReplyCount}
+              active={filterType === 'post_reply'}
+              onClick={() => setFilterType('post_reply')}
+            />
+          )}
+          {newFollowerCount > 0 && (
+            <FilterTab
+              label={language === 'zh' ? '新粉丝' : 'Followers'}
+              count={newFollowerCount}
+              active={filterType === 'new_follower'}
+              onClick={() => setFilterType('new_follower')}
+            />
+          )}
+          {groupUpdateCount > 0 && (
+            <FilterTab
+              label={language === 'zh' ? '群组更新' : 'Groups'}
+              count={groupUpdateCount}
+              active={filterType === 'group_update'}
+              onClick={() => setFilterType('group_update')}
+            />
+          )}
         </Box>
 
         {/* 通知列表 */}
@@ -274,9 +324,7 @@ export default function NotificationsPage() {
                     cursor: n.link ? 'pointer' : 'default',
                     background: n.read ? 'transparent' : tokens.colors.bg.secondary,
                     transition: `background ${tokens.transition.base}`,
-                    borderLeft: n.type === 'trader_alert'
-                      ? `3px solid ${severityColors[severity]}`
-                      : '3px solid transparent',
+                    borderLeft: `3px solid ${getNotificationBorderColor(n.type, severity)}`,
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = tokens.colors.bg.tertiary
@@ -296,10 +344,10 @@ export default function NotificationsPage() {
                     justifyContent: 'center',
                     background: n.type === 'trader_alert'
                       ? severityColors[severity] + '15'
-                      : tokens.colors.bg.tertiary,
+                      : (NOTIFICATION_TYPE_CONFIG[n.type]?.color || tokens.colors.bg.tertiary) + '15',
                     fontSize: 14,
                   }}>
-                    {n.type === 'trader_alert' ? severityIcons[severity] : 'N'}
+                    {n.type === 'trader_alert' ? severityIcons[severity] : getNotificationIcon(n.type)}
                   </Box>
 
                   {/* 内容 */}

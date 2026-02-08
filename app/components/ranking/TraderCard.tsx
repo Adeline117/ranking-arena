@@ -17,7 +17,7 @@ import {
   areTraderPropsEqual,
   getScoreStyle,
 } from './shared/TraderDisplay'
-// AddCompareButton removed — compare accessible via toolbar only
+import { useComparisonStore } from '@/lib/stores'
 
 export interface TraderCardProps {
   trader: Trader
@@ -43,6 +43,26 @@ export const TraderCard = memo(function TraderCard({
   const displayName = formatDisplayName(traderHandle)
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
+  const isSelected = useComparisonStore(s => s.isSelected(trader.id))
+  const addTrader = useComparisonStore(s => s.addTrader)
+  const removeTrader = useComparisonStore(s => s.removeTrader)
+  const canAddMore = useComparisonStore(s => s.canAddMore)
+
+  const handleCompareToggle = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (isSelected) {
+      removeTrader(trader.id)
+    } else {
+      addTrader({
+        id: trader.id,
+        handle: traderHandle,
+        source: trader.source || source || '',
+        avatarUrl: trader.avatar_url || undefined,
+      })
+    }
+  }
+
   return (
     <Link
       href={href}
@@ -58,8 +78,37 @@ export const TraderCard = memo(function TraderCard({
           display: 'flex',
           flexDirection: 'column',
           gap: tokens.spacing[3],
+          position: 'relative',
+          border: isSelected ? `2px solid ${tokens.colors.accent.primary}` : undefined,
         }}
       >
+        {/* Compare checkbox */}
+        <Box
+          className="compare-checkbox-cell"
+          onClick={handleCompareToggle}
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            width: 28,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: isSelected ? 1 : 0,
+            transition: 'opacity 0.15s ease',
+            zIndex: 2,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={isSelected}
+            disabled={!isSelected && !canAddMore()}
+            readOnly
+            style={{ cursor: 'pointer', width: 16, height: 16, accentColor: tokens.colors.accent.primary }}
+          />
+        </Box>
+
         {/* Top row: Rank + Avatar + Name */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
           {/* Rank */}

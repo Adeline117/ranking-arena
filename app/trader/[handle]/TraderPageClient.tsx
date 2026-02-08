@@ -295,11 +295,46 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
             >
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
                 {performance ? (
-                  <OverviewPerformanceCard
-                    performance={performance}
-                    equityCurve={equityCurve?.['90D']}
-                    source={profile?.source}
-                  />
+                  <Box style={{ position: 'relative' }}>
+                    <OverviewPerformanceCard
+                      performance={performance}
+                      equityCurve={equityCurve?.['90D']}
+                      source={profile?.source}
+                    />
+                    {/* Blur overlay for non-logged-in users */}
+                    {!email && equityCurve?.['90D'] && (
+                      <Box style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: '60%',
+                        background: 'linear-gradient(to bottom, transparent 0%, rgba(10,10,15,0.85) 50%, rgba(10,10,15,0.95) 100%)',
+                        backdropFilter: 'blur(4px)',
+                        WebkitBackdropFilter: 'blur(4px)',
+                        borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 5,
+                      }}>
+                        <Link href={`/login?returnUrl=${encodeURIComponent(`/trader/${handle}`)}`} style={{ textDecoration: 'none' }}>
+                          <Box style={{
+                            padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                            background: `${tokens.colors.accent.primary}20`,
+                            border: `1px solid ${tokens.colors.accent.primary}50`,
+                            borderRadius: tokens.radius.lg,
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                          }}>
+                            <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
+                              🔒 {language === 'zh' ? '注册查看完整历史数据' : 'Sign up to view full history'}
+                            </Text>
+                          </Box>
+                        </Link>
+                      </Box>
+                    )}
+                  </Box>
                 ) : (
                   <Box style={{
                     padding: tokens.spacing[6],

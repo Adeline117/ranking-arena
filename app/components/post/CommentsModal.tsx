@@ -233,6 +233,16 @@ export default function CommentsModal({
     commentInputRef.current?.focus()
   }
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
+  const commentsEndRef = useRef<HTMLDivElement>(null)
+  const prevCommentCount = useRef(comments.length)
+
+  // UF13: Auto-scroll to new comment after submission
+  useEffect(() => {
+    if (comments.length > prevCommentCount.current && commentsEndRef.current) {
+      commentsEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+    prevCommentCount.current = comments.length
+  }, [comments.length])
 
   // Auto-focus reply input
   useEffect(() => {
@@ -682,6 +692,7 @@ export default function CommentsModal({
         ) : (
           <div>
             {comments.map(comment => renderComment(comment))}
+            <div ref={commentsEndRef} />
           </div>
         )}
       </CompactErrorBoundary>

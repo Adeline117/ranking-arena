@@ -383,7 +383,7 @@ export default function ApplyGroupPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Card title={language === 'zh' ? '申请已提交' : 'Application Submitted'}>
+          <Card title={language === 'zh' ? '小组已创建' : 'Group Created'}>
             <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
               <Box style={{ 
                 width: 64, 
@@ -401,12 +401,12 @@ export default function ApplyGroupPage() {
                 </svg>
               </Box>
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                {language === 'zh' ? '申请已成功提交！' : 'Application submitted successfully!'}
+                {language === 'zh' ? '小组创建成功！' : 'Group created successfully!'}
               </Text>
               <Text color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>
                 {language === 'zh' 
-                  ? '请等待管理员审核，审核结果将通过通知告知您。' 
-                  : 'Please wait for admin review. You will be notified of the result.'}
+                  ? '你的小组已创建，现在可以开始邀请成员加入。' 
+                  : 'Your group is live! Start inviting members to join.'}
               </Text>
               <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
                 <Button variant="secondary" onClick={() => setSuccess(false)}>

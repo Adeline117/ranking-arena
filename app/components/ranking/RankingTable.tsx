@@ -641,6 +641,25 @@ function RankingTableInner(props: {
               )
             })}
           </Box>
+          {/* Registration CTA after first page for non-logged-in users */}
+          {!props.loggedIn && currentPage === 1 && sortedTraders.length > itemsPerPage && (
+            <Link href="/login" style={{ textDecoration: 'none' }}>
+              <Box style={{
+                margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+                background: `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.brand}10)`,
+                border: `1px solid ${tokens.colors.accent.primary}30`,
+                borderRadius: tokens.radius.lg,
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}>
+                <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
+                  {language === 'zh' ? '🔓 注册免费查看更多交易员' : '🔓 Sign up free to see more traders'}
+                </Text>
+              </Box>
+            </Link>
+          )}
           <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePaginationChange} />
         </>
       )}
