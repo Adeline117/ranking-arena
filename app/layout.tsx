@@ -98,6 +98,15 @@ export const metadata: Metadata = {
       },
     ],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Arena - Crypto Trader Leaderboard & Community",
+    description:
+      "Aggregating 90-day ROI rankings from Binance, Bybit, Bitget, MEXC, OKX, KuCoin, CoinEx, GMX and more.",
+    images: [
+      `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
+    ],
+  },
   robots: {
     index: true,
     follow: true,
@@ -110,7 +119,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" dir="ltr" data-theme="dark" translate="no" className={inter.variable}>
+    <html lang="zh-CN" dir="ltr" data-theme="dark" translate="no" className={inter.variable}>
       <head>
         {/* Inline critical CSS for faster initial render */}
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
