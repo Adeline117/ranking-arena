@@ -369,7 +369,7 @@ export default function ReportModal({
                       style={{
                         position: 'absolute', top: 2, right: 2, width: 20, height: 20,
                         borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none',
-                        color: '#fff', fontSize: 12, cursor: 'pointer', display: 'flex',
+                        color: tokens.colors.white, fontSize: 12, cursor: 'pointer', display: 'flex',
                         alignItems: 'center', justifyContent: 'center',
                       }}
                     ><span aria-hidden="true">X</span></button>

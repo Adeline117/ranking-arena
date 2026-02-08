@@ -209,7 +209,7 @@ export function ProLabel({ size = 'sm' }: { size?: 'xs' | 'sm' | 'md' }) {
         style={{
           fontSize: styles.fontSize,
           fontWeight: 700,
-          color: '#fff',
+          color: tokens.colors.white,
           letterSpacing: '0.5px',
           textTransform: 'uppercase',
         }}

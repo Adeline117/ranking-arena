@@ -103,7 +103,7 @@ export default function ActiveUsersWidget() {
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>
+                <span style={{ color: tokens.colors.white, fontSize: 12, fontWeight: 700 }}>
                   {getAvatarInitial(user.handle)}
                 </span>
               )}

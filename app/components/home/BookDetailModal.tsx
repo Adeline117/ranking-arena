@@ -226,7 +226,7 @@ export default function BookDetailModal({ item, onClose }: BookDetailModalProps)
               rel="noopener noreferrer"
               style={{
                 padding: '8px 20px', borderRadius: 8,
-                background: tokens.colors.accent.brand, color: '#fff',
+                background: tokens.colors.accent.brand, color: tokens.colors.white,
                 textDecoration: 'none', fontWeight: 600, fontSize: 13,
               }}
             >

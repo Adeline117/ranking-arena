@@ -350,7 +350,7 @@ function ApiKeyAuthContent() {
                             height: 28,
                             borderRadius: '50%',
                             background: tokens.colors.accent.primary,
-                            color: '#fff',
+                            color: tokens.colors.white,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',

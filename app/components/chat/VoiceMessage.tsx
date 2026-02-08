@@ -98,7 +98,7 @@ export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
           borderRadius: '50%',
           border: 'none',
           background: tokens.colors.accent.brand,
-          color: '#fff',
+          color: tokens.colors.white,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',

@@ -61,7 +61,7 @@ export default function GroupsError({
           style={{
             padding: '10px 24px',
             background: tokens.colors.accent.brand,
-            color: '#fff',
+            color: tokens.colors.white,
             border: 'none',
             borderRadius: 8,
             cursor: 'pointer',

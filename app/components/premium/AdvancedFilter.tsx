@@ -177,7 +177,7 @@ export default function AdvancedFilter({
                 padding: `2px 8px`,
                 borderRadius: tokens.radius.full,
                 background: tokens.colors.accent.primary,
-                color: '#fff',
+                color: tokens.colors.white,
                 fontSize: 10,
                 fontWeight: 'bold',
               }}

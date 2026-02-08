@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 const ARENA_PURPLE = 'var(--color-brand, #8b6fa8)'
 
@@ -358,7 +359,7 @@ export default function Error({
             style={{ 
               padding: '14px 28px', 
               background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, #6b4f88 100%)`,
-              color: '#fff', 
+              color: tokens.colors.white, 
               borderRadius: 12,
               border: 'none',
               cursor: isRetrying ? 'wait' : 'pointer',

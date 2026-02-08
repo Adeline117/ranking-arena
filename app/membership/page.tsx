@@ -157,7 +157,7 @@ export default function MembershipPage() {
               style={{
                 padding: '12px 24px',
                 background: tokens.colors.accent.brand,
-                color: '#fff',
+                color: tokens.colors.white,
                 border: 'none',
                 borderRadius: 12,
                 fontWeight: 700,
@@ -397,7 +397,7 @@ export default function MembershipPage() {
                 background: tokens.colors.accent.brand,
                 border: 'none',
                 borderRadius: 12,
-                color: '#fff',
+                color: tokens.colors.white,
                 fontWeight: 600,
                 cursor: 'pointer',
               }}

@@ -916,7 +916,7 @@ export default function LoginPage() {
                   background: sendingCode || !email || countdown > 0 
                     ? 'rgba(139, 111, 168, 0.2)' 
                     : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                  color: '#fff',
+                  color: tokens.colors.white,
                   fontWeight: 700,
                   fontSize: 15,
                   cursor: sendingCode || !email || countdown > 0 ? 'not-allowed' : 'pointer',
@@ -977,7 +977,7 @@ export default function LoginPage() {
                     background: loading || !code 
                       ? 'rgba(139, 111, 168, 0.2)' 
                       : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                    color: '#fff',
+                    color: tokens.colors.white,
                     fontWeight: 700,
                     fontSize: 15,
                     cursor: loading || !code ? 'not-allowed' : 'pointer',
@@ -1136,7 +1136,7 @@ export default function LoginPage() {
                     background: loading || !password || password.length < 6 || !handle || handle.length < 1 
                       ? 'rgba(139, 111, 168, 0.2)' 
                       : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                    color: '#fff',
+                    color: tokens.colors.white,
                     fontWeight: 700,
                     fontSize: 15,
                     cursor: loading || !password || password.length < 6 || !handle || handle.length < 1 ? 'not-allowed' : 'pointer',
@@ -1225,7 +1225,7 @@ export default function LoginPage() {
                     background: loading || !email || !password 
                       ? 'rgba(139, 111, 168, 0.2)' 
                       : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                    color: '#fff',
+                    color: tokens.colors.white,
                     fontWeight: 700,
                     fontSize: 15,
                     cursor: loading || !email || !password ? 'not-allowed' : 'pointer',
@@ -1295,7 +1295,7 @@ export default function LoginPage() {
                       background: sendingCode || !email || countdown > 0 
                         ? 'rgba(139, 111, 168, 0.2)' 
                         : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                      color: '#fff',
+                      color: tokens.colors.white,
                       fontWeight: 700,
                       fontSize: 15,
                       cursor: sendingCode || !email || countdown > 0 ? 'not-allowed' : 'pointer',
@@ -1356,7 +1356,7 @@ export default function LoginPage() {
                         background: loading || !code 
                           ? 'rgba(139, 111, 168, 0.2)' 
                           : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                        color: '#fff',
+                        color: tokens.colors.white,
                         fontWeight: 700,
                         fontSize: 15,
                         cursor: loading || !code ? 'not-allowed' : 'pointer',

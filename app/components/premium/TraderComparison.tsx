@@ -240,7 +240,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                     borderRadius: tokens.radius.full,
                     background: tokens.colors.accent.error,
                     border: 'none',
-                    color: '#fff',
+                    color: tokens.colors.white,
                     cursor: 'pointer',
                     fontSize: 14,
                     fontWeight: 'bold',
@@ -283,7 +283,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                         />
                       ) : (
-                        <Text size="lg" weight="black" style={{ color: '#fff' }}>
+                        <Text size="lg" weight="black" style={{ color: tokens.colors.white }}>
                           {getAvatarInitial(trader.handle || trader.id)}
                         </Text>
                       )}

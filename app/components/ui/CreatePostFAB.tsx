@@ -29,7 +29,7 @@ export default function CreatePostFAB() {
         borderRadius: '50%',
         border: 'none',
         background: tokens.gradient.primary,
-        color: '#fff',
+        color: tokens.colors.white,
         cursor: 'pointer',
         boxShadow: hover
           ? '0 8px 24px rgba(124, 58, 237, 0.4)'

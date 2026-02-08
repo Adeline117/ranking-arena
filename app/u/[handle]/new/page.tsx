@@ -73,7 +73,7 @@ function parseVideoUrl(url: string): { type: 'youtube' | 'bilibili'; embedUrl: s
 // 视频播放器组件
 function VideoPlayer({ embedUrl, type }: { embedUrl: string; type: string }) {
   return (
-    <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', margin: '8px 0', borderRadius: 8, overflow: 'hidden', background: '#000' }}>
+    <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', margin: '8px 0', borderRadius: 8, overflow: 'hidden', background: tokens.colors.black }}>
       <iframe
         src={embedUrl}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
@@ -233,7 +233,7 @@ function renderContentWithControls(
                 height: 24,
                 border: 'none',
                 background: isFirst ? 'rgba(100,100,100,0.5)' : 'rgba(139,111,168,0.9)',
-                color: '#fff',
+                color: tokens.colors.white,
                 cursor: isFirst ? 'not-allowed' : 'pointer',
                 fontSize: 14,
                 borderRadius: 4,
@@ -253,7 +253,7 @@ function renderContentWithControls(
                 height: 24,
                 border: 'none',
                 background: isLast ? 'rgba(100,100,100,0.5)' : 'rgba(139,111,168,0.9)',
-                color: '#fff',
+                color: tokens.colors.white,
                 cursor: isLast ? 'not-allowed' : 'pointer',
                 fontSize: 14,
                 borderRadius: 4,
@@ -272,7 +272,7 @@ function renderContentWithControls(
                 height: 24,
                 border: 'none',
                 background: 'rgba(255,77,77,0.9)',
-                color: '#fff',
+                color: tokens.colors.white,
                 cursor: 'pointer',
                 fontSize: 14,
                 borderRadius: 4,
@@ -970,7 +970,7 @@ export default function NewPostPage() {
                     top: -12,
                     left: 12,
                     background: tokens.colors.accent.brand,
-                    color: '#fff',
+                    color: tokens.colors.white,
                     padding: '2px 10px',
                     borderRadius: 999,
                     fontSize: 11,
@@ -1089,7 +1089,7 @@ export default function NewPostPage() {
                     width: 20,
                     height: 20,
                     borderRadius: '50%',
-                    background: '#fff',
+                    background: tokens.colors.white,
                     position: 'absolute',
                     top: 2,
                     left: pollEnabled ? 22 : 2,
@@ -1275,7 +1275,7 @@ export default function NewPostPage() {
               </Text>
               <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
                 {t('imageInsertStep1')}<br />
-                {t('imageInsertStep2')} <span style={{ background: tokens.colors.accent.brand, color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
+                {t('imageInsertStep2')} <span style={{ background: tokens.colors.accent.brand, color: tokens.colors.white, padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
                 {t('imageInsertStep3')}
               </Text>
             </Box>
@@ -1344,7 +1344,7 @@ export default function NewPostPage() {
                         left: 0,
                         right: 0,
                         background: 'rgba(139,111,168,0.9)',
-                        color: '#fff',
+                        color: tokens.colors.white,
                         fontSize: 10,
                         textAlign: 'center',
                         padding: '2px 0',
@@ -1370,7 +1370,7 @@ export default function NewPostPage() {
                         height: 24,
                         border: 'none',
                         background: 'rgba(139,111,168,0.9)',
-                        color: '#fff',
+                        color: tokens.colors.white,
                         cursor: 'pointer',
                         fontSize: 12,
                         display: 'flex',
@@ -1388,7 +1388,7 @@ export default function NewPostPage() {
                         height: 24,
                         border: 'none',
                         background: 'rgba(255,77,77,0.9)',
-                        color: '#fff',
+                        color: tokens.colors.white,
                         cursor: 'pointer',
                         fontSize: 14,
                         display: 'flex',
@@ -1472,7 +1472,7 @@ export default function NewPostPage() {
                     borderRadius: tokens.radius.md,
                     overflow: 'hidden',
                     border: ('2px solid ' + tokens.colors.accent.brand),
-                    background: '#000',
+                    background: tokens.colors.black,
                   }}
                 >
                   <video
@@ -1497,7 +1497,7 @@ export default function NewPostPage() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#fff',
+                      color: tokens.colors.white,
                       fontSize: 18,
                     }}
                   >
@@ -1511,7 +1511,7 @@ export default function NewPostPage() {
                       left: 0,
                       right: 0,
                       background: 'rgba(139,111,168,0.9)',
-                      color: '#fff',
+                      color: tokens.colors.white,
                       fontSize: 10,
                       textAlign: 'center',
                       padding: '2px 0',
@@ -1531,7 +1531,7 @@ export default function NewPostPage() {
                       height: 24,
                       border: 'none',
                       background: 'rgba(255,77,77,0.9)',
-                      color: '#fff',
+                      color: tokens.colors.white,
                       cursor: 'pointer',
                       fontSize: 14,
                       borderRadius: 4,

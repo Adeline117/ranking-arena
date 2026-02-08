@@ -1729,7 +1729,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                             background: 'var(--color-pro-badge-bg)',
                             fontSize: 10,
                             fontWeight: 700,
-                            color: '#fff',
+                            color: tokens.colors.white,
                           }}
                         >
                           Pro

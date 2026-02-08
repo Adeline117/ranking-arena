@@ -243,7 +243,7 @@ export function OneClickWalletButton({
         return {
           ...baseStyles,
           background: 'linear-gradient(135deg, ${tokens.colors.accent.success} 0%, ${tokens.colors.accent.success} 100%)',
-          color: '#fff',
+          color: tokens.colors.white,
         }
       case 'error':
         return {
@@ -267,7 +267,7 @@ export function OneClickWalletButton({
           return {
             ...baseStyles,
             background: 'linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)',
-            color: '#fff',
+            color: tokens.colors.white,
           }
         }
         // Not connected

@@ -327,7 +327,7 @@ export default function ChatSettingsDrawer({
                       borderRadius: 8,
                       border: 'none',
                       background: 'linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)',
-                      color: '#fff',
+                      color: tokens.colors.white,
                       fontSize: 13,
                       fontWeight: 600,
                       cursor: saving ? 'not-allowed' : 'pointer',
@@ -593,7 +593,7 @@ function SettingsToggle({
             width: 20,
             height: 20,
             borderRadius: '50%',
-            background: '#fff',
+            background: tokens.colors.white,
             boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
             transition: 'left 0.2s',
           }}

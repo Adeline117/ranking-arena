@@ -117,7 +117,7 @@ export function TraderSearchFilter({
               padding: '2px 6px',
               borderRadius: tokens.radius.full,
               background: tokens.colors.accent.primary,
-              color: '#fff',
+              color: tokens.colors.white,
               fontSize: 10,
               fontWeight: 700,
             }}

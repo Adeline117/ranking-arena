@@ -326,7 +326,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   marginTop: 8,
                   padding: '8px 16px',
                   background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
-                  color: '#fff',
+                  color: tokens.colors.white,
                   border: 'none',
                   borderRadius: 8,
                   fontSize: 13,

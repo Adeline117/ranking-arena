@@ -356,7 +356,7 @@ export default function PaymentSuccessPage() {
               }}
             >
               <StarIcon size={18} />
-              <Text size="md" weight="bold" style={{ color: '#fff' }}>
+              <Text size="md" weight="bold" style={{ color: tokens.colors.white }}>
                 Pro Member
               </Text>
             </Box>

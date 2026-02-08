@@ -512,7 +512,7 @@ function ResetPasswordContent() {
                 background: loading || !email || countdown > 0 
                   ? 'rgba(139, 111, 168, 0.2)' 
                   : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                color: '#fff',
+                color: tokens.colors.white,
                 fontWeight: 700,
                 fontSize: 15,
                 cursor: loading || !email || countdown > 0 ? 'not-allowed' : 'pointer',
@@ -672,7 +672,7 @@ function ResetPasswordContent() {
                 background: loading || !newPassword || !confirmPassword 
                   ? 'rgba(139, 111, 168, 0.2)' 
                   : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                color: '#fff',
+                color: tokens.colors.white,
                 fontWeight: 700,
                 fontSize: 15,
                 cursor: loading || !newPassword || !confirmPassword ? 'not-allowed' : 'pointer',

@@ -37,7 +37,7 @@ export function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange
           width: 20,
           height: 20,
           borderRadius: '50%',
-          background: '#fff',
+          background: tokens.colors.white,
           transform: checked ? 'translateX(22px)' : 'translateX(0)',
           transition: `transform ${tokens.transition.bounce}`,
           boxShadow: tokens.shadow.sm,

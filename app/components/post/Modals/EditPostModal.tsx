@@ -122,7 +122,7 @@ export function EditPostModal({
               borderRadius: 10,
               border: 'none',
               background: saving || !title.trim() ? 'rgba(139,111,168,0.3)' : tokens.colors.accent.brand,
-              color: '#fff',
+              color: tokens.colors.white,
               fontWeight: 900,
               fontSize: 14,
               cursor: saving || !title.trim() ? 'not-allowed' : 'pointer',

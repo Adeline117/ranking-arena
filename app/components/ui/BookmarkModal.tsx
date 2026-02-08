@@ -306,7 +306,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                   }}
                 >
                   {!folder?.avatar_url && folder?.name && (
-                    <Text size="lg" weight="bold" style={{ color: '#fff' }}>
+                    <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
                       {folder.name.charAt(0)}
                     </Text>
                   )}

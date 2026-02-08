@@ -141,7 +141,7 @@ export default function GuestSignupPrompt() {
               padding: '12px 24px',
               borderRadius: tokens.radius.lg,
               background: tokens.colors.accent.brand,
-              color: '#fff',
+              color: tokens.colors.white,
               fontSize: 15,
               fontWeight: 700,
               textDecoration: 'none',

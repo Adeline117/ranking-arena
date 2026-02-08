@@ -292,7 +292,7 @@ export default function OnboardingPage() {
             <button className="continue-btn" onClick={goToFeatures} style={{
               width: '100%', padding: '16px 24px', borderRadius: 14, border: 'none',
               background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-              color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer',
+              color: tokens.colors.white, fontWeight: 700, fontSize: 16, cursor: 'pointer',
             }}>
               {tr('continueButton')}
             </button>
@@ -367,7 +367,7 @@ export default function OnboardingPage() {
               <button className="continue-btn" onClick={goToInterests} style={{
                 flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
                 background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer',
+                color: tokens.colors.white, fontWeight: 700, fontSize: 15, cursor: 'pointer',
               }}>
                 {tr('continueButton')}
               </button>
@@ -427,7 +427,7 @@ export default function OnboardingPage() {
                 style={{
                   flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
                   background: saving ? 'rgba(139, 111, 168, 0.2)' : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                  color: '#fff', fontWeight: 700, fontSize: 15,
+                  color: tokens.colors.white, fontWeight: 700, fontSize: 15,
                   cursor: saving ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}>
@@ -465,7 +465,7 @@ export default function OnboardingPage() {
             <button className="continue-btn" onClick={handleGoHome} style={{
               width: '100%', padding: '16px 24px', borderRadius: 14, border: 'none',
               background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-              color: '#fff', fontWeight: 700, fontSize: 16, cursor: 'pointer',
+              color: tokens.colors.white, fontWeight: 700, fontSize: 16, cursor: 'pointer',
             }}>
               {tr('exploreRanking') || '开始探索'}
             </button>

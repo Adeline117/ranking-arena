@@ -179,7 +179,7 @@ export default function FavoritesPage() {
                 style={{
                   padding: '12px 24px',
                   background: tokens.colors.accent.primary,
-                  color: '#fff',
+                  color: tokens.colors.white,
                   borderRadius: tokens.radius.md,
                   textDecoration: 'none',
                   fontWeight: 900,
@@ -379,7 +379,7 @@ export default function FavoritesPage() {
                     }}
                   >
                     {!folder.avatar_url && (
-                      <Text size="lg" weight="bold" style={{ color: '#fff' }}>
+                      <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
                         {folder.name.charAt(0).toUpperCase()}
                       </Text>
                     )}
@@ -501,7 +501,7 @@ export default function FavoritesPage() {
                     }}
                   >
                     {!folder.avatar_url && (
-                      <Text size="lg" weight="bold" style={{ color: '#fff' }}>
+                      <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
                         {folder.name.charAt(0).toUpperCase()}
                       </Text>
                     )}

@@ -197,7 +197,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 borderRadius: tokens.radius.md,
                 border: 'none',
                 background: 'linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)',
-                color: '#fff',
+                color: tokens.colors.white,
                 fontWeight: 700,
                 fontSize: tokens.typography.fontSize.sm,
                 cursor: linkLoading ? 'not-allowed' : 'pointer',

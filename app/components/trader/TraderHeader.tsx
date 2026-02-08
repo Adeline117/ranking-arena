@@ -203,7 +203,7 @@ function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTr
         size="sm"
         onClick={() => router.push('/pricing')}
         style={{
-          color: '#fff',
+          color: tokens.colors.white,
           fontSize: tokens.typography.fontSize.sm,
           padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
           borderRadius: tokens.radius.lg,

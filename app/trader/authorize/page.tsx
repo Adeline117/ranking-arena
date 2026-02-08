@@ -416,7 +416,7 @@ export default function TraderAuthorizePage() {
               borderRadius: tokens.radius.md,
               border: 'none',
               backgroundColor: loading || success ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
-              color: '#fff',
+              color: tokens.colors.white,
               cursor: loading || success ? 'not-allowed' : 'pointer',
               opacity: loading || success ? 0.6 : 1,
             }}

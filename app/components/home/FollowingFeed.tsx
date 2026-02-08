@@ -67,7 +67,7 @@ export default function FollowingFeed() {
         </p>
         <a href="/login" style={{
           display: 'inline-block', padding: '8px 24px', borderRadius: 8,
-          background: tokens.colors.accent.brand, color: '#fff',
+          background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
           {isZh ? '去登录' : 'Login'}
@@ -102,7 +102,7 @@ export default function FollowingFeed() {
         </p>
         <a href="/rankings" style={{
           display: 'inline-block', marginTop: 16, padding: '8px 24px', borderRadius: 8,
-          background: tokens.colors.accent.brand, color: '#fff',
+          background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
           {isZh ? '去看排行榜' : 'View Rankings'}

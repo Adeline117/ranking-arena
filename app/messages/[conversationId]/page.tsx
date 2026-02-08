@@ -765,7 +765,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 display: 'inline-block',
                 padding: '12px 24px',
                 background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`,
-                color: '#fff',
+                color: tokens.colors.white,
                 borderRadius: 12,
                 textDecoration: 'none',
                 fontWeight: 700,
@@ -1528,7 +1528,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               borderRadius: '50%',
               border: 'none',
               background: 'rgba(255,255,255,0.1)',
-              color: '#fff',
+              color: tokens.colors.white,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -1575,7 +1575,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                   height: '90vh',
                   borderRadius: 12,
                   overflow: 'hidden',
-                  background: '#fff',
+                  background: tokens.colors.white,
                 }}
               >
                 <iframe
@@ -1636,7 +1636,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     gap: 8,
                     padding: '12px 24px',
                     background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`,
-                    color: '#fff',
+                    color: tokens.colors.white,
                     borderRadius: 12,
                     textDecoration: 'none',
                     fontWeight: 700,

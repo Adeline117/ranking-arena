@@ -198,7 +198,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                             padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                             borderRadius: tokens.radius.sm,
                             background: tokens.colors.accent.error,
-                            color: '#fff',
+                            color: tokens.colors.white,
                             fontSize: tokens.typography.fontSize.xs,
                           }}
                         >
@@ -211,7 +211,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                             padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                             borderRadius: tokens.radius.sm,
                             background: tokens.colors.accent.success,
-                            color: '#fff',
+                            color: tokens.colors.white,
                             fontSize: tokens.typography.fontSize.xs,
                           }}
                         >
@@ -256,7 +256,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                             size="sm"
                             onClick={() => handleBan(user.id)}
                             disabled={actionLoading[user.id]}
-                            style={{ background: tokens.colors.accent.error, color: '#fff' }}
+                            style={{ background: tokens.colors.accent.error, color: tokens.colors.white }}
                           >
                             {t('adminConfirmAction')}
                           </Button>

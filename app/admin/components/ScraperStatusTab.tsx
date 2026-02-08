@@ -96,7 +96,7 @@ export default function ScraperStatusTab() {
                       padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                       borderRadius: tokens.radius.sm,
                       background: statusColors[platform.status],
-                      color: '#fff',
+                      color: tokens.colors.white,
                       fontSize: tokens.typography.fontSize.xs,
                       fontWeight: tokens.typography.fontWeight.bold,
                     }}

@@ -200,7 +200,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
               }}
             >
               {!folder.avatar_url && (
-                <Text size="sm" weight="bold" style={{ color: '#fff' }}>
+                <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>
                   {folder.name.charAt(0).toUpperCase()}
                 </Text>
               )}

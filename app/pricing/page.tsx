@@ -368,7 +368,7 @@ export default function PricingPage() {
                 boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
               }}
             >
-              <Text size="xs" weight="bold" style={{ color: '#fff' }}>
+              <Text size="xs" weight="bold" style={{ color: tokens.colors.white }}>
                 {t('earlyBirdOffer')}
               </Text>
             </Box>
@@ -440,7 +440,7 @@ export default function PricingPage() {
                     borderRadius: tokens.radius.full,
                     fontSize: 10,
                     fontWeight: 700,
-                    color: '#fff',
+                    color: tokens.colors.white,
                   }}
                 >
                   {t('savePercent').replace('{percent}', String(yearlySavings))}

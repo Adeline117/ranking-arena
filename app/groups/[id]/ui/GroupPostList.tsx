@@ -555,7 +555,7 @@ function PostListItem(props: PostListItemProps) {
                 {post.author_avatar_url ? (
                   <Image src={post.author_avatar_url} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                 ) : (
-                  <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>
+                  <span style={{ color: tokens.colors.white, fontSize: 10, fontWeight: 700 }}>
                     {(post.author_handle || 'U').charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -807,7 +807,7 @@ function CommentsSection(props: CommentsSectionProps) {
                         {comment.author_avatar_url ? (
                           <Image src={comment.author_avatar_url} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                         ) : (
-                          <span style={{ color: '#fff', fontSize: 9, fontWeight: 700 }}>
+                          <span style={{ color: tokens.colors.white, fontSize: 9, fontWeight: 700 }}>
                             {(comment.author_handle || 'U').charAt(0).toUpperCase()}
                           </span>
                         )}
@@ -886,7 +886,7 @@ function CommentsSection(props: CommentsSectionProps) {
                               {reply.author_avatar_url ? (
                                 <Image src={reply.author_avatar_url} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
                               ) : (
-                                <span style={{ color: '#fff', fontSize: 8, fontWeight: 700 }}>
+                                <span style={{ color: tokens.colors.white, fontSize: 8, fontWeight: 700 }}>
                                   {reply.author_handle.charAt(0).toUpperCase()}
                                 </span>
                               )}

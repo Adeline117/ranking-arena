@@ -240,7 +240,7 @@ export function MobileFilterDrawer({
                 background: tokens.colors.accent.primary,
                 border: 'none',
                 borderRadius: 12,
-                color: '#fff',
+                color: tokens.colors.white,
                 fontSize: 16,
                 fontWeight: 700,
                 cursor: 'pointer',

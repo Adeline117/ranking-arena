@@ -29,7 +29,7 @@ import { Web3VerifiedBadge } from '@/app/components/trader/Web3VerifiedBadge'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 
 // Threshold for using virtual scrolling (for large datasets)
-const VIRTUAL_SCROLL_THRESHOLD = 50
+const VIRTUAL_SCROLL_THRESHOLD = 2000
 
 // Convert RankedTraderV2 to VirtualLeaderboard's TraderRow format
 /** Get a readable trader name — skip pure-numeric IDs */
