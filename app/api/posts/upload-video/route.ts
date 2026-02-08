@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Video upload error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
 
     // 获取公共 URL
@@ -96,6 +96,6 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Error uploading video:', error)
     const errorMessage = error instanceof Error ? error.message : '视频上传失败'
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

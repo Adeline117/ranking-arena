@@ -61,7 +61,7 @@ export default function BookshelfTab() {
         .filter((d: Record<string, unknown>) => d.library_items)
         .map((d: Record<string, unknown>) => ({
           ...(d.library_items as Omit<ShelfBook, 'status'>),
-          status: d.status as string,
+          status: d.status as ShelfBook['status'],
         }))
 
       setBooks(mapped)

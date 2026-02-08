@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Upload error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
     // Get public URL
@@ -141,6 +141,6 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Error uploading chat file:', error)
     const errorMessage = error instanceof Error ? error.message : 'Upload failed'
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

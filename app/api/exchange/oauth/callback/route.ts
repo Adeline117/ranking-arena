@@ -222,6 +222,6 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     logger.error('Error handling OAuth callback', { error })
     const errorMessage = error instanceof Error ? error.message : 'Failed to handle callback'
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

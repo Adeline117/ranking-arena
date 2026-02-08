@@ -46,7 +46,6 @@ export async function POST(request: NextRequest) {
       console.error('Error listing buckets:', bucketsError)
       return NextResponse.json({
         error: 'Storage service unavailable. Please contact administrator.',
-        details: bucketsError.message
       }, { status: 503 })
     }
 
@@ -88,7 +87,7 @@ export async function POST(request: NextRequest) {
           code: 'PERMISSION_DENIED'
         }, { status: 403 })
       }
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
     }
 
     // 验证文件确实上传成功 - 检查文件是否存在
@@ -122,8 +121,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     console.error('Error uploading image:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Upload failed'
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
 }
 

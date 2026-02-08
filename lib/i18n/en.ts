@@ -2573,6 +2573,21 @@ const en = {
     sidebarWidgets: 'More',
     expandWidgets: 'Show more',
     collapseWidgets: 'Collapse',
+    proFeatureOnly: 'Pro Feature - Upgrade to unlock trader comparison',
+
+    // Sub not-found pages
+    traderNotFoundTitle: 'Trader Not Found',
+    traderNotFoundDesc: 'This trader does not exist or the profile has been removed.',
+    userNotFoundTitle: 'User Not Found',
+    userNotFoundDesc: 'This user does not exist or has deleted their account.',
+    postNotFoundTitle: 'Post Not Found',
+    postNotFoundDesc: 'This post does not exist or has been deleted.',
+    libraryNotFoundTitle: 'Content Not Found',
+    libraryNotFoundDesc: 'This content does not exist or has been removed.',
+    backToLibrary: 'Back to Library',
+    groupNotFoundTitle: 'Group Not Found',
+    groupNotFoundDesc: 'This group does not exist or has been deleted.',
+    backToGroups2: 'Back to Groups',
 
 } as const
 
