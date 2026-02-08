@@ -96,20 +96,6 @@ export default function StatusPage() {
     marginBottom: tokens.spacing[4],
   }
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: tokens.typography.fontSize.xs,
-    color: tokens.colors.textTertiary,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-    marginBottom: tokens.spacing[1],
-  }
-
-  const valueStyle: React.CSSProperties = {
-    fontSize: tokens.typography.fontSize.base,
-    color: tokens.colors.textPrimary,
-    fontWeight: tokens.typography.fontWeight.medium,
-  }
-
   return (
     <div
       style={{

@@ -669,7 +669,7 @@ function SettingsContent() {
   }
 
   // ===== Sessions handlers =====
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true)
     try {
@@ -718,7 +718,7 @@ function SettingsContent() {
   }
 
   // ===== Blocked users handlers =====
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   const loadBlockedUsers = useCallback(async (uid: string) => {
     setLoadingBlockedUsers(true)
     try {

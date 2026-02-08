@@ -229,7 +229,7 @@ function _createMockSupabase() {
   })
 
   return {
-    client: { from: fromFn } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    client: { from: fromFn } as any,  
     mocks: { from: fromFn, upsert: upsertFn },
   }
 }

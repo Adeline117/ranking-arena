@@ -45,7 +45,7 @@ interface TraderSourceResult {
 // 查找交易员来源
 async function findTraderSource(
    
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   supabase: ReturnType<typeof createClient<any>>,
   handle: string
 ): Promise<{ traderId: string; source: SourceType } | null> {

@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
                 }}
               >
                 {trader.a ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+                   
                   <img src={trader.a} alt="" width={80} height={80} style={{ objectFit: 'cover' }} />
                 ) : (
                   trader.n.charAt(0).toUpperCase()
