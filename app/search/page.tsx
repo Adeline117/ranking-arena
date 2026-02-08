@@ -694,7 +694,7 @@ function SearchContent() {
                       transition: tokens.transition.base,
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
-                      minHeight: 36,
+                      minHeight: 44,
                       lineHeight: '20px',
                     }}
                     onMouseEnter={(e) => {
@@ -903,7 +903,8 @@ function SearchContent() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: tokens.spacing[2],
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                        minHeight: 44,
                         background: tokens.glass.bg.light,
                         border: tokens.glass.border.light,
                         borderRadius: tokens.radius.lg,
@@ -1014,10 +1015,21 @@ function SearchContent() {
           border-bottom: none !important;
         }
         .search-result-card {
-          min-height: 56px;
+          min-height: 64px;
+        }
+        .search-result-card:active {
+          transform: scale(0.98);
+        }
+        .touch-target {
+          min-height: 44px;
+          min-width: 44px;
         }
         @media (max-width: 640px) {
           main {
+            padding-left: ${tokens.spacing[3]} !important;
+            padding-right: ${tokens.spacing[3]} !important;
+          }
+          .search-result-card {
             padding-left: ${tokens.spacing[3]} !important;
             padding-right: ${tokens.spacing[3]} !important;
           }
