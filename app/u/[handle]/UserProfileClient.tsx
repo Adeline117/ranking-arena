@@ -764,22 +764,25 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                   <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                     {[
                       {
-                        icon: '📊',
-                        text: t('guidanceBindExchange') || '绑定交易所账号展示你的交易成绩',
+                        icon: null,
+                        iconSvg: <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="10" width="4" height="8" rx="1" fill="var(--color-accent-primary)"/><rect x="8" y="6" width="4" height="12" rx="1" fill="var(--color-accent-primary)" opacity="0.7"/><rect x="14" y="2" width="4" height="16" rx="1" fill="var(--color-accent-primary)" opacity="0.4"/></svg>,
+                        text: t('guidanceBindExchange'),
                         action: () => router.push('/exchange/auth/api-key'),
-                        actionLabel: t('guidanceGo') || '去绑定',
+                        actionLabel: t('guidanceGo'),
                       },
                       {
-                        icon: '✍️',
-                        text: t('guidanceFirstPost') || '发一条帖子开始社交',
+                        icon: null,
+                        iconSvg: <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 14l4-4 3 3 7-7" stroke="var(--color-accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 3h3v3" stroke="var(--color-accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                        text: t('guidanceFirstPost'),
                         action: () => router.push(`/u/${handle}/new`),
-                        actionLabel: t('newPost') || '发帖',
+                        actionLabel: t('newPost'),
                       },
                       {
-                        icon: '👀',
-                        text: t('guidanceFollowTraders') || '关注感兴趣的交易员',
+                        icon: null,
+                        iconSvg: <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="var(--color-accent-primary)" strokeWidth="2"/><circle cx="10" cy="10" r="3" fill="var(--color-accent-primary)"/></svg>,
+                        text: t('guidanceFollowTraders'),
                         action: () => router.push('/rankings'),
-                        actionLabel: t('guidanceBrowse') || '去看看',
+                        actionLabel: t('guidanceBrowse'),
                       },
                     ].map((card, i) => (
                       <Box key={i} style={{
@@ -789,7 +792,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                         background: `${tokens.colors.accent.primary}08`,
                         border: `1px solid ${tokens.colors.accent.primary}20`,
                       }}>
-                        <span style={{ fontSize: 24 }}>{card.icon}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32 }}>{card.iconSvg || card.icon}</span>
                         <Text size="sm" style={{ flex: 1, color: tokens.colors.text.secondary }}>{card.text}</Text>
                         <button onClick={card.action} style={{
                           padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
