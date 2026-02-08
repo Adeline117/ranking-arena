@@ -18,6 +18,7 @@ const CookieConsent = dynamic(() => import("./components/ui/CookieConsent"));
 const WelcomeGuide = dynamic(() => import("./components/ui/WelcomeGuide"));
 const CompareFloatingBar = dynamic(() => import("./components/trader/CompareFloatingBar"));
 const ScrollToTop = dynamic(() => import("./components/ui/ScrollToTop"));
+const InstallPrompt = dynamic(() => import("./components/pwa/InstallPrompt"));
 const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
 const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })));
@@ -49,19 +50,22 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Arena · Crypto Trader Leaderboard & Community",
-    template: "%s · Arena",
+    default: "ArenaFi - 加密货币交易员排行榜与社区",
+    template: "%s | ArenaFi",
   },
   description:
-    "Aggregating 90-day ROI rankings from Binance, Bybit, Bitget, MEXC, OKX, KuCoin, CoinEx, GMX and more. Follow top traders and join the community.",
+    "聚合 Binance、Bybit、Bitget、OKX、MEXC、KuCoin 等 30+ 交易所的 90 天 ROI 排行榜。关注顶级交易员，加入交易社区。",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
-  applicationName: "Arena",
+  applicationName: "ArenaFi",
   keywords: [
+    "跟单交易",
+    "交易员排行榜",
+    "加密货币交易员",
+    "ROI排行",
+    "交易社区",
     "Copy Trading",
     "Trader Ranking",
-    "Crypto Traders",
-    "ROI Leaderboard",
-    "Trading Community",
+    "Crypto Leaderboard",
   ],
   manifest: "/manifest.json",
   icons: {
@@ -82,30 +86,39 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  alternates: {
+    canonical: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
+    languages: {
+      'zh-CN': process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
+      'en': `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/en`,
+    },
+  },
   openGraph: {
     type: "website",
-    title: "Arena · Crypto Trader Leaderboard & Community",
+    title: "ArenaFi - 加密货币交易员排行榜与社区",
     description:
-      "Aggregating 90-day ROI rankings from multiple exchanges. Real-time updates, follow traders and share insights.",
+      "聚合 30+ 交易所 90 天 ROI 排行榜，实时更新，关注顶级交易员，分享交易见解。",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
-    siteName: "Arena",
+    siteName: "ArenaFi",
+    locale: "zh_CN",
     images: [
       {
         url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
         width: 1200,
         height: 630,
-        alt: "Arena - Crypto Trader Leaderboard",
+        alt: "ArenaFi - 加密货币交易员排行榜",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Arena - Crypto Trader Leaderboard & Community",
+    title: "ArenaFi - 加密货币交易员排行榜与社区",
     description:
-      "Aggregating 90-day ROI rankings from Binance, Bybit, Bitget, MEXC, OKX, KuCoin, CoinEx, GMX and more.",
+      "聚合 Binance、Bybit、Bitget、OKX、MEXC 等 30+ 交易所 90 天 ROI 排行榜。",
     images: [
       `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
     ],
+    creator: "@arenafi",
   },
   robots: {
     index: true,
@@ -180,6 +193,7 @@ export default function RootLayout({
             <WelcomeGuide />
             <CompareFloatingBar />
             <ScrollToTop />
+            <InstallPrompt />
           </CapacitorProvider>
         </Providers>
       </body>
