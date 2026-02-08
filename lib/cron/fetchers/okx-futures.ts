@@ -214,6 +214,7 @@ async function fetchPeriod(
       sharpe_ratio: sharpeRatio,
       arena_score: calculateArenaScore(roi, totalPnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
+      avatar_url: item.portLink || null,
     })
   }
 

@@ -164,6 +164,7 @@ async function fetchPeriod(
       followers,
       arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
+      avatar_url: item.avatarUrl || item.avatar || item.userPhoto || null,
     })
   }
 

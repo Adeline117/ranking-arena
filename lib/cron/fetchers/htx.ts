@@ -128,6 +128,7 @@ async function fetchPeriod(
       followers: item.copyUserNum || null,
       arena_score: calculateArenaScore(roi, Number(item.profit90 || 0), maxDrawdown, winRate, period),
       captured_at: capturedAt,
+      avatar_url: item.imgUrl || null,
     })
   }
 
