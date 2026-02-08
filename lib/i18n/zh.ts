@@ -1481,6 +1481,17 @@ const zh = {
     alertEmailChannel: '邮件',
     alertPushChannel: '推送',
     alertAddCondition: '添加告警条件',
+    alertSetReminder: '设置提醒',
+    alertPriceAboveLabel: '价格上破',
+    alertPriceAboveDesc: '当价格突破指定值时提醒',
+    alertPriceBelowLabel: '价格下破',
+    alertPriceBelowDesc: '当价格跌破指定值时提醒',
+    alertRankUnit: '位',
+    alertOneTime: '一次性提醒（触发后自动关闭）',
+    alertNoAlerts: '暂无提醒配置',
+    alertLastTriggered: '上次触发',
+    alertNewPositionLabel: '新开仓提醒',
+    alertNewPositionDesc: '当交易员开新仓位时提醒',
 
     // ProFeaturesPanel
     proFeaturesTitle: 'Pro 功能',
@@ -2934,6 +2945,14 @@ rejectCall: '拒绝',
     playSpeed: '播放速度',
     voiceSelect: '选择语音',
     reading: '朗读中',
+
+    // Data export
+    export: '导出',
+    exportCSV: '导出 CSV',
+    exportJSON: '导出 JSON',
+    exportPDF: '导出 PDF',
+    exportSuccess: '导出成功',
+    preparing: '准备中...',
 
     // Social sharing
     copyLink: '复制链接',
