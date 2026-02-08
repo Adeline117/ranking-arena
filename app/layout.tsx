@@ -113,8 +113,11 @@ export default function RootLayout({
           />
         ))}
 
-        {/* Preload critical API endpoint for faster data fetch */}
-        <link rel="preconnect" href={process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"} />
+        {/* Prefetch rankings data for faster homepage load */}
+        <link rel="prefetch" href="/api/rankings?window=90D&limit=20" as="fetch" crossOrigin="anonymous" />
+        
+        {/* DNS prefetch for Sentry error reporting */}
+        <link rel="dns-prefetch" href="https://o4509384792580096.ingest.us.sentry.io" />
 
         {/* Font preloading is handled automatically by next/font.
             Removed hardcoded preload link — the hashed filename (e.g. be2afef9-s.woff2)

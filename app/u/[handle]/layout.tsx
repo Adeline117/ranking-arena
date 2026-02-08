@@ -25,6 +25,8 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       
       if (profile) {
         const title = `${profile.handle} · Arena`
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+        const canonicalUrl = `${baseUrl}/u/${encodeURIComponent(handle)}`
         const description = profile.bio 
           ? `${profile.bio.substring(0, 150)}${profile.bio.length > 150 ? '...' : ''}`
           : `查看 ${profile.handle} 的个人资料和交易动态。`
@@ -32,6 +34,9 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
         return {
           title,
           description,
+          alternates: {
+            canonical: canonicalUrl,
+          },
           openGraph: {
             title,
             description,
