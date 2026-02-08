@@ -157,6 +157,7 @@ function FaqSection({ title, items }: { title: string; items: Array<{ q: string;
 export default function HelpPage() {
   const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const faqData = getFaqData(t)
 
@@ -166,6 +167,27 @@ export default function HelpPage() {
       setEmail(data.user?.email ?? null)
     })
   }, [])
+
+  // Filter FAQ items by search query
+  const filterItems = (items: Array<{ q: string; a: string }>) => {
+    if (!searchQuery.trim()) return items
+    const query = searchQuery.toLowerCase()
+    return items.filter(
+      (item) =>
+        item.q.toLowerCase().includes(query) ||
+        item.a.toLowerCase().includes(query)
+    )
+  }
+
+  const filteredSections = Object.entries(faqData)
+    .map(([key, section]) => ({
+      key,
+      title: section.title,
+      items: filterItems(section.items),
+    }))
+    .filter((section) => section.items.length > 0)
+
+  const hasResults = filteredSections.length > 0
 
   return (
     <Box
@@ -289,7 +311,35 @@ export default function HelpPage() {
           />
         </Box>
 
-        {/* FAQ 内容 */}
+        {/* Search */}
+        <Box style={{ marginBottom: tokens.spacing[5] }}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('faqSearchPlaceholder')}
+            style={{
+              width: '100%',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              background: 'var(--color-bg-secondary)',
+              border: '1px solid var(--color-border-primary)',
+              borderRadius: tokens.radius.lg,
+              color: 'var(--color-text-primary)',
+              fontSize: tokens.typography.fontSize.sm,
+              outline: 'none',
+              transition: `border-color ${tokens.transition.fast}`,
+              boxSizing: 'border-box',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-border-primary)'
+            }}
+          />
+        </Box>
+
+        {/* FAQ content */}
         <Box
           style={{
             background: 'var(--color-bg-secondary)',
@@ -298,10 +348,17 @@ export default function HelpPage() {
             padding: tokens.spacing[6],
           }}
         >
-          <FaqSection title={faqData.subscription.title} items={faqData.subscription.items} />
-          <FaqSection title={faqData.features.title} items={faqData.features.items} />
-          <FaqSection title={faqData.account.title} items={faqData.account.items} />
-          <FaqSection title={faqData.contact.title} items={faqData.contact.items} />
+          {hasResults ? (
+            filteredSections.map((section) => (
+              <FaqSection key={section.key} title={section.title} items={section.items} />
+            ))
+          ) : (
+            <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
+              <Text size="sm" color="tertiary">
+                {t('faqNoResults')}
+              </Text>
+            </Box>
+          )}
         </Box>
 
         {/* 底部 */}
