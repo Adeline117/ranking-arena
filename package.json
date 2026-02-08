@@ -49,7 +49,9 @@
     "security:audit": "npm audit",
     "security:audit:json": "npm audit --json > docs/audit-report-$(date +%Y%m%d).json",
     "security:fix": "npm audit fix",
-    "security:check": "npm run security:audit && npm run type-check && npm run lint"
+    "security:check": "npm run security:audit && npm run type-check && npm run lint",
+    "validate:env": "npx tsx -e \"require('./lib/env')\"",
+    "predev": "npx tsx -e \"try{require('./lib/env')}catch(e){console.warn(e.message)}\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.985.0",

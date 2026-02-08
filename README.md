@@ -346,7 +346,12 @@ npm install
 
 # Configure environment variables
 cp .env.example .env.local
-# Edit .env.local with required configuration
+# Edit .env.local — at minimum set:
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+# Validate environment (optional — dev server also checks on start)
+npm run validate:env
 
 # Setup database
 # Execute scripts/setup_all.sql in Supabase SQL Editor
