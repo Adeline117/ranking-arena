@@ -194,10 +194,12 @@ export async function getWeightedPosts(
 
   // 按权重增强分数排序
   postsWithWeightedScore.sort((a: WeightedPostRow, b: WeightedPostRow) => {
+    const aScore = a.weighted_score ?? 0
+    const bScore = b.weighted_score ?? 0
     if (sort_order === 'asc') {
-      return a.weighted_score - b.weighted_score
+      return aScore - bScore
     } else {
-      return b.weighted_score - a.weighted_score
+      return bScore - aScore
     }
   })
 
@@ -266,19 +268,19 @@ export async function getWeightedPosts(
   }
 
   // 转换为最终格式
-  const result: PostWithAuthor[] = postsWithWeightedScore.map((post: WeightedPostRow) => {
+  const result = postsWithWeightedScore.map((post: WeightedPostRow): PostWithAuthor => {
     const profile = authorProfileMap.get(post.author_id)
     
     return {
       id: post.id,
-      title: post.title,
-      content: post.content,
+      title: post.title || '',
+      content: post.content || '',
       author_id: post.author_id,
-      author_handle: profile?.handle || post.author_handle,
+      author_handle: profile?.handle || post.author_handle || '',
       author_avatar_url: profile?.avatar_url ?? undefined,
       author_is_pro: profile?.is_pro ?? false,
       author_show_pro_badge: profile?.show_pro_badge !== false,
-      group_id: post.group_id,
+      group_id: post.group_id ?? undefined,
       group_name: post.group_name || undefined,
       group_name_en: post.group_name_en || undefined,
       poll_enabled: post.poll_enabled || false,
@@ -295,9 +297,9 @@ export async function getWeightedPosts(
       is_pinned: post.is_pinned || false,
       images: post.images || null,
       created_at: post.created_at,
-      updated_at: post.updated_at,
+      updated_at: post.updated_at || undefined,
       original_post_id: post.original_post_id || null,
-      original_post: post.original_post_id ? originalPostMap.get(post.original_post_id) : null,
+      original_post: post.original_post_id ? (originalPostMap.get(post.original_post_id) ?? null) : null,
     }
   })
 

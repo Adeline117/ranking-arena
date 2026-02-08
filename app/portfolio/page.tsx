@@ -9,7 +9,6 @@ import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-// @ts-expect-error - module removed in cleanup
 import RadarChart from '@/app/components/premium/RadarChart'
 
 // ── Types ──────────────────────────────────────────────────
