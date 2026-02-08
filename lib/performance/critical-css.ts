@@ -69,7 +69,7 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 /* Safe Area (iPhone 刘海屏) */
 .safe-area-inset-bottom{padding-bottom:env(safe-area-inset-bottom,0)}
 .safe-area-inset-top{padding-top:env(safe-area-inset-top,0)}
-.has-mobile-nav{padding-bottom:calc(56px + env(safe-area-inset-bottom,0))}
+.has-mobile-nav{padding-bottom:calc(var(--mobile-nav-height,60px) + env(safe-area-inset-bottom,0))}
 @media(min-width:768px){.has-mobile-nav{padding-bottom:0}}
 
 /* 移动端容器 */

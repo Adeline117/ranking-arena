@@ -58,7 +58,7 @@ export const GET = withPublic(
           page: useLegacyPaging ? Math.max(0, page) : 0,
         })
       },
-      { ttl: 120, lockTtl: 10 }
+      { ttl: 60, lockTtl: 10 }
     )
 
     const response = NextResponse.json(cachedData)
@@ -165,11 +165,11 @@ async function fetchFromLeaderboard(
     : traders.length === limit
 
   // Available sources (for UI filter)
-  // Only fetch distinct sources once per timeRange (cached via outer cache)
-  // Fetch sources across all seasons so newly-computed platforms always appear
+  // Use DISTINCT query instead of fetching all rows (N+1 fix)
   const { data: sourceRows } = await supabase
     .from('leaderboard_ranks')
     .select('source')
+    .limit(1000)
 
   const availableSources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort()
 

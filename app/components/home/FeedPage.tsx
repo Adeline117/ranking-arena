@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { usePullToRefresh } from '@/lib/hooks/usePullToRefresh'
 import { supabase } from '@/lib/supabase/client'
 import PostFeed from '@/app/components/post/PostFeed'
 import TopNav from '@/app/components/layout/TopNav'
@@ -28,8 +29,17 @@ export default function FeedPage() {
 
   const sortBy = activeTab === 'hot' ? 'hot_score' : 'created_at'
 
+  const [refreshKey, setRefreshKey] = useState(0)
+  const handleRefresh = useCallback(async () => {
+    setRefreshKey(k => k + 1)
+  }, [])
+  const { containerRef: ptrRef, indicatorRef: ptrIndicatorRef } = usePullToRefresh({
+    onRefresh: handleRefresh,
+  })
+
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box ref={ptrRef} className="pull-to-refresh-wrapper" style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <div ref={ptrIndicatorRef} className="pull-to-refresh-indicator" />
       <TopNav email={email} />
 
       {/* Desktop sidebar - hidden on mobile */}
@@ -97,7 +107,7 @@ export default function FeedPage() {
 
         {/* Post feed - no groupId filter shows all posts */}
         <PostFeed
-          key={activeTab}
+          key={`${activeTab}-${refreshKey}`}
           layout="masonry"
           sortBy={sortBy}
         />

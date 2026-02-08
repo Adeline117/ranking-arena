@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const result = await tieredGetOrSet(
     cacheKey,
     () => fetchLibraryData({ category, search, lang, sort, page, limit, offset }),
-    search ? 'warm' : 'cold',
+    search ? 'warm' : 'hot',  // 无搜索词时用 hot 层 (Redis 300s)，有搜索词用 warm 层
     ['library']
   )
 
