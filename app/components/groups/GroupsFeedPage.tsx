@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
@@ -25,6 +25,7 @@ type Group = {
 }
 
 type TabKey = 'feed' | 'discover'
+type SubTabKey = 'following' | 'recommended' | 'bookshelf'
 
 export default function GroupsFeedPage() {
   const { language, t } = useLanguage()
@@ -35,20 +36,7 @@ export default function GroupsFeedPage() {
   const [loadingDiscover, setLoadingDiscover] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>('feed')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Debounce search input (300ms)
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      setDebouncedQuery(searchQuery)
-    }, 300)
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
-  }, [searchQuery])
+  const [subTab, setSubTab] = useState<SubTabKey>('recommended')
 
   useEffect(() => {
     // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
@@ -102,19 +90,11 @@ export default function GroupsFeedPage() {
     const loadAll = async () => {
       setLoadingDiscover(true)
       try {
-        let query = supabase
+        const query = supabase
           .from('groups')
           .select('id, name, name_en, avatar_url, member_count')
           .order('member_count', { ascending: false, nullsFirst: false })
           .limit(30)
-
-        if (debouncedQuery.trim()) {
-          const sanitized = debouncedQuery.trim()
-            .slice(0, 100)
-            .replace(/[\\%_]/g, c => `\\${c}`)
-            .replace(/[.,()]/g, '')
-          query = query.or(`name.ilike.%${sanitized}%,name_en.ilike.%${sanitized}%`)
-        }
 
         const { data } = await query
         setAllGroups(data || [])
@@ -126,7 +106,7 @@ export default function GroupsFeedPage() {
     }
 
     loadAll()
-  }, [activeTab, debouncedQuery])
+  }, [activeTab])
 
   const myGroupIds = myGroups.map(g => g.id)
 
@@ -211,6 +191,39 @@ export default function GroupsFeedPage() {
           </Link>
         </Box>
 
+        {/* Sub-tabs: 关注 / 推荐 / 书架 */}
+        <Box style={{
+          display: 'flex',
+          gap: tokens.spacing[3],
+          marginBottom: tokens.spacing[4],
+          borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          paddingBottom: tokens.spacing[2],
+        }}>
+          {([
+            { key: 'following' as SubTabKey, label: t('following') },
+            { key: 'recommended' as SubTabKey, label: t('recommended') },
+            { key: 'bookshelf' as SubTabKey, label: t('bookshelf') || '书架' },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setSubTab(tab.key)}
+              style={{
+                padding: `${tokens.spacing[1]} 0`,
+                border: 'none',
+                background: 'transparent',
+                color: subTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+                fontWeight: subTab === tab.key ? 700 : 400,
+                fontSize: tokens.typography.fontSize.sm,
+                cursor: 'pointer',
+                borderBottom: subTab === tab.key ? `2px solid ${tokens.colors.accent.primary}` : '2px solid transparent',
+                transition: `all ${tokens.transition.base}`,
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </Box>
+
         {activeTab === 'feed' ? (
           <>
             {/* My Groups - Horizontal scrollable */}
@@ -292,26 +305,6 @@ export default function GroupsFeedPage() {
         ) : (
           /* Discover tab */
           <Box>
-            {/* Search */}
-            <Box style={{ marginBottom: tokens.spacing[3] }}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t('searchGroupsPlaceholder')}
-                style={{
-                  width: '100%',
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.lg,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.secondary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.sm,
-                  outline: 'none',
-                }}
-              />
-            </Box>
-
             {/* Groups grid */}
             {loadingDiscover ? (
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
