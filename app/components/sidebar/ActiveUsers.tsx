@@ -78,7 +78,7 @@ export default function ActiveUsersWidget() {
     <SidebarCard title={isZh ? '活跃用户' : 'Active Users'}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {users.map(user => (
-          <Link
+          <Link prefetch={false}
             key={user.id}
             href={`/u/${encodeURIComponent(user.handle)}`}
             style={{

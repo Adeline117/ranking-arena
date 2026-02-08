@@ -106,7 +106,7 @@ export default function RecommendedGroups() {
             const displayName = isZh ? g.name : (g.name_en || g.name)
             const desc = isZh ? g.description : (g.description_en || g.description)
             return (
-              <Link
+              <Link prefetch={false}
                 key={g.id}
                 href={`/groups/${g.id}`}
                 style={{

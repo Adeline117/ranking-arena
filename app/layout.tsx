@@ -19,6 +19,7 @@ const WelcomeGuide = dynamic(() => import("./components/ui/WelcomeGuide"));
 const CompareFloatingBar = dynamic(() => import("./components/trader/CompareFloatingBar"));
 const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
+const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })));
 const NetworkStatusBanner = dynamic(() => import("./components/ui/NetworkStatusBanner"));
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
 import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
@@ -152,6 +153,7 @@ export default function RootLayout({
             {/* Analytics deferred via dynamic import */}
             <WebVitals />
             <SpeedInsights />
+            <Analytics />
             <NetworkStatusBanner />
             <SkipLink targetId="main-content" />
             <ServiceWorkerRegistration />

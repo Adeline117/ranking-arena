@@ -73,7 +73,7 @@ export default function TrendingDiscussions() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {posts.map((post, idx) => (
-            <Link
+            <Link prefetch={false}
               key={post.id}
               href={`/hot?post=${post.id}`}
               style={{
