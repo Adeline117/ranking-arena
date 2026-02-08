@@ -14,6 +14,8 @@ import { useSubscription } from './hooks/useSubscription'
 // 懒加载组件
 const PostFeed = lazy(() => import('../post/PostFeed'))
 const MarketPanel = lazy(() => import('./MarketPanel'))
+const SectorPerformance = lazy(() => import('../market/SectorPerformance'))
+const ExchangeVolume = lazy(() => import('../market/ExchangeVolume'))
 
 interface SidebarSectionProps {
   position: 'left' | 'right'
@@ -89,6 +91,20 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
       <ErrorBoundary>
         <Suspense fallback={<SkeletonCard />}>
           <MarketPanel />
+        </Suspense>
+      </ErrorBoundary>
+
+      {/* 板块表现 */}
+      <ErrorBoundary>
+        <Suspense fallback={<SkeletonCard />}>
+          <SectorPerformance />
+        </Suspense>
+      </ErrorBoundary>
+
+      {/* 交易所成交量 */}
+      <ErrorBoundary>
+        <Suspense fallback={<SkeletonCard />}>
+          <ExchangeVolume />
         </Suspense>
       </ErrorBoundary>
     </Box>

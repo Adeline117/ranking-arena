@@ -2817,6 +2817,10 @@ walletAddress: 'Wallet Address',
 viewOnExplorer: 'View on Explorer',
 dexLeaderboard: 'DEX Leaderboard',
 
+// Sector & Exchange Widgets
+sectorPerformance: 'Sector Performance',
+exchangeVolume: 'Exchange Volume',
+
 // Voice & Video Calls
 voiceCall: 'Voice Call',
 videoCall: 'Video Call',
