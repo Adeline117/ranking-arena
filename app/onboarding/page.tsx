@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box, Text } from '@/app/components/base'
 import { setLanguage, translations, type Language } from '@/lib/i18n'
@@ -8,20 +8,43 @@ import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { tokens } from '@/lib/design-tokens'
 import { lightTokens, darkTokens } from '@/lib/theme-tokens'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type Theme = 'dark' | 'light'
-type Step = 'welcome' | 'features' | 'interests' | 'complete'
+type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
 
-const interests = [
-  { id: 'btc', labelKey: 'btcTrading', icon: '₿' },
-  { id: 'eth', labelKey: 'ethTrading', icon: 'Ξ' },
-  { id: 'altcoin', labelKey: 'altcoins', icon: '◈' },
-  { id: 'futures', labelKey: 'futuresTrading', icon: '⟡' },
-  { id: 'spot', labelKey: 'spotTrading', icon: '◉' },
-  { id: 'defi', labelKey: 'defi', icon: '⬡' },
-  { id: 'nft', labelKey: 'nft', icon: '◇' },
-  { id: 'analysis', labelKey: 'technicalAnalysis', icon: '' },
+const STEPS: Step[] = ['welcome', 'interests', 'traders', 'groups', 'complete']
+
+const INTERESTS = [
+  { id: 'defi', labelKey: 'defi', icon: '\u2B21' },
+  { id: 'cex', labelKey: 'interestCex', icon: '\u25C8' },
+  { id: 'quant', labelKey: 'interestQuant', icon: '\u29D7' },
+  { id: 'nft', labelKey: 'nft', icon: '\u25C7' },
+  { id: 'layer2', labelKey: 'interestLayer2', icon: '\u25EB' },
+  { id: 'onchain', labelKey: 'interestOnchain', icon: '\u25CE' },
+  { id: 'futures', labelKey: 'futuresTrading', icon: '\u27E1' },
+  { id: 'spot', labelKey: 'spotTrading', icon: '\u25C9' },
+  { id: 'macro', labelKey: 'interestMacro', icon: '\u25A3' },
+  { id: 'meme', labelKey: 'interestMeme', icon: '\u25CA' },
 ]
+
+type Trader = {
+  source: string
+  source_trader_id: string
+  handle: string | null
+  avatar_url: string | null
+  roi: number | null
+  arena_score: number | null
+}
+
+type Group = {
+  id: string
+  name: string
+  name_en: string | null
+  description: string | null
+  avatar_url: string | null
+  member_count: number | null
+}
 
 const injectStyles = () => {
   if (typeof window === 'undefined') return
@@ -29,33 +52,32 @@ const injectStyles = () => {
   const style = document.createElement('style')
   style.id = 'onboarding-styles'
   style.textContent = `
-    @keyframes onboardingGradient { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
-    @keyframes stepEnter { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
-    @keyframes celebrationBurst { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    @keyframes stepEnter { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes celebrationBurst { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
     @keyframes checkDraw { from { stroke-dashoffset: 50; } to { stroke-dashoffset: 0; } }
     @keyframes progressPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139, 111, 168, 0.4); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(139, 111, 168, 0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .onboarding-bg { position: fixed; inset: 0; z-index: 0; transition: background 0.5s ease; }
     .onboarding-bg.dark { background: linear-gradient(135deg, #0a0a0f 0%, #13111a 50%, #0f0d14 100%); }
     .onboarding-bg.light { background: linear-gradient(135deg, #f5f5f7 0%, #e8e8ed 50%, #f0f0f5 100%); }
-    .onboarding-bg::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at center, rgba(139, 111, 168, 0.08) 0%, transparent 50%); animation: onboardingGradient 20s ease infinite; }
+    .onboarding-bg::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at center, rgba(139, 111, 168, 0.08) 0%, transparent 50%); }
     .onboarding-card { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
     .option-card { cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
     .option-card:hover { transform: translateY(-2px); }
-    .option-card.selected { animation: pulse 2s ease infinite; }
     .continue-btn { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
     .continue-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(139, 111, 168, 0.4); }
     .continue-btn:not(:disabled):active { transform: translateY(0) scale(0.98); }
-    .floating-particle { position: absolute; border-radius: 50%; animation: float 6s ease-in-out infinite; }
-    @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.3; } 50% { transform: translateY(-15px) rotate(180deg); opacity: 0.5; } }
     .step-content { animation: stepEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     .interest-card { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; }
     .interest-card:hover { transform: translateY(-2px); }
     .progress-dot.active { animation: progressPulse 2s ease infinite; }
     .celebration-icon { animation: celebrationBurst 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
     .check-animation { stroke-dasharray: 50; stroke-dashoffset: 50; animation: checkDraw 0.5s ease 0.3s forwards; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .trader-row { transition: all 0.2s ease; cursor: default; }
+    .trader-row:hover { background: rgba(139, 111, 168, 0.06); }
+    .follow-btn { transition: all 0.2s ease; cursor: pointer; border: none; font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; }
+    .follow-btn:hover { transform: scale(1.03); }
   `
   document.head.appendChild(style)
 }
@@ -71,6 +93,14 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
 
+  // Traders & groups data
+  const [traders, setTraders] = useState<Trader[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
+  const [followedTraders, setFollowedTraders] = useState<Set<string>>(new Set())
+  const [joinedGroups, setJoinedGroups] = useState<Set<string>>(new Set())
+  const [loadingTraders, setLoadingTraders] = useState(false)
+  const [loadingGroups, setLoadingGroups] = useState(false)
+
   const tr = (key: string) => translations[language][key] || translations.zh[key] || key
 
   useEffect(() => {
@@ -85,7 +115,12 @@ export default function OnboardingPage() {
       document.documentElement.setAttribute('data-theme', savedTheme)
     }
 
-    // Check if logged in user has completed onboarding
+    // Check if already onboarded
+    if (localStorage.getItem('hasOnboarded') === 'true') {
+      router.replace('/')
+      return
+    }
+
     // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
@@ -93,6 +128,34 @@ export default function OnboardingPage() {
       }
     })
   }, [router])
+
+  // Fetch traders when entering that step
+  const fetchTraders = useCallback(async () => {
+    setLoadingTraders(true)
+    try {
+      const res = await fetch('/api/sidebar/top-traders')
+      const data = await res.json()
+      setTraders(data.traders || [])
+    } catch {
+      console.error('Failed to fetch traders')
+    } finally {
+      setLoadingTraders(false)
+    }
+  }, [])
+
+  // Fetch groups when entering that step
+  const fetchGroups = useCallback(async () => {
+    setLoadingGroups(true)
+    try {
+      const res = await fetch('/api/groups?limit=8&sort_by=member_count')
+      const data = await res.json()
+      setGroups(data.data || data.groups || [])
+    } catch {
+      console.error('Failed to fetch groups')
+    } finally {
+      setLoadingGroups(false)
+    }
+  }, [])
 
   const handleLanguageChange = (lang: Language) => {
     setLang(lang)
@@ -105,15 +168,10 @@ export default function OnboardingPage() {
     document.documentElement.setAttribute('data-theme', newTheme)
   }
 
-  const goToFeatures = () => {
-    setLanguage(language)
-    localStorage.setItem('theme', theme)
-    document.documentElement.setAttribute('data-theme', theme)
-    setStep('features')
-  }
-
-  const goToInterests = () => {
-    setStep('interests')
+  const goToStep = (nextStep: Step) => {
+    if (nextStep === 'traders') fetchTraders()
+    if (nextStep === 'groups') fetchGroups()
+    setStep(nextStep)
   }
 
   const toggleInterest = (id: string) => {
@@ -122,12 +180,55 @@ export default function OnboardingPage() {
     )
   }
 
-  const saveAndComplete = async (withInterests: boolean) => {
+  const handleFollowTrader = async (traderId: string) => {
+    if (!userId) return
+    const isFollowed = followedTraders.has(traderId)
+    const next = new Set(followedTraders)
+    if (isFollowed) {
+      next.delete(traderId)
+    } else {
+      next.add(traderId)
+    }
+    setFollowedTraders(next)
+    try {
+      await fetch('/api/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        body: JSON.stringify({ traderId, action: isFollowed ? 'unfollow' : 'follow' }),
+      })
+    } catch {
+      // revert on error
+      setFollowedTraders(followedTraders)
+    }
+  }
+
+  const handleJoinGroup = async (groupId: string) => {
+    if (!userId) return
+    const isJoined = joinedGroups.has(groupId)
+    const next = new Set(joinedGroups)
+    if (isJoined) {
+      next.delete(groupId)
+    } else {
+      next.add(groupId)
+    }
+    setJoinedGroups(next)
+    try {
+      await fetch('/api/groups/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        body: JSON.stringify({ groupId, action: isJoined ? 'leave' : 'join' }),
+      })
+    } catch {
+      setJoinedGroups(joinedGroups)
+    }
+  }
+
+  const saveAndComplete = async () => {
     setSaving(true)
     try {
       if (userId) {
         const updates: Record<string, unknown> = { onboarding_completed: true }
-        if (withInterests && selectedInterests.length > 0) {
+        if (selectedInterests.length > 0) {
           updates.interests = selectedInterests
         }
         const { error } = await supabase
@@ -142,20 +243,20 @@ export default function OnboardingPage() {
       setStep('complete')
     } catch (err) {
       console.error('Error completing onboarding:', err)
+      showToast(tr('saveFailed'), 'error')
     } finally {
       setSaving(false)
     }
   }
 
-  const handleGoHome = () => {
-    router.push('/')
+  const handleGoRankings = () => {
+    router.push('/rankings')
   }
 
   if (!mounted) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 40, height: 40, border: '3px solid rgba(139, 111, 168, 0.2)', borderTopColor: 'var(--color-brand)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </Box>
     )
   }
@@ -171,35 +272,37 @@ export default function OnboardingPage() {
     ? 'linear-gradient(135deg, rgba(139, 111, 168, 0.3) 0%, rgba(139, 111, 168, 0.15) 100%)'
     : 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)'
   const selectedBorder = 'rgba(139, 111, 168, 0.5)'
+  const brandGradient = 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)'
 
-  const stepIndex = step === 'welcome' ? 0 : step === 'features' ? 1 : step === 'interests' ? 2 : 3
+  const stepIndex = STEPS.indexOf(step)
+
+  const formatTraderName = (t: Trader) => {
+    const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
+    const isLong = (s: string) => /^\d{10,}$/.test(s)
+    const name = t.handle || t.source_trader_id
+    if (isAddress(name)) return `${name.slice(0, 6)}...${name.slice(-4)}`
+    if (isLong(name)) return `ID ${name.slice(-6)}`
+    return name
+  }
 
   return (
     <Box style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, position: 'relative', overflow: 'hidden' }}>
       <div className={`onboarding-bg ${theme}`} />
 
-      {[...Array(5)].map((_, i) => (
-        <div key={i} className="floating-particle" style={{
-          width: 6 + i * 3, height: 6 + i * 3, left: `${15 + i * 18}%`, top: `${25 + (i % 3) * 20}%`,
-          background: `linear-gradient(135deg, rgba(139, 111, 168, ${isDark ? 0.3 : 0.2}), rgba(139, 111, 168, 0.1))`,
-          animationDelay: `${i * 0.7}s`, animationDuration: `${5 + i}s`,
-        }} />
-      ))}
-
       <Box className="onboarding-card" style={{
-        maxWidth: 540, width: '100%', background: cardBg, border: `1px solid ${cardBorder}`,
-        borderRadius: 28, padding: '48px 40px', position: 'relative', zIndex: 1,
+        maxWidth: 560, width: '100%', background: cardBg, border: `1px solid ${cardBorder}`,
+        borderRadius: 28, padding: '44px 36px', position: 'relative', zIndex: 1,
         boxShadow: isDark
           ? '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 100px rgba(139, 111, 168, 0.06)'
           : '0 25px 50px -12px rgba(0, 0, 0, 0.1), 0 0 100px rgba(139, 111, 168, 0.1)',
       }}>
-        {/* Progress dots */}
-        <Box style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 40 }}>
-          {['welcome', 'features', 'interests', 'complete'].map((s, i) => (
+        {/* Progress bar */}
+        <Box style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 36 }}>
+          {STEPS.map((s, i) => (
             <Box key={s} className={`progress-dot ${stepIndex === i ? 'active' : ''}`} style={{
               width: stepIndex === i ? 28 : 10, height: 10, borderRadius: 5,
               background: i <= stepIndex
-                ? 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)'
+                ? brandGradient
                 : isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
               transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
             }} />
@@ -289,9 +392,9 @@ export default function OnboardingPage() {
               </Box>
             </Box>
 
-            <button className="continue-btn" onClick={goToFeatures} style={{
+            <button className="continue-btn" onClick={() => goToStep('interests')} style={{
               width: '100%', padding: '16px 24px', borderRadius: 14, border: 'none',
-              background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+              background: brandGradient,
               color: tokens.colors.white, fontWeight: 700, fontSize: 16, cursor: 'pointer',
             }}>
               {tr('continueButton')}
@@ -299,83 +402,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 2: Feature introduction */}
-        {step === 'features' && (
-          <div key="features" className="step-content">
-            <Text size="2xl" weight="black" style={{
-              marginBottom: 8, textAlign: 'center',
-              background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            }}>
-              {tr('onboardingFeatureTitle')}
-            </Text>
-            <Text style={{ marginBottom: 28, textAlign: 'center', color: textSecondary }}>
-              {tr('onboardingFeatureSubtitle')}
-            </Text>
-
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
-              {[
-                { titleKey: 'onboardingFeature1Title', descKey: 'onboardingFeature1Desc', icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                  </svg>
-                )},
-                { titleKey: 'onboardingFeature2Title', descKey: 'onboardingFeature2Desc', icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="1" y="3" width="8" height="18" rx="2" />
-                    <rect x="15" y="3" width="8" height="18" rx="2" />
-                  </svg>
-                )},
-                { titleKey: 'onboardingFeature3Title', descKey: 'onboardingFeature3Desc', icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
-                )},
-              ].map((feature) => (
-                <Box key={feature.titleKey} style={{
-                  display: 'flex', gap: 14, padding: '16px 18px', borderRadius: 14,
-                  border: `1px solid ${optionBorder}`, background: optionBg,
-                }}>
-                  <Box style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(139, 111, 168, 0.1)' }}>
-                    {feature.icon}
-                  </Box>
-                  <Box>
-                    <Text size="sm" weight="bold" style={{ color: textPrimary, marginBottom: 4 }}>
-                      {tr(feature.titleKey)}
-                    </Text>
-                    <Text size="xs" style={{ color: textSecondary, lineHeight: 1.4 }}>
-                      {tr(feature.descKey)}
-                    </Text>
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-
-            <Box style={{ display: 'flex', gap: 14 }}>
-              <button className="continue-btn" onClick={() => { saveAndComplete(false) }} disabled={saving}
-                style={{
-                  flex: 1, padding: '14px 20px', borderRadius: 12,
-                  border: `1px solid ${optionBorder}`, background: 'transparent',
-                  color: textSecondary, fontWeight: 600, fontSize: 15,
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                }}>
-                {tr('skip') || 'Skip'}
-              </button>
-              <button className="continue-btn" onClick={goToInterests} style={{
-                flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
-                background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                color: tokens.colors.white, fontWeight: 700, fontSize: 15, cursor: 'pointer',
-              }}>
-                {tr('continueButton')}
-              </button>
-            </Box>
-          </div>
-        )}
-
-        {/* Step 3: Interest selection */}
+        {/* Step 2: Interests */}
         {step === 'interests' && (
           <div key="interests" className="step-content">
             <Text size="2xl" weight="black" style={{
@@ -383,25 +410,25 @@ export default function OnboardingPage() {
               background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
-              {tr('selectInterests') || '选择你的兴趣'}
+              {tr('selectInterests')}
             </Text>
-            <Text style={{ marginBottom: 32, textAlign: 'center', color: textSecondary }}>
-              {tr('selectInterestsDesc') || '帮助我们为你推荐更好的内容'}
+            <Text style={{ marginBottom: 28, textAlign: 'center', color: textSecondary }}>
+              {tr('selectInterestsDesc')}
             </Text>
 
-            <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 36 }}>
-              {interests.map(interest => {
+            <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 32 }}>
+              {INTERESTS.map(interest => {
                 const isSelected = selectedInterests.includes(interest.id)
                 return (
                   <Box key={interest.id} onClick={() => toggleInterest(interest.id)}
                     className={`interest-card ${isSelected ? 'selected' : ''}`}
                     style={{
-                      padding: '16px 18px', borderRadius: 14,
+                      padding: '14px 16px', borderRadius: 14,
                       border: isSelected ? `1px solid ${selectedBorder}` : `1px solid ${optionBorder}`,
                       background: isSelected ? selectedBg : optionBg,
-                      display: 'flex', alignItems: 'center', gap: 12,
+                      display: 'flex', alignItems: 'center', gap: 10,
                     }}>
-                    <span style={{ fontSize: 18, opacity: isSelected ? 1 : 0.6, transition: 'opacity 0.2s ease' }}>
+                    <span style={{ fontSize: 16, opacity: isSelected ? 1 : 0.5, transition: 'opacity 0.2s ease' }}>
                       {interest.icon}
                     </span>
                     <Text size="sm" weight={isSelected ? 'bold' : 'medium'}
@@ -414,31 +441,210 @@ export default function OnboardingPage() {
             </Box>
 
             <Box style={{ display: 'flex', gap: 14 }}>
-              <button className="continue-btn" onClick={() => saveAndComplete(false)} disabled={saving}
+              <button className="continue-btn" onClick={() => goToStep('traders')}
                 style={{
                   flex: 1, padding: '14px 20px', borderRadius: 12,
                   border: `1px solid ${optionBorder}`, background: 'transparent',
-                  color: textSecondary, fontWeight: 600, fontSize: 15,
-                  cursor: saving ? 'not-allowed' : 'pointer',
+                  color: textSecondary, fontWeight: 600, fontSize: 15, cursor: 'pointer',
                 }}>
-                {tr('skip') || '跳过'}
+                {tr('skip')}
               </button>
-              <button className="continue-btn" onClick={() => saveAndComplete(true)} disabled={saving}
-                style={{
-                  flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
-                  background: saving ? 'rgba(139, 111, 168, 0.2)' : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
-                  color: tokens.colors.white, fontWeight: 700, fontSize: 15,
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}>
-                {saving && <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
-                {saving ? (tr('saving') || '保存中...') : (tr('complete') || '完成')}
+              <button className="continue-btn" onClick={() => goToStep('traders')} style={{
+                flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
+                background: brandGradient,
+                color: tokens.colors.white, fontWeight: 700, fontSize: 15, cursor: 'pointer',
+              }}>
+                {tr('continueButton')}
               </button>
             </Box>
           </div>
         )}
 
-        {/* Step 3: Complete */}
+        {/* Step 3: Follow Traders */}
+        {step === 'traders' && (
+          <div key="traders" className="step-content">
+            <Text size="2xl" weight="black" style={{
+              marginBottom: 8, textAlign: 'center',
+              background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>
+              {tr('onboardingFollowTitle')}
+            </Text>
+            <Text style={{ marginBottom: 24, textAlign: 'center', color: textSecondary }}>
+              {tr('onboardingFollowDesc')}
+            </Text>
+
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 28, maxHeight: 340, overflowY: 'auto' }}>
+              {loadingTraders ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ height: 52, borderRadius: 10, background: optionBg, marginBottom: 4 }} />
+                ))
+              ) : traders.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: textSecondary, padding: '20px 0' }}>
+                  {language === 'zh' ? '暂无数据' : 'No data'}
+                </Text>
+              ) : (
+                traders.slice(0, 10).map((t, idx) => {
+                  const tid = `${t.source}:${t.source_trader_id}`
+                  const isFollowed = followedTraders.has(tid)
+                  return (
+                    <Box key={tid} className="trader-row" style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                      borderRadius: 10,
+                    }}>
+                      {/* Rank */}
+                      <span style={{
+                        fontSize: 13, fontWeight: 800, minWidth: 20, textAlign: 'right',
+                        color: idx < 3 ? ['#D4A843', '#A8A8A8', '#CD7F32'][idx] : textSecondary,
+                      }}>
+                        {idx + 1}
+                      </span>
+                      {/* Avatar */}
+                      <Box style={{
+                        width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                        background: 'linear-gradient(135deg, rgba(139,111,168,0.3), rgba(212,168,67,0.3))',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 14, fontWeight: 600, color: textPrimary, overflow: 'hidden',
+                      }}>
+                        {t.avatar_url ? (
+                          <img src={t.avatar_url} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                          (formatTraderName(t)).charAt(0).toUpperCase()
+                        )}
+                      </Box>
+                      {/* Name + score */}
+                      <Box style={{ flex: 1, minWidth: 0 }}>
+                        <Text size="sm" weight="semibold" style={{
+                          color: textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {formatTraderName(t)}
+                        </Text>
+                        <Text size="xs" style={{ color: textSecondary }}>
+                          {t.arena_score != null ? `${(language === 'zh' ? '分数' : 'Score')} ${t.arena_score.toFixed(0)}` : t.source}
+                        </Text>
+                      </Box>
+                      {/* Follow button */}
+                      <button className="follow-btn" onClick={() => handleFollowTrader(tid)}
+                        style={{
+                          background: isFollowed ? optionBg : brandGradient,
+                          color: isFollowed ? textSecondary : '#fff',
+                          border: isFollowed ? `1px solid ${optionBorder}` : 'none',
+                        }}>
+                        {isFollowed ? tr('onboardingFollowedBtn') : tr('onboardingFollowBtn')}
+                      </button>
+                    </Box>
+                  )
+                })
+              )}
+            </Box>
+
+            <Box style={{ display: 'flex', gap: 14 }}>
+              <button className="continue-btn" onClick={() => goToStep('groups')}
+                style={{
+                  flex: 1, padding: '14px 20px', borderRadius: 12,
+                  border: `1px solid ${optionBorder}`, background: 'transparent',
+                  color: textSecondary, fontWeight: 600, fontSize: 15, cursor: 'pointer',
+                }}>
+                {tr('skip')}
+              </button>
+              <button className="continue-btn" onClick={() => goToStep('groups')} style={{
+                flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
+                background: brandGradient,
+                color: tokens.colors.white, fontWeight: 700, fontSize: 15, cursor: 'pointer',
+              }}>
+                {tr('continueButton')}
+              </button>
+            </Box>
+          </div>
+        )}
+
+        {/* Step 4: Join Groups */}
+        {step === 'groups' && (
+          <div key="groups" className="step-content">
+            <Text size="2xl" weight="black" style={{
+              marginBottom: 8, textAlign: 'center',
+              background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>
+              {tr('onboardingGroupTitle')}
+            </Text>
+            <Text style={{ marginBottom: 24, textAlign: 'center', color: textSecondary }}>
+              {tr('onboardingGroupDesc')}
+            </Text>
+
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28, maxHeight: 340, overflowY: 'auto' }}>
+              {loadingGroups ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} style={{ height: 60, borderRadius: 14, background: optionBg }} />
+                ))
+              ) : groups.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: textSecondary, padding: '20px 0' }}>
+                  {language === 'zh' ? '暂无小组' : 'No groups yet'}
+                </Text>
+              ) : (
+                groups.map(g => {
+                  const isJoined = joinedGroups.has(g.id)
+                  const displayName = language === 'zh' ? g.name : (g.name_en || g.name)
+                  return (
+                    <Box key={g.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                      borderRadius: 14, border: `1px solid ${optionBorder}`, background: optionBg,
+                    }}>
+                      {/* Avatar */}
+                      <Box style={{
+                        width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                        background: 'linear-gradient(135deg, rgba(139,111,168,0.3), rgba(212,168,67,0.3))',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 16, fontWeight: 600, color: textPrimary, overflow: 'hidden',
+                      }}>
+                        {g.avatar_url ? (
+                          <img src={g.avatar_url} alt="" style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }} />
+                        ) : (
+                          displayName.charAt(0).toUpperCase()
+                        )}
+                      </Box>
+                      {/* Name + members */}
+                      <Box style={{ flex: 1, minWidth: 0 }}>
+                        <Text size="sm" weight="semibold" style={{
+                          color: textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {displayName}
+                        </Text>
+                        {g.member_count != null && (
+                          <Text size="xs" style={{ color: textSecondary }}>
+                            {g.member_count} {language === 'zh' ? '成员' : 'members'}
+                          </Text>
+                        )}
+                      </Box>
+                      {/* Join button */}
+                      <button className="follow-btn" onClick={() => handleJoinGroup(g.id)}
+                        style={{
+                          background: isJoined ? optionBg : brandGradient,
+                          color: isJoined ? textSecondary : '#fff',
+                          border: isJoined ? `1px solid ${optionBorder}` : 'none',
+                        }}>
+                        {isJoined ? tr('onboardingJoinedBtn') : tr('onboardingJoinBtn')}
+                      </button>
+                    </Box>
+                  )
+                })
+              )}
+            </Box>
+
+            <button className="continue-btn" onClick={saveAndComplete} disabled={saving} style={{
+              width: '100%', padding: '16px 24px', borderRadius: 14, border: 'none',
+              background: saving ? 'rgba(139, 111, 168, 0.2)' : brandGradient,
+              color: tokens.colors.white, fontWeight: 700, fontSize: 16,
+              cursor: saving ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}>
+              {saving && <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
+              {saving ? tr('saving') : tr('continueButton')}
+            </button>
+          </div>
+        )}
+
+        {/* Step 5: Complete */}
         {step === 'complete' && (
           <div key="complete" className="step-content" style={{ textAlign: 'center' }}>
             <Box className="celebration-icon" style={{
@@ -456,18 +662,18 @@ export default function OnboardingPage() {
               background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
-              {tr('setupComplete') || '设置完成！'}
+              {tr('onboardingDoneTitle')}
             </Text>
             <Text style={{ marginBottom: 36, color: textSecondary }}>
-              {tr('welcomeToArena') || '欢迎来到 Arena，开始你的探索之旅'}
+              {tr('onboardingDoneDesc')}
             </Text>
 
-            <button className="continue-btn" onClick={handleGoHome} style={{
+            <button className="continue-btn" onClick={handleGoRankings} style={{
               width: '100%', padding: '16px 24px', borderRadius: 14, border: 'none',
-              background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+              background: brandGradient,
               color: tokens.colors.white, fontWeight: 700, fontSize: 16, cursor: 'pointer',
             }}>
-              {tr('exploreRanking') || '开始探索'}
+              {tr('onboardingGoRankings')}
             </button>
           </div>
         )}
