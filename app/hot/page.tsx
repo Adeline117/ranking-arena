@@ -752,11 +752,11 @@ function HotContent() {
         <ThreeColumnLayout
           leftSidebar={<TopTraders />}
           rightSidebar={
-            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
-              <div style={{ flex: '0 0 33.3%', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 72px)' }}>
+              <div style={{ flexShrink: 0, maxHeight: '35%', overflow: 'auto' }}>
                 <WatchlistMarket />
               </div>
-              <div style={{ flex: '0 0 66.7%', overflow: 'auto' }}>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 <NewsFlash />
               </div>
             </div>

@@ -89,6 +89,10 @@ export function formatDisplayName(name: string): string {
   if (name.startsWith('0x') && name.length > 20) {
     return `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
   }
+  // Long numeric IDs (e.g. Binance source_trader_id)
+  if (/^\d{10,}$/.test(name)) {
+    return `ID ...${name.slice(-6)}`
+  }
   return name
 }
 
