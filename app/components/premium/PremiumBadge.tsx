@@ -225,7 +225,7 @@ export function FeatureTag({ tier, size = 'xs', style }: FeatureTagProps) {
         backgroundColor: config.bgColor,
         borderRadius: sizeConfig.borderRadius,
         color: config.color,
-        fontSize: size === 'xs' ? '9px' : '10px',
+        fontSize: tokens.typography.fontSize.xs,
         fontWeight: 600,
         textTransform: 'uppercase',
         letterSpacing: '0.5px',

@@ -194,7 +194,7 @@ export default function DataSourceTooltip({
                 size="xs"
                 style={{
                   color: statusInfo.color,
-                  fontSize: '9px',
+                  fontSize: tokens.typography.fontSize.xs,
                   fontWeight: 600,
                   lineHeight: 1,
                 }}
@@ -519,7 +519,7 @@ export function DataSourceBadge({
         {exchange?.toUpperCase()}
       </Text>
       {lastUpdated && (
-        <Text size="xs" color="tertiary" style={{ fontSize: '9px' }}>
+        <Text size="xs" color="tertiary" style={{ fontSize: tokens.typography.fontSize.xs }}>
           {formatLastUpdated(lastUpdated, language)}
         </Text>
       )}

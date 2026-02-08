@@ -129,9 +129,9 @@ export default function ContactSupportButton({
   const defaultLabel = label || t('contactSupport')
 
   const sizeStyles = {
-    sm: { padding: '10px 16px', fontSize: '13px', borderRadius: '8px', minHeight: '44px' },
-    md: { padding: '12px 20px', fontSize: '14px', borderRadius: '10px', minHeight: '44px' },
-    lg: { padding: '14px 24px', fontSize: '15px', borderRadius: '12px', minHeight: '48px' },
+    sm: { padding: '10px 16px', fontSize: tokens.typography.fontSize.sm, borderRadius: tokens.radius.md, minHeight: '44px' },
+    md: { padding: '12px 20px', fontSize: tokens.typography.fontSize.base, borderRadius: tokens.radius.lg, minHeight: '44px' },
+    lg: { padding: '14px 24px', fontSize: tokens.typography.fontSize.md, borderRadius: tokens.radius.lg, minHeight: '48px' },
   }
 
   if (variant === 'link') {
