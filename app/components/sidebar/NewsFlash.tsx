@@ -14,6 +14,21 @@ type NewsItem = {
   title_en: string | null
   source: string
   published_at: string
+  category?: 'crypto' | 'macro' | 'defi' | 'regulation' | 'market'
+  importance?: 'breaking' | 'important' | 'normal'
+}
+
+const IMPORTANCE_CONFIG: Record<string, { color: string; label: string; label_en: string }> = {
+  breaking: { color: '#ef4444', label: '突发', label_en: 'Breaking' },
+  important: { color: '#f97316', label: '重要', label_en: 'Important' },
+}
+
+const CATEGORY_CONFIG: Record<string, { color: string; label: string; label_en: string }> = {
+  crypto: { color: '#f59e0b', label: '加密货币', label_en: 'Crypto' },
+  macro: { color: '#3b82f6', label: '宏观经济', label_en: 'Macro' },
+  defi: { color: '#10b981', label: 'DeFi', label_en: 'DeFi' },
+  regulation: { color: '#8b5cf6', label: '监管政策', label_en: 'Regulation' },
+  market: { color: '#06b6d4', label: '市场动态', label_en: 'Market' },
 }
 
 export default function NewsFlash() {
@@ -56,23 +71,49 @@ export default function NewsFlash() {
             {isZh ? '暂无快讯' : 'No news yet'}
           </p>
         ) : (
-          news.map((item, idx) => (
-            <div
-              key={item.id}
-              style={{
-                padding: '10px 4px',
-                borderBottom: idx < news.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
-              }}
-            >
-              <p style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.4, marginBottom: 4 }}>
-                {getTitle(item)}
-              </p>
-              <div style={{ display: 'flex', gap: 8, fontSize: 11, color: tokens.colors.text.secondary }}>
-                <span>{item.source}</span>
-                <span>{formatTimeAgo(item.published_at, language)}</span>
+          news.map((item, idx) => {
+            const impConfig = item.importance && item.importance !== 'normal' ? IMPORTANCE_CONFIG[item.importance] : null
+            const catConfig = item.category ? CATEGORY_CONFIG[item.category] : null
+
+            return (
+              <div
+                key={item.id}
+                style={{
+                  padding: '10px 4px',
+                  borderBottom: idx < news.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+                }}
+              >
+                {/* Importance + Category badges */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {impConfig && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: '#fff',
+                      background: impConfig.color, padding: '1px 6px',
+                      borderRadius: 4, lineHeight: '16px',
+                    }}>
+                      {isZh ? impConfig.label : impConfig.label_en}
+                    </span>
+                  )}
+                  {catConfig && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, color: catConfig.color,
+                      background: `${catConfig.color}15`, padding: '1px 6px',
+                      borderRadius: 4, lineHeight: '16px',
+                    }}>
+                      {isZh ? catConfig.label : catConfig.label_en}
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.4, marginBottom: 4 }}>
+                  {getTitle(item)}
+                </p>
+                <div style={{ display: 'flex', gap: 8, fontSize: 11, color: tokens.colors.text.secondary }}>
+                  <span>{item.source}</span>
+                  <span>{formatTimeAgo(item.published_at, language)}</span>
+                </div>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
       <Link

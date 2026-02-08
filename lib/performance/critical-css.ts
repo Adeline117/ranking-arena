@@ -141,6 +141,10 @@ img{display:block;max-width:100%;height:auto}
 video{display:block;max-width:100%}
 iframe{display:block;max-width:100%}
 
+/* CSS Containment for rendering performance */
+.trader-card-contained{contain:layout style paint}
+.sidebar-contained{contain:layout style}
+
 /* 预留空间 - 防止字体加载导致的CLS */
 .font-loading body{letter-spacing:-0.011em}
 
@@ -216,6 +220,10 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
     // Supabase -- API calls on every page (rankings, auth, etc.)
     { rel: 'preconnect', href: supabaseUrl, crossOrigin: 'anonymous' },
     { rel: 'dns-prefetch', href: supabaseUrl },
+    // Trader avatar CDNs -- dns-prefetch for faster avatar loading
+    { rel: 'dns-prefetch', href: 'https://bin.bnbstatic.com' },
+    { rel: 'dns-prefetch', href: 'https://static.bitget.com' },
+    { rel: 'dns-prefetch', href: 'https://www.okx.com' },
   ]
 
   // Upstash Redis -- server-side cache, add dns-prefetch only (not fetched from browser)

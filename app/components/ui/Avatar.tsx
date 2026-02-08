@@ -90,6 +90,7 @@ export default function Avatar({
             alt={name || userId || 'Avatar'}
             width={size}
             height={size}
+            sizes={`${size}px`}
             unoptimized={finalAvatarUrl.includes('bgstatic.com')}
             style={{
               width: '100%',

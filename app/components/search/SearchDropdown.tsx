@@ -418,6 +418,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         borderRadius: tokens.radius.md,
         maxHeight: 600,
         overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
         zIndex: tokens.zIndex.dropdown,
         boxShadow: tokens.shadow.md,
       }}

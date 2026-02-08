@@ -417,6 +417,7 @@ export default function TraderHeader({
                 alt={handle}
                 width={72}
                 height={72}
+                sizes="72px"
                 priority
                 style={{
                   width: '100%',

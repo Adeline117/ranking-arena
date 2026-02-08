@@ -258,9 +258,13 @@ const nextConfig: NextConfig = {
       'otpauth',
       'lightweight-charts',
       '@tanstack/react-query',
-      'wagmi',
-      'viem',
       'ethers',
+      'viem',
+      '@rainbow-me/rainbowkit',
+      'wagmi',
+      'stripe',
+      '@coinbase/wallet-sdk',
+      '@metamask/sdk',
     ],
 
     // Enable optimized CSS loading
@@ -268,6 +272,13 @@ const nextConfig: NextConfig = {
 
     // Optimize font loading
     optimizeServerReact: true,
+
+    // Client-side router cache — keep prefetched pages fresh longer
+    // Reduces redundant server requests on back/forward navigation
+    staleTimes: {
+      dynamic: 60,   // Cache dynamic pages for 60s on client
+      static: 300,   // Cache static pages for 5min on client
+    },
   },
   
   // 生产环境不生成 source maps（减少构建大小）
