@@ -32,6 +32,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 // RSS 数据源配置
 const RSS_SOURCES = [
+  // ─── Major Crypto Media (English) ───
   {
     name: 'CoinDesk',
     url: 'https://www.coindesk.com/arc/outboundfeeds/rss/',
@@ -48,15 +49,43 @@ const RSS_SOURCES = [
   },
   {
     name: 'The Block',
-    url: 'https://www.theblock.co/rss/all',
+    url: 'https://www.theblock.co/rss.xml',
     category: 'crypto',
     language: 'en',
     importance: 'important',
   },
   {
-    name: 'DeFiPulse',
-    url: 'https://defipulse.com/blog/feed/',
-    category: 'defi',
+    name: 'Decrypt',
+    url: 'https://decrypt.co/feed',
+    category: 'crypto',
+    language: 'en',
+    importance: 'important',
+  },
+  {
+    name: 'DL News',
+    url: 'https://www.dlnews.com/arc/outboundfeeds/rss/',
+    category: 'crypto',
+    language: 'en',
+    importance: 'important',
+  },
+  {
+    name: 'CryptoSlate',
+    url: 'https://cryptoslate.com/feed/',
+    category: 'crypto',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'CryptoBriefing',
+    url: 'https://cryptobriefing.com/feed/',
+    category: 'crypto',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Bitcoin Magazine',
+    url: 'https://bitcoinmagazine.com/.rss/full/',
+    category: 'crypto',
     language: 'en',
     importance: 'normal',
   },
@@ -67,22 +96,7 @@ const RSS_SOURCES = [
     language: 'en',
     importance: 'normal',
   },
-  // ─── Macro sources ───
-  {
-    name: 'Bloomberg Crypto',
-    url: 'https://www.bloomberg.com/crypto/feed',
-    category: 'macro',
-    language: 'en',
-    importance: 'important',
-  },
-  {
-    name: 'Reuters Fintech',
-    url: 'https://www.reutersagency.com/feed/?best-topics=tech',
-    category: 'macro',
-    language: 'en',
-    importance: 'important',
-  },
-  // ─── DeFi sources ───
+  // ─── DeFi & Protocol Sources ───
   {
     name: 'DeFi Llama',
     url: 'https://defillama.com/rss',
@@ -97,7 +111,128 @@ const RSS_SOURCES = [
     language: 'en',
     importance: 'normal',
   },
-  // ─── Regulation sources ───
+  {
+    name: 'Ethereum Blog',
+    url: 'https://blog.ethereum.org/feed.xml',
+    category: 'defi',
+    language: 'en',
+    importance: 'important',
+  },
+  {
+    name: 'Uniswap Blog',
+    url: 'https://blog.uniswap.org/rss.xml',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Chainlink Blog',
+    url: 'https://blog.chain.link/rss/',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Compound Finance',
+    url: 'https://medium.com/feed/compound-finance',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Aave',
+    url: 'https://aave.mirror.xyz/feed/atom',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'MakerDAO Blog',
+    url: 'https://blog.makerdao.com/feed',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Arbitrum (Offchain Labs)',
+    url: 'https://medium.com/feed/offchainlabs',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Celestia Blog',
+    url: 'https://blog.celestia.org/rss/',
+    category: 'defi',
+    language: 'en',
+    importance: 'normal',
+  },
+  // ─── Exchange & Trading Sources ───
+  {
+    name: 'Kraken Blog',
+    url: 'https://blog.kraken.com/feed/',
+    category: 'market',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'BitMEX Blog',
+    url: 'https://blog.bitmex.com/feed/',
+    category: 'market',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Crypto.com Blog',
+    url: 'https://blog.crypto.com/rss/',
+    category: 'market',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'Deribit Insights',
+    url: 'https://blog.deribit.com/feed/',
+    category: 'market',
+    language: 'en',
+    importance: 'normal',
+  },
+  // ─── Research & VCs ───
+  {
+    name: 'a16z Crypto',
+    url: 'https://a16zcrypto.com/feed/',
+    category: 'crypto',
+    language: 'en',
+    importance: 'important',
+  },
+  {
+    name: 'Paradigm Research',
+    url: 'https://www.paradigm.xyz/feed.xml',
+    category: 'crypto',
+    language: 'en',
+    importance: 'important',
+  },
+  {
+    name: 'Messari',
+    url: 'https://messari.io/rss',
+    category: 'crypto',
+    language: 'en',
+    importance: 'important',
+  },
+  // ─── Macro & Regulation Sources ───
+  {
+    name: 'Bloomberg Crypto',
+    url: 'https://www.bloomberg.com/crypto/feed',
+    category: 'macro',
+    language: 'en',
+    importance: 'important',
+  },
+  {
+    name: 'Reuters Fintech',
+    url: 'https://www.reutersagency.com/feed/?best-topics=tech',
+    category: 'macro',
+    language: 'en',
+    importance: 'important',
+  },
   {
     name: 'SEC Press Releases',
     url: 'https://www.sec.gov/rss/news/press.xml',
@@ -111,6 +246,42 @@ const RSS_SOURCES = [
     category: 'regulation',
     language: 'en',
     importance: 'important',
+  },
+  {
+    name: 'Coin Center',
+    url: 'https://www.coincenter.org/feed',
+    category: 'regulation',
+    language: 'en',
+    importance: 'normal',
+  },
+  // ─── Chinese Crypto Media ───
+  {
+    name: 'Bitfinex Blog (Chinese)',
+    url: 'http://blog.bitfinex.com/feed/',
+    category: 'crypto',
+    language: 'en',
+    importance: 'normal',
+  },
+  {
+    name: 'BitMEX Blog (Chinese)',
+    url: 'https://blog.bitmex.com/feed/?lang=zh_CN',
+    category: 'crypto',
+    language: 'zh',
+    importance: 'normal',
+  },
+  {
+    name: 'ChainFeeds',
+    url: 'http://mirror.xyz/chainfeeds.eth/feed/atom',
+    category: 'crypto',
+    language: 'zh',
+    importance: 'normal',
+  },
+  {
+    name: 'Mask Network (Chinese)',
+    url: 'https://news.mask.io/zh-Hans/rss-feed.xml',
+    category: 'crypto',
+    language: 'zh',
+    importance: 'normal',
   },
 ]
 
@@ -373,12 +544,15 @@ function processNewsItem(item, source) {
     // 判断重要性
     const importance = determineImportance(title, content)
     
+    // For Chinese-language sources, set title_zh directly
+    const isChineseSource = source.language === 'zh'
+    
     return {
       title: title,
-      title_zh: null, // Will be translated via GPT in batch
-      title_en: title,
+      title_zh: isChineseSource ? title : null, // Chinese sources already have Chinese titles
+      title_en: isChineseSource ? null : title,  // Will be translated via GPT in batch
       content: content || null,
-      content_zh: null, // Will be translated via GPT in batch
+      content_zh: isChineseSource ? (content || null) : null, // Will be translated via GPT in batch
       source: source.name,
       source_url: link || null,
       category: source.category,
@@ -478,36 +652,41 @@ async function main() {
         continue
       }
       
-      // 批量翻译标题到中文
-      try {
-        const titles = newsItems.map(item => item.title)
-        const translations = await translateTitlesBatch(titles)
-        for (let i = 0; i < newsItems.length; i++) {
-          if (translations[i]) {
-            newsItems[i].title_zh = translations[i]
-          }
-        }
-        console.log(`${source.name}: 翻译了 ${translations.filter(Boolean).length} 条标题`)
-      } catch (err) {
-        console.error(`${source.name}: 标题批量翻译失败:`, err.message)
-      }
-      
-      // 批量翻译内容到中文
-      try {
-        const contents = newsItems.map(item => item.content).filter(Boolean)
-        if (contents.length > 0) {
-          const contentTranslations = await translateContentBatch(contents)
-          let ci = 0
+      // Skip translation for Chinese-language sources (already in Chinese)
+      if (source.language !== 'zh') {
+        // 批量翻译标题到中文
+        try {
+          const titles = newsItems.map(item => item.title)
+          const translations = await translateTitlesBatch(titles)
           for (let i = 0; i < newsItems.length; i++) {
-            if (newsItems[i].content && contentTranslations[ci]) {
-              newsItems[i].content_zh = contentTranslations[ci]
+            if (translations[i]) {
+              newsItems[i].title_zh = translations[i]
             }
-            if (newsItems[i].content) ci++
           }
-          console.log(`${source.name}: 翻译了 ${contentTranslations.filter(Boolean).length} 条内容`)
+          console.log(`${source.name}: 翻译了 ${translations.filter(Boolean).length} 条标题`)
+        } catch (err) {
+          console.error(`${source.name}: 标题批量翻译失败:`, err.message)
         }
-      } catch (err) {
-        console.error(`${source.name}: 内容批量翻译失败:`, err.message)
+        
+        // 批量翻译内容到中文
+        try {
+          const contents = newsItems.map(item => item.content).filter(Boolean)
+          if (contents.length > 0) {
+            const contentTranslations = await translateContentBatch(contents)
+            let ci = 0
+            for (let i = 0; i < newsItems.length; i++) {
+              if (newsItems[i].content && contentTranslations[ci]) {
+                newsItems[i].content_zh = contentTranslations[ci]
+              }
+              if (newsItems[i].content) ci++
+            }
+            console.log(`${source.name}: 翻译了 ${contentTranslations.filter(Boolean).length} 条内容`)
+          }
+        } catch (err) {
+          console.error(`${source.name}: 内容批量翻译失败:`, err.message)
+        }
+      } else {
+        console.log(`${source.name}: 中文源，跳过翻译`)
       }
       
       // 保存到数据库
