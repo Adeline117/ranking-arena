@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 interface ActionProps {
   icon?: React.ReactNode
@@ -42,7 +43,7 @@ export function Action({
       style={{
         border: 'none',
         background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
-        color: active ? '#8b6fa8' : '#a9a9a9',
+        color: active ? tokens.colors.accent.brand : '#a9a9a9',
         cursor: 'pointer',
         padding: '6px 12px',
         fontSize: 13,

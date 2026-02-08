@@ -92,7 +92,7 @@ function ActivityLogSection({ groupId }: { groupId: string }) {
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
       {activities.map(activity => (
-        <Box key={activity.id} style={{ padding: tokens.spacing[2], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.md, borderLeft: `3px solid ${tokens.colors.accent?.primary || '#8b6fa8'}` }}>
+        <Box key={activity.id} style={{ padding: tokens.spacing[2], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.md, borderLeft: `3px solid ${tokens.colors.accent?.primary || tokens.colors.accent.brand}` }}>
           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text size="sm" weight="bold">{activity.title}</Text>
             <Text size="xs" color="tertiary">{new Date(activity.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</Text>
@@ -785,7 +785,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         <TopNav email={email} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
           <Text color="tertiary">{t('noManagePermission')}</Text>
-          <Link href={`/groups/${groupId}`} style={{ color: '#8b6fa8', marginTop: tokens.spacing[4], display: 'inline-block' }}>
+          <Link href={`/groups/${groupId}`} style={{ color: tokens.colors.accent.brand, marginTop: tokens.spacing[4], display: 'inline-block' }}>
             ← {t('backToGroup')}
           </Link>
         </Box>
@@ -839,8 +839,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                 borderRadius: tokens.radius.lg,
                 border: 'none',
                 cursor: 'pointer',
-                background: activeTab === 'activity' ? `${tokens.colors.accent?.primary || '#8b6fa8'}20` : 'transparent',
-                color: activeTab === 'activity' ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
+                background: activeTab === 'activity' ? `${tokens.colors.accent?.primary || tokens.colors.accent.brand}20` : 'transparent',
+                color: activeTab === 'activity' ? tokens.colors.accent?.primary || tokens.colors.accent.brand : tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: activeTab === 'activity' ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
                 transition: `all ${tokens.transition.base}`,
@@ -1204,14 +1204,14 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                       background: post.deleted_at
                         ? 'rgba(255, 107, 107, 0.1)'
                         : post.is_pinned
-                          ? `linear-gradient(135deg, ${tokens.colors.accent?.primary || '#8b6fa8'}15 0%, ${tokens.colors.bg.secondary} 100%)`
+                          ? `linear-gradient(135deg, ${tokens.colors.accent?.primary || tokens.colors.accent.brand}15 0%, ${tokens.colors.bg.secondary} 100%)`
                           : tokens.colors.bg.secondary,
                       borderRadius: tokens.radius.lg,
                       border: `1px solid ${
                         post.deleted_at
                           ? 'rgba(255, 107, 107, 0.3)'
                           : post.is_pinned
-                            ? `${tokens.colors.accent?.primary || '#8b6fa8'}50`
+                            ? `${tokens.colors.accent?.primary || tokens.colors.accent.brand}50`
                             : tokens.colors.border.primary
                       }`,
                     }}
@@ -1225,8 +1225,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                                 fontSize: tokens.typography.fontSize.xs,
                                 padding: `2px ${tokens.spacing[2]}`,
                                 borderRadius: tokens.radius.full,
-                                background: `${tokens.colors.accent?.primary || '#8b6fa8'}20`,
-                                color: tokens.colors.accent?.primary || '#8b6fa8',
+                                background: `${tokens.colors.accent?.primary || tokens.colors.accent.brand}20`,
+                                color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
                                 fontWeight: tokens.typography.fontWeight.bold,
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -1257,7 +1257,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                             onClick={() => handlePinPost(post.id)}
                             disabled={pinningPost === post.id}
                             style={{
-                              color: post.is_pinned ? tokens.colors.accent?.primary || '#8b6fa8' : tokens.colors.text.secondary,
+                              color: post.is_pinned ? tokens.colors.accent?.primary || tokens.colors.accent.brand : tokens.colors.text.secondary,
                             }}
                           >
                             {pinningPost === post.id
@@ -1389,7 +1389,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                       type="button"
                       style={{
                         ...langTabStyle(false),
-                        color: tokens.colors.accent?.primary || '#8b6fa8',
+                        color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
                         border: 'none',
                       }}
                       onClick={() => {

@@ -177,7 +177,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--tab-indicator-color, #8b6fa8);
+  background: var(--tab-indicator-color, var(--color-brand));
   transform: scaleX(0);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -260,7 +260,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, #8b6fa8, #6b4f88);
+  background: linear-gradient(180deg, var(--color-brand), #6b4f88);
   transform: scaleY(0);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }

@@ -439,7 +439,7 @@ function SearchContent() {
   const getIconStyle = (type: string): { bg: string; color: string; radius: string } => {
     switch (type) {
       case 'user':
-        return { bg: 'rgba(139, 111, 168, 0.15)', color: '#8b6fa8', radius: tokens.radius.full }
+        return { bg: 'rgba(139, 111, 168, 0.15)', color: tokens.colors.accent.brand, radius: tokens.radius.full }
       case 'trader':
         return { bg: tokens.gradient.successSubtle, color: tokens.colors.accent.success, radius: tokens.radius.full }
       case 'post':

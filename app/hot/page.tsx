@@ -24,7 +24,7 @@ import { renderContentWithLinks } from '@/lib/utils/content'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 // Use design token for brand color
-const ARENA_PURPLE = tokens.colors.accent.brand
+const ARENA_PURPLE = 'var(--color-brand)'
 
 // 本地 Trader 类型
 type Trader = {
@@ -743,7 +743,7 @@ function HotContent() {
   }, [accessToken, openPost?.id, showToast, t])
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
       <TopNav email={email} />
 
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
@@ -784,23 +784,23 @@ function HotContent() {
                       background: activeHotTab === tab.value ? tokens.gradient.primary : tokens.glass.bg.light,
                       backdropFilter: tokens.glass.blur.sm,
                       WebkitBackdropFilter: tokens.glass.blur.sm,
-                      color: activeHotTab === tab.value ? '#fff' : tokens.colors.text.secondary,
+                      color: activeHotTab === tab.value ? '#fff' : 'var(--color-text-secondary)',
                       fontWeight: activeHotTab === tab.value ? 900 : 600,
                       fontSize: '12px',
                       cursor: 'pointer',
                       transition: tokens.transition.all,
-                      boxShadow: activeHotTab === tab.value ? `0 4px 12px ${tokens.colors.accent.primary}40` : 'none',
+                      boxShadow: activeHotTab === tab.value ? `0 4px 12px ${'var(--color-accent-primary)'}40` : 'none',
                     }}
                     onMouseEnter={(e) => {
                       if (activeHotTab !== tab.value) {
                         e.currentTarget.style.background = tokens.glass.bg.medium
-                        e.currentTarget.style.color = tokens.colors.text.primary
+                        e.currentTarget.style.color = 'var(--color-text-primary)'
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (activeHotTab !== tab.value) {
                         e.currentTarget.style.background = tokens.glass.bg.light
-                        e.currentTarget.style.color = tokens.colors.text.secondary
+                        e.currentTarget.style.color = 'var(--color-text-secondary)'
                       }
                     }}
                   >
@@ -861,8 +861,8 @@ function HotContent() {
                               cursor: 'pointer',
                               padding: '12px 14px',
                               borderRadius: tokens.radius.md,
-                              background: tokens.colors.bg.secondary,
-                              border: `1px solid ${tokens.colors.border.primary}`,
+                              background: 'var(--color-bg-secondary)',
+                              border: `1px solid ${'var(--color-border-primary)'}`,
                               boxShadow: 'none',
                               transition: `all 0.2s ease`,
                             }}
@@ -877,14 +877,14 @@ function HotContent() {
                             }}
                             onMouseLeave={(e) => {
                               e.currentTarget.style.boxShadow = tokens.shadow.sm
-                              e.currentTarget.style.borderColor = tokens.colors.border.primary
+                              e.currentTarget.style.borderColor = 'var(--color-border-primary)'
                               e.currentTarget.style.transform = 'translateY(0)'
                             }}
                           >
                             {/* Top row: rank + badges + group */}
                             <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap', alignItems: 'center' }}>
                               <Text className="hot-post-rank" size="sm" weight="black" style={{
-                                color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
+                                color: rank <= 3 ? tokens.colors.accent.warning : 'var(--color-text-tertiary)',
                                 fontSize: rank <= 3 ? '15px' : '13px',
                                 minWidth: 28,
                               }}>
@@ -926,7 +926,7 @@ function HotContent() {
                                   {language === 'zh' ? p.group : (p.group_en || p.group)}
                                 </Link>
                               ) : (
-                                <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `${tokens.colors.text.tertiary}10`, borderRadius: 999 }}>
+                                <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `${'var(--color-text-tertiary)'}10`, borderRadius: 999 }}>
                                   {language === 'zh' ? p.group : (p.group_en || p.group)}
                                 </Text>
                               )}
@@ -966,7 +966,7 @@ function HotContent() {
                                     marginBottom: tokens.spacing[1],
                                     lineHeight: 1.5,
                                     fontSize: '12px',
-                                    color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : tokens.colors.text.secondary,
+                                    color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : 'var(--color-text-secondary)',
                                   }}>
                                     {renderContentWithLinks(contentToShow)}
                                   </Text>
@@ -999,7 +999,7 @@ function HotContent() {
                               display: 'flex',
                               gap: tokens.spacing[2],
                               fontSize: '11px',
-                              color: tokens.colors.text.tertiary,
+                              color: 'var(--color-text-tertiary)',
                               flexWrap: 'wrap',
                               alignItems: 'center',
                               marginTop: tokens.spacing[1],
@@ -1012,7 +1012,7 @@ function HotContent() {
                                   onClick={(e) => e.stopPropagation()}
                                   style={{
                                     fontSize: tokens.typography.fontSize.xs,
-                                    color: tokens.colors.text.secondary,
+                                    color: 'var(--color-text-secondary)',
                                     textDecoration: 'none',
                                     fontWeight: 700,
                                   }}
@@ -1023,10 +1023,10 @@ function HotContent() {
                                 <Text size="xs" color="tertiary">{p.author}</Text>
                               )}
                               <Text size="xs" color="tertiary">{p.time}</Text>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: tokens.colors.text.tertiary }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
                                 <CommentIcon size={12} /> {p.comments}
                               </span>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: tokens.colors.text.tertiary }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
                                 <ThumbsUpIcon size={12} /> {p.likes}
                               </span>
                               <Text size="xs" color="tertiary" style={{ marginLeft: 'auto' }}>
@@ -1048,15 +1048,15 @@ function HotContent() {
                                 style={{
                                   padding: tokens.spacing[4],
                                   borderRadius: tokens.radius.lg,
-                                  background: tokens.colors.bg.secondary,
-                                  border: `1px solid ${tokens.colors.border.primary}`,
+                                  background: 'var(--color-bg-secondary)',
+                                  border: `1px solid ${'var(--color-border-primary)'}`,
                                   filter: 'blur(6px)',
                                   pointerEvents: 'none',
                                   opacity: 0.5,
                                 }}
                               >
                                 <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap', alignItems: 'center' }}>
-                                  <Text size="sm" weight="black" style={{ color: tokens.colors.text.secondary }}>
+                                  <Text size="sm" weight="black" style={{ color: 'var(--color-text-secondary)' }}>
                                     #{rank}
                                   </Text>
                                   <Text size="xs" color="secondary">{language === 'zh' ? p.group : (p.group_en || p.group)}</Text>
@@ -1068,7 +1068,7 @@ function HotContent() {
                                 <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}>
                                   {p.body.slice(0, 100)}...
                                 </Text>
-                                <Box style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+                                <Box style={{ display: 'flex', gap: tokens.spacing[3], fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)' }}>
                                   <Text size="xs" color="tertiary">{p.author}</Text>
                                   <Text size="xs" color="tertiary">{p.time}</Text>
                                 </Box>
@@ -1133,8 +1133,8 @@ function HotContent() {
                           style={{
                             padding: '10px 14px',
                             borderRadius: tokens.radius.md,
-                            background: tokens.colors.bg.secondary,
-                            border: `1px solid ${tokens.colors.border.primary}`,
+                            background: 'var(--color-bg-secondary)',
+                            border: `1px solid ${'var(--color-border-primary)'}`,
                             boxShadow: 'none',
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
@@ -1147,13 +1147,13 @@ function HotContent() {
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.boxShadow = tokens.shadow.sm
-                            e.currentTarget.style.borderColor = tokens.colors.border.primary
+                            e.currentTarget.style.borderColor = 'var(--color-border-primary)'
                             e.currentTarget.style.transform = 'translateY(0)'
                           }}
                         >
                           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                              <Text size="sm" weight="black" style={{ color: idx < 3 ? tokens.colors.accent.warning : tokens.colors.text.secondary }}>
+                              <Text size="sm" weight="black" style={{ color: idx < 3 ? tokens.colors.accent.warning : 'var(--color-text-secondary)' }}>
                                 #{idx + 1}
                               </Text>
                               <Text size="base" weight="bold">
@@ -1183,10 +1183,11 @@ function HotContent() {
           role="dialog"
           aria-modal="true"
           aria-label={openPost.title}
+          className="post-modal-overlay"
           style={{
             position: 'fixed',
             inset: 0,
-            background: tokens.colors.overlay.dark,
+            background: 'var(--color-blur-overlay)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1196,13 +1197,14 @@ function HotContent() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
+            className="post-modal-content"
             style={{
               width: 'min(760px, 100%)',
               maxHeight: '90vh',
               overflowY: 'auto',
-              border: `1px solid ${tokens.colors.border.primary}`,
+              border: `1px solid ${'var(--color-border-primary)'}`,
               borderRadius: 16,
-              background: tokens.colors.bg.secondary,
+              background: 'var(--color-bg-secondary)',
               padding: 16,
             }}
           >
@@ -1213,7 +1215,7 @@ function HotContent() {
                 style={{
                   border: 'none',
                   background: 'transparent',
-                  color: tokens.colors.text.secondary,
+                  color: 'var(--color-text-secondary)',
                   cursor: 'pointer',
                   fontSize: 20,
                   width: 44,
@@ -1256,12 +1258,12 @@ function HotContent() {
             </div>
 
             {/* Author - clickable link */}
-            <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
               {openPost.author_handle ? (
                 <Link
                   href={`/u/${encodeURIComponent(openPost.author_handle)}`}
                   style={{
-                    color: tokens.colors.text.secondary,
+                    color: 'var(--color-text-secondary)',
                     textDecoration: 'none',
                     fontWeight: 700,
                   }}
@@ -1278,7 +1280,7 @@ function HotContent() {
               <span>{openPost.comments}</span>
             </div>
 
-            <div translate="no" style={{ marginTop: 12, fontSize: 14, color: tokens.colors.text.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+            <div translate="no" style={{ marginTop: 12, fontSize: 14, color: 'var(--color-text-primary)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
               {showingOriginal
                 ? renderContentWithLinks(openPost.body || '')
                 : renderContentWithLinks(translatedContent || openPost.body || '')
@@ -1295,10 +1297,10 @@ function HotContent() {
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    border: `1px solid ${tokens.colors.border.primary}`,
+                    border: `1px solid ${'var(--color-border-primary)'}`,
                     borderRadius: 6,
-                    background: tokens.colors.bg.tertiary,
-                    color: tokens.colors.text.secondary,
+                    background: 'var(--color-bg-tertiary)',
+                    color: 'var(--color-text-secondary)',
                     cursor: translating ? 'wait' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -1314,14 +1316,14 @@ function HotContent() {
                   )}
                 </button>
                 {!showingOriginal && (
-                  <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                     {t('translatedByAI')}
                   </span>
                 )}
               </div>
             )}
 
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.colors.border.secondary}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${'var(--color-border-secondary)'}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
               <button
                 onClick={() => toggleReaction(openPost.id, 'up')}
                 style={{
@@ -1331,8 +1333,8 @@ function HotContent() {
                   padding: '6px 12px',
                   border: 'none',
                   borderRadius: 8,
-                  background: openPost.user_reaction === 'up' ? `${tokens.colors.accent.success}20` : tokens.colors.bg.tertiary,
-                  color: openPost.user_reaction === 'up' ? tokens.colors.accent.success : tokens.colors.text.secondary,
+                  background: openPost.user_reaction === 'up' ? `${'var(--color-accent-success)'}20` : 'var(--color-bg-tertiary)',
+                  color: openPost.user_reaction === 'up' ? 'var(--color-accent-success)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
                   fontSize: 13,
                   fontWeight: 600,
@@ -1349,8 +1351,8 @@ function HotContent() {
                   padding: '6px 12px',
                   border: 'none',
                   borderRadius: 8,
-                  background: openPost.user_reaction === 'down' ? `${tokens.colors.accent.error}20` : tokens.colors.bg.tertiary,
-                  color: openPost.user_reaction === 'down' ? tokens.colors.accent.error : tokens.colors.text.secondary,
+                  background: openPost.user_reaction === 'down' ? `${'var(--color-accent-error)'}20` : 'var(--color-bg-tertiary)',
+                  color: openPost.user_reaction === 'down' ? 'var(--color-accent-error)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
                   fontSize: 13,
                   fontWeight: 600,
@@ -1361,7 +1363,7 @@ function HotContent() {
             </div>
 
             {/* 评论区 */}
-            <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.colors.border.secondary}`, paddingTop: 16 }}>
+            <div style={{ marginTop: 16, borderTop: `1px solid ${'var(--color-border-secondary)'}`, paddingTop: 16 }}>
               <div style={{ fontWeight: 950, marginBottom: 12 }}>
                 {t('comments')} ({openPost.comments})
               </div>
@@ -1378,9 +1380,9 @@ function HotContent() {
                     minHeight: 80,
                     padding: 12,
                     borderRadius: 8,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: tokens.colors.bg.primary,
-                    color: tokens.colors.text.primary,
+                    border: `1px solid ${'var(--color-border-primary)'}`,
+                    background: 'var(--color-bg-primary)',
+                    color: 'var(--color-text-primary)',
                     fontSize: 14,
                     resize: 'vertical',
                     outline: 'none',
@@ -1409,9 +1411,9 @@ function HotContent() {
 
               {/* 评论列表 */}
               {loadingComments ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('loadingComments')}</div>
+                <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>{t('loadingComments')}</div>
               ) : comments.length === 0 ? (
-                <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('noCommentsYet')}</div>
+                <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>{t('noCommentsYet')}</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {comments.filter(Boolean).map((comment) => (
@@ -1419,9 +1421,9 @@ function HotContent() {
                       key={comment.id}
                       style={{
                         padding: 12,
-                        background: tokens.colors.bg.primary,
+                        background: 'var(--color-bg-primary)',
                         borderRadius: 8,
-                        border: `1px solid ${tokens.colors.border.primary}`,
+                        border: `1px solid ${'var(--color-border-primary)'}`,
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1431,22 +1433,22 @@ function HotContent() {
                             style={{
                               fontSize: 12,
                               fontWeight: 700,
-                              color: tokens.colors.text.secondary,
+                              color: 'var(--color-text-secondary)',
                               textDecoration: 'none',
                             }}
                           >
                             @{comment.author_handle}
                           </Link>
                         ) : (
-                          <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-secondary)' }}>
                             {'user'}
                           </span>
                         )}
-                        <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                           {formatTimeAgo(comment.created_at)}
                         </span>
                       </div>
-                      <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
+                      <div translate="no" style={{ fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.6 }}>
                         {renderContentWithLinks(comment.content || '')}
                       </div>
                     </div>
@@ -1460,9 +1462,9 @@ function HotContent() {
                       style={{
                         padding: '10px 16px',
                         background: 'transparent',
-                        border: `1px solid ${tokens.colors.border.primary}`,
+                        border: `1px solid ${'var(--color-border-primary)'}`,
                         borderRadius: 8,
-                        color: tokens.colors.text.secondary,
+                        color: 'var(--color-text-secondary)',
                         fontSize: 13,
                         fontWeight: 600,
                         cursor: loadingMoreComments ? 'not-allowed' : 'pointer',
@@ -1473,13 +1475,13 @@ function HotContent() {
                       }}
                       onMouseEnter={(e) => {
                         if (!loadingMoreComments) {
-                          e.currentTarget.style.borderColor = tokens.colors.accent.primary
-                          e.currentTarget.style.color = tokens.colors.accent.primary
+                          e.currentTarget.style.borderColor = 'var(--color-accent-primary)'
+                          e.currentTarget.style.color = 'var(--color-accent-primary)'
                         }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = tokens.colors.border.primary
-                        e.currentTarget.style.color = tokens.colors.text.secondary
+                        e.currentTarget.style.borderColor = 'var(--color-border-primary)'
+                        e.currentTarget.style.color = 'var(--color-text-secondary)'
                       }}
                     >
                       {loadingMoreComments ? t('loading') : t('loadMoreComments')}
@@ -1499,7 +1501,7 @@ function HotContent() {
 export default function HotPage() {
   return (
     <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <RankingSkeleton />

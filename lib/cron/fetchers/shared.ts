@@ -247,3 +247,27 @@ export function normalizeWinRate(wr: number | null): number | null {
   if (wr == null) return null
   return wr <= 1 ? wr * 100 : wr
 }
+
+/**
+ * 归一化ROI值，统一各平台的小数/百分比格式差异
+ * 输出：百分比形式（如 50 表示 50%）
+ *
+ * 各平台差异：
+ * - binance/bybit/okx: 已经是百分比形式（50 = 50%）
+ * - hyperliquid/dydx/drift: 小数形式（0.5 = 50%）
+ * - gmx/gains/vertex: 小数形式（0.5 = 50%）
+ */
+const DECIMAL_ROI_PLATFORMS = new Set([
+  'hyperliquid', 'dydx', 'drift', 'gmx', 'gains', 'vertex',
+  'kwenta', 'synthetix', 'mux', 'jupiter-perps', 'aevo',
+])
+
+export function normalizeROI(rawRoi: number | null, platform: string): number | null {
+  if (rawRoi == null) return null
+  if (DECIMAL_ROI_PLATFORMS.has(platform)) {
+    // 小数形式 -> 百分比（0.5 -> 50）
+    // 安全检查：如果值已经大于10，可能已经是百分比
+    return Math.abs(rawRoi) < 10 ? rawRoi * 100 : rawRoi
+  }
+  return rawRoi
+}

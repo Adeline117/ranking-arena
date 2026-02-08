@@ -286,12 +286,23 @@ function GroupsWaterfall() {
   )
 }
 
+type GroupsView = 'feed' | 'discover'
+
 function GroupsContent() {
   const [email, setEmail] = useState<string | null>(null)
   const { language } = useLanguage()
+  const searchParams = useSearchParams()
+  const [activeView, setActiveView] = useState<GroupsView>(
+    searchParams.get('view') === 'discover' ? 'discover' : 'feed'
+  )
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
   }, [])
+
+  const viewTabs: { key: GroupsView; label: string }[] = [
+    { key: 'feed', label: language === 'zh' ? '动态' : 'Feed' },
+    { key: 'discover', label: language === 'zh' ? '发现小组' : 'Discover' },
+  ]
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
@@ -320,14 +331,50 @@ function GroupsContent() {
             </div>
           }
         >
-          {/* Main content: Post feed with tabs */}
-          <HomePageWithSubNav
-            recommendedContent={
-              <Suspense fallback={<RankingSkeleton />}>
-                <PostFeed sortBy="hot_score" layout="masonry" />
-              </Suspense>
-            }
-          />
+          {/* 视图切换: 动态 / 发现小组 */}
+          <div style={{
+            display: 'flex',
+            gap: 4,
+            marginBottom: 16,
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+            paddingBottom: 0,
+          }}>
+            {viewTabs.map(tab => {
+              const isActive = activeView === tab.key
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveView(tab.key)}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: 14,
+                    fontWeight: isActive ? 600 : 400,
+                    color: isActive ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: isActive ? `2px solid ${tokens.colors.accent.brand}` : '2px solid transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    marginBottom: -1,
+                  }}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {activeView === 'feed' ? (
+            <HomePageWithSubNav
+              recommendedContent={
+                <Suspense fallback={<RankingSkeleton />}>
+                  <PostFeed sortBy="hot_score" layout="masonry" />
+                </Suspense>
+              }
+            />
+          ) : (
+            <GroupsWaterfall />
+          )}
         </ThreeColumnLayout>
       </Box>
     </Box>

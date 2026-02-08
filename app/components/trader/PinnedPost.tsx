@@ -116,7 +116,7 @@ export default function PinnedPost({ item }: PinnedPostProps) {
               display: 'block',
               marginTop: tokens.spacing[2],
               fontSize: tokens.typography.fontSize.xs,
-              color: '#8b6fa8',
+              color: tokens.colors.accent.brand,
               textDecoration: 'none',
             }}
           >

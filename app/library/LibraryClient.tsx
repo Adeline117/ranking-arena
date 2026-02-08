@@ -39,7 +39,7 @@ interface LibraryClientProps {
 }
 
 export default function LibraryClient({ initialItems, initialFeatured, initialTotal }: LibraryClientProps) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const searchParams = useSearchParams()
 
   const [items, setItems] = useState<LibraryItem[]>(initialItems)
@@ -139,7 +139,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
               marginBottom: 6,
               lineHeight: tokens.typography.lineHeight.tight,
             }}>
-              Crypto Library
+              {t('cryptoLibrary')}
             </h1>
             <p style={{
               color: tokens.colors.text.secondary,
@@ -249,6 +249,8 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
         }}>
           <div
             ref={categoryScrollRef}
+            role="tablist"
+            aria-label={isZh ? '书城分类' : 'Library categories'}
             style={{
               display: 'flex', gap: 8, flex: 1,
               overflowX: 'auto', scrollbarWidth: 'none',
@@ -260,7 +262,29 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
               return (
                 <button
                   key={cat.key}
+                  role="tab"
+                  aria-selected={active}
+                  aria-label={isZh ? cat.zh : cat.en}
+                  tabIndex={active ? 0 : -1}
                   onClick={() => { setCategory(cat.key); setPage(1) }}
+                  onKeyDown={(e) => {
+                    const cats = CATEGORIES
+                    const idx = cats.findIndex(c => c.key === cat.key)
+                    let nextIdx = -1
+                    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % cats.length
+                    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + cats.length) % cats.length
+                    if (nextIdx >= 0) {
+                      e.preventDefault()
+                      setCategory(cats[nextIdx].key)
+                      setPage(1)
+                      const container = categoryScrollRef.current
+                      if (container) {
+                        const buttons = container.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+                        buttons[nextIdx]?.focus()
+                        buttons[nextIdx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+                      }
+                    }
+                  }}
                   style={{
                     padding: '7px 18px',
                     borderRadius: tokens.radius.full,

@@ -336,7 +336,7 @@ export const PostListItem = memo(function PostListItem({
                 borderRadius: 4,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#8b6fa8'
+                e.currentTarget.style.color = `${tokens.colors.accent.brand}`
                 e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
               }}
               onMouseLeave={(e) => {

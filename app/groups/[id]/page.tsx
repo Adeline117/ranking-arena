@@ -730,8 +730,8 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
                 transition: 'all 0.2s ease',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = `${tokens.colors.accent?.primary || '#8b6fa8'}1a`
-                e.currentTarget.style.borderColor = `${tokens.colors.accent?.primary || '#8b6fa8'}33`
+                e.currentTarget.style.background = `${tokens.colors.accent?.primary || tokens.colors.accent.brand}1a`
+                e.currentTarget.style.borderColor = `${tokens.colors.accent?.primary || tokens.colors.accent.brand}33`
                 e.currentTarget.style.transform = 'translateX(4px)'
               }}
               onMouseLeave={(e) => {

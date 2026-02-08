@@ -331,7 +331,7 @@ export default function GroupsFeedPage() {
                         transition: `all ${tokens.transition.base}`,
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = `${tokens.colors.accent?.primary || '#8b6fa8'}50`
+                        e.currentTarget.style.borderColor = `${tokens.colors.accent?.primary || tokens.colors.accent.brand}50`
                         e.currentTarget.style.transform = 'translateX(4px)'
                       }}
                       onMouseLeave={(e) => {

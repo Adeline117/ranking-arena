@@ -54,6 +54,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const [sortType, setSortType] = useState<SortType>('time')
   const [openPost, setOpenPost] = useState<Post | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
+  // 移动端视图切换：默认列表视图，可切换为瀑布流
+  const [mobileViewMode, setMobileViewMode] = useState<'list' | 'masonry'>('list')
 
   // Listen to feed refresh trigger from store
   const feedRefreshTrigger = usePostStore(s => s.feedRefreshTrigger)
@@ -1382,7 +1384,35 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         </div>
       )}
       {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} t={t} />}
-      <div style={props.layout === 'masonry' ? { columnGap: 12 } : undefined} className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''}`}>
+      {/* 移动端视图切换按钮 */}
+      {props.layout === 'masonry' && (
+        <div className="mobile-only" style={{ display: 'none', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button
+            onClick={() => setMobileViewMode(prev => prev === 'list' ? 'masonry' : 'list')}
+            aria-label={mobileViewMode === 'list' ? (language === 'zh' ? '切换为瀑布流' : 'Switch to grid') : (language === 'zh' ? '切换为列表' : 'Switch to list')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {mobileViewMode === 'list' ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            )}
+            {mobileViewMode === 'list' ? (language === 'zh' ? '瀑布流' : 'Grid') : (language === 'zh' ? '列表' : 'List')}
+          </button>
+        </div>
+      )}
+      <div style={props.layout === 'masonry' ? { columnGap: 12 } : undefined} className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''} ${props.layout === 'masonry' ? `mobile-view-${mobileViewMode}` : ''}`}>
         {/* 只在个人主页（有 authorHandle）时才将置顶帖子排在最上面 */}
         {(props.authorHandle ? [...posts].sort((a, b) => {
           // 置顶帖子优先（仅在个人主页生效）

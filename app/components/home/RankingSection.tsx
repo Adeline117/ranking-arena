@@ -57,7 +57,7 @@ function getStoredPreferences() {
 const AdvancedFilter = dynamic(() => import('../premium/AdvancedFilter'), {
   ssr: false,
   loading: () => (
-    <Box style={{ padding: tokens.spacing[3], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.md }}>
+    <Box style={{ padding: tokens.spacing[3], background: 'var(--color-bg-secondary)', borderRadius: tokens.radius.md }}>
       <Box className="skeleton" style={{ height: 40, borderRadius: tokens.radius.sm }} />
     </Box>
   ),
@@ -561,8 +561,8 @@ export default function RankingSection({
                 height: 24,
                 borderRadius: tokens.radius.sm,
                 background: tokens.glass.bg.light,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                color: tokens.colors.text.secondary,
+                border: `1px solid ${'var(--color-border-primary)'}`,
+                color: 'var(--color-text-secondary)',
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.fast}`,
               }}
@@ -585,8 +585,8 @@ export default function RankingSection({
                 height: 24,
                 borderRadius: tokens.radius.sm,
                 background: tokens.glass.bg.light,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                color: tokens.colors.text.secondary,
+                border: `1px solid ${'var(--color-border-primary)'}`,
+                color: 'var(--color-text-secondary)',
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.fast}`,
               }}
@@ -635,7 +635,7 @@ export default function RankingSection({
           marginBottom: tokens.spacing[2],
           textAlign: 'center',
           fontSize: tokens.typography.fontSize.sm,
-          color: tokens.colors.text.tertiary,
+          color: 'var(--color-text-tertiary)',
           background: tokens.glass.bg.light,
           borderRadius: tokens.radius.md,
         }}>
@@ -671,45 +671,39 @@ export default function RankingSection({
       {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
         <Box
           style={{
-            marginTop: -60,
+            marginTop: -40,
             position: 'relative',
             zIndex: 10,
-            paddingTop: 60,
-            background: 'linear-gradient(180deg, transparent 0%, rgba(15,15,30,0.7) 30%, rgba(15,15,30,0.95) 100%)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            paddingTop: 40,
+            background: 'linear-gradient(180deg, transparent 0%, var(--color-bg-secondary) 40%)',
             borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
             textAlign: 'center',
             paddingBottom: tokens.spacing[6],
           }}
         >
           <Box style={{
-            padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+            padding: `${tokens.spacing[5]} ${tokens.spacing[5]}`,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             gap: tokens.spacing[3],
+            background: 'linear-gradient(180deg, var(--color-bg-secondary) 0%, var(--color-pro-glow) 100%)',
+            borderRadius: tokens.radius.lg,
+            border: '1px solid var(--color-pro-gradient-start)',
+            margin: `0 ${tokens.spacing[4]}`,
           }}>
-            <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary }}>
-              {`升级 Pro 查看全部 ${advancedFiltered.length} 名交易员`}
+            <svg width={24} height={24} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start)">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+            </svg>
+            <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)' }}>
+              {t('upgradeProViewAll').replace('{count}', String(advancedFiltered.length))}
             </Text>
-            <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
-              {`当前仅显示前 ${FREE_LEADERBOARD_LIMIT} 名`}
+            <Text size="sm" style={{ color: 'var(--color-text-tertiary)' }}>
+              {t('currentlyShowingTop').replace('{count}', String(FREE_LEADERBOARD_LIMIT))}
             </Text>
             <button
+              className="pro-feature-teaser-cta"
               onClick={() => router.push('/pricing')}
-              style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                border: 'none',
-                borderRadius: tokens.radius.md,
-                color: '#fff',
-                fontWeight: tokens.typography.fontWeight.bold,
-                fontSize: tokens.typography.fontSize.sm,
-                cursor: 'pointer',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
-              }}
             >
               {t('upgradeProFull')}
             </button>
@@ -725,14 +719,14 @@ export default function RankingSection({
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
             background: tokens.glass.bg.light,
             borderRadius: tokens.radius.md,
-            border: `1px solid ${tokens.colors.border.secondary}`,
+            border: `1px solid ${'var(--color-border-secondary)'}`,
             display: 'flex',
             flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: tokens.spacing[2],
             fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.text.tertiary,
+            color: 'var(--color-text-tertiary)',
           }}
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
@@ -742,7 +736,7 @@ export default function RankingSection({
                 key={src}
                 style={{
                   padding: '2px 6px',
-                  background: tokens.colors.bg.secondary,
+                  background: 'var(--color-bg-secondary)',
                   borderRadius: tokens.radius.sm,
                   fontWeight: tokens.typography.fontWeight.semibold,
                 }}
@@ -772,7 +766,7 @@ export default function RankingSection({
           marginTop: tokens.spacing[2],
           textAlign: 'center',
           fontSize: tokens.typography.fontSize.xs,
-          color: tokens.colors.text.tertiary,
+          color: 'var(--color-text-tertiary)',
         }}
       >
         {t('notInvestmentAdvice')}

@@ -34,7 +34,7 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
   --text-primary:#EDEDED;
   --text-secondary:#A8A8B3;
   --text-tertiary:#8E8E9E;
-  --accent-primary:#8b6fa8;
+  --accent-primary:var(--color-brand);
   --border-primary:#2A2836;
   --border-secondary:#3A3848;
   --glass-bg:rgba(20,18,28,0.85);

@@ -2,7 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 
-const ARENA_PURPLE = '#8b6fa8'
+const ARENA_PURPLE = tokens.colors.accent.brand
 
 export type SortType = 'time' | 'likes'
 
