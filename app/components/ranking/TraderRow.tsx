@@ -17,6 +17,7 @@ import {
   ArenaScoreBadge,
   areTraderPropsEqual,
 } from './shared/TraderDisplay'
+import { CopyButton } from './HeroSection'
 // AddCompareButton removed — compare accessible via toolbar only
 
 const ScoreBreakdownTooltip = dynamic(
@@ -75,7 +76,20 @@ export const TraderRow = memo(function TraderRow({
   const traderHandle = trader.handle || trader.id
   const href = `/trader/${encodeURIComponent(traderHandle)}`
   const displayName = formatDisplayName(traderHandle)
+  const isAddress = traderHandle.startsWith('0x') && traderHandle.length > 20
   const sourceInfo = parseSourceInfo(trader.source || source || '')
+
+  // Top 3 background gradients
+  const top3Bg = rank === 1
+    ? 'linear-gradient(90deg, rgba(255,215,0,0.08) 0%, transparent 100%)'
+    : rank === 2
+    ? 'linear-gradient(90deg, rgba(192,192,192,0.08) 0%, transparent 100%)'
+    : rank === 3
+    ? 'linear-gradient(90deg, rgba(205,127,50,0.08) 0%, transparent 100%)'
+    : undefined
+
+  // Zebra stripe
+  const zebraBg = rank > 3 && rank % 2 === 0 ? 'rgba(255,255,255,0.02)' : undefined
 
   return (
     <Link
@@ -96,6 +110,7 @@ export const TraderRow = memo(function TraderRow({
           cursor: 'pointer',
           position: 'relative',
           minHeight: 72,
+          background: top3Bg || zebraBg || 'transparent',
         }}
       >
         {/* Rank */}
@@ -120,6 +135,7 @@ export const TraderRow = memo(function TraderRow({
               <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '14px' }}>
                 <HighlightedName text={displayName} query={searchQuery} />
               </Text>
+              {isAddress && <CopyButton text={traderHandle} />}
               {/* Mobile Score Badge */}
               {trader.arena_score != null && (
                 <span className="mobile-score-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
@@ -155,7 +171,7 @@ export const TraderRow = memo(function TraderRow({
         {/* ROI */}
         {(() => {
           const roi = trader.roi || 0
-          const roiColor = roi >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR
+          const roiColor = roi >= 0 ? '#00D68F' : '#FF6B6B'
           const pnl = trader.pnl
           const hasPnl = pnl != null
           const pnlColor = hasPnl

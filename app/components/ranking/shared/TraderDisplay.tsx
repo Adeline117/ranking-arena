@@ -160,21 +160,30 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
 }
 
 // Get styling for arena score based on score value (exported for TraderCard)
+// Tiers: 0-40 gray, 40-60 blue, 60-80 purple, 80+ gold
 export function getScoreStyle(score: number): { bgGradient: string; borderColor: string; textColor: string; fillColor: string } {
+  if (score >= 80) {
+    return {
+      bgGradient: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.1))',
+      borderColor: 'rgba(255,215,0,0.5)',
+      textColor: '#FFD700',
+      fillColor: 'rgba(255,215,0,0.15)',
+    }
+  }
   if (score >= 60) {
     return {
-      bgGradient: tokens.gradient.successSubtle,
-      borderColor: `${tokens.colors.accent.success}50`,
-      textColor: tokens.colors.accent.success,
-      fillColor: `${tokens.colors.accent.success}20`,
+      bgGradient: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(168,85,247,0.1))',
+      borderColor: 'rgba(139,92,246,0.5)',
+      textColor: '#A855F7',
+      fillColor: 'rgba(139,92,246,0.15)',
     }
   }
   if (score >= 40) {
     return {
-      bgGradient: tokens.gradient.warningSubtle,
-      borderColor: `${tokens.colors.accent.warning}40`,
-      textColor: tokens.colors.accent.warning,
-      fillColor: `${tokens.colors.accent.warning}20`,
+      bgGradient: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(96,165,250,0.1))',
+      borderColor: 'rgba(59,130,246,0.4)',
+      textColor: '#3B82F6',
+      fillColor: 'rgba(59,130,246,0.15)',
     }
   }
   return {
