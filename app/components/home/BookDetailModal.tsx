@@ -174,9 +174,9 @@ export default function BookDetailModal({ item, onClose }: BookDetailModalProps)
           background: tokens.colors.bg.secondary,
           borderRadius: 10, border: `1px solid ${tokens.colors.border.primary}`,
         }}>
-          <h4 style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 8 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 8 }}>
             {isZh ? '图书信息' : 'Book Info'}
-          </h4>
+          </h3>
           <MetaRow label={isZh ? '作者' : 'Author'} value={item.author} />
           <MetaRow label={isZh ? '出版社' : 'Publisher'} value={item.publisher} />
           <MetaRow label={isZh ? '出版日期' : 'Published'} value={item.publish_date} />
@@ -206,9 +206,9 @@ export default function BookDetailModal({ item, onClose }: BookDetailModalProps)
         {/* Description */}
         {item.description && (
           <div style={{ padding: '0 24px 20px' }}>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 8 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 8 }}>
               {isZh ? '简介' : 'Description'}
-            </h4>
+            </h3>
             <p style={{ fontSize: 13, color: tokens.colors.text.secondary, lineHeight: 1.7 }}>
               {item.description}
             </p>

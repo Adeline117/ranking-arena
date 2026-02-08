@@ -238,7 +238,7 @@ export default function NotificationsList() {
             </div>
           ) : notifications.length === 0 ? (
             <div style={{ padding: '24px 12px', textAlign: 'center' }}>
-              <img src="/stickers/gn.png" alt="" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
+              <img src="/stickers/gn.png" alt="No notifications" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
               <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
                 {t('noNotifications')}
               </p>
