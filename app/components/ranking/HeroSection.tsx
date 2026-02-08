@@ -61,7 +61,7 @@ const MEDAL_LABELS = ['#1', '#2', '#3']
 
 function HeroCard({ trader, rank, large }: { trader: Trader; rank: number; large?: boolean }) {
   const handle = trader.handle || trader.id
-  const displayName = formatDisplayName(handle)
+  const displayName = formatDisplayName(handle, trader.source)
   const isAddress = handle.startsWith('0x') && handle.length > 20
   const roi = trader.roi || 0
   const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error

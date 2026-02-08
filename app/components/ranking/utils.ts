@@ -87,17 +87,46 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
 /**
  * Format display name - truncate wallet addresses
  */
-export function formatDisplayName(name: string): string {
+export function formatDisplayName(name: string, platform?: string): string {
   if (!name) return 'Unknown'
   if (name.length > 60) return name.slice(0, 57) + '...'
   if (name.startsWith('0x') && name.length > 20) {
     return `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
   }
-  // Long numeric IDs (e.g. Binance source_trader_id)
-  if (/^\d{8,}$/.test(name)) {
-    return `Trader ${name.slice(-4)}`
+  // Numeric IDs must show platform identifier
+  if (/^\d+$/.test(name)) {
+    const platformLabel = platform ? formatPlatformShort(platform) : ''
+    return platformLabel ? `${platformLabel} #${name.slice(-6)}` : `#${name.slice(-6)}`
   }
   return name
+}
+
+/** Short platform label for display */
+function formatPlatformShort(platform: string): string {
+  const map: Record<string, string> = {
+    binance_futures: 'Binance',
+    binance_spot: 'Binance',
+    okx_futures: 'OKX',
+    okx_web3: 'OKX',
+    bybit: 'Bybit',
+    bitget_futures: 'Bitget',
+    bitget_spot: 'Bitget',
+    hyperliquid: 'HL',
+    gmx: 'GMX',
+    mexc: 'MEXC',
+    kucoin: 'KuCoin',
+    coinex: 'CoinEx',
+    htx_futures: 'HTX',
+    xt: 'XT',
+    lbank: 'LBank',
+    dydx: 'dYdX',
+    gains: 'Gains',
+    weex: 'Weex',
+    blofin: 'BloFin',
+    phemex: 'Phemex',
+    aevo: 'Aevo',
+  }
+  return map[platform] || platform
 }
 
 /**
