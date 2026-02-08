@@ -138,7 +138,7 @@ export default function GuestSignupPrompt() {
             href="/login"
             style={{
               display: 'block',
-              padding: '12px 24px',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
               borderRadius: tokens.radius.lg,
               background: tokens.colors.accent.brand,
               color: tokens.colors.white,

@@ -76,7 +76,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
       </div>
 
       {/* Info */}
-      <div style={{ padding: '12px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
         {/* Category + tags row */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{
@@ -128,7 +128,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
             <span style={{
               fontSize: 10, color: tokens.colors.accent.brand,
               marginLeft: 'auto', fontWeight: 600,
-              padding: '1px 6px', borderRadius: 4,
+              padding: '1px 6px', borderRadius: tokens.radius.sm,
               background: tokens.colors.accent.brandMuted,
             }}>
               PDF

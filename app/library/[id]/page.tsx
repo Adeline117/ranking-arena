@@ -165,9 +165,9 @@ export default function BookDetailPage() {
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
             <div style={{ width: 220, aspectRatio: '2/3', borderRadius: tokens.radius.xl, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
             <div style={{ flex: 1, minWidth: 260, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ height: 28, width: '70%', borderRadius: 6, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
-              <div style={{ height: 18, width: '40%', borderRadius: 6, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
-              <div style={{ height: 40, width: '50%', borderRadius: 8, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ height: 28, width: '70%', borderRadius: tokens.radius.sm, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ height: 18, width: '40%', borderRadius: tokens.radius.sm, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ height: 40, width: '50%', borderRadius: tokens.radius.md, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
           </div>
         </main>
@@ -504,10 +504,10 @@ export default function BookDetailPage() {
                   <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 13, color: tokens.colors.text.secondary, width: 16, textAlign: 'right' }}>{star}</span>
                     <span style={{ fontSize: 13, color: tokens.colors.rating.filled }}>*</span>
-                    <div style={{ flex: 1, height: 10, borderRadius: 5, background: tokens.colors.bg.primary, overflow: 'hidden' }}>
+                    <div style={{ flex: 1, height: 10, borderRadius: tokens.radius.sm, background: tokens.colors.bg.primary, overflow: 'hidden' }}>
                       <div style={{
                         width: `${(dist[star as keyof typeof dist] / maxDist) * 100}%`,
-                        height: '100%', borderRadius: 5,
+                        height: '100%', borderRadius: tokens.radius.sm,
                         background: 'linear-gradient(90deg, #f5c518, #f7d94e)',
                         transition: `width ${tokens.transition.slow}`,
                       }} />

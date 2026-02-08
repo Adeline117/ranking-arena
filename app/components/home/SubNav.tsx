@@ -43,7 +43,7 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
               border: 'none',
               borderBottom: isActive ? `2px solid ${tokens.colors.accent.brand}` : '2px solid transparent',
               cursor: 'pointer',
-              transition: 'all 0.2s',
+              transition: `all ${tokens.transition.base}`,
               marginBottom: -1,
             }}
           >

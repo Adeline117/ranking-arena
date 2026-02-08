@@ -693,7 +693,7 @@ export default function ReadPage() {
             ? (isZh ? '该书籍暂无电子版阅读资源，请稍后再来查看。' : 'No digital reading resource is available for this book yet. Please check back later.')
             : (error || (isZh ? '未找到该书籍' : 'Book not found'))}
         </p>
-        <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: 12, background: 'var(--color-accent-primary)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+        <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: 'var(--color-accent-primary)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
           {isZh ? '返回书籍详情' : 'Back to Book'}
         </Link>
       </div>
@@ -713,10 +713,10 @@ export default function ReadPage() {
           {isZh ? '该书籍仅对会员开放，升级会员即可畅读所有付费内容。' : 'This book is available to members only.'}
         </p>
         <div style={{ display: 'flex', gap: 12 }}>
-          <Link href="/membership" style={{ padding: '10px 24px', borderRadius: 12, background: tokens.gradient.primary, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+          <Link href="/membership" style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: tokens.gradient.primary, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
             {isZh ? '升级会员' : 'Upgrade'}
           </Link>
-          <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: 12, border: '1px solid var(--color-border-primary)', color: 'var(--color-text-primary)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+          <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, border: '1px solid var(--color-border-primary)', color: 'var(--color-text-primary)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
             {isZh ? '返回' : 'Back'}
           </Link>
         </div>
@@ -854,7 +854,7 @@ export default function ReadPage() {
                 onChange={e => { const val = parseInt(e.target.value); if (!isNaN(val)) goToPage(val) }}
                 style={{
                   width: 48, textAlign: 'center', background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6,
+                  border: '1px solid rgba(255,255,255,0.15)', borderRadius: tokens.radius.sm,
                   color: '#fff', fontSize: 13, fontWeight: 600, padding: '3px 4px', outline: 'none',
                 }}
                 min={1} max={totalPages}
@@ -908,7 +908,7 @@ export default function ReadPage() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {bookmarks.map(page => (
                     <button key={page} onClick={() => goToPage(page)} style={{
-                      padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+                      padding: '4px 10px', borderRadius: tokens.radius.sm, fontSize: 12, fontWeight: 500,
                       background: currentPage === page ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'),
                       color: currentPage === page ? '#fff' : (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
                       border: 'none', cursor: 'pointer',

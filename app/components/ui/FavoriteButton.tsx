@@ -96,7 +96,7 @@ export default function FavoriteButton({ traderId, userId, initialFavorited = fa
       aria-pressed={favorited}
       style={{
         padding: '10px 14px',
-        borderRadius: '8px',
+        borderRadius: tokens.radius.md,
         border: 'none',
         background: 'transparent',
         color: favorited ? tokens.colors.interactive.favorite : tokens.colors.interactive.inactive,

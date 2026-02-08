@@ -295,7 +295,7 @@ const VirtualRow = memo(function VirtualRow({
         gap: tokens.spacing[3],
         borderBottom: `1px solid ${tokens.colors.border.secondary}`,
         cursor: 'pointer',
-        transition: 'background-color 0.1s',
+        transition: `background-color ${tokens.transition.fast}`,
         backgroundColor: 'transparent',
       }}
       className="virtual-row"

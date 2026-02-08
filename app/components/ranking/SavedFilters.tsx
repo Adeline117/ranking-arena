@@ -495,7 +495,7 @@ function FilterItem({
             color: isConfirmingDelete ? '#fff' : tokens.colors.text.tertiary,
             cursor: 'pointer',
             opacity: isConfirmingDelete ? 1 : 0.6,
-            transition: 'all 0.2s',
+            transition: `all ${tokens.transition.base}`,
           }}
           onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
           onMouseLeave={(e) => {
