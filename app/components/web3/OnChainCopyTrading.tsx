@@ -80,7 +80,7 @@ const ChainIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 )
 
-export function OnChainCopyTrading({ traderHandle, traderAddress, className = '' }: OnChainCopyTradingProps) {
+export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopyTradingProps) {
   const { isConnected, chainId } = useAccount()
   const { t } = useLanguage()
   const { showToast } = useToast()

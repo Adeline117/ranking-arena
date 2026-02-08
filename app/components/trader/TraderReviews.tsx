@@ -374,12 +374,12 @@ function ReviewForm({
   traderHandle,
   onSubmitted,
   t,
-  language,
+  _language,
 }: {
   traderHandle: string
   onSubmitted: () => void
   t: (key: string) => string
-  language: string
+  _language: string
 }) {
   const { showToast } = useToast()
   const [rating, setRating] = useState(0)
@@ -500,7 +500,7 @@ function ReviewForm({
 
 // ============ Main Component ============
 
-export default function TraderReviews({ traderId, traderHandle }: TraderReviewsProps) {
+export default function TraderReviews({ traderHandle }: TraderReviewsProps) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
 
