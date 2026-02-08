@@ -56,7 +56,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
         : `View ${profile.handle}'s trader profile, ROI, win rate, and portfolio on Arena.`
 
       // Dynamic OG image with trader data
-      const ogImageUrl = new URL(`${baseUrl}/api/og`)
+      const ogImageUrl = new URL(`${baseUrl}/api/og/trader`)
       ogImageUrl.searchParams.set('handle', profile.handle)
       if (performance?.roi_90d != null) ogImageUrl.searchParams.set('roi', String(performance.roi_90d))
       if (performance?.win_rate != null) ogImageUrl.searchParams.set('winRate', String(performance.win_rate))

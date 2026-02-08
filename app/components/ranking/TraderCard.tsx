@@ -6,6 +6,7 @@ import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatROI, formatDisplayName } from './utils'
 import { HighlightedName } from './RankingSearch'
+import { Sparkline } from '../ui/Sparkline'
 import {
   TRADER_TEXT_TERTIARY,
   TRADER_ACCENT_ERROR,
@@ -117,6 +118,14 @@ export const TraderCard = memo(function TraderCard({
               </Box>
             )
           })()}
+        </Box>
+
+        {/* Sparkline */}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <Sparkline roi={trader.roi || 0} width={120} height={24} />
+          <Text size="lg" weight="black" style={{ color: (trader.roi || 0) >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR, marginLeft: 'auto' }}>
+            {formatROI(trader.roi || 0)}
+          </Text>
         </Box>
 
         {/* Stats row */}
