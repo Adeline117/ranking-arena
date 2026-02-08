@@ -11,6 +11,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { generatePostArticleSchema, generateBreadcrumbSchema, combineSchemas } from '@/lib/seo'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import ShareButton from '@/app/components/common/ShareButton'
 
 interface PostData {
   id: string
@@ -109,11 +110,22 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
         margin: '0 auto', 
         padding: tokens.spacing[6],
       }}>
-        {/* Breadcrumb */}
-        <Breadcrumb items={[
-          { label: language === 'zh' ? '热榜' : 'Hot', href: '/hot' },
-          { label: postData?.title?.slice(0, 30) || '...' },
-        ]} />
+        {/* Breadcrumb + Share */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Breadcrumb items={[
+            { label: language === 'zh' ? '热榜' : 'Hot', href: '/hot' },
+            { label: postData?.title?.slice(0, 30) || '...' },
+          ]} />
+          {postData && (
+            <ShareButton
+              data={{
+                type: 'post',
+                url: typeof window !== 'undefined' ? window.location.href : '',
+                title: postData.title,
+              }}
+            />
+          )}
+        </div>
         
         {/* 帖子内容 - 使用 PostFeed 并设置 initialPostId 自动打开帖子详情 */}
         <PostFeed initialPostId={postId} variant="full" />
