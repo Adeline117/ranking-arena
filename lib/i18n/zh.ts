@@ -2720,6 +2720,14 @@ const zh = {
   noSearchResults: '未找到相关消息',
   jumpToMessage: '跳转到消息',
 
+  // Timeframes
+  timeframe1m: '1分钟',
+  timeframe5m: '5分钟',
+  timeframe15m: '15分钟',
+  timeframe1h: '1小时',
+  timeframe4h: '4小时',
+  timeframe1d: '1天',
+
 } as const
 
 export default zh

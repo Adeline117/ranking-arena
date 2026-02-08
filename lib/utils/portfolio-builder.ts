@@ -2,6 +2,7 @@
  * 跟单组合建议算法
  * 根据用户风险偏好推荐分散化的交易员组合
  */
+import { round1, round2, moneyMul } from '@/lib/utils/currency'
 
 // ============================================
 // 类型定义
@@ -335,9 +336,9 @@ function calculateExpectedMetrics(
     : 0
 
   return {
-    roi: Math.round(weightedRoi * 10) / 10,
-    max_drawdown: Math.round(weightedDrawdown * 10) / 10,
-    sharpe_ratio: Math.round(sharpeRatio * 100) / 100,
+    roi: round1(weightedRoi),
+    max_drawdown: round1(weightedDrawdown),
+    sharpe_ratio: round2(sharpeRatio),
   }
 }
 
@@ -379,8 +380,8 @@ export function generatePortfolioSuggestion(
     reason: generateReason(trader, config),
     risk_level: getTraderRiskLevel(trader),
     expected_contribution: {
-      roi: Math.round(trader.roi * (allocations.get(trader.trader_id) || 0) / 100 * 10) / 10,
-      drawdown: Math.round(Math.abs(trader.max_drawdown || 0) * (allocations.get(trader.trader_id) || 0) / 100 * 10) / 10,
+      roi: round1(moneyMul(trader.roi, (allocations.get(trader.trader_id) || 0) / 100)),
+      drawdown: round1(moneyMul(Math.abs(trader.max_drawdown || 0), (allocations.get(trader.trader_id) || 0) / 100)),
     },
   }))
 

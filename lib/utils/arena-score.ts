@@ -1,4 +1,5 @@
 import { SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
+import { round2 } from '@/lib/utils/currency'
 
 /**
  * Arena Score V2 计算模块
@@ -365,11 +366,11 @@ export function calculateArenaScore(
   const totalScore = clip(rawTotal * confidenceMultiplier * trustMultiplier, 0, 100)
 
   return {
-    totalScore: Math.round(totalScore * 100) / 100,  // 保留2位小数
-    returnScore: Math.round(returnScore * 100) / 100,
-    pnlScore: Math.round(pnlScore * 100) / 100,
-    drawdownScore: Math.round(drawdownScore * 100) / 100,
-    stabilityScore: Math.round(stabilityScore * 100) / 100,
+    totalScore: round2(totalScore),  // 保留2位小数
+    returnScore: round2(returnScore),
+    pnlScore: round2(pnlScore),
+    drawdownScore: round2(drawdownScore),
+    stabilityScore: round2(stabilityScore),
     scoreConfidence,
   }
 }
@@ -456,7 +457,7 @@ export function calculateOverallScore(input: OverallScoreInput): number {
   const momentum = calculateMomentumBonus(score7d ?? null, score30d ?? null)
   overall += momentum
 
-  return Math.round(clip(overall, 0, 100) * 100) / 100
+  return round2(clip(overall, 0, 100))
 }
 
 /**
@@ -756,14 +757,14 @@ export function calculateArenaScoreV3(
   const totalScore = clip(rawTotal * confidenceMultiplier * trustMultiplier, 0, 100)
 
   return {
-    totalScore: Math.round(totalScore * 100) / 100,
-    returnScore: Math.round(returnScore * 100) / 100,
-    pnlScore: Math.round(pnlScore * 100) / 100,
-    drawdownScore: Math.round(drawdownScore * 100) / 100,
-    stabilityScore: Math.round(stabilityScore * 100) / 100,
-    alphaScore: Math.round(alphaScore * 100) / 100,
-    riskAdjustedScore: Math.round(riskAdjustedScore * 100) / 100,
-    consistencyScore: Math.round(consistencyScore * 100) / 100,
+    totalScore: round2(totalScore),
+    returnScore: round2(returnScore),
+    pnlScore: round2(pnlScore),
+    drawdownScore: round2(drawdownScore),
+    stabilityScore: round2(stabilityScore),
+    alphaScore: round2(alphaScore),
+    riskAdjustedScore: round2(riskAdjustedScore),
+    consistencyScore: round2(consistencyScore),
     scoreConfidence,
   }
 }
