@@ -12,6 +12,7 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { useMarketFeed } from '@/lib/hooks/useMarketFeed'
+import { t } from '@/lib/i18n'
 import type { NormalizedTrade, ExchangeId } from '@/lib/ws/exchange-feeds'
 
 // ============================================
@@ -103,7 +104,7 @@ function TradeRow({ trade }: { trade: NormalizedTrade }) {
 
       {/* 方向 */}
       <span style={{ width: 32, color: textColor, fontWeight: 600, flexShrink: 0 }}>
-        {isBuy ? 'BUY' : 'SELL'}
+        {isBuy ? t('tradeBuy') : t('tradeSell')}
       </span>
 
       {/* 价格 */}

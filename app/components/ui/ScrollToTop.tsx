@@ -20,7 +20,7 @@ export default function ScrollToTop() {
   return (
     <button
       onClick={scrollToTop}
-      aria-label="Back to top"
+      aria-label="返回顶部"
       className="scroll-to-top-btn"
       style={{
         position: 'fixed',

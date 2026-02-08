@@ -552,7 +552,7 @@ function RankingTableInner(props: {
                     fontSize: 11, fontWeight: 500,
                     cursor: 'pointer', opacity: 0.7,
                   }}
-                  title="Pro feature"
+                  title={t('proFeature')}
                 >
                   <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" /></svg>
                   {language === 'zh' ? '导出排名' : 'Export'}

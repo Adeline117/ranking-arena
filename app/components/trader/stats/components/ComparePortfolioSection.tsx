@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../../base'
 import { useLanguage } from '../../../Providers/LanguageProvider'
+import { t as i18nT } from '@/lib/i18n'
 import type { LineData, Time } from 'lightweight-charts'
 
 interface EquityCurveData {
@@ -77,7 +78,7 @@ export function ComparePortfolioSection({
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
             }}
           >
-            <option value="BTC">vs BTC</option>
+            <option value="BTC">{i18nT('vsBtcOption')}</option>
             <option value="SPX500">vs SPX500</option>
           </select>
         </Box>
@@ -334,7 +335,7 @@ function CompareRow({ name, pct, color }: { name: string; pct?: number; color: s
           fontFamily: tokens.typography.fontFamily.mono.join(', '),
         }}
       >
-        {pct !== undefined ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : 'N/A'}
+        {pct !== undefined ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : i18nT('notAvailable')}
       </Text>
     </Box>
   )

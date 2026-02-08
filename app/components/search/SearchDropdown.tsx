@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -15,14 +16,13 @@ import {
   clearHistory,
 } from '@/lib/services/search-history'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
 
 interface SearchDropdownProps {
   open: boolean
   query: string
   onClose: () => void
 }
-
-// Search history is stored as a simple string[] in localStorage under 'arena_search_history'
 
 interface HotPost {
   id: string
@@ -32,21 +32,23 @@ interface HotPost {
   view_count?: number
 }
 
-interface SearchResult {
-  id: string
-  type: 'trader' | 'post' | 'group'
-  title: string
-  subtitle?: string
-  href: string
-  roi?: number
-}
+// 类别配置
+const CATEGORY_CONFIG = {
+  traders: { icon: 'T', labelZh: '交易员', labelEn: 'Traders', color: '#8B5CF6' },
+  posts: { icon: 'P', labelZh: '帖子', labelEn: 'Posts', color: '#3B82F6' },
+  library: { icon: 'L', labelZh: '资料库', labelEn: 'Library', color: '#10B981' },
+  users: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: '#F59E0B' },
+} as const
+
+type CategoryKey = keyof typeof CATEGORY_CONFIG
 
 /**
  * 搜索下拉菜单
- * - 实时搜索建议（通过 API）
+ * - 统一搜索：交易员、帖子、资料库、用户
+ * - 按类别分组显示结果
  * - 键盘导航（上下箭头、Enter、Escape）
- * - 显示搜索历史记录（可删除）
- * - 显示热榜帖子前十（前三标橙）
+ * - 搜索历史记录
+ * - 热榜帖子
  */
 export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
   const router = useRouter()
@@ -55,7 +57,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
   const [loading, setLoading] = useState(false)
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searchData, setSearchData] = useState<UnifiedSearchResponse | null>(null)
   const [searching, setSearching] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [translatedTitles, setTranslatedTitles] = useState<Record<string, string>>({})
@@ -63,22 +65,29 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const abortControllerRef = useRef<AbortController | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // 加载搜索历史 - 当认证状态确定后加载
+  // 展平所有结果用于键盘导航
+  const flatResults: UnifiedSearchResult[] = searchData
+    ? [
+        ...searchData.results.traders,
+        ...searchData.results.posts,
+        ...searchData.results.library,
+        ...searchData.results.users,
+      ]
+    : []
+
+  // 加载搜索历史
   useEffect(() => {
     if (!authChecked) return
-
     const loadHistory = async () => {
       const history = await initializeHistory(userId ?? undefined)
       setSearchHistory(history)
     }
-
     loadHistory()
   }, [authChecked, userId, isLoggedIn])
 
-  // 从数据库加载热榜帖子
+  // 加载热榜帖子
   const loadHotPosts = useCallback(async () => {
     if (!open) return
-
     setLoading(true)
     try {
       const { data, error } = await supabase
@@ -89,22 +98,22 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         .order('like_count', { ascending: false, nullsFirst: false })
         .limit(10)
 
-      if (error) {
-        return
-      }
+      if (error) return
 
       if (data && data.length > 0) {
-        const posts: HotPost[] = data.map((post, index) => ({
-          id: post.id,
-          title: post.title || t('noTitle'),
-          hotScore: post.hot_score ||
-            (post.view_count || 0) * 0.1 +
-            (post.like_count || 0) * 2 +
-            (post.comment_count || 0) * 3,
-          rank: index + 1,
-          view_count: post.view_count,
-        }))
-        setHotPosts(posts)
+        setHotPosts(
+          data.map((post, index) => ({
+            id: post.id,
+            title: post.title || t('noTitle'),
+            hotScore:
+              post.hot_score ||
+              (post.view_count || 0) * 0.1 +
+                (post.like_count || 0) * 2 +
+                (post.comment_count || 0) * 3,
+            rank: index + 1,
+            view_count: post.view_count,
+          }))
+        )
       }
     } catch (e) {
       console.error('Failed to load hot posts:', e)
@@ -117,31 +126,28 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     loadHotPosts()
   }, [loadHotPosts])
 
-  // Auto-translate hot post titles to match current language
+  // 热榜标题翻译
   useEffect(() => {
     if (hotPosts.length === 0 || translating) return
 
-    // Check if we already have translations for current language
     const langKey = (id: string) => `${language}:${id}`
-    const needsTranslation = hotPosts.some(post => !translatedTitles[langKey(post.id)])
+    const needsTranslation = hotPosts.some(
+      (post) => !translatedTitles[langKey(post.id)]
+    )
     if (!needsTranslation) return
 
-    // Detect if title needs translation (simple heuristic: check if mostly CJK or Latin)
     const isCJK = (text: string) => /[\u4e00-\u9fff\u3000-\u303f]/.test(text)
-    const postsToTranslate = hotPosts.filter(post => {
+    const postsToTranslate = hotPosts.filter((post) => {
       if (translatedTitles[langKey(post.id)]) return false
       const titleIsCJK = isCJK(post.title)
-      // If language is zh and title is already Chinese, skip
       if (language === 'zh' && titleIsCJK) return false
-      // If language is en and title is already English, skip
       if (language === 'en' && !titleIsCJK) return false
       return true
     })
 
     if (postsToTranslate.length === 0) {
-      // Mark non-needing posts as already "translated" (identity)
       const newTranslations = { ...translatedTitles }
-      hotPosts.forEach(post => {
+      hotPosts.forEach((post) => {
         if (!newTranslations[langKey(post.id)]) {
           newTranslations[langKey(post.id)] = post.title
         }
@@ -153,34 +159,29 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     const translateTitles = async () => {
       setTranslating(true)
       try {
-        const targetLang = language === 'zh' ? 'zh' : 'en'
-
         const res = await fetch('/api/translate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            items: postsToTranslate.map(p => ({
+            items: postsToTranslate.map((p) => ({
               id: p.id,
               text: p.title,
               contentType: 'post_title',
               contentId: p.id,
             })),
-            targetLang,
+            targetLang: language === 'zh' ? 'zh' : 'en',
           }),
         })
-
         if (res.ok) {
           const json = await res.json()
           const results = json.data?.results || {}
-
           const newTranslations: Record<string, string> = { ...translatedTitles }
           postsToTranslate.forEach((post) => {
             if (results[post.id]?.translatedText) {
               newTranslations[langKey(post.id)] = results[post.id].translatedText
             }
           })
-          // Also mark untranslated posts
-          hotPosts.forEach(post => {
+          hotPosts.forEach((post) => {
             if (!newTranslations[langKey(post.id)]) {
               newTranslations[langKey(post.id)] = post.title
             }
@@ -193,110 +194,39 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         setTranslating(false)
       }
     }
-
     translateTitles()
   }, [language, hotPosts, translatedTitles, translating])
 
-  // 实时搜索 - 使用 API 和 AbortController
+  // 统一搜索 - 300ms 防抖
   useEffect(() => {
     if (!open || !query.trim() || query.length < 2) {
-      setSearchResults([])
+      setSearchData(null)
       setSelectedIndex(-1)
       return
     }
 
     const searchTimer = setTimeout(async () => {
-      // Cancel previous request
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
 
       const controller = new AbortController()
       abortControllerRef.current = controller
-
       setSearching(true)
 
       try {
-        // Use the search suggestions API
         const response = await fetch(
-          `/api/search/suggestions?q=${encodeURIComponent(query.trim())}&limit=10`,
+          `/api/search?q=${encodeURIComponent(query.trim())}&limit=5`,
           { signal: controller.signal }
         )
 
         if (!response.ok) throw new Error('Search failed')
 
-        const data = await response.json()
-        const suggestions = data.suggestions || []
-
-        const results: SearchResult[] = suggestions.map((s: { type: string; value: string; label: string; subLabel?: string; source?: string; roi?: number }) => {
-          let href: string
-          let type: 'trader' | 'post' | 'group'
-
-          if (s.type === 'trader') {
-            type = 'trader'
-            href = `/trader/${encodeURIComponent(s.value)}`
-          } else if (s.type === 'symbol') {
-            type = 'trader'
-            href = `/search?q=${encodeURIComponent(s.value)}`
-          } else {
-            type = 'post'
-            href = `/search?q=${encodeURIComponent(s.value)}`
-          }
-
-          return {
-            id: `${s.type}-${s.value}`,
-            type,
-            title: s.label,
-            subtitle: s.subLabel,
-            href,
-            roi: s.roi,
-          }
-        })
-
-        // Also search posts and groups from Supabase for dropdown enrichment
-        const sanitizedQuery = query.trim()
-          .slice(0, 100)
-          .replace(/[\\%_]/g, c => `\\${c}`)
-          .replace(/[.,()]/g, '')
-
-        const [postsRes, groupsRes] = await Promise.all([
-          supabase
-            .from('posts')
-            .select('id, title, author_handle')
-            .or(`title.ilike.%${sanitizedQuery}%`)
-            .limit(3),
-          supabase
-            .from('groups')
-            .select('id, name, name_en')
-            .or(`name.ilike.%${sanitizedQuery}%,name_en.ilike.%${sanitizedQuery}%`)
-            .limit(3),
-        ])
-
-        if (postsRes.data) {
-          postsRes.data.forEach((post) => {
-            results.push({
-              id: post.id,
-              type: 'post',
-              title: post.title || t('noTitle'),
-              subtitle: post.author_handle ? `@${post.author_handle}` : undefined,
-              href: `/post/${post.id}`,
-            })
-          })
-        }
-
-        if (groupsRes.data) {
-          groupsRes.data.forEach((group) => {
-            results.push({
-              id: group.id,
-              type: 'group',
-              title: language === 'zh' ? group.name : (group.name_en || group.name),
-              href: `/groups/${group.id}`,
-            })
-          })
-        }
+        const json = await response.json()
+        const data: UnifiedSearchResponse = json.data || json
 
         if (!controller.signal.aborted) {
-          setSearchResults(results)
+          setSearchData(data)
           setSelectedIndex(-1)
         }
       } catch (error) {
@@ -307,7 +237,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           setSearching(false)
         }
       }
-    }, 300) // 300ms 防抖
+    }, 300)
 
     return () => {
       clearTimeout(searchTimer)
@@ -315,16 +245,19 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         abortControllerRef.current.abort()
       }
     }
-  }, [query, open, language])
+  }, [query, open])
 
-  // 保存搜索到历史记录
-  const saveToHistory = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) return
-    const newHistory = await addToHistory(searchQuery, userId ?? undefined)
-    setSearchHistory(newHistory)
-  }, [userId])
+  // 保存搜索历史
+  const saveToHistory = useCallback(
+    async (searchQuery: string) => {
+      if (!searchQuery.trim()) return
+      const newHistory = await addToHistory(searchQuery, userId ?? undefined)
+      setSearchHistory(newHistory)
+    },
+    [userId]
+  )
 
-  // Keyboard navigation
+  // 键盘导航
   useEffect(() => {
     if (!open) return
 
@@ -334,21 +267,21 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         return
       }
 
-      if (searchResults.length === 0) return
+      if (flatResults.length === 0) return
 
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setSelectedIndex(prev =>
-          prev < searchResults.length - 1 ? prev + 1 : 0
+        setSelectedIndex((prev) =>
+          prev < flatResults.length - 1 ? prev + 1 : 0
         )
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        setSelectedIndex(prev =>
-          prev > 0 ? prev - 1 : searchResults.length - 1
+        setSelectedIndex((prev) =>
+          prev > 0 ? prev - 1 : flatResults.length - 1
         )
       } else if (e.key === 'Enter' && selectedIndex >= 0) {
         e.preventDefault()
-        const selected = searchResults[selectedIndex]
+        const selected = flatResults[selectedIndex]
         if (selected) {
           saveToHistory(query)
           router.push(selected.href)
@@ -359,9 +292,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, searchResults, selectedIndex, query, onClose, router, saveToHistory])
+  }, [open, flatResults, selectedIndex, query, onClose, router, saveToHistory])
 
-  // 删除单个历史记录
+  // 删除历史记录
   const handleDeleteHistory = async (term: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -369,7 +302,6 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     setSearchHistory(newHistory)
   }
 
-  // 清空所有历史记录
   const handleClearAllHistory = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -377,7 +309,6 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     setSearchHistory([])
   }
 
-  // 点击搜索结果时保存到历史
   const handleResultClick = () => {
     if (query.trim()) {
       saveToHistory(query)
@@ -387,22 +318,180 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
   if (!open) return null
 
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case 'trader': return t('traderTypeLabel')
-      case 'post': return t('postTypeLabel')
-      case 'group': return t('groupTypeLabel')
-      default: return ''
+  // 计算展平索引偏移，用于高亮
+  const getCategoryOffset = (category: CategoryKey): number => {
+    if (!searchData) return 0
+    const order: CategoryKey[] = ['traders', 'posts', 'library', 'users']
+    let offset = 0
+    for (const key of order) {
+      if (key === category) break
+      offset += searchData.results[key].length
     }
+    return offset
   }
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'trader': return 'T'
-      case 'post': return 'P'
-      case 'group': return 'G'
-      default: return ''
-    }
+  const renderCategoryResults = (
+    category: CategoryKey,
+    items: UnifiedSearchResult[]
+  ) => {
+    if (items.length === 0) return null
+    const config = CATEGORY_CONFIG[category]
+    const offset = getCategoryOffset(category)
+    const label = language === 'zh' ? config.labelZh : config.labelEn
+
+    return (
+      <Box key={category}>
+        {/* 类别标题 */}
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
+          <Box
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: tokens.radius.sm,
+              background: `${config.color}20`,
+              color: config.color,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
+              fontWeight: 800,
+              flexShrink: 0,
+            }}
+          >
+            {config.icon}
+          </Box>
+          <Text
+            size="xs"
+            weight="bold"
+            color="tertiary"
+            style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}
+          >
+            {label}
+          </Text>
+          <Text size="xs" color="tertiary">
+            ({items.length})
+          </Text>
+        </Box>
+
+        {/* 结果列表 */}
+        {items.map((result, index) => {
+          const globalIndex = offset + index
+          const isSelected = globalIndex === selectedIndex
+          return (
+            <Link
+              key={`${result.type}-${result.id}`}
+              href={result.href}
+              style={{ textDecoration: 'none' }}
+              onClick={handleResultClick}
+            >
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[3],
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                  cursor: 'pointer',
+                  background: isSelected
+                    ? tokens.colors.bg.tertiary
+                    : 'transparent',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={(e) => {
+                  setSelectedIndex(globalIndex)
+                  e.currentTarget.style.background = tokens.colors.bg.tertiary
+                }}
+                onMouseLeave={(e) => {
+                  if (globalIndex !== selectedIndex) {
+                    e.currentTarget.style.background = 'transparent'
+                  }
+                }}
+              >
+                {/* 用户头像或类型图标 */}
+                {result.avatar ? (
+                  <Image
+                    src={result.avatar}
+                    alt=""
+                    width={28}
+                    height={28}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: tokens.radius.full,
+                      objectFit: 'cover',
+                      flexShrink: 0,
+                    }}
+                    unoptimized={result.avatar.startsWith('data:')}
+                  />
+                ) : (
+                  <Box
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: tokens.radius.full,
+                      background: `${config.color}15`,
+                      color: config.color,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {config.icon}
+                  </Box>
+                )}
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    size="sm"
+                    style={{
+                      color: tokens.colors.text.primary,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {result.title}
+                  </Text>
+                  {result.subtitle && (
+                    <Text
+                      size="xs"
+                      color="tertiary"
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {result.subtitle}
+                    </Text>
+                  )}
+                </Box>
+                {/* 键盘导航提示 */}
+                {isSelected && (
+                  <Text
+                    size="xs"
+                    color="tertiary"
+                    style={{ flexShrink: 0, opacity: 0.5 }}
+                  >
+                    Enter
+                  </Text>
+                )}
+              </Box>
+            </Link>
+          )
+        })}
+      </Box>
+    )
   }
 
   return (
@@ -423,22 +512,12 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         boxShadow: tokens.shadow.md,
       }}
     >
-      {/* 实时搜索结果 */}
+      {/* 搜索结果 - 按类别分组 */}
       {query.trim().length >= 2 && (
         <Box>
-          <Box
-            style={{
-              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              borderBottom: `1px solid ${tokens.colors.border.primary}`,
-            }}
-          >
-            <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
-              {t('searchDropdownResults')}
-            </Text>
-          </Box>
           {searching ? (
             <Box style={{ padding: `${tokens.spacing[2]} 0` }}>
-              {[1, 2, 3].map((i) => (
+              {[1, 2, 3, 4].map((i) => (
                 <Box
                   key={i}
                   style={{
@@ -449,100 +528,90 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                     borderBottom: `1px solid ${tokens.colors.border.primary}`,
                   }}
                 >
-                  <Box style={{ width: 28, height: 28, borderRadius: tokens.radius.md, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite', flexShrink: 0 }} />
-                  <Box style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <Box style={{ width: `${50 + i * 15}%`, height: 12, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.sm, animation: 'pulse 1.5s ease-in-out infinite' }} />
-                    <Box style={{ width: `${30 + i * 10}%`, height: 10, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.sm, animation: 'pulse 1.5s ease-in-out infinite', opacity: 0.6 }} />
+                  <Box
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: tokens.radius.full,
+                      background: tokens.colors.bg.tertiary,
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Box
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                    }}
+                  >
+                    <Box
+                      style={{
+                        width: `${50 + i * 12}%`,
+                        height: 12,
+                        background: tokens.colors.bg.tertiary,
+                        borderRadius: tokens.radius.sm,
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                      }}
+                    />
+                    <Box
+                      style={{
+                        width: `${30 + i * 8}%`,
+                        height: 10,
+                        background: tokens.colors.bg.tertiary,
+                        borderRadius: tokens.radius.sm,
+                        animation: 'pulse 1.5s ease-in-out infinite',
+                        opacity: 0.6,
+                      }}
+                    />
                   </Box>
                 </Box>
               ))}
             </Box>
-          ) : searchResults.length === 0 ? (
+          ) : searchData && searchData.total === 0 ? (
             <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">{t('noRelatedResults')}</Text>
+              <Text size="sm" color="tertiary">
+                {t('noRelatedResults')}
+              </Text>
             </Box>
-          ) : (
-            searchResults.map((result, index) => (
+          ) : searchData ? (
+            <>
+              {renderCategoryResults('traders', searchData.results.traders)}
+              {renderCategoryResults('posts', searchData.results.posts)}
+              {renderCategoryResults('library', searchData.results.library)}
+              {renderCategoryResults('users', searchData.results.users)}
+
+              {/* 查看全部 */}
               <Link
-                key={`${result.type}-${result.id}`}
-                href={result.href}
+                href={`/search?q=${encodeURIComponent(query)}`}
                 style={{ textDecoration: 'none' }}
                 onClick={handleResultClick}
               >
                 <Box
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: tokens.spacing[3],
                     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                    textAlign: 'center',
                     cursor: 'pointer',
-                    background: index === selectedIndex ? tokens.colors.bg.tertiary : 'transparent',
                   }}
                   onMouseEnter={(e) => {
-                    setSelectedIndex(index)
                     e.currentTarget.style.background = tokens.colors.bg.tertiary
                   }}
                   onMouseLeave={(e) => {
-                    if (index !== selectedIndex) {
-                      e.currentTarget.style.background = 'transparent'
-                    }
+                    e.currentTarget.style.background = 'transparent'
                   }}
                 >
-                  <Text size="lg">{getTypeIcon(result.type)}</Text>
-                  <Box style={{ flex: 1 }}>
-                    <Text size="sm" style={{ color: tokens.colors.text.primary }}>
-                      {result.title}
-                    </Text>
-                    <Box style={{ display: 'flex', gap: tokens.spacing[2], marginTop: 2 }}>
-                      <Text size="xs" color="tertiary">{getTypeLabel(result.type)}</Text>
-                      {result.subtitle && (
-                        <Text size="xs" color="tertiary">· {result.subtitle}</Text>
-                      )}
-                    </Box>
-                  </Box>
-                  {result.roi !== undefined && (
-                    <Text
-                      size="xs"
-                      style={{ color: result.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}
-                    >
-                      {result.roi >= 0 ? '+' : ''}{result.roi.toFixed(1)}%
-                    </Text>
-                  )}
+                  <Text size="xs" color="tertiary">
+                    {t('viewAllSearchResults')} →
+                  </Text>
                 </Box>
               </Link>
-            ))
-          )}
-          {/* 查看全部搜索结果链接 */}
-          {searchResults.length > 0 && (
-            <Link
-              href={`/search?q=${encodeURIComponent(query)}`}
-              style={{ textDecoration: 'none' }}
-              onClick={handleResultClick}
-            >
-              <Box
-                style={{
-                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.tertiary
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                }}
-              >
-                <Text size="xs" color="tertiary">
-                  {t('viewAllSearchResults')} →
-                </Text>
-              </Box>
-            </Link>
-          )}
+            </>
+          ) : null}
         </Box>
       )}
 
-      {/* 搜索历史 - 仅在没有输入查询时显示 */}
+      {/* 搜索历史 */}
       {query.trim().length < 2 && searchHistory.length > 0 && (
         <Box>
           <Box
@@ -554,7 +623,12 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
               borderBottom: `1px solid ${tokens.colors.border.primary}`,
             }}
           >
-            <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              style={{ textTransform: 'uppercase' }}
+            >
               {t('searchHistory')}
             </Text>
             <button
@@ -595,7 +669,10 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                   style={{ textDecoration: 'none', flex: 1 }}
                   onClick={onClose}
                 >
-                  <Text size="sm" style={{ color: tokens.colors.text.primary }}>
+                  <Text
+                    size="sm"
+                    style={{ color: tokens.colors.text.primary }}
+                  >
                     {term}
                   </Text>
                 </Link>
@@ -627,16 +704,24 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         </Box>
       )}
 
-      {/* 热榜帖子 - 仅在没有输入查询时显示 */}
+      {/* 热榜帖子 */}
       {query.trim().length < 2 && (
         <Box>
           <Box
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              borderBottom: searchHistory.length > 0 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+              borderBottom:
+                searchHistory.length > 0
+                  ? `1px solid ${tokens.colors.border.primary}`
+                  : 'none',
             }}
           >
-            <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              style={{ textTransform: 'uppercase' }}
+            >
               {t('hotPosts')}
             </Text>
           </Box>
@@ -678,7 +763,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                 ))}
               </Box>
             ) : hotPosts.length === 0 ? (
-              <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+              <Box
+                style={{ padding: tokens.spacing[4], textAlign: 'center' }}
+              >
                 <Text size="sm" color="tertiary">
                   {t('noHotPosts')}
                 </Text>
@@ -701,7 +788,8 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                       cursor: 'pointer',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = tokens.colors.bg.tertiary
+                      e.currentTarget.style.background =
+                        tokens.colors.bg.tertiary
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'transparent'
@@ -711,7 +799,10 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                       size="sm"
                       weight="black"
                       style={{
-                        color: post.rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
+                        color:
+                          post.rank <= 3
+                            ? tokens.colors.accent.warning
+                            : tokens.colors.text.tertiary,
                         minWidth: 24,
                         textAlign: 'right',
                       }}
@@ -726,9 +817,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                           lineHeight: 1.5,
                         }}
                       >
-                        {translatedTitles[`${language}:${post.id}`] || post.title}
+                        {translatedTitles[`${language}:${post.id}`] ||
+                          post.title}
                       </Text>
-{/* view_count display removed */}
                     </Box>
                   </Box>
                 </Link>

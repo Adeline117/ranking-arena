@@ -6,6 +6,7 @@ import { Box, Text } from '../base'
 import { useCountUp } from '@/lib/hooks/useCountUp'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
+import { t as i18nT } from '@/lib/i18n'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatPnL, formatROI, formatDisplayName } from './utils'
@@ -34,8 +35,8 @@ function NaIndicator({ source, metricType }: { source?: string; metricType: 'win
   // Get platform-specific note or use default
   const platformNote = source ? getPlatformNote(source) : undefined
   const defaultNote = metricType === 'winRate' 
-    ? 'Win rate not provided by this platform' 
-    : 'Drawdown not provided by this platform'
+    ? i18nT('winRateNotAvailable') 
+    : i18nT('drawdownNotAvailable')
   
   return (
     <span
