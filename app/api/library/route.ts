@@ -8,6 +8,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 )
 
+// Only select fields the frontend needs (avoid transferring large text fields like ai_summary)
+const LIBRARY_LIST_FIELDS = 'id,title,title_en,title_zh,author,description,category,subcategory,cover_url,language,tags,publish_date,rating,rating_count,view_count,download_count,is_free,created_at'
+
 export async function GET(req: NextRequest) {
   try {
   // Rate limit: 60 req/min
@@ -54,13 +57,13 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
       p_offset: offset,
     })
 
-    if (!error) {
-      // Get total count separately
-      let countQuery = supabase.from('library_items').select('*', { count: 'exact', head: true })
+    if (!error && data) {
+      // Get total count in parallel - use head:true with minimal select for speed
+      let countQuery = supabase.from('library_items').select('id', { count: 'exact', head: true })
       if (category && category !== 'all') countQuery = countQuery.eq('category', category)
       const { count: total } = await countQuery
       return {
-        items: data || [],
+        items: data,
         total: total || 0,
         page,
         totalPages: Math.ceil((total || 0) / limit),
@@ -72,7 +75,7 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
 
   let query = supabase
     .from('library_items')
-    .select('*', { count: 'exact' })
+    .select(LIBRARY_LIST_FIELDS, { count: 'exact' })
 
   if (category && category !== 'all') {
     query = query.eq('category', category)
@@ -85,7 +88,7 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
   // Apply sort order
   switch (sort) {
     case 'popular':
-      query = query.order('viewcount', { ascending: false, nullsFirst: false })
+      query = query.order('view_count', { ascending: false, nullsFirst: false })
       break
     case 'rating':
       query = query.order('rating', { ascending: false, nullsFirst: false })

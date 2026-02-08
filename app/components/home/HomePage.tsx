@@ -1,6 +1,11 @@
+
+'use client'
+
 import { Suspense, lazy } from 'react'
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
+import { useLanguage } from '../Providers/LanguageProvider'
 import TopNav from '../layout/TopNav'
 import MobileBottomNav from '../layout/MobileBottomNav'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
@@ -28,6 +33,7 @@ export default function HomePage({
   initialTraders,
   initialLastUpdated,
 }: HomePageProps) {
+  const { t } = useLanguage()
   return (
     <Box
       style={{
@@ -95,8 +101,53 @@ export default function HomePage({
               lineHeight: 1.5,
             }}
           >
-            聚合全网交易员排名，发现最强交易者
+            {t('heroSubtitle')}
           </p>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 12,
+              marginBottom: 20,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Link
+              href="/rankings"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '10px 24px',
+                borderRadius: tokens.radius.lg,
+                background: tokens.colors.accent.brand,
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                textDecoration: 'none',
+                transition: 'opacity 0.2s',
+              }}
+            >
+              {t('heroCTABrowse')}
+            </Link>
+            <Link
+              href="/login"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '10px 24px',
+                borderRadius: tokens.radius.lg,
+                background: 'transparent',
+                color: tokens.colors.text.primary,
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: 'none',
+                border: `1px solid ${tokens.colors.border.primary}`,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              {t('heroCTASignUp')}
+            </Link>
+          </div>
           <Suspense fallback={null}>
             <HeroStats />
           </Suspense>

@@ -215,7 +215,7 @@ function RankingFadeWrapper({ transitionKey, children }: { transitionKey: string
 }
 
 function RankingsContent() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -241,6 +241,8 @@ function RankingsContent() {
     }
     setHasRestoredPrefs(true)
   }, [hasRestoredPrefs, searchParams, router, pathname])
+
+  const [searchQuery, setSearchQuery] = useState('')
 
   const activeWindow = (searchParams.get('window') as SnapshotWindow) || '90D'
   const activePlatform = searchParams.get('platform') || undefined
@@ -284,18 +286,29 @@ function RankingsContent() {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
-  // Filter data by category if no specific platform selected
+  // Filter data by category and search query
   const filteredTraders = useMemo(() => {
     if (!data) return []
-    if (activeCategory === 'all' || activePlatform) return data.traders
-    return data.traders.filter(t => {
-      const sourceType = SOURCE_TYPE_MAP[t.platform]
-      if (activeCategory === 'cex_futures') return sourceType === 'futures'
-      if (activeCategory === 'cex_spot') return sourceType === 'spot'
-      if (activeCategory === 'onchain_dex') return sourceType === 'web3'
-      return true
-    })
-  }, [data, activeCategory, activePlatform])
+    let result = data.traders
+    if (activeCategory !== 'all' && !activePlatform) {
+      result = result.filter(t => {
+        const sourceType = SOURCE_TYPE_MAP[t.platform]
+        if (activeCategory === 'cex_futures') return sourceType === 'futures'
+        if (activeCategory === 'cex_spot') return sourceType === 'spot'
+        if (activeCategory === 'onchain_dex') return sourceType === 'web3'
+        return true
+      })
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      result = result.filter(t => {
+        const name = getTraderDisplayName(t).toLowerCase()
+        const key = t.trader_key.toLowerCase()
+        return name.includes(q) || key.includes(q)
+      })
+    }
+    return result
+  }, [data, activeCategory, activePlatform, searchQuery])
   
   // Defer expensive list rendering to keep UI responsive during filter changes
   const deferredTraders = useDeferredValue(filteredTraders)
@@ -466,6 +479,54 @@ function RankingsContent() {
             router.replace(`${pathname}?${params.toString()}`, { scroll: false })
           }}
         />
+
+        {/* Search box */}
+        <div style={{ position: 'relative', marginBottom: tokens.spacing[4] }}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('rankingsSearchPlaceholder')}
+            style={{
+              width: '100%',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              paddingRight: searchQuery ? 36 : tokens.spacing[4],
+              borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.glass.bg.light,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+              outline: 'none',
+              transition: `border-color ${tokens.transition.fast}`,
+            }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = tokens.colors.accent.brand }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: tokens.colors.text.tertiary,
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              aria-label="Clear search"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6L18 18" />
+              </svg>
+            </button>
+          )}
+        </div>
 
         <RankingFadeWrapper transitionKey={`${activeWindow}-${activeCategory}-${activePlatform || ''}`}>
           <DataStateWrapper
@@ -751,7 +812,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
         title={metrics.win_rate == null ? (getPlatformNote(trader.platform) || 'Win rate not provided by this platform') : undefined}
       >
         {metrics.win_rate != null ? `${metrics.win_rate.toFixed(1)}%` : (
-          <span style={{ opacity: 0.5, cursor: 'help' }}>N/A</span>
+          <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, cursor: 'help' }}>&mdash;</span>
         )}
       </div>
 
@@ -761,7 +822,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
         title={metrics.max_drawdown == null ? (getPlatformNote(trader.platform) || 'Drawdown not provided by this platform') : undefined}
       >
         {metrics.max_drawdown != null ? `-${metrics.max_drawdown.toFixed(1)}%` : (
-          <span style={{ opacity: 0.5, cursor: 'help' }}>N/A</span>
+          <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, cursor: 'help' }}>&mdash;</span>
         )}
       </div>
 

@@ -369,7 +369,7 @@ export default function PricingPage() {
               }}
             >
               <Text size="xs" weight="bold" style={{ color: '#fff' }}>
-                {t('limitedOffer')}
+                {t('earlyBirdOffer')}
               </Text>
             </Box>
 
@@ -573,8 +573,11 @@ export default function PricingPage() {
           </Box>
 
           {/* 用户评价 */}
-          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[5] }}>
+          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
             {t('userTestimonials')}
+          </Text>
+          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[5] }}>
+            {t('sampleTestimonialLabel')}
           </Text>
           
           <Box

@@ -2622,6 +2622,18 @@ const zh = {
     faqSearchPlaceholder: '搜索常见问题...',
     faqNoResults: '未找到匹配的问题，请尝试其他关键词。',
 
+    // Hero section
+    heroSubtitle: '聚合全网交易员排名，发现最强交易者',
+    heroCTABrowse: '查看排行榜',
+    heroCTASignUp: '免费注册',
+
+    // Rankings search
+    rankingsSearchPlaceholder: '按名称搜索交易员...',
+
+    // Pricing
+    earlyBirdOffer: '早鸟优惠',
+    sampleTestimonialLabel: '示例评价',
+
 } as const
 
 export default zh
