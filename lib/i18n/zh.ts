@@ -2667,6 +2667,59 @@ const zh = {
     hapticFeedbackDesc: '当关注的交易员开仓时，手机会有特定节奏的震动',
     tradeAlertVibration: '交易提醒震动',
 
+  // Messaging system - read receipts, presence, group channels
+  messageSent: '已发送',
+  messageRead: '已读',
+  messageDelivered: '已送达',
+  onlineNow: '在线',
+  offlineStatus: '离线',
+  lastSeenAt: '最近在线',
+  lastSeenJustNow: '刚刚在线',
+  lastSeenMinutesAgo: '{n}分钟前在线',
+  lastSeenHoursAgo: '{n}小时前在线',
+  lastSeenDaysAgo: '{n}天前在线',
+  
+  // Group channels
+  groupChat: '群聊',
+  createGroupChat: '创建群聊',
+  chatGroupName: '群聊名称',
+  chatGroupNamePlaceholder: '输入群聊名称',
+  chatGroupDescription: '群聊描述',
+  addMembers: '添加成员',
+  removeMembers: '移除成员',
+  chatMemberCount: '{n}位成员',
+  channelSettings: '群聊设置',
+  dissolveGroup: '解散群聊',
+  groupOwner: '群主',
+  groupAdmin: '管理员',
+  inviteMembers: '邀请成员',
+  setAsAdmin: '设为管理员',
+  removeMember: '移除成员',
+  confirmRemoveMember: '确认移除该成员?',
+  confirmLeaveGroup: '确认退出群聊?',
+  confirmDissolveGroup: '确认解散群聊? 此操作不可撤销。',
+  groupCreated: '群聊创建成功',
+  memberAdded: '成员已添加',
+  memberRemoved: '成员已移除',
+  noGroupChats: '暂无群聊',
+  directMessages: '私信',
+  groupMessages: '群聊',
+  allChats: '全部',
+  searchUsers: '搜索用户',
+  selectMembers: '选择成员',
+  selectedCount: '已选 {n} 人',
+  createGroup: '创建',
+  
+  // File & image
+  dragDropHint: '拖拽文件到此处发送',
+  pasteImageHint: '粘贴图片发送',
+  attachmentUploading: '上传中...',
+  
+  // Search
+  searchMessages: '搜索消息',
+  noSearchResults: '未找到相关消息',
+  jumpToMessage: '跳转到消息',
+
 } as const
 
 export default zh

@@ -20,6 +20,7 @@ import {
   getErrorMessage,
 } from '@/lib/auth'
 import { useRealtime } from '@/lib/hooks/useRealtime'
+import { usePresence, formatLastSeen } from '@/lib/hooks/usePresence'
 import ChatSettingsDrawer from '@/app/components/features/ChatSettingsDrawer'
 import ChatSearchOverlay from '@/app/components/features/ChatSearchOverlay'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -45,6 +46,7 @@ type Message = {
   receiver_id: string
   content: string
   read: boolean
+  read_at?: string | null
   created_at: string
   media_url?: string | null
   media_type?: 'image' | 'video' | 'file' | null
@@ -175,6 +177,25 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   const [uploading, setUploading] = useState(false)
   const [previewOpen, setPreviewOpen] = useState<{ type: 'image' | 'video' | 'file'; url: string; fileName?: string } | null>(null)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  // Online presence
+  const watchIds = otherUser ? [otherUser.id] : []
+  const { getUserPresence } = usePresence(userId, watchIds)
+  const otherPresence = otherUser ? getUserPresence(otherUser.id) : null
+
+  // Mark messages as read when conversation opens
+  useEffect(() => {
+    if (!conversationId || !accessToken) return
+    fetch('/api/messages/read', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ conversationId }),
+    }).catch(() => {})
+  }, [conversationId, accessToken, messages.length])
 
   // 注入 spin 动画样式
   useEffect(() => {
@@ -377,6 +398,14 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           if (prev.some(m => m.id === newMsg.id)) return prev
           return [...prev, newMsg]
         })
+        // Auto-mark incoming messages as read since we're viewing the conversation
+        if (accessToken && conversationId) {
+          fetch('/api/messages/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+            body: JSON.stringify({ conversationId }),
+          }).catch(() => {})
+        }
       }
     },
     onStatusChange: (status) => {
@@ -386,6 +415,23 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
         setConnectionStatus('disconnected')
       } else if (status === 'reconnecting') {
         setConnectionStatus('reconnecting')
+      }
+    },
+  })
+
+  // Subscribe to read receipt updates (when other user reads our messages)
+  useRealtime<Message>({
+    table: 'direct_messages',
+    event: 'UPDATE',
+    filter: userId ? `sender_id=eq.${userId}` : undefined,
+    enabled: !!userId && !!conversationId && !!otherUser,
+    autoReconnect: true,
+    maxRetries: 5,
+    onUpdate: ({ new: updatedMsg }) => {
+      if (updatedMsg.read) {
+        setMessages(prev => prev.map(m =>
+          m.id === updatedMsg.id ? { ...m, read: true, read_at: updatedMsg.read_at } : m
+        ))
       }
     },
   })
@@ -799,14 +845,53 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   const messageGroups = groupMessagesByDate(visibleMessages)
 
   return (
-    <Box style={{
-      minHeight: '100vh',
-      background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary} 50%, ${tokens.colors.bg.primary} 100%)`,
-      color: tokens.colors.text.primary,
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative',
-    }}>
+    <Box
+      onDragOver={(e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }}
+      onDragLeave={(e: React.DragEvent) => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false) }}
+      onDrop={async (e: React.DragEvent) => {
+        e.preventDefault()
+        setIsDragging(false)
+        const file = e.dataTransfer.files?.[0]
+        if (file && userId && conversationId) {
+          setUploading(true)
+          try {
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('userId', userId)
+            formData.append('conversationId', conversationId)
+            const res = await globalThis.fetch('/api/chat/upload', { method: 'POST', headers: getCsrfHeaders(), body: formData })
+            const data = await res.json()
+            if (res.ok) {
+              setPendingAttachment({ url: data.url, type: data.category, fileName: data.fileName, originalName: data.originalName, fileSize: data.fileSize })
+            } else {
+              showToast(data.error || t('uploadFailed'), 'error')
+            }
+          } catch { showToast(t('uploadFailedRetry'), 'error') }
+          finally { setUploading(false) }
+        }
+      }}
+      style={{
+        minHeight: '100vh',
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary} 50%, ${tokens.colors.bg.primary} 100%)`,
+        color: tokens.colors.text.primary,
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+      }}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <Box style={{
+          position: 'absolute', inset: 0, zIndex: 999,
+          background: 'rgba(149, 117, 205, 0.15)',
+          border: `3px dashed ${tokens.colors.accent.brand}`,
+          borderRadius: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.brand }}>{t('dragDropHint')}</Text>
+        </Box>
+      )}
       <TopNav email={email} />
       
       {/* Header */}
@@ -917,17 +1002,20 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                   size={44}
                 />
                 {/* Online status indicator */}
-                <Box style={{
-                  position: 'absolute',
-                  bottom: 1,
-                  right: 1,
-                  width: 12,
-                  height: 12,
-                  borderRadius: tokens.radius.full,
-                  background: tokens.colors.accent.success,
-                  border: `2px solid ${tokens.colors.bg.secondary}`,
-                  boxShadow: tokens.shadow.glowSuccess,
-                }} />
+                {otherPresence && (
+                  <Box style={{
+                    position: 'absolute',
+                    bottom: 1,
+                    right: 1,
+                    width: 12,
+                    height: 12,
+                    borderRadius: tokens.radius.full,
+                    background: otherPresence.isOnline ? tokens.colors.accent.success : tokens.colors.text.tertiary,
+                    border: `2px solid ${tokens.colors.bg.secondary}`,
+                    boxShadow: otherPresence.isOnline ? tokens.shadow.glowSuccess : 'none',
+                    transition: 'background 0.3s',
+                  }} />
+                )}
               </Box>
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
@@ -938,7 +1026,16 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     @{displayName}
                   </Text>
                 )}
-                {!remark && otherUser.bio && (
+                {!remark && otherPresence && (
+                  <Text size="xs" style={{
+                    marginTop: 2,
+                    color: otherPresence.isOnline ? tokens.colors.accent.success : tokens.colors.text.tertiary,
+                    fontWeight: otherPresence.isOnline ? 600 : 400,
+                  }}>
+                    {otherPresence.isOnline ? t('onlineNow') : formatLastSeen(otherPresence.lastSeenAt, t)}
+                  </Text>
+                )}
+                {!remark && !otherPresence && otherUser.bio && (
                   <Text size="xs" color="tertiary" style={{
                     maxWidth: '100%',
                     overflow: 'hidden',
@@ -1416,8 +1513,19 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                         <>
                           {formatTime(msg.created_at)}
                           {isMine && (
-                            <span style={{ marginLeft: 2, opacity: 0.7 }}>
-                              {msg.read ? 'Read' : 'Sent'}
+                            <span style={{ marginLeft: 3, display: 'inline-flex', alignItems: 'center' }}>
+                              {msg.read ? (
+                                /* Double check = read */
+                                <svg width="16" height="10" viewBox="0 0 16 10" fill="none" style={{ opacity: 0.9 }}>
+                                  <path d="M1 5l3 3L10 1" stroke={tokens.colors.accent.success} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M5 5l3 3L14 1" stroke={tokens.colors.accent.success} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              ) : (
+                                /* Single check = sent */
+                                <svg width="12" height="10" viewBox="0 0 12 10" fill="none" style={{ opacity: 0.5 }}>
+                                  <path d="M1 5l3 3L10 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
                             </span>
                           )}
                         </>
@@ -1860,6 +1968,33 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={async (e) => {
+              const items = e.clipboardData?.items
+              if (!items || !userId || !conversationId) return
+              for (const item of Array.from(items)) {
+                if (item.type.startsWith('image/')) {
+                  e.preventDefault()
+                  const file = item.getAsFile()
+                  if (!file) return
+                  setUploading(true)
+                  try {
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    formData.append('userId', userId)
+                    formData.append('conversationId', conversationId)
+                    const res = await globalThis.fetch('/api/chat/upload', { method: 'POST', headers: getCsrfHeaders(), body: formData })
+                    const data = await res.json()
+                    if (res.ok) {
+                      setPendingAttachment({ url: data.url, type: data.category, fileName: data.fileName, originalName: data.originalName || 'pasted-image.png', fileSize: data.fileSize })
+                    } else {
+                      showToast(data.error || t('uploadFailed'), 'error')
+                    }
+                  } catch { showToast(t('uploadFailedRetry'), 'error') }
+                  finally { setUploading(false) }
+                  break
+                }
+              }
+            }}
             placeholder={t('enterMessage')}
             rows={1}
             style={{
