@@ -69,8 +69,6 @@ const zh = {
     downvote: '反对',
     hotDiscussion: '热门讨论',
     more: '更多',
-    market: '市场',
-    traderComparison: '交易者对比',
     loadFailed: '加载失败',
     secondsAgo: '秒前',
     minutesAgo: '分钟前',

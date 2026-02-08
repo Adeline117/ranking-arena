@@ -68,8 +68,6 @@ const en = {
     downvote: 'Downvote',
     hotDiscussion: 'Hot Discussion',
     more: 'More',
-    market: 'Market',
-    traderComparison: 'Trader Comparison',
     loadFailed: 'Load failed',
     secondsAgo: 'seconds ago',
     minutesAgo: 'minutes ago',
