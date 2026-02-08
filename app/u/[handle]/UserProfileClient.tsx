@@ -133,6 +133,7 @@ interface ServerProfile {
   isRegistered: boolean
   isVerifiedTrader?: boolean
   proBadgeTier: 'pro' | null
+  role?: string
 }
 
 interface UserProfileClientProps {
@@ -143,7 +144,8 @@ interface UserProfileClientProps {
 export default function UserProfileClient({ handle, serverProfile }: UserProfileClientProps) {
   const router = useRouter()
   const { showToast } = useToast()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const isZh = language === 'zh'
 
   const [email, setEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -203,7 +205,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
       // Check if profile exists by user ID
       const { data: existingProfile } = await supabase
         .from('user_profiles')
-        .select('id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier')
+        .select('id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, role')
         .eq('id', userId)
         .maybeSingle()
 
@@ -223,6 +225,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           followingTraders: 0,
           isRegistered: true,
           proBadgeTier: null,
+          role: existingProfile.role || undefined,
         })
       } else {
         const defaultHandle = emailHandle || userId.slice(0, 8)
@@ -494,6 +497,55 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
                 {profile.proBadgeTier === 'pro' && (
                   <ProBadge size="sm" showLabel={true} />
+                )}
+
+                {/* Developer Badge */}
+                {profile.role === 'developer' && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 8px',
+                      background: 'linear-gradient(135deg, var(--color-brand), #6b4f88)',
+                      borderRadius: tokens.radius.full,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: '#FFFFFF',
+                      letterSpacing: '0.02em',
+                      boxShadow: '0 2px 8px rgba(139, 111, 168, 0.4)',
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="16 18 22 12 16 6" />
+                      <polyline points="8 6 2 12 8 18" />
+                    </svg>
+                    {isZh ? '开发者' : 'Developer'}
+                  </span>
+                )}
+
+                {/* Admin Badge */}
+                {profile.role === 'admin' && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 8px',
+                      background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+                      borderRadius: tokens.radius.full,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: '#1a1200',
+                      letterSpacing: '0.02em',
+                      boxShadow: '0 2px 8px rgba(255, 215, 0, 0.4)',
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 1l3.22 6.636 7.28.96-5.25 5.18 1.24 7.224L12 17.77 5.51 21l1.24-7.224L1.5 8.596l7.28-.96z" />
+                    </svg>
+                    {isZh ? '管理员' : 'Admin'}
+                  </span>
                 )}
               </Box>
 

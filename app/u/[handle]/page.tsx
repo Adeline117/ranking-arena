@@ -37,6 +37,7 @@ interface UserProfileData {
   isRegistered: boolean
   isVerifiedTrader?: boolean
   proBadgeTier: 'pro' | null
+  role?: string
 }
 
 async function fetchUserProfile(handle: string): Promise<UserProfileData | null> {
@@ -46,7 +47,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   // Parallel lookup: by handle + by UUID (if applicable)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   // Only select columns that actually exist in user_profiles table
-  const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge'
+  const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role'
 
   const [handleResult, uuidResult] = await Promise.all([
     supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
@@ -97,6 +98,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     isRegistered: true,
     isVerifiedTrader: hasClaimedTrader,
     proBadgeTier: hasPro && userProfile.show_pro_badge !== false ? 'pro' : null,
+    role: userProfile.role || undefined,
   }
 }
 
