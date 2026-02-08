@@ -15,7 +15,15 @@ export default function CreatePostFAB() {
 
   return (
     <button
-      onClick={() => router.push('/groups')}
+      onClick={() => {
+        // Navigate to group selection or last-used group's new post page
+        const lastGroup = typeof window !== 'undefined' ? localStorage.getItem('last_post_group_id') : null
+        if (lastGroup) {
+          router.push(`/groups/${lastGroup}/new`)
+        } else {
+          router.push('/groups')
+        }
+      }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       aria-label="发帖"

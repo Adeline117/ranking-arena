@@ -165,7 +165,7 @@ const zh = {
     source: '来源',
     allExchanges: '全部',
     // 交易员主页
-    similarTraders: '查看更多类似交易员',
+    similarTraders: '相似交易员',
     traderNotRegistered: '交易员未入驻',
     traderNotRegisteredDesc: '该交易员尚未认领此账号',
     jumpToExchange: '跳转至交易所跟单',
@@ -1342,7 +1342,6 @@ const zh = {
     translationServiceError: '翻译服务出错',
 
     // GroupsFeedPage
-    createGroup: '创建小组',
     groupFeed: '小组动态',
     discoverGroups: '发现小组',
     myGroups: '我的小组',
@@ -2635,24 +2634,16 @@ const zh = {
     earlyBirdOffer: '早鸟优惠',
     sampleTestimonialLabel: '示例评价',
 
-    // Search dropdown
-    searchDropdownResults: '搜索结果',
-    viewAllSearchResults: '查看全部搜索结果',
-    searchHistory: '搜索历史',
-    clearSearchHistory: '清空',
-    traderTypeLabel: '交易员',
-    postTypeLabel: '帖子',
-    groupTypeLabel: '群组',
-    noHotPosts: '暂无热门帖子',
-    enablePushNotifications: '开启推送通知',
-    pushNotificationsTitle: '推送通知',
-    pushNotificationsDesc: '在浏览器或手机上接收实时推送通知',
-    browserNotSupported: '你的浏览器不支持推送通知',
-    allowNotificationPermission: '请在浏览器设置中允许通知权限',
-    pushNotificationsEnabled: '推送通知已开启！',
-    hapticFeedbackTitle: '震动反馈',
-    hapticFeedbackDesc: '当关注的交易员开仓时，手机会有特定节奏的震动',
-    tradeAlertVibration: '交易提醒震动',
+    // Empty state CTAs
+    goToRankings: '去排行榜看看',
+    goToLibrary: '去书库看看',
+    goToGroups: '去社区看看',
+    browsePublicFolders: '浏览公开收藏夹',
+    writeFirstPost: '发布第一篇帖子',
+    noFollowingCta: '还没有关注的交易员，去排行榜看看',
+    noFoldersCta: '还没有收藏夹，点击上方创建一个',
+    noPostsCta: '还没有帖子，去社区发布第一篇',
+    loginToFollow: '登录后关注交易员，追踪最新表现',
 
 } as const
 

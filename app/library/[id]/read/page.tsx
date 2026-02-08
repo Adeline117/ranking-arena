@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { usePremium } from '@/lib/premium/hooks'
 import { tokens } from '@/lib/design-tokens'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { supabase } from '@/lib/supabase/client'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -669,12 +670,29 @@ export default function ReadPage() {
   }
 
   if (error || !book) {
+    const isNoContent = error === (isZh ? '该书籍暂无阅读资源' : 'No reading resource available')
     return (
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="1.5" style={{ marginBottom: 16 }}>
-          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-        </svg>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 16, marginBottom: 16, textAlign: 'center' }}>{error}</p>
+        <div style={{
+          width: 80, height: 80, borderRadius: '50%',
+          background: 'var(--color-bg-secondary, rgba(255,255,255,0.05))',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: 20,
+        }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="1.5">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+          </svg>
+        </div>
+        <h2 style={{ color: 'var(--color-text-primary)', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+          {isNoContent
+            ? (isZh ? '暂无内容' : 'No Content Available')
+            : (isZh ? '加载失败' : 'Failed to Load')}
+        </h2>
+        <p style={{ color: 'var(--color-text-tertiary)', fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400, lineHeight: 1.6 }}>
+          {isNoContent
+            ? (isZh ? '该书籍暂无电子版阅读资源，请稍后再来查看。' : 'No digital reading resource is available for this book yet. Please check back later.')
+            : (error || (isZh ? '未找到该书籍' : 'Book not found'))}
+        </p>
         <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: 12, background: 'var(--color-accent-primary)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
           {isZh ? '返回书籍详情' : 'Back to Book'}
         </Link>

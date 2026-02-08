@@ -95,7 +95,7 @@ function SearchContent() {
       if (idx > last) parts.push(text.slice(last, idx))
       parts.push(
         <span key={`hl-${idx}`} style={{
-          backgroundColor: 'rgba(139, 111, 168, 0.25)',
+          backgroundColor: 'var(--color-accent-primary-25, rgba(139, 111, 168, 0.25))',
           color: 'inherit', borderRadius: 2, padding: '0 2px', fontWeight: 600,
         }}>
           {text.slice(idx, idx + lq.length)}

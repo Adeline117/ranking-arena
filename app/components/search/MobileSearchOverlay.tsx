@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { CloseIcon } from '../ui/icons'
@@ -19,6 +20,7 @@ interface MobileSearchOverlayProps {
  */
 export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverlayProps) {
   const { t } = useLanguage()
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -75,6 +77,13 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && query.trim()) {
+                e.preventDefault()
+                router.push(`/search?q=${encodeURIComponent(query.trim())}`)
+                onClose()
+              }
+            }}
             placeholder={t('searchPlaceholder')}
             style={{
               width: '100%',
