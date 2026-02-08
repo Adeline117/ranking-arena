@@ -506,6 +506,38 @@ function RankingsContent() {
   )
 }
 
+type SortField = 'rank' | 'roi' | 'pnl' | 'winRate' | 'drawdown' | 'score'
+type SortDir = 'asc' | 'desc'
+
+/** Sort arrow indicator */
+function SortIndicator({ active, direction }: { active: boolean; direction: SortDir }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        lineHeight: 0,
+        marginLeft: 2,
+        opacity: active ? 1 : 0.3,
+        transition: 'opacity 0.15s ease',
+      }}
+    >
+      <span style={{
+        fontSize: 8,
+        color: active && direction === 'asc' ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+      }}>
+        &#9650;
+      </span>
+      <span style={{
+        fontSize: 8,
+        color: active && direction === 'desc' ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+      }}>
+        &#9660;
+      </span>
+    </span>
+  )
+}
+
 /**
  * TraderList - Renders trader list with automatic virtual scrolling
  * Uses VirtualLeaderboard when there are many traders for performance
@@ -520,11 +552,42 @@ function TraderList({
   isLoading: boolean
 }) {
   const router = useRouter()
+  const [sortField, setSortField] = useState<SortField>('rank')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  const handleSort = useCallback((field: SortField) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      // Default direction: descending for metrics, ascending for rank
+      setSortDir(field === 'rank' ? 'asc' : 'desc')
+    }
+  }, [sortField])
+
+  const sortedTraders = useMemo(() => {
+    if (sortField === 'rank') {
+      return sortDir === 'asc' ? traders : [...traders].reverse()
+    }
+    const sorted = [...traders].sort((a, b) => {
+      let va: number, vb: number
+      switch (sortField) {
+        case 'roi': va = a.metrics.roi; vb = b.metrics.roi; break
+        case 'pnl': va = a.metrics.pnl; vb = b.metrics.pnl; break
+        case 'winRate': va = a.metrics.win_rate ?? -1; vb = b.metrics.win_rate ?? -1; break
+        case 'drawdown': va = a.metrics.max_drawdown ?? 999; vb = b.metrics.max_drawdown ?? 999; break
+        case 'score': va = a.metrics.arena_score ?? -1; vb = b.metrics.arena_score ?? -1; break
+        default: va = 0; vb = 0
+      }
+      return sortDir === 'desc' ? vb - va : va - vb
+    })
+    return sorted
+  }, [traders, sortField, sortDir])
   
   // Convert traders to virtual row format
   const virtualRows = useMemo(() => 
-    traders.map((t, i) => toVirtualRow(t, i + 1)),
-    [traders]
+    sortedTraders.map((t, i) => toVirtualRow(t, i + 1)),
+    [sortedTraders]
   )
   
   const handleRowClick = useCallback((row: VirtualTraderRow) => {
@@ -563,6 +626,12 @@ function TraderList({
       </div>
     )
   }
+
+  const headerStyle: React.CSSProperties = {
+    cursor: 'pointer',
+    userSelect: 'none',
+    transition: 'color 0.15s ease',
+  }
   
   // Regular rendering for small datasets
   return (
@@ -572,26 +641,28 @@ function TraderList({
           className="grid ranking-table-grid gap-2 px-4 py-3 text-xs font-medium border-b"
           style={{ color: tokens.colors.text.secondary, borderColor: tokens.colors.border.primary }}
         >
-          <div>#</div>
+          <div style={headerStyle} onClick={() => handleSort('rank')}>
+            # <SortIndicator active={sortField === 'rank'} direction={sortDir} />
+          </div>
           <div>{isZh ? '交易员' : 'Trader'}</div>
-          <div className="text-right flex items-center justify-end gap-1">
-            ROI <MetricTooltip metric="roi" language={isZh ? 'zh' : 'en'} />
+          <div className="text-right flex items-center justify-end gap-1" style={headerStyle} onClick={() => handleSort('roi')}>
+            ROI <SortIndicator active={sortField === 'roi'} direction={sortDir} /> <MetricTooltip metric="roi" language={isZh ? 'zh' : 'en'} />
           </div>
-          <div className="text-right col-pnl flex items-center justify-end gap-1">
-            PnL <MetricTooltip metric="pnl" language={isZh ? 'zh' : 'en'} />
+          <div className="text-right col-pnl flex items-center justify-end gap-1" style={headerStyle} onClick={() => handleSort('pnl')}>
+            PnL <SortIndicator active={sortField === 'pnl'} direction={sortDir} /> <MetricTooltip metric="pnl" language={isZh ? 'zh' : 'en'} />
           </div>
-          <div className="text-right col-winrate flex items-center justify-end gap-1">
-            {isZh ? '胜率' : 'Win%'} <MetricTooltip metric="winRate" language={isZh ? 'zh' : 'en'} />
+          <div className="text-right col-winrate flex items-center justify-end gap-1" style={headerStyle} onClick={() => handleSort('winRate')}>
+            {isZh ? '胜率' : 'Win%'} <SortIndicator active={sortField === 'winRate'} direction={sortDir} /> <MetricTooltip metric="winRate" language={isZh ? 'zh' : 'en'} />
           </div>
-          <div className="text-right col-mdd flex items-center justify-end gap-1">
-            {isZh ? '回撤' : 'MDD'} <MetricTooltip metric="maxDrawdown" language={isZh ? 'zh' : 'en'} />
+          <div className="text-right col-mdd flex items-center justify-end gap-1" style={headerStyle} onClick={() => handleSort('drawdown')}>
+            {isZh ? '回撤' : 'MDD'} <SortIndicator active={sortField === 'drawdown'} direction={sortDir} /> <MetricTooltip metric="maxDrawdown" language={isZh ? 'zh' : 'en'} />
           </div>
-          <div className="text-right col-score flex items-center justify-end gap-1">
-            Score <MetricTooltip metric="arenaScore" language={isZh ? 'zh' : 'en'} />
+          <div className="text-right col-score flex items-center justify-end gap-1" style={headerStyle} onClick={() => handleSort('score')}>
+            Score <SortIndicator active={sortField === 'score'} direction={sortDir} /> <MetricTooltip metric="arenaScore" language={isZh ? 'zh' : 'en'} />
           </div>
         </div>
 
-        {traders.map((trader, index) => (
+        {sortedTraders.map((trader, index) => (
           <TraderRow key={`${trader.platform}:${trader.trader_key}`} trader={{ ...trader, rank: index + 1 }} />
         ))}
 
