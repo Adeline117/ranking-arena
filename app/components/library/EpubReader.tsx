@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Rendition, Book, NavItem, Contents } from 'epubjs'
+import AudioReader from './AudioReader'
 import { supabase } from '@/lib/supabase/client'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -235,6 +236,10 @@ export default function EpubReader({
   // Notes panel
   const [showNotes, setShowNotes] = useState(false)
 
+  // Audio reader
+  const [showAudioReader, setShowAudioReader] = useState(false)
+  const [currentPageText, setCurrentPageText] = useState('')
+
   // Typography settings panel
   const [showTypography, setShowTypography] = useState(false)
   const [localLineHeight, setLocalLineHeight] = useState<LineHeight>(lineHeight)
@@ -363,6 +368,18 @@ export default function EpubReader({
             onProgressChange(p, page, total)
           }
 
+          // Extract page text for audio reader
+          try {
+            const contents = rendition.getContents() as any
+            if (contents && contents.length > 0) {
+              const doc = contents[0]?.document || contents[0]?.content?.ownerDocument
+              if (doc) {
+                const body = doc.querySelector?.('body') || doc.body
+                setCurrentPageText(body?.textContent?.trim() || '')
+              }
+            }
+          } catch { /* empty */ }
+
           // Sync to server (debounced by nature of user interaction)
           syncEpubPositionToServer(bookId, cfi, p, page, total)
         }
@@ -478,12 +495,14 @@ export default function EpubReader({
       if (e.key === 'n' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowNotes(p => !p) }
       if (e.key === 'i' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowStats(p => !p) }
       if (e.key === 't' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowTypography(p => !p) }
+      if (e.key === 'a' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowAudioReader(p => !p) }
       if (e.key === 'Escape') {
         setShowSearch(false)
         setShowNotes(false)
         setShowStats(false)
         setShowTypography(false)
         setShowNoteInput(false)
+        setShowAudioReader(false)
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -648,6 +667,18 @@ export default function EpubReader({
         </div>
       )}
 
+      {/* Audio Reader overlay */}
+      {showAudioReader && currentPageText && (
+        <AudioReader
+          text={currentPageText}
+          isZh={isZh}
+          themeIsDark={themeIsDark}
+          onClose={() => {
+            setShowAudioReader(false)
+          }}
+        />
+      )}
+
       {/* ─── Bottom progress info bar ─────────────────────── */}
       {ready && (
         <div style={{
@@ -667,6 +698,18 @@ export default function EpubReader({
           <span>
             {isZh ? '预计剩余 ' : 'Remaining: '}{timeRemainingStr}
           </span>
+          <button
+            onClick={() => setShowAudioReader(p => !p)}
+            style={{
+              padding: '2px 10px', borderRadius: 6, fontSize: 11,
+              border: `1px solid ${panelBorder}`,
+              background: showAudioReader ? accent : 'transparent',
+              color: showAudioReader ? '#fff' : 'inherit',
+              cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            {isZh ? '朗读模式' : 'Audio'}
+          </button>
         </div>
       )}
 
