@@ -2724,6 +2724,20 @@ const en = {
   timeframe4h: '4 Hours',
   timeframe1d: '1 Day',
 
+  // Technical Analysis Indicators
+  technicalIndicators: 'Technical Indicators',
+  indicatorRSI: 'Relative Strength Index (RSI)',
+  indicatorMACD: 'MACD',
+  indicatorMACDLine: 'MACD Line',
+  indicatorMACDSignal: 'Signal Line',
+  indicatorMACDHistogram: 'Histogram',
+  indicatorBollingerBands: 'Bollinger Bands',
+  indicatorBollingerUpper: 'Upper Band',
+  indicatorBollingerMiddle: 'Middle Band',
+  indicatorBollingerLower: 'Lower Band',
+  indicatorSMA: 'Simple Moving Average (SMA)',
+  indicatorEMA: 'Exponential Moving Average (EMA)',
+
 } as const
 
 export default en
