@@ -420,9 +420,7 @@ export async function GET(request: Request) {
 
   // Try bulk fetch first
   if (mode !== 'individual' && BULK_FETCHERS[platform]) {
-    console.log(`[backfill-avatars] Bulk fetching for ${platform}...`)
     const bulkMap = await BULK_FETCHERS[platform]()
-    console.log(`[backfill-avatars] Bulk: ${bulkMap.size} avatars found`)
     
     for (const t of traders) {
       const avatar = bulkMap.get(t.source_trader_id) || bulkMap.get(t.handle)

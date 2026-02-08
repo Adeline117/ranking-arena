@@ -80,7 +80,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`[cleanup-deleted-accounts] Deleted ${deleted}/${expiredAccounts.length} accounts`)
 
     return NextResponse.json({
       message: `Cleanup complete`,

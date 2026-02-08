@@ -175,10 +175,8 @@ export async function POST(request: NextRequest) {
   let errors = 0
 
   try {
-    console.log('[Fetch Open Interest] Starting fetch from all exchanges...')
 
     for (const exchange of EXCHANGES) {
-      console.log(`[Fetch Open Interest] Processing ${exchange.name}...`)
 
       for (const symbol of exchange.symbols) {
         try {

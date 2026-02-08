@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
     yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const dateStr = yesterday.toISOString().split('T')[0]
 
-    console.log(`[Aggregate Daily Snapshots] Processing date: ${dateStr}`)
 
     // Get all active traders from trader_sources
     const { data: traders, error: fetchError } = await supabase
@@ -70,7 +69,6 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    console.log(`[Aggregate Daily Snapshots] Found ${traders.length} traders to process`)
 
     // Process traders in batches
     for (let i = 0; i < traders.length; i += BATCH_SIZE) {
@@ -177,7 +175,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Log progress every batch
-      console.log(`[Aggregate Daily Snapshots] Progress: ${processed}/${traders.length} traders processed, ${inserted} snapshots inserted`)
     }
 
     const duration = Date.now() - startTime

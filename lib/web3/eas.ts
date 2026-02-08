@@ -155,11 +155,9 @@ export async function registerSchema(): Promise<Hex> {
   // The schema UID is the first indexed topic in the first log
   const schemaUID = receipt.logs[0]?.topics?.[1] as Hex | undefined
   if (schemaUID) {
-    console.log('[EAS] Schema registered, UID:', schemaUID, 'tx:', hash)
     return schemaUID
   }
 
-  console.log('[EAS] Schema registered, tx:', hash, '(extract UID from explorer)')
   return hash
 }
 

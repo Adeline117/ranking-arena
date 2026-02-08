@@ -99,7 +99,6 @@ export async function GET(req: Request) {
       totalCount += count
       results.push({ source, count })
 
-      console.log(`[FollowedTraders Cron] ${source}: ${count} 个关注的交易员需要更新`)
     }
 
     // 6. 运行异动检测
@@ -109,7 +108,6 @@ export async function GET(req: Request) {
       const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
       if (supabaseUrl && supabaseKey) {
         alertResult = await runTraderAlertDetection(supabaseUrl, supabaseKey)
-        console.log(`[FollowedTraders Cron] 异动检测: ${alertResult.alertsDetected} 告警, ${alertResult.notificationsSaved} 通知`)
       }
     } catch (alertError) {
       console.error('[FollowedTraders Cron] 异动检测失败:', alertError)

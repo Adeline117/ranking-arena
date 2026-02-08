@@ -292,9 +292,7 @@ export async function GET(req: Request) {
           PLATFORM_NAMES
         )
         if (alertResult.sent) {
-          console.log(
-            `[DataFreshness] 报警已发送到: ${alertResult.channels.join(', ')}`
-          )
+          // Alert sent successfully
         }
       } catch (error: unknown) {
         logger.error('Failed to send freshness alert', {}, error instanceof Error ? error : new Error(String(error)))

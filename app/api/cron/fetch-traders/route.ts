@@ -102,7 +102,6 @@ export async function POST(req: Request) {
     // 4) 顺序执行各平台脚本
     for (const platform of platforms) {
       try {
-        console.log(`[Cron] 开始执行平台: ${platform}`)
         const { results } = await executePlatformScripts(platform)
         allResults.push({ platform, results })
 

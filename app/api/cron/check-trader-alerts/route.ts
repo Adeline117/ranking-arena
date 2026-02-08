@@ -127,7 +127,6 @@ export async function POST(req: Request) {
 
     // 2. 收集需要检查的交易员 ID
     const traderIds = [...new Set(alerts.map((a: AlertConfig) => a.trader_id))]
-    console.log(`[TraderAlerts Cron] 需要检查 ${traderIds.length} 个交易员`)
 
     // 3. 获取这些交易员的当前数据
     const { data: tradersData, error: tradersError } = await supabase

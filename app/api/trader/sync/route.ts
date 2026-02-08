@@ -90,7 +90,6 @@ export async function POST(request: NextRequest) {
       authorizations = data || []
     }
 
-    console.log(`[Sync] Syncing ${authorizations.length} authorizations...`)
 
     let synced = 0
     let errors = 0
