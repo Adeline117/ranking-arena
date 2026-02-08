@@ -27,7 +27,6 @@ export function useRankingTableStyles() {
     link.rel = 'stylesheet'
     link.href = href
     link.onerror = () => {
-      console.warn('Failed to load ranking-table.css')
     }
     document.head.appendChild(link)
   }, [])

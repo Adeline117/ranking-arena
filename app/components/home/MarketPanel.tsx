@@ -49,7 +49,6 @@ export default function MarketPanel() {
         .maybeSingle()
 
       if (error) {
-        console.warn('[MarketPanel] Failed to load custom pairs:', error.message)
         loadPairsFromLocalStorage()
         return
       }
@@ -164,12 +163,7 @@ export default function MarketPanel() {
           )
           
           if (filteredRows.length === 0 && json.rows && json.rows.length > 0) {
-            // API 返回了数据但过滤后为空 - 可能是币种名称不匹配
-            console.warn('[MarketPanel] 警告: 过滤后数据为空', {
-              customPairs: pairsToFilter,
-              apiSymbols: json.rows.map((r: MarketRow) => r.symbol),
-              mismatch: pairsToFilter.filter(p => !json.rows.some((r: MarketRow) => r.symbol === p)),
-            })
+            // API returned data but filtering produced empty - possible symbol mismatch
           }
           
           // 只在数据真正变化时才更新，避免不必要的重新渲染

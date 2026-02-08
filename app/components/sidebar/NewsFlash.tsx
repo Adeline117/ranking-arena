@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import useSWR from 'swr'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, newsCategories, newsImportance } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -19,16 +19,16 @@ type NewsItem = {
 }
 
 const IMPORTANCE_CONFIG: Record<string, { color: string; label: string; label_en: string }> = {
-  breaking: { color: '#ef4444', label: '突发', label_en: 'Breaking' },
-  important: { color: '#f97316', label: '重要', label_en: 'Important' },
+  breaking: { color: newsImportance.breaking.color, label: '突发', label_en: 'Breaking' },
+  important: { color: newsImportance.important.color, label: '重要', label_en: 'Important' },
 }
 
 const CATEGORY_CONFIG: Record<string, { color: string; label: string; label_en: string }> = {
-  crypto: { color: '#f59e0b', label: '加密货币', label_en: 'Crypto' },
-  macro: { color: '#3b82f6', label: '宏观经济', label_en: 'Macro' },
-  defi: { color: '#10b981', label: 'DeFi', label_en: 'DeFi' },
-  regulation: { color: '#8b5cf6', label: '监管政策', label_en: 'Regulation' },
-  market: { color: '#06b6d4', label: '市场动态', label_en: 'Market' },
+  crypto: { color: newsCategories.crypto.color, label: '加密货币', label_en: 'Crypto' },
+  macro: { color: newsCategories.macro.color, label: '宏观经济', label_en: 'Macro' },
+  defi: { color: newsCategories.defi.color, label: 'DeFi', label_en: 'DeFi' },
+  regulation: { color: newsCategories.regulation.color, label: '监管政策', label_en: 'Regulation' },
+  market: { color: newsCategories.market.color, label: '市场动态', label_en: 'Market' },
 }
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())

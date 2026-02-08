@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 
@@ -16,7 +16,7 @@ type Trader = {
   arena_score: number | null
 }
 
-const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32']
+const RANK_COLORS = RANK_COLORS_ARRAY
 
 const PLATFORM_LABELS: Record<string, string> = {
   binance: 'Binance',

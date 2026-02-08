@@ -86,7 +86,6 @@ export function useSubscription() {
         // subscriptions 表可能还没更新（webhook 延迟），使用 user_profiles 作为备用
         finalTier = 'pro'
         isPro = true
-        console.warn(`[useSubscription] User ${user.id} has pro tier in profile but no active subscription record - webhook may be delayed`)
       }
       
       // 更新缓存

@@ -93,7 +93,6 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         onFollowChange?.(actualFollowing)
       }
     } catch (error) {
-      console.warn('[TraderFollowButton] Failed to refresh follow state:', error)
     }
   }, [userId, traderId, getAuthHeadersAsync, onFollowChange])
 
