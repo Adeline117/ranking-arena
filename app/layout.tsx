@@ -17,7 +17,7 @@ const ServiceWorkerRegistration = dynamic(() => import("./components/Providers/S
 const CookieConsent = dynamic(() => import("./components/ui/CookieConsent"));
 const WelcomeGuide = dynamic(() => import("./components/ui/WelcomeGuide"));
 const CompareFloatingBar = dynamic(() => import("./components/trader/CompareFloatingBar"));
-const ScrollToTop = dynamic(() => import("./components/ui/ScrollToTop"), { ssr: false });
+const ScrollToTop = dynamic(() => import("./components/ui/ScrollToTop"));
 const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
 const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })));
