@@ -34,16 +34,17 @@ const VIRTUAL_SCROLL_THRESHOLD = 50
 // Convert RankedTraderV2 to VirtualLeaderboard's TraderRow format
 /** Get a readable trader name — skip pure-numeric IDs */
 function getTraderDisplayName(trader: { display_name: string | null; trader_key: string; platform: string }): string {
-  const name = trader.display_name
-  // If name is null, empty, or a long numeric ID, use a friendlier format
-  if (!name || (name.length > 10 && /^\d+$/.test(name))) {
-    const platformLabel = EXCHANGE_NAMES[trader.platform as keyof typeof EXCHANGE_NAMES] || trader.platform
-    const shortId = trader.trader_key.length > 10 
-      ? `${trader.trader_key.slice(0, 4)}...${trader.trader_key.slice(-4)}`
-      : trader.trader_key
-    return `${platformLabel} #${shortId}`
+  // Show original platform ID as primary name
+  // Users can customize after claiming their profile
+  const key = trader.trader_key
+  if (!key) {
+    return trader.display_name || 'Unknown'
   }
-  return name
+  // Shorten long addresses/IDs (e.g. 0x addresses)
+  if (key.length > 16) {
+    return `${key.slice(0, 6)}...${key.slice(-4)}`
+  }
+  return key
 }
 
 function getTrustTier(platform: string): 'high' | 'medium' | 'low' {

@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic'
 const OneClickWalletButton = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.OneClickWalletButton })), { ssr: false })
 const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.Web3Boundary })), { ssr: false })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 // 密码强度计算函数
 function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labelKey: string; color: string } {
