@@ -1,3 +1,5 @@
+import { moneyAdd } from '@/lib/utils/currency'
+
 /**
  * Max Drawdown (MDD) 自行计算模块
  *
@@ -106,7 +108,7 @@ export function calculateMaxDrawdownFromPnl(
   let cumulative = initialEquity
   for (const point of dailyPnl) {
     if (point.value == null || !isFinite(point.value)) continue
-    cumulative += point.value
+    cumulative = moneyAdd(cumulative, point.value)
     if (cumulative <= 0) {
       // Total loss — MDD is -100%
       return -100
