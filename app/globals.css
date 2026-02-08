@@ -222,6 +222,7 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 
 /* Smooth scroll only when not navigating (avoids blocking FCP on initial load) */
@@ -245,6 +246,20 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
+}
+
+/* Unified link hover */
+a:hover {
+  color: var(--color-accent-primary);
+}
+
+/* Unified input focus ring */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--color-accent-primary);
+  box-shadow: var(--shadow-input-focus);
 }
 
 /* Selection */
@@ -654,6 +669,15 @@ body {
   content-visibility: auto;
   contain-intrinsic-size: auto 72px; /* Estimated height */
   contain: layout style;
+}
+
+/* Prevent overscroll chaining on scrollable containers */
+.ranking-table-container,
+.post-feed-masonry,
+.three-col-left,
+.three-col-right,
+.three-col-center {
+  overscroll-behavior: contain;
 }
 
 /* Reduce paint for fixed elements */

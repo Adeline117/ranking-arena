@@ -1618,6 +1618,7 @@ export default function NewPostPage() {
               size="md"
               onClick={handleSubmit}
               disabled={loading || !title.trim()}
+              loading={loading}
             >
               {loading ? t('publishing') : t('publish')}
             </Button>

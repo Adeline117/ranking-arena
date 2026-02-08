@@ -61,14 +61,14 @@ export function ReactButton({
       onMouseEnter={(e) => {
         if (!active) {
           e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-          e.currentTarget.style.color = '#d6d6d6'
+          e.currentTarget.style.color = 'var(--color-text-primary)'
         }
       }}
       onMouseLeave={(e) => {
         setIsPressed(false)
         if (!active) {
           e.currentTarget.style.background = 'transparent'
-          e.currentTarget.style.color = '#a9a9a9'
+          e.currentTarget.style.color = 'var(--color-text-secondary)'
         }
       }}
     >

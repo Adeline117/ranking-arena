@@ -38,7 +38,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
 
   const chainConfig = CHAIN_CONFIGS[chainId as SupportedChainId]
   const isSupported = chainConfig?.isSupported ?? false
-  const chainStyle = CHAIN_ICONS[chainId] || { color: '#6B7280', bg: 'rgba(107, 114, 128, 0.1)' }
+  const chainStyle = CHAIN_ICONS[chainId] || { color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.1)' }
 
   const sizes = {
     sm: { dot: 8, text: 11, px: 8, py: 4, icon: 12 },
@@ -196,7 +196,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
             {Object.values(CHAIN_CONFIGS)
               .filter(c => c.isSupported || c.id === chainId)
               .map(chain => {
-                const style = CHAIN_ICONS[chain.id] || { color: '#6B7280', bg: 'rgba(107, 114, 128, 0.1)' }
+                const style = CHAIN_ICONS[chain.id] || { color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.1)' }
                 const isActive = chain.id === chainId
 
                 return (

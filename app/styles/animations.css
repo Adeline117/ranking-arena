@@ -671,11 +671,33 @@
    ============================================ */
 
 .toast-enter {
-  animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: toastSlideInFromTop 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .toast-exit {
-  animation: slideOutUp 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: toastFadeOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes toastSlideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastFadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
 }
 
 .toast-progress {
