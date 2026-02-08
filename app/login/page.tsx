@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/app/components/ui/Toast'
-import { OneClickWalletButton } from '@/app/components/web3/OneClickWalletButton'
+import dynamic from 'next/dynamic'
+const OneClickWalletButton = dynamic(() => import('@/app/components/web3/OneClickWalletButton').then(m => ({ default: m.OneClickWalletButton })), { ssr: false })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // 密码强度计算函数
