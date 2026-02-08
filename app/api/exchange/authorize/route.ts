@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getAuthUser } from '@/lib/supabase/server'
 
 const EXCHANGE_AUTH_URLS: Record<string, string> = {
   binance: 'https://www.binance.com/en/my/settings/api-management',
@@ -17,9 +18,15 @@ const EXCHANGE_AUTH_URLS: Record<string, string> = {
 
 export async function GET(req: NextRequest) {
   try {
+    // Auth check
+    const user = await getAuthUser(req)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const searchParams = req.nextUrl.searchParams
     const exchange = searchParams.get('exchange')
-    const userId = searchParams.get('userId') // 用于回调时识别用户
+    const userId = user.id // Use authenticated user ID
 
     if (!exchange) {
       return NextResponse.json(

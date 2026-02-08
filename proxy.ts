@@ -43,7 +43,8 @@ const PROTECTED_ROUTES = [
   '/api/messages',
   '/api/notifications',
   '/api/users/follow',
-  '/api/exchange/oauth',
+  '/api/exchange',
+  '/api/settings',
   '/settings',
   '/my-posts',
   '/favorites',
@@ -399,6 +400,16 @@ export async function proxy(request: NextRequest) {
   // 生成请求 ID 用于追踪
   const requestId = generateRequestId()
   
+  // Redirect logged-in users away from /login
+  if (pathname === '/login') {
+    const hasSession = hasSessionCookie(request)
+    if (hasSession) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
+  }
+
   // 处理 CORS 预检请求
   if (method === 'OPTIONS') {
     const response = new NextResponse(null, { status: 204 })

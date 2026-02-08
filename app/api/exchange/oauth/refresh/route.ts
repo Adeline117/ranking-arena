@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { getAuthUser } from '@/lib/supabase/server'
+import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -55,11 +57,25 @@ function decrypt(encryptedText: string, key: string): string {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { exchange, userId } = body
+    // Auth check - use authenticated user's ID instead of trusting request body
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    if (!exchange || !userId) {
-      return NextResponse.json({ error: 'Missing exchange or userId' }, { status: 400 })
+    // CSRF validation
+    const csrfCookie = request.cookies.get(CSRF_COOKIE_NAME)?.value
+    const csrfHeader = request.headers.get(CSRF_HEADER_NAME) ?? undefined
+    if (!validateCsrfToken(csrfCookie, csrfHeader)) {
+      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const { exchange } = body
+    const userId = user.id // Use authenticated user ID, not from body
+
+    if (!exchange) {
+      return NextResponse.json({ error: 'Missing exchange' }, { status: 400 })
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)

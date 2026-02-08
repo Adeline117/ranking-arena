@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
+import { getAuthUser } from '@/lib/supabase/server'
+import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 
 const logger = createLogger('exchange-oauth-callback')
 
@@ -59,10 +61,24 @@ function _decrypt(encryptedText: string, key: string): string {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { exchange, code, state, userId } = body
+    // Auth check - use authenticated user's ID
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    if (!exchange || !code || !state || !userId) {
+    // CSRF validation
+    const csrfCookie = request.cookies.get(CSRF_COOKIE_NAME)?.value
+    const csrfHeader = request.headers.get(CSRF_HEADER_NAME) ?? undefined
+    if (!validateCsrfToken(csrfCookie, csrfHeader)) {
+      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const { exchange, code, state } = body
+    const userId = user.id // Use authenticated user ID, not from body
+
+    if (!exchange || !code || !state) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
     }
 

@@ -14,6 +14,8 @@ import { createClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/exchange/encryption'
 import { getBinanceAccount } from '@/lib/exchange/binance'
 import type { BinanceConfig } from '@/lib/exchange/binance'
+import { getAuthUser } from '@/lib/supabase/server'
+import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -52,19 +54,20 @@ async function _getBinanceAccountId(config: BinanceConfig): Promise<string | nul
  */
 export async function POST(req: NextRequest) {
   try {
-    // 1. 获取用户身份
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader) {
+    // 1. Auth check
+    const user = await getAuthUser(req)
+    if (!user) {
       return NextResponse.json({ error: '未授权' }, { status: 401 })
     }
 
-    const token = authHeader.replace('Bearer ', '')
-    const adminSupabase = getSupabaseAdmin()
-    
-    const { data: { user }, error: userError } = await adminSupabase.auth.getUser(token)
-    if (userError || !user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+    // CSRF validation
+    const cookieToken = req.cookies.get(CSRF_COOKIE_NAME)?.value
+    const headerToken = req.headers.get(CSRF_HEADER_NAME) ?? undefined
+    if (!validateCsrfToken(cookieToken, headerToken)) {
+      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
+
+    const adminSupabase = getSupabaseAdmin()
 
     // 2. 解析请求体
     const body = await req.json()

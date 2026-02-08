@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
+import { getAuthUser } from '@/lib/supabase/server'
 
 const logger = createLogger('exchange-oauth-authorize')
 
@@ -56,14 +57,20 @@ function generateCodeChallenge(codeVerifier: string): string {
 
 export async function GET(request: NextRequest) {
   try {
+    // Auth check - use authenticated user's ID instead of trusting query params
+    const user = await getAuthUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const exchange = searchParams.get('exchange')
-    const userId = searchParams.get('userId')
+    const userId = user.id // Use authenticated user ID, not from query params
     // 是否使用 PKCE 流程（适用于浏览器/移动端应用）
     const usePKCE = searchParams.get('pkce') === 'true'
 
-    if (!exchange || !userId) {
-      return NextResponse.json({ error: 'Missing exchange or userId' }, { status: 400 })
+    if (!exchange) {
+      return NextResponse.json({ error: 'Missing exchange' }, { status: 400 })
     }
 
     const config = OAUTH_CONFIG[exchange]
