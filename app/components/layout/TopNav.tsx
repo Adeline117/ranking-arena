@@ -363,9 +363,10 @@ export default function TopNav({ email = null }: { email?: string | null }) {
           {/* 导航链接 - 移动端隐藏 */}
           <Box as="nav" className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             {[
-              { href: '/', labelKey: 'home' as const },
+              { href: '/', labelKey: 'rankings' as const },
               { href: '/groups', labelKey: 'groups' as const },
               { href: '/hot', labelKey: 'hot' as const },
+              { href: '/library', labelKey: 'library' as const },
             ].map((item) => {
               const label = t(item.labelKey)
               const isActive = pathname === item.href || (item.href === '/' && pathname === '/')
@@ -499,10 +500,8 @@ export default function TopNav({ email = null }: { email?: string | null }) {
           >
             <SearchIcon size={20} />
           </button>
-          {/* 语言切换 - 移动端隐藏 */}
-          <Box className="hide-mobile">
-            <LanguageSwitcher />
-          </Box>
+          {/* 语言切换 */}
+          <LanguageSwitcher />
           <ThemeToggle />
           {!isReady ? (
             /* Generic Login placeholder while auth is deferred - reduces TBT */

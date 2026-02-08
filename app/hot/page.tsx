@@ -23,8 +23,8 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
-// Use design tokens for brand color
-const ARENA_PURPLE = '#8b6fa8' // fallback, prefer tokens.colors.accent.brand
+// Use design token for brand color
+const ARENA_PURPLE = tokens.colors.accent.brand
 
 // 本地 Trader 类型
 type Trader = {
@@ -299,6 +299,7 @@ function HotContent() {
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!latestPostTime.current) return
+      if (document.visibilityState !== 'visible') return
       try {
         const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=1&after=${latestPostTime.current}`)
         const json = await res.json()
@@ -777,6 +778,7 @@ function HotContent() {
                     onClick={() => setActiveHotTab(tab.value)}
                     style={{
                       padding: '8px 16px',
+                      minHeight: 44,
                       borderRadius: tokens.radius.lg,
                       border: activeHotTab === tab.value ? 'none' : tokens.glass.border.light,
                       background: activeHotTab === tab.value ? tokens.gradient.primary : tokens.glass.bg.light,

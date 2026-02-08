@@ -135,7 +135,7 @@ html.theme-transition *::after {
   /* Text colors (WCAG AA on #FFFFFF) */
   --color-text-primary: #1A1A1A;
   --color-text-secondary: #5A5A6A;
-  --color-text-tertiary: #717180;
+  --color-text-tertiary: #5F5F70;
   --color-text-quaternary: #767680;
   
   /* Border colors */
