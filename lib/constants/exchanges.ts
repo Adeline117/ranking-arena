@@ -334,3 +334,58 @@ export const SOURCE_RELIABILITY: Record<string, number> = {
   dune_uniswap: 85,
   dune_defi: 80,
 }
+
+// ---------------------------------------------------------------------------
+// SOURCE_TRUST_WEIGHT – trust multiplier applied to Arena Score calculations
+// Higher weight = more trusted data source, score counts more.
+// Range: 0.0 (untrusted) to 1.0 (fully trusted)
+// ---------------------------------------------------------------------------
+
+export const SOURCE_TRUST_WEIGHT: Record<string, number> = {
+  // Tier 1: Fully trusted – transparent on-chain or top-tier CEX APIs
+  binance_futures: 1.0,
+  binance_spot: 1.0,
+  okx_futures: 1.0,
+  okx_web3: 1.0,
+  okx_wallet: 1.0,
+  htx_futures: 0.95,
+  hyperliquid: 1.0,
+  gmx: 1.0,
+  dydx: 0.95,
+  gains: 0.95,
+  jupiter_perps: 0.95,
+  aevo: 0.90,
+  synthetix: 0.90,
+  kwenta: 0.90,
+  drift: 0.90,
+  vertex: 0.85,
+  mux: 0.85,
+
+  // Tier 2: Mostly trusted – good APIs but some data gaps
+  bybit: 0.85,
+  bybit_spot: 0.85,
+  bitget_futures: 0.85,
+  bitget_spot: 0.80,
+  binance_web3: 0.85,
+  kucoin: 0.80,
+  mexc: 0.80,
+  coinex: 0.80,
+  gateio: 0.80,
+  phemex: 0.75,
+
+  // Tier 3: Lower trust – unstable APIs, limited data, or scraping required
+  weex: 0.70,
+  bingx: 0.65,
+  xt: 0.65,
+  pionex: 0.65,
+  lbank: 0.60,
+  blofin: 0.65,
+  bitmart: 0.65,
+  okx_spot: 0.80,
+
+  // Dune data sources
+  dune_gmx: 0.95,
+  dune_hyperliquid: 0.95,
+  dune_uniswap: 0.85,
+  dune_defi: 0.80,
+}
