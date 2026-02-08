@@ -71,14 +71,14 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
       onMouseEnter={(e) => {
         if (!active) {
           e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-          e.currentTarget.style.color = '#d6d6d6'
+          e.currentTarget.style.color = tokens.colors.interactive.hover
         }
       }}
       onMouseLeave={(e) => {
         setIsPressed(false)
         if (!active) {
           e.currentTarget.style.background = 'transparent'
-          e.currentTarget.style.color = '#a9a9a9'
+          e.currentTarget.style.color = tokens.colors.interactive.inactive
         }
       }}
     >
@@ -136,7 +136,7 @@ export function Action({ icon, text, onClick, active, count, showCount }: Action
       style={{
         border: 'none',
         background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
-        color: active ? ARENA_PURPLE : '#a9a9a9',
+        color: active ? ARENA_PURPLE : tokens.colors.interactive.inactive,
         cursor: 'pointer',
         padding: '6px 12px',
         fontSize: 13,
@@ -152,14 +152,14 @@ export function Action({ icon, text, onClick, active, count, showCount }: Action
       onMouseEnter={(e) => {
         if (!active) {
           e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-          e.currentTarget.style.color = '#d6d6d6'
+          e.currentTarget.style.color = tokens.colors.interactive.hover
         }
       }}
       onMouseLeave={(e) => {
         setIsPressed(false)
         if (!active) {
           e.currentTarget.style.background = 'transparent'
-          e.currentTarget.style.color = '#a9a9a9'
+          e.currentTarget.style.color = tokens.colors.interactive.inactive
         }
       }}
     >

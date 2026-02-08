@@ -158,11 +158,11 @@ const RankBadge = memo(function RankBadge({
             width: 26, height: 26, borderRadius: '50%',
             fontSize: 12, fontWeight: 700,
             background: rank === 1
-              ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+              ? `linear-gradient(135deg, ${tokens.colors.medal.gold}, ${tokens.colors.medal.goldEnd})`
               : rank === 2
-              ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
-              : 'linear-gradient(135deg, #CD7F32, #A0522D)',
-            color: rank === 1 ? '#1a1200' : '#fff',
+              ? `linear-gradient(135deg, ${tokens.colors.medal.silver}, ${tokens.colors.medal.silverEnd})`
+              : `linear-gradient(135deg, ${tokens.colors.medal.bronze}, ${tokens.colors.medal.bronzeEnd})`,
+            color: rank === 1 ? tokens.colors.medal.goldText : tokens.colors.white,
             boxShadow: rank === 1
               ? '0 0 8px rgba(255,215,0,0.4)'
               : rank === 2

@@ -6,6 +6,7 @@ import { TraderAvatar } from './shared/TraderDisplay'
 import { formatROI, formatDisplayName } from './utils'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import type { Trader } from './RankingTable'
+import { tokens } from '@/lib/design-tokens'
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -29,7 +30,7 @@ function CopyButton({ text }: { text: string }) {
         alignItems: 'center',
         opacity: 0.6,
         transition: 'opacity 0.2s',
-        color: copied ? '#00D68F' : 'inherit',
+        color: copied ? tokens.colors.accent.success : 'inherit',
       }}
     >
       {copied ? (
@@ -46,11 +47,15 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-const MEDAL_BORDERS = [
-  'linear-gradient(135deg, #FFD700, #FFA500, #FFD700)', // gold
-  'linear-gradient(135deg, #C0C0C0, #E8E8E8, #C0C0C0)', // silver
-  'linear-gradient(135deg, #CD7F32, #D4A574, #CD7F32)', // bronze
-]
+// Medal border gradients - these reference theme tokens at render time
+function getMedalBorders() {
+  const m = tokens.colors.medal
+  return [
+    `linear-gradient(135deg, ${m.gold}, ${m.goldEnd}, ${m.gold})`,
+    `linear-gradient(135deg, ${m.silver}, #E8E8E8, ${m.silver})`,
+    `linear-gradient(135deg, ${m.bronze}, #D4A574, ${m.bronze})`,
+  ]
+}
 
 const MEDAL_LABELS = ['#1', '#2', '#3']
 
@@ -59,11 +64,11 @@ function HeroCard({ trader, rank, large }: { trader: Trader; rank: number; large
   const displayName = formatDisplayName(handle)
   const isAddress = handle.startsWith('0x') && handle.length > 20
   const roi = trader.roi || 0
-  const roiColor = roi >= 0 ? '#00D68F' : '#FF6B6B'
+  const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
   const exchangeName = EXCHANGE_NAMES[trader.source || ''] || (trader.source || '').split('_')[0]
   const href = `/trader/${encodeURIComponent(handle)}`
 
-  const borderGradient = MEDAL_BORDERS[rank - 1] || 'none'
+  const borderGradient = getMedalBorders()[rank - 1] || 'none'
 
   return (
     <Link href={href} style={{ textDecoration: 'none', display: 'block', flex: large ? '1 1 0' : undefined, minWidth: large ? 0 : undefined }}>
@@ -94,7 +99,7 @@ function HeroCard({ trader, rank, large }: { trader: Trader; rank: number; large
           <span style={{
             fontSize: large ? 13 : 11,
             fontWeight: 800,
-            color: rank === 1 ? '#FFD700' : rank === 2 ? '#C0C0C0' : '#CD7F32',
+            color: rank === 1 ? tokens.colors.medal.gold : rank === 2 ? tokens.colors.medal.silver : tokens.colors.medal.bronze,
             letterSpacing: 1,
           }}>
             {MEDAL_LABELS[rank - 1] || `#${rank}`}
@@ -114,7 +119,7 @@ function HeroCard({ trader, rank, large }: { trader: Trader; rank: number; large
             <span style={{
               fontSize: large ? 14 : 11,
               fontWeight: 700,
-              color: '#fff',
+              color: tokens.colors.white,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -138,7 +143,7 @@ function HeroCard({ trader, rank, large }: { trader: Trader; rank: number; large
           {/* Exchange */}
           <span style={{
             fontSize: 10,
-            color: '#8888a0',
+            color: tokens.colors.text.tertiary,
             fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: 0.5,

@@ -84,7 +84,7 @@ export function CustomPollCard({
         {poll.endAt && (
           <span style={{
             fontSize: 11,
-            color: poll.isExpired ? '#ff6b6b' : tokens.colors.text.tertiary,
+            color: poll.isExpired ? tokens.colors.accent.error : tokens.colors.text.tertiary,
             fontWeight: 400,
           }}>
             {poll.isExpired

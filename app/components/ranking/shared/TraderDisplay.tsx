@@ -10,8 +10,8 @@ import type { Trader } from '../RankingTable'
 
 // Shared color constants for trader display components
 // These ensure WCAG AA 4.5:1 contrast on card/row backgrounds
-export const TRADER_TEXT_TERTIARY = '#b0b0be'
-export const TRADER_ACCENT_ERROR = '#ff8080'
+export const TRADER_TEXT_TERTIARY = tokens.colors.text.tertiary
+export const TRADER_ACCENT_ERROR = tokens.colors.accent.error
 
 // Shared memo comparison for trader components
 export function areTraderPropsEqual(
@@ -109,7 +109,7 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
       }}
     >
       <span style={{
-        color: '#ffffff',
+        color: tokens.colors.white,
         fontSize: size * 0.4,
         fontWeight: 900,
         lineHeight: 1,
@@ -150,7 +150,7 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
   const isMinimal = confidence === 'minimal'
   const title = isMinimal ? 'Incomplete data (-20%)' : 'Partial data (-8%)'
   const background = isMinimal
-    ? (tokens.colors.accent.error ?? '#ff6b6b')
+    ? (tokens.colors.accent.error)
     : tokens.colors.accent.warning
 
   return (
@@ -174,7 +174,7 @@ export function getScoreStyle(score: number): { bgGradient: string; borderColor:
     return {
       bgGradient: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.1))',
       borderColor: 'rgba(255,215,0,0.5)',
-      textColor: '#FFD700',
+      textColor: tokens.colors.medal.gold,
       fillColor: 'rgba(255,215,0,0.15)',
     }
   }
@@ -182,7 +182,7 @@ export function getScoreStyle(score: number): { bgGradient: string; borderColor:
     return {
       bgGradient: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(168,85,247,0.1))',
       borderColor: 'rgba(139,92,246,0.5)',
-      textColor: '#A855F7',
+      textColor: tokens.colors.verified.web3,
       fillColor: 'rgba(139,92,246,0.15)',
     }
   }
@@ -190,7 +190,7 @@ export function getScoreStyle(score: number): { bgGradient: string; borderColor:
     return {
       bgGradient: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(96,165,250,0.1))',
       borderColor: 'rgba(59,130,246,0.4)',
-      textColor: '#3B82F6',
+      textColor: tokens.colors.accent.brand,
       fillColor: 'rgba(59,130,246,0.15)',
     }
   }

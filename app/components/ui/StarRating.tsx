@@ -13,8 +13,8 @@ interface StarRatingProps {
   showCount?: boolean
 }
 
-const GOLD = '#f5c518'
-const GOLD_DIM = '#3a3a2a'
+const GOLD = tokens.colors.rating.filled
+const GOLD_DIM = tokens.colors.rating.empty
 
 function StarIcon({ fill, size = 20 }: { fill: 'full' | 'half' | 'empty'; size?: number }) {
   if (fill === 'full') {

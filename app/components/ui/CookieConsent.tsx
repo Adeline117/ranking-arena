@@ -70,8 +70,8 @@ const styles = {
     border: 'none',
   },
   primaryButton: {
-    background: '#7d6599',
-    color: '#FFFFFF',
+    background: tokens.colors.accent.brand,
+    color: tokens.colors.white,
   },
   secondaryButton: {
     background: 'transparent',
@@ -134,7 +134,7 @@ const styles = {
     left: '2px',
     width: '20px',
     height: '20px',
-    background: '#FFFFFF',
+    background: tokens.colors.white,
     borderRadius: '50%',
     transition: 'transform 0.2s ease',
   },
@@ -328,9 +328,9 @@ export function CookieConsent() {
 
         <div style={{ marginTop: '12px', fontSize: '12px', color: tokens.colors.text.tertiary }}>
           {t('learnMorePrivacy')}{' '}
-          <a href="/privacy" style={{ color: '#a88bc3' }}>{t('privacyPolicy')}</a>
+          <a href="/privacy" style={{ color: tokens.colors.accent.brandHover }}>{t('privacyPolicy')}</a>
           {' '}{t('andWord')}{' '}
-          <a href="/terms" style={{ color: '#a88bc3' }}>{t('termsOfService')}</a>
+          <a href="/terms" style={{ color: tokens.colors.accent.brandHover }}>{t('termsOfService')}</a>
         </div>
       </div>
     </div>

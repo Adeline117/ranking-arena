@@ -238,7 +238,7 @@ export default function GroupsFeedPage() {
                         {group.avatar_url ? (
                           <Image src={group.avatar_url} alt={group.name} width={40} height={40} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized onError={(e) => { e.currentTarget.style.display = 'none' }} />
                         ) : (
-                          <Text size="sm" weight="bold" style={{ color: '#c9b8db' }}>
+                          <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.brandLight }}>
                             {group.name.charAt(0).toUpperCase()}
                           </Text>
                         )}
@@ -344,7 +344,7 @@ export default function GroupsFeedPage() {
                         {group.avatar_url ? (
                           <Image src={group.avatar_url} alt={group.name} fill style={{ objectFit: 'cover' }} unoptimized onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                         ) : (
-                          <Text size="base" weight="bold" style={{ color: '#c9b8db' }}>
+                          <Text size="base" weight="bold" style={{ color: tokens.colors.accent.brandLight }}>
                             {group.name.charAt(0).toUpperCase()}
                           </Text>
                         )}

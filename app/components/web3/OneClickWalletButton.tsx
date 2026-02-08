@@ -12,6 +12,7 @@
 import { useOneClickSiwe, type OneClickStatus } from '@/lib/web3/useOneClickSiwe'
 import { useAccountModal } from '@rainbow-me/rainbowkit'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 // ============================================
 // Types
@@ -241,7 +242,7 @@ export function OneClickWalletButton({
       case 'success':
         return {
           ...baseStyles,
-          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+          background: 'linear-gradient(135deg, ${tokens.colors.accent.success} 0%, ${tokens.colors.accent.success} 100%)',
           color: '#fff',
         }
       case 'error':
@@ -249,7 +250,7 @@ export function OneClickWalletButton({
           ...baseStyles,
           background: 'rgba(239, 68, 68, 0.1)',
           border: '1px solid rgba(239, 68, 68, 0.3)',
-          color: '#ef4444',
+          color: tokens.colors.accent.error,
         }
       case 'connecting':
       case 'signing':
@@ -257,7 +258,7 @@ export function OneClickWalletButton({
         return {
           ...baseStyles,
           background: 'rgba(99, 102, 241, 0.2)',
-          color: '#a5b4fc',
+          color: tokens.colors.accent.brandLight,
           opacity: 0.9,
         }
       default:
@@ -265,7 +266,7 @@ export function OneClickWalletButton({
           // Connected but idle - show gradient
           return {
             ...baseStyles,
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+            background: 'linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)',
             color: '#fff',
           }
         }
@@ -274,7 +275,7 @@ export function OneClickWalletButton({
           ...baseStyles,
           background: 'rgba(139, 111, 168, 0.08)',
           border: '1px solid rgba(139, 111, 168, 0.3)',
-          color: '#c9b8db',
+          color: tokens.colors.accent.brandLight,
         }
     }
   }
@@ -322,7 +323,7 @@ export function OneClickWalletButton({
               borderRadius: sizeConfig.borderRadius,
               background: 'rgba(139, 111, 168, 0.08)',
               border: '1px solid rgba(139, 111, 168, 0.3)',
-              color: '#c9b8db',
+              color: tokens.colors.accent.brandLight,
               cursor: 'pointer',
               transition: 'all 0.2s ease',
             }}
@@ -342,7 +343,7 @@ export function OneClickWalletButton({
             background: 'rgba(239, 68, 68, 0.1)',
             border: '1px solid rgba(239, 68, 68, 0.2)',
             fontSize: 12,
-            color: '#ef4444',
+            color: tokens.colors.accent.error,
             display: 'flex',
             alignItems: 'center',
             gap: 6,
@@ -365,7 +366,7 @@ export function OneClickWalletButton({
               borderRadius: 4,
               border: 'none',
               background: 'rgba(239, 68, 68, 0.2)',
-              color: '#ef4444',
+              color: tokens.colors.accent.error,
               fontSize: 11,
               fontWeight: 600,
               cursor: 'pointer',

@@ -34,7 +34,7 @@ export function Web3VerifiedBadge({ size = 'sm' }: Web3VerifiedBadgeProps) {
         height={iconSize}
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#8B5CF6"
+        stroke={tokens.colors.verified.web3}
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -46,7 +46,7 @@ export function Web3VerifiedBadge({ size = 'sm' }: Web3VerifiedBadgeProps) {
         style={{
           fontSize,
           fontWeight: 600,
-          color: '#8B5CF6',
+          color: tokens.colors.verified.web3,
         }}
       >
         On-Chain

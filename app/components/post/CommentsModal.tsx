@@ -338,7 +338,7 @@ export default function CommentsModal({
                   alignItems: 'center',
                   gap: 4,
                   borderRadius: 4,
-                  color: comment.user_disliked ? '#ef4444' : tokens.colors.text.tertiary,
+                  color: comment.user_disliked ? tokens.colors.accent.error : tokens.colors.text.tertiary,
                 }}
               >
                 <ThumbsDownIcon size={14} />

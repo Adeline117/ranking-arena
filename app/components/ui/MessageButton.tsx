@@ -7,6 +7,7 @@ import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 type MessageButtonProps = {
   targetUserId: string
@@ -107,7 +108,7 @@ export default function MessageButton({
           width: fullWidth ? '100%' : 'auto',
           border: '1px solid rgba(255,255,255,0.2)',
           background: 'rgba(255,255,255,0.05)',
-          color: '#eaeaea',
+          color: tokens.colors.text.primary,
           fontWeight: 700,
           cursor: 'pointer',
           display: 'flex',
@@ -135,7 +136,7 @@ export default function MessageButton({
         width: fullWidth ? '100%' : 'auto',
         border: '1px solid rgba(255,255,255,0.2)',
         background: 'rgba(255,255,255,0.05)',
-        color: '#eaeaea',
+        color: tokens.colors.text.primary,
         fontWeight: 700,
         cursor: isLoading ? 'not-allowed' : 'pointer',
         opacity: isLoading ? 0.6 : 1,

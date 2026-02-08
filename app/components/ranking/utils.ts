@@ -1,4 +1,5 @@
 import { SOURCE_TYPE_MAP, EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { tokens } from '@/lib/design-tokens'
 
 /**
  * 格式化 PnL 显示
@@ -62,7 +63,7 @@ export type SourceInfo = { exchange: string; type: string; typeColor: string }
  */
 export function parseSourceInfo(src: string, t: (key: string) => string): SourceInfo {
   // Use central SOURCE_TYPE_MAP as single source of truth
-  const sourceTagColor = '#b0b0be'
+  const sourceTagColor = tokens.colors.text.tertiary
   const typeMap: Record<string, { label: string; color: string }> = {
     'futures': { label: t('categoryFutures'), color: sourceTagColor },
     'spot': { label: t('categorySpot'), color: sourceTagColor },

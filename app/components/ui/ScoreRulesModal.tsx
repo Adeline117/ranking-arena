@@ -408,7 +408,7 @@ function ScoreRange({
   gold?: boolean
 }) {
   const color = gold 
-    ? '#FFD700' 
+    ? tokens.colors.medal.gold 
     : highlight 
       ? tokens.colors.accent.success 
       : tokens.colors.text.secondary
