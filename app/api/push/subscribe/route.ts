@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 export const POST = withAuth(
   async ({ user, request }) => {
     const body = await request.json()
-    const { token, provider, deviceId, deviceName, platform } = body
+    const { token, provider, deviceId, deviceName, platform, endpoint, p256dh, auth } = body
 
     // 验证参数
     if (!token || !provider) {
@@ -40,7 +40,7 @@ export const POST = withAuth(
         user.id,
         token,
         provider,
-        { deviceId, deviceName, platform }
+        { deviceId, deviceName, platform, endpoint, p256dh, auth }
       )
 
       return NextResponse.json({
