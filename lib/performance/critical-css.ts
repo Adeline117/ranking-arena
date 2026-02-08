@@ -220,6 +220,9 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
     // Supabase -- API calls on every page (rankings, auth, etc.)
     { rel: 'preconnect', href: supabaseUrl, crossOrigin: 'anonymous' },
     { rel: 'dns-prefetch', href: supabaseUrl },
+    // CDN -- images, assets
+    { rel: 'preconnect', href: 'https://cdn.arenafi.org', crossOrigin: 'anonymous' },
+    { rel: 'dns-prefetch', href: 'https://cdn.arenafi.org' },
     // Trader avatar CDNs -- dns-prefetch for faster avatar loading
     { rel: 'dns-prefetch', href: 'https://bin.bnbstatic.com' },
     { rel: 'dns-prefetch', href: 'https://static.bitget.com' },

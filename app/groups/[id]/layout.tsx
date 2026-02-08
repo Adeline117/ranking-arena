@@ -30,15 +30,26 @@ export async function generateMetadata({
     // 静默失败，使用默认元数据
   }
 
-  const title = `${groupName} | Ranking Arena`
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+  const title = `${groupName} · Arena`
 
   return {
     title,
     description: groupDescription,
+    alternates: {
+      canonical: `${baseUrl}/groups/${id}`,
+    },
     openGraph: {
       title,
       description: groupDescription,
+      url: `${baseUrl}/groups/${id}`,
+      siteName: 'Arena',
       type: 'website',
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description: groupDescription,
     },
   }
 }
