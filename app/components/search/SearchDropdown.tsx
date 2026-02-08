@@ -277,7 +277,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             results.push({
               id: post.id,
               type: 'post',
-              title: post.title || (language === 'zh' ? '无标题' : 'Untitled'),
+              title: post.title || t('noTitle'),
               subtitle: post.author_handle ? `@${post.author_handle}` : undefined,
               href: `/post/${post.id}`,
             })

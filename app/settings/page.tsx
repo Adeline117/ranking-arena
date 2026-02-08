@@ -35,7 +35,7 @@ import {
 } from './components'
 
 function ExchangeBindingBanner({ userId }: { userId: string | null }) {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const [show, setShow] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -77,17 +77,15 @@ function ExchangeBindingBanner({ userId }: { userId: string | null }) {
       </Box>
       <Box style={{ flex: 1 }}>
         <Text size="sm" weight="bold" style={{ marginBottom: 4 }}>
-          {language === 'zh' ? '绑定你的交易所账号' : 'Connect your exchange account'}
+          {t('bindExchangeBannerTitle')}
         </Text>
         <Text size="xs" color="tertiary">
-          {language === 'zh'
-            ? '绑定后可自动同步交易数据，参与排行榜，展示真实业绩'
-            : 'Sync your trading data automatically, join rankings, and showcase real performance'}
+          {t('bindExchangeBannerDesc')}
         </Text>
       </Box>
       <a href="/exchange/auth" style={{ textDecoration: 'none', flexShrink: 0 }}>
         <Button variant="primary" size="sm">
-          {language === 'zh' ? '去绑定' : 'Connect'}
+          {t('goToBind')}
         </Button>
       </a>
     </Box>

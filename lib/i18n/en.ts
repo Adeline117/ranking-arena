@@ -2644,6 +2644,28 @@ const en = {
     noPostsCta: 'No posts yet. Share your first trading insight!',
     loginToFollow: 'Log in to follow traders and track their performance',
 
+    // Exchange binding banner
+    bindExchangeBannerTitle: 'Connect your exchange account',
+    bindExchangeBannerDesc: 'Sync your trading data automatically, join rankings, and showcase real performance',
+    goToBind: 'Connect',
+
+    // Search dropdown
+    searchDropdownResults: 'Search Results',
+    viewAllSearchResults: 'View all search results',
+    traderTypeLabel: 'Trader',
+    postTypeLabel: 'Post',
+    groupTypeLabel: 'Group',
+    noHotPosts: 'No hot posts yet',
+    enablePushNotifications: 'Enable Push Notifications',
+    pushNotificationsTitle: 'Push Notifications',
+    pushNotificationsDesc: 'Receive real-time push notifications on your browser or phone',
+    browserNotSupported: 'Your browser does not support push notifications',
+    allowNotificationPermission: 'Please allow notification permission in browser settings',
+    pushNotificationsEnabled: 'Push notifications enabled!',
+    hapticFeedbackTitle: 'Haptic Feedback',
+    hapticFeedbackDesc: 'Feel vibrations when followed traders open positions',
+    tradeAlertVibration: 'Trade Alert Vibration',
+
 } as const
 
 export default en
