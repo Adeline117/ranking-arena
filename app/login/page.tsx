@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/app/components/ui/Toast'
 import dynamic from 'next/dynamic'
 const OneClickWalletButton = dynamic(() => import('@/app/components/web3/OneClickWalletButton').then(m => ({ default: m.OneClickWalletButton })), { ssr: false })
+const Web3Boundary = dynamic(() => import('@/lib/web3/withWeb3').then(m => ({ default: m.Web3Boundary })), { ssr: false })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // 密码强度计算函数
@@ -1435,14 +1436,16 @@ export default function LoginPage() {
 
         {/* One-Click Wallet Sign-In */}
         <div style={{ marginBottom: 16 }}>
-          <OneClickWalletButton
-            fullWidth
-            size="md"
-            onSuccess={(result) => {
-              showToast(t('loginWalletSignInSuccess'), 'success')
-              router.push(getRedirectUrl(result.handle))
-            }}
-          />
+          <Web3Boundary>
+            <OneClickWalletButton
+              fullWidth
+              size="md"
+              onSuccess={(result) => {
+                showToast(t('loginWalletSignInSuccess'), 'success')
+                router.push(getRedirectUrl(result.handle))
+              }}
+            />
+          </Web3Boundary>
         </div>
 
         {/* Switch login/register */}
