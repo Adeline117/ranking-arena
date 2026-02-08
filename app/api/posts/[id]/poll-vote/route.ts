@@ -11,12 +11,16 @@ import {
   success,
   handleError,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 // 获取投票详情
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { id: postId } = await context.params
     const supabase = getSupabaseAdmin()
     

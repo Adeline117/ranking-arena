@@ -3,6 +3,7 @@ import { SiweMessage } from 'siwe'
 import { cookies } from 'next/headers'
 import { isAddress } from 'viem'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const EXPECTED_CHAIN_ID = 8453 // Base mainnet (must match client's chainId)
 
@@ -15,6 +16,8 @@ const EXPECTED_CHAIN_ID = 8453 // Base mainnet (must match client's chainId)
  */
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
+    if (rateLimitResponse) return rateLimitResponse
     const { message, signature } = await request.json()
 
     if (!message || !signature) {
