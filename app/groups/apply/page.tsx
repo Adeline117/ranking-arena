@@ -544,13 +544,13 @@ export default function ApplyGroupPage() {
                       placeholder="例如：BTC 交易讨论组"
                       style={{
                         ...inputStyle,
-                        borderColor: fieldErrors.name ? '#DC2626' : tokens.colors.border.primary
+                        borderColor: fieldErrors.name ? tokens.colors.accent.error : tokens.colors.border.primary
                       }}
                       aria-invalid={!!fieldErrors.name}
                       maxLength={50}
                     />
                     {fieldErrors.name && (
-                      <Text size="xs" style={{ color: '#DC2626', marginTop: tokens.spacing[1] }}>
+                      <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
                         {fieldErrors.name}
                       </Text>
                     )}
@@ -616,13 +616,13 @@ export default function ApplyGroupPage() {
                         placeholder="e.g., BTC Trading Discussion"
                         style={{
                           ...inputStyle,
-                          borderColor: fieldErrors.name ? '#DC2626' : tokens.colors.border.primary
+                          borderColor: fieldErrors.name ? tokens.colors.accent.error : tokens.colors.border.primary
                         }}
                         aria-invalid={!!fieldErrors.name}
                         maxLength={50}
                       />
                       {fieldErrors.name && (
-                        <Text size="xs" style={{ color: '#DC2626', marginTop: tokens.spacing[1] }}>
+                        <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
                           {fieldErrors.name}
                         </Text>
                       )}

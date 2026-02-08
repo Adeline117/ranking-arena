@@ -21,10 +21,10 @@ function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labe
   if (/\d/.test(password)) score++
   if (/[^a-zA-Z0-9]/.test(password)) score++
 
-  if (score <= 1) return { level: 1, labelKey: 'loginPasswordWeak', color: '#ff4d4d' }
-  if (score === 2) return { level: 2, labelKey: 'loginPasswordFair', color: '#ffa500' }
-  if (score === 3) return { level: 3, labelKey: 'loginPasswordGood', color: '#ffc107' }
-  return { level: 4, labelKey: 'loginPasswordStrong', color: '#2fe57d' }
+  if (score <= 1) return { level: 1, labelKey: 'loginPasswordWeak', color: tokens.colors.accent.error }
+  if (score === 2) return { level: 2, labelKey: 'loginPasswordFair', color: tokens.colors.accent.warning }
+  if (score === 3) return { level: 3, labelKey: 'loginPasswordGood', color: tokens.colors.accent.warning }
+  return { level: 4, labelKey: 'loginPasswordStrong', color: tokens.colors.accent.success }
 }
 
 // 实时验证函数
@@ -730,7 +730,7 @@ export default function LoginPage() {
             <span style={{
               fontSize: 24,
               fontWeight: 700,
-              color: '#f2f2f2',
+              color: tokens.colors.text.primary,
               letterSpacing: '-0.3px',
             }}>
               <span style={{ color: '#8B5CF6', fontWeight: 800 }}>a</span>rena
@@ -796,7 +796,7 @@ export default function LoginPage() {
             borderRadius: 12,
             border: '1px solid rgba(255, 255, 255, 0.15)',
             background: 'rgba(255, 255, 255, 0.05)',
-            color: '#eaeaea',
+            color: tokens.colors.text.primary,
             fontWeight: 600,
             fontSize: 15,
             cursor: 'pointer',
@@ -824,7 +824,7 @@ export default function LoginPage() {
           marginBottom: 24,
         }}>
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
-          <span style={{ fontSize: 12, color: '#5a5a5a' }}>{lang === 'zh' ? '或使用邮箱登录' : 'or use email'}</span>
+          <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{lang === 'zh' ? '或使用邮箱登录' : 'or use email'}</span>
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
         </div>
 
@@ -842,7 +842,7 @@ export default function LoginPage() {
           </h1>
           <p style={{
             fontSize: 14,
-            color: '#7a7a7a',
+            color: tokens.colors.text.secondary,
             fontWeight: 500,
             marginBottom: 16,
           }}>
@@ -880,7 +880,7 @@ export default function LoginPage() {
               borderRadius: 12,
               border: `1px solid ${touchedFields.email && !emailValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
               background: 'rgba(0, 0, 0, 0.3)',
-              color: '#eaeaea',
+              color: tokens.colors.text.primary,
               fontSize: 15,
               outline: 'none',
             }}
@@ -945,7 +945,7 @@ export default function LoginPage() {
                       borderRadius: 12,
                       border: '1px solid rgba(255, 255, 255, 0.1)',
                       background: 'rgba(0, 0, 0, 0.3)',
-                      color: '#eaeaea',
+                      color: tokens.colors.text.primary,
                       fontSize: 15,
                       outline: 'none',
                       letterSpacing: 4,
@@ -1032,7 +1032,7 @@ export default function LoginPage() {
                       borderRadius: 12,
                       border: `1px solid ${touchedFields.handle && !handleValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
                       background: 'rgba(0, 0, 0, 0.3)',
-                      color: '#eaeaea',
+                      color: tokens.colors.text.primary,
                       fontSize: 15,
                       outline: 'none',
                     }}
@@ -1064,7 +1064,7 @@ export default function LoginPage() {
                         borderRadius: 12,
                         border: `1px solid ${touchedFields.password && !passwordValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
                         background: 'rgba(0, 0, 0, 0.3)',
-                        color: '#eaeaea',
+                        color: tokens.colors.text.primary,
                         fontSize: 15,
                         outline: 'none',
                       }}
@@ -1176,7 +1176,7 @@ export default function LoginPage() {
                         borderRadius: 12,
                         border: `1px solid ${touchedFields.password && password && !passwordValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
                         background: 'rgba(0, 0, 0, 0.3)',
-                        color: '#eaeaea',
+                        color: tokens.colors.text.primary,
                         fontSize: 15,
                         outline: 'none',
                       }}
@@ -1324,7 +1324,7 @@ export default function LoginPage() {
                           borderRadius: 12,
                           border: '1px solid rgba(255, 255, 255, 0.1)',
                           background: 'rgba(0, 0, 0, 0.3)',
-                          color: '#eaeaea',
+                          color: tokens.colors.text.primary,
                           fontSize: 15,
                           outline: 'none',
                           letterSpacing: 4,
@@ -1431,7 +1431,7 @@ export default function LoginPage() {
           margin: '20px 0',
         }}>
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
-          <span style={{ fontSize: 12, color: '#5a5a5a' }}>{t('loginOrDivider')}</span>
+          <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{t('loginOrDivider')}</span>
           <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
         </div>
 
