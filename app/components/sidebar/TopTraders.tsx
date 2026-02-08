@@ -122,7 +122,7 @@ export default function TopTraders() {
               ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%`
               : null
             return (
-              <Link
+              <Link prefetch={false}
                 key={`${t.source}-${t.source_trader_id}`}
                 href={`/trader/${t.source}/${t.source_trader_id}`}
                 style={{

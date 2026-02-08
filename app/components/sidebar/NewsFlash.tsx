@@ -138,7 +138,7 @@ export default function NewsFlash() {
           })
         )}
       </div>
-      <Link
+      <Link prefetch={false}
         href="/flash-news"
         style={{
           display: 'block', textAlign: 'center', marginTop: tokens.spacing[2],

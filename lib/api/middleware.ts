@@ -183,9 +183,15 @@ export function withApiMiddleware<T>(
         addDeprecationHeaders(response, versionContext)
       }
 
-      // 8. 添加响应时间头
+      // 8. 添加响应时间头 & 慢查询日志
       const duration = Date.now() - startTime
       response.headers.set('X-Response-Time', `${duration}ms`)
+
+      if (duration >= 3000) {
+        logger.error(`CRITICAL SLOW API: ${name} took ${duration}ms`, { path: request.nextUrl.pathname })
+      } else if (duration >= 1000) {
+        logger.warn(`Slow API: ${name} took ${duration}ms`, { path: request.nextUrl.pathname })
+      }
 
       return response
     } catch (error: unknown) {

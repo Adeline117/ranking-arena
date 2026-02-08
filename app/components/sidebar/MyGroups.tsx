@@ -110,7 +110,7 @@ export default function MyGroups() {
           {groups.map(g => {
             const displayName = isZh ? g.name : (g.name_en || g.name)
             return (
-              <Link
+              <Link prefetch={false}
                 key={g.id}
                 href={`/groups/${g.id}`}
                 style={{

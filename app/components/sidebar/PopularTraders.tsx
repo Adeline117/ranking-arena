@@ -160,7 +160,7 @@ export default function PopularTraders() {
                 ? formatAddr(t.handle)
                 : formatAddr(t.source_trader_id)
             return (
-              <Link
+              <Link prefetch={false}
                 key={`${t.source}-${t.source_trader_id}`}
                 href={`/trader/${t.source}/${t.source_trader_id}`}
                 style={{
