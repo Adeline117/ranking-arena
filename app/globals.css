@@ -689,8 +689,7 @@ select:focus-visible {
 .ranking-table-container,
 .post-feed-masonry,
 .three-col-left,
-.three-col-right,
-.three-col-center {
+.three-col-right {
   overscroll-behavior: contain;
 }
 
