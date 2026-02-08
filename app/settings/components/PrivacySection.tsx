@@ -44,11 +44,11 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
         </Text>
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
-            <input type="checkbox" checked={props.showFollowing} onChange={(e) => props.setShowFollowing(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8b6fa8' }} />
+            <input type="checkbox" checked={props.showFollowing} onChange={(e) => props.setShowFollowing(e.target.checked)} style={{ width: 18, height: 18, accentColor: tokens.colors.accent.brand }} />
             <Text size="sm">{t('showFollowingListLabel')}</Text>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
-            <input type="checkbox" checked={props.showFollowers} onChange={(e) => props.setShowFollowers(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8b6fa8' }} />
+            <input type="checkbox" checked={props.showFollowers} onChange={(e) => props.setShowFollowers(e.target.checked)} style={{ width: 18, height: 18, accentColor: tokens.colors.accent.brand }} />
             <Text size="sm">{t('showFollowersListLabel')}</Text>
           </label>
         </Box>
@@ -60,7 +60,7 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
           {t('proBadgeTitle')}
         </Text>
         <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
-          <input type="checkbox" checked={props.showProBadge} onChange={(e) => props.setShowProBadge(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8b6fa8' }} />
+          <input type="checkbox" checked={props.showProBadge} onChange={(e) => props.setShowProBadge(e.target.checked)} style={{ width: 18, height: 18, accentColor: tokens.colors.accent.brand }} />
           <Box>
             <Text size="sm">{t('showProBadgeLabel')}</Text>
             <Text size="xs" color="tertiary">{t('proBadgeNote')}</Text>

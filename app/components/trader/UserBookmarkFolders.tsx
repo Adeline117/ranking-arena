@@ -293,7 +293,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
               display: 'block',
               textAlign: 'center',
               padding: tokens.spacing[2],
-              color: tokens.colors.accent?.primary || '#8b6fa8',
+              color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
               fontSize: tokens.typography.fontSize.sm,
               textDecoration: 'none',
               borderRadius: tokens.radius.md,

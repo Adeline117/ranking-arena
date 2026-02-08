@@ -446,7 +446,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, #8b6fa8, #6b4f88);
+  background: linear-gradient(180deg, var(--color-brand), #6b4f88);
   transform: scaleY(0);
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -632,7 +632,7 @@
   width: 24px;
   height: 24px;
   border: 3px solid rgba(139, 111, 168, 0.2);
-  border-top-color: #8b6fa8;
+  border-top-color: var(--color-brand);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -658,7 +658,7 @@
 .dots-loading span {
   width: 6px;
   height: 6px;
-  background: #8b6fa8;
+  background: var(--color-brand);
   border-radius: 50%;
   animation: bounce 1.4s ease-in-out infinite;
 }
@@ -681,7 +681,7 @@
 
 .toast-progress {
   height: 3px;
-  background: linear-gradient(90deg, #8b6fa8, #6b4f88);
+  background: linear-gradient(90deg, var(--color-brand), #6b4f88);
   animation: progressFill 3s linear forwards;
   transform-origin: left;
 }
@@ -745,7 +745,7 @@
 }
 
 .input-focus-glow:focus {
-  border-color: #8b6fa8;
+  border-color: var(--color-brand);
   box-shadow: 0 0 0 3px rgba(139, 111, 168, 0.15);
 }
 
@@ -766,7 +766,7 @@ input:focus + .input-label-float {
   font-size: 11px;
   background: var(--color-bg-primary);
   padding: 0 4px;
-  color: #8b6fa8;
+  color: var(--color-brand);
 }
 
 /* ============================================

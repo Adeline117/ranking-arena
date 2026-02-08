@@ -148,7 +148,7 @@ export function RadioOption<T extends string>({
         value={value}
         checked={currentValue === value}
         onChange={() => onChange(value)}
-        style={{ marginTop: 3, accentColor: '#8b6fa8' }}
+        style={{ marginTop: 3, accentColor: tokens.colors.accent.brand }}
       />
       <Box>
         <Text size="sm" weight="medium">{label}</Text>

@@ -32,7 +32,7 @@ const MENU_LINK_STYLE: React.CSSProperties = {
   gap: tokens.spacing[2],
   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
   borderRadius: tokens.radius.md,
-  color: tokens.colors.text.primary,
+  color: 'var(--color-text-primary)',
   textDecoration: 'none',
   fontSize: tokens.typography.fontSize.base,
   fontWeight: tokens.typography.fontWeight.bold,
@@ -267,7 +267,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
         top: 0,
         zIndex: tokens.zIndex.sticky,
         background: tokens.glass.bg.primary,
-        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        borderBottom: `1px solid ${'var(--color-border-primary)'}`,
         height: 56,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
@@ -350,12 +350,12 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 style={{
                   fontSize: '20px',
                   fontWeight: 700,
-                  color: tokens.colors.text.primary,
+                  color: 'var(--color-text-primary)',
                   letterSpacing: '-0.3px',
                   fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
                 }}
               >
-                <span style={{ color: tokens.colors.accent.brand, fontWeight: 800 }}>a</span>rena
+                <span style={{ color: 'var(--color-brand)', fontWeight: 800 }}>a</span>rena
               </Box>
             </Box>
           </Link>
@@ -384,11 +384,11 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
-                    color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                    color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
                     textDecoration: 'none',
                     fontWeight: isActive ? 800 : 600,
                     fontSize: tokens.typography.fontSize.sm,
-                    background: isActive ? tokens.colors.bg.secondary : 'transparent',
+                    background: isActive ? 'var(--color-bg-secondary)' : 'transparent',
                     minHeight: 44,
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -430,7 +430,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 background: tokens.glass.bg.light,
                 backdropFilter: tokens.glass.blur.sm,
                 WebkitBackdropFilter: tokens.glass.blur.sm,
-                color: tokens.colors.text.primary,
+                color: 'var(--color-text-primary)',
                 padding: `0 ${tokens.spacing[4]} 0 40px`,
                 outline: 'none',
                 fontWeight: tokens.typography.fontWeight.medium,
@@ -458,7 +458,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 left: tokens.spacing[3],
                 top: '50%',
                 transform: 'translateY(-50%)',
-                color: tokens.colors.text.tertiary,
+                color: 'var(--color-text-tertiary)',
                 display: 'flex',
                 alignItems: 'center',
               }}
@@ -491,10 +491,10 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               width: 44,
               height: 44,
               borderRadius: tokens.radius.full,
-              background: `${tokens.colors.accent.primary}12`,
-              color: tokens.colors.text.secondary,
+              background: `${'var(--color-accent-primary)'}12`,
+              color: 'var(--color-text-secondary)',
               transition: `all ${tokens.transition.base}`,
-              border: `1px solid ${tokens.colors.accent.primary}30`,
+              border: `1px solid ${'var(--color-accent-primary)'}30`,
               cursor: 'pointer',
             }}
           >
@@ -504,7 +504,19 @@ export default function TopNav({ email = null }: { email?: string | null }) {
           <LanguageSwitcher />
           <ThemeToggle />
           {!isReady ? (
-            /* Generic Login placeholder while auth is deferred - reduces TBT */
+            /* Auth状态加载中：已登录用户显示骨架屏，未登录/未知显示登录按钮 */
+            authChecked && authLoggedIn ? (
+              /* 已登录 - 显示骨架屏占位，避免闪烁为登录按钮 */
+              <div
+                className="skeleton"
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
             <Link
               href="/login"
               aria-label={t('login')}
@@ -514,7 +526,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
-                color: tokens.colors.white,
+                color: '#fff',
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.black,
                 fontSize: tokens.typography.fontSize.sm,
@@ -524,11 +536,12 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 minWidth: 72,
                 height: 44,
                 border: 'none',
-                boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
+                boxShadow: `0 4px 12px ${'var(--color-accent-primary)'}40`,
               }}
             >
               {t('login')}
             </Link>
+            )
           ) : myId ? (
             <>
               {/* 通知铃铛图标 - desktop opens panel, mobile navigates to /inbox */}
@@ -553,18 +566,18 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   height: 44,
                   borderRadius: tokens.radius.full,
                   background: 'transparent',
-                  color: tokens.colors.text.secondary,
+                  color: 'var(--color-text-secondary)',
                   border: 'none',
                   cursor: 'pointer',
                   transition: `all ${tokens.transition.base}`,
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = tokens.glass.bg.light
-                  e.currentTarget.style.color = tokens.colors.text.primary
+                  e.currentTarget.style.color = 'var(--color-text-primary)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = tokens.colors.text.secondary
+                  e.currentTarget.style.color = 'var(--color-text-secondary)'
                 }}
               >
                 <NotificationIcon size={20} />
@@ -578,7 +591,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       height: 18,
                       borderRadius: 9,
                       background: tokens.gradient.error,
-                      border: `2px solid ${tokens.colors.bg.primary}`,
+                      border: `2px solid ${'var(--color-bg-primary)'}`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -607,7 +620,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                   borderRadius: tokens.radius.md,
                   transition: `all ${tokens.transition.base}`,
-                  background: showUserMenu ? tokens.colors.bg.secondary : 'transparent',
+                  background: showUserMenu ? 'var(--color-bg-secondary)' : 'transparent',
                   border: 'none',
                   fontFamily: 'inherit',
                   color: 'inherit',
@@ -635,7 +648,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       width: 36,
                       height: 36,
                       borderRadius: tokens.radius.full,
-                      border: `1px solid ${tokens.colors.border.primary}`,
+                      border: `1px solid ${'var(--color-border-primary)'}`,
                       objectFit: 'cover',
                     }}
                     unoptimized={myAvatarUrl?.startsWith('data:')}
@@ -646,12 +659,12 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       width: 36,
                       height: 36,
                       borderRadius: tokens.radius.full,
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                      background: tokens.colors.bg.secondary,
+                      border: `1px solid ${'var(--color-border-primary)'}`,
+                      background: 'var(--color-bg-secondary)',
                       display: 'grid',
                       placeItems: 'center',
                       fontWeight: tokens.typography.fontWeight.black,
-                      color: tokens.colors.text.primary,
+                      color: 'var(--color-text-primary)',
                       fontSize: tokens.typography.fontSize.sm,
                     }}
                   >
@@ -684,7 +697,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   <div role="group" aria-label="Account switcher">
                     <AccountSwitcher onClose={() => setShowUserMenu(false)} />
                   </div>
-                  <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[1]} 0` }} role="separator" />
+                  <Box style={{ height: 1, background: 'var(--color-border-primary)', margin: `${tokens.spacing[1]} 0` }} role="separator" />
 
                   <Link
                     href={myHandle ? `/u/${encodeURIComponent(myHandle)}` : '/'}
@@ -754,7 +767,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     role="separator"
                     style={{
                       height: 1,
-                      background: tokens.colors.border.primary,
+                      background: 'var(--color-border-primary)',
                       margin: `${tokens.spacing[2]} 0`,
                     }}
                   />
@@ -766,7 +779,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       display: 'block',
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                       borderRadius: tokens.radius.md,
-                      color: tokens.colors.text.secondary,
+                      color: 'var(--color-text-secondary)',
                       textDecoration: 'none',
                       fontSize: tokens.typography.fontSize.base,
                       fontWeight: tokens.typography.fontWeight.bold,
@@ -788,7 +801,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
-                color: tokens.colors.white,
+                color: '#fff',
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.black,
                 fontSize: tokens.typography.fontSize.sm,
@@ -798,7 +811,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 minWidth: 72,
                 height: 44,
                 border: 'none',
-                boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
+                boxShadow: `0 4px 12px ${'var(--color-accent-primary)'}40`,
               }}
             >
               {t('login')}

@@ -126,7 +126,7 @@ export default function GroupHeader({
                   <Link
                     href={`/u/${encodeURIComponent(group.owner_handle)}`}
                     style={{
-                      color: tokens.colors.accent?.primary || '#8b6fa8',
+                      color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
                       textDecoration: 'none',
                       marginLeft: tokens.spacing[1],
                     }}

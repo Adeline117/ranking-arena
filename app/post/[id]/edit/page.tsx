@@ -61,7 +61,7 @@ function renderContentWithControls(
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
             style={{
-              color: '#8b6fa8',
+              color: tokens.colors.accent.brand,
               textDecoration: 'underline',
               wordBreak: 'break-all',
             }}
@@ -216,7 +216,7 @@ function renderContentWithControls(
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
           style={{
-            color: '#8b6fa8',
+            color: tokens.colors.accent.brand,
             textDecoration: 'underline',
             wordBreak: 'break-all',
           }}
@@ -611,7 +611,7 @@ export default function EditPostPage() {
                     style={{
                       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                       border: 'none',
-                      background: !showPreview ? '#8b6fa8' : 'transparent',
+                      background: !showPreview ? tokens.colors.accent.brand : 'transparent',
                       color: !showPreview ? '#fff' : tokens.colors.text.secondary,
                       fontSize: tokens.typography.fontSize.xs,
                       cursor: 'pointer',
@@ -630,7 +630,7 @@ export default function EditPostPage() {
                       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                       border: 'none',
                       borderLeft: `1px solid ${tokens.colors.border.primary}`,
-                      background: showPreview ? '#8b6fa8' : 'transparent',
+                      background: showPreview ? tokens.colors.accent.brand : 'transparent',
                       color: showPreview ? '#fff' : tokens.colors.text.secondary,
                       fontSize: tokens.typography.fontSize.xs,
                       cursor: 'pointer',
@@ -655,16 +655,16 @@ export default function EditPostPage() {
             {showPreview ? (
               <Box
                 style={{
-                  width: '100%',
+                  width: '100%`,
                   minHeight: 288,
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: `2px solid #8b6fa8`,
+                  border: `2px solid ${tokens.colors.accent.brand}`,
                   background: `linear-gradient(135deg, rgba(139, 111, 168, 0.05) 0%, rgba(139, 111, 168, 0.1) 100%)`,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
                   lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap',
+                  whiteSpace: `pre-wrap',
                   wordBreak: 'break-word',
                   position: 'relative',
                 }}
@@ -675,7 +675,7 @@ export default function EditPostPage() {
                     position: 'absolute',
                     top: -12,
                     left: 12,
-                    background: '#8b6fa8',
+                    background: tokens.colors.accent.brand,
                     color: '#fff',
                     padding: '2px 10px',
                     borderRadius: 999,
@@ -746,7 +746,7 @@ export default function EditPostPage() {
                 marginBottom: tokens.spacing[3],
                 background: 'rgba(139, 111, 168, 0.1)',
                 borderRadius: tokens.radius.md,
-                border: '1px dashed #8b6fa8',
+                border: `1px dashed ${tokens.colors.accent.brand}`,
               }}
             >
               <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
@@ -754,7 +754,7 @@ export default function EditPostPage() {
               </Text>
               <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
                 {t('imageInsertStep1')}<br />
-                {t('imageInsertStep2')} <span style={{ background: '#8b6fa8', color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
+                {t('imageInsertStep2')} <span style={{ background: tokens.colors.accent.brand, color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
                 {t('imageInsertStep3')}
               </Text>
             </Box>
@@ -776,9 +776,9 @@ export default function EditPostPage() {
                     borderRadius: tokens.radius.md,
                     overflow: 'hidden',
                     border: inContent 
-                      ? '2px solid #8b6fa8'
+                      ? `2px solid ${tokens.colors.accent.brand}`
                       : draggedImageIndex === index 
-                        ? '2px solid #8b6fa8' 
+                        ? `2px solid ${tokens.colors.accent.brand}` 
                         : `1px solid ${tokens.colors.border.primary}`,
                     cursor: 'grab',
                     opacity: draggedImageIndex === index ? 0.7 : 1,

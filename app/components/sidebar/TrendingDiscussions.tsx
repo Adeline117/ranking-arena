@@ -106,7 +106,7 @@ export default function TrendingDiscussions() {
                   <span style={{
                     fontSize: 10,
                     fontWeight: 600,
-                    color: '#8b6fa8',
+                    color: tokens.colors.accent.brand,
                     background: 'rgba(139,111,168,0.1)',
                     padding: '1px 6px',
                     borderRadius: 4,

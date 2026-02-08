@@ -102,7 +102,7 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
                 {t('deletedUser')}
               </Text>
             ) : (
-              <Text size="xs" style={{ color: '#8b6fa8' }}>
+              <Text size="xs" style={{ color: tokens.colors.accent.brand }}>
                 @{post.author_handle}
               </Text>
             )}

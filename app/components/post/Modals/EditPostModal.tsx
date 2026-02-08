@@ -120,7 +120,7 @@ export function EditPostModal({
               padding: '10px 20px',
               borderRadius: 10,
               border: 'none',
-              background: saving || !title.trim() ? 'rgba(139,111,168,0.3)' : '#8b6fa8',
+              background: saving || !title.trim() ? 'rgba(139,111,168,0.3)' : tokens.colors.accent.brand,
               color: '#fff',
               fontWeight: 900,
               fontSize: 14,

@@ -2567,6 +2567,12 @@ const en = {
 
     // Search
     noRelatedResults: 'No related results found',
+    cryptoLibrary: 'Crypto Library',
+    upgradeProViewAll: 'Upgrade Pro to view all {count} traders',
+    currentlyShowingTop: 'Currently showing top {count}',
+    sidebarWidgets: 'More',
+    expandWidgets: 'Show more',
+    collapseWidgets: 'Collapse',
 
 } as const
 

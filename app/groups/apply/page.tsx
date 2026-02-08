@@ -393,15 +393,15 @@ export default function ApplyGroupPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto',
+                margin: '0 auto`,
                 marginBottom: tokens.spacing[4],
               }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8b6fa8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="${tokens.colors.accent.brand}" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </Box>
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                {language === 'zh' ? '申请已成功提交！' : 'Application submitted successfully!'}
+                {language === `zh' ? '申请已成功提交！' : 'Application submitted successfully!'}
               </Text>
               <Text color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>
                 {language === 'zh' 
@@ -505,7 +505,7 @@ export default function ApplyGroupPage() {
                       type="button"
                       style={{
                         ...tabStyle(false),
-                        color: tokens.colors.accent?.primary || '#8b6fa8',
+                        color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
                         border: 'none',
                       }}
                       onClick={() => {

@@ -78,8 +78,15 @@ html.theme-transition *::after {
   
   /* Accent colors */
   --color-accent-primary: #8b6fa8;
+  --color-accent-primary-08: rgba(139, 111, 168, 0.08);
+  --color-accent-primary-12: rgba(139, 111, 168, 0.12);
+  --color-accent-primary-30: rgba(139, 111, 168, 0.3);
+  --color-accent-primary-40: rgba(139, 111, 168, 0.4);
+  --color-accent-primary-60: rgba(139, 111, 168, 0.6);
   --color-accent-success: #2fe57d;
+  --color-accent-success-20: rgba(47, 229, 125, 0.2);
   --color-accent-error: #ff7c7c;
+  --color-accent-error-20: rgba(255, 124, 124, 0.2);
   --color-accent-warning: #ffc107;
   
   /* Glass backgrounds - Dark */
@@ -678,7 +685,7 @@ body {
 /* Variant-specific hover shadows */
 .btn-base.btn-primary:not(:disabled) {
   box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
-  background: linear-gradient(135deg, #9d84b5 0%, #8b6fa8 100%);
+  background: linear-gradient(135deg, #9d84b5 0%, var(--color-brand) 100%);
 }
 
 .btn-base.btn-primary:not(:disabled):hover {
@@ -1140,4 +1147,70 @@ body {
     columns: 3;
     column-gap: 16px;
   }
+}
+
+/* 移动端视图切换按钮 */
+@media (max-width: 767px) {
+  .mobile-only {
+    display: flex !important;
+  }
+  /* 移动端列表模式：覆盖瀑布流为单列 */
+  .mobile-view-list {
+    columns: 1 !important;
+  }
+}
+
+/* Post modal - mobile bottom sheet */
+@media (max-width: 767px) {
+  .post-modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .post-modal-content {
+    width: 100% !important;
+    max-height: 92vh !important;
+    border-radius: 16px 16px 0 0 !important;
+    border-bottom: none !important;
+    animation: slideUpSheet 0.3s ease-out;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  @keyframes slideUpSheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+}
+
+/* Mobile sidebar widgets - collapsible area */
+.mobile-sidebar-widgets {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .mobile-sidebar-widgets {
+    display: block;
+    margin-top: 24px;
+    padding: 0 16px;
+  }
+}
+
+/* Pro Feature Teaser */
+.pro-feature-teaser {
+  position: relative;
+  overflow: hidden;
+}
+.pro-feature-teaser-cta {
+  background: linear-gradient(135deg, var(--color-pro-gradient-start), var(--color-pro-gradient-end));
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 44px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.pro-feature-teaser-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--color-pro-badge-shadow);
 }

@@ -146,7 +146,7 @@ function RoleBadge({ role }: RoleBadgeProps): React.ReactElement {
   const background = isOwner
     ? 'linear-gradient(135deg, #FFD700, #FFA500)'
     : isAdmin
-      ? 'linear-gradient(135deg, #8b6fa8, #6b4f88)'
+      ? `linear-gradient(135deg, ${tokens.colors.accent.brand}, #6b4f88)`
       : tokens.colors.bg.tertiary || tokens.colors.bg.secondary
 
   const label = isOwner
@@ -207,7 +207,7 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
           <InfoRow label={t('owner')}>
             <Text size="md">
               {group.owner_handle ? (
-                <Link href={`/u/${encodeURIComponent(group.owner_handle)}`} style={{ color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}>
+                <Link href={`/u/${encodeURIComponent(group.owner_handle)}`} style={{ color: tokens.colors.accent?.primary || tokens.colors.accent.brand, textDecoration: 'none' }}>
                   @{group.owner_handle}
                 </Link>
               ) : t('none')}

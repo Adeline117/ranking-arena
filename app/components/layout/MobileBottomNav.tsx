@@ -76,6 +76,14 @@ function NewsIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
+function FireIcon({ active }: IconProps): React.ReactElement {
+  return (
+    <NavIcon active={active}>
+      <path d="M12 12c2-2.96 0-7-1-8 0 3.038-1.773 4.741-3 6-1.226 1.26-2 3.24-2 5a6 6 0 1 0 12 0c0-1.532-1.056-3.94-2-5-1.786 3-2.791 3-4 2z" />
+    </NavIcon>
+  )
+}
+
 function LibraryIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
@@ -103,7 +111,7 @@ function NotificationBadge({ count, ariaLabel }: NotificationBadgeProps): React.
         height: 16,
         padding: '0 4px',
         borderRadius: 8,
-        background: tokens.colors.accent.error,
+        background: 'var(--color-accent-error)',
         color: '#fff',
         fontSize: 10,
         fontWeight: 700,
@@ -208,7 +216,7 @@ export default function MobileBottomNav(): React.ReactElement {
 
   const navItems: NavItem[] = useMemo(() => [
     { href: '/', labelKey: 'home', Icon: HomeIcon },
-    { href: '/rankings', labelKey: 'rankings', Icon: TrophyIcon },
+    { href: '/hot', labelKey: 'hot', Icon: FireIcon },
     { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
     { href: '/library', labelKey: 'library', Icon: LibraryIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
@@ -230,7 +238,7 @@ export default function MobileBottomNav(): React.ReactElement {
           background: tokens.glass.bg.primary,
           backdropFilter: tokens.glass.blur.lg,
           WebkitBackdropFilter: tokens.glass.blur.lg,
-          borderTop: `1px solid ${tokens.colors.border.primary}`,
+          borderTop: `1px solid ${'var(--color-border-primary)'}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-around',
@@ -279,13 +287,13 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         gap: 4,
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         textDecoration: 'none',
-        color: active ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+        color: active ? 'var(--color-accent-primary)' : 'var(--color-text-tertiary)',
         transition: `all ${tokens.transition.base}`,
         borderRadius: tokens.radius.lg,
         position: 'relative',
         minWidth: 60,
         minHeight: tokens.touchTarget.comfortable,
-        background: active ? `${tokens.colors.accent.primary}08` : 'transparent',
+        background: active ? `${'var(--color-accent-primary)'}08` : 'transparent',
       }}
     >
       {active && <ActiveIndicator />}
@@ -337,7 +345,7 @@ function ActiveIndicator(): React.ReactElement {
         height: 3,
         borderRadius: '0 0 4px 4px',
         background: tokens.gradient.primary,
-        boxShadow: `0 2px 8px ${tokens.colors.accent.primary}60`,
+        boxShadow: `0 2px 8px ${'var(--color-accent-primary)'}60`,
       }}
       aria-hidden="true"
     />
@@ -354,7 +362,7 @@ function HighlightDot(): React.ReactElement {
         width: 6,
         height: 6,
         borderRadius: 3,
-        background: tokens.colors.accent.error,
+        background: 'var(--color-accent-error)',
       }}
       aria-hidden="true"
     />

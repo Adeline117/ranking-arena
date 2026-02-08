@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 
 // 进度条颜色
-const PROGRESS_COLOR = tokens.colors.accent.primary || '#8b6fa8'
+const PROGRESS_COLOR = tokens.colors.accent.primary || tokens.colors.accent.brand
 
 /**
  * 全局页面加载进度条

@@ -131,7 +131,7 @@ function renderContentWithControls(
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
             style={{
-              color: '#8b6fa8',
+              color: tokens.colors.accent.brand,
               textDecoration: 'underline',
               wordBreak: 'break-all',
             }}
@@ -299,7 +299,7 @@ function renderContentWithControls(
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
           style={{
-            color: '#8b6fa8',
+            color: tokens.colors.accent.brand,
             textDecoration: 'underline',
             wordBreak: 'break-all',
           }}
@@ -899,7 +899,7 @@ export default function NewPostPage() {
                     style={{
                       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                       border: 'none',
-                      background: !showPreview ? '#8b6fa8' : 'transparent',
+                      background: !showPreview ? tokens.colors.accent.brand : 'transparent',
                       color: !showPreview ? '#fff' : tokens.colors.text.secondary,
                       fontSize: tokens.typography.fontSize.xs,
                       cursor: 'pointer',
@@ -918,7 +918,7 @@ export default function NewPostPage() {
                       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                       border: 'none',
                       borderLeft: `1px solid ${tokens.colors.border.primary}`,
-                      background: showPreview ? '#8b6fa8' : 'transparent',
+                      background: showPreview ? tokens.colors.accent.brand : 'transparent',
                       color: showPreview ? '#fff' : tokens.colors.text.secondary,
                       fontSize: tokens.typography.fontSize.xs,
                       cursor: 'pointer',
@@ -948,16 +948,16 @@ export default function NewPostPage() {
             {showPreview ? (
               <Box
                 style={{
-                  width: '100%',
+                  width: '100%`,
                   minHeight: 288,
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: `2px solid #8b6fa8`,
+                  border: `2px solid ${tokens.colors.accent.brand}`,
                   background: `linear-gradient(135deg, rgba(139, 111, 168, 0.05) 0%, rgba(139, 111, 168, 0.1) 100%)`,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
                   lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap',
+                  whiteSpace: `pre-wrap',
                   wordBreak: 'break-word',
                   position: 'relative',
                 }}
@@ -968,7 +968,7 @@ export default function NewPostPage() {
                     position: 'absolute',
                     top: -12,
                     left: 12,
-                    background: '#8b6fa8',
+                    background: tokens.colors.accent.brand,
                     color: '#fff',
                     padding: '2px 10px',
                     borderRadius: 999,
@@ -1026,7 +1026,7 @@ export default function NewPostPage() {
                   cursor: 'pointer',
                   padding: '4px 10px',
                   borderRadius: 8,
-                  color: showStickerPicker ? '#8b6fa8' : tokens.colors.text.tertiary,
+                  color: showStickerPicker ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
                   fontSize: 13,
                   display: 'flex',
                   alignItems: 'center',
@@ -1058,7 +1058,7 @@ export default function NewPostPage() {
             style={{
               padding: tokens.spacing[4],
               borderRadius: tokens.radius.md,
-              border: `1px solid ${pollEnabled ? '#8b6fa8' : tokens.colors.border.primary}`,
+              border: `1px solid ${pollEnabled ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
               background: pollEnabled ? 'rgba(139, 111, 168, 0.1)' : tokens.colors.bg.secondary,
               transition: 'all 0.2s ease',
             }}
@@ -1077,7 +1077,7 @@ export default function NewPostPage() {
                   width: 44,
                   height: 24,
                   borderRadius: 12,
-                  background: pollEnabled ? '#8b6fa8' : tokens.colors.border.primary,
+                  background: pollEnabled ? tokens.colors.accent.brand : tokens.colors.border.primary,
                   position: 'relative',
                   transition: 'background 0.2s ease',
                   flexShrink: 0,
@@ -1098,7 +1098,7 @@ export default function NewPostPage() {
                 />
               </Box>
               <Box>
-                <Text size="sm" weight="bold" style={{ color: pollEnabled ? '#8b6fa8' : tokens.colors.text.primary }}>
+                <Text size="sm" weight="bold" style={{ color: pollEnabled ? tokens.colors.accent.brand : tokens.colors.text.primary }}>
                   {t('enablePoll')}
                 </Text>
                 <Text size="xs" color="tertiary">
@@ -1189,9 +1189,9 @@ export default function NewPostPage() {
                         style={{
                           flex: 1,
                           padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                          border: `1px solid ${pollType === 'single' ? '#8b6fa8' : tokens.colors.border.primary}`,
+                          border: `1px solid ${pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
                           background: pollType === 'single' ? 'rgba(139,111,168,0.2)' : 'transparent',
-                          color: pollType === 'single' ? '#8b6fa8' : tokens.colors.text.secondary,
+                          color: pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
                           borderRadius: tokens.radius.md,
                           cursor: 'pointer',
                           fontSize: tokens.typography.fontSize.xs,
@@ -1205,9 +1205,9 @@ export default function NewPostPage() {
                         style={{
                           flex: 1,
                           padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                          border: `1px solid ${pollType === 'multiple' ? '#8b6fa8' : tokens.colors.border.primary}`,
+                          border: `1px solid ${pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
                           background: pollType === 'multiple' ? 'rgba(139,111,168,0.2)' : 'transparent',
-                          color: pollType === 'multiple' ? '#8b6fa8' : tokens.colors.text.secondary,
+                          color: pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
                           borderRadius: tokens.radius.md,
                           cursor: 'pointer',
                           fontSize: tokens.typography.fontSize.xs,
@@ -1266,7 +1266,7 @@ export default function NewPostPage() {
                 marginBottom: tokens.spacing[3],
                 background: 'rgba(139, 111, 168, 0.1)',
                 borderRadius: tokens.radius.md,
-                border: '1px dashed #8b6fa8',
+                border: `1px dashed ${tokens.colors.accent.brand}`,
               }}
             >
               <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
@@ -1274,7 +1274,7 @@ export default function NewPostPage() {
               </Text>
               <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
                 {t('imageInsertStep1')}<br />
-                {t('imageInsertStep2')} <span style={{ background: '#8b6fa8', color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
+                {t('imageInsertStep2')} <span style={{ background: tokens.colors.accent.brand, color: '#fff', padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
                 {t('imageInsertStep3')}
               </Text>
             </Box>
@@ -1312,13 +1312,13 @@ export default function NewPostPage() {
                     width: 100,
                     height: 100,
                     borderRadius: tokens.radius.md,
-                    overflow: 'hidden',
+                    overflow: 'hidden`,
                     border: inContent 
-                      ? `2px solid #8b6fa8`
+                      ? `2px solid ${tokens.colors.accent.brand}`
                       : draggedImageIndex === index 
                         ? `2px solid ${tokens.colors.accent.brand}` 
                         : `1px solid ${tokens.colors.border.primary}`,
-                    cursor: 'grab',
+                    cursor: `grab',
                     opacity: draggedImageIndex === index ? 0.7 : 1,
                     transition: 'all 0.2s ease',
                   }}
@@ -1469,9 +1469,9 @@ export default function NewPostPage() {
                     width: 200,
                     height: 120,
                     borderRadius: tokens.radius.md,
-                    overflow: 'hidden',
-                    border: `2px solid #8b6fa8`,
-                    background: '#000',
+                    overflow: 'hidden`,
+                    border: `2px solid ${tokens.colors.accent.brand}`,
+                    background: `#000',
                   }}
                 >
                   <video
@@ -1581,7 +1581,7 @@ export default function NewPostPage() {
                           style={{
                             width: `${videoUploadProgress}%`,
                             height: '100%',
-                            background: '#8b6fa8',
+                            background: tokens.colors.accent.brand,
                             transition: 'width 0.3s ease',
                           }}
                         />

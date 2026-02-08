@@ -536,7 +536,7 @@ function PostListItem(props: PostListItemProps) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                color: tokens.colors.accent?.primary || '#8b6fa8',
+                color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
                 textDecoration: 'none',
                 fontWeight: tokens.typography.fontWeight.bold,
                 fontSize: tokens.typography.fontSize.xs,
@@ -796,7 +796,7 @@ function CommentsSection(props: CommentsSectionProps) {
                   {comment.author_handle ? (
                     <Link
                       href={`/u/${encodeURIComponent(comment.author_handle)}`}
-                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.accent?.primary || tokens.colors.accent.brand, textDecoration: 'none' }}
                     >
                       <span style={{
                         width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
@@ -875,7 +875,7 @@ function CommentsSection(props: CommentsSectionProps) {
                         {reply.author_handle ? (
                           <Link
                             href={`/u/${encodeURIComponent(reply.author_handle)}`}
-                            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.accent?.primary || '#8b6fa8', textDecoration: 'none' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.accent?.primary || tokens.colors.accent.brand, textDecoration: 'none' }}
                           >
                             <span style={{
                               width: 16, height: 16, borderRadius: '50%', flexShrink: 0,

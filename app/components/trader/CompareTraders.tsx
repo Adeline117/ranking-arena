@@ -142,7 +142,7 @@ function CompareFloatingBar({
       {/* 头部 */}
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <BarChart3 size={18} style={{ color: tokens.colors.accent?.primary || '#8b6fa8' }} />
+          <BarChart3 size={18} style={{ color: tokens.colors.accent?.primary || tokens.colors.accent.brand }} />
           <Text size="sm" weight="bold">
             {t('compare')} ({traders.length}/5)
           </Text>
@@ -300,7 +300,7 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
               <tr
                 key={trader.id}
                 style={{
-                  background: isFirst ? `${tokens.colors.accent?.primary || '#8b6fa8'}10` : 'transparent',
+                  background: isFirst ? `${tokens.colors.accent?.primary || tokens.colors.accent.brand}10` : 'transparent',
                 }}
               >
                 <td style={{
@@ -308,7 +308,7 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
                   borderBottom: `1px solid ${tokens.colors.border.primary}`,
                   position: 'sticky',
                   left: 0,
-                  background: isFirst ? `${tokens.colors.accent?.primary || '#8b6fa8'}10` : tokens.colors.bg.secondary,
+                  background: isFirst ? `${tokens.colors.accent?.primary || tokens.colors.accent.brand}10` : tokens.colors.bg.secondary,
                 }}>
                   <Link href={`/trader/${trader.handle || trader.id}`} style={{ textDecoration: 'none' }}>
                     <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -317,7 +317,7 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
                           fontSize: 10,
                           padding: '2px 6px',
                           borderRadius: 4,
-                          background: tokens.colors.accent?.primary || '#8b6fa8',
+                          background: tokens.colors.accent?.primary || tokens.colors.accent.brand,
                           color: '#fff',
                         }}>
                           TOP
@@ -439,7 +439,7 @@ function CompareTraders({ traders, onRemove, onClear, maxTraders = 5 }: CompareT
           background: tokens.colors.bg.tertiary,
         }}>
           <Box style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <BarChart3 size={20} style={{ color: tokens.colors.accent?.primary || '#8b6fa8' }} />
+            <BarChart3 size={20} style={{ color: tokens.colors.accent?.primary || tokens.colors.accent.brand }} />
             <Text size="md" weight="bold">
               {t('compareTraders')} ({traders.length}/{maxTraders})
             </Text>
