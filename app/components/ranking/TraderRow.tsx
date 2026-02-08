@@ -92,7 +92,7 @@ export const TraderRow = memo(function TraderRow({
 }: TraderRowProps) {
   const traderHandle = trader.handle || trader.id
   const href = `/trader/${encodeURIComponent(traderHandle)}`
-  const displayName = formatDisplayName(traderHandle)
+  const displayName = formatDisplayName(traderHandle, trader.source || source)
   const isAddress = traderHandle.startsWith('0x') && traderHandle.length > 20
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 

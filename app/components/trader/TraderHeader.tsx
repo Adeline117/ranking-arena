@@ -477,7 +477,7 @@ export default function TraderHeader({
                 textShadow: hasCover ? '0 2px 8px rgba(0,0,0,0.5)' : undefined,
               }}
             >
-              {formatDisplayName(handle)}
+              {formatDisplayName(handle, source)}
             </Text>
 
             {uid && (
