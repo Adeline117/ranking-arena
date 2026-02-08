@@ -32,9 +32,9 @@ export interface Post {
 
 export interface OriginalPost {
   id: string
-  title: string
-  content: string
-  author_handle: string
+  title: string | null
+  content: string | null
+  author_handle: string | null
   author_avatar_url?: string | null
   images?: string[] | null
   created_at: string

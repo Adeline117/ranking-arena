@@ -58,10 +58,10 @@ export default function BookshelfTab() {
       }
 
       const mapped: ShelfBook[] = (data || [])
-        .filter((d: any) => d.library_items)
-        .map((d: any) => ({
-          ...(d.library_items as any),
-          status: d.status,
+        .filter((d: Record<string, unknown>) => d.library_items)
+        .map((d: Record<string, unknown>) => ({
+          ...(d.library_items as Omit<ShelfBook, 'status'>),
+          status: d.status as string,
         }))
 
       setBooks(mapped)

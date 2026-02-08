@@ -83,7 +83,7 @@ export default function MyGroups() {
         .select('group_id, groups(id, name, name_en, avatar_url, updated_at)')
         .eq('user_id', user!.id)
         .limit(10)
-      const gs = (data || []).map((d: any) => d.groups).filter(Boolean)
+      const gs = (data || []).map((d: { groups: unknown }) => d.groups).filter(Boolean)
       setGroups(gs)
       setLoading(false)
     }

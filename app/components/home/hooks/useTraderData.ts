@@ -5,6 +5,8 @@ import type { Trader } from '../../ranking/RankingTable'
 import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
+import { FIVE_MINUTES_MS } from '@/lib/constants/time'
+
 export type TimeRange = '90D' | '30D' | '7D'
 export type SortBy = 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown'
 export type SortOrder = 'asc' | 'desc'
@@ -13,7 +15,7 @@ export type SortOrder = 'asc' | 'desc'
 const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
 
 // Feature 4: Stale threshold for visibility-based refresh (5 minutes)
-const STALE_THRESHOLD_MS = 5 * 60 * 1000
+const STALE_THRESHOLD_MS = FIVE_MINUTES_MS
 
 interface CachedData {
   traders: Trader[]
@@ -35,10 +37,32 @@ const pendingRequests = new Map<string, Promise<CachedData>>()
 // AbortController Map for request cancellation
 const abortControllers = new Map<string, AbortController>()
 
+/**
+ * 交易员数据获取与管理 Hook
+ *
+ * 核心功能：
+ * - 按时间段（7D/30D/90D）获取排行榜交易员数据
+ * - 内存缓存 + 请求去重，避免重复网络请求
+ * - SSR 初始数据注入，配合 requestIdleCallback 延迟加载完整数据
+ * - BroadcastChannel 多窗口数据同步
+ * - Page Visibility API 智能刷新（隐藏时暂停，可见时检查过期）
+ * - AbortController 请求取消（切换时间段时取消旧请求）
+ *
+ * @param options - 配置选项
+ * @returns 交易员数据、加载状态、时间段控制等
+ *
+ * @example
+ * ```tsx
+ * const { traders, loading, activeTimeRange, changeTimeRange } = useTraderData({
+ *   initialTraders: serverTraders,
+ *   initialLastUpdated: serverTimestamp,
+ * })
+ * ```
+ */
 export function useTraderData(options: UseTraderDataOptions = {}) {
   // Feature 4: Default 5 min refresh when visible (reduced from 10 min)
   const {
-    autoRefreshInterval = 5 * 60 * 1000,
+    autoRefreshInterval = FIVE_MINUTES_MS,
     sortBy,
     sortOrder,
     initialTraders,
