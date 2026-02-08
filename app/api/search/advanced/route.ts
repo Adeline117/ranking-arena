@@ -370,11 +370,11 @@ export async function GET(req: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Advanced search error', { error })
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    // Never expose internal error details to the client
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
+        error: 'Internal server error',
       },
       { status: 500 }
     )

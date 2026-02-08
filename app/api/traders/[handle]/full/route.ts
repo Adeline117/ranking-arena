@@ -176,7 +176,7 @@ export async function GET(
   } catch (error: unknown) {
     console.error('[API] 交易员聚合数据获取失败:', error)
     return NextResponse.json(
-      { error: '服务器错误', message: error instanceof Error ? error.message : '未知错误' },
+      { error: '服务器错误' },
       { status: 500 }
     )
   }

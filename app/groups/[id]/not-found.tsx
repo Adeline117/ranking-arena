@@ -1,4 +1,8 @@
+'use client'
+
 import Link from 'next/link'
+import { t } from '@/lib/i18n'
+import { tokens } from '@/lib/design-tokens'
 
 export default function GroupNotFound() {
   return (
@@ -8,27 +12,28 @@ export default function GroupNotFound() {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '2rem',
+      padding: tokens.spacing[8],
       textAlign: 'center',
     }}>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.75rem', color: 'var(--color-text-primary)' }}>
-        找不到该小组
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: tokens.spacing[3], color: tokens.colors.text.primary }}>
+        {t('groupNotFoundTitle')}
       </h1>
-      <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1.5rem' }}>
-        该小组不存在或已被删除。
+      <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
+        {t('groupNotFoundDesc')}
       </p>
       <Link
         href="/groups"
         style={{
-          padding: '0.5rem 1.5rem',
-          fontSize: '0.875rem',
+          padding: '10px 28px',
+          borderRadius: 8,
+          background: tokens.colors.accent.brand,
           color: '#fff',
-          backgroundColor: 'var(--color-accent-primary)',
-          borderRadius: '6px',
           textDecoration: 'none',
+          fontWeight: 600,
+          fontSize: 14,
         }}
       >
-        返回小组列表
+        {t('backToGroups2')}
       </Link>
     </div>
   )

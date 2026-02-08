@@ -102,7 +102,7 @@ export async function PUT(
   } catch (error: unknown) {
     logger.error('Error editing post', { error })
     const errorMessage = error instanceof Error ? error.message : '服务器错误'
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 

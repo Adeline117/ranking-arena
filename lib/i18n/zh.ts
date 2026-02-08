@@ -2575,6 +2575,20 @@ const zh = {
     expandWidgets: '展开更多',
     collapseWidgets: '收起',
 
+    // 子 not-found 页面
+    traderNotFoundTitle: '交易员不存在',
+    traderNotFoundDesc: '该交易员不存在或资料已被移除。',
+    userNotFoundTitle: '用户不存在',
+    userNotFoundDesc: '该用户不存在或已注销账号。',
+    postNotFoundTitle: '帖子不存在',
+    postNotFoundDesc: '该帖子不存在或已被删除。',
+    libraryNotFoundTitle: '内容不存在',
+    libraryNotFoundDesc: '该内容不存在或已被移除。',
+    backToLibrary: '返回书库',
+    groupNotFoundTitle: '小组不存在',
+    groupNotFoundDesc: '该小组不存在或已被删除。',
+    backToGroups2: '返回小组列表',
+
 } as const
 
 export default zh

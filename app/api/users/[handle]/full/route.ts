@@ -116,9 +116,10 @@ export async function GET(
       },
     })
   } catch (error: unknown) {
+    // Log server-side only; never expose internal details to client
     console.error('[API] Error fetching user full data:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }

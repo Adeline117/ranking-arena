@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: '关注功能暂未开放', tableNotFound: true }, { status: 503 })
         }
         console.error('[User Follow API] 关注错误:', error)
-        return NextResponse.json({ error: error.message || '关注操作失败' }, { status: 500 })
+        return NextResponse.json({ error: '关注操作失败' }, { status: 500 })
       }
 
       // 检查是否互相关注
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: '关注功能暂未开放', tableNotFound: true }, { status: 503 })
         }
         console.error('[User Follow API] 取消关注错误:', error)
-        return NextResponse.json({ error: error.message || '取消关注操作失败' }, { status: 500 })
+        return NextResponse.json({ error: '取消关注操作失败' }, { status: 500 })
       }
 
       return NextResponse.json({ success: true, following: false, mutual: false })
