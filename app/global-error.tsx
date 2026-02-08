@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { t } from '@/lib/i18n'
 
-const ARENA_PURPLE = 'var(--color-accent-brand, #8b6fa8)'
+const ARENA_PURPLE = 'var(--color-brand, #8b6fa8)'
 
 export default function GlobalError({
   error,

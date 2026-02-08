@@ -70,7 +70,7 @@ export default function OfflinePage() {
             fontSize: '0.875rem',
             fontWeight: '500',
             color: '#EDEDED',
-            backgroundColor: '#8b6fa8',
+            backgroundColor: 'var(--color-brand)',
             border: 'none',
             borderRadius: '8px',
             cursor: 'pointer',
@@ -80,7 +80,7 @@ export default function OfflinePage() {
             e.currentTarget.style.backgroundColor = '#9d84b5'
           }}
           onMouseOut={(e) => {
-            e.currentTarget.style.backgroundColor = '#8b6fa8'
+            e.currentTarget.style.backgroundColor = 'var(--color-brand)'
           }}
         >
           {t('retryConnection')}

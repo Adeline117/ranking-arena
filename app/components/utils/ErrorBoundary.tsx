@@ -148,7 +148,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 fontSize: this.props.level === 'component' ? 18 : 28,
                 fontWeight: 700,
                 marginBottom: 12,
-                background: 'linear-gradient(135deg, #EDEDED 0%, #8b6fa8 100%)',
+                background: 'linear-gradient(135deg, #EDEDED 0%, var(--color-brand) 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
@@ -206,7 +206,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 aria-label={t('retryLoad')}
                 style={{
                   padding: '12px 24px',
-                  background: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
+                  background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                   color: '#fff',
                   borderRadius: 8,
                   border: 'none',
@@ -322,7 +322,7 @@ export function SectionErrorBoundary({
               marginTop: 12,
               padding: '8px 16px',
               background: 'rgba(139, 111, 168, 0.2)',
-              color: '#8b6fa8',
+              color: 'var(--color-brand)',
               borderRadius: 6,
               border: '1px solid rgba(139, 111, 168, 0.3)',
               cursor: 'pointer',
@@ -385,7 +385,7 @@ export function CompactErrorBoundary({
             style={{
               padding: '4px 10px',
               background: 'transparent',
-              color: '#8b6fa8',
+              color: 'var(--color-brand)',
               borderRadius: 4,
               border: '1px solid rgba(139, 111, 168, 0.3)',
               cursor: 'pointer',

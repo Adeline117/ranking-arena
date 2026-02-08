@@ -948,7 +948,7 @@ export default function NewPostPage() {
             {showPreview ? (
               <Box
                 style={{
-                  width: '100%`,
+                  width: '100%',
                   minHeight: 288,
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,

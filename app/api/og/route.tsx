@@ -325,7 +325,7 @@ export async function GET(request: NextRequest) {
             fontWeight: 700,
           }}
         >
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8b6fa8" strokeWidth="2">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={colors.brand} strokeWidth="2">
             <path d="M12 1L9 9H1l6 5-2 9 7-5 7 5-2-9 6-5h-8z"/>
           </svg>
           Ranking Arena
