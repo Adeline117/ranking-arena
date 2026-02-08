@@ -26,6 +26,7 @@ export type NotificationType =
   | 'comment'
   | 'system'
   | 'mention'
+  | 'copy_trade'
   | 'message'
   | 'trader_alert'
   | 'post_reply'
@@ -179,7 +180,7 @@ export async function createNotification(
   supabase: SupabaseClient,
   notification: {
     user_id: string
-    type: 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'message' | 'trader_alert'
+    type: 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'copy_trade' | 'message' | 'trader_alert'
     title: string
     message: string
     link?: string
