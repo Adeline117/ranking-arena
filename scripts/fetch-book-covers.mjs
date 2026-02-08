@@ -20,7 +20,7 @@ const DRY_RUN = !args.includes('--apply')
 const LIMIT_ARG = args.indexOf('--limit')
 const MAX_ITEMS = LIMIT_ARG !== -1 ? parseInt(args[LIMIT_ARG + 1]) : Infinity
 const BATCH_SIZE = 50
-const API_DELAY_MS = 150 // ~6 req/s, well within Google's free limits
+const API_DELAY_MS = 500 // conservative rate to avoid 429s
 
 let matched = 0, missed = 0, errors = 0, processed = 0
 
@@ -32,11 +32,11 @@ async function searchGoogleBooks(title) {
   const url = `https://www.googleapis.com/books/v1/volumes?q=intitle:${q}&maxResults=3&fields=items(volumeInfo(title,imageLinks))`
 
   try {
-    const res = await fetch(url)
+    let res = await fetch(url)
     if (res.status === 429) {
-      console.warn('  ⚠ Rate limited, waiting 30s...')
-      await sleep(30000)
-      return searchGoogleBooks(title) // retry once
+      console.warn('  ⚠ Rate limited, waiting 60s...')
+      await sleep(60000)
+      res = await fetch(url)
     }
     if (!res.ok) return null
 
@@ -74,11 +74,46 @@ async function searchGoogleBooks(title) {
   }
 }
 
+/**
+ * Fallback: Search Open Library by title. Returns cover URL or null.
+ */
+async function searchOpenLibrary(title) {
+  const q = encodeURIComponent(title)
+  const url = `https://openlibrary.org/search.json?title=${q}&limit=3&fields=key,title,cover_i`
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'RankingArena/1.0 (book-cover-fetcher)' },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data.docs || data.docs.length === 0) return null
+
+    for (const doc of data.docs) {
+      if (doc.cover_i) {
+        return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Combined search: Google Books first, then Open Library fallback.
+ */
+async function findCover(title) {
+  const gCover = await searchGoogleBooks(title)
+  if (gCover) return gCover
+  await sleep(200)
+  return searchOpenLibrary(title)
+}
+
 async function processBatch(items) {
   for (const item of items) {
     if (processed >= MAX_ITEMS) return
 
-    const coverUrl = await searchGoogleBooks(item.title)
+    const coverUrl = await findCover(item.title)
     processed++
 
     if (coverUrl) {
