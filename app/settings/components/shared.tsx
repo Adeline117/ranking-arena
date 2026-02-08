@@ -11,17 +11,24 @@ export function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       style={{
-        width: 44,
-        height: 24,
-        borderRadius: 12,
-        padding: 2,
+        width: 48,
+        height: 26,
+        borderRadius: 13,
+        padding: 3,
         border: 'none',
-        background: checked ? tokens.colors.accent.brand : tokens.colors.bg.tertiary,
+        background: checked ? tokens.gradient.primary : tokens.colors.bg.tertiary,
         cursor: 'pointer',
-        transition: `background ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
+        transition: `all ${tokens.transition.base}`,
         position: 'relative',
         flexShrink: 0,
-        boxShadow: checked ? tokens.shadow.glow : tokens.shadow.inner,
+        boxShadow: checked ? `${tokens.shadow.glow}, ${tokens.shadow.inner}` : tokens.shadow.inner,
+        outline: 'none',
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.boxShadow = `0 0 0 ${tokens.focusRing.width} ${tokens.focusRing.color}`
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.boxShadow = checked ? `${tokens.shadow.glow}, ${tokens.shadow.inner}` : tokens.shadow.inner
       }}
     >
       <span
@@ -31,8 +38,8 @@ export function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange
           height: 20,
           borderRadius: '50%',
           background: '#fff',
-          transform: checked ? 'translateX(20px)' : 'translateX(0)',
-          transition: `transform ${tokens.transition.fast}`,
+          transform: checked ? 'translateX(22px)' : 'translateX(0)',
+          transition: `transform ${tokens.transition.bounce}`,
           boxShadow: tokens.shadow.sm,
         }}
       />
@@ -60,10 +67,12 @@ export function SectionCard({
         marginBottom: tokens.spacing[6],
         padding: tokens.spacing[6],
         borderRadius: tokens.radius['2xl'],
-        background: tokens.colors.bg.secondary,
-        border: `1px solid ${variant === 'danger' ? tokens.colors.accent.error + '30' : tokens.colors.border.primary}`,
-        boxShadow: variant === 'danger' ? tokens.shadow.glowError : tokens.shadow.sm,
-        transition: `box-shadow ${tokens.transition.fast}`,
+        background: tokens.glass.bg.secondary,
+        backdropFilter: tokens.glass.blur.md,
+        WebkitBackdropFilter: tokens.glass.blur.md,
+        border: variant === 'danger' ? `1px solid ${tokens.colors.accent.error}30` : tokens.glass.border.light,
+        boxShadow: variant === 'danger' ? tokens.shadow.glowError : tokens.shadow.md,
+        transition: `all ${tokens.transition.base}`,
       }}
     >
       <Text
@@ -72,12 +81,13 @@ export function SectionCard({
         style={{
           marginBottom: description ? tokens.spacing[1] : tokens.spacing[4],
           color: variant === 'danger' ? tokens.colors.accent.error : tokens.colors.text.primary,
+          letterSpacing: '-0.2px',
         }}
       >
         {title}
       </Text>
       {description && (
-        <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+        <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[4], lineHeight: tokens.typography.lineHeight.relaxed }}>
           {description}
         </Text>
       )}
@@ -92,11 +102,14 @@ export function getInputStyle(hasError = false): React.CSSProperties {
     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
     borderRadius: tokens.radius.lg,
     border: `1px solid ${hasError ? tokens.colors.accent.error : tokens.colors.border.primary}`,
-    background: tokens.colors.bg.primary,
+    background: tokens.glass.bg.light,
+    backdropFilter: tokens.glass.blur.xs,
+    WebkitBackdropFilter: tokens.glass.blur.xs,
     color: tokens.colors.text.primary,
     fontSize: tokens.typography.fontSize.sm,
+    fontWeight: tokens.typography.fontWeight.medium,
     outline: 'none',
-    transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
+    transition: `all ${tokens.transition.base}`,
     boxShadow: tokens.shadow.inner,
   }
 }

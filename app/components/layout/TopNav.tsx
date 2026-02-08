@@ -425,16 +425,18 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 width: '100%',
                 height: 40,
                 borderRadius: tokens.radius.full,
-                border: `1px solid ${tokens.colors.border.primary}`,
+                border: tokens.glass.border.light,
                 background: tokens.glass.bg.light,
                 backdropFilter: tokens.glass.blur.sm,
                 WebkitBackdropFilter: tokens.glass.blur.sm,
                 color: tokens.colors.text.primary,
                 padding: `0 ${tokens.spacing[4]} 0 40px`,
                 outline: 'none',
-                fontWeight: tokens.typography.fontWeight.bold,
+                fontWeight: tokens.typography.fontWeight.medium,
                 fontSize: tokens.typography.fontSize.sm,
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                transition: `all ${tokens.transition.base}`,
+                boxShadow: tokens.shadow.inner,
               }}
               onFocus={() => {
                 setShowSearchDropdown(true)
@@ -555,6 +557,15 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   color: tokens.colors.text.secondary,
                   border: 'none',
                   cursor: 'pointer',
+                  transition: `all ${tokens.transition.base}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = tokens.glass.bg.light
+                  e.currentTarget.style.color = tokens.colors.text.primary
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = tokens.colors.text.secondary
                 }}
               >
                 <NotificationIcon size={20} />
@@ -562,20 +573,21 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   <Box
                     style={{
                       position: 'absolute',
-                      top: 0,
-                      right: -2,
-                      minWidth: 16,
-                      height: 16,
-                      borderRadius: 8,
-                      background: '#ef4444',
-                      border: `1.5px solid ${tokens.colors.bg.primary}`,
+                      top: -1,
+                      right: -3,
+                      minWidth: 18,
+                      height: 18,
+                      borderRadius: 9,
+                      background: tokens.gradient.error,
+                      border: `2px solid ${tokens.colors.bg.primary}`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       padding: '0 4px',
+                      boxShadow: tokens.shadow.glowError,
                     }}
                   >
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', lineHeight: 1 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', lineHeight: 1 }}>
                       {totalUnread > 99 ? '99+' : totalUnread}
                     </span>
                   </Box>
