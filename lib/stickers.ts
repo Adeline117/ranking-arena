@@ -9,7 +9,7 @@ export interface Sticker {
 
 export const STICKERS: Sticker[] = [
   { id: 'surprised', name_en: 'Surprised', name_zh: '惊讶', label_en: 'Surprised', label_zh: '惊讶', path: '/stickers/surprised.png' },
-  { id: 'wagmi', name_en: 'WAGMI', name_zh: 'WAGMI', label_en: 'We\'re All Gonna Make It', label_zh: '我们都会成功', path: '/stickers/wagmi.png' },
+  { id: 'begging', name_en: 'Begging', name_zh: '求求了', label_en: 'Please', label_zh: '求求了', path: '/stickers/begging.png' },
   { id: 'pray', name_en: 'Pray', name_zh: '祈祷', label_en: 'Pray', label_zh: '祈祷', path: '/stickers/pray.png' },
   { id: 'party', name_en: 'Party', name_zh: '庆祝', label_en: 'Party', label_zh: '庆祝', path: '/stickers/party.png' },
   { id: 'bullish', name_en: 'Bullish', name_zh: '看涨', label_en: 'Bullish', label_zh: '看涨', path: '/stickers/bullish.png' },
@@ -24,7 +24,7 @@ export const STICKERS: Sticker[] = [
   { id: 'gn', name_en: 'GN', name_zh: '晚安', label_en: 'Good Night', label_zh: '晚安', path: '/stickers/gn.png' },
   { id: 'lfg', name_en: 'LFG', name_zh: '冲冲冲', label_en: 'Let\'s Go', label_zh: '冲冲冲', path: '/stickers/lfg.png' },
   { id: 'thinking', name_en: 'Thinking', name_zh: '思考', label_en: 'Thinking', label_zh: '思考', path: '/stickers/thinking.png' },
-  { id: 'angry', name_en: 'Angry', name_zh: '生气', label_en: 'Angry', label_zh: '生气', path: '/stickers/angry.png' },
+  { id: 'wagmi', name_en: 'WAGMI', name_zh: 'WAGMI', label_en: 'We\'re All Gonna Make It', label_zh: '我们都会成功', path: '/stickers/wagmi.png' },
   { id: 'shocked', name_en: 'Shocked', name_zh: '震惊', label_en: 'Shocked', label_zh: '震惊', path: '/stickers/shocked.png' },
   { id: 'rich', name_en: 'Rich', name_zh: '发财', label_en: 'Getting Rich', label_zh: '发财', path: '/stickers/rich.png' },
   { id: 'confused', name_en: 'Confused', name_zh: '懵圈', label_en: 'Confused', label_zh: '懵圈', path: '/stickers/confused.png' },
