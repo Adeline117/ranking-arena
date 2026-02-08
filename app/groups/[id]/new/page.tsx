@@ -51,7 +51,7 @@ const POLL_DURATION_OPTIONS = [
 const inputStyle: React.CSSProperties = {
   width: '100%',
   borderRadius: tokens.radius.md,
-  border: `1px solid ${tokens.colors.border.primary}`,
+  border: ('1px solid ' + tokens.colors.border.primary),
   background: tokens.colors.bg.secondary,
   color: tokens.colors.text.primary,
   fontSize: tokens.typography.fontSize.base,
@@ -91,7 +91,7 @@ function ToggleSwitch({ enabled, onToggle, label, description }: ToggleSwitchPro
         gap: tokens.spacing[3],
         padding: tokens.spacing[4],
         borderRadius: tokens.radius.md,
-        border: `1px solid ${enabled ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
+        border: ('1px solid ' + enabled ? tokens.colors.accent.brand : tokens.colors.border.primary),
         background: enabled ? 'rgba(139, 111, 168, 0.1)' : tokens.colors.bg.secondary,
         cursor: 'pointer',
         transition: 'all 0.2s ease',
@@ -595,7 +595,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                 <Text size="sm" weight="bold">
                   {t('contentLabel')}
                 </Text>
-                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
+                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: ('1px solid ' + tokens.colors.border.primary) }}>
                   <button
                     type="button"
                     onClick={() => setShowPreview(false)}
@@ -620,7 +620,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     style={{
                       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                       border: 'none',
-                      borderLeft: `1px solid ${tokens.colors.border.primary}`,
+                      borderLeft: ('1px solid ' + tokens.colors.border.primary),
                       background: showPreview ? tokens.colors.accent.brand : 'transparent',
                       color: showPreview ? '#fff' : tokens.colors.text.secondary,
                       fontSize: tokens.typography.fontSize.xs,
@@ -650,12 +650,12 @@ export default function NewGroupPostPage(): React.ReactElement {
                   minHeight: 288,
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: `2px solid ${tokens.colors.accent.brand}`,
+                  border: ('2px solid ' + tokens.colors.accent.brand),
                   background: `linear-gradient(135deg, rgba(139, 111, 168, 0.05) 0%, rgba(139, 111, 168, 0.1) 100%)`,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
                   lineHeight: 1.6,
-                  whiteSpace: `pre-wrap',
+                  whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   position: 'relative',
                 }}
@@ -694,7 +694,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                 onClick={() => setShowStickerPicker(prev => !prev)}
                 style={{
                   background: 'transparent',
-                  border: `1px solid ${tokens.colors.border.primary}`,
+                  border: ('1px solid ' + tokens.colors.border.primary),
                   cursor: 'pointer',
                   padding: '4px 10px',
                   borderRadius: 8,
@@ -715,7 +715,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                 isOpen={showStickerPicker}
                 onClose={() => setShowStickerPicker(false)}
                 onSelect={(sticker: Sticker) => {
-                  setContent(prev => prev + `[sticker:${sticker.id}]`)
+                  setContent(prev => prev + ('[sticker:' + sticker.id + ']'))
                   setShowStickerPicker(false)
                 }}
               />
@@ -755,7 +755,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                         flex: 1,
                         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                         borderRadius: tokens.radius.md,
-                        border: `1px solid ${tokens.colors.border.primary}`,
+                        border: ('1px solid ' + tokens.colors.border.primary),
                         background: tokens.colors.bg.primary,
                         color: tokens.colors.text.primary,
                         fontSize: tokens.typography.fontSize.sm,
@@ -786,7 +786,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     onClick={() => setPollOptions([...pollOptions, { text: '', votes: 0 }])}
                     style={{
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      border: `1px dashed ${tokens.colors.border.primary}`,
+                      border: ('1px dashed ' + tokens.colors.border.primary),
                       background: 'transparent',
                       color: tokens.colors.text.secondary,
                       borderRadius: tokens.radius.md,
@@ -812,7 +812,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                         flex: 1,
                         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                         borderRadius: tokens.radius.md,
-                        border: `1px solid ${pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
+                        border: ('1px solid ' + pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.border.primary),
                         background: pollType === 'single' ? 'rgba(139, 111, 168, 0.2)' : 'transparent',
                         color: pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
                         cursor: 'pointer',
@@ -828,7 +828,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                         flex: 1,
                         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                         borderRadius: tokens.radius.md,
-                        border: `1px solid ${pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
+                        border: ('1px solid ' + pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.border.primary),
                         background: pollType === 'multiple' ? 'rgba(139, 111, 168, 0.2)' : 'transparent',
                         color: pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
                         cursor: 'pointer',
@@ -852,7 +852,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                       width: '100%',
                       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                       borderRadius: tokens.radius.md,
-                      border: `1px solid ${tokens.colors.border.primary}`,
+                      border: ('1px solid ' + tokens.colors.border.primary),
                       background: tokens.colors.bg.primary,
                       color: tokens.colors.text.primary,
                       fontSize: tokens.typography.fontSize.sm,
@@ -902,7 +902,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     height: 100,
                     borderRadius: tokens.radius.md,
                     overflow: 'hidden',
-                    border: `1px solid ${tokens.colors.border.primary}`,
+                    border: ('1px solid ' + tokens.colors.border.primary),
                   }}
                 >
                   <img
@@ -970,7 +970,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     width: 100,
                     height: 100,
                     borderRadius: tokens.radius.md,
-                    border: `2px dashed ${tokens.colors.border.primary}`,
+                    border: ('2px dashed ' + tokens.colors.border.primary),
                     background: tokens.colors.bg.secondary,
                     display: 'flex',
                     flexDirection: 'column',
@@ -1030,9 +1030,9 @@ export default function NewGroupPostPage(): React.ReactElement {
                     width: 200,
                     height: 120,
                     borderRadius: tokens.radius.md,
-                    overflow: 'hidden`,
-                    border: `2px solid ${tokens.colors.accent.brand}`,
-                    background: `#000',
+                    overflow: 'hidden',
+                    border: ('2px solid ' + tokens.colors.accent.brand),
+                    background: '#000',
                   }}
                 >
                   <video
@@ -1113,7 +1113,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     width: 200,
                     height: 120,
                     borderRadius: tokens.radius.md,
-                    border: `2px dashed ${tokens.colors.border.primary}`,
+                    border: ('2px dashed ' + tokens.colors.border.primary),
                     background: tokens.colors.bg.secondary,
                     display: 'flex',
                     flexDirection: 'column',

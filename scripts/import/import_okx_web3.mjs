@@ -21,7 +21,7 @@ const supabase = getSupabaseClient()
 
 const SOURCE = 'okx_web3'
 const BASE_URL = 'https://web3.okx.com/zh-hans/copy-trade/leaderboard'
-const TARGET_COUNT = 500
+const TARGET_COUNT = 1000
 
 async function fetchLeaderboardData(period) {
   console.log(`\n=== 抓取 OKX Web3 ${period} 排行榜 ===`)

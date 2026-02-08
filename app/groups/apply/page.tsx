@@ -303,7 +303,7 @@ export default function ApplyGroupPage() {
     width: '100%',
     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
     borderRadius: tokens.radius.lg,
-    border: `1px solid ${tokens.colors.border.primary}`,
+    border: ('1px solid ' + tokens.colors.border.primary),
     background: tokens.colors.bg.primary,
     color: tokens.colors.text.primary,
     fontSize: tokens.typography.fontSize.base,
@@ -322,8 +322,8 @@ export default function ApplyGroupPage() {
   const tabStyle = (isActive: boolean): React.CSSProperties => ({
     padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
     borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
-    border: `1px solid ${isActive ? tokens.colors.border.primary : 'transparent'}`,
-    borderBottom: isActive ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+    border: ('1px solid ' + isActive ? tokens.colors.border.primary : 'transparent'),
+    borderBottom: isActive ? 'none' : ('1px solid ' + tokens.colors.border.primary),
     background: isActive ? tokens.colors.bg.secondary : 'transparent',
     color: isActive ? tokens.colors.text.primary : tokens.colors.text.tertiary,
     cursor: 'pointer',
@@ -401,7 +401,7 @@ export default function ApplyGroupPage() {
                 </svg>
               </Box>
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                {language === `zh' ? '申请已成功提交！' : 'Application submitted successfully!'}
+                {language === 'zh' ? '申请已成功提交！' : 'Application submitted successfully!'}
               </Text>
               <Text color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>
                 {language === 'zh' 
@@ -460,7 +460,7 @@ export default function ApplyGroupPage() {
                     padding: tokens.spacing[3],
                     background: tokens.colors.bg.secondary,
                     borderRadius: tokens.radius.lg,
-                    border: `1px solid ${tokens.colors.border.primary}`,
+                    border: ('1px solid ' + tokens.colors.border.primary),
                   }}
                 >
                   <Box>
@@ -483,7 +483,7 @@ export default function ApplyGroupPage() {
               
               {/* 语言标签页 */}
               <Box>
-                <Box style={{ display: 'flex', borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                <Box style={{ display: 'flex', borderBottom: ('1px solid ' + tokens.colors.border.primary) }}>
                   <button
                     type="button"
                     style={tabStyle(activeTab === 'zh')}
@@ -526,8 +526,8 @@ export default function ApplyGroupPage() {
                     gap: tokens.spacing[4],
                     padding: tokens.spacing[4],
                     background: tokens.colors.bg.secondary,
-                    borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
-                    border: `1px solid ${tokens.colors.border.primary}`,
+                    borderRadius: ('0 0 ' + tokens.radius.lg + ' ' + tokens.radius.lg),
+                    border: ('1px solid ' + tokens.colors.border.primary),
                     borderTop: 'none',
                   }}
                 >
@@ -580,8 +580,8 @@ export default function ApplyGroupPage() {
                       gap: tokens.spacing[4],
                       padding: tokens.spacing[4],
                       background: tokens.colors.bg.secondary,
-                      borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
-                      border: `1px solid ${tokens.colors.border.primary}`,
+                      borderRadius: ('0 0 ' + tokens.radius.lg + ' ' + tokens.radius.lg),
+                      border: ('1px solid ' + tokens.colors.border.primary),
                       borderTop: 'none',
                     }}
                   >
@@ -666,7 +666,7 @@ export default function ApplyGroupPage() {
                           padding: tokens.spacing[3],
                           background: tokens.colors.bg.secondary,
                           borderRadius: tokens.radius.lg,
-                          border: `1px solid ${tokens.colors.border.primary}`,
+                          border: ('1px solid ' + tokens.colors.border.primary),
                         }}
                       >
                         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
@@ -719,7 +719,7 @@ export default function ApplyGroupPage() {
                     padding: tokens.spacing[3],
                     background: tokens.colors.bg.secondary,
                     borderRadius: tokens.radius.lg,
-                    border: `1px dashed ${tokens.colors.border.primary}`,
+                    border: ('1px dashed ' + tokens.colors.border.primary),
                   }}
                 >
                   <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
@@ -798,7 +798,7 @@ export default function ApplyGroupPage() {
                           height: 120,
                           borderRadius: tokens.radius.lg,
                           objectFit: 'cover',
-                          border: `1px solid ${tokens.colors.border.primary}`,
+                          border: ('1px solid ' + tokens.colors.border.primary),
                         }}
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none'
