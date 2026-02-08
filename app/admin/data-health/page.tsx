@@ -1,0 +1,142 @@
+'use client'
+
+/**
+ * 数据健康仪表盘
+ * 显示每个平台的数据状态、最后更新时间、数据量、freshness
+ */
+
+import { useEffect, useState } from 'react'
+import { tokens } from '@/lib/design-tokens'
+import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+
+interface PlatformHealth {
+  source: string
+  total: number
+  latest_snapshot: string | null
+  oldest_snapshot: string | null
+  age_hours: number | null
+  status: 'healthy' | 'warning' | 'critical' | 'no_data'
+}
+
+interface HealthData {
+  platforms: PlatformHealth[]
+  total_traders: number
+  total_platforms: number
+  timestamp: string
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  healthy: '#22c55e',
+  warning: '#f59e0b',
+  critical: '#ef4444',
+  no_data: '#6b7280',
+}
+
+export default function DataHealthPage() {
+  const [data, setData] = useState<HealthData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/monitoring/freshness')
+      .then(res => res.json())
+      .then((d) => {
+        // Transform freshness API response
+        const platforms: PlatformHealth[] = (d.platforms || []).map((p: Record<string, unknown>) => ({
+          source: p.source as string,
+          total: (p.total as number) || 0,
+          latest_snapshot: p.latestSnapshot as string | null,
+          oldest_snapshot: null,
+          age_hours: p.ageHours as number | null,
+          status: p.status as string || 'no_data',
+        }))
+        setData({
+          platforms,
+          total_traders: platforms.reduce((sum: number, p: PlatformHealth) => sum + p.total, 0),
+          total_platforms: platforms.filter((p: PlatformHealth) => p.total > 0).length,
+          timestamp: d.timestamp || new Date().toISOString(),
+        })
+        setLoading(false)
+      })
+      .catch(err => {
+        setError(err.message)
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) return <div style={{ padding: 40, color: '#999' }}>加载中...</div>
+  if (error) return <div style={{ padding: 40, color: '#ef4444' }}>错误: {error}</div>
+  if (!data) return null
+
+  return (
+    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, padding: '24px 32px' }}>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>数据健康仪表盘</h1>
+      <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 24 }}>
+        最后检查: {new Date(data.timestamp).toLocaleString('zh-CN')} · 共 {data.total_platforms} 个活跃平台 · {data.total_traders} 名交易员
+      </p>
+
+      {/* Summary cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 32 }}>
+        {['healthy', 'warning', 'critical', 'no_data'].map(status => {
+          const count = data.platforms.filter(p => p.status === status).length
+          const label = status === 'healthy' ? '正常' : status === 'warning' ? '警告' : status === 'critical' ? '异常' : '无数据'
+          return (
+            <div key={status} style={{
+              padding: '16px 20px', borderRadius: 10,
+              background: `${STATUS_COLORS[status]}12`,
+              border: `1px solid ${STATUS_COLORS[status]}30`,
+            }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: STATUS_COLORS[status] }}>{count}</div>
+              <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{label}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Platform table */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>平台</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>数据量</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>最后更新</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>数据年龄</th>
+              <th style={{ textAlign: 'center', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.platforms
+              .sort((a, b) => (b.total || 0) - (a.total || 0))
+              .map(p => (
+              <tr key={p.source} style={{ borderBottom: `1px solid ${tokens.colors.border.primary}30` }}>
+                <td style={{ padding: '10px 12px', fontWeight: 500 }}>
+                  {EXCHANGE_NAMES[p.source] || p.source}
+                </td>
+                <td style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {p.total > 0 ? p.total.toLocaleString() : '-'}
+                </td>
+                <td style={{ padding: '10px 12px', textAlign: 'right', color: tokens.colors.text.tertiary, fontSize: 12 }}>
+                  {p.latest_snapshot ? new Date(p.latest_snapshot).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                </td>
+                <td style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {p.age_hours != null
+                    ? p.age_hours < 1 ? `${Math.round(p.age_hours * 60)}分钟`
+                    : p.age_hours < 24 ? `${Math.round(p.age_hours)}小时`
+                    : `${Math.round(p.age_hours / 24)}天`
+                    : '-'}
+                </td>
+                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                  <span style={{
+                    display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                    backgroundColor: STATUS_COLORS[p.status] || STATUS_COLORS.no_data,
+                  }} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

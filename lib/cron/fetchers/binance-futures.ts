@@ -37,7 +37,7 @@ import {
 const SOURCE = 'binance_futures'
 const API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
-const TARGET = 500
+const TARGET = 2000
 const PAGE_SIZE = 20
 
 // Phase 2: Enrichment settings - increased coverage from 50 to 100

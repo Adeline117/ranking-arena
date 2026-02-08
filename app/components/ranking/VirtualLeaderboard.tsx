@@ -31,6 +31,7 @@ export interface TraderRow {
   drawdown?: number
   followers?: number
   source: string
+  trustTier?: 'high' | 'medium' | 'low'
 }
 
 interface VirtualLeaderboardProps {
@@ -188,6 +189,22 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
         }}>
           {trader.source}
         </span>
+        {trader.trustTier && (
+          <span style={{
+            fontSize: 9,
+            padding: '1px 5px',
+            borderRadius: 3,
+            backgroundColor: trader.trustTier === 'high' ? `${tokens.colors.accent.success}18`
+              : trader.trustTier === 'medium' ? `${tokens.colors.accent.warning}18`
+              : `${tokens.colors.accent.error}18`,
+            color: trader.trustTier === 'high' ? tokens.colors.accent.success
+              : trader.trustTier === 'medium' ? tokens.colors.accent.warning
+              : tokens.colors.accent.error,
+            fontWeight: 500,
+          }}>
+            {trader.trustTier === 'high' ? '可信' : trader.trustTier === 'medium' ? '一般' : '低信任'}
+          </span>
+        )}
       </div>
     </div>
   )
