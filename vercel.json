@@ -102,7 +102,21 @@
     { "path": "/api/cron/fetch-bybit-traders", "schedule": "*/15 * * * *" },
     { "path": "/api/trader/sync", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/fetch-funding-rates", "schedule": "0 */4 * * *" },
-    { "path": "/api/cron/fetch-open-interest", "schedule": "0 * * * *" }
+    { "path": "/api/cron/fetch-open-interest", "schedule": "0 * * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=binance_futures&limit=200", "schedule": "5 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=binance_spot&limit=200", "schedule": "10 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=bybit&limit=200", "schedule": "15 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=bitget_futures&limit=200", "schedule": "20 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=bitget_spot&limit=200", "schedule": "25 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=mexc&limit=200", "schedule": "30 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=kucoin&limit=200", "schedule": "35 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=coinex&limit=200", "schedule": "40 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=xt&limit=200", "schedule": "45 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=weex&limit=200", "schedule": "50 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=lbank&limit=200", "schedule": "55 */2 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=bingx&limit=100", "schedule": "0 1,5,9,13,17,21 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=phemex&limit=50", "schedule": "5 1,5,9,13,17,21 * * *" },
+    { "path": "/api/cron/backfill-avatars?platform=blofin&limit=50", "schedule": "10 1,5,9,13,17,21 * * *" }
   ],
   "headers": [
     {
