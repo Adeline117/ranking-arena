@@ -31,6 +31,15 @@ interface TraderAlertConfig {
   pnl_change_threshold?: number
   alert_score_change?: boolean
   score_change_threshold?: number
+  alert_rank_change?: boolean
+  rank_change_threshold?: number
+  alert_new_position?: boolean
+  alert_price_above?: boolean
+  price_above_value?: number | null
+  alert_price_below?: boolean
+  price_below_value?: number | null
+  price_symbol?: string | null
+  one_time?: boolean
   enabled?: boolean
 }
 
@@ -142,6 +151,15 @@ export async function POST(request: NextRequest) {
       pnl_change_threshold: config.pnl_change_threshold ?? 5000,
       alert_score_change: config.alert_score_change ?? true,
       score_change_threshold: config.score_change_threshold ?? 5,
+      alert_rank_change: config.alert_rank_change ?? false,
+      rank_change_threshold: config.rank_change_threshold ?? 5,
+      alert_new_position: config.alert_new_position ?? false,
+      alert_price_above: config.alert_price_above ?? false,
+      price_above_value: config.price_above_value ?? null,
+      alert_price_below: config.alert_price_below ?? false,
+      price_below_value: config.price_below_value ?? null,
+      price_symbol: config.price_symbol ?? null,
+      one_time: config.one_time ?? false,
       enabled: config.enabled ?? true,
     }
 

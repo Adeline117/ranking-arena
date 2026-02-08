@@ -67,6 +67,15 @@ interface AlertConfig {
   pnl_change_threshold: number
   alert_score_change: boolean
   score_change_threshold: number
+  alert_rank_change: boolean
+  rank_change_threshold: number
+  alert_new_position: boolean
+  alert_price_above: boolean
+  price_above_value: number | null
+  alert_price_below: boolean
+  price_below_value: number | null
+  price_symbol: string | null
+  one_time: boolean
 }
 
 interface Snapshot {
@@ -327,6 +336,52 @@ export async function POST(req: Request) {
 
       if (logsError) {
         console.error('[TraderAlerts Cron] 批量保存日志失败:', logsError)
+      }
+    }
+
+    // 批量插入 alert_history
+    if (alertLogsToInsert.length > 0) {
+      const historyToInsert = alertLogsToInsert.map(log => ({
+        alert_id: log.alert_id,
+        user_id: log.user_id,
+        alert_type: log.alert_type,
+        triggered_at: new Date().toISOString(),
+        data: {
+          trader_id: log.trader_id,
+          old_value: log.old_value,
+          new_value: log.new_value,
+          change_percent: log.change_percent,
+          message: log.message,
+        },
+      }))
+
+      const { error: historyError } = await supabase
+        .from('alert_history')
+        .insert(historyToInsert)
+
+      if (historyError) {
+        console.error('[TraderAlerts Cron] 保存 alert_history 失败:', historyError)
+      }
+    }
+
+    // 更新 last_triggered_at 并处理一次性提醒
+    const triggeredAlertIds = [...new Set(alertLogsToInsert.map(l => l.alert_id))]
+    if (triggeredAlertIds.length > 0) {
+      await supabase
+        .from('trader_alerts')
+        .update({ last_triggered_at: new Date().toISOString() })
+        .in('id', triggeredAlertIds)
+
+      // 禁用一次性提醒
+      const oneTimeAlertIds = (alerts as AlertConfig[])
+        .filter(a => a.one_time && triggeredAlertIds.includes(a.id))
+        .map(a => a.id)
+
+      if (oneTimeAlertIds.length > 0) {
+        await supabase
+          .from('trader_alerts')
+          .update({ enabled: false })
+          .in('id', oneTimeAlertIds)
       }
     }
 

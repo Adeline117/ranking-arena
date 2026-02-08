@@ -1,0 +1,54 @@
+/**
+ * 提醒历史 API
+ *
+ * GET /api/alerts - 获取提醒触发历史
+ * GET /api/alerts?alert_id=xxx - 获取指定提醒的历史
+ */
+
+import { NextRequest } from 'next/server'
+import {
+  getSupabaseAdmin,
+  requireAuth,
+  success,
+  error,
+  handleError,
+} from '@/lib/api'
+
+export const runtime = 'nodejs'
+
+/**
+ * GET - 获取提醒触发历史
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const user = await requireAuth(request)
+    const supabase = getSupabaseAdmin()
+
+    const { searchParams } = new URL(request.url)
+    const alertId = searchParams.get('alert_id')
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100)
+    const offset = parseInt(searchParams.get('offset') || '0', 10)
+
+    let query = supabase
+      .from('alert_history')
+      .select('*', { count: 'exact' })
+      .eq('user_id', user.id)
+      .order('triggered_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (alertId) {
+      query = query.eq('alert_id', alertId)
+    }
+
+    const { data: history, error: queryError, count } = await query
+
+    if (queryError) {
+      console.error('[alerts] 查询历史失败:', queryError)
+      return error('获取提醒历史失败', 500)
+    }
+
+    return success({ history: history || [], total: count || 0 })
+  } catch (err: unknown) {
+    return handleError(err)
+  }
+}

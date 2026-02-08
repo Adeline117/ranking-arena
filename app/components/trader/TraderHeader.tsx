@@ -25,6 +25,7 @@ const MessageButton = dynamic(() => import('../ui/MessageButton'), { ssr: false 
 const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
 const Web3VerifiedBadge = dynamic(() => import('./Web3VerifiedBadge').then(m => ({ default: m.Web3VerifiedBadge })), { ssr: false })
 const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
+const AlertConfig = dynamic(() => import('../alerts/AlertConfig'), { ssr: false })
 
 interface TraderHeaderProps {
   handle: string
@@ -345,6 +346,7 @@ export default function TraderHeader({
   const [mounted, setMounted] = useState(false)
   const [avatarHovered, setAvatarHovered] = useState(false)
   const [followerCount, setFollowerCount] = useState(followers)
+  const [showAlertConfig, setShowAlertConfig] = useState(false)
   const router = useRouter()
   const { t } = useLanguage()
   const { showToast } = useToast()
@@ -728,6 +730,20 @@ export default function TraderHeader({
           }}
         />
 
+        {!isOwnProfile && userId && (
+          <ActionButton
+            onClick={() => setShowAlertConfig(!showAlertConfig)}
+            variant="ghost"
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            }
+          >
+            {t('alertSetReminder')}
+          </ActionButton>
+        )}
+
         <ActionButton onClick={() => router.push('/')} variant="ghost">
           ← {t('back')}
         </ActionButton>
@@ -736,6 +752,18 @@ export default function TraderHeader({
           <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
         )}
       </Box>
+
+      {showAlertConfig && userId && (
+        <Box style={{ marginTop: 12 }}>
+          <AlertConfig
+            traderId={traderId}
+            traderHandle={handle}
+            source={source}
+            userId={userId}
+            onClose={() => setShowAlertConfig(false)}
+          />
+        </Box>
+      )}
     </Box>
   )
 }
