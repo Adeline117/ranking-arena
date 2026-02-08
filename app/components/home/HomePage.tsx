@@ -2,19 +2,16 @@
 'use client'
 
 import { Suspense, lazy } from 'react'
-import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
-import { useLanguage } from '../Providers/LanguageProvider'
 import TopNav from '../layout/TopNav'
 import MobileBottomNav from '../layout/MobileBottomNav'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 import Footer from '../layout/Footer'
 import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
-import StatsBar from './StatsBar'
-import HeroStats from './HeroStats'
 import ExchangePartners from './ExchangePartners'
+import GuestSignupPrompt from './GuestSignupPrompt'
 import HomePageClient from './HomePageClient'
 // HomePageWithSubNav removed from homepage - only used in groups page
 import type { InitialTrader } from '@/lib/getInitialTraders'
@@ -33,7 +30,6 @@ export default function HomePage({
   initialTraders,
   initialLastUpdated,
 }: HomePageProps) {
-  const { t } = useLanguage()
   return (
     <Box
       style={{
@@ -71,94 +67,18 @@ export default function HomePage({
           padding: '16px 16px',
         }}
       >
-        {/* Hero Section */}
+        {/* Compact Hero - minimal, get users to rankings fast */}
         <Box
           style={{
             textAlign: 'center',
-            padding: '32px 16px 24px',
-            marginBottom: 8,
+            padding: '12px 16px 8px',
+            marginBottom: 4,
           }}
         >
-          <h1
-            className="hero-title"
-            style={{
-              fontSize: 48,
-              fontWeight: 900,
-              color: tokens.colors.text.primary,
-              margin: '0 0 8px',
-              letterSpacing: '-0.02em',
-              lineHeight: 1.1,
-            }}
-          >
-            Arena
-          </h1>
-          <p
-            className="hero-subtitle"
-            style={{
-              fontSize: 16,
-              color: tokens.colors.text.secondary,
-              margin: '0 0 20px',
-              lineHeight: 1.5,
-            }}
-          >
-            {t('heroSubtitle')}
-          </p>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: 12,
-              marginBottom: 20,
-              flexWrap: 'wrap',
-            }}
-          >
-            <Link
-              href="/rankings"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '10px 24px',
-                borderRadius: tokens.radius.lg,
-                background: tokens.colors.accent.brand,
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 700,
-                textDecoration: 'none',
-                transition: 'opacity 0.2s',
-              }}
-            >
-              {t('heroCTABrowse')}
-            </Link>
-            <Link
-              href="/login"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '10px 24px',
-                borderRadius: tokens.radius.lg,
-                background: 'transparent',
-                color: tokens.colors.text.primary,
-                fontSize: 14,
-                fontWeight: 600,
-                textDecoration: 'none',
-                border: `1px solid ${tokens.colors.border.primary}`,
-                transition: 'opacity 0.2s',
-              }}
-            >
-              {t('heroCTASignUp')}
-            </Link>
-          </div>
-          <Suspense fallback={null}>
-            <HeroStats />
-          </Suspense>
           <Suspense fallback={null}>
             <ExchangePartners />
           </Suspense>
         </Box>
-
-        <Suspense fallback={<div style={{ height: 40 }} />}>
-          <StatsBar />
-        </Suspense>
 
         <ThreeColumnLayout
           leftSidebar={
@@ -196,6 +116,7 @@ export default function HomePage({
 
       <Footer />
       <MobileBottomNav />
+      <GuestSignupPrompt />
     </Box>
   )
 }

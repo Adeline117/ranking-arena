@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense, useRef } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from 'next/navigation'
+import { tokens } from '@/lib/design-tokens'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -772,7 +773,7 @@ export default function ResetPasswordPage() {
     <Suspense fallback={
       <div style={{ 
         minHeight: '100vh', 
-        background: '#0a0a0f', 
+        background: tokens.colors.bg.primary, 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
