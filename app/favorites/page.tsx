@@ -177,6 +177,10 @@ export default function FavoritesPage() {
               <Link
                 href="/login?redirect=/favorites"
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 44,
                   padding: '12px 24px',
                   background: tokens.colors.accent.primary,
                   color: tokens.colors.white,
@@ -331,7 +335,28 @@ export default function FavoritesPage() {
           folders.length === 0 ? (
             <EmptyState
               title={t('noFolders')}
-              description={t('noFoldersDesc')}
+              description={t('noFoldersCta')}
+              action={
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 44,
+                    padding: '10px 24px',
+                    background: tokens.colors.accent.brand,
+                    color: tokens.colors.white,
+                    borderRadius: tokens.radius.md,
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: 14,
+                  }}
+                >
+                  + {t('newFolder')}
+                </button>
+              }
             />
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -409,8 +434,8 @@ export default function FavoritesPage() {
                           style={{
                             fontSize: 10,
                             padding: '2px 6px',
-                            background: '#4ECDC420',
-                            color: '#4ECDC4',
+                            background: tokens.colors.accent.success + '20',
+                            color: tokens.colors.accent.success,
                             borderRadius: tokens.radius.sm,
                           }}
                         >
@@ -454,6 +479,26 @@ export default function FavoritesPage() {
             <EmptyState
               title={t('noSubscribedFolders')}
               description={t('noSubscribedFoldersDesc')}
+              action={
+                <Link
+                  href="/hot"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 44,
+                    padding: '10px 24px',
+                    background: tokens.colors.accent.brand,
+                    color: tokens.colors.white,
+                    borderRadius: tokens.radius.md,
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    fontSize: 14,
+                  }}
+                >
+                  {t('browsePublicFolders')}
+                </Link>
+              }
             />
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -517,12 +562,12 @@ export default function FavoritesPage() {
                         style={{
                           fontSize: 10,
                           padding: '2px 6px',
-                          background: '#FFD70020',
-                          color: '#FFD700',
+                          background: tokens.colors.accent.warning + '20',
+                          color: tokens.colors.accent.warning,
                           borderRadius: tokens.radius.sm,
                         }}
                       >
-                        [Saved] {t('bookmarked')}
+                        {t('subscribed')}
                       </span>
                     </Box>
                     {folder.description && (

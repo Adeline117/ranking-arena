@@ -311,6 +311,7 @@ export default function TraderHeader({
   const [userId, setUserId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const [avatarHovered, setAvatarHovered] = useState(false)
+  const [followerCount, setFollowerCount] = useState(followers)
   const router = useRouter()
   const { t } = useLanguage()
   const { showToast } = useToast()
@@ -549,7 +550,7 @@ export default function TraderHeader({
           
           {/* Stats row */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
-            <StatItem value={followers} label={t('followers') || '被关注'} hasCover={hasCover} />
+            <StatItem value={followerCount} label={t('followers') || '被关注'} hasCover={hasCover} />
             <StatItem value={following} label={t('following') || '关注中'} hasCover={hasCover} />
 
             {copiers !== undefined && copiers > 0 && (
@@ -651,6 +652,9 @@ export default function TraderHeader({
             <TraderFollowButton
               traderId={traderId}
               userId={userId}
+              onFollowChange={(isFollowing) => {
+                setFollowerCount(prev => isFollowing ? prev + 1 : Math.max(0, prev - 1))
+              }}
             />
           )
         )}

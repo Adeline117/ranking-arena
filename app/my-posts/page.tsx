@@ -160,8 +160,12 @@ export default function MyPostsPage() {
             description={t('loginToManagePosts')}
             action={
               <Link
-                href="/login"
+                href="/login?redirect=/my-posts"
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 44,
                   padding: '12px 24px',
                   background: tokens.colors.accent.primary,
                   color: tokens.colors.white,

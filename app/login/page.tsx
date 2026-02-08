@@ -358,7 +358,7 @@ export default function LoginPage() {
         if (otpError.message.includes('redirect') || otpError.message.includes('link')) {
           setError(t('loginConfigError'))
         } else {
-          setError(otpError.message || t('loginSendFailed'))
+          setError(t('loginSendFailed'))
         }
         setSendingCode(false)
         return
@@ -372,7 +372,8 @@ export default function LoginPage() {
         setError(t('loginSendFailed'))
       }
     } catch (err: unknown) {
-      setError((err instanceof Error ? err.message : undefined) || t('loginSendFailedNetwork'))
+      console.error('Login OTP error:', err)
+      setError(t('loginSendFailedNetwork'))
     } finally {
       setSendingCode(false)
       submittingRef.current = false
@@ -404,7 +405,7 @@ export default function LoginPage() {
       })
 
       if (otpError) {
-        setError(otpError.message || t('loginSendFailedShort'))
+        setError(t('loginSendFailedShort'))
         setSendingCode(false)
         return
       }
@@ -417,7 +418,8 @@ export default function LoginPage() {
         setError(t('loginSendFailedShort'))
       }
     } catch (err: unknown) {
-      setError((err instanceof Error ? err.message : undefined) || t('loginSendFailedSimple'))
+      console.error('Login OTP error:', err)
+      setError(t('loginSendFailedSimple'))
     } finally {
       setSendingCode(false)
       submittingRef.current = false
@@ -445,8 +447,10 @@ export default function LoginPage() {
       if (verifyError) {
         if (verifyError.message.includes('expired') || verifyError.message.includes('过期')) {
           setError(t('loginCodeExpired'))
+        } else if (verifyError.message.includes('invalid') || verifyError.message.includes('Invalid')) {
+          setError(t('loginVerificationFailed'))
         } else {
-          setError(verifyError.message)
+          setError(t('loginVerificationFailed'))
         }
         setLoading(false)
         return

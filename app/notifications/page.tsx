@@ -78,20 +78,47 @@ const severityIcons = {
 
 // Notification type display config
 const NOTIFICATION_TYPE_CONFIG: Record<string, { icon: string; color: string; filterLabel?: { zh: string; en: string } }> = {
-  trader_alert: { icon: '📊', color: '#3B82F6' },
-  post_reply: { icon: '💬', color: '#8B5CF6', filterLabel: { zh: '帖子回复', en: 'Replies' } },
-  new_follower: { icon: '👤', color: '#10B981', filterLabel: { zh: '新粉丝', en: 'Followers' } },
-  group_update: { icon: '📢', color: '#F59E0B', filterLabel: { zh: '群组更新', en: 'Groups' } },
-  follow: { icon: '👤', color: '#10B981' },
-  like: { icon: '❤️', color: '#EF4444' },
-  comment: { icon: '💬', color: '#8B5CF6' },
-  system: { icon: '🔔', color: '#6B7280' },
+  trader_alert: { icon: 'chart', color: '#3B82F6' },
+  post_reply: { icon: 'reply', color: '#8B5CF6', filterLabel: { zh: '帖子回复', en: 'Replies' } },
+  new_follower: { icon: 'user', color: '#10B981', filterLabel: { zh: '新粉丝', en: 'Followers' } },
+  group_update: { icon: 'megaphone', color: '#F59E0B', filterLabel: { zh: '群组更新', en: 'Groups' } },
+  follow: { icon: 'user', color: '#10B981' },
+  like: { icon: 'heart', color: '#EF4444' },
+  comment: { icon: 'reply', color: '#8B5CF6' },
+  system: { icon: 'bell', color: '#6B7280' },
   mention: { icon: '@', color: '#3B82F6' },
-  message: { icon: '✉️', color: '#6366F1' },
+  message: { icon: 'mail', color: '#6366F1' },
+}
+
+// SVG icon renderer for notification types (no emoji)
+function NotificationIconSvg({ type, size = 16 }: { type: string; size?: number }) {
+  const color = NOTIFICATION_TYPE_CONFIG[type]?.color || '#6B7280'
+  const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  const iconKey = NOTIFICATION_TYPE_CONFIG[type]?.icon || 'bell'
+
+  switch (iconKey) {
+    case 'chart':
+      return <svg {...props}><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg>
+    case 'reply':
+      return <svg {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+    case 'user':
+      return <svg {...props}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+    case 'megaphone':
+      return <svg {...props}><path d="m3 11 18-5v12L3 13v-2z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" /></svg>
+    case 'heart':
+      return <svg {...props} fill={color}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+    case 'mail':
+      return <svg {...props}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>
+    case '@':
+      return <svg {...props}><circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94" /></svg>
+    case 'bell':
+    default:
+      return <svg {...props}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+  }
 }
 
 function getNotificationIcon(type: string): string {
-  return NOTIFICATION_TYPE_CONFIG[type]?.icon || 'N'
+  return NOTIFICATION_TYPE_CONFIG[type]?.icon || 'bell'
 }
 
 function getNotificationBorderColor(type: string, severity: 'critical' | 'warning' | 'info'): string {
@@ -347,7 +374,7 @@ export default function NotificationsPage() {
                       : (NOTIFICATION_TYPE_CONFIG[n.type]?.color || tokens.colors.bg.tertiary) + '15',
                     fontSize: 14,
                   }}>
-                    {n.type === 'trader_alert' ? severityIcons[severity] : getNotificationIcon(n.type)}
+                    {n.type === 'trader_alert' ? severityIcons[severity] : <NotificationIconSvg type={n.type} size={16} />}
                   </Box>
 
                   {/* 内容 */}
