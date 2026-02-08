@@ -64,6 +64,24 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null)
   const [followersCount, setFollowersCount] = useState(serverProfile?.followers || 0)
   const profileCreationRef = useRef(false) // Prevent race condition in profile creation
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  type ProfileTabKey = 'overview' | 'groups' | 'bookmarks'
+  const urlTab = searchParams.get('tab') as ProfileTabKey | null
+  const [activeTab, setActiveTab] = useState<ProfileTabKey>(
+    urlTab && ['overview', 'groups', 'bookmarks'].includes(urlTab) ? urlTab : 'overview'
+  )
+  const handleTabChange = useCallback((tab: ProfileTabKey) => {
+    setActiveTab(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'overview') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const qs = params.toString()
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+  }, [searchParams, pathname, router])
 
   // Auth check - lightweight, runs once
   useEffect(() => {
@@ -195,26 +213,6 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
   const isOwnProfile = currentUserId === profile.id
   const followingCount = (profile.following || 0) + (profile.followingTraders || 0)
-  const searchParams = useSearchParams()
-  const pathname = usePathname()
-
-  type ProfileTabKey = 'overview' | 'groups' | 'bookmarks'
-  const urlTab = searchParams.get('tab') as ProfileTabKey | null
-  const [activeTab, setActiveTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'groups', 'bookmarks'].includes(urlTab) ? urlTab : 'overview'
-  )
-
-  const handleTabChange = useCallback((tab: ProfileTabKey) => {
-    setActiveTab(tab)
-    const params = new URLSearchParams(searchParams.toString())
-    if (tab === 'overview') {
-      params.delete('tab')
-    } else {
-      params.set('tab', tab)
-    }
-    const qs = params.toString()
-    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
-  }, [searchParams, pathname, router])
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') || '概览' },
