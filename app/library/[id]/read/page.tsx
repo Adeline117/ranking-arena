@@ -59,6 +59,36 @@ function lsSet(key: string, value: unknown) {
   try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)) } catch {}
 }
 
+// UF20: Server-side reading progress sync
+async function syncProgressToServer(bookId: string, page: number, totalPages: number) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    await supabase.from('reading_progress').upsert({
+      user_id: session.user.id,
+      book_id: bookId,
+      current_page: page,
+      total_pages: totalPages,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,book_id' })
+  } catch {}
+}
+
+async function loadProgressFromServer(bookId: string): Promise<{ page: number; total: number } | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return null
+    const { data } = await supabase
+      .from('reading_progress')
+      .select('current_page, total_pages')
+      .eq('user_id', session.user.id)
+      .eq('book_id', bookId)
+      .maybeSingle()
+    if (data) return { page: data.current_page, total: data.total_pages }
+  } catch {}
+  return null
+}
+
 // ─── SVG Icons ───────────────────────────────────────────────────────
 
 function IconBack() {
@@ -220,10 +250,16 @@ export default function ReadPage() {
           }
         } catch {}
 
-        // Restore reading progress
-        const saved = lsGet<{ page: number; total: number; lastRead: number } | null>(`progress_${id}`, null)
-        if (saved && saved.page > 1 && saved.page <= doc.numPages) {
-          setCurrentPage(saved.page)
+        // UF20: Restore reading progress - server first, fallback to localStorage
+        const serverProgress = await loadProgressFromServer(id)
+        if (serverProgress && serverProgress.page > 1 && serverProgress.page <= doc.numPages) {
+          setCurrentPage(serverProgress.page)
+          lsSet(`progress_${id}`, { page: serverProgress.page, total: serverProgress.total, lastRead: Date.now() })
+        } else {
+          const saved = lsGet<{ page: number; total: number; lastRead: number } | null>(`progress_${id}`, null)
+          if (saved && saved.page > 1 && saved.page <= doc.numPages) {
+            setCurrentPage(saved.page)
+          }
         }
       } catch {
         if (!cancelled) setError(isZh ? '无法加载 PDF' : 'Unable to load PDF')
@@ -291,9 +327,12 @@ export default function ReadPage() {
       renderTaskRef.current = task
       await task.promise
 
-      // Save progress
+      // Save progress (localStorage + server sync UF20)
       if (id) {
-        lsSet(`progress_${id}`, { page: currentPage, total: totalPages, lastRead: Date.now() })
+        const progressData = { page: currentPage, total: totalPages, lastRead: Date.now() }
+        lsSet(`progress_${id}`, progressData)
+        // Async server sync - fire and forget
+        syncProgressToServer(id, currentPage, totalPages)
       }
     } catch (err: any) {
       if (err?.name !== 'RenderingCancelledException') {
@@ -307,6 +346,18 @@ export default function ReadPage() {
   useEffect(() => {
     if (pdfDoc && totalPages > 0) renderCurrentPage()
   }, [pdfDoc, currentPage, totalPages, renderCurrentPage])
+
+  // UF20: Sync progress on page close
+  useEffect(() => {
+    if (!id) return
+    const handleUnload = () => {
+      if (totalPages > 0) {
+        syncProgressToServer(id, currentPage, totalPages)
+      }
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [id, currentPage, totalPages])
 
   // Re-render on resize
   useEffect(() => {

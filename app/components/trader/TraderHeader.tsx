@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../base'
 import CopyTradeButton from './CopyTradeButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
-import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES, EXCHANGE_CONFIG, type RoiType } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -489,6 +489,17 @@ export default function TraderHeader({
               <Badge color={tokens.colors.accent.primary}>
                 <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, letterSpacing: '0.3px' }}>
                   {EXCHANGE_NAMES[source.toLowerCase()]}
+                </Text>
+              </Badge>
+            )}
+
+            {source && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG]?.roiType && (
+              <Badge color={tokens.colors.text.tertiary}>
+                <Text size="xs" weight="bold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.3px', textTransform: 'uppercase', fontSize: '10px' }}>
+                  {(() => {
+                    const roiType: RoiType = EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType
+                    return roiType === 'realized' ? 'ROI: Realized' : roiType === 'unrealized' ? 'ROI: Unrealized' : 'ROI: Mixed'
+                  })()}
                 </Text>
               </Badge>
             )}

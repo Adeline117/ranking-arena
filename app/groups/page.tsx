@@ -9,6 +9,7 @@ import PopularTradersWidget from '@/app/components/sidebar/PopularTraders'
 import RecommendedGroupsWidget from '@/app/components/sidebar/RecommendedGroups'
 import MyGroupsWidget from '@/app/components/sidebar/MyGroups'
 import NewsFlashWidget from '@/app/components/sidebar/NewsFlash'
+import ActiveUsersWidget from '@/app/components/sidebar/ActiveUsers'
 import { Box } from '@/app/components/base'
 import CreatePostFAB from '@/app/components/ui/CreatePostFAB'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -40,8 +41,11 @@ function GroupsContent() {
           }
           rightSidebar={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 72px)' }}>
-              <div style={{ flexShrink: 0, maxHeight: '35%', overflow: 'auto' }}>
+              <div style={{ flexShrink: 0, maxHeight: '30%', overflow: 'auto' }}>
                 <MyGroupsWidget />
+              </div>
+              <div style={{ flexShrink: 0, maxHeight: '30%', overflow: 'auto' }}>
+                <ActiveUsersWidget />
               </div>
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 <NewsFlashWidget />

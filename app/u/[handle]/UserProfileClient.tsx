@@ -31,6 +31,94 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ),
 })
 
+function FollowersList({ profileId }: { profileId: string }) {
+  const { t } = useLanguage()
+  const [followers, setFollowers] = useState<Array<{ id: string; handle: string; avatar_url: string | null }>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      try {
+        const { data: follows } = await supabase
+          .from('user_follows')
+          .select('follower_id')
+          .eq('followed_id', profileId)
+          .limit(100)
+        if (follows && follows.length > 0) {
+          const ids = follows.map((f: { follower_id: string }) => f.follower_id)
+          const { data: profiles } = await supabase
+            .from('user_profiles')
+            .select('id, handle, avatar_url')
+            .in('id', ids)
+          setFollowers((profiles || []) as Array<{ id: string; handle: string; avatar_url: string | null }>)
+        } else {
+          setFollowers([])
+        }
+      } catch {
+        setFollowers([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [profileId])
+
+  if (loading) {
+    return (
+      <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
+        <Text size="sm" color="tertiary">{t('loading') || '加载中...'}</Text>
+      </Box>
+    )
+  }
+
+  if (followers.length === 0) {
+    return (
+      <Box bg="secondary" p={6} radius="lg" border="primary" style={{ textAlign: 'center' }}>
+        <Text size="sm" color="tertiary">{t('noFollowers') || '暂无粉丝'}</Text>
+      </Box>
+    )
+  }
+
+  return (
+    <Box bg="secondary" p={4} radius="lg" border="primary">
+      <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+        {t('followers') || '粉丝'} ({followers.length})
+      </Text>
+      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+        {followers.map(f => (
+          <Link key={f.id} href={`/u/${encodeURIComponent(f.handle)}`} style={{ textDecoration: 'none' }}>
+            <Box style={{
+              display: 'flex', alignItems: 'center', gap: tokens.spacing[3],
+              padding: tokens.spacing[3], borderRadius: tokens.radius.md,
+              transition: 'background 0.15s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <Box style={{
+                width: 40, height: 40, borderRadius: tokens.radius.full,
+                background: f.avatar_url ? tokens.colors.bg.tertiary : getAvatarGradient(f.id),
+                overflow: 'hidden', display: 'grid', placeItems: 'center',
+                flexShrink: 0,
+              }}>
+                {f.avatar_url ? (
+                  <Image src={`/api/avatar?url=${encodeURIComponent(f.avatar_url)}`} alt={f.handle} width={40} height={40} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <Text size="sm" weight="bold" style={{ color: '#fff' }}>{getAvatarInitial(f.handle)}</Text>
+                )}
+              </Box>
+              <Text size="sm" weight="semibold" style={{ color: tokens.colors.text.primary }}>
+                @{f.handle}
+              </Text>
+            </Box>
+          </Link>
+        ))}
+      </Box>
+    </Box>
+  )
+}
+
 interface ServerProfile {
   id: string
   handle: string
@@ -66,11 +154,13 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
   const profileCreationRef = useRef(false) // Prevent race condition in profile creation
   const searchParams = useSearchParams()
   const pathname = usePathname()
-  type ProfileTabKey = 'overview' | 'groups' | 'bookmarks'
+  type ProfileTabKey = 'overview' | 'followers' | 'groups' | 'bookmarks'
   const urlTab = searchParams.get('tab') as ProfileTabKey | null
   const [activeTab, setActiveTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'groups', 'bookmarks'].includes(urlTab) ? urlTab : 'overview'
+    urlTab && ['overview', 'followers', 'groups', 'bookmarks'].includes(urlTab) ? urlTab : 'overview'
   )
+  const [followersList, setFollowersList] = useState<Array<{ id: string; handle: string; avatar_url: string | null }>>([])
+  const [loadingFollowers, setLoadingFollowers] = useState(false)
   const handleTabChange = useCallback((tab: ProfileTabKey) => {
     setActiveTab(tab)
     const params = new URLSearchParams(searchParams.toString())
@@ -216,6 +306,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') || '概览' },
+    { key: 'followers', label: `${t('followers') || '粉丝'} (${followersCount})` },
     { key: 'groups', label: t('groups') || '群组' },
     { key: 'bookmarks', label: t('bookmarks') || '收藏' },
   ]
@@ -615,6 +706,53 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
             >
               {/* Posts */}
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                {/* UF33: Guidance cards for own empty profile */}
+                {isOwnProfile && (
+                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                    {[
+                      {
+                        icon: '📊',
+                        text: t('guidanceBindExchange') || '绑定交易所账号展示你的交易成绩',
+                        action: () => router.push('/exchange/auth/api-key'),
+                        actionLabel: t('guidanceGo') || '去绑定',
+                      },
+                      {
+                        icon: '✍️',
+                        text: t('guidanceFirstPost') || '发一条帖子开始社交',
+                        action: () => router.push(`/u/${handle}/new`),
+                        actionLabel: t('newPost') || '发帖',
+                      },
+                      {
+                        icon: '👀',
+                        text: t('guidanceFollowTraders') || '关注感兴趣的交易员',
+                        action: () => router.push('/rankings'),
+                        actionLabel: t('guidanceBrowse') || '去看看',
+                      },
+                    ].map((card, i) => (
+                      <Box key={i} style={{
+                        display: 'flex', alignItems: 'center', gap: tokens.spacing[3],
+                        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                        borderRadius: tokens.radius.lg,
+                        background: `${tokens.colors.accent.primary}08`,
+                        border: `1px solid ${tokens.colors.accent.primary}20`,
+                      }}>
+                        <span style={{ fontSize: 24 }}>{card.icon}</span>
+                        <Text size="sm" style={{ flex: 1, color: tokens.colors.text.secondary }}>{card.text}</Text>
+                        <button onClick={card.action} style={{
+                          padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                          borderRadius: tokens.radius.md,
+                          border: `1px solid ${tokens.colors.accent.primary}40`,
+                          background: `${tokens.colors.accent.primary}10`,
+                          color: tokens.colors.accent.primary,
+                          fontSize: tokens.typography.fontSize.xs,
+                          fontWeight: 600, cursor: 'pointer',
+                        }}>
+                          {card.actionLabel}
+                        </button>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
                 <Box bg="secondary" p={4} radius="lg" border="primary">
                   <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
                     <Text size="lg" weight="black">{t('posts')}</Text>
@@ -645,6 +783,12 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                 <JoinedGroups userId={profile.id} />
                 <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
               </Box>
+            </Box>
+          )}
+
+          {activeTab === 'followers' && (
+            <Box style={{ maxWidth: 600 }}>
+              <FollowersList profileId={profile.id} />
             </Box>
           )}
 

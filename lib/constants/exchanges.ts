@@ -196,58 +196,62 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
 // EXCHANGE_CONFIG – unified configuration object per source
 // ---------------------------------------------------------------------------
 
+export type RoiType = 'realized' | 'unrealized' | 'mixed'
+
 export interface ExchangeConfig {
   name: string
   sourceType: SourceType
   reliability: number
   trustWeight: number
+  /** How ROI is calculated on this platform */
+  roiType: RoiType
 }
 
 export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   // CEX futures
-  binance_futures: { name: 'Binance', sourceType: 'futures', reliability: 88, trustWeight: 1.0 },
-  bybit: { name: 'Bybit', sourceType: 'futures', reliability: 45, trustWeight: 0.85 },
-  bitget_futures: { name: 'Bitget', sourceType: 'futures', reliability: 68, trustWeight: 0.85 },
-  okx_futures: { name: 'OKX', sourceType: 'futures', reliability: 95, trustWeight: 1.0 },
-  mexc: { name: 'MEXC', sourceType: 'futures', reliability: 75, trustWeight: 0.80 },
-  kucoin: { name: 'KuCoin', sourceType: 'futures', reliability: 72, trustWeight: 0.80 },
-  coinex: { name: 'CoinEx', sourceType: 'futures', reliability: 72, trustWeight: 0.80 },
-  htx_futures: { name: 'HTX', sourceType: 'futures', reliability: 95, trustWeight: 0.95 },
-  weex: { name: 'WEEX', sourceType: 'futures', reliability: 70, trustWeight: 0.70 },
-  phemex: { name: 'Phemex', sourceType: 'futures', reliability: 70, trustWeight: 0.75 },
-  bingx: { name: 'BingX', sourceType: 'futures', reliability: 40, trustWeight: 0.65 },
-  gateio: { name: 'Gate.io', sourceType: 'futures', reliability: 68, trustWeight: 0.80 },
-  xt: { name: 'XT.COM', sourceType: 'futures', reliability: 55, trustWeight: 0.65 },
-  pionex: { name: 'Pionex', sourceType: 'futures', reliability: 60, trustWeight: 0.65 },
-  lbank: { name: 'LBank', sourceType: 'futures', reliability: 35, trustWeight: 0.60 },
-  blofin: { name: 'BloFin', sourceType: 'futures', reliability: 40, trustWeight: 0.65 },
-  bitmart: { name: 'BitMart', sourceType: 'futures', reliability: 65, trustWeight: 0.65 },
+  binance_futures: { name: 'Binance', sourceType: 'futures', reliability: 88, trustWeight: 1.0, roiType: 'mixed' },
+  bybit: { name: 'Bybit', sourceType: 'futures', reliability: 45, trustWeight: 0.85, roiType: 'mixed' },
+  bitget_futures: { name: 'Bitget', sourceType: 'futures', reliability: 68, trustWeight: 0.85, roiType: 'mixed' },
+  okx_futures: { name: 'OKX', sourceType: 'futures', reliability: 95, trustWeight: 1.0, roiType: 'mixed' },
+  mexc: { name: 'MEXC', sourceType: 'futures', reliability: 75, trustWeight: 0.80, roiType: 'mixed' },
+  kucoin: { name: 'KuCoin', sourceType: 'futures', reliability: 72, trustWeight: 0.80, roiType: 'mixed' },
+  coinex: { name: 'CoinEx', sourceType: 'futures', reliability: 72, trustWeight: 0.80, roiType: 'mixed' },
+  htx_futures: { name: 'HTX', sourceType: 'futures', reliability: 95, trustWeight: 0.95, roiType: 'mixed' },
+  weex: { name: 'WEEX', sourceType: 'futures', reliability: 70, trustWeight: 0.70, roiType: 'mixed' },
+  phemex: { name: 'Phemex', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
+  bingx: { name: 'BingX', sourceType: 'futures', reliability: 40, trustWeight: 0.65, roiType: 'mixed' },
+  gateio: { name: 'Gate.io', sourceType: 'futures', reliability: 68, trustWeight: 0.80, roiType: 'mixed' },
+  xt: { name: 'XT.COM', sourceType: 'futures', reliability: 55, trustWeight: 0.65, roiType: 'mixed' },
+  pionex: { name: 'Pionex', sourceType: 'futures', reliability: 60, trustWeight: 0.65, roiType: 'mixed' },
+  lbank: { name: 'LBank', sourceType: 'futures', reliability: 35, trustWeight: 0.60, roiType: 'mixed' },
+  blofin: { name: 'BloFin', sourceType: 'futures', reliability: 40, trustWeight: 0.65, roiType: 'mixed' },
+  bitmart: { name: 'BitMart', sourceType: 'futures', reliability: 65, trustWeight: 0.65, roiType: 'mixed' },
   // CEX spot
-  binance_spot: { name: 'Binance Spot', sourceType: 'spot', reliability: 88, trustWeight: 1.0 },
-  bitget_spot: { name: 'Bitget Spot', sourceType: 'spot', reliability: 65, trustWeight: 0.80 },
-  bybit_spot: { name: 'Bybit Spot', sourceType: 'spot', reliability: 45, trustWeight: 0.85 },
-  okx_spot: { name: 'OKX Spot', sourceType: 'spot', reliability: 90, trustWeight: 0.80 },
+  binance_spot: { name: 'Binance Spot', sourceType: 'spot', reliability: 88, trustWeight: 1.0, roiType: 'mixed' },
+  bitget_spot: { name: 'Bitget Spot', sourceType: 'spot', reliability: 65, trustWeight: 0.80, roiType: 'mixed' },
+  bybit_spot: { name: 'Bybit Spot', sourceType: 'spot', reliability: 45, trustWeight: 0.85, roiType: 'mixed' },
+  okx_spot: { name: 'OKX Spot', sourceType: 'spot', reliability: 90, trustWeight: 0.80, roiType: 'mixed' },
   // CEX web3 / wallets
-  binance_web3: { name: 'Binance Web3', sourceType: 'web3', reliability: 85, trustWeight: 0.85 },
-  okx_web3: { name: 'OKX Web3', sourceType: 'web3', reliability: 90, trustWeight: 1.0 },
-  okx_wallet: { name: 'OKX Wallet', sourceType: 'web3', reliability: 90, trustWeight: 1.0 },
+  binance_web3: { name: 'Binance Web3', sourceType: 'web3', reliability: 85, trustWeight: 0.85, roiType: 'mixed' },
+  okx_web3: { name: 'OKX Web3', sourceType: 'web3', reliability: 90, trustWeight: 1.0, roiType: 'mixed' },
+  okx_wallet: { name: 'OKX Wallet', sourceType: 'web3', reliability: 90, trustWeight: 1.0, roiType: 'mixed' },
   // DEX / on-chain perpetuals
-  gmx: { name: 'GMX', sourceType: 'web3', reliability: 95, trustWeight: 1.0 },
-  dydx: { name: 'dYdX', sourceType: 'web3', reliability: 90, trustWeight: 0.95 },
-  hyperliquid: { name: 'Hyperliquid', sourceType: 'web3', reliability: 95, trustWeight: 1.0 },
-  kwenta: { name: 'Kwenta', sourceType: 'web3', reliability: 88, trustWeight: 0.90 },
-  gains: { name: 'Gains Network', sourceType: 'web3', reliability: 95, trustWeight: 0.95 },
-  mux: { name: 'MUX', sourceType: 'web3', reliability: 88, trustWeight: 0.85 },
-  vertex: { name: 'Vertex', sourceType: 'web3', reliability: 85, trustWeight: 0.85 },
-  drift: { name: 'Drift', sourceType: 'web3', reliability: 85, trustWeight: 0.90 },
-  jupiter_perps: { name: 'Jupiter Perps', sourceType: 'web3', reliability: 85, trustWeight: 0.95 },
-  aevo: { name: 'Aevo', sourceType: 'web3', reliability: 85, trustWeight: 0.90 },
-  synthetix: { name: 'Synthetix', sourceType: 'web3', reliability: 85, trustWeight: 0.90 },
+  gmx: { name: 'GMX', sourceType: 'web3', reliability: 95, trustWeight: 1.0, roiType: 'realized' },
+  dydx: { name: 'dYdX', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'realized' },
+  hyperliquid: { name: 'Hyperliquid', sourceType: 'web3', reliability: 95, trustWeight: 1.0, roiType: 'mixed' },
+  kwenta: { name: 'Kwenta', sourceType: 'web3', reliability: 88, trustWeight: 0.90, roiType: 'realized' },
+  gains: { name: 'Gains Network', sourceType: 'web3', reliability: 95, trustWeight: 0.95, roiType: 'realized' },
+  mux: { name: 'MUX', sourceType: 'web3', reliability: 88, trustWeight: 0.85, roiType: 'realized' },
+  vertex: { name: 'Vertex', sourceType: 'web3', reliability: 85, trustWeight: 0.85, roiType: 'mixed' },
+  drift: { name: 'Drift', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'mixed' },
+  jupiter_perps: { name: 'Jupiter Perps', sourceType: 'web3', reliability: 85, trustWeight: 0.95, roiType: 'mixed' },
+  aevo: { name: 'Aevo', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'mixed' },
+  synthetix: { name: 'Synthetix', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'realized' },
   // Dune on-chain data
-  dune_gmx: { name: 'GMX (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95 },
-  dune_hyperliquid: { name: 'Hyperliquid (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95 },
-  dune_uniswap: { name: 'Uniswap (Dune)', sourceType: 'spot', reliability: 85, trustWeight: 0.85 },
-  dune_defi: { name: 'DeFi (Dune)', sourceType: 'web3', reliability: 80, trustWeight: 0.80 },
+  dune_gmx: { name: 'GMX (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'realized' },
+  dune_hyperliquid: { name: 'Hyperliquid (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'mixed' },
+  dune_uniswap: { name: 'Uniswap (Dune)', sourceType: 'spot', reliability: 85, trustWeight: 0.85, roiType: 'realized' },
+  dune_defi: { name: 'DeFi (Dune)', sourceType: 'web3', reliability: 80, trustWeight: 0.80, roiType: 'mixed' },
 }
 
 // ---------------------------------------------------------------------------
@@ -272,4 +276,9 @@ export const SOURCE_RELIABILITY: Record<string, number> = Object.fromEntries(
 /** @deprecated Use EXCHANGE_CONFIG[source].trustWeight instead */
 export const SOURCE_TRUST_WEIGHT: Record<string, number> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.trustWeight])
+)
+
+/** ROI type per source – derived from EXCHANGE_CONFIG */
+export const SOURCE_ROI_TYPE: Record<string, RoiType> = Object.fromEntries(
+  Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.roiType])
 )
