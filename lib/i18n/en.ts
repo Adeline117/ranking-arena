@@ -2940,7 +2940,8 @@ rejectCall: 'Reject',
     playSpeed: 'Play Speed',
     voiceSelect: 'Select Voice',
     reading: 'Reading',
-    export: 'Export',
+
+    // Data export
     exportCSV: 'Export CSV',
     exportJSON: 'Export JSON',
     exportPDF: 'Export PDF',
