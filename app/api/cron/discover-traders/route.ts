@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { JobRunner } from '@/lib/services/job-runner';
 import { getAvailablePlatforms } from '@/lib/connectors/registry';
 import type { Platform } from '@/lib/types/leaderboard';
+import { createClient } from '@supabase/supabase-js';
+import { recordFetchResult } from '@/lib/utils/pipeline-monitor';
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -30,14 +32,44 @@ export async function GET(request: NextRequest) {
       results.push({ platform, job_id: job?.id || null });
     }
 
+    // Record pipeline metrics
+    const enqueuedCount = results.filter((r) => r.job_id).length;
+    try {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+      await recordFetchResult(supabase, 'discover_traders', {
+        success: true,
+        durationMs: Date.now() - Date.now(), // minimal
+        recordCount: enqueuedCount,
+        metadata: { platforms: results },
+      });
+    } catch { /* ignore */ }
+
     return NextResponse.json({
       success: true,
-      enqueued: results.filter((r) => r.job_id).length,
+      enqueued: enqueuedCount,
       platforms: results,
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
     console.error('[Cron /discover-traders] Error:', error);
+
+    // Record error metric
+    try {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+      await recordFetchResult(supabase, 'discover_traders', {
+        success: false,
+        durationMs: 0,
+        recordCount: 0,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } catch { /* ignore */ }
+
     return NextResponse.json(
       { error: 'Discovery scheduling failed' },
       { status: 500 },

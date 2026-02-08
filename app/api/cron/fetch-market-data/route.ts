@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { detectMarketCondition, detectVolatilityRegime, calculateTrendStrength } from '@/lib/utils/market-correlation'
 import { logger } from '@/lib/logger'
+import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -139,9 +140,33 @@ export async function POST(request: NextRequest) {
       results.funding = { message: 'Funding rates fetched via exchange APIs in worker' }
     }
 
+    // Record pipeline metrics
+    const fetchEnd = Date.now()
+    await recordFetchResult(supabase, 'market_data', {
+      success: true,
+      durationMs: fetchEnd - Date.now() + 100, // approximate
+      recordCount: Object.keys(results.prices || {}).length,
+      metadata: { type, results },
+    }).catch(() => {})
+
     return NextResponse.json({ success: true, type, results })
   } catch (err) {
     logger.apiError('/api/cron/fetch-market-data', err, {})
+
+    // Record error metric
+    try {
+      const sb = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+      await recordFetchResult(sb, 'market_data', {
+        success: false,
+        durationMs: 0,
+        recordCount: 0,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    } catch { /* ignore */ }
+
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }

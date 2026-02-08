@@ -13,6 +13,7 @@ import {
   getSupabaseEnv,
 } from '@/lib/cron/utils'
 import { logger } from '@/lib/logger'
+import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -63,9 +64,21 @@ export async function GET(request: Request, { params }: Params) {
 
     const result = await fetcher(supabase, ['7D', '30D', '90D'])
 
-    // 5) Return result
+    // 5) Record pipeline metrics
     const hasErrors = Object.values(result.periods).some((p) => p.error)
+    const totalSaved = Object.values(result.periods).reduce((sum, p) => sum + (p.saved || 0), 0)
 
+    await recordFetchResult(supabase, result.source, {
+      success: !hasErrors,
+      durationMs: result.duration,
+      recordCount: totalSaved,
+      error: hasErrors
+        ? Object.entries(result.periods).filter(([, p]) => p.error).map(([k, p]) => `${k}: ${p.error}`).join('; ')
+        : undefined,
+      metadata: { periods: result.periods },
+    })
+
+    // 6) Return result
     return NextResponse.json({
       ok: !hasErrors,
       platform: result.source,
@@ -76,6 +89,19 @@ export async function GET(request: Request, { params }: Params) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error)
     logger.apiError(`/api/cron/fetch-traders/${platform}`, error, { platform })
+
+    // Record error metric
+    try {
+      const supabase = createSupabaseAdmin()
+      if (supabase) {
+        await recordFetchResult(supabase, platform, {
+          success: false,
+          durationMs: 0,
+          recordCount: 0,
+          error: msg,
+        })
+      }
+    } catch { /* ignore metric recording failures */ }
 
     return NextResponse.json(
       { ok: false, platform, error: msg },
