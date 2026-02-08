@@ -18,6 +18,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import FilterPresets, { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import ExchangeFilter from '../ranking/ExchangeFilter'
+import HeroSection from '../ranking/HeroSection'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -622,6 +623,26 @@ export default function RankingSection({
         </Box>
       )}
 
+      {/* Top 10 Hero Section */}
+      {!loading && advancedFiltered.length >= 3 && (
+        <HeroSection traders={advancedFiltered.slice(0, 10)} />
+      )}
+
+      {/* Exchange trader count hint */}
+      {!loading && selectedExchange && advancedFiltered.length > 0 && advancedFiltered.length < 20 && (
+        <Box style={{
+          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+          marginBottom: tokens.spacing[2],
+          textAlign: 'center',
+          fontSize: tokens.typography.fontSize.sm,
+          color: tokens.colors.text.tertiary,
+          background: tokens.glass.bg.light,
+          borderRadius: tokens.radius.md,
+        }}>
+          {`该平台共 ${advancedFiltered.length} 名交易员`}
+        </Box>
+      )}
+
       <RankingTable
         traders={filteredTraders}
         loading={loading || premiumLoading}
@@ -646,36 +667,53 @@ export default function RankingSection({
         onSearchChange={handleSearchChange}
       />
 
-      {/* Free user limit prompt */}
+      {/* Free user limit prompt - glassmorphism overlay */}
       {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
         <Box
           style={{
-            marginTop: tokens.spacing[2],
-            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            background: `${tokens.colors.accent.primary}08`,
-            border: `1px solid ${tokens.colors.accent.primary}20`,
-            borderRadius: tokens.radius.md,
+            marginTop: -60,
+            position: 'relative',
+            zIndex: 10,
+            paddingTop: 60,
+            background: 'linear-gradient(180deg, transparent 0%, rgba(15,15,30,0.7) 30%, rgba(15,15,30,0.95) 100%)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
             textAlign: 'center',
-            fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.text.secondary,
+            paddingBottom: tokens.spacing[6],
           }}
         >
-          {t('freeUserLimit').replace('{limit}', String(FREE_LEADERBOARD_LIMIT)).replace('{total}', String(advancedFiltered.length))}
-          <button
-            onClick={() => router.push('/pricing')}
-            style={{
-              color: tokens.colors.accent.primary,
-              fontWeight: tokens.typography.fontWeight.bold,
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: 0,
-              fontSize: 'inherit',
-            }}
-          >
-            {t('upgradeProFull')}
-          </button>
+          <Box style={{
+            padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: tokens.spacing[3],
+          }}>
+            <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary }}>
+              {`升级 Pro 查看全部 ${advancedFiltered.length} 名交易员`}
+            </Text>
+            <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
+              {`当前仅显示前 ${FREE_LEADERBOARD_LIMIT} 名`}
+            </Text>
+            <button
+              onClick={() => router.push('/pricing')}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                border: 'none',
+                borderRadius: tokens.radius.md,
+                color: '#fff',
+                fontWeight: tokens.typography.fontWeight.bold,
+                fontSize: tokens.typography.fontSize.sm,
+                cursor: 'pointer',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
+              }}
+            >
+              {t('upgradeProFull')}
+            </button>
+          </Box>
         </Box>
       )}
 

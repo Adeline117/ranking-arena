@@ -472,10 +472,10 @@ function RankingTableInner(props: {
         language={language}
       />
 
-      {/* Table Header (only in table view) */}
+      {/* Table Header (only in table view) - sticky */}
       {viewMode === 'table' && (
       <Box className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
-        style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'transparent' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0` }}>
+        style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'rgba(15,15,30,0.98)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 0, zIndex: 20, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
         <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>{t('rank')}</Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: '12px' }}>{t('trader')}</Text>
@@ -553,34 +553,43 @@ function RankingTableInner(props: {
           )}
         </Box>
       ) : sortedTraders.length === 0 ? (
-        <Box style={{ padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
-          <Text size="md" color="tertiary">
+        <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[4]}`, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[4] }}>
+          <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.3, color: tokens.colors.text.tertiary }}>
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+          </svg>
+          <Text size="md" weight="semibold" style={{ color: tokens.colors.text.secondary }}>
             {debouncedSearch.trim() || hasActiveFilters
-              ? t('noResults')
+              ? '没有符合条件的交易员'
               : t('noTraderData')}
           </Text>
           {(debouncedSearch.trim() || hasActiveFilters) && (
-            <button
-              onClick={() => {
-                if (debouncedSearch.trim()) {
-                  if (onSearchChange) onSearchChange('')
-                  else setInternalSearchQuery('')
-                }
-              }}
-              style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
-                background: `${tokens.colors.accent.primary}20`,
-                border: `1px solid ${tokens.colors.accent.primary}40`,
-                borderRadius: tokens.radius.md,
-                color: tokens.colors.accent.primary,
-                cursor: 'pointer',
-                fontSize: tokens.typography.fontSize.sm,
-                fontWeight: tokens.typography.fontWeight.bold,
-                transition: `all ${tokens.transition.base}`,
-              }}
-            >
-              {t('clearSearch')}
-            </button>
+            <>
+              <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
+                试试放宽筛选条件
+              </Text>
+              <button
+                onClick={() => {
+                  if (debouncedSearch.trim()) {
+                    if (onSearchChange) onSearchChange('')
+                    else setInternalSearchQuery('')
+                  }
+                }}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                  background: `${tokens.colors.accent.primary}20`,
+                  border: `1px solid ${tokens.colors.accent.primary}40`,
+                  borderRadius: tokens.radius.md,
+                  color: tokens.colors.accent.primary,
+                  cursor: 'pointer',
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  transition: `all ${tokens.transition.base}`,
+                }}
+              >
+                {t('clearSearch')}
+              </button>
+            </>
           )}
         </Box>
       ) : viewMode === 'card' ? (
