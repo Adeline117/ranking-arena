@@ -2376,8 +2376,8 @@ const en = {
     noRecommendations: 'No recommendations',
 
     // GroupPostList
-    joinToViewPosts: 'Join to view posts',
-    joinToViewPostsDesc: 'Join the group to view posts, comments, and participate in discussions',
+    joinToViewPosts: 'Join to participate',
+    joinToViewPostsDesc: 'Join the group to post and comment. Everyone can view and like.',
     joiningGroup: 'Joining...',
     loginToJoin: 'Login to join',
     listView: 'List view',

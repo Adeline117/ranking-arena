@@ -2377,8 +2377,8 @@ const zh = {
     noRecommendations: '暂无推荐',
 
     // 小组帖子列表
-    joinToViewPosts: '加入小组查看帖子',
-    joinToViewPostsDesc: '加入小组后可以查看帖子、评论和参与讨论',
+    joinToViewPosts: '加入小组参与互动',
+    joinToViewPostsDesc: '加入小组后可以发帖和评论，所有人都可以查看和点赞',
     joiningGroup: '加入中...',
     loginToJoin: '登录后加入',
     listView: '列表视图',
