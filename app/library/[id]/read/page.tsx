@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -20,8 +20,6 @@ type BookInfo = {
   is_free: boolean
 }
 
-type ContentMode = 'pdf' | 'web' | 'none'
-
 type ReadingTheme = 'white' | 'sepia' | 'dark' | 'green'
 
 type TocItem = {
@@ -33,41 +31,19 @@ type TocItem = {
 
 // ─── Constants ───────────────────────────────────────────────────────
 
-const THEME_PRESETS: Record<ReadingTheme, { bg: string; text: string; label: string; labelZh: string; dot: string }> = {
-  white:  { bg: '#FFFFFF', text: '#1a1a1a', label: 'White',  labelZh: '白色',   dot: '#FFFFFF' },
-  sepia:  { bg: '#F4ECD8', text: '#5b4636', label: 'Sepia',  labelZh: '暖黄',   dot: '#F4ECD8' },
-  dark:   { bg: '#1a1a2e', text: '#d4d4d8', label: 'Dark',   labelZh: '暗黑',   dot: '#1a1a2e' },
-  green:  { bg: '#C7EDCC', text: '#2d4a32', label: 'Green',  labelZh: '护眼绿', dot: '#C7EDCC' },
+const THEME_PRESETS: Record<ReadingTheme, { bg: string; pageBg: string; text: string; label: string; labelZh: string; dot: string }> = {
+  white:  { bg: '#e8e4df', pageBg: '#FFFFFF', text: '#1a1a1a', label: 'White',  labelZh: '白色',   dot: '#FFFFFF' },
+  sepia:  { bg: '#d4cbb8', pageBg: '#F4ECD8', text: '#5b4636', label: 'Sepia',  labelZh: '暖黄',   dot: '#F4ECD8' },
+  dark:   { bg: '#0f0f1a', pageBg: '#1a1a2e', text: '#d4d4d8', label: 'Dark',   labelZh: '暗黑',   dot: '#1a1a2e' },
+  green:  { bg: '#a8d4ad', pageBg: '#C7EDCC', text: '#2d4a32', label: 'Green',  labelZh: '护眼绿', dot: '#C7EDCC' },
 }
-
-const FONT_SIZES = [14, 16, 18, 20, 24]
-const LINE_HEIGHTS: { value: number; label: string; labelZh: string }[] = [
-  { value: 1.4, label: 'Compact', labelZh: '紧凑' },
-  { value: 1.6, label: 'Normal',  labelZh: '正常' },
-  { value: 2.0, label: 'Relaxed', labelZh: '宽松' },
-]
 
 const LS_PREFIX = 'reader_'
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function isPdfUrl(url: string | null): boolean {
-  if (!url) return false
-  const lower = url.toLowerCase()
-  return lower.endsWith('.pdf') || lower.includes('.pdf?') || lower.includes('/pdf/') || lower.includes('type=pdf')
-}
-
-function getContentMode(book: BookInfo): ContentMode {
-  if (book.pdf_url) return 'pdf'
-  if (book.source_url && isPdfUrl(book.source_url)) return 'pdf'
-  if (book.source_url) return 'web'
-  return 'none'
-}
-
 function getContentUrl(book: BookInfo): string | null {
-  if (book.pdf_url) return book.pdf_url
-  if (book.source_url) return book.source_url
-  return null
+  return book.pdf_url || book.source_url || null
 }
 
 function lsGet<T>(key: string, fallback: T): T {
@@ -83,22 +59,28 @@ function lsSet(key: string, value: unknown) {
   try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)) } catch {}
 }
 
-// ─── SVG Icons (geometric, no emoji) ─────────────────────────────────
+// ─── SVG Icons ───────────────────────────────────────────────────────
 
 function IconBack() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
 }
 function IconToc() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
 }
-function IconFont() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 20h16"/><path d="M7 4h10l-5 16"/></svg>
+function IconSettings() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
 }
 function IconFullscreen() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
 }
 function IconClose() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+}
+function IconChevronLeft() {
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+}
+function IconChevronRight() {
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
 }
 
 // ─── Main Component ──────────────────────────────────────────────────
@@ -117,70 +99,64 @@ export default function ReadPage() {
   const [needsUpgrade, setNeedsUpgrade] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  // Bookshelf prompt state
-  const [showBookshelfPrompt, setShowBookshelfPrompt] = useState(false)
-  const [addedToShelf, setAddedToShelf] = useState(false)
-  const bookshelfPromptShown = useRef(false)
-
   // PDF state
   const [pdfDoc, setPdfDoc] = useState<any>(null)
   const [totalPages, setTotalPages] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
   const [pdfLoading, setPdfLoading] = useState(false)
-  const [renderedPages, setRenderedPages] = useState<Set<number>>(new Set())
-  const [currentVisiblePage, setCurrentVisiblePage] = useState(1)
+  const [pageRendering, setPageRendering] = useState(false)
   const [toc, setToc] = useState<TocItem[]>([])
 
   // Reading preferences
-  const [theme, setTheme] = useState<ReadingTheme>(() => lsGet('theme', 'white'))
-  const [fontSize, setFontSize] = useState(() => lsGet('fontSize', 2)) // index into FONT_SIZES
-  const [lineHeight, setLineHeight] = useState(() => lsGet('lineHeight', 1)) // index into LINE_HEIGHTS
+  const [theme, setTheme] = useState<ReadingTheme>(() => lsGet('theme', 'dark'))
 
   // UI state
   const [showToolbar, setShowToolbar] = useState(true)
   const [showToc, setShowToc] = useState(false)
-  const [showFontPanel, setShowFontPanel] = useState(false)
-  const [showResumePrompt, setShowResumePrompt] = useState(false)
-  const [savedScrollRatio, setSavedScrollRatio] = useState<number | null>(null)
-  const [progressPercent, setProgressPercent] = useState(0)
-  const [isDraggingProgress, setIsDraggingProgress] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [flipDirection, setFlipDirection] = useState<'left' | 'right' | null>(null)
+
+  // Bookshelf prompt
+  const [showBookshelfPrompt, setShowBookshelfPrompt] = useState(false)
+  const [addedToShelf, setAddedToShelf] = useState(false)
+  const bookshelfPromptShown = useRef(false)
 
   // Refs
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
-  const lastScrollY = useRef(0)
-  const toolbarTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const pdfDocRef = useRef<any>(null)
+  const renderTaskRef = useRef<any>(null)
+  const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
+  const toolbarTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const pageInputRef = useRef<HTMLInputElement>(null)
 
   const themeColors = THEME_PRESETS[theme]
 
   // Persist preferences
   useEffect(() => { lsSet('theme', theme) }, [theme])
-  useEffect(() => { lsSet('fontSize', fontSize) }, [fontSize])
-  useEffect(() => { lsSet('lineHeight', lineHeight) }, [lineHeight])
 
   // ─── Fetch book ────────────────────────────────────────────────────
   useEffect(() => {
     if (!id) return
     setLoading(true)
-
-    // Check auth
-    supabase.auth.getUser().then(({ data }) => {
-      setIsLoggedIn(!!data.user)
-    })
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user))
 
     fetch(`/api/library/${id}`)
       .then(r => r.json())
       .then(data => {
         if (!data.item) { setError(isZh ? '未找到该书籍' : 'Book not found'); return }
         const item = data.item
-        if (!item.pdf_url && !item.source_url) { setError(isZh ? '该书籍暂无阅读资源' : 'No reading resource available'); return }
+        if (!item.pdf_url && !item.source_url) {
+          setError(isZh ? '该书籍暂无阅读资源' : 'No reading resource available')
+          return
+        }
         setBook(item)
       })
       .catch(() => setError(isZh ? '加载失败' : 'Failed to load'))
       .finally(() => setLoading(false))
   }, [id, isZh])
 
-  // Check membership after premium state is loaded
+  // Check membership
   useEffect(() => {
     if (premiumLoading) return
     if (!isPremium && book) {
@@ -190,7 +166,7 @@ export default function ReadPage() {
     }
   }, [isPremium, premiumLoading, book])
 
-  // Show bookshelf prompt after 2 minutes of reading
+  // Bookshelf prompt after 2 min
   useEffect(() => {
     if (!book || needsUpgrade || addedToShelf || bookshelfPromptShown.current) return
     const timer = setTimeout(() => {
@@ -198,37 +174,27 @@ export default function ReadPage() {
         bookshelfPromptShown.current = true
         setShowBookshelfPrompt(true)
       }
-    }, 120000) // 2 minutes
+    }, 120000)
     return () => clearTimeout(timer)
   }, [book, needsUpgrade, addedToShelf])
 
-  // Add to bookshelf handler
   const handleAddToShelf = useCallback(async () => {
     if (!id || !isLoggedIn) return
     try {
-      const { supabase } = await import('@/lib/supabase/client')
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       const res = await fetch(`/api/library/${id}/status`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ status: 'want_to_read' }),
       })
-      if (res.ok) {
-        setAddedToShelf(true)
-        setShowBookshelfPrompt(false)
-      }
+      if (res.ok) { setAddedToShelf(true); setShowBookshelfPrompt(false) }
     } catch {}
   }, [id, isLoggedIn])
 
   // ─── Load PDF ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!book) return
-    const mode = getContentMode(book)
-    if (mode !== 'pdf') return
     const url = getContentUrl(book)
     if (!url) return
 
@@ -239,7 +205,7 @@ export default function ReadPage() {
       try {
         const pdfjsLib = await import('pdfjs-dist')
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
-        const doc = await pdfjsLib.getDocument({ url: url || '', disableAutoFetch: false, disableStream: false }).promise
+        const doc = await pdfjsLib.getDocument({ url: url!, disableAutoFetch: false, disableStream: false }).promise
         if (cancelled) return
         setPdfDoc(doc)
         pdfDocRef.current = doc
@@ -248,21 +214,19 @@ export default function ReadPage() {
         // Extract TOC
         try {
           const outline = await doc.getOutline()
-          if (outline && outline.length > 0) {
+          if (outline?.length > 0) {
             const tocItems = await extractToc(doc, outline, 0)
             setToc(tocItems)
           }
         } catch {}
 
-        // Check saved progress
-        const saved = lsGet(`progress_${id}`, null) as number | null
-        if (saved !== null && saved > 0.02) {
-          setSavedScrollRatio(saved)
-          setShowResumePrompt(true)
+        // Restore reading progress
+        const saved = lsGet<{ page: number; total: number; lastRead: number } | null>(`progress_${id}`, null)
+        if (saved && saved.page > 1 && saved.page <= doc.numPages) {
+          setCurrentPage(saved.page)
         }
-      } catch (err: any) {
-        if (cancelled) return
-        setError(isZh ? '无法加载 PDF，可能是跨域限制' : 'Unable to load PDF, possibly due to CORS restrictions')
+      } catch {
+        if (!cancelled) setError(isZh ? '无法加载 PDF' : 'Unable to load PDF')
       } finally {
         if (!cancelled) setPdfLoading(false)
       }
@@ -279,10 +243,7 @@ export default function ReadPage() {
       try {
         if (entry.dest) {
           const dest = typeof entry.dest === 'string' ? await doc.getDestination(entry.dest) : entry.dest
-          if (dest) {
-            const ref = dest[0]
-            pageIndex = await doc.getPageIndex(ref)
-          }
+          if (dest) { pageIndex = await doc.getPageIndex(dest[0]) }
         }
       } catch {}
       const children = entry.items?.length ? await extractToc(doc, entry.items, level + 1) : undefined
@@ -291,217 +252,206 @@ export default function ReadPage() {
     return items
   }
 
-  // ─── Render a single PDF page ──────────────────────────────────────
-  const renderPage = useCallback(async (pageNum: number, container: HTMLDivElement) => {
-    if (!pdfDocRef.current || renderedPages.has(pageNum)) return
-    setRenderedPages(prev => new Set(prev).add(pageNum))
+  // ─── Render current page ──────────────────────────────────────────
+  const renderCurrentPage = useCallback(async () => {
+    const doc = pdfDocRef.current
+    const canvas = canvasRef.current
+    if (!doc || !canvas) return
 
+    // Cancel previous render
+    if (renderTaskRef.current) {
+      try { renderTaskRef.current.cancel() } catch {}
+    }
+
+    setPageRendering(true)
     try {
-      const page = await pdfDocRef.current.getPage(pageNum)
+      const page = await doc.getPage(currentPage)
       const baseViewport = page.getViewport({ scale: 1 })
-      const containerWidth = Math.min(container.parentElement?.clientWidth || 800, 900) - 48
-      const scale = containerWidth / baseViewport.width
+
+      // Calculate scale to fit the canvas container
+      const container = canvas.parentElement
+      if (!container) return
+      const maxW = container.clientWidth - 16
+      const maxH = container.clientHeight - 16
+      const scaleW = maxW / baseViewport.width
+      const scaleH = maxH / baseViewport.height
+      const scale = Math.min(scaleW, scaleH)
       const viewport = page.getViewport({ scale })
 
-      const canvas = document.createElement('canvas')
-      canvas.width = viewport.width * (window.devicePixelRatio || 1)
-      canvas.height = viewport.height * (window.devicePixelRatio || 1)
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = viewport.width * dpr
+      canvas.height = viewport.height * dpr
       canvas.style.width = viewport.width + 'px'
       canvas.style.height = viewport.height + 'px'
-      canvas.style.display = 'block'
 
       const ctx = canvas.getContext('2d')!
-      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1)
+      ctx.scale(dpr, dpr)
 
-      container.innerHTML = ''
-      container.appendChild(canvas)
+      const task = page.render({ canvasContext: ctx, viewport })
+      renderTaskRef.current = task
+      await task.promise
 
-      await page.render({ canvasContext: ctx, viewport }).promise
+      // Save progress
+      if (id) {
+        lsSet(`progress_${id}`, { page: currentPage, total: totalPages, lastRead: Date.now() })
+      }
     } catch (err: any) {
       if (err?.name !== 'RenderingCancelledException') {
-        console.error('Render error page', pageNum, err)
+        console.error('Render error', err)
       }
+    } finally {
+      setPageRendering(false)
     }
-  }, [renderedPages])
+  }, [currentPage, totalPages, id])
 
-  // ─── IntersectionObserver for lazy rendering ───────────────────────
   useEffect(() => {
-    if (!pdfDoc || totalPages === 0) return
+    if (pdfDoc && totalPages > 0) renderCurrentPage()
+  }, [pdfDoc, currentPage, totalPages, renderCurrentPage])
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          const pageNum = Number(entry.target.getAttribute('data-page'))
-          if (entry.isIntersecting && pageNum) {
-            const container = entry.target as HTMLDivElement
-            renderPage(pageNum, container)
-          }
-        })
-      },
-      { root: scrollContainerRef.current, rootMargin: '200px 0px', threshold: 0 }
-    )
-
-    pageRefs.current.forEach((el) => observer.observe(el))
-    return () => observer.disconnect()
-  }, [pdfDoc, totalPages, renderPage])
-
-  // ─── Re-render all pages on resize ─────────────────────────────────
+  // Re-render on resize
   useEffect(() => {
     if (!pdfDoc) return
-    const handleResize = () => {
-      setRenderedPages(new Set())
+    let timeout: ReturnType<typeof setTimeout>
+    const onResize = () => {
+      clearTimeout(timeout)
+      timeout = setTimeout(renderCurrentPage, 200)
     }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [pdfDoc])
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); clearTimeout(timeout) }
+  }, [pdfDoc, renderCurrentPage])
 
-  // ─── Scroll tracking: progress, current page, toolbar auto-hide ───
-  useEffect(() => {
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    let ticking = false
-    const onScroll = () => {
-      if (ticking) return
-      ticking = true
-      requestAnimationFrame(() => {
-        ticking = false
-        const { scrollTop, scrollHeight, clientHeight } = container
-        const maxScroll = scrollHeight - clientHeight
-        const ratio = maxScroll > 0 ? scrollTop / maxScroll : 0
-        setProgressPercent(Math.round(ratio * 100))
-
-        // Save progress
-        if (id) lsSet(`progress_${id}`, ratio)
-
-        // Determine current visible page
-        if (totalPages > 0) {
-          const pageEst = Math.max(1, Math.min(totalPages, Math.ceil(ratio * totalPages) || 1))
-          setCurrentVisiblePage(pageEst)
-        }
-
-        // Toolbar auto-hide
-        const delta = scrollTop - lastScrollY.current
-        if (delta > 30) {
-          setShowToolbar(false)
-          setShowFontPanel(false)
-        } else if (delta < -10) {
-          setShowToolbar(true)
-        }
-        lastScrollY.current = scrollTop
-      })
+  // ─── Navigation ────────────────────────────────────────────────────
+  const goNext = useCallback(() => {
+    if (currentPage < totalPages) {
+      setFlipDirection('left')
+      setCurrentPage(p => p + 1)
+      setTimeout(() => setFlipDirection(null), 300)
     }
+  }, [currentPage, totalPages])
 
-    container.addEventListener('scroll', onScroll, { passive: true })
-    return () => container.removeEventListener('scroll', onScroll)
-  }, [totalPages, id])
-
-  // ─── Resume reading ────────────────────────────────────────────────
-  const resumeReading = useCallback(() => {
-    if (savedScrollRatio === null) return
-    const container = scrollContainerRef.current
-    if (!container) return
-    // Delay to let pages render
-    setTimeout(() => {
-      const maxScroll = container.scrollHeight - container.clientHeight
-      container.scrollTo({ top: maxScroll * savedScrollRatio, behavior: 'smooth' })
-    }, 500)
-    setShowResumePrompt(false)
-  }, [savedScrollRatio])
-
-  // ─── Jump to page ──────────────────────────────────────────────────
-  const jumpToPage = useCallback((pageIndex: number) => {
-    const el = pageRefs.current.get(pageIndex + 1)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const goPrev = useCallback(() => {
+    if (currentPage > 1) {
+      setFlipDirection('right')
+      setCurrentPage(p => p - 1)
+      setTimeout(() => setFlipDirection(null), 300)
     }
+  }, [currentPage])
+
+  const goToPage = useCallback((page: number) => {
+    const p = Math.max(1, Math.min(totalPages, page))
+    setCurrentPage(p)
     setShowToc(false)
-  }, [])
+  }, [totalPages])
 
-  // ─── Progress bar click/drag ───────────────────────────────────────
-  const handleProgressInteraction = useCallback((clientX: number, barElement: HTMLDivElement) => {
-    const rect = barElement.getBoundingClientRect()
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-    const container = scrollContainerRef.current
-    if (container) {
-      const maxScroll = container.scrollHeight - container.clientHeight
-      container.scrollTo({ top: maxScroll * ratio })
-    }
-  }, [])
-
-  // ─── Fullscreen ────────────────────────────────────────────────────
-  const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen()
-    } else {
-      document.documentElement.requestFullscreen()
-    }
-  }, [])
-
-  // ─── Keyboard shortcuts ────────────────────────────────────────────
+  // Keyboard navigation
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { setShowToc(false); setShowFontPanel(false) }
+      if (e.target instanceof HTMLInputElement) return
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); goNext() }
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goPrev() }
+      if (e.key === 'Home') { e.preventDefault(); goToPage(1) }
+      if (e.key === 'End') { e.preventDefault(); goToPage(totalPages) }
+      if (e.key === 'Escape') { setShowToc(false); setShowSettings(false) }
       if (e.key === 'f' && !e.metaKey && !e.ctrlKey) toggleFullscreen()
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [toggleFullscreen])
+  }, [goNext, goPrev, goToPage, totalPages])
+
+  // Touch swipe
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }, [])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    const dy = e.changedTouches[0].clientY - touchStartY.current
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      if (dx < 0) goNext()
+      else goPrev()
+    }
+  }, [goNext, goPrev])
+
+  // Click zones: left 25% = prev, right 25% = next, center = toggle toolbar
+  const handlePageClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Ignore if clicking buttons/inputs
+    if ((e.target as HTMLElement).closest('button, input, a')) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    if (x < 0.25) goPrev()
+    else if (x > 0.75) goNext()
+    else setShowToolbar(p => !p)
+  }, [goNext, goPrev])
+
+  // ─── Fullscreen ────────────────────────────────────────────────────
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) document.exitFullscreen()
+    else document.documentElement.requestFullscreen()
+  }, [])
+
+  // Auto-hide toolbar
+  useEffect(() => {
+    if (showToolbar) {
+      clearTimeout(toolbarTimeoutRef.current)
+      toolbarTimeoutRef.current = setTimeout(() => setShowToolbar(false), 4000)
+    }
+    return () => clearTimeout(toolbarTimeoutRef.current)
+  }, [showToolbar, currentPage])
+
+  // ─── Progress bar interaction ──────────────────────────────────────
+  const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    const page = Math.max(1, Math.round(ratio * totalPages))
+    goToPage(page)
+  }, [totalPages, goToPage])
 
   // ─── Render ────────────────────────────────────────────────────────
 
   if (loading || pdfLoading || premiumLoading) {
     return (
-      <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-        <div style={{ width: 40, height: 40, border: `3px solid ${tokens.colors.border.primary}`, borderTopColor: tokens.colors.accent.brand, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
+      <div style={{ minHeight: '100vh', background: '#0f0f1a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div style={{ width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: tokens.colors.accent.brand, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>
           {pdfLoading ? (isZh ? '正在加载文档...' : 'Loading document...') : (isZh ? '加载中...' : 'Loading...')}
         </p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     )
   }
 
   if (error || !book) {
     return (
-      <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.5 }}>
+      <div style={{ minHeight: '100vh', background: '#0f0f1a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" style={{ marginBottom: 16 }}>
           <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
         </svg>
-        <p style={{ color: tokens.colors.text.secondary, fontSize: 16, marginBottom: 16, textAlign: 'center' }}>{error || (isZh ? '无法加载阅读器' : 'Unable to load reader')}</p>
-        <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: tokens.colors.accent.brand, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 16, marginBottom: 16, textAlign: 'center' }}>{error}</p>
+        <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: 12, background: tokens.colors.accent.brand, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
           {isZh ? '返回书籍详情' : 'Back to Book'}
         </Link>
       </div>
     )
   }
 
-  // ─── Membership gate ────────────────────────────────────────────────
   if (needsUpgrade) {
     return (
-      <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ minHeight: '100vh', background: '#0f0f1a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="1.5" style={{ marginBottom: 16 }}>
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        <h2 style={{ color: tokens.colors.text.primary, fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+        <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
           {isZh ? '升级会员解锁阅读' : 'Upgrade to unlock reading'}
         </h2>
-        <p style={{ color: tokens.colors.text.secondary, fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400 }}>
-          {isZh ? '该书籍仅对会员开放，升级会员即可畅读所有付费内容。' : 'This book is available to members only. Upgrade to read all premium content.'}
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400 }}>
+          {isZh ? '该书籍仅对会员开放，升级会员即可畅读所有付费内容。' : 'This book is available to members only.'}
         </p>
         <div style={{ display: 'flex', gap: 12 }}>
-          <Link href="/membership" style={{
-            padding: '10px 24px', borderRadius: tokens.radius.lg,
-            background: tokens.gradient.primary, color: '#fff',
-            textDecoration: 'none', fontSize: 14, fontWeight: 600,
-            boxShadow: tokens.shadow.glow,
-          }}>
+          <Link href="/membership" style={{ padding: '10px 24px', borderRadius: 12, background: tokens.gradient.primary, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
             {isZh ? '升级会员' : 'Upgrade'}
           </Link>
-          <Link href={`/library/${id}`} style={{
-            padding: '10px 24px', borderRadius: tokens.radius.lg,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            color: tokens.colors.text.primary, textDecoration: 'none', fontSize: 14, fontWeight: 600,
-          }}>
+          <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
             {isZh ? '返回' : 'Back'}
           </Link>
         </div>
@@ -509,134 +459,158 @@ export default function ReadPage() {
     )
   }
 
-  const mode = getContentMode(book)
-  const contentUrl = getContentUrl(book)
-  const currentTheme = THEME_PRESETS[theme]
+  const progressPercent = totalPages > 0 ? Math.round((currentPage / totalPages) * 100) : 0
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: currentTheme.bg, color: currentTheme.text, transition: 'background 0.4s ease, color 0.4s ease' }}>
+    <div style={{
+      position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column',
+      background: themeColors.bg, color: themeColors.text,
+      transition: 'background 0.4s ease, color 0.4s ease',
+      userSelect: 'none', overflow: 'hidden',
+    }}>
 
-      {/* ─── Toolbar ─────────────────────────────────────── */}
+      {/* ─── Top Toolbar ─────────────────────────────────── */}
       <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
         transform: showToolbar ? 'translateY(0)' : 'translateY(-100%)',
-        transition: 'transform 0.3s ease',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '8px 16px',
-          background: theme === 'dark' ? 'rgba(26,26,46,0.95)' : 'rgba(255,255,255,0.92)',
-          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-          borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '10px 12px',
+          paddingTop: 'max(10px, env(safe-area-inset-top))',
+          background: theme === 'dark' ? 'rgba(15,15,26,0.96)' : 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
         }}>
-          {/* Back */}
-          <button onClick={() => router.push(`/library/${id}`)} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            color: currentTheme.text, background: 'none', border: 'none', cursor: 'pointer',
-            padding: '6px 8px', borderRadius: tokens.radius.md, fontSize: 13, opacity: 0.7,
-          }}>
-            <IconBack /> {isZh ? '返回' : 'Back'}
-          </button>
+          <ToolbarBtn onClick={() => router.push(`/library/${id}`)} title={isZh ? '返回' : 'Back'}>
+            <IconBack />
+          </ToolbarBtn>
 
-          {/* Title */}
-          <div style={{ flex: 1, overflow: 'hidden', textAlign: 'center' }}>
-            <p style={{ fontSize: 14, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{book.title}</p>
-            {book.author && <p style={{ fontSize: 11, margin: 0, opacity: 0.5 }}>{book.author}</p>}
+          <div style={{ flex: 1, overflow: 'hidden', textAlign: 'center', padding: '0 8px' }}>
+            <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {book.title}
+            </p>
+            {book.author && <p style={{ fontSize: 11, margin: 0, color: 'rgba(255,255,255,0.45)' }}>{book.author}</p>}
           </div>
 
-          {/* Theme picker */}
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            {(Object.keys(THEME_PRESETS) as ReadingTheme[]).map(t => (
-              <button key={t} onClick={() => setTheme(t)} title={isZh ? THEME_PRESETS[t].labelZh : THEME_PRESETS[t].label} style={{
-                width: 22, height: 22, borderRadius: '50%', border: theme === t ? `2px solid ${tokens.colors.accent.brand}` : `1px solid rgba(128,128,128,0.3)`,
-                background: THEME_PRESETS[t].dot, cursor: 'pointer', padding: 0, transition: 'border 0.2s',
-              }} />
-            ))}
-          </div>
-
-          {/* Font controls toggle */}
-          <button onClick={() => setShowFontPanel(p => !p)} style={{
-            display: 'inline-flex', alignItems: 'center', color: currentTheme.text,
-            background: showFontPanel ? (theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)') : 'none',
-            border: 'none', cursor: 'pointer', padding: '6px 8px', borderRadius: tokens.radius.md, opacity: 0.7,
-          }}>
-            <IconFont />
-          </button>
-
-          {/* TOC toggle */}
-          {mode === 'pdf' && toc.length > 0 && (
-            <button onClick={() => setShowToc(p => !p)} style={{
-              display: 'inline-flex', alignItems: 'center', color: currentTheme.text,
-              background: showToc ? (theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)') : 'none',
-              border: 'none', cursor: 'pointer', padding: '6px 8px', borderRadius: tokens.radius.md, opacity: 0.7,
-            }}>
+          {toc.length > 0 && (
+            <ToolbarBtn onClick={() => { setShowToc(p => !p); setShowSettings(false) }} active={showToc} title={isZh ? '目录' : 'Contents'}>
               <IconToc />
-            </button>
+            </ToolbarBtn>
           )}
-
-          {/* Fullscreen */}
-          <button onClick={toggleFullscreen} style={{
-            display: 'inline-flex', alignItems: 'center', color: currentTheme.text,
-            background: 'none', border: 'none', cursor: 'pointer', padding: '6px 8px', borderRadius: tokens.radius.md, opacity: 0.7,
-          }}>
+          <ToolbarBtn onClick={() => { setShowSettings(p => !p); setShowToc(false) }} active={showSettings} title={isZh ? '设置' : 'Settings'}>
+            <IconSettings />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={toggleFullscreen} title={isZh ? '全屏' : 'Fullscreen'}>
             <IconFullscreen />
-          </button>
+          </ToolbarBtn>
         </div>
-
-        {/* Font control panel */}
-        {showFontPanel && (
-          <div style={{
-            padding: '12px 20px',
-            background: theme === 'dark' ? 'rgba(26,26,46,0.95)' : 'rgba(255,255,255,0.95)',
-            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-            display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'center',
-          }}>
-            {/* Font size */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, opacity: 0.6 }}>{isZh ? '字号' : 'Size'}</span>
-              <div style={{ display: 'flex', gap: 2 }}>
-                {FONT_SIZES.map((s, i) => (
-                  <button key={s} onClick={() => setFontSize(i)} style={{
-                    width: 32, height: 32, borderRadius: tokens.radius.sm,
-                    border: fontSize === i ? `2px solid ${tokens.colors.accent.brand}` : `1px solid rgba(128,128,128,0.2)`,
-                    background: fontSize === i ? (theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)') : 'transparent',
-                    color: currentTheme.text, cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                  }}>{s}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Line height */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, opacity: 0.6 }}>{isZh ? '行距' : 'Spacing'}</span>
-              <div style={{ display: 'flex', gap: 2 }}>
-                {LINE_HEIGHTS.map((lh, i) => (
-                  <button key={lh.value} onClick={() => setLineHeight(i)} style={{
-                    padding: '4px 10px', borderRadius: tokens.radius.sm,
-                    border: lineHeight === i ? `2px solid ${tokens.colors.accent.brand}` : `1px solid rgba(128,128,128,0.2)`,
-                    background: lineHeight === i ? (theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)') : 'transparent',
-                    color: currentTheme.text, cursor: 'pointer', fontSize: 11,
-                  }}>{isZh ? lh.labelZh : lh.label}</button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ─── TOC Slide-out ───────────────────────────────── */}
+      {/* ─── Bottom Bar ──────────────────────────────────── */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100,
+        transform: showToolbar ? 'translateY(0)' : 'translateY(100%)',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}>
+        <div style={{
+          padding: '10px 16px',
+          paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
+          background: theme === 'dark' ? 'rgba(15,15,26,0.96)' : 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          {/* Progress bar */}
+          <div
+            onClick={handleProgressClick}
+            style={{
+              height: 6, borderRadius: 3, cursor: 'pointer', position: 'relative',
+              background: 'rgba(255,255,255,0.12)',
+            }}
+          >
+            <div style={{
+              height: '100%', borderRadius: 3,
+              width: `${progressPercent}%`,
+              background: tokens.colors.accent.brand,
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+
+          {/* Page controls */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <button
+              onClick={goPrev}
+              disabled={currentPage <= 1}
+              style={{
+                background: 'none', border: 'none', color: currentPage <= 1 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.7)',
+                cursor: currentPage <= 1 ? 'default' : 'pointer',
+                padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: 13, fontWeight: 500,
+              }}
+            >
+              <IconChevronLeft />
+              <span className="hide-mobile">{isZh ? '上一页' : 'Prev'}</span>
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+              <input
+                ref={pageInputRef}
+                type="number"
+                value={currentPage}
+                onChange={e => {
+                  const val = parseInt(e.target.value)
+                  if (!isNaN(val)) goToPage(val)
+                }}
+                style={{
+                  width: 48, textAlign: 'center', background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6,
+                  color: '#fff', fontSize: 13, fontWeight: 600, padding: '3px 4px',
+                  outline: 'none',
+                }}
+                min={1}
+                max={totalPages}
+              />
+              <span>/ {totalPages}</span>
+              <span style={{ marginLeft: 8, opacity: 0.5 }}>{progressPercent}%</span>
+            </div>
+
+            <button
+              onClick={goNext}
+              disabled={currentPage >= totalPages}
+              style={{
+                background: 'none', border: 'none', color: currentPage >= totalPages ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.7)',
+                cursor: currentPage >= totalPages ? 'default' : 'pointer',
+                padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: 13, fontWeight: 500,
+              }}
+            >
+              <span className="hide-mobile">{isZh ? '下一页' : 'Next'}</span>
+              <IconChevronRight />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── TOC Drawer ──────────────────────────────────── */}
       {showToc && (
         <>
-          <div onClick={() => setShowToc(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 200 }} />
+          <div onClick={() => setShowToc(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200 }} />
           <div style={{
-            position: 'fixed', top: 0, left: 0, bottom: 0, width: 300, maxWidth: '80vw', zIndex: 201,
-            background: theme === 'dark' ? '#1e1e3a' : '#fff',
-            boxShadow: tokens.shadow.xl, overflow: 'auto', padding: '16px 0',
+            position: 'fixed', top: 0, left: 0, bottom: 0, width: 320, maxWidth: '85vw', zIndex: 201,
+            background: theme === 'dark' ? '#16162a' : '#fff',
+            boxShadow: '4px 0 24px rgba(0,0,0,0.3)', overflow: 'auto',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px 12px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: currentTheme.text }}>{isZh ? '目录' : 'Table of Contents'}</span>
-              <button onClick={() => setShowToc(false)} style={{ background: 'none', border: 'none', color: currentTheme.text, cursor: 'pointer', padding: 4, opacity: 0.6 }}><IconClose /></button>
+            <div style={{
+              position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 16px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'}`,
+              background: theme === 'dark' ? '#16162a' : '#fff',
+            }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: theme === 'dark' ? '#fff' : '#1a1a1a' }}>
+                {isZh ? '目录' : 'Contents'}
+              </span>
+              <button onClick={() => setShowToc(false)} style={{ background: 'none', border: 'none', color: theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)', cursor: 'pointer', padding: 4 }}>
+                <IconClose />
+              </button>
             </div>
             <div style={{ padding: '8px 0' }}>
               {renderTocItems(toc)}
@@ -645,187 +619,174 @@ export default function ReadPage() {
         </>
       )}
 
-      {/* ─── Resume prompt ────────────────────────────────── */}
-      {showResumePrompt && (
-        <div style={{
-          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 300,
-          background: theme === 'dark' ? '#2a2a4a' : '#fff',
-          boxShadow: tokens.shadow.lg, borderRadius: tokens.radius.lg,
-          padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12,
-          border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
-        }}>
-          <span style={{ fontSize: 13, color: currentTheme.text }}>{isZh ? '继续上次阅读?' : 'Continue where you left off?'}</span>
-          <button onClick={resumeReading} style={{
-            padding: '6px 14px', borderRadius: tokens.radius.md,
-            background: tokens.colors.accent.brand, color: '#fff', border: 'none',
-            cursor: 'pointer', fontSize: 12, fontWeight: 600,
-          }}>{isZh ? '继续' : 'Resume'}</button>
-          <button onClick={() => setShowResumePrompt(false)} style={{
-            padding: '6px 14px', borderRadius: tokens.radius.md,
-            background: 'transparent', color: currentTheme.text, border: `1px solid rgba(128,128,128,0.3)`,
-            cursor: 'pointer', fontSize: 12, opacity: 0.7,
-          }}>{isZh ? '从头开始' : 'Start over'}</button>
-        </div>
+      {/* ─── Settings Panel ──────────────────────────────── */}
+      {showSettings && (
+        <>
+          <div onClick={() => setShowSettings(false)} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
+          <div style={{
+            position: 'fixed', top: 56, right: 12, zIndex: 201,
+            background: theme === 'dark' ? '#1e1e36' : '#fff',
+            borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            padding: '20px 24px', width: 260,
+            border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'}`,
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, opacity: 0.6 }}>
+              {isZh ? '阅读主题' : 'Reading Theme'}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              {(Object.keys(THEME_PRESETS) as ReadingTheme[]).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTheme(t)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                  }}
+                >
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: THEME_PRESETS[t].dot,
+                    border: theme === t ? `3px solid ${tokens.colors.accent.brand}` : `2px solid ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`,
+                    transition: 'border 0.2s',
+                    boxShadow: theme === t ? `0 0 0 2px ${tokens.colors.accent.brand}40` : 'none',
+                  }} />
+                  <span style={{
+                    fontSize: 11, color: theme === t ? tokens.colors.accent.brand : (theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'),
+                    fontWeight: theme === t ? 600 : 400,
+                  }}>
+                    {isZh ? THEME_PRESETS[t].labelZh : THEME_PRESETS[t].label}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div style={{
+              marginTop: 18, paddingTop: 14,
+              borderTop: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+            }}>
+              <p style={{ fontSize: 11, opacity: 0.4, textAlign: 'center' }}>
+                {isZh ? '快捷键: 左右方向键翻页, F 全屏' : 'Keys: Arrow keys to flip, F fullscreen'}
+              </p>
+            </div>
+          </div>
+        </>
       )}
 
-      {/* ─── Content area ─────────────────────────────────── */}
-      {mode === 'pdf' ? (
-        <div
-          ref={scrollContainerRef}
-          onClick={() => setShowToolbar(p => !p)}
-          style={{
-            flex: 1, overflow: 'auto', paddingTop: 56, paddingBottom: 48,
-            WebkitOverflowScrolling: 'touch',
-          }}
-        >
-          <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 0' }}>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
-              <div
-                key={pageNum}
-                data-page={pageNum}
-                ref={el => { if (el) pageRefs.current.set(pageNum, el) }}
-                style={{
-                  minHeight: 400, marginBottom: 8, display: 'flex',
-                  justifyContent: 'center', alignItems: 'flex-start',
-                  background: theme === 'white' ? '#fff' : 'transparent',
-                  boxShadow: theme !== 'dark' ? tokens.shadow.sm : 'none',
-                  borderRadius: 2,
-                }}
-              />
-            ))}
+      {/* ─── Page Content ─────────────────────────────────── */}
+      <div
+        style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', overflow: 'hidden',
+        }}
+        onClick={handlePageClick}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Left zone hint */}
+        {currentPage > 1 && (
+          <div style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0, width: '25%', zIndex: 10,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+            paddingLeft: 8,
+          }}>
+            <div className="nav-hint nav-hint-left" style={{ opacity: 0, transition: 'opacity 0.2s', color: themeColors.text }}>
+              <IconChevronLeft />
+            </div>
           </div>
-        </div>
-      ) : mode === 'web' && contentUrl ? (
-        <div ref={scrollContainerRef} style={{ flex: 1, position: 'relative', paddingTop: 56, paddingBottom: 48 }}>
-          <iframe
-            src={contentUrl}
-            style={{ width: '100%', height: 'calc(100vh - 104px)', border: 'none' }}
-            title={book.title || 'Reader'}
-            sandbox="allow-scripts allow-same-origin allow-forms"
-            loading="lazy"
-          />
-        </div>
-      ) : null}
-
-      {/* ─── Bottom progress bar ──────────────────────────── */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-        background: theme === 'dark' ? 'rgba(26,26,46,0.95)' : 'rgba(255,255,255,0.92)',
-        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        borderTop: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
-        padding: '6px 16px', display: 'flex', alignItems: 'center', gap: 12,
-      }}>
-        {/* Page indicator */}
-        {mode === 'pdf' && totalPages > 0 && (
-          <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: 'nowrap', minWidth: 60 }}>
-            {currentVisiblePage} / {totalPages}
-          </span>
         )}
 
-        {/* Progress bar */}
-        <div
-          style={{ flex: 1, height: 4, background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderRadius: 2, cursor: 'pointer', position: 'relative' }}
-          onMouseDown={(e) => {
-            setIsDraggingProgress(true)
-            handleProgressInteraction(e.clientX, e.currentTarget)
-            const bar = e.currentTarget
-            const onMove = (ev: MouseEvent) => handleProgressInteraction(ev.clientX, bar)
-            const onUp = () => { setIsDraggingProgress(false); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-            window.addEventListener('mousemove', onMove)
-            window.addEventListener('mouseup', onUp)
-          }}
-          onTouchStart={(e) => {
-            const bar = e.currentTarget
-            handleProgressInteraction(e.touches[0].clientX, bar)
-            const onMove = (ev: TouchEvent) => handleProgressInteraction(ev.touches[0].clientX, bar)
-            const onEnd = () => { bar.removeEventListener('touchmove', onMove); bar.removeEventListener('touchend', onEnd) }
-            bar.addEventListener('touchmove', onMove, { passive: true })
-            bar.addEventListener('touchend', onEnd)
-          }}
-        >
+        {/* Right zone hint */}
+        {currentPage < totalPages && (
           <div style={{
-            height: '100%', borderRadius: 2, width: `${progressPercent}%`,
-            background: tokens.colors.accent.brand, transition: isDraggingProgress ? 'none' : 'width 0.2s ease',
-          }} />
-          {/* Drag handle */}
-          <div style={{
-            position: 'absolute', top: '50%', left: `${progressPercent}%`, transform: 'translate(-50%, -50%)',
-            width: 12, height: 12, borderRadius: '50%', background: tokens.colors.accent.brand,
-            boxShadow: tokens.shadow.sm, opacity: isDraggingProgress ? 1 : 0,
-            transition: 'opacity 0.2s',
-          }} />
+            position: 'absolute', right: 0, top: 0, bottom: 0, width: '25%', zIndex: 10,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+            paddingRight: 8,
+          }}>
+            <div className="nav-hint nav-hint-right" style={{ opacity: 0, transition: 'opacity 0.2s', color: themeColors.text }}>
+              <IconChevronRight />
+            </div>
+          </div>
+        )}
+
+        {/* Canvas container */}
+        <div style={{
+          width: '100%', height: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 8,
+        }}>
+          <canvas
+            ref={canvasRef}
+            style={{
+              maxWidth: '100%', maxHeight: '100%',
+              boxShadow: theme !== 'dark' ? '0 2px 20px rgba(0,0,0,0.15)' : '0 2px 20px rgba(0,0,0,0.4)',
+              borderRadius: 2,
+              background: themeColors.pageBg,
+              transform: flipDirection === 'left' ? 'translateX(0)' : flipDirection === 'right' ? 'translateX(0)' : 'none',
+              animation: flipDirection ? `page-flip-${flipDirection} 0.3s ease` : 'none',
+            }}
+          />
         </div>
 
-        {/* Percentage */}
-        <span style={{ fontSize: 11, opacity: 0.6, minWidth: 32, textAlign: 'right' }}>{progressPercent}%</span>
+        {/* Page loading indicator */}
+        {pageRendering && (
+          <div style={{
+            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            width: 24, height: 24, border: '2px solid rgba(128,128,128,0.2)',
+            borderTopColor: tokens.colors.accent.brand, borderRadius: '50%',
+            animation: 'spin 0.6s linear infinite', zIndex: 5,
+          }} />
+        )}
       </div>
 
       {/* Bookshelf prompt */}
       {showBookshelfPrompt && !addedToShelf && (
         <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 200,
-          background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.xl, padding: '16px 20px',
-          boxShadow: tokens.shadow.lg, maxWidth: 320,
+          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 150,
+          background: theme === 'dark' ? '#2a2a4a' : '#fff',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)', borderRadius: 16,
+          padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12,
+          border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
           animation: 'slideUp 0.3s ease',
         }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 6 }}>
-            {isZh ? '觉得不错？' : 'Enjoying this?'}
-          </p>
-          <p style={{ fontSize: 13, color: tokens.colors.text.secondary, marginBottom: 14 }}>
-            {isZh ? '加入书架，方便下次继续阅读' : 'Add to your bookshelf for easy access later'}
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={handleAddToShelf}
-              style={{
-                padding: '7px 18px', borderRadius: tokens.radius.lg,
-                background: tokens.colors.accent.brand, color: '#fff',
-                border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              {isZh ? '加入书架' : 'Add to Shelf'}
-            </button>
-            <button
-              onClick={() => setShowBookshelfPrompt(false)}
-              style={{
-                padding: '7px 14px', borderRadius: tokens.radius.lg,
-                background: 'transparent', color: tokens.colors.text.secondary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                fontSize: 13, cursor: 'pointer',
-              }}
-            >
-              {isZh ? '稍后' : 'Later'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Added confirmation */}
-      {addedToShelf && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 200,
-          background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.accent.success}40`,
-          borderRadius: tokens.radius.xl, padding: '14px 20px',
-          boxShadow: tokens.shadow.lg,
-          animation: 'slideUp 0.3s ease',
-        }}
-          ref={el => { if (el) setTimeout(() => setAddedToShelf(false), 3000) }}
-        >
-          <p style={{ fontSize: 13, color: tokens.colors.accent.success, fontWeight: 600, margin: 0 }}>
-            {isZh ? '已加入书架' : 'Added to bookshelf'}
-          </p>
+          <span style={{ fontSize: 13 }}>{isZh ? '加入书架?' : 'Add to shelf?'}</span>
+          <button onClick={handleAddToShelf} style={{
+            padding: '5px 14px', borderRadius: 8, background: tokens.colors.accent.brand,
+            color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+          }}>{isZh ? '加入' : 'Add'}</button>
+          <button onClick={() => setShowBookshelfPrompt(false)} style={{
+            padding: '5px 10px', borderRadius: 8, background: 'transparent',
+            color: themeColors.text, border: `1px solid rgba(128,128,128,0.2)`,
+            cursor: 'pointer', fontSize: 12, opacity: 0.6,
+          }}>{isZh ? '稍后' : 'Later'}</button>
         </div>
       )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg) } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
+        @keyframes page-flip-left {
+          0% { opacity: 1; transform: translateX(0); }
+          30% { opacity: 0.3; transform: translateX(-30px); }
+          60% { opacity: 0.3; transform: translateX(15px); }
+          100% { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes page-flip-right {
+          0% { opacity: 1; transform: translateX(0); }
+          30% { opacity: 0.3; transform: translateX(30px); }
+          60% { opacity: 0.3; transform: translateX(-15px); }
+          100% { opacity: 1; transform: translateX(0); }
+        }
         * { -webkit-tap-highlight-color: transparent; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.4); }
+        .nav-hint { pointer-events: none; }
+        div:hover > .nav-hint-left,
+        div:hover > .nav-hint-right { opacity: 0.3 !important; }
+        .hide-mobile { display: inline; }
+        @media (max-width: 640px) {
+          .hide-mobile { display: none; }
+        }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
       `}</style>
     </div>
   )
@@ -834,22 +795,56 @@ export default function ReadPage() {
     return items.map((item, i) => (
       <div key={i}>
         <button
-          onClick={() => jumpToPage(item.pageIndex)}
+          onClick={() => goToPage(item.pageIndex + 1)}
           style={{
-            display: 'block', width: '100%', textAlign: 'left', padding: '8px 16px',
-            paddingLeft: 16 + item.level * 16,
-            background: 'none', border: 'none', color: currentTheme.text,
-            cursor: 'pointer', fontSize: 13, opacity: 0.8,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            width: '100%', textAlign: 'left', padding: '10px 16px',
+            paddingLeft: 16 + item.level * 20,
+            background: currentPage === item.pageIndex + 1
+              ? (theme === 'dark' ? 'rgba(139,111,168,0.15)' : 'rgba(139,111,168,0.08)')
+              : 'none',
+            border: 'none', color: theme === 'dark' ? '#fff' : '#1a1a1a',
+            cursor: 'pointer', fontSize: 13, lineHeight: 1.4,
             transition: 'background 0.15s',
           }}
           onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          onMouseLeave={e => e.currentTarget.style.background = currentPage === item.pageIndex + 1
+            ? (theme === 'dark' ? 'rgba(139,111,168,0.15)' : 'rgba(139,111,168,0.08)')
+            : 'transparent'}
         >
-          {item.title}
-          <span style={{ float: 'right', opacity: 0.4, fontSize: 11 }}>{item.pageIndex + 1}</span>
+          <span style={{ flex: 1, marginRight: 12 }}>{item.title}</span>
+          <span style={{ opacity: 0.35, fontSize: 11, flexShrink: 0 }}>{item.pageIndex + 1}</span>
         </button>
         {item.children && renderTocItems(item.children)}
       </div>
     ))
   }
+}
+
+// ─── Toolbar Button ──────────────────────────────────────────────────
+
+function ToolbarBtn({ children, onClick, active, title }: {
+  children: React.ReactNode
+  onClick: () => void
+  active?: boolean
+  title?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 36, height: 36, borderRadius: 10,
+        background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
+        border: 'none', color: 'rgba(255,255,255,0.75)',
+        cursor: 'pointer', transition: 'background 0.15s',
+        flexShrink: 0,
+      }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+    >
+      {children}
+    </button>
+  )
 }
