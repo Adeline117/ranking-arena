@@ -253,7 +253,7 @@ const nextConfig: NextConfig = {
   
   // 服务端专用包（不打包到客户端）
   // 注意：@upstash/redis 使用 REST API，不需要在此配置
-  serverExternalPackages: [],
+  serverExternalPackages: ['ccxt', 'puppeteer', 'puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'pg', 'redis'],
   
   // 实验性功能
   experimental: {
