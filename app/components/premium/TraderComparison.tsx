@@ -8,9 +8,7 @@ import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/u
 import { useLanguage } from '../Providers/LanguageProvider'
 // @ts-expect-error - modules removed in cleanup
 import RadarChart from './RadarChart'
-// @ts-expect-error - modules removed in cleanup
 import EquityCurveOverlay, { CHART_COLORS } from './EquityCurveOverlay'
-// @ts-expect-error - modules removed in cleanup
 import ShareCompareButton from './ShareCompareButton'
 
 interface TraderCompareData {
