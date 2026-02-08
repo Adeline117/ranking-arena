@@ -2738,6 +2738,13 @@ const en = {
   indicatorSMA: 'Simple Moving Average (SMA)',
   indicatorEMA: 'Exponential Moving Average (EMA)',
 
+  fearGreedTitle: 'Fear & Greed Index',
+  fearGreedExtremeFear: 'Extreme Fear',
+  fearGreedFear: 'Fear',
+  fearGreedNeutral: 'Neutral',
+  fearGreedGreed: 'Greed',
+  fearGreedExtremeGreed: 'Extreme Greed',
+
 } as const
 
 export default en

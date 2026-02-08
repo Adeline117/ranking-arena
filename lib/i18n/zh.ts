@@ -2742,6 +2742,13 @@ const zh = {
   indicatorSMA: '简单移动平均线 (SMA)',
   indicatorEMA: '指数移动平均线 (EMA)',
 
+fearGreedTitle: '恐惧与贪婪指数',
+fearGreedExtremeFear: '极度恐惧',
+fearGreedFear: '恐惧',
+fearGreedNeutral: '中性',
+fearGreedGreed: '贪婪',
+fearGreedExtremeGreed: '极度贪婪',
+
 } as const
 
 export default zh
