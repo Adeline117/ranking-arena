@@ -450,7 +450,7 @@ export default function ReadPage() {
 
   // ─── Render ────────────────────────────────────────────────────────
 
-  if (loading || pdfLoading) {
+  if (loading || pdfLoading || premiumLoading) {
     return (
       <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <div style={{ width: 40, height: 40, border: `3px solid ${tokens.colors.border.primary}`, borderTopColor: tokens.colors.accent.brand, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -760,8 +760,67 @@ export default function ReadPage() {
         <span style={{ fontSize: 11, opacity: 0.6, minWidth: 32, textAlign: 'right' }}>{progressPercent}%</span>
       </div>
 
+      {/* Bookshelf prompt */}
+      {showBookshelfPrompt && !addedToShelf && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 200,
+          background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
+          borderRadius: tokens.radius.xl, padding: '16px 20px',
+          boxShadow: tokens.shadow.lg, maxWidth: 320,
+          animation: 'slideUp 0.3s ease',
+        }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 6 }}>
+            {isZh ? '觉得不错？' : 'Enjoying this?'}
+          </p>
+          <p style={{ fontSize: 13, color: tokens.colors.text.secondary, marginBottom: 14 }}>
+            {isZh ? '加入书架，方便下次继续阅读' : 'Add to your bookshelf for easy access later'}
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleAddToShelf}
+              style={{
+                padding: '7px 18px', borderRadius: tokens.radius.lg,
+                background: tokens.colors.accent.brand, color: '#fff',
+                border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              {isZh ? '加入书架' : 'Add to Shelf'}
+            </button>
+            <button
+              onClick={() => setShowBookshelfPrompt(false)}
+              style={{
+                padding: '7px 14px', borderRadius: tokens.radius.lg,
+                background: 'transparent', color: tokens.colors.text.secondary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              {isZh ? '稍后' : 'Later'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Added confirmation */}
+      {addedToShelf && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 200,
+          background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.accent.success}40`,
+          borderRadius: tokens.radius.xl, padding: '14px 20px',
+          boxShadow: tokens.shadow.lg,
+          animation: 'slideUp 0.3s ease',
+        }}
+          ref={el => { if (el) setTimeout(() => setAddedToShelf(false), 3000) }}
+        >
+          <p style={{ fontSize: 13, color: tokens.colors.accent.success, fontWeight: 600, margin: 0 }}>
+            {isZh ? '已加入书架' : 'Added to bookshelf'}
+          </p>
+        </div>
+      )}
+
       <style>{`
         @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         * { -webkit-tap-highlight-color: transparent; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
