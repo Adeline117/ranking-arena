@@ -79,13 +79,15 @@ export default function TopTraders() {
   useEffect(() => {
     async function load() {
       try {
-        // Step 1: Get top traders from snapshots
+        // Step 1: Get top traders from snapshots (by arena_score, with ROI threshold)
         const { data: snapData, error: snapErr } = await supabase
           .from('trader_snapshots')
           .select('source, source_trader_id, roi, arena_score')
           .eq('season_id', '90D')
-          .not('roi', 'is', null)
-          .order('roi', { ascending: false })
+          .not('arena_score', 'is', null)
+          .gt('arena_score', 0)
+          .lt('roi', 10000)  // Filter out anomalous ROI (>10000%)
+          .order('arena_score', { ascending: false })
           .limit(10)
 
         if (snapErr || !snapData || snapData.length === 0) {
@@ -149,12 +151,14 @@ export default function TopTraders() {
           {traders.map((t, idx) => {
             // Show handle if available and not an address; otherwise format address nicely
             const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
+            const isLongNumeric = (s: string) => /^\d{10,}$/.test(s)
             const formatAddr = (s: string) => `${s.slice(0, 6)}...${s.slice(-4)}`
-            const displayName = t.handle && !isAddress(t.handle)
+            const formatId = (s: string) => isAddress(s) ? formatAddr(s) : isLongNumeric(s) ? `ID ${s.slice(-6)}` : s
+            const displayName = t.handle && !isAddress(t.handle) && !isLongNumeric(t.handle)
               ? t.handle
               : t.handle
-                ? formatAddr(t.handle)
-                : formatAddr(t.source_trader_id)
+                ? formatId(t.handle)
+                : formatId(t.source_trader_id)
             return (
               <Link
                 key={`${t.source}-${t.source_trader_id}`}

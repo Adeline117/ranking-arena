@@ -22,7 +22,7 @@ const zh = {
     guest: '游客模式',
     roi: 'ROI',
     winRate: '胜率',
-    noData: '暂无链上数据',
+    noData: '暂无数据',
     loading: '加载中...',
     loadingShort: '加载中',
     noResults: '未找到结果',

@@ -72,11 +72,12 @@ export default function PopularTraders() {
   useEffect(() => {
     async function load() {
       try {
-        // Query trader_snapshots for top traders by arena_score
+        // Query trader_snapshots for top traders by arena_score (ROI<10000%)
         const { data: snapData, error: snapErr } = await supabase
           .from('trader_snapshots')
           .select('source, source_trader_id, followers, roi, arena_score')
           .not('arena_score', 'is', null)
+          .lt('roi', 10000)
           .order('arena_score', { ascending: false, nullsFirst: false })
           .limit(10)
 

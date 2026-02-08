@@ -123,13 +123,14 @@ function HotContent() {
     const load = async () => {
       setLoadingTraders(true)
       try {
-        // 获取90天排名前10的交易员 (season_id 使用大写)
+        // 获取90天排名前10的交易员 (season_id 使用大写, ROI<10000%)
         let { data, error: supabaseError } = await supabase
           .from('trader_snapshots')
           .select('source, source_trader_id, roi, arena_score, followers, win_rate')
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
+          .lt('roi', 10000)
           .order('arena_score', { ascending: false })
           .limit(30)
 
@@ -140,6 +141,7 @@ function HotContent() {
             .select('source, source_trader_id, roi, arena_score, followers, win_rate')
             .eq('season_id', '90D')
             .not('roi', 'is', null)
+            .lt('roi', 10000)
             .order('roi', { ascending: false })
             .limit(30)
 
