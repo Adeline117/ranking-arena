@@ -130,7 +130,7 @@ export const TraderRow = memo(function TraderRow({
     : undefined
 
   // Zebra stripe
-  const zebraBg = rank > 3 && rank % 2 === 0 ? 'rgba(255,255,255,0.02)' : undefined
+  const zebraBg = rank > 3 && rank % 2 === 0 ? 'var(--overlay-hover)' : undefined
 
   return (
     <Link

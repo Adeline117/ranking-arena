@@ -625,7 +625,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                       style={{
                         fontSize: 10,
                         padding: '2px 6px',
-                        background: 'rgba(255,255,255,0.1)',
+                        background: 'var(--glass-bg-medium)',
                         color: tokens.colors.text.tertiary,
                         borderRadius: tokens.radius.sm,
                       }}

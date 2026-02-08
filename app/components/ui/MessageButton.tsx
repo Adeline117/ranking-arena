@@ -106,8 +106,8 @@ export default function MessageButton({
         style={{
           ...sizeStyles[size],
           width: fullWidth ? '100%' : 'auto',
-          border: '1px solid rgba(255,255,255,0.2)',
-          background: 'rgba(255,255,255,0.05)',
+          border: `1px solid var(--glass-border-medium)`,
+          background: 'var(--glass-bg-light)',
           color: tokens.colors.text.primary,
           fontWeight: 700,
           cursor: 'pointer',
@@ -134,8 +134,8 @@ export default function MessageButton({
       style={{
         ...sizeStyles[size],
         width: fullWidth ? '100%' : 'auto',
-        border: '1px solid rgba(255,255,255,0.2)',
-        background: 'rgba(255,255,255,0.05)',
+        border: `1px solid var(--glass-border-medium)`,
+        background: 'var(--glass-bg-light)',
         color: tokens.colors.text.primary,
         fontWeight: 700,
         cursor: isLoading ? 'not-allowed' : 'pointer',

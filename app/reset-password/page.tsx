@@ -68,7 +68,7 @@ const injectStyles = () => {
     .reset-page-bg {
       position: fixed;
       inset: 0;
-      background: linear-gradient(135deg, #0a0a0f 0%, #13111a 50%, #0f0d14 100%);
+      background: var(--color-bg-primary);
       z-index: 0;
     }
     
@@ -484,7 +484,7 @@ function ResetPasswordContent() {
                   padding: '14px 16px', 
                   borderRadius: 12,
                   border: '1px solid rgba(255, 255, 255, 0.1)',
-                  background: 'rgba(0, 0, 0, 0.3)',
+                  background: 'var(--color-bg-tertiary)',
                   color: tokens.colors.text.primary,
                   fontSize: 15,
                   outline: 'none',
@@ -544,7 +544,7 @@ function ResetPasswordContent() {
                     paddingRight: 50,
                     borderRadius: 12,
                     border: '1px solid rgba(255, 255, 255, 0.1)',
-                    background: 'rgba(0, 0, 0, 0.3)',
+                    background: 'var(--color-bg-tertiary)',
                     color: tokens.colors.text.primary,
                     fontSize: 15,
                     outline: 'none',
@@ -586,7 +586,7 @@ function ResetPasswordContent() {
                           flex: 1,
                           height: 4,
                           borderRadius: 2,
-                          background: level <= passwordStrength.level ? passwordStrength.color : 'rgba(255, 255, 255, 0.1)',
+                          background: level <= passwordStrength.level ? passwordStrength.color : 'var(--glass-border-light)',
                           transition: 'all 0.3s ease',
                         }}
                       />
@@ -617,8 +617,8 @@ function ResetPasswordContent() {
                     padding: '14px 16px', 
                     paddingRight: 50,
                     borderRadius: 12,
-                    border: `1px solid ${confirmPassword && confirmPassword !== newPassword ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
-                    background: 'rgba(0, 0, 0, 0.3)',
+                    border: `1px solid ${confirmPassword && confirmPassword !== newPassword ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
+                    background: 'var(--color-bg-tertiary)',
                     color: tokens.colors.text.primary,
                     fontSize: 15,
                     outline: 'none',

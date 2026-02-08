@@ -70,7 +70,7 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
       }}
       onMouseEnter={(e) => {
         if (!active) {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+          e.currentTarget.style.background = 'var(--overlay-hover)'
           e.currentTarget.style.color = tokens.colors.interactive.hover
         }
       }}
@@ -151,7 +151,7 @@ export function Action({ icon, text, onClick, active, count, showCount }: Action
       }}
       onMouseEnter={(e) => {
         if (!active) {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+          e.currentTarget.style.background = 'var(--overlay-hover)'
           e.currentTarget.style.color = tokens.colors.interactive.hover
         }
       }}

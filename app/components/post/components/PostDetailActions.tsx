@@ -114,7 +114,7 @@ export function PostDetailActions({
             transition: 'all 0.2s ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+            e.currentTarget.style.background = 'var(--overlay-hover)'
             e.currentTarget.style.color = tokens.colors.text.secondary
           }}
           onMouseLeave={(e) => {

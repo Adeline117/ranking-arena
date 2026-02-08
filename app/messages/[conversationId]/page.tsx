@@ -126,7 +126,7 @@ function renderTextWithLinks(text: string, linkColor?: string) {
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
           style={{
-            color: linkColor || '#90caf9',
+            color: linkColor || 'var(--color-accent-primary)',
             textDecoration: 'underline',
             wordBreak: 'break-all',
           }}
@@ -1507,7 +1507,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                       >
                         {hasStickers(msg.content)
                           ? renderWithStickers(msg.content, 64)
-                          : renderTextWithLinks(msg.content, isMine ? '#e0d4f5' : '#90caf9')}
+                          : renderTextWithLinks(msg.content, isMine ? 'var(--color-brand-accent)' : 'var(--color-accent-primary)')}
                       </Text>
                     )}
                     {/* Show text for messages without media */}
@@ -1522,7 +1522,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                       >
                         {hasStickers(msg.content)
                           ? renderWithStickers(msg.content, 64)
-                          : renderTextWithLinks(msg.content, isMine ? '#e0d4f5' : '#90caf9')}
+                          : renderTextWithLinks(msg.content, isMine ? 'var(--color-brand-accent)' : 'var(--color-accent-primary)')}
                       </Text>
                     )}
                   </Box>
@@ -1709,7 +1709,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               height: 40,
               borderRadius: '50%',
               border: 'none',
-              background: 'rgba(255,255,255,0.1)',
+              background: 'var(--glass-bg-medium)',
               color: tokens.colors.white,
               cursor: 'pointer',
               display: 'flex',
