@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
+import CryptoIcon from '@/app/components/common/CryptoIcon'
 
 interface OverviewData {
   btcPrice: number
@@ -104,6 +105,7 @@ export default function MarketOverviewBar() {
       </span>
       {items.map((item, i) => (
         <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {(item.label === 'BTC' || item.label === 'ETH') && <CryptoIcon symbol={item.label} size={16} />}
           <span style={{ color: tokens.colors.text.tertiary }}>{item.label}</span>
           <span style={{ color: tokens.colors.text.primary, fontWeight: 600 }}>{item.value}</span>
           {'change' in item && item.change != null && <ChangeSpan value={item.change} />}

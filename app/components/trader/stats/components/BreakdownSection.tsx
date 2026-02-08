@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../../base'
+import CryptoIcon from '@/app/components/common/CryptoIcon'
 import { useLanguage } from '../../../Providers/LanguageProvider'
 
 interface AssetBreakdownData {
@@ -155,6 +156,7 @@ export function BreakdownSection({
                 boxShadow: `0 2px 4px ${getColorForIndex(idx)}40`,
               }}
             />
+            <CryptoIcon symbol={item.symbol} size={16} />
             <Text size="sm" weight="bold" style={{ flex: 1, color: tokens.colors.text.primary }}>{item.symbol}</Text>
             <Text
               size="sm"
