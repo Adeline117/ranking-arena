@@ -110,11 +110,11 @@ export function usePostFeedData(options: UsePostFeedDataOptions): UsePostFeedDat
       if (onSuccess) {
         onSuccess(fetchedPosts)
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
         return // Request was cancelled, ignore
       }
-      const errorMessage = err.message || 'Failed to load posts'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load posts'
       setError(errorMessage)
       if (onError) {
         onError(errorMessage)
@@ -169,8 +169,8 @@ export function usePostFeedData(options: UsePostFeedDataOptions): UsePostFeedDat
       setPosts(prev => [...prev, ...morePosts])
       setOffset(prev => prev + morePosts.length)
       setHasMore(morePosts.length >= pageSize)
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to load more posts'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load more posts'
       setError(errorMessage)
       if (onError) {
         onError(errorMessage)

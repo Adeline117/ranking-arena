@@ -1,2 +1,2 @@
-export * from './DataBuffer'
-export { default as DataBuffer } from './DataBuffer'
+// Buffer module - DataBuffer removed (unused)
+export {}
