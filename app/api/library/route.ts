@@ -70,7 +70,7 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
       }
     }
     // Fallback to simple query if RPC doesn't exist
-    console.warn('RPC fallback:', error.message)
+    console.warn('RPC fallback:', error?.message)
   }
 
   let query = supabase
