@@ -450,7 +450,7 @@ function PortfolioContent() {
 export default function PortfolioPage() {
   return (
     <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: '#0a0a0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ color: '#888' }}>Loading...</Text>
       </Box>
     }>

@@ -6,6 +6,8 @@ import { Box, Text } from '@/app/components/base'
 import { setLanguage, translations, type Language } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/app/components/ui/Toast'
+import { tokens } from '@/lib/design-tokens'
+import { lightTokens, darkTokens } from '@/lib/theme-tokens'
 
 type Theme = 'dark' | 'light'
 type Step = 'welcome' | 'features' | 'interests' | 'complete'
@@ -151,7 +153,7 @@ export default function OnboardingPage() {
 
   if (!mounted) {
     return (
-      <Box style={{ minHeight: '100vh', background: '#0a0a0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 40, height: 40, border: '3px solid rgba(139, 111, 168, 0.2)', borderTopColor: 'var(--color-brand)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </Box>
@@ -262,7 +264,7 @@ export default function OnboardingPage() {
                     }}>
                     <Box style={{
                       width: 32, height: 32, margin: '0 auto 8px', borderRadius: '50%',
-                      background: t === 'dark' ? '#1a1a2e' : '#f5f5f7',
+                      background: t === 'dark' ? darkTokens.colors.bg.secondary : lightTokens.colors.bg.secondary,
                       border: '2px solid var(--color-brand)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>

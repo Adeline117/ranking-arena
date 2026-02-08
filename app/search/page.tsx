@@ -571,7 +571,7 @@ function SearchContent() {
 export default function SearchPage() {
   return (
     <Suspense fallback={
-      <div style={{ minHeight: '100vh', background: '#060606', color: '#f2f2f2' }}>
+      <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={null} />
         <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px' }}>
           <div style={{ marginTop: 60 }}>
