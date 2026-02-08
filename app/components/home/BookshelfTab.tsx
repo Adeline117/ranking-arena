@@ -1,127 +1,120 @@
 'use client'
 
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '@/app/library/BookCover'
-import type { LibraryItem } from '@/lib/types/library'
+import { supabase } from '@/lib/supabase/client'
 
-const BookDetailModal = lazy(() => import('./BookDetailModal'))
-
-const CATEGORIES = [
-  { key: 'all', en: 'All', zh: '全部' },
-  { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书' },
-  { key: 'research', en: 'Research', zh: '研报' },
-  { key: 'book', en: 'Books', zh: '书籍' },
-  { key: 'paper', en: 'Papers', zh: '论文' },
-]
+type ShelfBook = {
+  id: string
+  title: string
+  author: string | null
+  cover_url: string | null
+  category: string
+  rating: number | null
+  rating_count: number | null
+  status: 'want_to_read' | 'read'
+}
 
 export default function BookshelfTab() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
 
-  const [items, setItems] = useState<LibraryItem[]>([])
-  const [total, setTotal] = useState(0)
+  const [books, setBooks] = useState<ShelfBook[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('all')
-  const [langFilter, setLangFilter] = useState<'all' | 'zh' | 'en'>('all')
-  const [selectedBook, setSelectedBook] = useState<LibraryItem | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'all' | 'want_to_read' | 'read'>('all')
 
-  const fetchItems = useCallback(async () => {
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null)
+      if (!data.user) setLoading(false)
+    })
+  }, [])
+
+  const fetchBookshelf = useCallback(async () => {
+    if (!userId) return
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (category !== 'all') params.set('category', category)
-      if (search) params.set('search', search)
-      if (langFilter !== 'all') params.set('language', langFilter)
-      params.set('limit', '24')
-      const res = await fetch(`/api/library?${params}`)
-      const data = await res.json()
-      setItems(data.items || [])
-      setTotal(data.total || 0)
+      let query = supabase
+        .from('book_ratings')
+        .select('status, library_item_id, library_items(id, title, author, cover_url, category, rating, rating_count)')
+        .eq('user_id', userId)
+        .in('status', ['want_to_read', 'read'])
+
+      if (filter !== 'all') {
+        query = query.eq('status', filter)
+      }
+
+      const { data, error } = await query.order('updated_at', { ascending: false })
+
+      if (error) {
+        console.error('Bookshelf fetch error:', error)
+        setBooks([])
+        return
+      }
+
+      const mapped: ShelfBook[] = (data || [])
+        .filter((d: any) => d.library_items)
+        .map((d: any) => ({
+          ...(d.library_items as any),
+          status: d.status,
+        }))
+
+      setBooks(mapped)
     } catch (e) {
-      console.error('Failed to fetch library:', e)
+      console.error('Failed to fetch bookshelf:', e)
+      setBooks([])
     } finally {
       setLoading(false)
     }
-  }, [category, search, langFilter])
+  }, [userId, filter])
 
-  useEffect(() => { fetchItems() }, [fetchItems])
+  useEffect(() => {
+    if (userId) fetchBookshelf()
+  }, [userId, fetchBookshelf])
+
+  // Not logged in
+  if (!loading && !userId) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px', color: tokens.colors.text.secondary }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.5 }}>
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
+        <p style={{ fontSize: 16, marginBottom: 12 }}>
+          {isZh ? '登录后查看你的书架' : 'Login to see your bookshelf'}
+        </p>
+        <a href="/login" style={{
+          display: 'inline-block', padding: '8px 24px', borderRadius: 8,
+          background: tokens.colors.accent.brand, color: '#fff',
+          textDecoration: 'none', fontWeight: 600, fontSize: 14,
+        }}>
+          {isZh ? '去登录' : 'Login'}
+        </a>
+      </div>
+    )
+  }
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <p style={{ color: tokens.colors.text.secondary, fontSize: 13, margin: 0 }}>
-          {isZh ? `${total.toLocaleString()} 篇文献` : `${total.toLocaleString()} items`}
-        </p>
-        <Link href="/library" style={{
-          fontSize: 13, color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 500,
-        }}>
-          {isZh ? '查看全部' : 'View All'}
-        </Link>
-      </div>
-
-      {/* Search */}
-      <div style={{ position: 'relative', marginBottom: 12 }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-          <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
-        </svg>
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder={isZh ? '搜索标题、作者...' : 'Search titles, authors...'}
-          style={{
-            width: '100%', maxWidth: 400, padding: '8px 12px 8px 32px',
-            borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}`,
-            background: tokens.colors.bg.secondary, color: tokens.colors.text.primary,
-            fontSize: 13, outline: 'none',
-          }}
-        />
-      </div>
-
-      {/* Category pills */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
-        {CATEGORIES.map(cat => {
-          const active = category === cat.key
-          return (
-            <button
-              key={cat.key}
-              onClick={() => setCategory(cat.key)}
-              style={{
-                padding: '5px 14px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: active ? 600 : 500,
-                border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-                background: active ? tokens.colors.accent.brand : 'transparent',
-                color: active ? '#fff' : tokens.colors.text.secondary,
-                cursor: 'pointer', transition: `all ${tokens.transition.fast}`,
-                whiteSpace: 'nowrap', flexShrink: 0,
-              }}
-            >
-              {isZh ? cat.zh : cat.en}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Language filter */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', scrollbarWidth: 'none' }}>
         {([
-          { key: 'all' as const, label: isZh ? '全部语言' : 'All Languages' },
-          { key: 'zh' as const, label: isZh ? '中文' : 'Chinese' },
-          { key: 'en' as const, label: 'English' },
+          { key: 'all' as const, label: isZh ? '全部' : 'All' },
+          { key: 'want_to_read' as const, label: isZh ? '想读' : 'Want to Read' },
+          { key: 'read' as const, label: isZh ? '已读' : 'Read' },
         ]).map(opt => (
           <button
             key={opt.key}
-            onClick={() => setLangFilter(opt.key)}
+            onClick={() => setFilter(opt.key)}
             style={{
-              padding: '5px 14px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: langFilter === opt.key ? 600 : 500,
-              border: langFilter === opt.key ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-              background: langFilter === opt.key ? tokens.colors.accent.brand : 'transparent',
-              color: langFilter === opt.key ? '#fff' : tokens.colors.text.secondary,
+              padding: '5px 14px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: filter === opt.key ? 600 : 500,
+              border: filter === opt.key ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+              background: filter === opt.key ? tokens.colors.accent.brand : 'transparent',
+              color: filter === opt.key ? '#fff' : tokens.colors.text.secondary,
               cursor: 'pointer', transition: `all ${tokens.transition.fast}`,
               whiteSpace: 'nowrap', flexShrink: 0,
             }}
@@ -131,32 +124,48 @@ export default function BookshelfTab() {
         ))}
       </div>
 
-      {/* Grid */}
+      {/* Loading */}
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
-          {Array.from({ length: 8 }).map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ aspectRatio: '2/3', borderRadius: tokens.radius.lg, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
               <div style={{ height: 12, borderRadius: 4, width: '75%', background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
           ))}
         </div>
-      ) : items.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 60, color: tokens.colors.text.secondary }}>
-          {isZh ? '暂无内容' : 'No items found'}
+      ) : books.length === 0 ? (
+        /* Empty state */
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: tokens.colors.text.secondary }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.5 }}>
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+          <p style={{ fontSize: 16, marginBottom: 8 }}>
+            {isZh ? '还没有收藏的书籍' : 'No books in your shelf yet'}
+          </p>
+          <p style={{ fontSize: 13, marginBottom: 16 }}>
+            {isZh ? '去书城发现感兴趣的书籍吧' : 'Discover books in the library'}
+          </p>
+          <Link href="/library" style={{
+            display: 'inline-block', padding: '10px 28px', borderRadius: 8,
+            background: tokens.colors.accent.brand, color: '#fff',
+            textDecoration: 'none', fontWeight: 600, fontSize: 14,
+          }}>
+            {isZh ? '去书城' : 'Browse Library'}
+          </Link>
         </div>
       ) : (
+        /* Book grid */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
-          {items.map(item => (
-            <div
-              key={item.id}
-              onClick={() => setSelectedBook(item)}
+          {books.map(book => (
+            <Link
+              key={book.id}
+              href={`/library/${book.id}`}
               style={{
-                cursor: 'pointer',
+                textDecoration: 'none',
                 transition: `transform ${tokens.transition.base}`,
+                display: 'block',
               }}
-              onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-4px)')}
-              onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
             >
               {/* Cover */}
               <div style={{
@@ -164,48 +173,61 @@ export default function BookshelfTab() {
                 overflow: 'hidden', boxShadow: tokens.shadow.md, marginBottom: 8,
               }}>
                 <BookCover
-                  title={item.title}
-                  author={item.author}
-                  category={item.category}
-                  coverUrl={item.cover_url}
+                  title={book.title}
+                  author={book.author}
+                  category={book.category}
+                  coverUrl={book.cover_url}
                   fontSize="sm"
                 />
               </div>
 
-              {/* Info */}
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
+              {/* Status badge */}
+              <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
                 <span style={{
                   fontSize: 10, padding: '1px 7px', borderRadius: tokens.radius.full,
-                  background: tokens.colors.accent.brandMuted, color: tokens.colors.accent.brand,
-                  fontWeight: 600, textTransform: 'uppercase',
+                  background: book.status === 'read' ? '#10b98118' : tokens.colors.accent.brandMuted,
+                  color: book.status === 'read' ? '#10b981' : tokens.colors.accent.brand,
+                  fontWeight: 600,
                 }}>
-                  {item.category}
+                  {book.status === 'read' ? (isZh ? '已读' : 'Read') : (isZh ? '想读' : 'Want to Read')}
                 </span>
               </div>
+
               <h3 style={{
                 fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary,
                 lineHeight: 1.3, margin: '0 0 2px',
                 overflow: 'hidden', textOverflow: 'ellipsis',
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
               }}>
-                {item.title}
+                {book.title}
               </h3>
-              {item.author && (
+              {book.author && (
                 <p style={{ fontSize: 11, color: tokens.colors.text.secondary, margin: '0 0 4px' }}>
-                  {item.author.length > 30 ? item.author.slice(0, 30) + '...' : item.author}
+                  {book.author.length > 30 ? book.author.slice(0, 30) + '...' : book.author}
                 </p>
               )}
-              <StarRating rating={item.rating || 0} ratingCount={item.rating_count || 0} size={13} readonly />
-            </div>
+              {book.rating != null && book.rating > 0 && (
+                <StarRating rating={book.rating} ratingCount={book.rating_count || 0} size={13} readonly />
+              )}
+            </Link>
           ))}
-        </div>
-      )}
 
-      {/* Book detail modal */}
-      {selectedBook && (
-        <Suspense fallback={null}>
-          <BookDetailModal item={selectedBook} onClose={() => setSelectedBook(null)} />
-        </Suspense>
+          {/* Browse more link */}
+          <Link href="/library" style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            aspectRatio: '2/3', borderRadius: tokens.radius.lg,
+            border: `2px dashed ${tokens.colors.border.primary}`,
+            textDecoration: 'none', color: tokens.colors.text.secondary,
+            transition: `all ${tokens.transition.fast}`,
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span style={{ fontSize: 13, fontWeight: 500, marginTop: 8 }}>
+              {isZh ? '去书城' : 'Browse'}
+            </span>
+          </Link>
+        </div>
       )}
     </div>
   )

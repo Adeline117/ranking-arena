@@ -324,7 +324,7 @@ function GroupsContent() {
           <HomePageWithSubNav
             recommendedContent={
               <Suspense fallback={<RankingSkeleton />}>
-                <PostFeed sortBy="hot_score" />
+                <PostFeed sortBy="hot_score" layout="masonry" />
               </Suspense>
             }
           />

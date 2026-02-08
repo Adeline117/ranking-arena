@@ -12,7 +12,7 @@ async function fetchLibraryItems(): Promise<{ items: LibraryItem[]; total: numbe
     const { data, count } = await supabase
       .from('library_items')
       .select('*', { count: 'exact' })
-      .order('view_count', { ascending: false })
+      .order('created_at', { ascending: false })
       .range(0, 23)
 
     return { items: data || [], total: count || 0 }
