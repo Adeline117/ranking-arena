@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('posts-delete')
 
@@ -13,6 +14,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { id: postId } = await params
 
     // 验证用户身份

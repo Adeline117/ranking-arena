@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 /**
  * POST /api/auth/siwe/unlink
@@ -11,6 +12,8 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
  */
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
+    if (rateLimitResponse) return rateLimitResponse
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })

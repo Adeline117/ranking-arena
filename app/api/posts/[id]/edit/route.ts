@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('posts-edit')
 
@@ -18,6 +19,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { id: postId } = await params
 
     // CSRF 验证

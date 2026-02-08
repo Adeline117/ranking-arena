@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { toDataURL } from 'qrcode'
 import { generateTotpSecret } from '@/lib/services/totp'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,9 @@ function getSupabaseAdmin() {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
+    if (rateLimitResponse) return rateLimitResponse
+
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

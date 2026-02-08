@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('messages-api')
 
@@ -23,6 +24,9 @@ const MAX_PAGE_SIZE = 100
 // 获取会话消息（支持 cursor 分页）
 export async function GET(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.authenticated)
+    if (rateLimitResponse) return rateLimitResponse
+
     // SECURITY: Require authentication
     const user = await getAuthUser(request)
     if (!user) {
@@ -162,6 +166,9 @@ export async function GET(request: NextRequest) {
 // 发送私信
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResponse) return rateLimitResponse
+
     // SECURITY: Require authentication
     const user = await getAuthUser(request)
     if (!user) {

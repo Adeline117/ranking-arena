@@ -12,11 +12,15 @@ import {
   validateEnum,
 } from '@/lib/api'
 import { togglePostVote, getPostById } from '@/lib/data/posts'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { id } = await context.params
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()

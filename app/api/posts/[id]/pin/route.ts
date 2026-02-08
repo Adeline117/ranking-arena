@@ -10,11 +10,15 @@ import {
   success,
   handleError,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { id: postId } = await context.params
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()

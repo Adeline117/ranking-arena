@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,9 @@ async function authenticateUser(request: NextRequest, supabase: ReturnType<typeo
 // 获取关注状态
 export async function GET(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.authenticated)
+    if (rateLimitResponse) return rateLimitResponse
+
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
     }
@@ -90,6 +94,9 @@ export async function GET(request: NextRequest) {
 // 关注/取消关注
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResponse) return rateLimitResponse
+
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
     }

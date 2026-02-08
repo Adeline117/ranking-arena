@@ -14,11 +14,15 @@ import {
 import { togglePostReaction, getPostById } from '@/lib/data/posts'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { id } = await context.params
 
     // CSRF 验证
