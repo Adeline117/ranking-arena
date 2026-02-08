@@ -76,7 +76,7 @@ export default function TimeRangeSelector({
                 : tokens.typography.fontWeight.medium,
               cursor: disabled ? 'not-allowed' : 'pointer',
               opacity: disabled ? 0.5 : 1,
-              transition: 'all 0.15s ease',
+              transition: `all ${tokens.transition.fast}`,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
               boxShadow: isActive
                 ? '0 1px 3px rgba(0,0,0,0.08)'

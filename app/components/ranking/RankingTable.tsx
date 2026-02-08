@@ -749,7 +749,7 @@ function RankingTableInner(props: {
                 borderRadius: tokens.radius.lg,
                 textAlign: 'center',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
+                transition: `all ${tokens.transition.base}`,
               }}>
                 <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
                   {language === 'zh' ? '🔓 注册免费查看更多交易员' : '🔓 Sign up free to see more traders'}

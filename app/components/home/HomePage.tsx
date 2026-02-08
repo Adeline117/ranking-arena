@@ -71,7 +71,7 @@ export default function HomePage({
         <Box
           style={{
             textAlign: 'center',
-            padding: '12px 16px 8px',
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]} ${tokens.spacing[2]}`,
             marginBottom: 4,
           }}
         >

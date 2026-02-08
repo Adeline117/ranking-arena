@@ -118,7 +118,7 @@ export default function CategoryRankingTabs({
               cursor: isLocked ? 'not-allowed' : 'pointer',
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: isActive ? 700 : 500,
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
               boxShadow: isActive ? '0 2px 8px var(--color-pro-badge-shadow)' : 'none',
               flexShrink: 0,
             }}

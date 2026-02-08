@@ -33,7 +33,7 @@ const styles = {
     margin: '0 auto',
     padding: '20px 24px',
     background: tokens.colors.bg.secondary,
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     border: `1px solid ${tokens.colors.border.primary}`,
   },
   header: {
@@ -62,7 +62,7 @@ const styles = {
   },
   button: {
     padding: '10px 20px',
-    borderRadius: '8px',
+    borderRadius: tokens.radius.md,
     fontSize: '14px',
     fontWeight: 700,
     cursor: 'pointer',
@@ -116,7 +116,7 @@ const styles = {
     width: '44px',
     height: '24px',
     background: tokens.colors.bg.tertiary,
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     cursor: 'pointer',
     transition: 'background 0.2s ease',
     flexShrink: 0,

@@ -50,7 +50,7 @@ function AnimatedAvatar({
         boxShadow: isHovered 
           ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
           : tokens.shadow.lg,
-        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: `all ${tokens.transition.smooth}`,
         position: 'relative',
         transform: isHovered ? 'scale(1.08) rotate(2deg)' : 'scale(1) rotate(0deg)',
         cursor: 'pointer',
@@ -125,7 +125,7 @@ const socialLinkStyle: React.CSSProperties = {
   color: tokens.colors.text.secondary,
   fontSize: tokens.typography.fontSize.xs,
   textDecoration: 'none',
-  transition: 'all 0.2s ease',
+  transition: `all ${tokens.transition.base}`,
   border: `1px solid ${tokens.colors.border.primary}40`,
 }
 
@@ -225,7 +225,7 @@ export default function TraderAboutCard({
         border: `1px solid ${tokens.colors.border.primary}60`,
         padding: tokens.spacing[6],
         boxShadow: `0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06)`,
-        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: `all ${tokens.transition.smooth}`,
         zIndex: 10,
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateX(0)' : 'translateX(30px)',
@@ -478,7 +478,7 @@ function StatItem({
         padding: tokens.spacing[3],
         borderRadius: tokens.radius.lg,
         background: isHovered && clickable ? `${tokens.colors.accent.primary}10` : 'transparent',
-        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: `all ${tokens.transition.slow}`,
         transform: isHovered && clickable ? 'scale(1.02)' : 'scale(1)',
         textAlign: 'center',
       }}

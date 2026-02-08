@@ -55,15 +55,15 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
     <Link href={href} style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}>
       <div
         style={{
-          borderRadius: 12,
+          borderRadius: tokens.radius.lg,
           border: `1.5px solid ${medalColor}`,
           background: tokens.colors.bg.secondary,
-          padding: '12px 10px',
+          padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           gap: 6,
-          transition: 'transform 0.15s',
+          transition: `transform ${tokens.transition.fast}`,
         }}
         onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
         onMouseLeave={e => e.currentTarget.style.transform = 'none'}
