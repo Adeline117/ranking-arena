@@ -257,6 +257,10 @@ const nextConfig: NextConfig = {
       'react-easy-crop',
       'otpauth',
       'lightweight-charts',
+      '@tanstack/react-query',
+      'wagmi',
+      'viem',
+      'ethers',
     ],
 
     // Enable optimized CSS loading

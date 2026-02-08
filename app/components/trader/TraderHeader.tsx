@@ -2,18 +2,21 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../base'
-import ClaimTraderButton from './ClaimTraderButton'
 import CopyTradeButton from './CopyTradeButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { OnChainBadge } from './OnChainBadge'
-import { BadgeDisplay } from './BadgeDisplay'
+
+// Lazy-load rarely-used components
+const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
+const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
+const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
 
 interface TraderHeaderProps {
   handle: string
