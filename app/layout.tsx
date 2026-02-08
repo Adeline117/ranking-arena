@@ -81,7 +81,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Arena",
+    title: "ArenaFi",
   },
   formatDetection: {
     telephone: false,
