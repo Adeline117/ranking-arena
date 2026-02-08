@@ -2945,8 +2945,6 @@ rejectCall: '拒绝',
     playSpeed: '播放速度',
     voiceSelect: '选择语音',
     reading: '朗读中',
-
-    // Data export
     export: '导出',
     exportCSV: '导出 CSV',
     exportJSON: '导出 JSON',

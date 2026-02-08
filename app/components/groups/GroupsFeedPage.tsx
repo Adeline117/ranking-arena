@@ -13,6 +13,7 @@ import RecommendedGroups from '@/app/components/sidebar/RecommendedGroups'
 import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text } from '@/app/components/base'
+import Image from 'next/image'
 
 type Group = {
   id: string
@@ -23,6 +24,110 @@ type Group = {
 }
 
 type SubTabKey = 'following' | 'recommended' | 'bookshelf'
+
+type BookItem = {
+  id: string
+  title: string
+  author: string | null
+  cover_image_url: string | null
+  type: string | null
+  category: string | null
+}
+
+function BookshelfTab() {
+  const { language } = useLanguage()
+  const [books, setBooks] = useState<BookItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    async function load() {
+      const { data } = await supabase
+        .from('library_items')
+        .select('id, title, author, cover_image_url, type, category')
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (alive) {
+        setBooks(data || [])
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { alive = false }
+  }, [])
+
+  if (loading) {
+    return (
+      <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: tokens.spacing[3] }}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Box key={i} style={{ background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, overflow: 'hidden' }}>
+            <div className="skeleton" style={{ width: '100%', aspectRatio: '3/4' }} />
+            <Box style={{ padding: tokens.spacing[2] }}>
+              <div className="skeleton" style={{ height: 14, width: '80%', marginBottom: 4 }} />
+              <div className="skeleton" style={{ height: 12, width: '60%' }} />
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    )
+  }
+
+  return (
+    <Box>
+      <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: tokens.spacing[3] }}>
+        {books.map((book) => (
+          <Link
+            key={book.id}
+            href={`/library/${book.id}`}
+            style={{
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.lg,
+              overflow: 'hidden',
+              textDecoration: 'none',
+              color: 'inherit',
+              border: `1px solid ${tokens.colors.border.primary}`,
+              transition: `all ${tokens.transition.base}`,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = tokens.colors.accent.primary; e.currentTarget.style.transform = 'translateY(-2px)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary; e.currentTarget.style.transform = 'translateY(0)' }}
+          >
+            <Box style={{ width: '100%', aspectRatio: '3/4', background: tokens.colors.bg.tertiary, position: 'relative', overflow: 'hidden' }}>
+              {book.cover_image_url ? (
+                <Image src={book.cover_image_url} alt={book.title} fill style={{ objectFit: 'cover' }} unoptimized />
+              ) : (
+                <Box style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: tokens.spacing[2] }}>
+                  <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', lineHeight: 1.3 }}>
+                    {book.title.slice(0, 30)}
+                  </Text>
+                </Box>
+              )}
+            </Box>
+            <Box style={{ padding: tokens.spacing[2] }}>
+              <Text size="xs" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {book.title}
+              </Text>
+              {book.author && (
+                <Text size="xs" color="tertiary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                  {book.author}
+                </Text>
+              )}
+            </Box>
+          </Link>
+        ))}
+      </Box>
+      <Box style={{ textAlign: 'center', marginTop: tokens.spacing[4] }}>
+        <Link href="/library" style={{
+          color: tokens.colors.accent.primary,
+          textDecoration: 'none',
+          fontWeight: 600,
+          fontSize: tokens.typography.fontSize.sm,
+        }}>
+          {language === 'zh' ? '查看全部书库 →' : 'View full library →'}
+        </Link>
+      </Box>
+    </Box>
+  )
+}
 
 export default function GroupsFeedPage() {
   const { language, t } = useLanguage()
@@ -146,14 +251,7 @@ export default function GroupsFeedPage() {
         )}
 
         {subTab === 'bookshelf' && (
-          <Box style={{ padding: tokens.spacing[6], textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
-            <Text size="sm" color="tertiary">{t('bookshelf') || '书架'}</Text>
-            <Box style={{ marginTop: tokens.spacing[3] }}>
-              <Link href="/library" style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
-                {t('browseLibrary') || '浏览书库'}
-              </Link>
-            </Box>
-          </Box>
+          <BookshelfTab />
         )}
       </ThreeColumnLayout>
 
