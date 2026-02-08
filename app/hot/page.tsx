@@ -754,7 +754,7 @@ function HotContent() {
           {/* 中：热榜 */}
           <Box as="section" style={{ minWidth: 0 }}>
             <Card title={t('hotList')}>
-              <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2], fontSize: '11px' }}>
                 {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
               </Text>
 
@@ -816,7 +816,7 @@ function HotContent() {
                       <p className="empty-state-title">{t('noData')}</p>
                     </div>
                   ) : (
-                    <Box className="stagger-fade" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], position: 'relative' }}>
+                    <Box className="stagger-fade" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], position: 'relative' }}>
                       {/* New posts polling banner */}
                       {newPostCount > 0 && (
                         <Box
@@ -849,11 +849,11 @@ function HotContent() {
                             className="hot-post-item"
                             style={{
                               cursor: 'pointer',
-                              padding: tokens.spacing[4],
-                              borderRadius: tokens.radius.lg,
+                              padding: '12px 14px',
+                              borderRadius: tokens.radius.md,
                               background: tokens.colors.bg.secondary,
                               border: `1px solid ${tokens.colors.border.primary}`,
-                              boxShadow: tokens.shadow.sm,
+                              boxShadow: 'none',
                               transition: `all 0.2s ease`,
                             }}
                             onClick={(e: React.MouseEvent) => {
@@ -872,7 +872,7 @@ function HotContent() {
                             }}
                           >
                             {/* Top row: rank + badges + group */}
-                            <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3], flexWrap: 'wrap', alignItems: 'center' }}>
+                            <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap', alignItems: 'center' }}>
                               <Text className="hot-post-rank" size="sm" weight="black" style={{
                                 color: rank <= 3 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
                                 fontSize: rank <= 3 ? '15px' : '13px',
@@ -924,9 +924,9 @@ function HotContent() {
 
                             {/* Title */}
                             <Text className="hot-post-title" size="base" weight="bold" style={{
-                              marginBottom: tokens.spacing[2],
+                              marginBottom: tokens.spacing[1],
                               lineHeight: 1.4,
-                              fontSize: '15px',
+                              fontSize: '14px',
                             }}>
                               {translatedListPosts[p.id]?.title || p.title}
                               {translatedListPosts[p.id]?.title && (
@@ -953,9 +953,9 @@ function HotContent() {
                               return (
                                 <>
                                   <Text className="hot-post-body" size="sm" color="secondary" style={{
-                                    marginBottom: tokens.spacing[2],
-                                    lineHeight: 1.6,
-                                    fontSize: '13px',
+                                    marginBottom: tokens.spacing[1],
+                                    lineHeight: 1.5,
+                                    fontSize: '12px',
                                     color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : tokens.colors.text.secondary,
                                   }}>
                                     {renderContentWithLinks(contentToShow)}
@@ -987,14 +987,14 @@ function HotContent() {
                             {/* Footer: author, time, stats */}
                             <Box className="hot-post-footer" style={{
                               display: 'flex',
-                              gap: tokens.spacing[3],
-                              fontSize: tokens.typography.fontSize.xs,
+                              gap: tokens.spacing[2],
+                              fontSize: '11px',
                               color: tokens.colors.text.tertiary,
                               flexWrap: 'wrap',
                               alignItems: 'center',
-                              marginTop: tokens.spacing[2],
-                              paddingTop: tokens.spacing[2],
-                              borderTop: `1px solid ${tokens.colors.border.primary}`,
+                              marginTop: tokens.spacing[1],
+                              paddingTop: tokens.spacing[1],
+                              borderTop: 'none',
                             }}>
                               {p.author_handle ? (
                                 <Link
@@ -1066,30 +1066,32 @@ function HotContent() {
                             )
                           })}
 
-                          {/* Prominent login CTA */}
+                          {/* Login CTA */}
                           <Box style={{
                             background: tokens.gradient.primarySubtle,
-                            borderRadius: tokens.radius.lg,
-                            padding: tokens.spacing[6],
+                            borderRadius: tokens.radius.md,
+                            padding: '12px 16px',
                             textAlign: 'center',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '12px',
+                            flexWrap: 'wrap',
                           }}>
-                            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                            <Text size="sm" color="secondary">
                               {t('loginToViewFullHotList')}
-                            </Text>
-                            <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-                              {t('unlockAllHotPosts')}
                             </Text>
                             <Link
                               href="/login"
                               style={{
                                 display: 'inline-block',
-                                padding: '10px 24px',
+                                padding: '6px 16px',
                                 background: tokens.gradient.primary,
                                 color: '#fff',
-                                borderRadius: tokens.radius.md,
+                                borderRadius: tokens.radius.sm,
                                 textDecoration: 'none',
                                 fontWeight: 700,
-                                fontSize: '14px',
+                                fontSize: '12px',
                               }}
                             >
                               {t('loginNow')}
@@ -1114,16 +1116,16 @@ function HotContent() {
                       <Text color="tertiary">{t('noData')}</Text>
                     </Box>
                   ) : (
-                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                       {groups.map((group, idx) => (
                         <Box
                           key={group.id}
                           style={{
-                            padding: tokens.spacing[4],
-                            borderRadius: tokens.radius.lg,
+                            padding: '10px 14px',
+                            borderRadius: tokens.radius.md,
                             background: tokens.colors.bg.secondary,
                             border: `1px solid ${tokens.colors.border.primary}`,
-                            boxShadow: tokens.shadow.sm,
+                            boxShadow: 'none',
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
                           }}
