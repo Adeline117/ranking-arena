@@ -1,14 +1,20 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { parseError } from '@/lib/utils/error-messages'
+
+const FEEDBACK_URL = 'https://github.com/AdelineWen/ranking-arena/issues/new'
 
 /**
- * Shared route-level error component.
- * Use in route error.tsx files for consistent, Chinese-first error UX.
- * Does NOT expose raw error.message to users.
+ * 统一路由级错误组件
+ * 在各路由 error.tsx 中使用，提供一致的中文错误体验
+ *
+ * - 不向用户暴露原始 error.message
+ * - 开发模式下可展开错误详情
+ * - 支持重试、返回首页、反馈问题
  */
 export default function RouteError({
   error,
@@ -20,10 +26,19 @@ export default function RouteError({
   contextLabel?: string
 }) {
   const { t } = useLanguage()
+  const [showDetails, setShowDetails] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const isDev = process.env.NODE_ENV === 'development'
+  const parsed = parseError(error)
 
   useEffect(() => {
     console.error(`[${contextLabel || 'RouteError'}]`, error)
   }, [error, contextLabel])
+
+  const handleRetry = () => {
+    setIsRetrying(true)
+    setTimeout(() => reset(), 300)
+  }
 
   return (
     <div style={{
@@ -35,6 +50,7 @@ export default function RouteError({
       padding: 24,
       textAlign: 'center',
     }}>
+      {/* 错误图标 */}
       <div style={{
         width: 72,
         height: 72,
@@ -51,6 +67,8 @@ export default function RouteError({
           <line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
       </div>
+
+      {/* 标题 */}
       <h2 style={{
         fontSize: 20,
         fontWeight: 600,
@@ -59,47 +77,100 @@ export default function RouteError({
       }}>
         {t('errorTitle') || '出了点问题'}
       </h2>
+
+      {/* 用户友好消息 */}
       <p style={{
         color: 'var(--color-text-secondary)',
-        marginBottom: 24,
+        marginBottom: 16,
         maxWidth: 400,
         fontSize: 14,
         lineHeight: 1.6,
       }}>
-        {t('errorRefresh') || '请刷新页面或稍后再试'}
+        {parsed.retryable
+          ? (t('errorRefresh') || '请刷新页面或稍后再试')
+          : (parsed.message)}
       </p>
+
+      {/* 错误代码 */}
       {error.digest && (
         <p style={{
           color: 'var(--color-text-tertiary)',
           fontSize: 12,
           marginBottom: 16,
           fontFamily: '"SF Mono", Consolas, monospace',
+          padding: '4px 10px',
+          background: 'rgba(255, 124, 124, 0.08)',
+          borderRadius: 6,
+          border: '1px solid rgba(255, 124, 124, 0.12)',
         }}>
           {t('errorCode') || '错误代码'}: {error.digest}
         </p>
       )}
-      <div style={{ display: 'flex', gap: 12 }}>
+
+      {/* 开发模式错误详情 */}
+      {isDev && (
+        <div style={{ marginBottom: 16, maxWidth: 500, width: '100%' }}>
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--color-text-tertiary)',
+              fontSize: 12,
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: 0,
+            }}
+          >
+            {showDetails ? '收起详情' : '展开错误详情（仅开发环境可见）'}
+          </button>
+          {showDetails && (
+            <pre style={{
+              marginTop: 8,
+              padding: 12,
+              background: 'var(--color-bg-tertiary, rgba(0,0,0,0.3))',
+              borderRadius: 8,
+              border: '1px solid var(--color-border-primary)',
+              fontSize: 11,
+              color: 'var(--color-text-secondary)',
+              textAlign: 'left',
+              overflow: 'auto',
+              maxHeight: 200,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}>
+              {`类型: ${parsed.type}\n可重试: ${parsed.retryable ? '是' : '否'}\n状态码: ${parsed.statusCode ?? '无'}\n\n${error.stack || error.message}`}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* 操作按钮 */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
         <button
-          onClick={reset}
+          onClick={handleRetry}
+          disabled={isRetrying}
           style={{
             padding: '10px 24px',
             background: tokens.colors.accent.brand,
             color: tokens.colors.white,
             border: 'none',
             borderRadius: 8,
-            cursor: 'pointer',
+            cursor: isRetrying ? 'wait' : 'pointer',
             fontSize: 14,
             fontWeight: 500,
             display: 'flex',
             alignItems: 'center',
             gap: 6,
+            opacity: isRetrying ? 0.7 : 1,
+            transition: 'opacity 0.2s',
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="23 4 23 10 17 10" />
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
           </svg>
-          {t('retry') || '重试'}
+          {isRetrying ? '重试中...' : (t('retry') || '重试')}
         </button>
         <Link
           href="/"
@@ -115,6 +186,22 @@ export default function RouteError({
         >
           {t('backToHome') || '返回首页'}
         </Link>
+        <a
+          href={FEEDBACK_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            padding: '10px 24px',
+            background: 'transparent',
+            color: 'var(--color-text-tertiary)',
+            border: '1px solid var(--color-border-primary)',
+            borderRadius: 8,
+            textDecoration: 'none',
+            fontSize: 14,
+          }}
+        >
+          反馈问题
+        </a>
       </div>
     </div>
   )
