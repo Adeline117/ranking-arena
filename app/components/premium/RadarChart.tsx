@@ -5,12 +5,12 @@ import { Box, Text } from '../base'
 
 interface RadarChartProps {
   data: Array<{ label: string; values: number[] }>
-  labels: string[]
+  traderNames: string[]
   colors?: string[]
   size?: number
 }
 
-export default function RadarChart({ data, labels, size = 300 }: RadarChartProps) {
+export default function RadarChart({ size = 300 }: RadarChartProps) {
   return (
     <Box style={{
       width: size,

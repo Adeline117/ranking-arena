@@ -35,7 +35,7 @@ interface WeightedPostRow {
   group_name_en: string | null
   author_weight: number | null
   weighted_score?: number
-  groups?: { name: string; name_en: string } | null
+  groups?: { name: string; name_en: string | null } | null
 }
 
 /** Author profile info used in mapping */
@@ -230,7 +230,7 @@ export async function getWeightedPosts(
   // 处理原始帖子
   const originalPostMap = new Map<string, OriginalPostSummary>()
   if (originalPostsResult.data && originalPostsResult.data.length > 0) {
-    const originalAuthorIds = [...new Set(originalPostsResult.data.map((p: any) => p.author_id).filter(Boolean))]
+    const originalAuthorIds = [...new Set(originalPostsResult.data.map((p) => p.author_id).filter(Boolean))]
     const missingIds = originalAuthorIds.filter(id => !authorProfileMap.has(id))
 
     if (missingIds.length > 0) {
@@ -266,7 +266,7 @@ export async function getWeightedPosts(
   }
 
   // 转换为最终格式
-  const result: PostWithAuthor[] = postsWithWeightedScore.map((post: any) => {
+  const result: PostWithAuthor[] = postsWithWeightedScore.map((post: WeightedPostRow) => {
     const profile = authorProfileMap.get(post.author_id)
     
     return {

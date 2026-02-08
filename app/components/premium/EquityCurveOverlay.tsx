@@ -5,10 +5,15 @@ import { Box, Text } from '../base'
 
 export const CHART_COLORS = ['#8B6FA8', '#06B6D4', '#F59E0B', '#10B981', '#EF4444']
 
+interface EquityTrader {
+  traderId: string
+  traderName: string
+  data: Array<{ date: string; roi: number }>
+  color: string
+}
+
 interface EquityCurveOverlayProps {
-  data: Array<{ date: string; values: number[] }>
-  labels: string[]
-  colors?: string[]
+  traders: EquityTrader[]
   height?: number
 }
 
