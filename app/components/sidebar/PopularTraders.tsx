@@ -72,46 +72,20 @@ export default function PopularTraders({ limit = 10 }: { limit?: number } = {}) 
   useEffect(() => {
     async function load() {
       try {
-        // Query trader_snapshots for top traders by arena_score (ROI<10000%)
-        const { data: snapData, error: snapErr } = await supabase
-          .from('trader_snapshots')
-          .select('source, source_trader_id, followers, roi, arena_score')
-          .not('arena_score', 'is', null)
-          .lt('roi', 10000)
-          .order('arena_score', { ascending: false, nullsFirst: false })
-          .limit(limit)
+        // Use rankings API to stay in sync with the main leaderboard
+        const res = await fetch(`/api/rankings?window=90D&sort_by=arena_score&sort_dir=desc&limit=${limit}`)
+        if (!res.ok) throw new Error('Failed to fetch')
+        const data = await res.json()
+        const rows = data?.data || []
 
-        if (snapErr || !snapData || snapData.length === 0) {
-          setTraders([])
-          setLoading(false)
-          return
-        }
-
-        // Batch fetch handles and avatars from trader_sources
-        const _keys = snapData.map(d => `${d.source}:${d.source_trader_id}`)
-        const { data: sourceData } = await supabase
-          .from('trader_sources')
-          .select('source, source_trader_id, handle, avatar_url')
-          .eq('is_active', true)
-          .in('source', snapData.map(d => d.source))
-          .in('source_trader_id', snapData.map(d => d.source_trader_id))
-
-        const sourceMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
-        if (sourceData) {
-          sourceData.forEach(s => sourceMap.set(`${s.source}:${s.source_trader_id}`, { handle: s.handle, avatar_url: s.avatar_url }))
-        }
-
-        const mapped: Trader[] = snapData.map(d => {
-          const src = sourceMap.get(`${d.source}:${d.source_trader_id}`)
-          return {
-            source: d.source,
-            source_trader_id: d.source_trader_id,
-            handle: src?.handle || null,
-            followers: d.followers,
-            roi: d.roi,
-            avatar_url: src?.avatar_url || null,
-          }
-        })
+        const mapped: Trader[] = rows.map((r: { platform: string; trader_key: string; display_name: string | null; avatar_url: string | null; metrics: { followers?: number | null; roi?: number | null } }) => ({
+          source: r.platform,
+          source_trader_id: r.trader_key,
+          handle: r.display_name,
+          followers: r.metrics?.followers ?? null,
+          roi: r.metrics?.roi ?? null,
+          avatar_url: r.avatar_url,
+        }))
         setTraders(mapped)
       } catch {
         setError(true)
@@ -120,7 +94,10 @@ export default function PopularTraders({ limit = 10 }: { limit?: number } = {}) 
       }
     }
     load()
-  }, [])
+    // Auto-refresh every 60s to stay in sync with rankings
+    const interval = setInterval(load, 60000)
+    return () => clearInterval(interval)
+  }, [limit])
 
   const platformLabel = (source: string) => {
     const labels: Record<string, string> = {
