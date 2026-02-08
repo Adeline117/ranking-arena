@@ -257,6 +257,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         const sanitizedQuery = query.trim()
           .slice(0, 100)
           .replace(/[\\%_]/g, c => `\\${c}`)
+          .replace(/[.,()]/g, '')
 
         const [postsRes, groupsRes] = await Promise.all([
           supabase

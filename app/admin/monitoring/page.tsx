@@ -1,13 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import TopNav from '@/app/components/layout/TopNav'
 import { useToast } from '@/app/components/ui/Toast'
+import { useAdminAuth } from '../hooks/useAdminAuth'
 import HealthScoreCard from './components/HealthScoreCard'
 import AlertsPanel from './components/AlertsPanel'
 import SchedulerMetrics from './components/SchedulerMetrics'
@@ -106,32 +105,11 @@ interface MonitoringData {
 }
 
 export default function MonitoringPage() {
-  const router = useRouter()
   const { showToast } = useToast()
-  const [email, setEmail] = useState<string | null>(null)
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
   const [data, setData] = useState<MonitoringData | null>(null)
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
-
-  // Check authentication
-  useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) {
-        router.push('/login')
-        return
-      }
-      setEmail(user.email || null)
-    })
-
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.access_token) {
-        setAccessToken(session.access_token)
-      }
-    })
-  }, [router])
 
   // Load monitoring data
   const loadData = async () => {
@@ -161,10 +139,10 @@ export default function MonitoringPage() {
 
   // Initial load
   useEffect(() => {
-    if (accessToken) {
+    if (accessToken && isAdmin) {
       loadData()
     }
-  }, [accessToken, loadData])
+  }, [accessToken, isAdmin, loadData])
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -177,12 +155,26 @@ export default function MonitoringPage() {
     return () => clearInterval(interval)
   }, [autoRefresh, accessToken, loadData])
 
-  if (!email) {
+  if (authChecking) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <TopNav email={null} />
         <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text>Loading...</Text>
+          <Text>Verifying admin permissions...</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
+        <TopNav email={email} />
+        <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
+          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+            Access Denied
+          </Text>
+          <Text color="tertiary">You do not have admin permissions to view this page.</Text>
         </Box>
       </Box>
     )
