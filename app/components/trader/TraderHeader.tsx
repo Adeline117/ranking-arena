@@ -14,6 +14,8 @@ import { formatDisplayName } from '@/app/components/ranking/utils'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import TraderFollowButton from '../ui/TraderFollowButton'
+import UserFollowButton from '../ui/UserFollowButton'
 
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
@@ -30,6 +32,7 @@ interface TraderHeaderProps {
   coverUrl?: string
   isRegistered?: boolean
   followers?: number
+  following?: number
   copiers?: number
   aum?: number
   isOwnProfile?: boolean
@@ -293,6 +296,7 @@ export default function TraderHeader({
   coverUrl,
   isRegistered,
   followers = 0,
+  following = 0,
   copiers,
   aum,
   isOwnProfile = false,
@@ -545,7 +549,8 @@ export default function TraderHeader({
           
           {/* Stats row */}
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
-            <StatItem value={followers} label={t('fans')} hasCover={hasCover} />
+            <StatItem value={followers} label={t('followers') || '被关注'} hasCover={hasCover} />
+            <StatItem value={following} label={t('following') || '关注中'} hasCover={hasCover} />
 
             {copiers !== undefined && copiers > 0 && (
               <StatItem
@@ -633,6 +638,21 @@ export default function TraderHeader({
           >
             {t('editProfile')}
           </ActionButton>
+        )}
+
+        {!isOwnProfile && userId && (
+          isRegistered ? (
+            <UserFollowButton
+              targetUserId={traderId}
+              currentUserId={userId}
+              size="sm"
+            />
+          ) : (
+            <TraderFollowButton
+              traderId={traderId}
+              userId={userId}
+            />
+          )
         )}
 
         {!isOwnProfile && (

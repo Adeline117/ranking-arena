@@ -365,15 +365,6 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
               </Box>
 
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                <TraderAboutCard
-                  handle={profile.handle}
-                  traderId={profile.id}
-                  avatarUrl={profile.avatar_url}
-                  bio={profile.bio}
-                  followers={profile.followers}
-                  isRegistered={profile.isRegistered}
-                />
-
                 {similarTraders.length > 0 && <SimilarTraders traders={similarTraders} />}
               </Box>
             </Box>
