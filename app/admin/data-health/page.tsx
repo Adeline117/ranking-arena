@@ -8,6 +8,8 @@
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { useAdminAuth } from '../hooks/useAdminAuth'
+import TopNav from '@/app/components/layout/TopNav'
 
 interface PlatformHealth {
   source: string
@@ -33,11 +35,13 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function DataHealthPage() {
+  const { email, isAdmin, authChecking } = useAdminAuth()
   const [data, setData] = useState<HealthData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!isAdmin) return
     fetch('/api/monitoring/freshness')
       .then(res => res.json())
       .then((d) => {
@@ -62,8 +66,18 @@ export default function DataHealthPage() {
         setError(err.message)
         setLoading(false)
       })
-  }, [])
+  }, [isAdmin])
 
+  if (authChecking) return <div style={{ padding: 40, color: '#999' }}>验证权限中...</div>
+  if (!isAdmin) return (
+    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <TopNav email={email} />
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <h2>无权限访问</h2>
+        <p style={{ color: '#999' }}>您没有管理员权限</p>
+      </div>
+    </div>
+  )
   if (loading) return <div style={{ padding: 40, color: '#999' }}>加载中...</div>
   if (error) return <div style={{ padding: 40, color: '#ef4444' }}>错误: {error}</div>
   if (!data) return null

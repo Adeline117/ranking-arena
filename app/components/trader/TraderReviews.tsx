@@ -385,6 +385,7 @@ function ReviewForm({
   const [rating, setRating] = useState(0)
   const [content, setContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const [accessToken, setAccessToken] = useState<string | null>(null)
 
   useEffect(() => {
@@ -407,7 +408,8 @@ function ReviewForm({
       showToast(t('pleaseWriteReview'), 'warning')
       return
     }
-
+    if (submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       const { ok, status, data } = await authedFetch<{ success: boolean; error?: string }>(
@@ -428,6 +430,7 @@ function ReviewForm({
     } catch {
       showToast(t('networkError'), 'error')
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }

@@ -4,8 +4,43 @@ import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
-import { useStats } from '../hooks/useStats'
+import { useStats, AdminStats } from '../hooks/useStats'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+
+function exportStatsAsCSV(stats: AdminStats) {
+  const rows = [
+    ['Category', 'Metric', 'Value'],
+    ['Users', 'Total', stats.users.total],
+    ['Users', 'New Today', stats.users.newToday],
+    ['Users', 'New Yesterday', stats.users.newYesterday],
+    ['Users', 'Banned', stats.users.banned],
+    ['Posts', 'Total', stats.posts.total],
+    ['Posts', 'New Today', stats.posts.newToday],
+    ['Posts', 'New Yesterday', stats.posts.newYesterday],
+    ['Comments', 'Total', stats.comments.total],
+    ['Comments', 'New Today', stats.comments.newToday],
+    ['Reports', 'Pending', stats.reports.pending],
+    ['Reports', 'This Week', stats.reports.thisWeek],
+    ['Groups', 'Total', stats.groups.total],
+    ['Groups', 'Pending Applications', stats.groups.pendingApplications],
+    ['Scraper', 'Fresh', stats.scraperHealth.fresh],
+    ['Scraper', 'Stale', stats.scraperHealth.stale],
+    ['Scraper', 'Critical', stats.scraperHealth.critical],
+    ['Traders', 'Total', stats.traders.total],
+    ['Traders', 'Snapshots (24h)', stats.traders.snapshots24h],
+    ['Library', 'Total Items', stats.library.total],
+    ['Library', 'With PDF', stats.library.withPdf],
+    ...Object.entries(stats.traders.byPlatform).map(([platform, count]) => ['Traders', `Platform: ${platform}`, count]),
+  ]
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `admin-stats-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 interface DashboardTabProps {
   accessToken: string | null
@@ -65,7 +100,12 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
 
   return (
     <Card title={t('adminDataDashboard')}>
-      <Box style={{ marginBottom: tokens.spacing[4], textAlign: 'right' }}>
+      <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[2] }}>
+        {stats && (
+          <Button variant="secondary" size="sm" onClick={() => exportStatsAsCSV(stats)}>
+            📊 {t('adminExportCSV') || 'Export CSV'}
+          </Button>
+        )}
         <Button variant="secondary" size="sm" onClick={loadStats} disabled={loading}>
           {loading ? t('adminRefreshing') : t('adminRefreshData')}
         </Button>
@@ -186,6 +226,45 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
                 value={stats.scraperHealth.critical}
                 color={stats.scraperHealth.critical > 0 ? tokens.colors.accent.error : tokens.colors.accent.success}
               />
+            </Box>
+          </Box>
+
+          {/* Trader Stats */}
+          <Box>
+            <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+              {t('adminTraderStats') || 'Trader Data'}
+            </Text>
+            <Box
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gap: tokens.spacing[3],
+              }}
+            >
+              <StatCard title={t('adminTotalTraders') || 'Total Traders'} value={stats.traders.total.toLocaleString()} />
+              <StatCard
+                title={t('adminSnapshots24h') || 'Snapshots (24h)'}
+                value={stats.traders.snapshots24h.toLocaleString()}
+                color={stats.traders.snapshots24h > 0 ? tokens.colors.accent.success : tokens.colors.accent.warning}
+              />
+              <StatCard title={t('adminPlatformCount') || 'Platforms'} value={Object.keys(stats.traders.byPlatform).length} />
+            </Box>
+          </Box>
+
+          {/* Library Stats */}
+          <Box>
+            <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+              {t('adminLibraryStats') || 'Library'}
+            </Text>
+            <Box
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gap: tokens.spacing[3],
+              }}
+            >
+              <StatCard title={t('adminLibraryTotal') || 'Total Items'} value={stats.library.total.toLocaleString()} />
+              <StatCard title={t('adminLibraryWithPdf') || 'With PDF'} value={stats.library.withPdf.toLocaleString()} />
             </Box>
           </Box>
         </Box>

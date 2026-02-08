@@ -31,6 +31,15 @@ export interface AdminStats {
     stale: number
     critical: number
   }
+  traders: {
+    total: number
+    byPlatform: Record<string, number>
+    snapshots24h: number
+  }
+  library: {
+    total: number
+    withPdf: number
+  }
 }
 
 export function useStats(accessToken: string | null) {

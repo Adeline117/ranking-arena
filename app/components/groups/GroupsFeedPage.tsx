@@ -110,6 +110,7 @@ export default function GroupsFeedPage() {
           const sanitized = debouncedQuery.trim()
             .slice(0, 100)
             .replace(/[\\%_]/g, c => `\\${c}`)
+            .replace(/[.,()]/g, '')
           query = query.or(`name.ilike.%${sanitized}%,name_en.ilike.%${sanitized}%`)
         }
 

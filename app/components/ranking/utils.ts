@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
  * 格式化 PnL 显示
  */
 export function formatPnL(pnl: number): string {
+  if (!isFinite(pnl) || isNaN(pnl)) return '$0'
   const absPnL = Math.abs(pnl)
   if (absPnL >= 1000000) {
     return `$${(pnl / 1000000).toFixed(2)}M`
@@ -19,6 +20,7 @@ export function formatPnL(pnl: number): string {
  * 格式化 ROI 显示（处理极端值）
  */
 export function formatROI(roi: number): string {
+  if (!isFinite(roi) || isNaN(roi)) return '+0.0%'
   const absRoi = Math.abs(roi)
   if (absRoi >= 10000) {
     return `${roi >= 0 ? '+' : ''}${(roi / 1000).toFixed(0)}K%`
