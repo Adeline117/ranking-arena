@@ -323,15 +323,18 @@ export default function MembershipPage() {
               </tr>
             </thead>
             <tbody>
-              <BenefitRow feature={t('benefitFollowTraders')} free={`${FEATURE_LIMITS.free.maxFollows} ${t('benefitUnit')}`} pro={`${FEATURE_LIMITS.pro.maxFollows} ${t('benefitUnit')}`} />
-              <BenefitRow feature={t('benefitHistoricalData')} free={`${FEATURE_LIMITS.free.historicalDays} ${t('benefitDays')}`} pro={`${FEATURE_LIMITS.pro.historicalDays} ${t('benefitDays')}`} />
-              <BenefitRow feature={t('benefitTraderAlerts')} free="--" pro="Yes" isPro />
-              <BenefitRow feature={t('benefitTraderCompare')} free={t('benefitLimited')} pro={t('benefitUnlimited')} isPro />
-              <BenefitRow feature={t('benefitArenaScore')} free="--" pro="Yes" isPro />
-              <BenefitRow feature={t('benefitApiAccess')} free="--" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay} ${t('benefitTimesPerDay')}`} isPro />
-              <BenefitRow feature={t('benefitProGroups')} free="--" pro="Yes" isPro />
-              <BenefitRow feature={t('benefitAdvancedFilter')} free="--" pro="Yes" isPro />
-              <BenefitRow feature={t('benefitNft')} free="--" pro="Yes" isPro />
+              <BenefitRow feature={language === 'zh' ? '关注交易员' : 'Follow Traders'} free={`${FEATURE_LIMITS.free.maxFollows} ${language === 'zh' ? '个' : ''}`} pro={`${FEATURE_LIMITS.pro.maxFollows} ${language === 'zh' ? '个' : ''}`} />
+              <BenefitRow feature={language === 'zh' ? '历史数据' : 'Historical Data'} free={`${FEATURE_LIMITS.free.historicalDays} ${language === 'zh' ? '天' : 'days'}`} pro={`${FEATURE_LIMITS.pro.historicalDays} ${language === 'zh' ? '天' : 'days'}`} />
+              <BenefitRow feature={language === 'zh' ? '排行榜浏览' : 'Rankings Browse'} free={language === 'zh' ? '基础排序' : 'Basic sort'} pro={language === 'zh' ? '全部排序+筛选' : 'All sorts + filters'} isPro />
+              <BenefitRow feature={language === 'zh' ? '交易员变动提醒' : 'Trader Alerts'} free="--" pro={language === 'zh' ? '支持' : 'Supported'} isPro />
+              <BenefitRow feature={language === 'zh' ? '交易员对比' : 'Trader Compare'} free={language === 'zh' ? '2人' : '2 traders'} pro={language === 'zh' ? '5人' : '5 traders'} isPro />
+              <BenefitRow feature={language === 'zh' ? 'Arena Score 详情' : 'Arena Score Details'} free="--" pro={language === 'zh' ? '支持' : 'Supported'} isPro />
+              <BenefitRow feature={language === 'zh' ? '交易所平台筛选' : 'Exchange Filter'} free="--" pro={language === 'zh' ? '支持' : 'Supported'} isPro />
+              <BenefitRow feature={language === 'zh' ? '数据导出' : 'Data Export'} free="--" pro={language === 'zh' ? 'Top 10/50/100' : 'Top 10/50/100'} isPro />
+              <BenefitRow feature={language === 'zh' ? 'API 访问' : 'API Access'} free="--" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay} ${language === 'zh' ? '次/天' : '/day'}`} isPro />
+              <BenefitRow feature={language === 'zh' ? '私聊消息' : 'Direct Messages'} free={language === 'zh' ? '基础' : 'Basic'} pro={language === 'zh' ? '无限制' : 'Unlimited'} isPro />
+              <BenefitRow feature={language === 'zh' ? 'Pro 专属群组' : 'Pro Groups'} free="--" pro={language === 'zh' ? '支持' : 'Supported'} isPro />
+              <BenefitRow feature={language === 'zh' ? 'NFT 会员证' : 'NFT Membership'} free="--" pro={language === 'zh' ? '支持' : 'Supported'} isPro />
             </tbody>
           </table>
         </div>
