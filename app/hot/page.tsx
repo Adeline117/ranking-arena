@@ -24,7 +24,7 @@ import { renderContentWithLinks } from '@/lib/utils/content'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 // Use design token for brand color
-const ARENA_PURPLE = 'var(--color-brand)'
+const ARENA_PURPLE = tokens.colors.accent.brand
 
 // 本地 Trader 类型
 type Trader = {
@@ -789,7 +789,7 @@ function HotContent() {
                       fontSize: '12px',
                       cursor: 'pointer',
                       transition: tokens.transition.all,
-                      boxShadow: activeHotTab === tab.value ? `0 4px 12px ${'var(--color-accent-primary)'}40` : 'none',
+                      boxShadow: activeHotTab === tab.value ? `0 4px 12px var(--color-accent-primary-40)` : 'none',
                     }}
                     onMouseEnter={(e) => {
                       if (activeHotTab !== tab.value) {
@@ -862,7 +862,7 @@ function HotContent() {
                               padding: '12px 14px',
                               borderRadius: tokens.radius.md,
                               background: 'var(--color-bg-secondary)',
-                              border: `1px solid ${'var(--color-border-primary)'}`,
+                              border: `1px solid var(--color-border-primary)`,
                               boxShadow: 'none',
                               transition: `all 0.2s ease`,
                             }}
@@ -884,7 +884,7 @@ function HotContent() {
                             {/* Top row: rank + badges + group */}
                             <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap', alignItems: 'center' }}>
                               <Text className="hot-post-rank" size="sm" weight="black" style={{
-                                color: rank <= 3 ? tokens.colors.accent.warning : 'var(--color-text-tertiary)',
+                                color: rank <= 3 ? 'var(--color-accent-warning)' : 'var(--color-text-tertiary)',
                                 fontSize: rank <= 3 ? '15px' : '13px',
                                 minWidth: 28,
                               }}>
@@ -926,7 +926,7 @@ function HotContent() {
                                   {language === 'zh' ? p.group : (p.group_en || p.group)}
                                 </Link>
                               ) : (
-                                <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `${'var(--color-text-tertiary)'}10`, borderRadius: 999 }}>
+                                <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `var(--color-text-tertiary-10)`, borderRadius: 999 }}>
                                   {language === 'zh' ? p.group : (p.group_en || p.group)}
                                 </Text>
                               )}
@@ -943,8 +943,8 @@ function HotContent() {
                                 <span style={{
                                   fontSize: 10, fontWeight: 500, marginLeft: 6,
                                   padding: '1px 6px', borderRadius: tokens.radius.sm,
-                                  background: `${tokens.colors.accent.translated || '#6b7280'}15`,
-                                  color: tokens.colors.accent.translated || '#6b7280',
+                                  background: `${'var(--color-text-tertiary)'}15`,
+                                  color: 'var(--color-text-tertiary)',
                                   verticalAlign: 'middle',
                                 }}>
                                   {language === 'zh' ? '译' : 'TR'}
@@ -966,7 +966,7 @@ function HotContent() {
                                     marginBottom: tokens.spacing[1],
                                     lineHeight: 1.5,
                                     fontSize: '12px',
-                                    color: translatedListPosts[p.id]?.body ? tokens.colors.accent.translated : 'var(--color-text-secondary)',
+                                    color: translatedListPosts[p.id]?.body ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)',
                                   }}>
                                     {renderContentWithLinks(contentToShow)}
                                   </Text>
@@ -1049,7 +1049,7 @@ function HotContent() {
                                   padding: tokens.spacing[4],
                                   borderRadius: tokens.radius.lg,
                                   background: 'var(--color-bg-secondary)',
-                                  border: `1px solid ${'var(--color-border-primary)'}`,
+                                  border: `1px solid var(--color-border-primary)`,
                                   filter: 'blur(6px)',
                                   pointerEvents: 'none',
                                   opacity: 0.5,
@@ -1134,7 +1134,7 @@ function HotContent() {
                             padding: '10px 14px',
                             borderRadius: tokens.radius.md,
                             background: 'var(--color-bg-secondary)',
-                            border: `1px solid ${'var(--color-border-primary)'}`,
+                            border: `1px solid var(--color-border-primary)`,
                             boxShadow: 'none',
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
@@ -1153,7 +1153,7 @@ function HotContent() {
                         >
                           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                              <Text size="sm" weight="black" style={{ color: idx < 3 ? tokens.colors.accent.warning : 'var(--color-text-secondary)' }}>
+                              <Text size="sm" weight="black" style={{ color: idx < 3 ? 'var(--color-accent-warning)' : 'var(--color-text-secondary)' }}>
                                 #{idx + 1}
                               </Text>
                               <Text size="base" weight="bold">
@@ -1202,7 +1202,7 @@ function HotContent() {
               width: 'min(760px, 100%)',
               maxHeight: '90vh',
               overflowY: 'auto',
-              border: `1px solid ${'var(--color-border-primary)'}`,
+              border: `1px solid var(--color-border-primary)`,
               borderRadius: 16,
               background: 'var(--color-bg-secondary)',
               padding: 16,
@@ -1297,7 +1297,7 @@ function HotContent() {
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    border: `1px solid ${'var(--color-border-primary)'}`,
+                    border: `1px solid var(--color-border-primary)`,
                     borderRadius: 6,
                     background: 'var(--color-bg-tertiary)',
                     color: 'var(--color-text-secondary)',
@@ -1323,7 +1323,7 @@ function HotContent() {
               </div>
             )}
 
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${'var(--color-border-secondary)'}`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid var(--color-border-secondary)`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
               <button
                 onClick={() => toggleReaction(openPost.id, 'up')}
                 style={{
@@ -1333,7 +1333,7 @@ function HotContent() {
                   padding: '6px 12px',
                   border: 'none',
                   borderRadius: 8,
-                  background: openPost.user_reaction === 'up' ? `${'var(--color-accent-success)'}20` : 'var(--color-bg-tertiary)',
+                  background: openPost.user_reaction === 'up' ? `var(--color-accent-success-20)` : 'var(--color-bg-tertiary)',
                   color: openPost.user_reaction === 'up' ? 'var(--color-accent-success)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
                   fontSize: 13,
@@ -1351,7 +1351,7 @@ function HotContent() {
                   padding: '6px 12px',
                   border: 'none',
                   borderRadius: 8,
-                  background: openPost.user_reaction === 'down' ? `${'var(--color-accent-error)'}20` : 'var(--color-bg-tertiary)',
+                  background: openPost.user_reaction === 'down' ? `var(--color-accent-error-20)` : 'var(--color-bg-tertiary)',
                   color: openPost.user_reaction === 'down' ? 'var(--color-accent-error)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
                   fontSize: 13,
@@ -1363,7 +1363,7 @@ function HotContent() {
             </div>
 
             {/* 评论区 */}
-            <div style={{ marginTop: 16, borderTop: `1px solid ${'var(--color-border-secondary)'}`, paddingTop: 16 }}>
+            <div style={{ marginTop: 16, borderTop: `1px solid var(--color-border-secondary)`, paddingTop: 16 }}>
               <div style={{ fontWeight: 950, marginBottom: 12 }}>
                 {t('comments')} ({openPost.comments})
               </div>
@@ -1380,7 +1380,7 @@ function HotContent() {
                     minHeight: 80,
                     padding: 12,
                     borderRadius: 8,
-                    border: `1px solid ${'var(--color-border-primary)'}`,
+                    border: `1px solid var(--color-border-primary)`,
                     background: 'var(--color-bg-primary)',
                     color: 'var(--color-text-primary)',
                     fontSize: 14,
@@ -1423,7 +1423,7 @@ function HotContent() {
                         padding: 12,
                         background: 'var(--color-bg-primary)',
                         borderRadius: 8,
-                        border: `1px solid ${'var(--color-border-primary)'}`,
+                        border: `1px solid var(--color-border-primary)`,
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1462,7 +1462,7 @@ function HotContent() {
                       style={{
                         padding: '10px 16px',
                         background: 'transparent',
-                        border: `1px solid ${'var(--color-border-primary)'}`,
+                        border: `1px solid var(--color-border-primary)`,
                         borderRadius: 8,
                         color: 'var(--color-text-secondary)',
                         fontSize: 13,
