@@ -20,6 +20,7 @@ import type { InitialTrader } from '@/lib/getInitialTraders'
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
+const FearGreedGauge = lazy(() => import('../market/FearGreedGauge'))
 
 interface HomePageProps {
   initialTraders?: InitialTrader[]
@@ -75,6 +76,11 @@ export default function HomePage({
           }
           rightSidebar={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 72px)' }}>
+              <div style={{ flexShrink: 0 }}>
+                <Suspense fallback={<div className="skeleton" style={{ height: 120, borderRadius: 12 }} />}>
+                  <FearGreedGauge />
+                </Suspense>
+              </div>
               <div style={{ flexShrink: 0, maxHeight: '35%', overflow: 'auto' }}>
                 <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
                   <WatchlistMarket />
