@@ -753,6 +753,19 @@ body {
 /* Nav link hover (non-active) */
 .top-nav-link {
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.top-nav-link-active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 2px;
+  background: var(--color-brand);
+  border-radius: 1px;
 }
 
 .top-nav-link:not(.top-nav-link-active):hover {
@@ -1010,7 +1023,7 @@ body {
 }
 @media (hover: hover) {
   .glass-card:hover {
-    box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle);
+    box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle), 0 0 12px var(--color-brand-muted);
     border-color: var(--glass-border-medium);
     transform: translateY(-2px);
   }
@@ -1104,8 +1117,8 @@ body {
               border-color 200ms ease;
 }
 .sidebar-card:hover {
-  border-color: var(--color-border-secondary);
-  box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle);
+  border-color: var(--color-brand-muted);
+  box-shadow: var(--shadow-card-hover), var(--shadow-inset-subtle), 0 0 12px var(--color-brand-muted);
 }
 
 /* Waterfall / Masonry Grid for groups */

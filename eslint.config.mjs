@@ -91,9 +91,11 @@ const eslintConfig = defineConfig([
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Tooling / docs - don't block app lint
+    // Tooling / docs / vendor - don't block app lint
     "scripts/**",
     "docs/**",
+    "public/**/*.mjs",
+    "worker/**",
     // Claude skills (external, not part of project)
     ".claude/**",
     // Default ignores of eslint-config-next:

@@ -41,6 +41,7 @@ const nextConfig: NextConfig = {
       }
     }
     config.plugins.push(
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       new (require('webpack').IgnorePlugin)({
         resourceRegExp: /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal)$/,
       })

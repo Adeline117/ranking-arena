@@ -199,9 +199,25 @@ export default function BookDetailPage() {
   const hasReadableContent = !!book.pdf_url || !!book.source_url
   const descLong = (book.description?.length || 0) > 300
 
+  const bookJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Book',
+    name: book.title,
+    ...(book.author ? { author: { '@type': 'Person', name: book.author } } : {}),
+    ...(book.isbn ? { isbn: book.isbn } : {}),
+    ...(book.description ? { description: book.description.slice(0, 500) } : {}),
+    ...(book.cover_url ? { image: book.cover_url } : {}),
+    ...(book.publisher ? { publisher: { '@type': 'Organization', name: book.publisher } } : {}),
+    ...(book.language ? { inLanguage: book.language } : {}),
+    ...(book.page_count ? { numberOfPages: book.page_count } : {}),
+    ...(avg > 0 ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: avg.toFixed(1), reviewCount: count } } : {}),
+    url: typeof window !== 'undefined' ? window.location.href : '',
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <TopNav />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(bookJsonLd) }} />
       <main style={{ maxWidth: 960, margin: '0 auto', padding: '80px 16px 100px' }}>
 
         {/* Back link */}
