@@ -244,6 +244,45 @@ async function translateTitlesBatch(titles) {
 }
 
 /**
+ * 批量翻译内容（减少 API 调用次数）
+ */
+async function translateContentBatch(contents) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey || contents.length === 0) return contents.map(() => null)
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional crypto/finance news translator. Translate each English news content to natural, fluent Simplified Chinese. Keep proper nouns, token symbols (BTC, ETH), and abbreviations (SEC, CFTC) as-is. Output ONLY a JSON array of translated strings in the same order.'
+          },
+          { role: 'user', content: JSON.stringify(contents) }
+        ],
+        temperature: 0.3,
+        max_tokens: 16000,
+      }),
+    })
+
+    if (!response.ok) return contents.map(() => null)
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content?.trim() || '[]'
+    const jsonStr = content.replace(/^```json?\n?/, '').replace(/\n?```$/, '')
+    return JSON.parse(jsonStr)
+  } catch (error) {
+    console.error('Batch content GPT translation failed:', error.message)
+    return contents.map(() => null)
+  }
+}
+
+/**
  * 获取RSS数据
  */
 async function fetchRSSFeed(source) {
@@ -339,6 +378,7 @@ function processNewsItem(item, source) {
       title_zh: null, // Will be translated via GPT in batch
       title_en: title,
       content: content || null,
+      content_zh: null, // Will be translated via GPT in batch
       source: source.name,
       source_url: link || null,
       category: source.category,
@@ -449,7 +489,25 @@ async function main() {
         }
         console.log(`${source.name}: 翻译了 ${translations.filter(Boolean).length} 条标题`)
       } catch (err) {
-        console.error(`${source.name}: 批量翻译失败:`, err.message)
+        console.error(`${source.name}: 标题批量翻译失败:`, err.message)
+      }
+      
+      // 批量翻译内容到中文
+      try {
+        const contents = newsItems.map(item => item.content).filter(Boolean)
+        if (contents.length > 0) {
+          const contentTranslations = await translateContentBatch(contents)
+          let ci = 0
+          for (let i = 0; i < newsItems.length; i++) {
+            if (newsItems[i].content && contentTranslations[ci]) {
+              newsItems[i].content_zh = contentTranslations[ci]
+            }
+            if (newsItems[i].content) ci++
+          }
+          console.log(`${source.name}: 翻译了 ${contentTranslations.filter(Boolean).length} 条内容`)
+        }
+      } catch (err) {
+        console.error(`${source.name}: 内容批量翻译失败:`, err.message)
       }
       
       // 保存到数据库

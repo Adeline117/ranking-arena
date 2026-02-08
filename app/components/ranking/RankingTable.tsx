@@ -12,7 +12,6 @@ import CategoryRankingTabs, { CategoryType } from './CategoryRankingTabs'
 import { ProLabel } from '../premium/PremiumGate'
 
 // Lazy-load non-LCP components to reduce initial bundle
-const ExportButton = dynamic(() => import('../utils/ExportButton'), { ssr: false })
 const Pagination = dynamic(() => import('../ui/Pagination'), { ssr: false })
 const _ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
@@ -26,7 +25,7 @@ import { TraderCard } from './TraderCard'
 import { AvatarPreload } from '../ui/AvatarPreload'
 import {
   FilterIcon, CompareIcon, SortIndicator, LockIconSmall,
-  SearchIcon, TableViewIcon, CardViewIcon, SettingsIcon,
+  TableViewIcon, CardViewIcon, SettingsIcon,
 } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
 
