@@ -133,6 +133,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
         style={{
           flex: 1,
           overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
           position: 'relative',
         }}
       >
