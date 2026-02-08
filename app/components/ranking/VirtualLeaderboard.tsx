@@ -228,7 +228,7 @@ export function VirtualLeaderboard({
   const { language } = useLanguage()
 
   // 计算可见范围
-  const { startIndex, _endIndex, visibleItems } = useMemo(() => {
+  const { startIndex, endIndex, visibleItems } = useMemo(() => {
     const start = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
     const visibleCount = Math.ceil(containerHeight / rowHeight)
     const end = Math.min(data.length - 1, start + visibleCount + overscan * 2)

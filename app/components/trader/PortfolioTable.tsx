@@ -30,7 +30,7 @@ type ViewMode = 'current' | 'history'
  * 现代化设计，流畅动画
  */
 export default function PortfolioTable({ items, history = [], isPro = true, onUnlock }: PortfolioTableProps) {
-  const { t, _language } = useLanguage()
+  const { t } = useLanguage()
   const [viewMode, setViewMode] = useState<ViewMode>('current')
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'openTime' | 'closeTime' | 'pnl'>('openTime')

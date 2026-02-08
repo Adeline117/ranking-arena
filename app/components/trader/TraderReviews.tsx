@@ -18,7 +18,7 @@ import type { Review, ReviewSummary } from '@/lib/data/reviews'
 
 interface TraderReviewsProps {
   traderId: string
-  _traderHandle: string
+  traderHandle: string
 }
 
 type SortMode = 'newest' | 'top'
@@ -497,7 +497,7 @@ function ReviewForm({
 
 // ============ Main Component ============
 
-export default function TraderReviews({ _traderId, traderHandle }: TraderReviewsProps) {
+export default function TraderReviews({ traderId, traderHandle }: TraderReviewsProps) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
 

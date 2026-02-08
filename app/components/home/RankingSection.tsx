@@ -104,7 +104,7 @@ export default function RankingSection({
   const router = useRouter()
   const searchParams = useSearchParams()
   const { showToast } = useToast()
-  const { _language, t } = useLanguage()
+  const { language, t } = useLanguage()
   const { isPro, isLoading: premiumLoading } = useSubscription()
   const { getAuthHeaders } = useAuthSession()
 

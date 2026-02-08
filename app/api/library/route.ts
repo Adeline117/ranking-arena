@@ -47,7 +47,7 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
   if (lang && !search) {
     // Preferred language items first, then others, sorted by creation date
     const preferredLang = lang === 'zh' ? 'zh' : 'en'
-    const { data, error, _count } = await supabase.rpc('library_items_by_lang', {
+    const { data, error, count } = await supabase.rpc('library_items_by_lang', {
       p_category: category && category !== 'all' ? category : null,
       p_preferred_lang: preferredLang,
       p_limit: limit,
@@ -85,7 +85,7 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
   // Apply sort order
   switch (sort) {
     case 'popular':
-      query = query.order('view_count', { ascending: false, nullsFirst: false })
+      query = query.order('viewcount', { ascending: false, nullsFirst: false })
       break
     case 'rating':
       query = query.order('rating', { ascending: false, nullsFirst: false })
