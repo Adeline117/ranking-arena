@@ -11,15 +11,18 @@ import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import TopNav from '@/app/components/layout/TopNav'
-import TraderPageV2 from '@/app/components/trader/TraderPageV2'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
-import TraderAboutCard from '@/app/components/trader/TraderAboutCard'
-import SimilarTraders from '@/app/components/trader/SimilarTraders'
-import TraderFeed from '@/app/components/trader/TraderFeed'
 // Phase 3A: Lazy-load heavy tab components (StatsPage imports lightweight-charts ~300KB)
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+// Phase 4: Lazy-load below-fold and secondary components
+const TraderPageV2 = dynamic(() => import('@/app/components/trader/TraderPageV2'), {
+  loading: () => <RankingSkeleton />,
+})
+const TraderAboutCard = dynamic(() => import('@/app/components/trader/TraderAboutCard'))
+const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
+const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
 })
