@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -25,8 +25,29 @@ const PLATFORM_LABELS: Record<string, string> = {
   bybit: 'Bybit',
 }
 
-function AvatarFallback({ name, size = 36 }: { name: string; size?: number }) {
+function TraderAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: string | null; size?: number }) {
+  const [imgError, setImgError] = useState(false)
   const initial = (name || '?').charAt(0).toUpperCase()
+
+  if (avatarUrl && !imgError) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        width={size}
+        height={size}
+        style={{
+          borderRadius: tokens.radius.full,
+          objectFit: 'cover',
+          minWidth: size,
+          width: size,
+          height: size,
+        }}
+        onError={() => setImgError(true)}
+      />
+    )
+  }
+
   return (
     <div
       style={{

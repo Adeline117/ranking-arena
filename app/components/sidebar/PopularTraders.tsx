@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -19,8 +18,29 @@ type Trader = {
 
 const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'] // gold, silver, bronze
 
-function AvatarFallback({ name, size = 40 }: { name: string; size?: number }) {
+function TraderAvatar({ name, avatarUrl, size = 40 }: { name: string; avatarUrl: string | null; size?: number }) {
+  const [imgError, setImgError] = useState(false)
   const initial = (name || '?').charAt(0).toUpperCase()
+
+  if (avatarUrl && !imgError) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        width={size}
+        height={size}
+        style={{
+          borderRadius: tokens.radius.full,
+          objectFit: 'cover',
+          minWidth: size,
+          width: size,
+          height: size,
+        }}
+        onError={() => setImgError(true)}
+      />
+    )
+  }
+
   return (
     <div
       style={{
@@ -168,22 +188,7 @@ export default function PopularTraders() {
                 </span>
 
                 {/* Avatar */}
-                {t.avatar_url ? (
-                  <Image
-                    src={t.avatar_url}
-                    alt={displayName}
-                    width={40}
-                    height={40}
-                    sizes="40px"
-                    style={{
-                      borderRadius: tokens.radius.full,
-                      objectFit: 'cover',
-                      minWidth: 40,
-                    }}
-                  />
-                ) : (
-                  <AvatarFallback name={displayName} size={40} />
-                )}
+                <TraderAvatar name={displayName} avatarUrl={t.avatar_url} size={40} />
 
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
