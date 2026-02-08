@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { SectionCard, ToggleSwitch, RadioOption } from './shared'
 import { isHapticSupported, haptic } from '@/lib/utils/haptics'
+import { PushNotificationToggle } from '@/app/components/notifications/PushNotificationToggle'
 
 interface NotificationsSectionProps {
   notifyFollow: boolean
@@ -28,13 +29,6 @@ interface NotificationsSectionProps {
 export const NotificationsSection = React.memo(function NotificationsSection(props: NotificationsSectionProps) {
   const { t } = useLanguage()
   const onToast = props.onToast || ((msg: string) => { console.log(msg) })
-  const [pushEnabled, setPushEnabled] = useState(false)
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setPushEnabled(Notification.permission === 'granted')
-    }
-  }, [])
 
   const items = [
     { key: 'follow', labelKey: 'newFollowerNotify', value: props.notifyFollow, setter: props.setNotifyFollow },
@@ -77,54 +71,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(pro
         <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
           {t('pushNotificationsDesc')}
         </Text>
-        <Box
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
-            borderRadius: tokens.radius.md,
-            background: tokens.colors.bg.primary,
-          }}
-        >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            <Text size="sm" weight="medium">
-              {t('enablePushNotifications')}
-            </Text>
-          </Box>
-          <ToggleSwitch
-            checked={pushEnabled}
-            onChange={async (enabled) => {
-              if (!enabled) {
-                setPushEnabled(false)
-                return
-              }
-              try {
-                if (!('Notification' in window)) {
-                  onToast(t('browserNotSupported'), 'error')
-                  return
-                }
-                const permission = await Notification.requestPermission()
-                if (permission === 'granted') {
-                  const reg = await navigator.serviceWorker?.ready
-                  if (reg) {
-                    setPushEnabled(true)
-                    onToast(t('pushNotificationsEnabled'), 'success')
-                  }
-                } else {
-                  onToast(t('allowNotificationPermission'), 'error')
-                }
-              } catch (err) {
-                console.error('Push notification error:', err)
-                onToast(t('pushNotificationError') || 'Failed', 'error')
-              }
-            }}
-          />
-        </Box>
+        <PushNotificationToggle onToast={onToast} />
       </Box>
 
       {/* Haptic Feedback */}

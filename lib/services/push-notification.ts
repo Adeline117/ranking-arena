@@ -6,6 +6,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { sendPushNotification as sendWebPush } from '@/lib/utils/web-push'
+import type { PushPayload } from '@/lib/utils/web-push'
 
 // ============================================
 // 类型定义
@@ -104,6 +106,9 @@ export class PushNotificationService {
       deviceId?: string
       deviceName?: string
       platform?: 'ios' | 'android' | 'web'
+      endpoint?: string
+      p256dh?: string
+      auth?: string
     }
   ): Promise<PushSubscription> {
      
@@ -116,6 +121,9 @@ export class PushNotificationService {
         device_id: options?.deviceId,
         device_name: options?.deviceName,
         platform: options?.platform,
+        endpoint: options?.endpoint,
+        p256dh: options?.p256dh,
+        auth: options?.auth,
         enabled: true,
         updated_at: new Date().toISOString(),
       }, {
@@ -225,8 +233,49 @@ export class PushNotificationService {
       return this.sendViaFCM(token, notification)
     }
 
-    // Web Push 暂未实现
-    return { success: false, error: 'Web Push 暂未支持' }
+    if (provider === 'web') {
+      return this.sendViaWebPush(token, notification)
+    }
+
+    return { success: false, error: 'Unknown provider' }
+  }
+
+  /**
+   * 通过 Web Push (VAPID) 发送推送
+   */
+  private async sendViaWebPush(
+    token: string,
+    notification: PushNotification
+  ): Promise<SendResult> {
+    // Look up the subscription keys from DB
+    const { data: sub } = await (this.supabase as any)
+      .from('push_subscriptions')
+      .select('endpoint, p256dh, auth')
+      .eq('token', token)
+      .eq('enabled', true)
+      .single()
+
+    if (!sub?.endpoint || !sub?.p256dh || !sub?.auth) {
+      return { success: false, error: 'Web Push subscription keys not found' }
+    }
+
+    const payload: PushPayload = {
+      type: (notification.data?.type as PushPayload['type']) || 'flash_news',
+      title: notification.title,
+      body: notification.body,
+      url: notification.data?.url,
+      icon: notification.imageUrl,
+    }
+
+    try {
+      const ok = await sendWebPush(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload
+      )
+      return ok ? { success: true } : { success: false, error: 'Subscription expired' }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
   }
 
   /**

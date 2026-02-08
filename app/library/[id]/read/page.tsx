@@ -8,6 +8,10 @@ import { usePremium } from '@/lib/premium/hooks'
 import { tokens } from '@/lib/design-tokens'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { supabase } from '@/lib/supabase/client'
+import dynamic from 'next/dynamic'
+import { getEpubControls } from '@/app/components/library/EpubReader'
+
+const EpubReader = dynamic(() => import('@/app/components/library/EpubReader'), { ssr: false })
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -26,7 +30,7 @@ type BookInfo = {
 type ReadingTheme = 'white' | 'sepia' | 'dark' | 'green'
 type FontSize = 'small' | 'medium' | 'large'
 type FontFamily = 'sans' | 'serif'
-type ContentMode = 'pdf' | 'html' | 'none'
+type ContentMode = 'pdf' | 'html' | 'epub' | 'none'
 
 type TocItem = {
   title: string
@@ -108,6 +112,7 @@ async function loadProgressFromServer(bookId: string): Promise<{ page: number; t
 }
 
 function detectContentMode(book: BookInfo): ContentMode {
+  if (book.epub_url) return 'epub'
   if (book.pdf_url) return 'pdf'
   if (book.content_url || book.source_url) return 'html'
   return 'none'
@@ -207,6 +212,12 @@ function IconBookmark({ filled }: { filled?: boolean }) {
     </svg>
   )
 }
+function IconSearch() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+}
+function IconNotes() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+}
 function _IconFont() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -245,6 +256,12 @@ export default function ReadPage() {
   const [htmlChapters, setHtmlChapters] = useState<HtmlChapter[]>([])
   const [htmlPages, setHtmlPages] = useState<string[]>([])
   const [htmlLoading, setHtmlLoading] = useState(false)
+
+  // ePub state
+  const [epubToc, setEpubToc] = useState<any[]>([])
+  const [epubGoToHref, setEpubGoToHref] = useState<string | null>(null)
+  const [epubReady, setEpubReady] = useState(false)
+  const epubContainerRef = useRef<HTMLDivElement>(null)
 
   // Reading preferences (persisted)
   const [theme, setTheme] = useState<ReadingTheme>(() => lsGet('theme', 'dark'))
@@ -655,7 +672,7 @@ export default function ReadPage() {
 
   // ─── Render states ─────────────────────────────────────────────────
 
-  const isLoading = loading || pdfLoading || htmlLoading || premiumLoading
+  const isLoading = loading || pdfLoading || htmlLoading || premiumLoading || (contentMode === 'epub' && !epubReady && book !== null && !error)
 
   if (isLoading) {
     return (
@@ -791,14 +808,32 @@ export default function ReadPage() {
             {book.author && <p style={{ fontSize: 11, margin: 0, color: 'rgba(255,255,255,0.45)' }}>{book.author}</p>}
           </div>
 
-          {toc.length > 0 && (
+          {(toc.length > 0 || epubToc.length > 0) && (
             <ToolbarBtn onClick={() => { setShowToc(p => !p); setShowSettings(false) }} active={showToc} title={isZh ? '目录' : 'Contents'}>
               <IconToc />
             </ToolbarBtn>
           )}
-          <ToolbarBtn onClick={toggleBookmark} active={isCurrentPageBookmarked} title={isZh ? '书签' : 'Bookmark'}>
-            <IconBookmark filled={isCurrentPageBookmarked} />
-          </ToolbarBtn>
+          {contentMode !== 'epub' && (
+            <ToolbarBtn onClick={toggleBookmark} active={isCurrentPageBookmarked} title={isZh ? '书签' : 'Bookmark'}>
+              <IconBookmark filled={isCurrentPageBookmarked} />
+            </ToolbarBtn>
+          )}
+          {contentMode === 'epub' && (
+            <>
+              <ToolbarBtn onClick={() => {
+                const ctrl = getEpubControls(epubContainerRef.current)
+                ctrl?.toggleSearch()
+              }} title={isZh ? '搜索' : 'Search'}>
+                <IconSearch />
+              </ToolbarBtn>
+              <ToolbarBtn onClick={() => {
+                const ctrl = getEpubControls(epubContainerRef.current)
+                ctrl?.toggleNotes()
+              }} title={isZh ? '笔记' : 'Notes'}>
+                <IconNotes />
+              </ToolbarBtn>
+            </>
+          )}
           <ToolbarBtn onClick={() => { setShowSettings(p => !p); setShowToc(false) }} active={showSettings} title={isZh ? '设置' : 'Settings'}>
             <IconSettings />
           </ToolbarBtn>
@@ -921,7 +956,7 @@ export default function ReadPage() {
             )}
 
             <div style={{ padding: '8px 0' }}>
-              {renderTocItems(toc)}
+              {contentMode === 'epub' ? renderEpubTocItems(epubToc) : renderTocItems(toc)}
             </div>
           </div>
         </>
@@ -985,8 +1020,8 @@ export default function ReadPage() {
               </div>
             </div>
 
-            {/* Font Family (HTML mode only) */}
-            {contentMode === 'html' && (
+            {/* Font Family (HTML/ePub mode) */}
+            {(contentMode === 'html' || contentMode === 'epub') && (
               <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, paddingTop: 14, marginBottom: 14 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, opacity: 0.6 }}>
                   {isZh ? '字体' : 'Font'}
@@ -1108,6 +1143,27 @@ export default function ReadPage() {
           </div>
         )}
 
+        {/* ePub Content */}
+        {contentMode === 'epub' && book?.epub_url && (
+          <div ref={epubContainerRef} style={{ width: '100%', height: '100%', background: themeColors.pageBg }}>
+            <EpubReader
+              url={book.epub_url}
+              bookId={id}
+              isZh={isZh}
+              theme={theme}
+              fontSize={fontSize}
+              fontFamily={fontFamily}
+              onTocLoaded={(tocItems) => setEpubToc(tocItems)}
+              onProgressChange={(percent, page, total) => {
+                setCurrentPage(page)
+                setTotalPages(total)
+              }}
+              onReady={() => setEpubReady(true)}
+              goToHref={epubGoToHref}
+            />
+          </div>
+        )}
+
         {/* Page loading indicator */}
         {pageRendering && (
           <div style={{
@@ -1170,6 +1226,29 @@ export default function ReadPage() {
       `}</style>
     </div>
   )
+
+  function renderEpubTocItems(items: any[], level = 0): React.ReactNode {
+    return items.map((item: any, i: number) => (
+      <div key={i}>
+        <button
+          onClick={() => { setEpubGoToHref(item.href); setShowToc(false); setTimeout(() => setEpubGoToHref(null), 100) }}
+          style={{
+            display: 'block', width: '100%', textAlign: 'left',
+            padding: '10px 16px', paddingLeft: 16 + level * 20,
+            background: 'none', border: 'none',
+            color: theme === 'dark' ? '#fff' : '#1a1a1a',
+            cursor: 'pointer', fontSize: 13, lineHeight: 1.4,
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        >
+          {item.label}
+        </button>
+        {item.subitems && item.subitems.length > 0 && renderEpubTocItems(item.subitems, level + 1)}
+      </div>
+    ))
+  }
 
   function renderTocItems(items: TocItem[]): React.ReactNode {
     return items.map((item, i) => (

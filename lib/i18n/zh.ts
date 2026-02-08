@@ -2663,6 +2663,8 @@ const zh = {
     browserNotSupported: '你的浏览器不支持推送通知',
     allowNotificationPermission: '请在浏览器设置中允许通知权限',
     pushNotificationsEnabled: '推送通知已开启！',
+    pushNotificationError: '推送通知设置失败，请稍后再试',
+    pushNotificationsDisabled: '推送通知已关闭',
     hapticFeedbackTitle: '震动反馈',
     hapticFeedbackDesc: '当关注的交易员开仓时，手机会有特定节奏的震动',
     tradeAlertVibration: '交易提醒震动',
@@ -2748,6 +2750,30 @@ fearGreedFear: '恐惧',
 fearGreedNeutral: '中性',
 fearGreedGreed: '贪婪',
 fearGreedExtremeGreed: '极度贪婪',
+
+  // TradingView Chart Labels
+  chartOpen: '开盘',
+  chartClose: '收盘',
+  chartHigh: '最高',
+  chartLow: '最低',
+  chartVolume: '成交量',
+  chartValue: '数值',
+
+  // ePub Reader
+  epubReaderSearch: '搜索内容',
+  epubReaderSearchPlaceholder: '输入关键词...',
+  epubReaderSearching: '搜索中...',
+  epubReaderNoResults: '未找到结果',
+  epubReaderHighlightsAndNotes: '高亮和笔记',
+  epubReaderAddHighlight: '添加高亮和笔记',
+  epubReaderAddNotePlaceholder: '添加笔记（可选）...',
+  epubReaderNoHighlights: '暂无高亮或笔记。选中文字即可添加。',
+  epubReaderDelete: '删除',
+  epubReaderSave: '保存',
+  epubReaderCancel: '取消',
+  epubReaderLoading: '正在加载...',
+  epubReaderTableOfContents: '目录',
+  epubReaderNotes: '笔记',
 
 } as const
 

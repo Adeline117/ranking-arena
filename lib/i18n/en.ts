@@ -2662,6 +2662,8 @@ const en = {
     browserNotSupported: 'Your browser does not support push notifications',
     allowNotificationPermission: 'Please allow notification permission in browser settings',
     pushNotificationsEnabled: 'Push notifications enabled!',
+    pushNotificationError: 'Failed to set up push notifications, please try again',
+    pushNotificationsDisabled: 'Push notifications disabled',
     hapticFeedbackTitle: 'Haptic Feedback',
     hapticFeedbackDesc: 'Feel vibrations when followed traders open positions',
     tradeAlertVibration: 'Trade Alert Vibration',
@@ -2744,6 +2746,30 @@ const en = {
   fearGreedNeutral: 'Neutral',
   fearGreedGreed: 'Greed',
   fearGreedExtremeGreed: 'Extreme Greed',
+
+  // TradingView Chart Labels
+  chartOpen: 'Open',
+  chartClose: 'Close',
+  chartHigh: 'High',
+  chartLow: 'Low',
+  chartVolume: 'Volume',
+  chartValue: 'Value',
+
+  // ePub Reader
+  epubReaderSearch: 'Search',
+  epubReaderSearchPlaceholder: 'Enter keyword...',
+  epubReaderSearching: 'Searching...',
+  epubReaderNoResults: 'No results found',
+  epubReaderHighlightsAndNotes: 'Highlights & Notes',
+  epubReaderAddHighlight: 'Add Highlight & Note',
+  epubReaderAddNotePlaceholder: 'Add a note (optional)...',
+  epubReaderNoHighlights: 'No highlights or notes yet. Select text to add.',
+  epubReaderDelete: 'Delete',
+  epubReaderSave: 'Save',
+  epubReaderCancel: 'Cancel',
+  epubReaderLoading: 'Loading...',
+  epubReaderTableOfContents: 'Table of Contents',
+  epubReaderNotes: 'Notes',
 
 } as const
 

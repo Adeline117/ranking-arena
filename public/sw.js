@@ -254,14 +254,33 @@ self.addEventListener('sync', (event) => {
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
-  const data = event.data.json();
+  let data;
+  try {
+    data = event.data.json();
+  } catch (_e) {
+    data = { title: 'Arena', body: event.data.text() };
+  }
+
+  // Route by payload type to relevant page
+  const typeUrlMap = {
+    rank_change: '/rankings',
+    flash_news: '/flash-news',
+    new_follower: '/notifications',
+    post_reply: '/notifications',
+  };
+
+  const url = data.url || typeUrlMap[data.type] || '/';
+
   const options = {
     body: data.body,
-    icon: '/icons/icon-192x192.png',
+    icon: data.icon || '/icons/icon-192x192.png',
     badge: '/icons/icon-72x72.png',
     vibrate: [100, 50, 100],
+    tag: data.type || 'arena',
     data: {
-      url: data.url || '/',
+      url,
+      type: data.type,
+      ...data.data,
     },
     actions: [
       { action: 'open', title: '查看' },

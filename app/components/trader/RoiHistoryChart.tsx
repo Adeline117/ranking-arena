@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Skeleton } from '../ui/Skeleton'
+import TradingViewChart, { type LineDataPoint } from '../charts/TradingViewChart'
+import type { Time } from 'lightweight-charts'
 
 // ============================================
 // 类型定义
@@ -67,7 +69,7 @@ export default function RoiHistoryChart({
   const { language } = useLanguage()
   const [period, setPeriod] = useState<TimePeriod>(initialPeriod)
   const [mounted, setMounted] = useState(false)
-  const [hoveredPoint, setHoveredPoint] = useState<HistoryDataPoint | null>(null)
+  const [_hoveredPoint, _setHoveredPoint] = useState<HistoryDataPoint | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const chartRef = useRef<HTMLDivElement>(null)
   
@@ -137,6 +139,23 @@ export default function RoiHistoryChart({
       isPositive: change >= 0,
     }
   }, [currentData, hasData, dataType])
+
+  // Convert data for TradingView chart
+  const tvChartData = useMemo<LineDataPoint[]>(() => {
+    return currentData.map(d => ({
+      time: d.date as Time,
+      value: dataType === 'arenaScore' ? (d.arenaScore || 0) : d.roi,
+    }))
+  }, [currentData, dataType])
+
+  // Detect current theme
+  const currentTheme = useMemo<'dark' | 'light'>(() => {
+    if (typeof document !== 'undefined') {
+      const t = document.documentElement.getAttribute('data-theme')
+      return t === 'light' ? 'light' : 'dark'
+    }
+    return 'dark'
+  }, [])
 
   const fullscreenStyles = isFullscreen ? {
     position: 'fixed' as const,
@@ -320,46 +339,17 @@ export default function RoiHistoryChart({
       {!isLoading && !error && hasData && (
         <>
           <div ref={chartRef} style={{ height: isFullscreen ? 'calc(100vh - 200px)' : height, position: 'relative' }}>
-            <InteractiveLineChart 
-              data={currentData} 
-              dataType={dataType}
-              height={height}
-              onHover={setHoveredPoint}
-              hoveredPoint={hoveredPoint}
+            <TradingViewChart
+              data={tvChartData}
+              type="area"
+              height={isFullscreen ? undefined : height}
+              theme={currentTheme}
+              locale={language as 'zh' | 'en'}
+              color={stats?.isPositive ? undefined : undefined}
             />
           </div>
           
-          {/* Hover Tooltip */}
-          {hoveredPoint && (
-            <Box style={{
-              position: 'absolute',
-              top: 60,
-              right: tokens.spacing[4],
-              background: tokens.colors.bg.primary,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: tokens.radius.lg,
-              padding: tokens.spacing[3],
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-              zIndex: 10,
-            }}>
-              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                {new Date(hoveredPoint.date).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </Text>
-              <Text size="lg" weight="black" style={{ 
-                color: (dataType === 'arenaScore' ? hoveredPoint.arenaScore || 0 : hoveredPoint.roi) >= 0 
-                  ? tokens.colors.accent.success 
-                  : tokens.colors.accent.error,
-                fontFamily: tokens.typography.fontFamily.mono.join(', '),
-              }}>
-                {dataType === 'arenaScore' 
-                  ? (hoveredPoint.arenaScore?.toFixed(1) || 'N/A')
-                  : `${hoveredPoint.roi >= 0 ? '+' : ''}${hoveredPoint.roi.toFixed(2)}%`}
-              </Text>
-            </Box>
-          )}
+          {/* Tooltip handled by TradingView chart */}
         </>
       )}
       
@@ -513,226 +503,6 @@ function StatItem({
     </Box>
   )
 }
-
-function InteractiveLineChart({ 
-  data, 
-  dataType,
-  height: _height,
-  onHover,
-  hoveredPoint,
-}: { 
-  data: HistoryDataPoint[]
-  dataType: 'roi' | 'arenaScore'
-  height: number
-  onHover: (point: HistoryDataPoint | null) => void
-  hoveredPoint: HistoryDataPoint | null
-}) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  
-  const values = data.map(d => dataType === 'arenaScore' ? (d.arenaScore || 0) : d.roi)
-  const maxValue = Math.max(...values)
-  const minValue = Math.min(...values)
-  const range = maxValue - minValue || 1
-  
-  // 添加一些 padding
-  const paddedMin = minValue - range * 0.1
-  const paddedMax = maxValue + range * 0.1
-  const paddedRange = paddedMax - paddedMin
-  
-  const chartWidth = 100
-  const chartHeight = 100
-  
-  const points = data.map((d, i) => {
-    const value = dataType === 'arenaScore' ? (d.arenaScore || 0) : d.roi
-    const x = data.length > 1 ? (i / (data.length - 1)) * chartWidth : chartWidth / 2
-    const y = chartHeight - ((value - paddedMin) / paddedRange) * chartHeight
-    return { x, y, data: d }
-  })
-  
-  const pathD = `M ${points.map(p => `${p.x},${p.y}`).join(' L ')}`
-  
-  const lastValue = values[values.length - 1]
-  const firstValue = values[0]
-  const isPositive = lastValue >= firstValue
-  const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
-  
-  // 处理鼠标悬停
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!containerRef.current || data.length === 0) return
-    
-    const rect = containerRef.current.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const ratio = x / rect.width
-    const index = Math.round(ratio * (data.length - 1))
-    const clampedIndex = Math.max(0, Math.min(data.length - 1, index))
-    
-    onHover(data[clampedIndex])
-  }, [data, onHover])
-  
-  const handleMouseLeave = useCallback(() => {
-    onHover(null)
-  }, [onHover])
-  
-  // 找到悬停点的索引
-  const hoveredIndex = hoveredPoint ? data.findIndex(d => d.date === hoveredPoint.date) : -1
-  const hoveredPointCoords = hoveredIndex >= 0 ? points[hoveredIndex] : null
-
-  return (
-    <div 
-      ref={containerRef}
-      style={{ 
-        height: '100%', 
-        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}40 100%)`, 
-        borderRadius: tokens.radius.xl,
-        padding: tokens.spacing[4],
-        position: 'relative',
-        border: `1px solid ${tokens.colors.border.primary}40`,
-        cursor: 'crosshair',
-      }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      {/* Y-axis Labels */}
-      <Box style={{ 
-        position: 'absolute', 
-        left: tokens.spacing[3], 
-        top: tokens.spacing[4], 
-        bottom: tokens.spacing[8],
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-      }}>
-        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-          {dataType === 'roi' ? `${paddedMax.toFixed(0)}%` : paddedMax.toFixed(0)}
-        </Text>
-        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-          {dataType === 'roi' ? `${((paddedMax + paddedMin) / 2).toFixed(0)}%` : ((paddedMax + paddedMin) / 2).toFixed(0)}
-        </Text>
-        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-          {dataType === 'roi' ? `${paddedMin.toFixed(0)}%` : paddedMin.toFixed(0)}
-        </Text>
-      </Box>
-      
-      {/* Chart Area */}
-      <Box style={{ 
-        marginLeft: 55, 
-        height: 'calc(100% - 32px)',
-        position: 'relative',
-      }}>
-        <svg 
-          viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
-          preserveAspectRatio="none"
-          style={{ width: '100%', height: '100%' }}
-        >
-          {/* Grid */}
-          {[0, 25, 50, 75, 100].map(y => (
-            <line 
-              key={y} 
-              x1="0" 
-              y1={y} 
-              x2="100" 
-              y2={y} 
-              stroke={tokens.colors.border.primary} 
-              strokeWidth="0.3" 
-              strokeDasharray="2,2" 
-            />
-          ))}
-          
-          {/* Zero Line (if visible) */}
-          {paddedMin < 0 && paddedMax > 0 && (
-            <line
-              x1="0"
-              y1={chartHeight - ((0 - paddedMin) / paddedRange) * chartHeight}
-              x2="100"
-              y2={chartHeight - ((0 - paddedMin) / paddedRange) * chartHeight}
-              stroke={tokens.colors.text.tertiary}
-              strokeWidth="0.5"
-              strokeDasharray="4,4"
-            />
-          )}
-          
-          {/* Area Fill */}
-          <path
-            d={`${pathD} L ${chartWidth},${chartHeight} L 0,${chartHeight} Z`}
-            fill={`url(#roi-gradient-${isPositive ? 'positive' : 'negative'})`}
-            opacity="0.3"
-          />
-          
-          {/* Line */}
-          <path
-            d={pathD}
-            fill="none"
-            stroke={color}
-            strokeWidth="2.5"
-            vectorEffect="non-scaling-stroke"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          
-          {/* Data Points on Hover */}
-          {points.map((p, i) => (
-            <circle
-              key={i}
-              cx={p.x}
-              cy={p.y}
-              r={hoveredIndex === i ? 4 : 0}
-              fill={color}
-              stroke="#fff"
-              strokeWidth="2"
-              style={{ transition: 'r 0.15s ease' }}
-            />
-          ))}
-          
-          {/* Hover Line */}
-          {hoveredPointCoords && (
-            <line
-              x1={hoveredPointCoords.x}
-              y1="0"
-              x2={hoveredPointCoords.x}
-              y2="100"
-              stroke={tokens.colors.text.tertiary}
-              strokeWidth="0.5"
-              strokeDasharray="3,3"
-            />
-          )}
-          
-          {/* Gradient Definitions */}
-          <defs>
-            <linearGradient id="roi-gradient-positive" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={tokens.colors.accent.success} stopOpacity="0.4" />
-              <stop offset="100%" stopColor={tokens.colors.accent.success} stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id="roi-gradient-negative" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={tokens.colors.accent.error} stopOpacity="0.4" />
-              <stop offset="100%" stopColor={tokens.colors.accent.error} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </Box>
-      
-      {/* X-axis Labels */}
-      <Box style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        marginLeft: 55,
-        marginTop: tokens.spacing[2],
-      }}>
-        <Text size="xs" color="tertiary">
-          {data[0]?.date ? new Date(data[0].date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
-        </Text>
-        {data.length > 2 && (
-          <Text size="xs" color="tertiary">
-            {new Date(data[Math.floor(data.length / 2)].date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
-          </Text>
-        )}
-        <Text size="xs" color="tertiary">
-          {data[data.length - 1]?.date ? new Date(data[data.length - 1].date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
-        </Text>
-      </Box>
-    </div>
-  )
-}
-
 function DataTable({ 
   data, 
   dataType,
