@@ -17,6 +17,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { usePremium, FEATURE_LIMITS } from '@/lib/premium/hooks'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
+import { useToast } from '@/app/components/ui/Toast'
 
 interface MembershipInfo {
   subscription: {
@@ -41,6 +42,7 @@ interface MembershipInfo {
 export default function MembershipPage() {
   const { t, language } = useLanguage()
   const router = useRouter()
+  const { showToast } = useToast()
   const { isLoggedIn, loading: authLoading, getAuthHeadersAsync } = useAuthSession()
   const { subscription, isPremium: isPro } = usePremium()
 
@@ -382,14 +384,20 @@ export default function MembershipPage() {
             {/* Manage / Change Plan */}
             <button
               onClick={async () => {
-                const headers = await getAuthHeadersAsync()
-                const res = await fetch('/api/stripe/portal', {
-                  method: 'POST',
-                  headers,
-                })
-                if (res.ok) {
-                  const { url } = await res.json()
-                  window.location.href = url
+                try {
+                  const headers = await getAuthHeadersAsync()
+                  const res = await fetch('/api/stripe/portal', {
+                    method: 'POST',
+                    headers,
+                  })
+                  if (res.ok) {
+                    const { url } = await res.json()
+                    window.location.href = url
+                  } else {
+                    showToast(language === 'zh' ? '支付系统暂未开放，敬请期待' : 'Payment system coming soon', 'error')
+                  }
+                } catch {
+                  showToast(language === 'zh' ? '操作失败，请稍后再试' : 'Failed, please try again', 'error')
                 }
               }}
               style={{
@@ -407,14 +415,20 @@ export default function MembershipPage() {
             {/* Billing History */}
             <button
               onClick={async () => {
-                const headers = await getAuthHeadersAsync()
-                const res = await fetch('/api/stripe/portal', {
-                  method: 'POST',
-                  headers,
-                })
-                if (res.ok) {
-                  const { url } = await res.json()
-                  window.location.href = url + '/billing'
+                try {
+                  const headers = await getAuthHeadersAsync()
+                  const res = await fetch('/api/stripe/portal', {
+                    method: 'POST',
+                    headers,
+                  })
+                  if (res.ok) {
+                    const { url } = await res.json()
+                    window.location.href = url + '/billing'
+                  } else {
+                    showToast(language === 'zh' ? '支付系统暂未开放，敬请期待' : 'Payment system coming soon', 'error')
+                  }
+                } catch {
+                  showToast(language === 'zh' ? '操作失败，请稍后再试' : 'Failed, please try again', 'error')
                 }
               }}
               style={{
