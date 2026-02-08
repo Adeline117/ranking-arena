@@ -3,6 +3,7 @@ import { SiweMessage } from 'siwe'
 import { cookies } from 'next/headers'
 import { isAddress } from 'viem'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 /**
  * POST /api/auth/siwe/link
@@ -12,6 +13,8 @@ import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
  */
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
+    if (rateLimitResponse) return rateLimitResponse
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })

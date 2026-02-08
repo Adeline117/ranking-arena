@@ -16,11 +16,15 @@ import {
   validateNumber,
 } from '@/lib/api'
 import { getPostComments, createComment, deleteComment } from '@/lib/data/comments'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { id } = await context.params
     const { searchParams } = new URL(request.url)
     

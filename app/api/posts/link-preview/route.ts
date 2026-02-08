@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 // 简单的 HTML 解析函数
 function extractMetaTags(html: string) {
@@ -17,6 +18,9 @@ function extractMetaTags(html: string) {
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { searchParams } = new URL(request.url)
     const url = searchParams.get('url')
 
