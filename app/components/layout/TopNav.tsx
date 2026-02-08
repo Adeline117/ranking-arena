@@ -141,7 +141,6 @@ export default function TopNav({ email = null }: { email?: string | null }) {
         if (!alive) return
         // Only log unexpected errors, not auth session failures (expected for non-logged-in users)
         if (err instanceof Error && err.message?.includes('Auth session')) return
-        console.warn('[TopNav] Auth initialization error:', err)
       }
     }
 
@@ -250,7 +249,6 @@ export default function TopNav({ email = null }: { email?: string | null }) {
             localStorage.setItem('arena_search_history', JSON.stringify([trimmedQuery]))
           } catch {
             // If still failing (e.g., private mode), silently fail
-            console.warn('[TopNav] localStorage unavailable')
           }
         }
       }

@@ -432,7 +432,6 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         fetch(`/api/posts/${postToOpen.id}/comments`)
           .then(res => res.json())
           .then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) })
-          .catch((err) => { console.error('Failed to load comments:', err) })
       } else {
         // 帖子不在当前列表中，单独加载
         const loadSinglePost = async () => {
@@ -471,7 +470,6 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               fetch(`/api/posts/${props.initialPostId}/comments`)
                 .then(res => res.json())
                 .then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) })
-                .catch((err) => { console.error('Failed to load comments:', err) })
             }
           } catch (err) {
             console.error('Failed to load single post:', err)

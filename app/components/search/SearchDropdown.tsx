@@ -90,7 +90,6 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         .limit(10)
 
       if (error) {
-        console.error('Failed to load hot posts:', error)
         return
       }
 

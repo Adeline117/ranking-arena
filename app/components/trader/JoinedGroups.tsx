@@ -43,7 +43,6 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
           .is('deleted_at', null)
 
         if (memberError) {
-          console.error('Error loading group memberships:', memberError)
           setLoading(false)
           return
         }
@@ -65,7 +64,6 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
           .order('member_count', { ascending: false })
 
         if (groupsError) {
-          console.error('Error loading groups:', groupsError)
         }
 
         const groupsWithRole = (groupsData || []).map(g => ({

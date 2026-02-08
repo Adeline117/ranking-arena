@@ -36,7 +36,6 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
         const actualUserId = user.id
         if (userId !== actualUserId) {
-          console.warn('[ClaimTrader] User ID mismatch:', { provided: userId, actual: actualUserId })
         }
 
         const { data } = await supabase

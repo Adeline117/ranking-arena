@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 
@@ -16,7 +16,7 @@ type Trader = {
   avatar_url: string | null
 }
 
-const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'] // gold, silver, bronze
+const RANK_COLORS = RANK_COLORS_ARRAY
 
 function TraderAvatar({ name, avatarUrl, size = 40 }: { name: string; avatarUrl: string | null; size?: number }) {
   const [imgError, setImgError] = useState(false)

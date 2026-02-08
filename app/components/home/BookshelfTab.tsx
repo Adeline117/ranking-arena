@@ -52,7 +52,6 @@ export default function BookshelfTab() {
       const { data, error } = await query.order('updated_at', { ascending: false })
 
       if (error) {
-        console.error('Bookshelf fetch error:', error)
         setBooks([])
         return
       }

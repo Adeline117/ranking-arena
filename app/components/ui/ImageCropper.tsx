@@ -110,7 +110,6 @@ export function ImageCropper({
 
   const handleConfirm = async () => {
     if (!croppedAreaPixels) {
-      console.error('No crop area selected')
       onError?.(t('noCropAreaSelected') || 'Please select an area to crop')
       return
     }

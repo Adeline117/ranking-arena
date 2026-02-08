@@ -363,4 +363,28 @@ export function getStaggerDelay(index: number, baseDelay: number = 50): string {
 }
 
 // Export type for tokens
+// Rank colors for leaderboards (gold, silver, bronze)
+export const rankColors = {
+  gold: '#FFD700',
+  silver: '#C0C0C0',
+  bronze: '#CD7F32',
+} as const
+
+export const RANK_COLORS_ARRAY = [rankColors.gold, rankColors.silver, rankColors.bronze] as const
+
+// News category color map
+export const newsCategories = {
+  crypto:     { color: '#f59e0b' },
+  macro:      { color: '#3b82f6' },
+  defi:       { color: '#10b981' },
+  regulation: { color: '#8b5cf6' },
+  market:     { color: '#06b6d4' },
+} as const
+
+// News importance color map
+export const newsImportance = {
+  breaking: { color: '#ef4444' },
+  important: { color: '#f97316' },
+} as const
+
 export type DesignTokens = typeof tokens

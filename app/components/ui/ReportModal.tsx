@@ -158,7 +158,7 @@ export default function ReportModal({
             }}
           >
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <Box style={{ color: '#f44336' }}>
+              <Box style={{ color: 'var(--color-accent-error)' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
                   <line x1="4" y1="22" x2="4" y2="15" />
@@ -225,10 +225,10 @@ export default function ReportModal({
                       gap: tokens.spacing[3],
                       padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                       background: reason === option.value
-                        ? 'rgba(244, 67, 54, 0.1)'
+                        ? 'var(--color-accent-error-20)'
                         : tokens.colors.bg.secondary,
                       border: reason === option.value
-                        ? '1px solid rgba(244, 67, 54, 0.5)'
+                        ? '1px solid var(--color-accent-error)'
                         : `1px solid ${tokens.colors.border.primary}`,
                       borderRadius: tokens.radius.md,
                       color: tokens.colors.text.primary,
@@ -243,7 +243,7 @@ export default function ReportModal({
                         height: 18,
                         borderRadius: '50%',
                         border: reason === option.value
-                          ? '2px solid #f44336'
+                          ? '2px solid var(--color-accent-error)'
                           : `2px solid ${tokens.colors.border.secondary}`,
                         display: 'flex',
                         alignItems: 'center',
@@ -257,7 +257,7 @@ export default function ReportModal({
                             width: 10,
                             height: 10,
                             borderRadius: '50%',
-                            background: '#f44336',
+                            background: 'var(--color-accent-error)',
                           }}
                         />
                       )}
@@ -271,7 +271,7 @@ export default function ReportModal({
             {/* Description */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('reportDetailsLabel')} <span style={{ color: '#f44336' }}>*</span>
+                {t('reportDetailsLabel')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
               </Text>
               <textarea
                 value={description}
@@ -293,13 +293,13 @@ export default function ReportModal({
                   transition: 'border-color 0.2s',
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = '#f44336'
+                  e.target.style.borderColor = 'var(--color-accent-error)'
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = tokens.colors.border.primary
                 }}
               />
-              <Text size="xs" style={{ marginTop: 4, textAlign: 'right', color: description.trim().length < MIN_DESC_LENGTH ? '#f44336' : tokens.colors.text.tertiary }}>
+              <Text size="xs" style={{ marginTop: 4, textAlign: 'right', color: description.trim().length < MIN_DESC_LENGTH ? 'var(--color-accent-error)' : tokens.colors.text.tertiary }}>
                 {description.trim().length}/{MIN_DESC_LENGTH} {t('reportMinChars') || '字符最少'} · {description.length}/1000
               </Text>
             </Box>
@@ -307,7 +307,7 @@ export default function ReportModal({
             {/* Image Upload */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('reportScreenshot') || '截图证据'} <span style={{ color: '#f44336' }}>*</span>
+                {t('reportScreenshot') || '截图证据'} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
                 <span style={{ fontWeight: 400, color: tokens.colors.text.tertiary, marginLeft: 4, fontSize: 12 }}>
                   ({images.length}/{MAX_IMAGES})
                 </span>
@@ -433,7 +433,7 @@ export default function ReportModal({
                 style={{
                   flex: 1,
                   padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                  background: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? '#f44336' : tokens.colors.bg.tertiary,
+                  background: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? 'var(--color-accent-error)' : tokens.colors.bg.tertiary,
                   border: 'none',
                   borderRadius: tokens.radius.md,
                   color: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? '#fff' : tokens.colors.text.tertiary,

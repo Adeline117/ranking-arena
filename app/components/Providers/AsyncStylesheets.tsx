@@ -40,7 +40,6 @@ export function AsyncStylesheets() {
     const loadStyles = () => {
       NON_CRITICAL_STYLESHEETS.forEach(href => {
         loadStylesheet(href).catch(err => {
-          console.warn('Failed to load stylesheet:', err)
         })
       })
     }
@@ -63,7 +62,6 @@ export function AsyncStylesheets() {
 export function TraderPageStylesheets() {
   useEffect(() => {
     loadStylesheet('/styles/trader-animations.css').catch(err => {
-      console.warn('Failed to load trader animations:', err)
     })
   }, [])
 

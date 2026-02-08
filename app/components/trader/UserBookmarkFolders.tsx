@@ -68,7 +68,6 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
           // 错误代码: 42P01=表不存在, PGRST116=没有找到资源, PGRST204=schema cache中没找到表, 42703=列不存在
           const ignoredCodes = ['42P01', 'PGRST116', 'PGRST204', '42703']
           if (!ignoredCodes.includes(error.code || '')) {
-            console.error('Error loading bookmark folders:', error.message || error)
           }
           setFolders([])
           return
@@ -134,7 +133,6 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
         ))
       } else {
         // 显示错误提示
-        console.error('Subscribe error:', data.error || 'Unknown error')
       }
     } catch (err) {
       console.error('Error toggling subscription:', err)
