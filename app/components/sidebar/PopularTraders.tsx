@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -98,16 +97,6 @@ export default function PopularTraders({ limit = 10 }: { limit?: number } = {}) 
     const interval = setInterval(load, 60000)
     return () => clearInterval(interval)
   }, [limit])
-
-  const platformLabel = (source: string) => {
-    const labels: Record<string, string> = {
-      binance: 'Binance',
-      okx: 'OKX',
-      bitget: 'Bitget',
-      bybit: 'Bybit',
-    }
-    return labels[source.toLowerCase()] || source
-  }
 
   return (
     <SidebarCard title={isZh ? '热门交易员' : 'Popular Traders'}>

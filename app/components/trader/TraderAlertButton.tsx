@@ -14,9 +14,9 @@ interface TraderAlertButtonProps {
 }
 
 export default function TraderAlertButton({ traderId, platform, traderName }: TraderAlertButtonProps) {
-  const { language, t } = useLanguage()
+  const { language } = useLanguage()
   const { showToast } = useToast()
-  const { alerts, addAlert, removeAlert, hasAlert, getAlertsForTrader } = useTraderAlerts()
+  const { addAlert, removeAlert, hasAlert, getAlertsForTrader } = useTraderAlerts()
   const [showModal, setShowModal] = useState(false)
   const [alertType, setAlertType] = useState<TraderAlert['alertType']>('roi_change')
   const [threshold, setThreshold] = useState(10)

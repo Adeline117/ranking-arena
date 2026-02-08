@@ -10,7 +10,7 @@ import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 import Footer from '../layout/Footer'
 import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
-import ExchangePartners from './ExchangePartners'
+// ExchangePartners removed per Adeline's request
 import GuestSignupPrompt from './GuestSignupPrompt'
 import HomePageClient from './HomePageClient'
 // HomePageWithSubNav removed from homepage - only used in groups page
@@ -67,19 +67,6 @@ export default function HomePage({
           padding: '16px 16px',
         }}
       >
-        {/* Compact Hero - minimal, get users to rankings fast */}
-        <Box
-          style={{
-            textAlign: 'center',
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]} ${tokens.spacing[2]}`,
-            marginBottom: 4,
-          }}
-        >
-          <Suspense fallback={null}>
-            <ExchangePartners />
-          </Suspense>
-        </Box>
-
         <ThreeColumnLayout
           leftSidebar={
             <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>

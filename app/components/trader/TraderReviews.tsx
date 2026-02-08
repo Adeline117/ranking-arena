@@ -255,7 +255,7 @@ function ReviewCard({
   review,
   currentUserId,
   accessToken,
-  traderHandle,
+  _traderHandle,
   translations,
   onTranslated,
   onLike,
