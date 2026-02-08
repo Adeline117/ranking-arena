@@ -9,7 +9,9 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const opportunities = await detectArbitrageOpportunities()
-    return NextResponse.json({ ok: true, opportunities, ts: Date.now() })
+    const response = NextResponse.json({ ok: true, opportunities, ts: Date.now() })
+    response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60')
+    return response
   } catch (err) {
     log.error('套利检测失败', err)
     return NextResponse.json({ ok: false, opportunities: [], error: '套利检测失败' }, { status: 500 })

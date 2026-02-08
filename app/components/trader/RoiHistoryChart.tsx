@@ -6,8 +6,11 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Skeleton } from '../ui/Skeleton'
-import TradingViewChart, { type LineDataPoint } from '../charts/TradingViewChart'
+import dynamic from 'next/dynamic'
 import type { Time } from 'lightweight-charts'
+
+const TradingViewChart = dynamic(() => import('../charts/TradingViewChart'), { ssr: false })
+type LineDataPoint = import('../charts/TradingViewChart').LineDataPoint
 
 // ============================================
 // 类型定义

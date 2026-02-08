@@ -4,6 +4,7 @@
  * 支持跨交易所套利和三角套利
  */
 
+import 'server-only'
 import ccxt, { type Exchange, type Ticker } from 'ccxt'
 
 // ---- 类型定义 ----
