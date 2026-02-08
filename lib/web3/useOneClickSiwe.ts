@@ -131,20 +131,6 @@ export function useOneClickSiwe(options: UseOneClickSiweOptions = {}): UseOneCli
   // Abort controller for fetch requests
   const abortRef = useRef<AbortController | null>(null)
 
-  // ── Auto-sign after wallet connection ──
-  useEffect(() => {
-    if (pendingSignInRef.current && isConnected && address && !inFlightRef.current) {
-      pendingSignInRef.current = false
-      if (autoSign) {
-        // Small delay to ensure wallet is fully ready
-        const timer = setTimeout(() => {
-          performSignIn()
-        }, 100)
-        return () => clearTimeout(timer)
-      }
-    }
-  }, [isConnected, address, autoSign, performSignIn])
-
   // ── Update status based on connection state ──
   useEffect(() => {
     if (isConnecting && pendingSignInRef.current) {
@@ -262,6 +248,19 @@ export function useOneClickSiwe(options: UseOneClickSiweOptions = {}): UseOneCli
       inFlightRef.current = false
     }
   }, [address, fetchNonce, createSiweMessage, signMessageAsync, t, onSuccess, onError, reset])
+
+  // ── Auto-sign after wallet connection ──
+  useEffect(() => {
+    if (pendingSignInRef.current && isConnected && address && !inFlightRef.current) {
+      pendingSignInRef.current = false
+      if (autoSign) {
+        const timer = setTimeout(() => {
+          performSignIn()
+        }, 100)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [isConnected, address, autoSign, performSignIn])
 
   const signIn = useCallback(async (): Promise<SiweAuthResult | null> => {
     // Reset any previous error state

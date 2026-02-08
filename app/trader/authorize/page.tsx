@@ -30,7 +30,7 @@ const SYNC_FREQUENCIES = [
 ]
 
 export default function TraderAuthorizePage() {
-  const { _t, language } = useLanguage()
+  const { t, language } = useLanguage()
   const router = useRouter()
 
   const [user, setUser] = useState<any>(null)

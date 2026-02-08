@@ -155,7 +155,7 @@ export default function StatusPage() {
             <span
               style={{
                 fontSize: tokens.typography.fontSize.xs,
-                color: tokens.colors.textTertiary,
+                color: tokens.colors.text.tertiary,
                 fontFamily: tokens.typography.fontFamily.mono.join(', '),
               }}
             >
@@ -195,7 +195,7 @@ export default function StatusPage() {
                 <span
                   style={{
                     fontSize: tokens.typography.fontSize.xs,
-                    color: tokens.colors.textTertiary,
+                    color: tokens.colors.text.tertiary,
                     fontFamily: tokens.typography.fontFamily.mono.join(', '),
                   }}
                 >
@@ -209,7 +209,7 @@ export default function StatusPage() {
                 justifyContent: 'space-between',
                 marginTop: tokens.spacing[3],
                 fontSize: tokens.typography.fontSize.xs,
-                color: tokens.colors.textTertiary,
+                color: tokens.colors.text.tertiary,
               }}
             >
               <span>Uptime: {formatUptime(health.uptime)}</span>
@@ -254,7 +254,7 @@ export default function StatusPage() {
                     <span
                       style={{
                         fontSize: tokens.typography.fontSize.xs,
-                        color: isStale ? tokens.colors.warning : tokens.colors.textTertiary,
+                        color: isStale ? tokens.colors.warning : tokens.colors.text.tertiary,
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >
@@ -271,7 +271,7 @@ export default function StatusPage() {
           style={{
             textAlign: 'center' as const,
             fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.textTertiary,
+            color: tokens.colors.text.tertiary,
             marginTop: tokens.spacing[8],
           }}
         >
