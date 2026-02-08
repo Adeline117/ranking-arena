@@ -1,14 +1,16 @@
 {
-  "name": "Arena",
-  "short_name": "Arena",
-  "description": "Crypto trader leaderboard and community platform",
+  "name": "ArenaFi - 竞技场",
+  "short_name": "竞技场",
+  "description": "加密货币交易员排行榜与社区平台 - 聚合多交易所90日ROI排名",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B0A10",
-  "theme_color": "#8b6fa8",
+  "theme_color": "#0B0A10",
   "orientation": "portrait-primary",
   "scope": "/",
-  "lang": "en",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "id": "/",
   "icons": [
     {
       "src": "/icons/icon.svg",
@@ -42,14 +44,14 @@
       "sizes": "1920x1080",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Desktop view"
+      "label": "桌面端视图"
     },
     {
       "src": "/screenshots/mobile.png",
       "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Mobile view"
+      "label": "移动端视图"
     }
   ],
   "related_applications": [],
