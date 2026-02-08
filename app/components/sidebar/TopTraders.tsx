@@ -59,22 +59,41 @@ export default function TopTraders() {
   useEffect(() => {
     async function load() {
       try {
-        const { data } = await supabase
+        // Step 1: Get top traders from snapshots
+        const { data: snapData, error: snapErr } = await supabase
           .from('trader_snapshots')
-          .select(`
-            source, source_trader_id, roi, arena_score,
-            trader_sources!trader_snapshots_source_source_trader_id_fkey(handle, avatar_url)
-          `)
+          .select('source, source_trader_id, roi, arena_score')
           .eq('season_id', '90D')
+          .not('roi', 'is', null)
           .order('roi', { ascending: false })
           .limit(10)
-        const mapped = (data || []).map((d: any) => {
-          const ts = Array.isArray(d.trader_sources) ? d.trader_sources[0] : d.trader_sources
+
+        if (snapErr || !snapData || snapData.length === 0) {
+          setTraders([])
+          setLoading(false)
+          return
+        }
+
+        // Step 2: Batch fetch handles/avatars from trader_sources
+        const { data: sourceData } = await supabase
+          .from('trader_sources')
+          .select('source, source_trader_id, handle, avatar_url')
+          .eq('is_active', true)
+          .in('source', snapData.map(d => d.source))
+          .in('source_trader_id', snapData.map(d => d.source_trader_id))
+
+        const sourceMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
+        if (sourceData) {
+          sourceData.forEach(s => sourceMap.set(`${s.source}:${s.source_trader_id}`, { handle: s.handle, avatar_url: s.avatar_url }))
+        }
+
+        const mapped: Trader[] = snapData.map(d => {
+          const src = sourceMap.get(`${d.source}:${d.source_trader_id}`)
           return {
             source: d.source,
             source_trader_id: d.source_trader_id,
-            handle: ts?.handle ?? null,
-            avatar_url: ts?.avatar_url ?? null,
+            handle: src?.handle || null,
+            avatar_url: src?.avatar_url || null,
             roi: d.roi,
             arena_score: d.arena_score,
           }
