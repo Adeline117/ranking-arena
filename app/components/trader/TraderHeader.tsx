@@ -8,6 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../base'
 import CopyTradeButton from './CopyTradeButton'
+const CopyTradeConfig = dynamic(() => import('../trading/CopyTradeConfig'), { ssr: false })
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES, EXCHANGE_CONFIG, type RoiType } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
@@ -185,14 +186,45 @@ interface CopyTradeSectionProps {
 }
 
 function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTradeSectionProps): React.ReactElement {
+  const [showCopyConfig, setShowCopyConfig] = useState(false)
+
   if (isPro) {
     return (
-      <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-        <CopyTradeButton traderId={traderId} source={source} traderHandle={handle} />
-        <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
-          {t('jumpToExchange')}
-        </Text>
-      </Box>
+      <>
+        <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <Box style={{ display: 'flex', gap: 6 }}>
+            <CopyTradeButton traderId={traderId} source={source} traderHandle={handle} />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCopyConfig(true)}
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.lg,
+                background: tokens.colors.accent.success,
+                color: '#fff',
+                border: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t('copyTrade_button')}
+            </Button>
+          </Box>
+          <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
+            {t('jumpToExchange')}
+          </Text>
+        </Box>
+        {showCopyConfig && (
+          <Box style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16,
+          }} onClick={(e: React.MouseEvent) => { if (e.target === e.currentTarget) setShowCopyConfig(false) }}>
+            <CopyTradeConfig traderId={traderId} traderName={handle} onClose={() => setShowCopyConfig(false)} />
+          </Box>
+        )}
+      </>
     )
   }
 

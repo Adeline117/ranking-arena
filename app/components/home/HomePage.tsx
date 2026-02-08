@@ -23,6 +23,7 @@ const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 const FearGreedGauge = lazy(() => import('../market/FearGreedGauge'))
 const DefiOverview = lazy(() => import('../market/DefiOverview'))
 const TopMovers = lazy(() => import('../market/TopMovers'))
+const ArbitrageOpportunities = lazy(() => import('../market/ArbitrageOpportunities'))
 const MarketOverviewBar = lazy(() => import('../market/MarketOverviewBar'))
 
 interface HomePageProps {
@@ -90,6 +91,11 @@ export default function HomePage({
               <div style={{ flexShrink: 0 }}>
                 <Suspense fallback={<div className="skeleton" style={{ height: 160, borderRadius: 12 }} />}>
                   <TopMovers />
+                </Suspense>
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <Suspense fallback={<div className="skeleton" style={{ height: 160, borderRadius: 12 }} />}>
+                  <ArbitrageOpportunities />
                 </Suspense>
               </div>
               <div style={{ flexShrink: 0 }}>
