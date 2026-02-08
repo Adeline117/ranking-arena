@@ -181,10 +181,10 @@ function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labe
   if (/\d/.test(password)) score++
   if (/[^a-zA-Z0-9]/.test(password)) score++
 
-  if (score <= 1) return { level: 1, labelKey: 'loginPasswordWeak', color: '#ff4d4d' }
-  if (score === 2) return { level: 2, labelKey: 'loginPasswordFair', color: '#ffa500' }
-  if (score === 3) return { level: 3, labelKey: 'loginPasswordGood', color: '#ffc107' }
-  return { level: 4, labelKey: 'loginPasswordStrong', color: '#2fe57d' }
+  if (score <= 1) return { level: 1, labelKey: 'loginPasswordWeak', color: tokens.colors.accent.error }
+  if (score === 2) return { level: 2, labelKey: 'loginPasswordFair', color: tokens.colors.accent.warning }
+  if (score === 3) return { level: 3, labelKey: 'loginPasswordGood', color: tokens.colors.accent.warning }
+  return { level: 4, labelKey: 'loginPasswordStrong', color: tokens.colors.accent.success }
 }
 
 function ResetPasswordContent() {
@@ -462,7 +462,7 @@ function ResetPasswordContent() {
 
         <p style={{
           fontSize: 14,
-          color: '#7a7a7a',
+          color: tokens.colors.text.secondary,
           marginBottom: 28,
           textAlign: 'center',
         }}>
@@ -473,7 +473,7 @@ function ResetPasswordContent() {
           // Send reset email form
           <>
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary }}>
                 {t('resetPasswordEmail')}
               </label>
               <input
@@ -485,7 +485,7 @@ function ResetPasswordContent() {
                   borderRadius: 12,
                   border: '1px solid rgba(255, 255, 255, 0.1)',
                   background: 'rgba(0, 0, 0, 0.3)',
-                  color: '#eaeaea',
+                  color: tokens.colors.text.primary,
                   fontSize: 15,
                   outline: 'none',
                 }}
@@ -531,7 +531,7 @@ function ResetPasswordContent() {
           // Set new password form
           <>
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary }}>
                 {t('resetPasswordNewPassword')}
               </label>
               <div style={{ position: 'relative' }}>
@@ -545,7 +545,7 @@ function ResetPasswordContent() {
                     borderRadius: 12,
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     background: 'rgba(0, 0, 0, 0.3)',
-                    color: '#eaeaea',
+                    color: tokens.colors.text.primary,
                     fontSize: 15,
                     outline: 'none',
                   }}
@@ -566,7 +566,7 @@ function ResetPasswordContent() {
                     border: 'none',
                     padding: 4,
                     cursor: 'pointer',
-                    color: '#6a6a6a',
+                    color: tokens.colors.text.tertiary,
                     fontSize: 12,
                   }}
                   tabIndex={-1}
@@ -605,7 +605,7 @@ function ResetPasswordContent() {
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#b0b0b0' }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary }}>
                 {t('resetPasswordConfirm')}
               </label>
               <div style={{ position: 'relative' }}>
@@ -619,7 +619,7 @@ function ResetPasswordContent() {
                     borderRadius: 12,
                     border: `1px solid ${confirmPassword && confirmPassword !== newPassword ? 'rgba(255, 124, 124, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
                     background: 'rgba(0, 0, 0, 0.3)',
-                    color: '#eaeaea',
+                    color: tokens.colors.text.primary,
                     fontSize: 15,
                     outline: 'none',
                   }}
@@ -645,7 +645,7 @@ function ResetPasswordContent() {
                     border: 'none',
                     padding: 4,
                     cursor: 'pointer',
-                    color: '#6a6a6a',
+                    color: tokens.colors.text.tertiary,
                     fontSize: 12,
                   }}
                   tabIndex={-1}
@@ -655,7 +655,7 @@ function ResetPasswordContent() {
               </div>
               {confirmPassword && confirmPassword === newPassword && (
                 <div style={{ marginTop: 6, fontSize: 12 }}>
-                  <span style={{ color: '#2fe57d' }}>OK - {t('loginPasswordsMatch')}</span>
+                  <span style={{ color: tokens.colors.accent.success }}>OK - {t('loginPasswordsMatch')}</span>
                 </div>
               )}
             </div>
@@ -721,7 +721,7 @@ function ResetPasswordContent() {
               borderRadius: 12,
               background: 'rgba(255, 77, 77, 0.1)',
               border: '1px solid rgba(255, 77, 77, 0.2)',
-              color: '#ff7c7c',
+              color: tokens.colors.accent.error,
               fontSize: 13,
               fontWeight: 500,
               display: 'flex',
@@ -748,7 +748,7 @@ function ResetPasswordContent() {
               borderRadius: 12,
               background: 'rgba(47, 229, 125, 0.1)',
               border: '1px solid rgba(47, 229, 125, 0.2)',
-              color: '#2fe57d',
+              color: tokens.colors.accent.success,
               fontSize: 13,
               fontWeight: 500,
               display: 'flex',

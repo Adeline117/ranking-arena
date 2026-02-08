@@ -125,6 +125,92 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 /**
+ * Export Ranking button with range selector (Top 10/50/100)
+ */
+function ExportRankingButton({ traders, source, timeRange, language }: {
+  traders: Trader[]
+  source?: string
+  timeRange?: string
+  language: string
+}) {
+  const [showMenu, setShowMenu] = useState(false)
+  const isZh = language === 'zh'
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
+    }
+    if (showMenu) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showMenu])
+
+  const doExport = (count: number) => {
+    setShowMenu(false)
+    const slice = traders.slice(0, count)
+    const headers = ['rank', 'id', 'source', 'arena_score', 'roi', 'pnl', 'win_rate', 'max_drawdown', 'followers']
+    const rows = slice.map((t, i) => [
+      i + 1, t.handle || t.id, t.source || '', t.arena_score ?? '', t.roi, t.pnl ?? '',
+      t.win_rate ?? '', t.max_drawdown ?? '', t.followers,
+    ])
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => {
+      if (v == null) return ''
+      const s = String(v)
+      return /[,"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }).join(','))].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `ranking-${source || 'all'}-top${count}-${timeRange || '90D'}.csv`
+    link.click()
+  }
+
+  const options = [10, 50, 100].filter(n => n <= traders.length || n === 10)
+
+  return (
+    <div ref={menuRef} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        style={{
+          padding: '6px 12px', borderRadius: 6,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          background: tokens.colors.bg.secondary,
+          color: tokens.colors.text.primary,
+          fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        }}
+      >
+        {isZh ? '导出排名' : 'Export Ranking'}
+      </button>
+      {showMenu && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 4,
+          background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
+          borderRadius: 8, overflow: 'hidden', zIndex: 100, minWidth: 120,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        }}>
+          {options.map(n => (
+            <button
+              key={n}
+              onClick={() => doExport(n)}
+              style={{
+                display: 'block', width: '100%', padding: '8px 16px',
+                background: 'transparent', border: 'none',
+                color: tokens.colors.text.primary, fontSize: 13, fontWeight: 500,
+                cursor: 'pointer', textAlign: 'left',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = tokens.colors.bg.tertiary}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              Top {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * 排行榜页面 - 核心功能，突出前三名
  */
 function RankingTableInner(props: {
@@ -448,18 +534,10 @@ function RankingTableInner(props: {
               )}
             </div>
 
-            {/* Export button - Pro only, show upgrade prompt for free users */}
+            {/* Export ranking - Pro only */}
             {traders.length > 0 && (
               isPro ? (
-                <ExportButton
-                  data={traders.map(t => ({
-                    rank: traders.indexOf(t) + 1, handle: t.handle || t.id, source: t.source || '',
-                    arena_score: t.arena_score ?? '', roi: t.roi, pnl: t.pnl ?? '',
-                    win_rate: t.win_rate ?? '', max_drawdown: t.max_drawdown ?? '', followers: t.followers,
-                  }))}
-                  filename={`ranking-arena-${source || 'all'}-${timeRange || '90D'}`}
-                  format="csv"
-                />
+                <ExportRankingButton traders={traders} source={source} timeRange={timeRange} language={language} />
               ) : (
                 <button
                   onClick={() => onProRequired?.()}
@@ -475,7 +553,7 @@ function RankingTableInner(props: {
                   title="Pro feature"
                 >
                   <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" /></svg>
-                  CSV
+                  {language === 'zh' ? '导出排名' : 'Export'}
                 </button>
               )
             )}
