@@ -1,8 +1,14 @@
 {
   "regions": [
-    "hnd1"
+    "hnd1",
+    "sin1",
+    "hkg1"
   ],
   "crons": [
+    {
+      "path": "/api/cron/compute-leaderboard",
+      "schedule": "0 * * * *"
+    },
     {
       "path": "/api/cron/fetch-followed-traders",
       "schedule": "0 * * * *"

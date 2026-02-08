@@ -1,3 +1,5 @@
+import { SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
+
 /**
  * Arena Score V2 计算模块
  *
@@ -31,6 +33,7 @@ export interface TraderScoreInput {
   pnl: number          // 已实现盈亏（USD）
   maxDrawdown: number | null  // 最大回撤（百分比，如 20% = 20）
   winRate: number | null      // 胜率（百分比，如 60% = 60）
+  source?: string      // 数据来源（用于 trust weight）
 }
 
 export interface ArenaScoreResult {
@@ -129,8 +132,8 @@ export const ARENA_CONFIG = {
 
   // === 排行榜稳定性参数 ===
 
-  // 置信度防抖：数据完整度变化后缓冲 8 小时
-  CONFIDENCE_DEBOUNCE_HOURS: 8,
+  // 置信度防抖：数据完整度变化后缓冲 2 小时
+  CONFIDENCE_DEBOUNCE_HOURS: 2,
 } as const
 
 // ============================================
@@ -336,7 +339,7 @@ export function calculateArenaScore(
   input: TraderScoreInput,
   period: Period
 ): ArenaScoreResult {
-  const { roi, pnl, maxDrawdown, winRate } = input
+  const { roi, pnl, maxDrawdown, winRate, source } = input
 
   // 判断数据完整性
   const scoreConfidence = getScoreConfidence(maxDrawdown, winRate)
@@ -353,7 +356,13 @@ export function calculateArenaScore(
   // 数据完整性惩罚：缺失 win_rate/max_drawdown 时降低总分
   // 这确保数据更完整的交易员排名更高
   const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[scoreConfidence]
-  const totalScore = clip(rawTotal * confidenceMultiplier, 0, 100)
+
+  // 数据源信任度权重：低信任度平台的分数会被适度压缩
+  const trustWeight = source ? (SOURCE_TRUST_WEIGHT[source] ?? 0.75) : 1.0
+  // Trust weight 只在低于 1.0 时生效，且影响范围有限（最低 80% 原分）
+  const trustMultiplier = 0.8 + 0.2 * trustWeight
+
+  const totalScore = clip(rawTotal * confidenceMultiplier * trustMultiplier, 0, 100)
 
   return {
     totalScore: Math.round(totalScore * 100) / 100,  // 保留2位小数
@@ -739,7 +748,12 @@ export function calculateArenaScoreV3(
 
   // 数据完整性惩罚
   const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[scoreConfidence]
-  const totalScore = clip(rawTotal * confidenceMultiplier, 0, 100)
+
+  // 数据源信任度权重
+  const trustWeight = input.source ? (SOURCE_TRUST_WEIGHT[input.source] ?? 0.75) : 1.0
+  const trustMultiplier = 0.8 + 0.2 * trustWeight
+
+  const totalScore = clip(rawTotal * confidenceMultiplier * trustMultiplier, 0, 100)
 
   return {
     totalScore: Math.round(totalScore * 100) / 100,
