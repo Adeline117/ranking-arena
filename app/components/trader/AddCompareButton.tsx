@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useComparisonStore, type CompareTrader } from '@/lib/stores'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
@@ -21,6 +22,7 @@ export default function AddCompareButton({
   className = '',
 }: AddCompareButtonProps) {
   const { t } = useLanguage()
+  const router = useRouter()
   const { showToast } = useToast()
   const { isPro } = useSubscription()
   const { addTrader, removeTrader, isSelected, canAddMore, selectedTraders } = useComparisonStore()
@@ -40,6 +42,7 @@ export default function AddCompareButton({
 
     if (!isPro) {
       showToast(t('proFeatureOnly') || 'Pro feature - upgrade to compare traders', 'warning')
+      router.push('/pricing')
       return
     }
 
@@ -52,7 +55,7 @@ export default function AddCompareButton({
     if (added) {
       showToast(t('compareAdded') || 'Added to comparison', 'success')
     }
-  }, [selected, isPro, trader, addTrader, removeTrader, canAddMore, showToast, t])
+  }, [selected, isPro, trader, addTrader, removeTrader, canAddMore, showToast, t, router])
 
   const buttonSize = size === 'sm' ? 28 : 36
   const iconSize = size === 'sm' ? 14 : 18

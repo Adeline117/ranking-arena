@@ -56,7 +56,8 @@ export default function MembershipPage() {
     }
 
     fetchMembershipInfo()
-  }, [isLoggedIn, authLoading, fetchMembershipInfo, router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, authLoading])
 
   async function fetchMembershipInfo() {
     try {

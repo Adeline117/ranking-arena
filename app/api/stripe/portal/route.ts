@@ -32,28 +32,41 @@ export async function POST(request: NextRequest) {
 
     const { returnUrl } = await request.json()
 
-    // 获取当前用户
-    const cookieHeader = request.headers.get('cookie') || ''
-    const supabaseClient = createClient(
-      supabaseUrl,
-      anonKey,
-      {
-        global: {
-          headers: {
-            cookie: cookieHeader,
-          },
-        },
-      }
-    )
+    // 获取当前用户 - 优先从 Authorization header，回退到 cookie
+    const authHeader = request.headers.get('authorization')
+    let user = null
+    let authError = null
 
-    const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession()
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7)
+      const supabaseAdmin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+      const { data, error } = await supabaseAdmin.auth.getUser(token)
+      user = data?.user
+      authError = error
+    } else {
+      const cookieHeader = request.headers.get('cookie') || ''
+      const supabaseClient = createClient(
+        supabaseUrl,
+        anonKey,
+        {
+          global: { headers: { cookie: cookieHeader } },
+          auth: { persistSession: false, detectSessionInUrl: false },
+        }
+      )
+      const { data, error } = await supabaseClient.auth.getUser()
+      user = data?.user
+      authError = error
+    }
 
-    if (sessionError || !session?.user) {
+    if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       )
     }
+
+    // Alias for backward compat
+    const session = { user }
 
     // 获取用户的 Stripe Customer ID
     const supabase = createClient(

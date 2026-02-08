@@ -787,6 +787,9 @@ export default function PricingPage() {
 
       {/* 响应式样式 */}
       <style jsx global>{`
+        .pricing-grid {
+          grid-template-columns: 1fr 1fr;
+        }
         @media (max-width: 768px) {
           .pricing-grid {
             grid-template-columns: 1fr !important;

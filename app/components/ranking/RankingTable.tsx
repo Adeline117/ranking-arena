@@ -386,10 +386,10 @@ function RankingTableInner(props: {
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
             {/* View toggle */}
             <Box className="view-toggle-group">
-              <button onClick={() => toggleViewMode('table')} title={t('tableView')} className={`view-toggle-btn touch-target-sm${viewMode === 'table' ? ' view-toggle-active' : ''}`}>
+              <button onClick={() => toggleViewMode('table')} title={t('tableView')} aria-label={t('tableView')} aria-pressed={viewMode === 'table'} className={`view-toggle-btn touch-target-sm${viewMode === 'table' ? ' view-toggle-active' : ''}`}>
                 <TableViewIcon size={12} />
               </button>
-              <button onClick={() => toggleViewMode('card')} title={t('cardView')} className={`view-toggle-btn touch-target-sm${viewMode === 'card' ? ' view-toggle-active' : ''}`}>
+              <button onClick={() => toggleViewMode('card')} title={t('cardView')} aria-label={t('cardView')} aria-pressed={viewMode === 'card'} className={`view-toggle-btn touch-target-sm${viewMode === 'card' ? ' view-toggle-active' : ''}`}>
                 <CardViewIcon size={12} />
               </button>
               {getStoredManualFlag() && (
@@ -448,17 +448,36 @@ function RankingTableInner(props: {
               )}
             </div>
 
-            {/* Export button */}
-            {isPro && traders.length > 0 && (
-              <ExportButton
-                data={traders.map(t => ({
-                  rank: traders.indexOf(t) + 1, handle: t.handle || t.id, source: t.source || '',
-                  arena_score: t.arena_score ?? '', roi: t.roi, pnl: t.pnl ?? '',
-                  win_rate: t.win_rate ?? '', max_drawdown: t.max_drawdown ?? '', followers: t.followers,
-                }))}
-                filename={`ranking-arena-${source || 'all'}-${timeRange || '90D'}`}
-                format="csv"
-              />
+            {/* Export button - Pro only, show upgrade prompt for free users */}
+            {traders.length > 0 && (
+              isPro ? (
+                <ExportButton
+                  data={traders.map(t => ({
+                    rank: traders.indexOf(t) + 1, handle: t.handle || t.id, source: t.source || '',
+                    arena_score: t.arena_score ?? '', roi: t.roi, pnl: t.pnl ?? '',
+                    win_rate: t.win_rate ?? '', max_drawdown: t.max_drawdown ?? '', followers: t.followers,
+                  }))}
+                  filename={`ranking-arena-${source || 'all'}-${timeRange || '90D'}`}
+                  format="csv"
+                />
+              ) : (
+                <button
+                  onClick={() => onProRequired?.()}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    padding: '4px 8px', borderRadius: 6,
+                    border: '1px solid var(--color-border-primary)',
+                    background: 'transparent',
+                    color: 'var(--color-text-tertiary)',
+                    fontSize: 11, fontWeight: 500,
+                    cursor: 'pointer', opacity: 0.7,
+                  }}
+                  title="Pro feature"
+                >
+                  <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" /></svg>
+                  CSV
+                </button>
+              )
             )}
           </Box>
         </Box>
