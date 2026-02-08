@@ -14,7 +14,7 @@ type Group = {
   name: string
   name_en: string | null
   avatar_url: string | null
-  last_active_at: string | null
+  updated_at: string | null
 }
 
 function GroupAvatar({ name, avatarUrl, size = 32 }: { name: string; avatarUrl: string | null; size?: number }) {
@@ -80,7 +80,7 @@ export default function MyGroups() {
     async function load() {
       const { data } = await supabase
         .from('group_members')
-        .select('group_id, groups(id, name, name_en, avatar_url, last_active_at)')
+        .select('group_id, groups(id, name, name_en, avatar_url, updated_at)')
         .eq('user_id', user!.id)
         .limit(10)
       const gs = (data || []).map((d: any) => d.groups).filter(Boolean)
@@ -138,7 +138,7 @@ export default function MyGroups() {
                   >
                     {displayName}
                   </div>
-                  {g.last_active_at && (
+                  {g.updated_at && (
                     <div
                       style={{
                         fontSize: tokens.typography.fontSize.xs,
@@ -146,7 +146,7 @@ export default function MyGroups() {
                         marginTop: 1,
                       }}
                     >
-                      {formatRelativeTime(g.last_active_at, isZh)}
+                      {formatRelativeTime(g.updated_at, isZh)}
                     </div>
                   )}
                 </div>

@@ -10,7 +10,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 type TrendingPost = {
   id: string
   title: string
-  body: string | null
+  content: string | null
   author_handle: string | null
   comment_count: number
   like_count: number
@@ -28,7 +28,7 @@ export default function TrendingDiscussions() {
     async function fetch() {
       const { data } = await supabase
         .from('posts')
-        .select('id, title, body, author_handle, comment_count, like_count, created_at, group_id')
+        .select('id, title, content, author_handle, comment_count, like_count, created_at, group_id')
         .eq('status', 'active')
         .order('hot_score', { ascending: false })
         .limit(8)
@@ -71,13 +71,13 @@ export default function TrendingDiscussions() {
                 }}>
                   {post.title}
                 </p>
-                {post.body && (
+                {post.content && (
                   <p style={{
                     fontSize: 12, color: tokens.colors.text.secondary, lineHeight: 1.3,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     margin: '2px 0 0 0',
                   }}>
-                    {post.body.slice(0, 80)}
+                    {post.content.slice(0, 80)}
                   </p>
                 )}
               </div>
