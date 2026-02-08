@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import TopNav from '@/app/components/layout/TopNav'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
@@ -255,6 +256,10 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
       <TopNav email={email} />
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
+        <Breadcrumb items={[
+          { label: language === 'zh' ? '排行榜' : 'Leaderboard', href: '/rankings' },
+          { label: profile.handle || handle },
+        ]} />
         {/* Header */}
         <TraderHeader
           handle={profile.handle}
