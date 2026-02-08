@@ -456,7 +456,7 @@ export default function NewGroupPostPage(): React.ReactElement {
     setVideos([])
     setContent(prev => prev.replace(/\n?\[(?:视频|video)\]\([^)]+\)\n?/g, ''))
     showToast(t('videoRemoved'), 'info')
-  }, [showToast])
+  }, [showToast, t])
 
   const handleSubmit = async () => {
     // 防止双重提交

@@ -14,12 +14,13 @@ export async function uploadFile(
   _key: string,
   _body: Buffer | Uint8Array | string,
   _contentType?: string
-): Promise<string> {
+): Promise<{ url: string }> {
   throw new Error('R2 storage is not configured. Install @aws-sdk/client-s3 first.')
 }
 
-export function libraryPdfKey(itemId: string): string {
-  return `library/${itemId}/content.pdf`
+export function libraryPdfKey(itemId: string, filename?: string): string {
+  const name = filename || 'content.pdf'
+  return `library/${itemId}/${name}`
 }
 
 export function getPublicUrl(key: string): string {

@@ -191,7 +191,7 @@ async function fetchPeriod(
       trades_count: t.tradeCount || null,
       arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
-      avatar_url: item.userPhotoUrl || null,
+      avatar_url: t.userPhotoUrl || null,
     })
   }
 
