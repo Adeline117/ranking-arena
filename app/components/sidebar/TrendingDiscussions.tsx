@@ -174,9 +174,7 @@ export default function TrendingDiscussions() {
                   </svg>
                   {post.comment_count}
                 </span>
-                {(post.view_count ?? 0) > 0 && (
-                  <span>{(post.view_count).toLocaleString()} {isZh ? '阅读' : 'views'}</span>
-                )}
+{/* view_count removed — not reliably tracked */}
               </div>
             </Link>
           ))}
