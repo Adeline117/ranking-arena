@@ -42,6 +42,7 @@ html.theme-transition *::after {
 :root {
   --background: #000000;
   --foreground: #FFFFFF;
+  --mobile-nav-height: 60px;
   
   /* Brand colors - Arena Purple */
   --color-brand: #8b6fa8;
@@ -906,22 +907,6 @@ select:focus-visible {
    Global interactive refinements
    ============================================ */
 
-/* Smooth scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--color-border-primary);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-secondary);
-}
-
 /* Category pill / filter chip shared hover */
 .filter-chip {
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -1267,17 +1252,6 @@ select:focus-visible {
 /* ============================================
    Mobile Performance Optimizations
    ============================================ */
-
-/* Mobile nav height CSS variable */
-:root {
-  --mobile-nav-height: 60px;
-}
-
-/* Touch target minimum size (WCAG 2.5.8) */
-.touch-target {
-  min-height: 44px;
-  min-width: 44px;
-}
 
 /* Avatar fixed-size container to prevent CLS */
 .avatar-container {
