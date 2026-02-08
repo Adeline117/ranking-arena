@@ -7,7 +7,7 @@ interface SidebarCardProps {
 
 export default function SidebarCard({ title, children }: SidebarCardProps) {
   return (
-    <div className="sidebar-card">
+    <div className="sidebar-card card-hover">
       <h3 style={{
         fontSize: 13,
         fontWeight: 600,
