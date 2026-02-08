@@ -685,9 +685,7 @@ select:focus-visible {
   contain: layout style;
 }
 
-/* Prevent overscroll chaining on scrollable containers */
-.ranking-table-container,
-.post-feed-masonry,
+/* Prevent overscroll chaining on sidebar containers only */
 .three-col-left,
 .three-col-right {
   overscroll-behavior: contain;
@@ -895,7 +893,7 @@ select:focus-visible {
 
 /* Ranking table container - contains its own layout */
 .ranking-table-container {
-  contain: layout style;
+  contain: style;
 }
 
 /* Individual trader cards in card view */
