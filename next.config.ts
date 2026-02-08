@@ -77,6 +77,22 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
+        hostname: 'cdn.arenafi.org',
+      },
+      {
+        protocol: 'https',
+        hostname: 'books.google.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'covers.openlibrary.org',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.googleusercontent.com',
+      },
+      {
+        protocol: 'https',
         hostname: '**.supabase.co',
       },
       {
