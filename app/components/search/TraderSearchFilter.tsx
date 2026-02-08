@@ -133,12 +133,14 @@ export function TraderSearchFilter({
       {/* Filter Panel */}
       {isVisible && (
         <Box
+          className="page-enter-fast"
           style={{
             marginTop: tokens.spacing[3],
             padding: tokens.spacing[4],
             background: tokens.colors.bg.secondary,
             borderRadius: tokens.radius.xl,
             border: `1px solid ${tokens.colors.border.primary}`,
+            boxShadow: tokens.shadow.md,
           }}
         >
           {/* Period Selection */}
@@ -154,8 +156,9 @@ export function TraderSearchFilter({
                     key={option.value}
                     onClick={() => updateFilter('period', isSelected ? undefined : option.value)}
                     style={{
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                       borderRadius: tokens.radius.md,
+                      minHeight: 40,
                       border: `1px solid ${isSelected ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
                       background: isSelected ? `${tokens.colors.accent.primary}20` : 'transparent',
                       color: isSelected ? tokens.colors.accent.primary : tokens.colors.text.secondary,
@@ -213,9 +216,11 @@ export function TraderSearchFilter({
                 placeholder={isZh ? '最小' : 'Min'}
                 value={filter.roi_min ?? ''}
                 onChange={(e) => updateFilter('roi_min', e.target.value ? Number(e.target.value) : undefined)}
+                className="input-focus-glow"
                 style={{
                   width: 80,
                   padding: tokens.spacing[2],
+                  minHeight: 40,
                   borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.primary,
@@ -230,9 +235,11 @@ export function TraderSearchFilter({
                 placeholder={isZh ? '最大' : 'Max'}
                 value={filter.roi_max ?? ''}
                 onChange={(e) => updateFilter('roi_max', e.target.value ? Number(e.target.value) : undefined)}
+                className="input-focus-glow"
                 style={{
                   width: 80,
                   padding: tokens.spacing[2],
+                  minHeight: 40,
                   borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.primary,
@@ -254,9 +261,11 @@ export function TraderSearchFilter({
               placeholder={isZh ? '例如: 40' : 'e.g. 40'}
               value={filter.min_score ?? ''}
               onChange={(e) => updateFilter('min_score', e.target.value ? Number(e.target.value) : undefined)}
+              className="input-focus-glow"
               style={{
                 width: 120,
                 padding: tokens.spacing[2],
+                minHeight: 40,
                 borderRadius: tokens.radius.md,
                 border: `1px solid ${tokens.colors.border.primary}`,
                 background: tokens.colors.bg.primary,
@@ -272,8 +281,9 @@ export function TraderSearchFilter({
             <button
               onClick={resetFilter}
               style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.md,
+                minHeight: 40,
                 border: `1px solid ${tokens.colors.border.primary}`,
                 background: 'transparent',
                 color: tokens.colors.text.tertiary,
