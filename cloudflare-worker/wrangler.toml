@@ -2,5 +2,10 @@ name = "ranking-arena-proxy"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
+# Route through non-US Cloudflare edge to avoid Binance geo-blocking
+# Smart placement lets CF pick the optimal location near the origin servers
+[placement]
+mode = "smart"
+
 [vars]
 ALLOWED_ORIGINS = "https://www.arenafi.org,https://arenafi.org"
