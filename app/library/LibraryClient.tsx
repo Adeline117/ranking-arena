@@ -30,7 +30,7 @@ const SORT_OPTIONS = [
   { key: 'date', en: 'Publish Date', zh: '出版日期' },
 ]
 
-const PAGE_SIZE = 24
+const PAGE_SIZE = 25
 
 interface LibraryClientProps {
   initialItems: LibraryItem[]
