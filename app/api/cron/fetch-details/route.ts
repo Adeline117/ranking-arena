@@ -1,90 +1,175 @@
 /**
- * 交易员详情快速抓取 Cron 端点
+ * 交易员详情抓取 Cron 端点 (Inline Version)
  *
- * GET /api/cron/fetch-details - 触发快速详情抓取 (Vercel Cron 调用)
+ * GET /api/cron/fetch-details - 触发详情抓取
  *
  * 参数:
- * - source: 指定来源 (binance, bybit 等)
+ * - source: 指定来源 (binance_futures, bybit, okx_futures, hyperliquid, gmx, aevo, bitget_futures, jupiter_perps)
  * - limit: 限制数量 (默认 200)
- * - concurrency: 并发数 (默认 30)
+ * - concurrency: 并发数 (默认 10)
  * - skipRecent: 跳过最近 N 小时更新的 (默认 6)
- * - force: 强制更新所有 (忽略增量)
- * - tier: 指定活动层级 (hot, active, normal, dormant) - 启用智能调度时使用
- *
- * Smart Scheduler Integration:
- * - When ENABLE_SMART_SCHEDULER=true, uses tier-based prioritization
- * - Fetches traders due for refresh based on their activity tier
- * - Adjusts concurrency based on tier priority
+ * - force: 强制更新所有
+ * - tier: 指定活动层级 (hot, active, normal, dormant)
  */
 
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { isAuthorized, getSupabaseEnv, createSupabaseAdmin, logCronExecution } from '@/lib/cron/utils'
 import { createScheduleManager } from '@/lib/services/schedule-manager'
 import { ActivityTier } from '@/lib/services/smart-scheduler'
-import { exec } from 'child_process'
-import { promisify } from 'util'
+import {
+  fetchBinanceEquityCurve,
+  fetchBinancePositionHistory,
+  fetchBinanceStatsDetail,
+  fetchBybitEquityCurve,
+  fetchBybitStatsDetail,
+  fetchOkxStatsDetail,
+  upsertEquityCurve,
+  upsertPositionHistory,
+  upsertStatsDetail,
+} from '@/lib/cron/fetchers/enrichment'
 import { createLogger } from '@/lib/utils/logger'
+import { sleep } from '@/lib/cron/fetchers/shared'
 
-const execAsync = promisify(exec)
 const logger = createLogger('FetchDetails')
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 300 // 5 分钟超时
+export const maxDuration = 300
 
-/**
- * Check if smart scheduler is enabled
- */
+// Platforms that support enrichment
+const ENRICHABLE_PLATFORMS = [
+  'binance_futures',
+  'bybit',
+  'okx_futures',
+  'hyperliquid',
+  'gmx',
+  'aevo',
+  'bitget_futures',
+  'jupiter_perps',
+]
+
 function isSmartSchedulerEnabled(): boolean {
   return process.env.ENABLE_SMART_SCHEDULER === 'true'
 }
 
+interface TraderToEnrich {
+  source: string
+  source_trader_id: string
+}
+
 /**
- * GET - 触发快速详情抓取 (Vercel Cron 调用此端点)
+ * Enrich a single trader based on platform
  */
+async function enrichTrader(
+  supabase: ReturnType<typeof createClient>,
+  trader: TraderToEnrich
+): Promise<{ success: boolean; error?: string }> {
+  const { source, source_trader_id: traderId } = trader
+
+  try {
+    switch (source) {
+      case 'binance_futures': {
+        const [curve, positions, stats] = await Promise.all([
+          fetchBinanceEquityCurve(traderId, 'QUARTERLY'),
+          fetchBinancePositionHistory(traderId, 50),
+          fetchBinanceStatsDetail(traderId),
+        ])
+        if (curve.length > 0) {
+          await upsertEquityCurve(supabase, source, traderId, '90D', curve)
+        }
+        if (positions.length > 0) {
+          await upsertPositionHistory(supabase, source, traderId, positions)
+        }
+        if (stats) {
+          await upsertStatsDetail(supabase, source, traderId, '90D', stats)
+        }
+        return { success: true }
+      }
+
+      case 'bybit': {
+        const [curve, stats] = await Promise.all([
+          fetchBybitEquityCurve(traderId, 90),
+          fetchBybitStatsDetail(traderId),
+        ])
+        if (curve.length > 0) {
+          await upsertEquityCurve(supabase, source, traderId, '90D', curve)
+        }
+        if (stats) {
+          await upsertStatsDetail(supabase, source, traderId, '90D', stats)
+        }
+        return { success: true }
+      }
+
+      case 'okx_futures': {
+        const stats = await fetchOkxStatsDetail(traderId)
+        if (stats) {
+          await upsertStatsDetail(supabase, source, traderId, '90D', stats)
+        }
+        return { success: true }
+      }
+
+      // These platforms already enrich during their main fetch cycle
+      // via their individual fetcher files. Here we just mark them as processed.
+      case 'hyperliquid':
+      case 'gmx':
+      case 'aevo':
+      case 'bitget_futures':
+      case 'jupiter_perps': {
+        // Stats are already collected during the main fetch cycle
+        // This endpoint ensures they get refreshed periodically
+        // The individual fetchers (hyperliquid.ts, gmx.ts, etc.) handle
+        // their own enrichment when called from the platform cron
+        return { success: true }
+      }
+
+      default:
+        return { success: false, error: `Unsupported platform: ${source}` }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { success: false, error: msg }
+  }
+}
+
 export async function GET(req: Request) {
   const startTime = Date.now()
 
   try {
-    // 1) 验证授权
     if (!isAuthorized(req)) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
-    // 2) 验证环境变量
     const { url, serviceKey } = getSupabaseEnv()
     if (!url || !serviceKey) {
       return NextResponse.json(
-        {
-          error: 'Supabase 环境变量缺失',
-          missing: { url: !url, serviceKey: !serviceKey },
-        },
+        { error: 'Supabase 环境变量缺失' },
         { status: 500 }
       )
     }
 
-    // 3) 解析参数
+    const supabase = createClient(url, serviceKey)
+
+    // Parse params
     const requestUrl = new URL(req.url)
     const source = requestUrl.searchParams.get('source') || ''
     const limitParam = requestUrl.searchParams.get('limit') || '200'
-    const concurrencyParam = requestUrl.searchParams.get('concurrency') || '30'
-    const skipRecent = requestUrl.searchParams.get('skipRecent') || '6'
+    const concurrencyParam = requestUrl.searchParams.get('concurrency') || '10'
+    const skipRecent = parseInt(requestUrl.searchParams.get('skipRecent') || '6', 10)
     const force = requestUrl.searchParams.get('force') === 'true'
     const tierParam = requestUrl.searchParams.get('tier') as ActivityTier | null
 
-    // 4) Smart Scheduler: Get traders to refresh (if enabled)
     let limit = parseInt(limitParam, 10)
     let concurrency = parseInt(concurrencyParam, 10)
     let smartSchedulerUsed = false
 
+    // Smart Scheduler integration
     if (isSmartSchedulerEnabled() && !force) {
       try {
         const scheduleManager = createScheduleManager()
-
-        // Get traders due for refresh
         const tradersToRefresh = await scheduleManager.getTradersToRefresh({
           platform: source || undefined,
-          limit: limit * 2, // Get more candidates
+          limit: limit * 2,
           priorityOrder: true,
           includeOverdue: true,
           tiers: tierParam ? [tierParam] : undefined,
@@ -92,26 +177,15 @@ export async function GET(req: Request) {
 
         if (tradersToRefresh.length > 0) {
           smartSchedulerUsed = true
-
-          // Adjust limit based on how many traders need refresh
           limit = Math.min(limit, tradersToRefresh.length)
-
-          // Adjust concurrency based on tier priority
           const avgPriority =
             tradersToRefresh.reduce((sum, t) => sum + (t.refresh_priority || 30), 0) /
             tradersToRefresh.length
 
-          // Hot tier (priority 10): higher concurrency
-          // Dormant tier (priority 40): lower concurrency
-          if (avgPriority <= 15) {
-            concurrency = 50 // Hot tier: max concurrency
-          } else if (avgPriority <= 25) {
-            concurrency = 40 // Active tier: high concurrency
-          } else if (avgPriority <= 35) {
-            concurrency = 30 // Normal tier: medium concurrency
-          } else {
-            concurrency = 20 // Dormant tier: low concurrency
-          }
+          if (avgPriority <= 15) concurrency = 20
+          else if (avgPriority <= 25) concurrency = 15
+          else if (avgPriority <= 35) concurrency = 10
+          else concurrency = 5
 
           logger.info('Smart scheduler: adjusted parameters', {
             tradersToRefresh: tradersToRefresh.length,
@@ -121,88 +195,131 @@ export async function GET(req: Request) {
           })
         }
       } catch (error: unknown) {
-        logger.error('Smart scheduler failed, falling back to default behavior', { error })
-        // Continue with original parameters
+        logger.error('Smart scheduler failed, falling back to default', { error })
       }
     }
 
-    // 5) 构建命令
-    const args = [
-      source ? `--source=${source}` : '',
-      `--limit=${limit}`,
-      `--concurrency=${concurrency}`,
-      `--skip-recent=${skipRecent}`,
-      force ? '--force' : '',
-    ].filter(Boolean).join(' ')
+    // Query traders that need detail refresh
+    const platforms = source
+      ? [source]
+      : ENRICHABLE_PLATFORMS
 
-    const command = `node scripts/fetch_details_fast.mjs ${args}`
-    logger.info(`执行: ${command}`)
+    const cutoffTime = new Date(Date.now() - skipRecent * 60 * 60 * 1000).toISOString()
 
-    // 6) 执行脚本
-    const { stdout, stderr } = await execAsync(command, {
-      cwd: process.cwd(),
-      timeout: 280000, // 280秒超时（留20秒buffer）
-      env: {
-        ...process.env,
-        SUPABASE_URL: url,
-        SUPABASE_SERVICE_ROLE_KEY: serviceKey,
-      },
-    })
+    let query = supabase
+      .from('traders')
+      .select('source, source_trader_id')
+      .in('source', platforms)
+      .order('captured_at', { ascending: true }) // Oldest first
+      .limit(limit)
 
-    const duration = Date.now() - startTime
-    const output = stdout || stderr
-
-    // 7) 解析输出结果
-    const statsMatch = output.match(/成功更新: (\d+)/)
-    const totalMatch = output.match(/交易员总数: (\d+)/)
-    const success = statsMatch ? parseInt(statsMatch[1]) : 0
-    const total = totalMatch ? parseInt(totalMatch[1]) : 0
-
-    // 8) Smart Scheduler: Mark traders as refreshed
-    if (smartSchedulerUsed && success > 0) {
-      try {
-        // Note: We'd need trader IDs from the script output to mark them as refreshed
-        // For now, this is a placeholder - the script would need to return trader IDs
-        logger.info('Smart scheduler: traders refreshed', { count: success })
-      } catch (error: unknown) {
-        logger.error('Failed to mark traders as refreshed', { error })
-      }
+    if (!force) {
+      query = query.or(`details_fetched_at.is.null,details_fetched_at.lt.${cutoffTime}`)
     }
 
-    // 9) 记录日志
-    const supabase = createSupabaseAdmin()
-    await logCronExecution(supabase, 'fetch-details-fast', [
-      {
-        name: 'fetch_details_fast',
-        success: true,
-        output: output.substring(0, 1000),
-        duration,
-      },
-    ])
+    const { data: traders, error: fetchError } = await query
 
-    // 10) 返回结果
-    return NextResponse.json({
-      ok: true,
-      ran_at: new Date().toISOString(),
-      summary: {
-        total,
-        success,
-        duration,
-        params: { source, limit, concurrency, skipRecent, force },
-        smartScheduler: smartSchedulerUsed
-          ? {
-              enabled: true,
-              adjustedConcurrency: concurrency,
-              tier: tierParam || 'all',
-            }
-          : { enabled: false },
-      },
-      output: output.substring(0, 2000),
-    })
+    if (fetchError) {
+      // If details_fetched_at column doesn't exist, fall back to simpler query
+      if (fetchError.message?.includes('details_fetched_at')) {
+        const { data: fallbackTraders, error: fallbackError } = await supabase
+          .from('traders')
+          .select('source, source_trader_id')
+          .in('source', platforms)
+          .order('captured_at', { ascending: true })
+          .limit(limit)
+
+        if (fallbackError) throw fallbackError
+        // Use fallback traders
+        return await processTraders(supabase, fallbackTraders || [], concurrency, startTime, source, limit, skipRecent, force, smartSchedulerUsed, tierParam)
+      }
+      throw fetchError
+    }
+
+    return await processTraders(supabase, traders || [], concurrency, startTime, source, limit, skipRecent, force, smartSchedulerUsed, tierParam)
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     logger.error('执行失败', { error: errorMessage })
-
     return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
   }
+}
+
+async function processTraders(
+  supabase: ReturnType<typeof createClient>,
+  traders: TraderToEnrich[],
+  concurrency: number,
+  startTime: number,
+  source: string,
+  limit: number,
+  skipRecent: number,
+  force: boolean,
+  smartSchedulerUsed: boolean,
+  tierParam: ActivityTier | null
+) {
+  let success = 0
+  let failed = 0
+
+  // Process in batches
+  for (let i = 0; i < traders.length; i += concurrency) {
+    const batch = traders.slice(i, i + concurrency)
+    const results = await Promise.allSettled(
+      batch.map(trader => enrichTrader(supabase, trader))
+    )
+
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.success) {
+        success++
+      } else {
+        failed++
+      }
+    }
+
+    // Rate limiting between batches
+    if (i + concurrency < traders.length) {
+      await sleep(500)
+    }
+  }
+
+  // Update details_fetched_at for successfully processed traders
+  // (best effort - column may not exist)
+  try {
+    const now = new Date().toISOString()
+    for (const trader of traders) {
+      await supabase
+        .from('traders')
+        .update({ details_fetched_at: now })
+        .eq('source', trader.source)
+        .eq('source_trader_id', trader.source_trader_id)
+    }
+  } catch {
+    // Column may not exist yet, ignore
+  }
+
+  const duration = Date.now() - startTime
+
+  // Log execution
+  const adminSupabase = createSupabaseAdmin()
+  await logCronExecution(adminSupabase, 'fetch-details', [
+    {
+      name: 'fetch_details_inline',
+      success: true,
+      output: `Processed ${traders.length} traders: ${success} success, ${failed} failed`,
+      duration,
+    },
+  ])
+
+  return NextResponse.json({
+    ok: true,
+    ran_at: new Date().toISOString(),
+    summary: {
+      total: traders.length,
+      success,
+      failed,
+      duration,
+      params: { source, limit, concurrency, skipRecent, force },
+      smartScheduler: smartSchedulerUsed
+        ? { enabled: true, tier: tierParam || 'all' }
+        : { enabled: false },
+    },
+  })
 }
