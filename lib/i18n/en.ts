@@ -2127,7 +2127,7 @@ const en = {
 
     // Terms of service page
     termsTitle: 'Terms of Service',
-    termsLastUpdated: 'Last updated: January 2024',
+    termsLastUpdated: 'Last updated: February 2026',
     termsAcceptTitle: '1. Acceptance of Terms',
     termsAcceptP1: 'Welcome to Arena ("the platform" or "we"). By accessing or using our services, you agree to be bound by these Terms of Service ("Terms"). If you do not agree to any part of these terms, please do not use our services.',
     termsServiceTitle: '2. Service Description',
@@ -2177,7 +2177,7 @@ const en = {
     termsChanges2: 'To suspend or terminate your account access for any reason',
     termsChanges3: 'To modify these terms, with modified terms taking effect immediately upon posting',
     termsGoverningLawTitle: '10. Governing Law',
-    termsGoverningLawP1: 'These terms are governed by and construed in accordance with the laws of the People\'s Republic of China. Any disputes related to these terms shall be submitted to the competent court for resolution.',
+    termsGoverningLawP1: 'These terms are governed by and construed in accordance with the laws of the State of California, United States, without regard to conflict of law provisions. Any disputes arising from these terms shall be resolved through binding arbitration in California. Before initiating arbitration, both parties agree to first attempt to resolve disputes through good-faith negotiation.',
     termsContactTitle: '11. Contact Us',
     termsContactP1: 'If you have any questions about these Terms of Service, please contact us via direct message:',
     termsSendMessageToSupport: 'Send Message to Support',
@@ -2798,6 +2798,29 @@ chainBreakdown: 'Chain Breakdown',
 dexVolume: 'DEX Volume',
 yieldPools: 'Yield Pools',
 stablecoinMarketCap: 'Stablecoin Market Cap',
+
+// DEX Trader Tracking
+dexTraders: 'DEX Traders',
+onChainVolume: 'On-chain Volume',
+swapCount: 'Swap Count',
+estimatedPnl: 'Estimated PnL',
+walletAddress: 'Wallet Address',
+viewOnExplorer: 'View on Explorer',
+dexLeaderboard: 'DEX Leaderboard',
+
+// Voice & Video Calls
+voiceCall: 'Voice Call',
+videoCall: 'Video Call',
+calling: 'Calling...',
+ringing: 'Ringing...',
+callEnded: 'Call Ended',
+callDuration: 'Call Duration',
+muteAudio: 'Mute',
+toggleCamera: 'Toggle Camera',
+endCall: 'End Call',
+incomingCall: 'Incoming Call',
+acceptCall: 'Accept',
+rejectCall: 'Reject',
 
 } as const
 
