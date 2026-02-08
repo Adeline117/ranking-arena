@@ -40,8 +40,40 @@ const HEADERS: Record<string, string> = {
   'Accept-Language': 'en-US,en;q=0.9',
 }
 
+/**
+ * Build Gate.io API v4 authentication headers (HMAC-SHA512).
+ * See: https://www.gate.io/docs/developers/apiv4/#authentication
+ */
+function buildAuthHeaders(
+  method: string,
+  path: string,
+  query: string,
+  body: string = ''
+): Record<string, string> | null {
+  const apiKey = process.env.GATEIO_API_KEY
+  const apiSecret = process.env.GATEIO_API_SECRET
+  if (!apiKey || !apiSecret) return null
+
+  // Gate.io v4 requires: KEY, SIGN, Timestamp
+  // SIGN = HMAC-SHA512(apiSecret, method + '\n' + path + '\n' + query + '\n' + sha512(body) + '\n' + timestamp)
+  const crypto = require('crypto')
+  const timestamp = Math.floor(Date.now() / 1000).toString()
+  const bodyHash = crypto.createHash('sha512').update(body).digest('hex')
+  const signString = `${method}\n${path}\n${query}\n${bodyHash}\n${timestamp}`
+  const sign = crypto.createHmac('sha512', apiSecret).update(signString).digest('hex')
+
+  return {
+    KEY: apiKey,
+    SIGN: sign,
+    Timestamp: timestamp,
+  }
+}
+
 /** Multiple API endpoints to try */
 const API_ENDPOINTS = [
+  // Gate.io API v4 authenticated endpoint (preferred)
+  (page: number, period: string) =>
+    `https://api.gateio.ws/api/v4/copy_trading/leader_board?sort_by=roi&period=${period}&page=${page}&limit=${PAGE_SIZE}`,
   // Internal web API patterns for Gate.io
   (page: number, period: string) =>
     `https://www.gate.io/apiw/v1/copytrade/leader/list?sort=roi&period=${period}&page=${page}&limit=${PAGE_SIZE}`,
@@ -171,7 +203,23 @@ async function fetchPeriod(
     for (let page = 1; page <= maxPages; page++) {
       try {
         const url = buildUrl(page, periodStr)
-        const data = await fetchJson<GateResponse>(url, { headers: HEADERS, timeoutMs: 10000 })
+        const urlObj = new URL(url)
+        const isV4 = url.includes('api.gateio.ws/api/v4/')
+        const reqHeaders: Record<string, string> = { ...HEADERS }
+
+        // Add auth headers for v4 API endpoint
+        if (isV4) {
+          const authHeaders = buildAuthHeaders(
+            'GET',
+            urlObj.pathname,
+            urlObj.search.replace(/^\?/, ''),
+          )
+          if (authHeaders) {
+            Object.assign(reqHeaders, authHeaders)
+          }
+        }
+
+        const data = await fetchJson<GateResponse>(url, { headers: reqHeaders, timeoutMs: 10000 })
 
         const list = extractList(data)
         if (list.length === 0) {

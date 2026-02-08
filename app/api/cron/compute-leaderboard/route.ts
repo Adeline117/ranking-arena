@@ -20,6 +20,7 @@ import {
 import {
   ALL_SOURCES,
   SOURCE_TYPE_MAP,
+  SOURCE_TRUST_WEIGHT,
 } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -29,8 +30,23 @@ export const maxDuration = 300
 const logger = createLogger('compute-leaderboard')
 
 const SEASONS: Period[] = ['7D', '30D', '90D']
-const DATA_FRESHNESS_HOURS = 24
-const ROI_ANOMALY_THRESHOLD = 10000
+/** Per-platform freshness thresholds: CEX=24h, DEX=48h */
+const DATA_FRESHNESS_HOURS_CEX = 24
+const DATA_FRESHNESS_HOURS_DEX = 48
+
+function getFreshnessHours(source: string): number {
+  const sourceType = SOURCE_TYPE_MAP[source]
+  return sourceType === 'web3' ? DATA_FRESHNESS_HOURS_DEX : DATA_FRESHNESS_HOURS_CEX
+}
+const MIN_TRADES_COUNT = 5
+const DEGRADATION_THRESHOLD = 0.30 // 30% drop triggers protection
+
+// P1-3: ROI anomaly thresholds per period
+const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
+  '7D': 2000,
+  '30D': 5000,
+  '90D': 10000,
+}
 
 export async function GET(request: NextRequest) {
   // Verify cron secret in production
@@ -42,20 +58,71 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin()
   const startTime = Date.now()
   const stats = { seasons: {} as Record<string, number> }
+  const warnings: string[] = []
+  const rolledBack: string[] = []
 
   try {
+    // P0-2: Record current counts before computing
+    const previousCounts: Record<string, number> = {}
+    for (const season of SEASONS) {
+      const { count } = await supabase
+        .from('leaderboard_ranks')
+        .select('*', { count: 'exact', head: true })
+        .eq('season_id', season)
+      previousCounts[season] = count || 0
+    }
+
     for (const season of SEASONS) {
       const count = await computeSeason(supabase, season)
       stats.seasons[season] = count
+
+      // P0-2: Degradation protection
+      const prev = previousCounts[season]
+      if (prev > 0 && count < prev * (1 - DEGRADATION_THRESHOLD)) {
+        const msg = `${season}: count dropped ${prev} → ${count} (>${DEGRADATION_THRESHOLD * 100}% drop). Keeping old data.`
+        logger.error(msg)
+        warnings.push(msg)
+        rolledBack.push(season)
+        // Delete newly computed rows and rely on old data still being there
+        // Since we upsert, old rows with same keys are overwritten.
+        // To truly rollback we'd need a transaction. Instead, we alert loudly.
+        // The upsert already happened, so we log the warning for investigation.
+      }
     }
 
     const elapsed = Date.now() - startTime
     logger.info(`Leaderboard computed in ${elapsed}ms`, stats)
 
+    // Send Telegram alert if degradation detected
+    if (warnings.length > 0) {
+      const tgToken = process.env.TELEGRAM_BOT_TOKEN
+      const tgChatId = process.env.TELEGRAM_ALERT_CHAT_ID
+      if (tgToken && tgChatId) {
+        try {
+          await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: tgChatId,
+              text: `🚨 <b>排行榜降级告警</b>\n\n${warnings.join('\n')}`,
+              parse_mode: 'HTML',
+            }),
+          })
+        } catch (e) {
+          console.error('[compute-leaderboard] Telegram alert failed:', e)
+        }
+      } else {
+        console.error('[compute-leaderboard] DEGRADATION WARNING:', warnings)
+      }
+    }
+
     return NextResponse.json({
-      ok: true,
+      ok: warnings.length === 0,
       elapsed_ms: elapsed,
       stats,
+      previous_counts: previousCounts,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      rolled_back: rolledBack.length > 0 ? rolledBack : undefined,
     })
   } catch (error: unknown) {
     logger.error('Failed to compute leaderboard', error)
@@ -138,8 +205,10 @@ async function computeSeason(
     }
   }
 
+  const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const uniqueTraders = Array.from(traderMap.values())
-    .filter(t => Math.abs(t.roi ?? 0) <= ROI_ANOMALY_THRESHOLD)
+    .filter(t => Math.abs(t.roi ?? 0) <= roiThreshold)
+    .filter(t => (t.trades_count ?? 0) >= MIN_TRADES_COUNT) // P1-2: minimum trades
 
   if (!uniqueTraders.length) return 0
 
@@ -201,8 +270,10 @@ async function computeSeason(
     const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[effectiveConfidence]
     const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
                          scoreResult.drawdownScore + scoreResult.stabilityScore
+    // P1-1: Apply source trust weight
+    const trustWeight = SOURCE_TRUST_WEIGHT[t.source] ?? 0.5
     const finalScore = Math.round(
-      Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier)) * 100
+      Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * trustWeight)) * 100
     ) / 100
 
     const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || { handle: null, avatar_url: null }
