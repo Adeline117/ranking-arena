@@ -143,7 +143,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         let data
         try {
           data = await response.json()
-        } catch (parseError) {
+        } catch (_parseError) {
           const errorMsg = tRef.current('errorDataFormat') || '数据格式错误'
           setError(errorMsg)
           return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }

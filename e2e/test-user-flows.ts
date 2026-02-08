@@ -13,7 +13,7 @@ config({ path: '.env.local' })
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+const _BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('❌ 缺少环境变量: NEXT_PUBLIC_SUPABASE_URL 或 NEXT_PUBLIC_SUPABASE_ANON_KEY')
@@ -37,7 +37,7 @@ interface TestResult {
 const results: TestResult[] = []
 
 function log(emoji: string, message: string) {
-  console.log(`${emoji} ${message}`)
+  console.warn(`${emoji} ${message}`)
 }
 
 function addResult(name: string, status: 'pass' | 'fail' | 'skip', message?: string, duration?: number) {
@@ -71,7 +71,7 @@ async function runTests() {
 
   addResult('用户登录', 'pass', `用户 ${authData.user?.email}`, Date.now() - startLogin)
 
-  const accessToken = authData.session.access_token
+  const _accessToken = authData.session.access_token
   const userId = authData.user?.id
 
   // ============================================
@@ -328,27 +328,27 @@ async function runTests() {
   // ============================================
   // 测试结果汇总
   // ============================================
-  console.log('\n' + '='.repeat(50))
-  console.log('📊 测试结果汇总')
-  console.log('='.repeat(50))
+  console.warn('\n' + '='.repeat(50))
+  console.warn('📊 测试结果汇总')
+  console.warn('='.repeat(50))
 
   const passed = results.filter(r => r.status === 'pass').length
   const failed = results.filter(r => r.status === 'fail').length
   const skipped = results.filter(r => r.status === 'skip').length
 
-  console.log(`✅ 通过: ${passed}`)
-  console.log(`❌ 失败: ${failed}`)
-  console.log(`⏭️ 跳过: ${skipped}`)
-  console.log(`📝 总计: ${results.length}`)
+  console.warn(`✅ 通过: ${passed}`)
+  console.warn(`❌ 失败: ${failed}`)
+  console.warn(`⏭️ 跳过: ${skipped}`)
+  console.warn(`📝 总计: ${results.length}`)
 
   if (failed > 0) {
-    console.log('\n❌ 失败的测试:')
+    console.warn('\n❌ 失败的测试:')
     results.filter(r => r.status === 'fail').forEach(r => {
-      console.log(`   - ${r.name}: ${r.message}`)
+      console.warn(`   - ${r.name}: ${r.message}`)
     })
   }
 
-  console.log('\n' + '='.repeat(50))
+  console.warn('\n' + '='.repeat(50))
 
   // 返回退出码
   process.exit(failed > 0 ? 1 : 0)

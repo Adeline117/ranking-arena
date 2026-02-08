@@ -129,7 +129,8 @@ export default function CapacitorProvider({ children }: { children: React.ReactN
         await StatusBar.setStyle({ style: Style.Light })
 
         if (getNativePlatform() === 'android') {
-          await StatusBar.setBackgroundColor({ color: '#0B0A10' })
+          const theme = document.documentElement.getAttribute('data-theme')
+          await StatusBar.setBackgroundColor({ color: theme === 'light' ? '#FFFFFF' : '#0B0A10' })
         }
       } catch {
         // Plugin not available

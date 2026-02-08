@@ -20,8 +20,8 @@ export default function OfflinePage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '1rem',
-        backgroundColor: '#0B0A10',
-        color: '#EDEDED',
+        backgroundColor: 'var(--color-bg-primary, #0B0A10)',
+        color: 'var(--color-text-primary, #EDEDED)',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       }}
     >
@@ -55,7 +55,7 @@ export default function OfflinePage() {
         <p
           style={{
             fontSize: '0.875rem',
-            color: '#A8A8B3',
+            color: 'var(--color-text-secondary, #A8A8B3)',
             marginBottom: '2rem',
             lineHeight: 1.6,
           }}
@@ -69,7 +69,7 @@ export default function OfflinePage() {
             padding: '0.75rem 2rem',
             fontSize: '0.875rem',
             fontWeight: '500',
-            color: '#EDEDED',
+            color: '#FFFFFF',
             backgroundColor: 'var(--color-brand)',
             border: 'none',
             borderRadius: '8px',
@@ -89,7 +89,7 @@ export default function OfflinePage() {
         <p
           style={{
             fontSize: '0.75rem',
-            color: '#6B6B7B',
+            color: 'var(--color-text-tertiary, #6B6B7B)',
             marginTop: '2rem',
           }}
         >

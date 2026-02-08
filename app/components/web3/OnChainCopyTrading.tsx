@@ -46,7 +46,7 @@ const RocketIcon = ({ size = 24 }: { size?: number }) => (
 )
 
 // Lock icon for not available
-const LockIcon = ({ size = 20 }: { size?: number }) => (
+const _LockIcon = ({ size = 20 }: { size?: number }) => (
   <svg
     width={size}
     height={size}
@@ -79,7 +79,7 @@ const ChainIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 )
 
-export function OnChainCopyTrading({ traderHandle, traderAddress, className = '' }: OnChainCopyTradingProps) {
+export function OnChainCopyTrading({ traderHandle, _traderAddress, className = '' }: OnChainCopyTradingProps) {
   const { isConnected, chainId } = useAccount()
   const { t } = useLanguage()
 

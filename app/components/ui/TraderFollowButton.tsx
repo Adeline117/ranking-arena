@@ -17,7 +17,7 @@ type TraderFollowButtonProps = {
   onFollowChange?: (following: boolean) => void
 }
 
-type FollowResponse = {
+type _FollowResponse = {
   following: boolean
   success?: boolean
   tableNotFound?: boolean
@@ -92,7 +92,8 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         setFollowing(actualFollowing)
         onFollowChange?.(actualFollowing)
       }
-    } catch (error) {
+    } catch (_error) {
+      // intentionally empty
     }
   }, [userId, traderId, getAuthHeadersAsync, onFollowChange])
 
@@ -186,7 +187,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
           sessionStorage.removeItem('pendingFollow')
         }
       }
-    } catch {}
+    } catch { /* intentionally empty */ }
   }, [userId, traderId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

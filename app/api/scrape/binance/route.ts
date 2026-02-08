@@ -76,7 +76,7 @@ async function fetchBinanceData(period: string): Promise<BinanceTrader[]> {
       const data = await response.json()
       
       if (data.code !== '000000') {
-        console.log(`[${period}] Page ${page} API error: ${data.code}`)
+        console.warn(`[${period}] Page ${page} API error: ${data.code}`)
         break
       }
       
@@ -193,7 +193,7 @@ async function saveTraders(traders: BinanceTrader[], period: string) {
       .upsert(sourcesData, { onConflict: 'source,source_trader_id' })
     
     if (sourcesError) {
-      console.log(`[${period}] trader_sources error:`, sourcesError.message)
+      console.warn(`[${period}] trader_sources error:`, sourcesError.message)
     }
   }
   
@@ -204,7 +204,7 @@ async function saveTraders(traders: BinanceTrader[], period: string) {
       .insert(snapshotsData)
     
     if (snapshotsError) {
-      console.log(`[${period}] trader_snapshots batch error:`, snapshotsError.message)
+      console.warn(`[${period}] trader_snapshots batch error:`, snapshotsError.message)
       // 如果批量失败，尝试逐条插入
       for (const snapshot of snapshotsData) {
         const { error } = await supabase.from('trader_snapshots').insert(snapshot)
@@ -216,7 +216,7 @@ async function saveTraders(traders: BinanceTrader[], period: string) {
   }
   
   // 打印 TOP 5 用于验证
-  topTraders.forEach((t, i) => {
+  topTraders.forEach((_t, _i) => {
   })
   
   return { saved, avatarCount, topTraders }

@@ -29,7 +29,7 @@ const ALGORITHM = 'aes-256-gcm'
 const KEY_LENGTH = 32 // AES-256 需要 32 字节密钥
 const IV_LENGTH = 16
 const SALT_LENGTH = 32
-const AUTH_TAG_LENGTH = 16
+const _AUTH_TAG_LENGTH = 16
 
 // PBKDF2 配置
 const PBKDF2_ITERATIONS = 100000

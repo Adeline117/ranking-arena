@@ -14,9 +14,9 @@ interface TraderAlertButtonProps {
 }
 
 export default function TraderAlertButton({ traderId, platform, traderName }: TraderAlertButtonProps) {
-  const { language, t } = useLanguage()
+  const { language, _t } = useLanguage()
   const { showToast } = useToast()
-  const { alerts, addAlert, removeAlert, hasAlert, getAlertsForTrader } = useTraderAlerts()
+  const { _alerts, addAlert, removeAlert, hasAlert, getAlertsForTrader } = useTraderAlerts()
   const [showModal, setShowModal] = useState(false)
   const [alertType, setAlertType] = useState<TraderAlert['alertType']>('roi_change')
   const [threshold, setThreshold] = useState(10)
@@ -51,7 +51,7 @@ export default function TraderAlertButton({ traderId, platform, traderName }: Tr
     showToast(language === 'zh' ? '提醒已删除' : 'Alert removed', 'success')
   }
 
-  const handleRemoveAll = () => {
+  const _handleRemoveAll = () => {
     traderAlerts.forEach(a => removeAlert(a.id))
     showToast(language === 'zh' ? '所有提醒已删除' : 'All alerts removed', 'success')
   }

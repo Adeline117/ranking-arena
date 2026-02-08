@@ -21,8 +21,8 @@ const SECTION_LIMIT = 5
 
 function SearchContent() {
   const searchParams = useSearchParams()
-  const router = useRouter()
-  const { t, language } = useLanguage()
+  const _router = useRouter()
+  const { _t, language } = useLanguage()
   const isZh = language === 'zh'
   const query = searchParams.get('q') || ''
   const [loading, setLoading] = useState(false)

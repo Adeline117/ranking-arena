@@ -22,7 +22,6 @@ import type {
   SnapshotMetrics,
   EquityCurvePoint,
 } from '@/lib/types/trading-platform'
-import { ARENA_CONFIG } from '@/lib/utils/arena-score'
 import { DelayRateLimiter } from './rate-limiter'
 import { SimpleCircuitBreaker } from './circuit-breaker'
 

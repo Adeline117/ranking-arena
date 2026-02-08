@@ -11,7 +11,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { LeaderboardPlatform, MarketType, Window } from '../types/leaderboard'
-import { LEADERBOARD_PLATFORMS } from '../types/leaderboard'
 
  
 type AnySupabaseClient = SupabaseClient<any, any, any>
@@ -33,7 +32,7 @@ interface ScheduleConfig {
   longTailInterval: number
 }
 
-const DEFAULT_SCHEDULE: ScheduleConfig = {
+const _DEFAULT_SCHEDULE: ScheduleConfig = {
   preheatTopN: 500,
   discoveryInterval: 3600000,      // 1 hour
   preheatInterval: 900000,         // 15 minutes

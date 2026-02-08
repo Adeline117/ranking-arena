@@ -10,26 +10,26 @@ export const lightTokens = {
     white: '#FFFFFF',
     black: '#000000',
     
-    // Background hierarchy (light theme)
+    // Background hierarchy (light theme) — aligned with globals.css
     bg: {
       primary: '#FFFFFF',      // Pure white background
-      secondary: '#F5F5F5',    // Light gray for cards
-      tertiary: '#EEEEEE',     // Elevated surfaces
-      hover: '#E5E5E5',        // Hover states
+      secondary: '#F8F8FA',    // Light gray for cards
+      tertiary: '#F0F0F4',     // Elevated surfaces
+      hover: '#E8E8EC',        // Hover states
     },
     
-    // Text hierarchy (WCAG AA contrast ratios on #FFFFFF)
+    // Text hierarchy (WCAG AA contrast ratios on #FFFFFF) — aligned with globals.css
     text: {
       primary: '#1A1A1A',      // Almost black text (16.6:1)
-      secondary: '#525260',    // Secondary text (7.1:1) - improved contrast
-      tertiary: '#5C5C6B',     // Muted text (5.5:1) - improved from 4.7:1
+      secondary: '#5A5A6A',    // Secondary text (7.1:1)
+      tertiary: '#5F5F70',     // Muted text (5.5:1)
       disabled: '#9E9E9E',     // Disabled text (3.5:1)
     },
     
-    // Border colors
+    // Border colors — aligned with globals.css
     border: {
-      primary: '#E0E0E0',      // Subtle borders
-      secondary: '#F0F0F0',    // Very subtle borders
+      primary: '#E0E0E6',      // Subtle borders
+      secondary: '#D0D0D8',    // Visible subtle borders
       focus: '#B0B0B0',        // Focus states
     },
     

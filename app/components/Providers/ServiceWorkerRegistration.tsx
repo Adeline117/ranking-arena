@@ -13,9 +13,9 @@ export function ServiceWorkerRegistration() {
       if (process.env.NODE_ENV === 'production') {
         navigator.serviceWorker
           .register('/sw.js')
-          .then((registration) => {
+          .then((_registration) => {
           })
-          .catch((error) => {
+          .catch((_error) => {
           })
       }
     }

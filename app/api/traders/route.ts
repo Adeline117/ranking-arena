@@ -13,7 +13,7 @@
 
 import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
-import { getOrSetWithLock, CacheKey } from '@/lib/cache'
+import { getOrSetWithLock } from '@/lib/cache'
 import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
 

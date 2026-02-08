@@ -106,10 +106,10 @@ export class ErrorBoundary extends Component<Props, State> {
             alignItems: 'center',
             justifyContent: 'center',
             padding: 24,
-            color: '#EDEDED',
+            color: 'var(--color-text-primary, #EDEDED)',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             background: this.props.level === 'page'
-              ? 'linear-gradient(135deg, #0a0a0f 0%, #140d14 50%, #0f0d14 100%)'
+              ? 'var(--color-bg-primary, #0a0a0f)'
               : 'transparent',
           }}
         >
@@ -148,7 +148,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 fontSize: this.props.level === 'component' ? 18 : 28,
                 fontWeight: 700,
                 marginBottom: 12,
-                background: 'linear-gradient(135deg, #EDEDED 0%, var(--color-brand) 100%)',
+                background: 'linear-gradient(135deg, var(--color-text-primary, #EDEDED) 0%, var(--color-brand) 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
@@ -230,9 +230,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 style={{
                   padding: '12px 24px',
                   background: 'transparent',
-                  color: '#EDEDED',
+                  color: 'var(--color-text-primary, #EDEDED)',
                   borderRadius: 8,
-                  border: '1px solid rgba(255,255,255,0.15)',
+                  border: '1px solid var(--glass-border-medium, rgba(255,255,255,0.15))',
                   textDecoration: 'none',
                   fontSize: 14,
                   fontWeight: 500,

@@ -36,6 +36,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
         const actualUserId = user.id
         if (userId !== actualUserId) {
+          // intentionally empty
         }
 
         const { data } = await supabase

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body to check for specific options
     const body = await request.json().catch(() => ({}))
-    const { userIds, force = false } = body
+    const { userIds, _force = false } = body
 
     let result
     let affectedCount = 0
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Top 10 users by weight
-    const { data: topUsers, error: topError } = await supabase
+    const { data: topUsers, error: _topError } = await supabase
       .from('user_profiles')
       .select('id, handle, weight, subscription_tier, created_at')
       .order('weight', { ascending: false })

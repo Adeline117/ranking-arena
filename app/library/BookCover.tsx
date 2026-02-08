@@ -2,7 +2,6 @@
 
 import React, { memo, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
 
 // Beautiful gradient palettes for different categories
 const COVER_GRADIENTS: Record<string, string[]> = {

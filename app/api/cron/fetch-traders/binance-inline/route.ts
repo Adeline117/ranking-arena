@@ -111,7 +111,7 @@ async function fetchBinanceList(period: string, page: number): Promise<BinanceTr
   return data?.data?.list || []
 }
 
-async function fetchBinanceDetail(portfolioId: string, period: string): Promise<BinanceTrader | null> {
+async function _fetchBinanceDetail(portfolioId: string, period: string): Promise<BinanceTrader | null> {
   try {
     const res = await fetch(BINANCE_DETAIL, {
       method: 'POST',

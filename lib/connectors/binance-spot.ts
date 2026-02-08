@@ -6,7 +6,7 @@
  * API: /bapi/futures/v1/friendly/future/spot-copy-trade/
  */
 
-import { BaseConnectorLegacy, ConnectorError } from './base';
+import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
   TraderIdentity,

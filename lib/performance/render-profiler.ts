@@ -119,7 +119,7 @@ export function printRenderSummary(): void {
       : 0
     const slowRenders = list.filter((m) => m.actualDuration > slowThreshold).length
 
-    console.log(
+    console.warn(
       `${name}:`,
       `\n  Mounts: ${mounts.length} (avg: ${avgMount.toFixed(2)}ms)`,
       `\n  Updates: ${updates.length} (avg: ${avgUpdate.toFixed(2)}ms)`,
@@ -140,7 +140,7 @@ export function useRenderTiming(componentName: string) {
 
   return () => {
     const unmountTime = performance.now()
-    console.debug(
+    console.warn(
       `[RenderProfiler] ${componentName} lifecycle:`,
       `\n  Total lifetime: ${(unmountTime - mountTime).toFixed(2)}ms`
     )

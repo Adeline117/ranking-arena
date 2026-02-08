@@ -496,7 +496,7 @@ function ReviewForm({
 
 // ============ Main Component ============
 
-export default function TraderReviews({ traderId, traderHandle }: TraderReviewsProps) {
+export default function TraderReviews({ _traderId, traderHandle }: TraderReviewsProps) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
 

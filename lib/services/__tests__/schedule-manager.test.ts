@@ -2,7 +2,7 @@
  * Schedule Manager Unit Tests
  */
 
-import { ScheduleManager, TraderWithSchedule, TierStats } from '../schedule-manager'
+import { ScheduleManager, TraderWithSchedule } from '../schedule-manager'
 import { ActivityTier, ScheduledJob } from '../smart-scheduler'
 
 // Create a chainable mock

@@ -41,7 +41,7 @@ let currentUser: User | null = null
 let userProfile: { id: string; handle: string } | null = null
 
 function log(emoji: string, message: string) {
-  console.log(`${emoji} ${message}`)
+  console.warn(`${emoji} ${message}`)
 }
 
 function addResult(category: string, name: string, status: 'pass' | 'fail' | 'skip', message?: string, duration?: number) {
@@ -781,8 +781,8 @@ async function testLogout() {
 // ============================================
 
 async function main() {
-  console.log('🚀 全面功能测试开始...')
-  console.log('=' .repeat(50))
+  console.warn('🚀 全面功能测试开始...')
+  console.warn('=' .repeat(50))
 
   // 初始化客户端
   supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -804,9 +804,9 @@ async function main() {
   }
 
   // 输出汇总
-  console.log('\n' + '='.repeat(50))
-  console.log('📊 测试结果汇总')
-  console.log('='.repeat(50))
+  console.warn('\n' + '='.repeat(50))
+  console.warn('📊 测试结果汇总')
+  console.warn('='.repeat(50))
 
   const categories = [...new Set(results.map(r => r.category))]
 
@@ -817,28 +817,28 @@ async function main() {
     const skipped = categoryResults.filter(r => r.status === 'skip').length
 
     const status = failed > 0 ? '❌' : '✅'
-    console.log(`${status} ${category}: ${passed} 通过, ${failed} 失败, ${skipped} 跳过`)
+    console.warn(`${status} ${category}: ${passed} 通过, ${failed} 失败, ${skipped} 跳过`)
   }
 
-  console.log('\n' + '-'.repeat(50))
+  console.warn('\n' + '-'.repeat(50))
 
   const totalPassed = results.filter(r => r.status === 'pass').length
   const totalFailed = results.filter(r => r.status === 'fail').length
   const totalSkipped = results.filter(r => r.status === 'skip').length
 
-  console.log(`✅ 总通过: ${totalPassed}`)
-  console.log(`❌ 总失败: ${totalFailed}`)
-  console.log(`⏭️ 总跳过: ${totalSkipped}`)
-  console.log(`📝 总计: ${results.length}`)
+  console.warn(`✅ 总通过: ${totalPassed}`)
+  console.warn(`❌ 总失败: ${totalFailed}`)
+  console.warn(`⏭️ 总跳过: ${totalSkipped}`)
+  console.warn(`📝 总计: ${results.length}`)
 
   if (totalFailed > 0) {
-    console.log('\n❌ 失败的测试:')
+    console.warn('\n❌ 失败的测试:')
     results.filter(r => r.status === 'fail').forEach(r => {
-      console.log(`   - [${r.category}] ${r.name}: ${r.message}`)
+      console.warn(`   - [${r.category}] ${r.name}: ${r.message}`)
     })
   }
 
-  console.log('\n' + '='.repeat(50))
+  console.warn('\n' + '='.repeat(50))
 
   process.exit(totalFailed > 0 ? 1 : 0)
 }

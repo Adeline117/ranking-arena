@@ -90,7 +90,7 @@ export default function MarketPanel() {
         setCustomPairs(pairs)
         setShowCustomize(false)
         return
-      } catch {}
+      } catch { /* intentionally empty */ }
       showToast(t('saveFailed'), 'error')
     }
   }

@@ -11,7 +11,7 @@ import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { getProfileUrl, getSafeProfileUrl } from '@/lib/utils/profile-navigation'
+import { getSafeProfileUrl } from '@/lib/utils/profile-navigation'
 import {
   MessageErrorCode,
   getAuthSession,
@@ -169,7 +169,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const _channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [pendingAttachment, setPendingAttachment] = useState<MediaAttachment | null>(null)
   const [uploading, setUploading] = useState(false)

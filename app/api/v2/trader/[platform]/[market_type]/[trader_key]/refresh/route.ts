@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { LeaderboardPlatform, MarketType, Window, RefreshResponse } from '@/lib/types/leaderboard'
-import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
+import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard'
 import { createRefreshJob } from '@/lib/jobs/processor'
 
 export const dynamic = 'force-dynamic'

@@ -44,7 +44,7 @@ interface PortfolioRow {
   updated_at: string
 }
 
-interface TraderSourceResult {
+interface _TraderSourceResult {
   source_trader_id: string
 }
 

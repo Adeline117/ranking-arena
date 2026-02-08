@@ -7,7 +7,7 @@
  */
 
 import { dataLogger } from '@/lib/utils/logger'
-import { getMemoryCache, MemoryCache } from './memory-fallback'
+import { getMemoryCache } from './memory-fallback'
 
 // 检测是否在客户端环境
 const isClient = typeof window !== 'undefined'

@@ -75,7 +75,7 @@ export default function ApplyGroupPage() {
   }, [accessToken])
 
   // Field-level validation
-  const validateField = (fieldName: string, value: string) => {
+  const validateField = (fieldName: string, _value: string) => {
     const newErrors = { ...fieldErrors }
 
     if (fieldName === 'nameZh' || fieldName === 'nameEn') {

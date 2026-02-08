@@ -217,53 +217,53 @@ function viewTraderDetail() {
 export function handleSummary(data) {
   const metrics = data.metrics;
 
-  console.log('\n' + '='.repeat(70));
-  console.log('  RANKING ARENA - STRESS TEST RESULTS (Vercel Pro)');
-  console.log('='.repeat(70));
+  console.warn('\n' + '='.repeat(70));
+  console.warn('  RANKING ARENA - STRESS TEST RESULTS (Vercel Pro)');
+  console.warn('='.repeat(70));
 
-  console.log(`\n  Peak VUs: 100 (Grafana Cloud Limit)`);
-  console.log(`  Total Requests: ${metrics.total_requests?.values?.count || 0}`);
-  console.log(`  Failed Requests: ${metrics.failed_requests?.values?.count || 0}`);
+  console.warn(`\n  Peak VUs: 100 (Grafana Cloud Limit)`);
+  console.warn(`  Total Requests: ${metrics.total_requests?.values?.count || 0}`);
+  console.warn(`  Failed Requests: ${metrics.failed_requests?.values?.count || 0}`);
 
-  console.log('\n  Response Times:');
-  console.log(`    Average: ${Math.round(metrics.response_time?.values?.avg || 0)}ms`);
-  console.log(`    P95: ${Math.round(metrics.response_time?.values?.['p(95)'] || 0)}ms`);
-  console.log(`    P99: ${Math.round(metrics.response_time?.values?.['p(99)'] || 0)}ms`);
-  console.log(`    Max: ${Math.round(metrics.response_time?.values?.max || 0)}ms`);
+  console.warn('\n  Response Times:');
+  console.warn(`    Average: ${Math.round(metrics.response_time?.values?.avg || 0)}ms`);
+  console.warn(`    P95: ${Math.round(metrics.response_time?.values?.['p(95)'] || 0)}ms`);
+  console.warn(`    P99: ${Math.round(metrics.response_time?.values?.['p(99)'] || 0)}ms`);
+  console.warn(`    Max: ${Math.round(metrics.response_time?.values?.max || 0)}ms`);
 
-  console.log('\n  By Endpoint:');
-  console.log(`    Homepage P95: ${Math.round(metrics.homepage_time?.values?.['p(95)'] || 0)}ms`);
-  console.log(`    API P95: ${Math.round(metrics.api_time?.values?.['p(95)'] || 0)}ms`);
-  console.log(`    Search P95: ${Math.round(metrics.search_time?.values?.['p(95)'] || 0)}ms`);
+  console.warn('\n  By Endpoint:');
+  console.warn(`    Homepage P95: ${Math.round(metrics.homepage_time?.values?.['p(95)'] || 0)}ms`);
+  console.warn(`    API P95: ${Math.round(metrics.api_time?.values?.['p(95)'] || 0)}ms`);
+  console.warn(`    Search P95: ${Math.round(metrics.search_time?.values?.['p(95)'] || 0)}ms`);
 
-  console.log(`\n  Error Rate: ${((metrics.errors?.values?.rate || 0) * 100).toFixed(2)}%`);
+  console.warn(`\n  Error Rate: ${((metrics.errors?.values?.rate || 0) * 100).toFixed(2)}%`);
 
   // 判断是否通过
   const errorRateValue = metrics.errors?.values?.rate || 0;
   const p95 = metrics.response_time?.values?.['p(95)'] || 0;
   const p99 = metrics.response_time?.values?.['p(99)'] || 0;
 
-  console.log('\n' + '-'.repeat(70));
+  console.warn('\n' + '-'.repeat(70));
 
   if (errorRateValue < 0.05 && p95 < 2000) {
-    console.log('  EXCELLENT! System handles stress perfectly.');
-    console.log('  Vercel Pro is performing as expected.');
+    console.warn('  EXCELLENT! System handles stress perfectly.');
+    console.warn('  Vercel Pro is performing as expected.');
   } else if (errorRateValue < 0.10 && p95 < 3000) {
-    console.log('  GOOD. System is stable under stress.');
-    console.log('  Minor optimizations could improve P95 further.');
+    console.warn('  GOOD. System is stable under stress.');
+    console.warn('  Minor optimizations could improve P95 further.');
   } else if (errorRateValue < 0.20 && p99 < 5000) {
-    console.log('  WARNING. System shows degradation under peak load.');
-    console.log('  Consider: Redis caching / Edge Functions / Rate limiting');
+    console.warn('  WARNING. System shows degradation under peak load.');
+    console.warn('  Consider: Redis caching / Edge Functions / Rate limiting');
   } else {
-    console.log('  CRITICAL. System struggles under stress.');
-    console.log('  Immediate action needed:');
-    console.log('    - Add Redis caching for /api/traders');
-    console.log('    - Implement rate limiting');
-    console.log('    - Consider Edge Functions for static content');
-    console.log('    - Check Supabase connection pooling');
+    console.warn('  CRITICAL. System struggles under stress.');
+    console.warn('  Immediate action needed:');
+    console.warn('    - Add Redis caching for /api/traders');
+    console.warn('    - Implement rate limiting');
+    console.warn('    - Consider Edge Functions for static content');
+    console.warn('    - Check Supabase connection pooling');
   }
 
-  console.log('='.repeat(70) + '\n');
+  console.warn('='.repeat(70) + '\n');
 
   return {
     stdout: '',

@@ -25,84 +25,155 @@ HTTP status codes: `200` (healthy/degraded), `503` (unhealthy).
 
 ## UptimeRobot Setup
 
-1. Create a free account at [UptimeRobot](https://uptimerobot.com/)
+### Free Plan Setup
+
+1. Create a free account at [UptimeRobot](https://uptimerobot.com/) (50 monitors, 5-min intervals)
 2. Add a new monitor:
    - **Monitor Type:** HTTP(s)
-   - **Friendly Name:** `Ranking Arena - Production`
-   - **URL:** `https://ranking-arena.vercel.app/api/health`
+   - **Friendly Name:** `Arena - Health`
+   - **URL:** `https://www.arenafi.org/api/health`
    - **Monitoring Interval:** 5 minutes
-3. Configure alert contacts:
-   - **Email:** Add your team email
-   - **Telegram:** Use UptimeRobot's Telegram integration (Settings → Alert Contacts → Add → Telegram)
-   - **Webhook:** Optionally add a Slack/Discord webhook
-4. Set keyword alert (optional):
+3. Add a keyword monitor (recommended):
+   - **Monitor Type:** Keyword
+   - **URL:** `https://www.arenafi.org/api/health`
    - **Keyword Type:** Keyword Exists
    - **Keyword Value:** `"healthy"`
-   - This ensures the monitor fails if the app returns degraded/unhealthy status
+   - This catches degraded/unhealthy states that still return HTTP 200
+
+### Alert Contacts
+
+#### Telegram Webhook
+
+1. Go to **My Settings** (top-right) > **Alert Contacts** > **Add Alert Contact**
+2. Select **Telegram** as the contact type
+3. Click the authorization link to connect your Telegram account/group
+4. UptimeRobot bot will message you to confirm — approve it
+5. Assign this contact to all monitors
+
+#### Alternative: Telegram Bot Webhook
+
+If you prefer a custom bot:
+
+1. Create a bot via [@BotFather](https://t.me/BotFather), get the token
+2. Get your chat ID via `https://api.telegram.org/bot<TOKEN>/getUpdates`
+3. In UptimeRobot: **Alert Contacts** > **Add** > **Webhook**
+4. URL: `https://api.telegram.org/bot<TOKEN>/sendMessage`
+5. POST body: `chat_id=<CHAT_ID>&text=*alertType*+*monitorURL*`
 
 ### Recommended Monitors
 
-| Monitor | URL | Interval | Alert |
-|---------|-----|----------|-------|
-| Health Check | `/api/health` | 5 min | All contacts |
-| Homepage | `/` | 5 min | All contacts |
-| API Traders | `/api/traders` | 15 min | All contacts |
+| Monitor | URL | Type | Interval |
+|---------|-----|------|----------|
+| Health Check | `https://www.arenafi.org/api/health` | Keyword ("healthy") | 5 min |
+| Homepage | `https://www.arenafi.org` | HTTP(s) | 5 min |
+| Platform Health | `https://www.arenafi.org/api/platforms/health` | HTTP(s) | 15 min |
 
 ---
 
 ## Sentry Error Tracking
 
-### Existing Configuration
+### Configuration Files
 
-The project has Sentry configured:
-- `sentry.client.config.ts` — Browser error tracking
-- `sentry.server.config.ts` — Server-side error tracking
-- `sentry.edge.config.ts` — Edge runtime error tracking
+All three Sentry config files are in the project root:
 
-### Configuring Sentry Alerts → Telegram
+- **`sentry.client.config.ts`** — Browser errors, 5% trace sampling, error replays at 10%
+- **`sentry.server.config.ts`** — Server errors, 10% trace sampling (prod), sensitive header stripping
+- **`sentry.edge.config.ts`** — Edge/middleware errors, 5% trace sampling (prod)
 
-1. **In Sentry Dashboard:**
-   - Go to **Settings → Integrations → Telegram** (or use the webhook approach below)
+All configs:
+- Strip IP addresses and auth headers before sending
+- Tag events with `app: ranking-arena` and platform identifier
+- Ignore common non-actionable errors (network failures, ResizeObserver, chunk loads)
 
-2. **Via Sentry Webhooks + Telegram Bot:**
-   - Create a Telegram bot via [@BotFather](https://t.me/BotFather)
-   - Get your chat ID (send `/start` to your bot, then check `https://api.telegram.org/bot<TOKEN>/getUpdates`)
-   - In Sentry: **Settings → Integrations → WebHooks**
-   - Add webhook URL: Use a middleware like [sentry-telegram](https://github.com/bodik/sentry-telegram) or a simple Vercel serverless function:
+### Setting Up Sentry Alert Rules
 
-   ```ts
-   // app/api/webhooks/sentry-telegram/route.ts
-   export async function POST(req: Request) {
-     const body = await req.json();
-     const message = `🚨 *Sentry Alert*\n\n*${body.event?.title || 'Unknown Error'}*\n${body.url || ''}`;
-     
-     await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({
-         chat_id: process.env.TELEGRAM_CHAT_ID,
-         text: message,
-         parse_mode: 'Markdown',
-       }),
-     });
-     
-     return Response.json({ ok: true });
-   }
-   ```
+In the Sentry dashboard (**Alerts > Create Alert Rule**):
 
-3. **Configure Alert Rules in Sentry:**
-   - Go to **Alerts → Create Alert Rule**
-   - **When:** A new issue is created / An event frequency exceeds threshold
-   - **Then:** Send a notification via webhook (your Telegram webhook URL)
-   - Recommended rules:
-     - New issues → Immediate notification
-     - Issue frequency > 10 in 1 hour → Alert
-     - First seen in new release → Alert
+#### 1. Error Spike Alert
+
+- **When:** Number of events in an issue exceeds **10 in 1 hour**
+- **If:** `app:ranking-arena` AND level is `error` or `fatal`
+- **Then:** Send notification to Telegram webhook
+- **Action interval:** 60 minutes (avoid spam)
+
+#### 2. New Issue Alert
+
+- **When:** A new issue is created
+- **If:** `app:ranking-arena` AND level is `error` or `fatal`
+- **Then:** Send notification to Telegram webhook
+- **Action interval:** 5 minutes
+
+#### 3. First Seen in Release
+
+- **When:** A new issue is first seen in a release
+- **Then:** Send notification to Telegram webhook
+- Catches regressions introduced by deploys
+
+#### 4. Performance Alert (Transaction Duration)
+
+- **Metric:** Transaction duration (p95)
+- **When:** p95 > 4 seconds for 5 minutes
+- **Filter:** `transaction:GET /api/health` or `transaction:GET /api/traders`
+- **Then:** Send notification to Telegram webhook
+
+### Telegram Integration for Sentry
+
+**Option A: Native Integration (Sentry Business plan)**
+
+1. **Settings > Integrations > Telegram**
+2. Follow OAuth flow to connect your Telegram group
+3. Assign as action in alert rules
+
+**Option B: Webhook Relay (Free plan)**
+
+1. Deploy a webhook relay endpoint (already available at `/api/webhooks/sentry-telegram`):
+
+```ts
+// app/api/webhooks/sentry-telegram/route.ts
+export async function POST(req: Request) {
+  const body = await req.json();
+  const title = body.event?.title || body.data?.event?.title || 'Unknown Error';
+  const url = body.url || '';
+  const message = `[Sentry] ${title}\n${url}`;
+
+  await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: process.env.TELEGRAM_CHAT_ID,
+      text: message,
+    }),
+  });
+
+  return Response.json({ ok: true });
+}
+```
+
+2. In Sentry: **Settings > Integrations > Webhooks**
+3. Add URL: `https://www.arenafi.org/api/webhooks/sentry-telegram`
+4. In alert rules, select "Send a notification via webhook" as the action
 
 ### Environment Variables
 
 ```env
+# Sentry
+NEXT_PUBLIC_SENTRY_DSN=your-sentry-dsn
+SENTRY_DSN=your-sentry-dsn
+
+# Telegram alerts (for Sentry webhook relay)
 TELEGRAM_BOT_TOKEN=your-bot-token
 TELEGRAM_CHAT_ID=your-chat-id
-SENTRY_DSN=your-sentry-dsn
 ```
+
+---
+
+## Status Page
+
+A public status page is available at [`/status`](https://www.arenafi.org/status).
+
+It shows:
+- API health status (from `/api/health`)
+- Last leaderboard computation time
+- Data freshness per platform (from `/api/platforms/health`)
+
+No authentication required.

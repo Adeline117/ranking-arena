@@ -1,10 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import { Box } from '@/app/components/base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatROI } from '@/app/components/ranking/utils'
 import { Sparkline } from '@/app/components/ui/Sparkline'

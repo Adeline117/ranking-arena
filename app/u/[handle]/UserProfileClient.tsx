@@ -159,8 +159,8 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
   const [activeTab, setActiveTab] = useState<ProfileTabKey>(
     urlTab && ['overview', 'followers', 'groups', 'bookmarks'].includes(urlTab) ? urlTab : 'overview'
   )
-  const [followersList, setFollowersList] = useState<Array<{ id: string; handle: string; avatar_url: string | null }>>([])
-  const [loadingFollowers, setLoadingFollowers] = useState(false)
+  const [_followersList, _setFollowersList] = useState<Array<{ id: string; handle: string; avatar_url: string | null }>>([])
+  const [_loadingFollowers, _setLoadingFollowers] = useState(false)
   const handleTabChange = useCallback((tab: ProfileTabKey) => {
     setActiveTab(tab)
     const params = new URLSearchParams(searchParams.toString())

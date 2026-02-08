@@ -31,7 +31,7 @@ import {
 } from './shared'
 
 const SOURCE = 'vertex'
-const TARGET = 500
+const _TARGET = 500
 
 // Known Vertex API endpoints (none currently support leaderboard)
 const ENDPOINTS_TRIED = [

@@ -322,7 +322,7 @@ export async function GET(req: NextRequest) {
     const supabase = getSupabaseClient()
     const filters = { exchange, minRoi, maxRoi, minFollowers, timeRange, sortBy }
 
-    let results: {
+    const results: {
       query: string
       filters: Record<string, unknown>
       results: { traders: unknown[]; posts: unknown[]; users: unknown[] }

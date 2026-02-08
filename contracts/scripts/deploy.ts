@@ -11,7 +11,7 @@
  *   npx tsx contracts/scripts/deploy.ts
  */
 
-import { createWalletClient, createPublicClient, http, parseAbi } from 'viem'
+import { createWalletClient, createPublicClient, http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { baseSepolia } from 'viem/chains'
 import * as fs from 'fs'
@@ -23,7 +23,7 @@ import 'dotenv/config'
 // Contract bytecode will be compiled separately
 // For now, we'll use a placeholder - in production, use solc or foundry
 
-const ARENA_MEMBERSHIP_ABI = [
+const _ARENA_MEMBERSHIP_ABI = [
   'constructor(address initialOwner, uint256 _defaultDuration)',
   'function mint(address to, uint256 duration) external returns (uint256)',
   'function renew(uint256 tokenId, uint256 additionalTime) external',
@@ -47,28 +47,28 @@ interface DeploymentResult {
 }
 
 async function deploy(): Promise<void> {
-  console.log('╔═══════════════════════════════════════════════════════════╗')
-  console.log('║         Arena Membership NFT Deployment                   ║')
-  console.log('╚═══════════════════════════════════════════════════════════╝')
-  console.log('')
+  console.warn('╔═══════════════════════════════════════════════════════════╗')
+  console.warn('║         Arena Membership NFT Deployment                   ║')
+  console.warn('╚═══════════════════════════════════════════════════════════╝')
+  console.warn('')
 
   // Check for private key
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY
   if (!privateKey) {
     console.error('❌ Error: DEPLOYER_PRIVATE_KEY not set in environment')
-    console.log('')
-    console.log('To deploy:')
-    console.log('1. Create a new wallet for testnet deployment')
-    console.log('2. Get Base Sepolia ETH from: https://www.coinbase.com/faucets/base-ethereum-goerli-faucet')
-    console.log('3. Add to .env: DEPLOYER_PRIVATE_KEY=0x...')
+    console.warn('')
+    console.warn('To deploy:')
+    console.warn('1. Create a new wallet for testnet deployment')
+    console.warn('2. Get Base Sepolia ETH from: https://www.coinbase.com/faucets/base-ethereum-goerli-faucet')
+    console.warn('3. Add to .env: DEPLOYER_PRIVATE_KEY=0x...')
     process.exit(1)
   }
 
   // Create account from private key
   const account = privateKeyToAccount(privateKey as `0x${string}`)
-  console.log(`📍 Deployer: ${account.address}`)
-  console.log(`🔗 Chain: Base Sepolia (${baseSepolia.id})`)
-  console.log('')
+  console.warn(`📍 Deployer: ${account.address}`)
+  console.warn(`🔗 Chain: Base Sepolia (${baseSepolia.id})`)
+  console.warn('')
 
   // Create clients
   const publicClient = createPublicClient({
@@ -76,7 +76,7 @@ async function deploy(): Promise<void> {
     transport: http(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'),
   })
 
-  const walletClient = createWalletClient({
+  const _walletClient = createWalletClient({
     account,
     chain: baseSepolia,
     transport: http(process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'),
@@ -84,35 +84,35 @@ async function deploy(): Promise<void> {
 
   // Check balance
   const balance = await publicClient.getBalance({ address: account.address })
-  console.log(`💰 Balance: ${(Number(balance) / 1e18).toFixed(4)} ETH`)
+  console.warn(`💰 Balance: ${(Number(balance) / 1e18).toFixed(4)} ETH`)
 
   if (balance === 0n) {
     console.error('❌ Error: Insufficient balance. Get testnet ETH first.')
     process.exit(1)
   }
 
-  console.log('')
-  console.log('⚠️  Contract deployment requires compiled bytecode.')
-  console.log('')
-  console.log('To compile and deploy:')
-  console.log('')
-  console.log('Option 1: Use Foundry (recommended)')
-  console.log('  1. Install Foundry: curl -L https://foundry.paradigm.xyz | bash')
-  console.log('  2. Run: foundryup')
-  console.log('  3. Compile: forge build')
-  console.log('  4. Deploy: forge create --rpc-url $BASE_SEPOLIA_RPC_URL \\')
-  console.log('       --private-key $DEPLOYER_PRIVATE_KEY \\')
-  console.log('       contracts/ArenaMembership.sol:ArenaMembership \\')
-  console.log('       --constructor-args $DEPLOYER_ADDRESS 2592000')
-  console.log('')
-  console.log('Option 2: Use Remix IDE')
-  console.log('  1. Go to https://remix.ethereum.org')
-  console.log('  2. Create new file, paste ArenaMembership.sol')
-  console.log('  3. Compile with Solidity 0.8.20')
-  console.log('  4. Deploy to Base Sepolia via MetaMask')
-  console.log('')
-  console.log('After deployment, update .env:')
-  console.log('  NEXT_PUBLIC_MEMBERSHIP_NFT_ADDRESS=0x...')
+  console.warn('')
+  console.warn('⚠️  Contract deployment requires compiled bytecode.')
+  console.warn('')
+  console.warn('To compile and deploy:')
+  console.warn('')
+  console.warn('Option 1: Use Foundry (recommended)')
+  console.warn('  1. Install Foundry: curl -L https://foundry.paradigm.xyz | bash')
+  console.warn('  2. Run: foundryup')
+  console.warn('  3. Compile: forge build')
+  console.warn('  4. Deploy: forge create --rpc-url $BASE_SEPOLIA_RPC_URL \\')
+  console.warn('       --private-key $DEPLOYER_PRIVATE_KEY \\')
+  console.warn('       contracts/ArenaMembership.sol:ArenaMembership \\')
+  console.warn('       --constructor-args $DEPLOYER_ADDRESS 2592000')
+  console.warn('')
+  console.warn('Option 2: Use Remix IDE')
+  console.warn('  1. Go to https://remix.ethereum.org')
+  console.warn('  2. Create new file, paste ArenaMembership.sol')
+  console.warn('  3. Compile with Solidity 0.8.20')
+  console.warn('  4. Deploy to Base Sepolia via MetaMask')
+  console.warn('')
+  console.warn('After deployment, update .env:')
+  console.warn('  NEXT_PUBLIC_MEMBERSHIP_NFT_ADDRESS=0x...')
 
   // Save deployment info template
   const deploymentTemplate: Partial<DeploymentResult> = {
@@ -124,8 +124,8 @@ async function deploy(): Promise<void> {
   const templatePath = path.join(__dirname, '../deployments/base-sepolia.template.json')
   fs.mkdirSync(path.dirname(templatePath), { recursive: true })
   fs.writeFileSync(templatePath, JSON.stringify(deploymentTemplate, null, 2))
-  console.log('')
-  console.log(`📄 Deployment template saved to: ${templatePath}`)
+  console.warn('')
+  console.warn(`📄 Deployment template saved to: ${templatePath}`)
 }
 
 deploy().catch(console.error)

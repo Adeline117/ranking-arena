@@ -15,7 +15,7 @@ interface ExchangeFilterProps {
 }
 
 export default function ExchangeFilter({ availableSources, selectedExchange, onExchangeChange, isPro = true, onProRequired }: ExchangeFilterProps) {
-  const { t, language } = useLanguage()
+  const { _t, language } = useLanguage()
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 

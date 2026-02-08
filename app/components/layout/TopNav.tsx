@@ -242,7 +242,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
           const filtered = history.filter((item) => item !== trimmedQuery)
           const updated = [trimmedQuery, ...filtered].slice(0, 10)
           localStorage.setItem('arena_search_history', JSON.stringify(updated))
-        } catch (error) {
+        } catch (_error) {
           // If quota exceeded or localStorage unavailable, try to clear and save just current search
           try {
             localStorage.removeItem('arena_search_history')

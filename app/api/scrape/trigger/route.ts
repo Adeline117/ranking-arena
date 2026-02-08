@@ -91,7 +91,7 @@ async function fetchBitgetSpot(period: string): Promise<{ source: string; trader
         followers: parseInt(String(item.followCount ?? 0)),
       })
     })
-  } catch {}
+  } catch { /* intentionally empty */ }
   
   const avatarCount = traders.filter(t => t.avatar).length
   return { source: 'bitget_spot', traders: traders.slice(0, 100), avatarCount }
@@ -123,7 +123,7 @@ async function fetchBitgetFutures(period: string): Promise<{ source: string; tra
         followers: parseInt(String(item.followerCount ?? 0)),
       })
     })
-  } catch {}
+  } catch { /* intentionally empty */ }
   
   const avatarCount = traders.filter(t => t.avatar).length
   return { source: 'bitget_futures', traders: traders.slice(0, 100), avatarCount }
@@ -158,7 +158,7 @@ async function fetchMexc(period: string): Promise<{ source: string; traders: Tra
         })
       })
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
   
   const avatarCount = traders.filter(t => t.avatar).length
   return { source: 'mexc', traders: traders.slice(0, 100), avatarCount }
@@ -197,7 +197,7 @@ async function saveTraders(source: string, traders: TraderData[], period: string
         captured_at: capturedAt,
       })
       saved++
-    } catch {}
+    } catch { /* intentionally empty */ }
   }
   
   return saved

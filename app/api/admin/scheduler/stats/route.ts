@@ -32,7 +32,7 @@ function isSmartSchedulerEnabled(): boolean {
 /**
  * GET - Get scheduler statistics
  */
-export async function GET(req: Request) {
+export async function GET(_req: Request) {
   try {
     // Check if smart scheduler is enabled
     if (!isSmartSchedulerEnabled()) {
@@ -72,7 +72,7 @@ export async function GET(req: Request) {
     }
 
     // 5. Calculate data freshness by tier
-    const { data: freshnessData, error: freshnessError } = await supabase.rpc(
+    const { data: _freshnessData, error: freshnessError } = await supabase.rpc(
       'calculate_freshness_by_tier'
     )
 
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
     }
 
     // 6. Get recent tier updates
-    const { data: recentUpdates, error: updatesError } = await supabase
+    const { data: recentUpdates, error: _updatesError } = await supabase
       .from('trader_sources')
       .select('tier_updated_at')
       .eq('is_active', true)

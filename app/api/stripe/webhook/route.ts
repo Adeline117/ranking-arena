@@ -7,24 +7,24 @@ import { createLogger } from '@/lib/utils/logger'
 import { mintMembershipNFT, isMintingConfigured } from '@/lib/web3/mint'
 
 // 懒加载 Supabase Admin 客户端
-let _supabase: SupabaseClient | null = null
+let _supabaseInstance: SupabaseClient | null = null
 function getSupabase() {
-  if (!_supabase) {
+  if (!_supabaseInstance) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!url || !serviceKey) {
       throw new Error('Supabase credentials not configured (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)')
     }
-    _supabase = createClient(url, serviceKey, {
+    _supabaseInstance = createClient(url, serviceKey, {
       auth: { persistSession: false },
     })
   }
-  return _supabase
+  return _supabaseInstance
 }
 
 // Lazy-initialized reference - all helper functions use this
 // Safe: initialized on first access, not at module load time
-const supabase = new Proxy({} as SupabaseClient, {
+const _supabase = new Proxy({} as SupabaseClient, {
   get(_, prop: string) {
     const client = getSupabase()
     const value = (client as unknown as Record<string, unknown>)[prop]

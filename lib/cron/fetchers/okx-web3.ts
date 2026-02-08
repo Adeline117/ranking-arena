@@ -112,7 +112,7 @@ function computePeriodMetrics(
 // Leaderboard fetch
 // ---------------------------------------------------------------------------
 
-async function fetchLeaderboard(period: string): Promise<OkxTrader[]> {
+async function fetchLeaderboard(_period: string): Promise<OkxTrader[]> {
   const allTraders: OkxTrader[] = []
   let totalPages = 1
 

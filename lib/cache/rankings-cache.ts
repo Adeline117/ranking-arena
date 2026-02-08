@@ -344,7 +344,7 @@ class RankingsCache {
 
     try {
       return await redis.zcard(key)
-    } catch (error) {
+    } catch (_error) {
       stats.errors++
       return 0
     }

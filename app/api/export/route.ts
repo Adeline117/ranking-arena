@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/api'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { checkRateLimit } from '@/lib/utils/rate-limit'
 
 export const runtime = 'nodejs'
 

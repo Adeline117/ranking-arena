@@ -577,7 +577,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
 
-      console.log('Post created successfully:', postData?.id)
+      console.warn('Post created successfully:', postData?.id)
 
       clearDraft()
       showToast(t('publishSuccess'), 'success')

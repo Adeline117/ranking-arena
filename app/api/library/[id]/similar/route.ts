@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
       if (currentBook) {
         const needed = 8 - results.length
-        let query = supabase
+        const query = supabase
           .from('library_items')
           .select('id, title, author, cover_url, rating, rating_count')
           .eq('category', currentBook.category)

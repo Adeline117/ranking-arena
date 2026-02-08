@@ -100,7 +100,7 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    console.log(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
+    console.warn(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
   }
 
   // Strategy 2: Try Cloudflare Worker proxy
@@ -110,7 +110,7 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    console.log(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
+    console.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
   }
 
   return null

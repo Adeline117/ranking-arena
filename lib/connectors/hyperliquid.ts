@@ -126,7 +126,7 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     window: RankingWindow,
   ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
     // Fetch user state and fills in parallel
-    const [userState, pnlData] = await Promise.all([
+    const [_userState, pnlData] = await Promise.all([
       this.requestWithCircuitBreaker<HyperliquidUserState>(
         () => this.fetchUserState(traderKey),
         { label: `fetchUserState(${traderKey})` },

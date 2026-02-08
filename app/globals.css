@@ -503,7 +503,7 @@ body {
 
 .three-col-left::-webkit-scrollbar-thumb,
 .three-col-right::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
+  background: var(--color-border-primary);
   border-radius: 4px;
 }
 

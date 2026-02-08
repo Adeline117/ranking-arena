@@ -10,7 +10,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { isR2Configured, uploadFile, libraryPdfKey, getPublicUrl } from '@/lib/r2'
+import { isR2Configured, uploadFile, libraryPdfKey } from '@/lib/r2'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',

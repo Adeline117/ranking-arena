@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const { plan, successUrl, cancelUrl, promotionCode } = await request.json()
 
-    const supabaseAdmin = getSupabaseAdmin()
+    const _supabaseAdmin = getSupabaseAdmin()
 
     // 优先从 Authorization header 获取 token
     const authHeader = request.headers.get('authorization')

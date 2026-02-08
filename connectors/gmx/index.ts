@@ -190,7 +190,7 @@ export class GmxConnector extends BaseConnector {
 
       // Values are in wei (1e30 scale)
       const pnl = Number(BigInt(stats.realizedPnl || '0')) / VALUE_SCALE;
-      const volume = Number(BigInt(stats.volume || '0')) / VALUE_SCALE;
+      const _volume = Number(BigInt(stats.volume || '0')) / VALUE_SCALE;
       const netCapital = Number(BigInt(stats.netCapital || '0')) / VALUE_SCALE;
       const maxCapital = Number(BigInt(stats.maxCapital || '0')) / VALUE_SCALE;
 
@@ -258,7 +258,7 @@ export class GmxConnector extends BaseConnector {
 }
 
 // Legacy interface for old Satsuma subgraph (deprecated)
-interface GmxAccountStat {
+interface _GmxAccountStat {
   id: string;
   account: string;
   totalPnlAfterFees: string;

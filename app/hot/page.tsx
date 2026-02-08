@@ -85,8 +85,8 @@ function HotContent() {
   const [translatingList, setTranslatingList] = useState(false)
   // 展开/收起状态
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
-  const [traders, setTraders] = useState<Trader[]>([])
-  const [loadingTraders, setLoadingTraders] = useState(true)
+  const [_traders, setTraders] = useState<Trader[]>([])
+  const [_loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
 

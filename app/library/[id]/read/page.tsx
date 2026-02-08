@@ -56,7 +56,7 @@ function lsGet<T>(key: string, fallback: T): T {
 
 function lsSet(key: string, value: unknown) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)) } catch {}
+  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)) } catch { /* intentionally empty */ }
 }
 
 // UF20: Server-side reading progress sync
@@ -71,7 +71,7 @@ async function syncProgressToServer(bookId: string, page: number, totalPages: nu
       total_pages: totalPages,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,book_id' })
-  } catch {}
+  } catch { /* intentionally empty */ }
 }
 
 async function loadProgressFromServer(bookId: string): Promise<{ page: number; total: number } | null> {
@@ -85,7 +85,7 @@ async function loadProgressFromServer(bookId: string): Promise<{ page: number; t
       .eq('book_id', bookId)
       .maybeSingle()
     if (data) return { page: data.current_page, total: data.total_pages }
-  } catch {}
+  } catch { /* intentionally empty */ }
   return null
 }
 
@@ -219,7 +219,7 @@ export default function ReadPage() {
         body: JSON.stringify({ status: 'want_to_read' }),
       })
       if (res.ok) { setAddedToShelf(true); setShowBookshelfPrompt(false) }
-    } catch {}
+    } catch { /* intentionally empty */ }
   }, [id, isLoggedIn])
 
   // ─── Load PDF ──────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ export default function ReadPage() {
             const tocItems = await extractToc(doc, outline, 0)
             setToc(tocItems)
           }
-        } catch {}
+        } catch { /* intentionally empty */ }
 
         // UF20: Restore reading progress - server first, fallback to localStorage
         const serverProgress = await loadProgressFromServer(id)
@@ -281,7 +281,7 @@ export default function ReadPage() {
           const dest = typeof entry.dest === 'string' ? await doc.getDestination(entry.dest) : entry.dest
           if (dest) { pageIndex = await doc.getPageIndex(dest[0]) }
         }
-      } catch {}
+      } catch { /* intentionally empty */ }
       const children = entry.items?.length ? await extractToc(doc, entry.items, level + 1) : undefined
       items.push({ title: entry.title, pageIndex, level, children })
     }
@@ -296,7 +296,7 @@ export default function ReadPage() {
 
     // Cancel previous render
     if (renderTaskRef.current) {
-      try { renderTaskRef.current.cancel() } catch {}
+      try { renderTaskRef.current.cancel() } catch { /* intentionally empty */ }
     }
 
     setPageRendering(true)

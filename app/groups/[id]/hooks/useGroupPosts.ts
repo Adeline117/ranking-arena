@@ -187,7 +187,7 @@ export function useGroupPosts({
   }, [userId])
 
   // Load initial posts
-  const loadPosts = useCallback(async (forceLoad = false) => {
+  const loadPosts = useCallback(async (_forceLoad = false) => {
     if (!groupId) {
       setPosts([])
       setHasMorePosts(false)

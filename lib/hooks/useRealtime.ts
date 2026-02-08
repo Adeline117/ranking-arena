@@ -9,7 +9,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { channelPool } from '@/lib/realtime/channel-pool'
-import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { realtimeLogger } from '@/lib/utils/logger'
 
 // ============================================

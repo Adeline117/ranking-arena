@@ -15,7 +15,7 @@ import { WalletSection } from '@/app/components/settings/WalletSection'
 import { ImageCropper } from '@/app/components/ui/ImageCropper'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { validateHandle, MAX_BIO_LENGTH } from './validation'
+import { validateHandle } from './validation'
 
 import {
   SectionId,
@@ -33,7 +33,7 @@ import {
 } from './components'
 
 function ExchangeBindingBanner({ userId }: { userId: string | null }) {
-  const { t, language } = useLanguage()
+  const { _t, language } = useLanguage()
   const [show, setShow] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -787,7 +787,7 @@ function SettingsContent() {
   }
 
   // ===== Notification save =====
-  const handleSaveNotifications = async () => {
+  const _handleSaveNotifications = async () => {
     if (submittingRef.current || savingNotifications || !userId) return
     submittingRef.current = true; setSavingNotifications(true)
     try {

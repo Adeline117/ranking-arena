@@ -244,7 +244,7 @@ test.describe('热榜评论系统 - 评论持久化', () => {
 
   test('加载更多评论正确获取分页数据', async ({ page }) => {
     // Mock: first page returns has_more=true, second page returns remaining
-    let callCount = 0
+    let _callCount = 0
 
     await page.route('**/api/posts/*/comments*', async (route) => {
       if (route.request().method() === 'GET') {
@@ -469,7 +469,7 @@ test.describe('PostFeed 小组名导航', () => {
       expect(href).toMatch(/\/groups\/[a-zA-Z0-9-]+/)
 
       // Click should navigate to group page
-      const [response] = await Promise.all([
+      const [_response] = await Promise.all([
         page.waitForNavigation({ timeout: 10000 }).catch(() => null),
         groupLink.click(),
       ])
