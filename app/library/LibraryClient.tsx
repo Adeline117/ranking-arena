@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import TopNav from '@/app/components/layout/TopNav'
 import dynamic from 'next/dynamic'
@@ -344,6 +345,51 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
             }}>
               {isZh ? '试试其他分类' : 'Try a different category'}
             </p>
+          </div>
+        ) : category === 'event' ? (
+          /* Timeline layout for events */
+          <div style={{ position: 'relative', paddingLeft: 24 }}>
+            <div style={{
+              position: 'absolute', left: 8, top: 0, bottom: 0, width: 2,
+              background: tokens.colors.border.primary,
+            }} />
+            {items.map((item) => (
+              <Link key={item.id} href={`/library/${item.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+                <div style={{
+                  position: 'relative', paddingLeft: 20, paddingBottom: 24,
+                }}>
+                  <div style={{
+                    position: 'absolute', left: -20, top: 4, width: 12, height: 12,
+                    borderRadius: '50%', background: tokens.colors.accent.brand,
+                    border: `2px solid ${tokens.colors.bg.primary}`,
+                  }} />
+                  <div style={{
+                    fontSize: 12, color: tokens.colors.text.tertiary, marginBottom: 4, fontWeight: 600,
+                  }}>
+                    {item.publish_date || item.created_at?.substring(0, 10) || ''}
+                  </div>
+                  <div style={{
+                    fontSize: 15, fontWeight: 700, color: tokens.colors.text.primary,
+                    marginBottom: 4, lineHeight: 1.4,
+                  }}>
+                    {isZh ? (item.title_zh || item.title) : (item.title_en || item.title)}
+                  </div>
+                  {item.author && (
+                    <div style={{ fontSize: 12, color: tokens.colors.text.secondary }}>
+                      {item.author}
+                    </div>
+                  )}
+                  {item.description && (
+                    <div style={{
+                      fontSize: 13, color: tokens.colors.text.secondary, marginTop: 4,
+                      lineHeight: 1.5, maxHeight: 60, overflow: 'hidden',
+                    }}>
+                      {item.description.substring(0, 150)}{item.description.length > 150 ? '...' : ''}
+                    </div>
+                  )}
+                </div>
+              </Link>
+            ))}
           </div>
         ) : (
           <div style={{

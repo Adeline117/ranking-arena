@@ -1,6 +1,8 @@
 export type LibraryItem = {
   id: string
   title: string
+  title_zh?: string | null
+  title_en?: string | null
   author: string | null
   description: string | null
   category: string
@@ -24,4 +26,5 @@ export type LibraryItem = {
   publisher?: string | null
   rating?: number | null
   rating_count?: number | null
+  created_at?: string | null
 }
