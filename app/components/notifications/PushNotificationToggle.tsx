@@ -65,7 +65,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
       })
 
       const json = sub.toJSON()
@@ -154,11 +154,13 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
           )}
         </Box>
       </Box>
-      <ToggleSwitch
-        checked={isOn}
-        onChange={handleToggle}
-        disabled={isDenied || isLoading}
-      />
+      {!(isDenied || isLoading) ? (
+        <ToggleSwitch checked={isOn} onChange={handleToggle} />
+      ) : (
+        <Box style={{ opacity: 0.4, pointerEvents: 'none' }}>
+          <ToggleSwitch checked={isOn} onChange={() => {}} />
+        </Box>
+      )}
     </Box>
   )
 }
