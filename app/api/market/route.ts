@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
+import { getOrSetWithLock } from '@/lib/cache'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic' // 禁用静态渲染
@@ -78,56 +79,63 @@ export async function GET(request: NextRequest) {
 
     // 缓存 key 基于请求的 pairs
     const cacheKey = targetPairs.map(p => p.symbol).sort().join(',')
+    const redisCacheKey = `api:market:${cacheKey}`
     const now = Date.now()
     const cached = cacheMap.get(cacheKey)
 
-    // 命中缓存直接返回
+    // 命中内存缓存直接返回
     if (cached && now - cached.ts < TTL_MS) {
       return NextResponse.json({ rows: cached.rows, source: cached.source, cached: true })
     }
 
-    // 先尝试 CoinGecko
+    // L2: Redis 缓存 (30秒 TTL，热数据)
     try {
-      const rows = await fetchFromCoinGeckoForPairs(targetPairs)
-      cacheMap.set(cacheKey, { ts: now, rows, source: 'coingecko' })
-      return NextResponse.json(
-        { rows, source: 'coingecko', cached: false },
-        { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } }
-      )
-    } catch (e1) {
-      // Fallback 到 Coinbase
-      const errorMessage = e1 instanceof Error ? e1.message : String(e1)
-      const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Rate limit')
-      if (isRateLimit) {
-        logger.warn('CoinGecko 速率限制 (429), 自动切换到 Coinbase')
-      } else {
-        logger.warn('CoinGecko 失败, 尝试 Coinbase', { error: errorMessage })
-      }
+      const result = await getOrSetWithLock<{ rows: MarketRow[]; source: string }>(
+        redisCacheKey,
+        async () => {
+          // 先尝试 CoinGecko
+          try {
+            const rows = await fetchFromCoinGeckoForPairs(targetPairs)
+            return { rows, source: 'coingecko' }
+          } catch (e1) {
+            const errorMessage = e1 instanceof Error ? e1.message : String(e1)
+            const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Rate limit')
+            if (isRateLimit) {
+              logger.warn('CoinGecko 速率限制 (429), 自动切换到 Coinbase')
+            } else {
+              logger.warn('CoinGecko 失败, 尝试 Coinbase', { error: errorMessage })
+            }
 
-      // 如果有过期缓存，429 时优先返回过期数据
-      if (isRateLimit && cached) {
+            // 如果有过期内存缓存，429 时优先返回过期数据
+            if (isRateLimit && cached) {
+              return { rows: cached.rows, source: cached.source }
+            }
+
+            const rows = await fetchFromCoinbaseForPairs(targetPairs)
+            return { rows, source: 'coinbase' }
+          }
+        },
+        { ttl: 30, lockTtl: 10 }
+      )
+
+      // 回填内存缓存
+      cacheMap.set(cacheKey, { ts: Date.now(), rows: result.rows, source: result.source })
+
+      return NextResponse.json(
+        { rows: result.rows, source: result.source, cached: false },
+        { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } }
+      )
+    } catch (e2: unknown) {
+      // 最后手段：返回过期缓存
+      if (cached) {
         return NextResponse.json({ rows: cached.rows, source: cached.source, cached: true, stale: true })
       }
-
-      try {
-        const rows = await fetchFromCoinbaseForPairs(targetPairs)
-        cacheMap.set(cacheKey, { ts: now, rows, source: 'coinbase' })
-        return NextResponse.json(
-          { rows, source: 'coinbase', cached: false },
-          { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } }
-        )
-      } catch (e2: unknown) {
-        // 最后手段：返回过期缓存
-        if (cached) {
-          return NextResponse.json({ rows: cached.rows, source: cached.source, cached: true, stale: true })
-        }
-        const e2Msg = e2 instanceof Error ? e2.message : 'unknown error'
-        logger.error('Coinbase 也失败', { error: e2Msg })
-        return NextResponse.json(
-          { rows: [], error: `Both sources failed. CoinGecko: ${errorMessage}, Coinbase: ${e2Msg}` },
-          { status: 500 }
-        )
-      }
+      const e2Msg = e2 instanceof Error ? e2.message : 'unknown error'
+      logger.error('All market data sources failed', { error: e2Msg })
+      return NextResponse.json(
+        { rows: [], error: e2Msg },
+        { status: 500 }
+      )
     }
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : 'unknown error'

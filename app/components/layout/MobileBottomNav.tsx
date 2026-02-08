@@ -225,7 +225,7 @@ export default function MobileBottomNav(): React.ReactElement {
 
   return (
     <>
-      <div className="mobile-bottom-nav-spacer has-mobile-nav" style={{ height: 0 }} aria-hidden="true" />
+      <div className="mobile-bottom-nav-spacer" style={{ height: 'var(--mobile-nav-height, 60px)' }} aria-hidden="true" />
 
       <nav
         aria-label={t('mainNavigation')}
