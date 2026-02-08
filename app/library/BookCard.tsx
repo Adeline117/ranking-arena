@@ -6,6 +6,17 @@ import type { LibraryItem } from '@/lib/types/library'
 import BookCover from './BookCover'
 import StarRating from '@/app/components/ui/StarRating'
 
+const CATEGORY_LABELS_ZH: Record<string, string> = {
+  book: '书籍',
+  paper: '论文',
+  whitepaper: '白皮书',
+  event: '事件',
+  research: '研报',
+  academic_paper: '学术论文',
+  finance: '金融',
+  regulatory: '监管',
+}
+
 interface BookCardProps {
   item: LibraryItem
   isZh: boolean
@@ -71,9 +82,9 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           <span style={{
             fontSize: 10, padding: '2px 8px', borderRadius: tokens.radius.full,
             background: tokens.colors.accent.brandMuted, color: tokens.colors.accent.brand,
-            fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em',
+            fontWeight: 600, letterSpacing: '0.03em',
           }}>
-            {item.category}
+            {isZh ? CATEGORY_LABELS_ZH[item.category] || item.category : item.category}
           </span>
           {item.category === 'event' && item.subcategory && (
             <span style={{
