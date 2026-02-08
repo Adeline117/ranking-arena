@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
+import { t } from '@/lib/i18n'
 import { Text } from '../base'
 
 interface ScoreRulesModalProps {
@@ -159,23 +160,23 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
           }}
         >
           {/* Score Composition */}
-          <Section title="Score Composition" accent>
+          <Section title={t('scoreComposition')} accent>
             <FormulaBox>
               S<sub>total</sub> = S<sub>return</sub> + S<sub>pnl</sub> + S<sub>dd</sub> + S<sub>stab</sub>
             </FormulaBox>
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <ScoreBadge label="Return Score" value="[0, 70]" color={tokens.colors.accent.success} />
-              <ScoreBadge label="PnL Score" value="[0, 15]" color={tokens.colors.accent.brand} />
-              <ScoreBadge label="Drawdown" value="[0, 8]" color={tokens.colors.accent.warning} />
-              <ScoreBadge label="Stability" value="[0, 7]" color={tokens.colors.accent.primary} />
-              <ScoreBadge label="Total" value="[0, 100]" color={tokens.colors.accent.warning} />
+              <ScoreBadge label={t('returnScoreLabel')} value="[0, 70]" color={tokens.colors.accent.success} />
+              <ScoreBadge label={t('pnlScoreLabel')} value="[0, 15]" color={tokens.colors.accent.brand} />
+              <ScoreBadge label={t('drawdownLabel')} value="[0, 8]" color={tokens.colors.accent.warning} />
+              <ScoreBadge label={t('stabilityLabel')} value="[0, 7]" color={tokens.colors.accent.primary} />
+              <ScoreBadge label={t('totalLabel')} value="[0, 100]" color={tokens.colors.accent.warning} />
             </div>
           </Section>
 
           {/* Return Score */}
-          <Section title="Return Score [0, 70]">
+          <Section title={t('returnScoreTitle')}>
             <div style={{ marginBottom: 12, color: tokens.colors.text.tertiary, fontSize: 12 }}>
-              Annualized ROI intensity with hyperbolic tangent compression
+              {t('annualizedRoiDesc')}
             </div>
             <FormulaBox>
               <div style={{ marginBottom: 8 }}>
@@ -187,7 +188,7 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
             </FormulaBox>
             <div style={{ marginTop: 12 }}>
               <ParamTable
-                headers={['Period', 'α (coeff)', 'β (exp)']}
+                headers={[t('periodHeader'), t('coeffHeader'), t('expHeader')]}
                 rows={[
                   ['7D', '0.08', '1.8'],
                   ['30D', '0.15', '1.6'],
@@ -196,21 +197,21 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
               />
             </div>
             <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
-              Where d = period days, ROI expressed as decimal
+              {t('periodDaysNote')}
             </div>
           </Section>
 
           {/* PnL Score */}
-          <Section title="PnL Score [0, 15]">
+          <Section title={t('pnlScoreTitle')}>
             <div style={{ marginBottom: 12, color: tokens.colors.text.tertiary, fontSize: 12 }}>
-              Absolute profit with logarithmic normalization
+              {t('absoluteProfitDesc')}
             </div>
             <FormulaBox>
               S<sub>pnl</sub> = 15 · tanh(γ · ln(1 + PnL / base))
             </FormulaBox>
             <div style={{ marginTop: 12 }}>
               <ParamTable
-                headers={['Period', 'base ($)', 'γ (coeff)']}
+                headers={[t('periodHeader'), t('baseHeader'), 'γ (coeff)']}
                 rows={[
                   ['7D', '500', '0.40'],
                   ['30D', '2,000', '0.35'],
@@ -221,17 +222,17 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
           </Section>
 
           {/* Risk Score */}
-          <Section title="Risk Score [0, 15]">
+          <Section title={t('riskScoreTitle')}>
             <div style={{ marginBottom: 16 }}>
               <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}>
-                Drawdown Component [0, 8]
+                {t('drawdownComponent')}
               </Text>
               <FormulaBox small>
                 S<sub>dd</sub> = 8 · max(0, 1 − MDD / θ<sub>d</sub>)
               </FormulaBox>
               <div style={{ marginTop: 8 }}>
                 <ParamTable 
-                  headers={['Period', 'θ (threshold)']}
+                  headers={[t('periodHeader'), t('thresholdHeader')]}
                   rows={[
                     ['7D', '15%'],
                     ['30D', '30%'],
@@ -244,14 +245,14 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
             
             <div>
               <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}>
-                Stability Component [0, 7]
+                {t('stabilityComponent')}
               </Text>
               <FormulaBox small>
                 S<sub>stab</sub> = 7 · clip((WR − 0.45) / (γ<sub>d</sub> − 0.45), 0, 1)
               </FormulaBox>
               <div style={{ marginTop: 8 }}>
                 <ParamTable 
-                  headers={['Period', 'γ (win rate cap)']}
+                  headers={[t('periodHeader'), t('winRateCapHeader')]}
                   rows={[
                     ['7D', '62%'],
                     ['30D', '68%'],
@@ -264,15 +265,15 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
           </Section>
 
           {/* Ranking Logic */}
-          <Section title="Ranking Logic">
+          <Section title={t('rankingLogicTitle')}>
             <FormulaBox small>
-              <div>Primary: sort by S<sub>total</sub> DESC</div>
-              <div style={{ marginTop: 4 }}>Secondary: sort by MDD ASC (lower drawdown preferred)</div>
+              <div>{t('primarySortDesc')}<sub>total</sub>{t('primarySortSuffix')}</div>
+              <div style={{ marginTop: 4 }}>{t('secondarySortDesc')}</div>
             </FormulaBox>
           </Section>
 
           {/* Score Distribution */}
-          <Section title="Score Distribution Reference" last>
+          <Section title={t('scoreDistTitle')} last>
             <div style={{ 
               display: 'flex', 
               flexDirection: 'column', 
@@ -281,10 +282,10 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
               padding: 12,
               borderRadius: tokens.radius.lg,
             }}>
-              <ScoreRange range="30-40" description="Median performers" />
-              <ScoreRange range="50-60" description="Above average" highlight />
-              <ScoreRange range="60-80" description="Top quartile" highlight />
-              <ScoreRange range="80+" description="Elite (< 1%)" gold />
+              <ScoreRange range="30-40" description={t('medianPerformers')} />
+              <ScoreRange range="50-60" description={t('aboveAverage')} highlight />
+              <ScoreRange range="60-80" description={t('topQuartile')} highlight />
+              <ScoreRange range="80+" description={t('elitePerformers')} gold />
             </div>
           </Section>
         </div>

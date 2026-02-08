@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
+import { t } from '@/lib/i18n'
 import { TraderAvatar } from './shared/TraderDisplay'
 import { formatROI, formatDisplayName } from './utils'
 import type { Trader } from './RankingTable'
@@ -19,7 +20,7 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1500)
         })
       }}
-      title="Copy"
+      title={t('copy')}
       style={{
         background: 'none', border: 'none', cursor: 'pointer',
         padding: 2, display: 'inline-flex', alignItems: 'center',

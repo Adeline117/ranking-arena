@@ -1,340 +1,119 @@
-/**
- * Dynamic OG Image Generator
- * 
- * 生成带热门交易员的社交预览卡片
- * 用于 Twitter/Telegram/Discord 分享
- */
-
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 
 export const runtime = 'edge'
 
-// 颜色配置
-const colors = {
-  bg: '#0B0A10',
-  bgCard: '#14131A',
-  text: '#EDEDED',
-  textSecondary: '#9A9A9A',
-  brand: '#8b6fa8',
-  success: '#4DFF9A',
-  error: '#FF4D4D',
-}
-
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    
-    const title = searchParams.get('title') || 'Ranking Arena'
-    const subtitle = searchParams.get('subtitle') || 'Crypto Trader Rankings'
-    const tradersJson = searchParams.get('traders')
-    const traderJson = searchParams.get('trader')
-    
-    // 解析交易员数据
-    let traders: { n: string; r: string; p: string }[] = []
-    if (tradersJson) {
-      try {
-        traders = JSON.parse(tradersJson)
-      } catch {
-        // ignore
-      }
-    }
-    
-    // 解析单个交易员
-    let trader: { n: string; r: string; pnl: string; p: string; wr?: string; a?: string } | null = null
-    if (traderJson) {
-      try {
-        trader = JSON.parse(traderJson)
-      } catch {
-        // ignore
-      }
-    }
+  const { searchParams } = request.nextUrl
+  const type = searchParams.get('type') || 'default'
+  const title = searchParams.get('title') || 'ArenaFi'
+  const subtitle = searchParams.get('subtitle') || ''
+  const stat1Label = searchParams.get('s1l') || ''
+  const stat1Value = searchParams.get('s1v') || ''
+  const stat2Label = searchParams.get('s2l') || ''
+  const stat2Value = searchParams.get('s2v') || ''
+  const stat3Label = searchParams.get('s3l') || ''
+  const stat3Value = searchParams.get('s3v') || ''
+  const avatarUrl = searchParams.get('avatar') || ''
 
-    return new ImageResponse(
-      (
-        <div
-          style={{
-            height: '100%',
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: colors.bg,
-            fontFamily: 'Inter, system-ui, sans-serif',
-            padding: 60,
-          }}
-        >
-          {/* Logo & Brand */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 16,
-              marginBottom: 40,
-            }}
-          >
-            <div
-              style={{
-                width: 60,
-                height: 60,
-                borderRadius: 12,
-                background: `linear-gradient(135deg, ${colors.brand}, #a88bc7)`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <path d="M12 1L9 9H1l6 5-2 9 7-5 7 5-2-9 6-5h-8z"/>
-              </svg>
+  const stats = [
+    stat1Label && { label: stat1Label, value: stat1Value },
+    stat2Label && { label: stat2Label, value: stat2Value },
+    stat3Label && { label: stat3Label, value: stat3Value },
+  ].filter(Boolean) as Array<{ label: string; value: string }>
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%)',
+          fontFamily: 'sans-serif',
+          color: '#fff',
+          padding: 0,
+        }}
+      >
+        {/* Top accent bar */}
+        <div style={{
+          height: 6,
+          background: 'linear-gradient(90deg, #8b6fa8, #6366f1, #8b6fa8)',
+          display: 'flex',
+        }} />
+
+        {/* Content */}
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          justifyContent: 'center', padding: '48px 56px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 16 }}>
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                width={80}
+                height={80}
+                style={{ borderRadius: '50%', border: '3px solid rgba(139,111,168,0.5)' }}
+              />
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{
+                fontSize: type === 'trader' ? 44 : 40,
+                fontWeight: 800,
+                lineHeight: 1.15,
+                letterSpacing: '-0.02em',
+              }}>
+                {title}
+              </div>
+              {subtitle && (
+                <div style={{
+                  fontSize: 22,
+                  color: 'rgba(255,255,255,0.65)',
+                  marginTop: 4,
+                }}>
+                  {subtitle}
+                </div>
+              )}
             </div>
-            <span
-              style={{
-                fontSize: 32,
-                fontWeight: 700,
-                color: colors.text,
-              }}
-            >
-              Ranking Arena
-            </span>
           </div>
 
-          {/* Title */}
-          <div
-            style={{
-              fontSize: 56,
-              fontWeight: 800,
-              color: colors.text,
-              textAlign: 'center',
-              marginBottom: 16,
-            }}
-          >
-            {title}
-          </div>
-
-          {/* Subtitle */}
-          <div
-            style={{
-              fontSize: 24,
-              color: colors.textSecondary,
-              textAlign: 'center',
-              marginBottom: 50,
-            }}
-          >
-            {subtitle}
-          </div>
-
-          {/* Single Trader Card */}
-          {trader && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 24,
-                padding: '24px 40px',
-                borderRadius: 16,
-                backgroundColor: colors.bgCard,
-                border: `2px solid ${colors.brand}40`,
-              }}
-            >
-              {/* Avatar */}
-              <div
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 40,
-                  background: trader.a 
-                    ? undefined 
-                    : `linear-gradient(135deg, ${colors.brand}, #a88bc7)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 36,
-                  color: '#fff',
-                  fontWeight: 700,
-                  overflow: 'hidden',
-                }}
-              >
-                {trader.a ? (
-                   
-                  <img src={trader.a} alt="" width={80} height={80} style={{ objectFit: 'cover' }} />
-                ) : (
-                  trader.n.charAt(0).toUpperCase()
-                )}
-              </div>
-
-              {/* Info */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 32, fontWeight: 700, color: colors.text }}>
-                  {trader.n}
-                </div>
-                <div style={{ fontSize: 18, color: colors.textSecondary }}>
-                  {trader.p}
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div style={{ display: 'flex', gap: 32, marginLeft: 40 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ 
-                    fontSize: 36, 
-                    fontWeight: 700, 
-                    color: parseFloat(trader.r) >= 0 ? colors.success : colors.error 
-                  }}>
-                    {parseFloat(trader.r) >= 0 ? '+' : ''}{trader.r}%
-                  </div>
-                  <div style={{ fontSize: 14, color: colors.textSecondary }}>ROI</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ fontSize: 36, fontWeight: 700, color: colors.text }}>
-                    ${parseInt(trader.pnl).toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: 14, color: colors.textSecondary }}>PnL</div>
-                </div>
-                {trader.wr && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ fontSize: 36, fontWeight: 700, color: colors.text }}>
-                      {trader.wr}%
-                    </div>
-                    <div style={{ fontSize: 14, color: colors.textSecondary }}>Win Rate</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Top Traders Grid */}
-          {traders.length > 0 && !trader && (
-            <div
-              style={{
-                display: 'flex',
-                gap: 24,
-              }}
-            >
-              {traders.slice(0, 3).map((t, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    padding: '24px 32px',
-                    borderRadius: 16,
-                    backgroundColor: colors.bgCard,
-                    border: i === 0 ? `2px solid ${colors.brand}` : `1px solid ${colors.brand}40`,
-                    minWidth: 180,
-                  }}
-                >
-                  {/* Rank Badge */}
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '50%',
-                      background: i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : '#CD7F32',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginBottom: 12,
-                      fontWeight: 700,
-                      fontSize: 14,
-                      color: '#000',
-                    }}
-                  >
-                    {i + 1}
-                  </div>
-                  {/* Name */}
-                  <div
-                    style={{
-                      fontSize: 20,
-                      fontWeight: 600,
-                      color: colors.text,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {t.n.length > 10 ? t.n.slice(0, 10) + '...' : t.n}
-                  </div>
-                  {/* Platform */}
-                  <div
-                    style={{
-                      fontSize: 14,
-                      color: colors.textSecondary,
-                      marginBottom: 12,
-                    }}
-                  >
-                    {t.p}
-                  </div>
-                  {/* ROI */}
-                  <div
-                    style={{
-                      fontSize: 28,
-                      fontWeight: 700,
-                      color: parseFloat(t.r) >= 0 ? colors.success : colors.error,
-                    }}
-                  >
-                    {parseFloat(t.r) >= 0 ? '+' : ''}{t.r}%
+          {/* Stats row */}
+          {stats.length > 0 && (
+            <div style={{
+              display: 'flex', gap: 40, marginTop: 24,
+              padding: '20px 0', borderTop: '1px solid rgba(255,255,255,0.1)',
+            }}>
+              {stats.map((s, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ fontSize: 36, fontWeight: 700 }}>{s.value}</div>
+                  <div style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {s.label}
                   </div>
                 </div>
               ))}
             </div>
           )}
+        </div>
 
-          {/* Footer */}
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 30,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              color: colors.textSecondary,
-              fontSize: 16,
-            }}
-          >
-            <span>arena.trading</span>
-            <span>•</span>
-            <span>20+ Exchanges</span>
-            <span>•</span>
-            <span>Real-time Data</span>
+        {/* Footer */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '16px 56px',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+        }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>
+            ArenaFi
+          </div>
+          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.35)' }}>
+            arenafi.org
           </div>
         </div>
-      ),
-      {
-        width: 1200,
-        height: 630,
-        headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-        },
-      }
-    )
-  } catch (error) {
-    console.error('OG Image generation error:', error)
-    
-    // 返回简单的备用图片
-    return new ImageResponse(
-      (
-        <div
-          style={{
-            height: '100%',
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 16,
-            backgroundColor: '#0B0A10',
-            color: '#EDEDED',
-            fontSize: 48,
-            fontWeight: 700,
-          }}
-        >
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={colors.brand} strokeWidth="2">
-            <path d="M12 1L9 9H1l6 5-2 9 7-5 7 5-2-9 6-5h-8z"/>
-          </svg>
-          Ranking Arena
-        </div>
-      ),
-      { width: 1200, height: 630 }
-    )
-  }
+      </div>
+    ),
+    {
+      width: 1200,
+      height: 630,
+    },
+  )
 }

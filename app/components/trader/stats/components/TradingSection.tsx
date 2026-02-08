@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { t as i18nT } from '@/lib/i18n'
 import { Box, Text } from '../../../base'
 import type { TraderStats } from '@/lib/data/trader'
 import { PositionHistorySection } from './PositionHistorySection'
@@ -74,15 +75,15 @@ export function TradingSection({
             marginBottom: tokens.spacing[6],
           }}
         >
-          <MiniKpi label="Total Trades (90D)" value={trading.totalTrades12M > 0 ? String(trading.totalTrades12M) : 'N/A'} />
+          <MiniKpi label={i18nT('totalTrades90d')} value={trading.totalTrades12M > 0 ? String(trading.totalTrades12M) : i18nT('notAvailable')} />
           <MiniKpi
-            label="Avg. Profit / Loss"
+            label={i18nT('avgProfitLoss')}
             value={trading.avgProfit > 0 || trading.avgLoss < 0
               ? `${trading.avgProfit.toFixed(2)}% / ${trading.avgLoss.toFixed(2)}%`
-              : 'N/A'
+              : i18nT('notAvailable')
             }
           />
-          <MiniKpi label="Profitable Trades" value={trading.profitableTradesPct > 0 ? `${trading.profitableTradesPct.toFixed(2)}%` : 'N/A'} />
+          <MiniKpi label={i18nT('profitableTradesLabel')} value={trading.profitableTradesPct > 0 ? `${trading.profitableTradesPct.toFixed(2)}%` : i18nT('notAvailable')} />
         </Box>
       ) : (
         <Box style={{
@@ -106,23 +107,23 @@ export function TradingSection({
       <Box>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
           <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
-            Additional stats
+            {i18nT('additionalStats')}
           </Text>
         </Box>
         <Box className="trading-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}>
           <MiniKpi
             label={t('avgHoldingTime')}
-            value={additionalStats?.avgHoldingTime || 'N/A'}
+            value={additionalStats?.avgHoldingTime || i18nT('notAvailable')}
           />
           <MiniKpi
             label={t('maxDrawdown')}
-            value={additionalStats?.maxDrawdown !== undefined ? `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%` : 'N/A'}
+            value={additionalStats?.maxDrawdown !== undefined ? `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%` : i18nT('notAvailable')}
             highlight={additionalStats?.maxDrawdown !== undefined}
             isNegative
           />
           <MiniKpi
-            label="Tracked since"
-            value={additionalStats?.activeSince || 'N/A'}
+            label={i18nT('trackedSinceLabel')}
+            value={additionalStats?.activeSince || i18nT('notAvailable')}
           />
         </Box>
       </Box>
