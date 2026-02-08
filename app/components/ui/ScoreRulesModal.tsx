@@ -20,17 +20,43 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
 
   useEffect(() => {
     if (!isOpen) return
+
+    const previousFocus = document.activeElement as HTMLElement
     
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+    // Focus the modal after render
+    const focusTimer = setTimeout(() => {
+      if (modalRef.current) {
+        const firstBtn = modalRef.current.querySelector<HTMLElement>('button')
+        firstBtn?.focus()
+      }
+    }, 50)
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      // Focus trap
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+        }
+      }
     }
     
-    document.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', handleKeyDown)
     document.body.style.overflow = 'hidden'
     
     return () => {
-      document.removeEventListener('keydown', handleEscape)
+      clearTimeout(focusTimer)
+      document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = ''
+      previousFocus?.focus()
     }
   }, [isOpen, onClose])
 
@@ -55,6 +81,9 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
     >
       <div
         ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="score-rules-modal-title"
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
@@ -83,11 +112,12 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
-          <Text size="lg" weight="bold" style={{ color: tokens.colors.text.primary }}>
+          <Text id="score-rules-modal-title" size="lg" weight="bold" style={{ color: tokens.colors.text.primary }}>
             Arena Score Methodology
           </Text>
           <button
             onClick={onClose}
+            aria-label="Close"
             style={{
               width: 32,
               height: 32,
@@ -111,7 +141,7 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
               e.currentTarget.style.color = tokens.colors.text.secondary
             }}
           >
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>

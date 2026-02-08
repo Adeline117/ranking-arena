@@ -503,16 +503,16 @@ function RankingTableInner(props: {
             title={t('rankingRules')}
           >?</button>
         </Box>
-        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} title={t('arenaScoreTooltip')} data-sortable>
+        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} title={t('arenaScoreTooltip')} aria-sort={sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           Score <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
         </Box>
-        <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} data-sortable>
+        <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} aria-sort={sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           ROI <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
         </Box>
-        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} data-sortable>
+        <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} aria-sort={sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           Win% <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
         </Box>
-        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip')} data-sortable>
+        <Box className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('mdd')} title={t('mddTooltip')} aria-sort={sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           MDD <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
         </Box>
         {visibleColumns.includes('sortino') && (

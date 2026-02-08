@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -27,6 +27,42 @@ export function DeleteAccountModal({
   onDelete: () => void
 }): React.ReactElement | null {
   const { t } = useLanguage()
+  const modalRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    previousFocusRef.current = document.activeElement as HTMLElement
+    const timer = setTimeout(() => {
+      if (modalRef.current) {
+        const firstInput = modalRef.current.querySelector<HTMLElement>('input, button')
+        firstInput?.focus()
+      }
+    }, 50)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocusRef.current?.focus()
+    }
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   return (
@@ -42,6 +78,10 @@ export function DeleteAccountModal({
       onClick={onClose}
     >
       <Box
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-account-modal-title"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: tokens.colors.bg.primary,
@@ -52,7 +92,7 @@ export function DeleteAccountModal({
           border: `1px solid ${tokens.colors.accent.error}40`,
         }}
       >
-        <Text size="lg" weight="bold" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
+        <Text id="delete-account-modal-title" size="lg" weight="bold" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
           {t('deleteAccountTitle')}
         </Text>
         <Box style={{ marginBottom: tokens.spacing[4] }}>
@@ -72,8 +112,11 @@ export function DeleteAccountModal({
           </Box>
         </Box>
         <Box style={{ marginBottom: tokens.spacing[3] }}>
-          <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('enterPasswordToConfirm')}</Text>
+          <label htmlFor="delete-account-password">
+            <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('enterPasswordToConfirm')}</Text>
+          </label>
           <input
+            id="delete-account-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -90,8 +133,11 @@ export function DeleteAccountModal({
           />
         </Box>
         <Box style={{ marginBottom: tokens.spacing[4] }}>
-          <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('deleteReasonOptional')}</Text>
+          <label htmlFor="delete-account-reason">
+            <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('deleteReasonOptional')}</Text>
+          </label>
           <input
+            id="delete-account-reason"
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}

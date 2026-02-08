@@ -206,6 +206,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         {/* Close Button */}
         <button
           onClick={handleClose}
+          aria-label="Dismiss notification"
           className="btn-press"
           style={{
             background: 'transparent',
@@ -343,6 +344,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {/* Toast Container */}
       {toasts.length > 0 && (
         <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="false"
           style={{
             position: 'fixed',
             top: 80,

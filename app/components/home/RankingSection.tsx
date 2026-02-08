@@ -551,6 +551,7 @@ export default function RankingSection({
                   showToast(t('copyFailed') || 'Copy failed', 'error')
                 })
               }}
+              aria-label={t('copyFilterLink') || 'Copy filter link'}
               title={t('copyFilterLink') || 'Copy filter link'}
               style={{
                 display: 'flex',
@@ -575,6 +576,7 @@ export default function RankingSection({
           {!loading && onRefresh && (
             <button
               onClick={onRefresh}
+              aria-label={t('refreshData')}
               title={t('refreshData')}
               style={{
                 display: 'flex',
