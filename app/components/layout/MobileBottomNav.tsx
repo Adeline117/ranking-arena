@@ -270,11 +270,12 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         textDecoration: 'none',
         color: active ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
-        transition: `all ${tokens.transition.fast}`,
-        borderRadius: tokens.radius.md,
+        transition: `all ${tokens.transition.base}`,
+        borderRadius: tokens.radius.lg,
         position: 'relative',
-        minWidth: 56,
-        minHeight: 48,
+        minWidth: 60,
+        minHeight: tokens.touchTarget.comfortable,
+        background: active ? `${tokens.colors.accent.primary}08` : 'transparent',
       }}
     >
       {active && <ActiveIndicator />}
@@ -322,10 +323,11 @@ function ActiveIndicator(): React.ReactElement {
         top: 0,
         left: '50%',
         transform: 'translateX(-50%)',
-        width: 24,
+        width: 28,
         height: 3,
-        borderRadius: '0 0 3px 3px',
-        background: tokens.colors.accent.primary,
+        borderRadius: '0 0 4px 4px',
+        background: tokens.gradient.primary,
+        boxShadow: `0 2px 8px ${tokens.colors.accent.primary}60`,
       }}
       aria-hidden="true"
     />

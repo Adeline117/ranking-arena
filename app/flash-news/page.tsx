@@ -3,9 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import { Box, Text, Button } from '@/app/components/base'
+import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
-import Pagination from '@/app/components/ui/Pagination'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -238,11 +237,11 @@ export default function FlashNewsPage() {
       <TopNav />
       <Box style={{ maxWidth: '800px', margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[3]}` }}>
         {/* Header */}
-        <Box style={{ marginBottom: tokens.spacing[5] }}>
-          <Text style={{ fontSize: '28px', fontWeight: '700', marginBottom: tokens.spacing[2] }}>
+        <Box style={{ marginBottom: tokens.spacing[6] }}>
+          <Text style={{ fontSize: tokens.typography.fontSize['3xl'], fontWeight: tokens.typography.fontWeight.black, marginBottom: tokens.spacing[2], letterSpacing: '-0.5px' }}>
             {language === 'zh' ? '快讯中心' : 'Flash News'}
           </Text>
-          <Text style={{ color: tokens.colors.text.secondary, fontSize: '16px' }}>
+          <Text style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: tokens.typography.lineHeight.relaxed }}>
             {language === 'zh'
               ? '实时跟踪加密货币、宏观经济、金融市场动态'
               : 'Real-time updates on crypto, macro, and financial markets'}
@@ -250,23 +249,47 @@ export default function FlashNewsPage() {
         </Box>
 
         {/* Category Filter */}
-        <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
-          {CATEGORIES.map((cat) => (
-            <Button
-              key={cat.key}
-              variant={selectedCategory === cat.key ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => handleCategoryChange(cat.key)}
-              style={{
-                border: selectedCategory === cat.key
-                  ? `2px solid ${tokens.colors.accent.primary}`
-                  : `1px solid ${tokens.colors.border.primary}`,
-                background: selectedCategory === cat.key ? tokens.colors.accent.primary : 'transparent',
-              }}
-            >
-              {language === 'zh' ? cat.label : cat.label_en}
-            </Button>
-          ))}
+        <Box style={{ marginBottom: tokens.spacing[5], display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
+          {CATEGORIES.map((cat) => {
+            const isActive = selectedCategory === cat.key
+            return (
+              <button
+                key={cat.key}
+                onClick={() => handleCategoryChange(cat.key)}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  borderRadius: tokens.radius.lg,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                  background: isActive ? tokens.gradient.primary : tokens.glass.bg.light,
+                  backdropFilter: isActive ? 'none' : tokens.glass.blur.sm,
+                  WebkitBackdropFilter: isActive ? 'none' : tokens.glass.blur.sm,
+                  color: isActive ? '#fff' : tokens.colors.text.secondary,
+                  border: isActive ? 'none' : tokens.glass.border.light,
+                  cursor: 'pointer',
+                  transition: `all ${tokens.transition.base}`,
+                  boxShadow: isActive ? `0 4px 12px ${tokens.colors.accent.primary}40` : 'none',
+                  outline: 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = tokens.glass.bg.medium
+                    e.currentTarget.style.color = tokens.colors.text.primary
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = tokens.glass.bg.light
+                    e.currentTarget.style.color = tokens.colors.text.secondary
+                    e.currentTarget.style.transform = 'translateY(0)'
+                  }
+                }}
+              >
+                {language === 'zh' ? cat.label : cat.label_en}
+              </button>
+            )
+          })}
         </Box>
 
         {/* News Timeline */}
@@ -306,20 +329,21 @@ export default function FlashNewsPage() {
                     >
                       {index > 0 && (
                         <Box style={{
-                          position: 'absolute', left: '-6px', top: tokens.spacing[2],
-                          width: '10px', height: '10px', borderRadius: '50%',
-                          background: impConfig.color, border: `2px solid ${tokens.colors.bg.primary}`,
+                          position: 'absolute', left: '-7px', top: tokens.spacing[3],
+                          width: '12px', height: '12px', borderRadius: '50%',
+                          background: impConfig.color, border: `2.5px solid ${tokens.colors.bg.primary}`,
+                          boxShadow: `0 0 8px ${impConfig.color}60`,
+                          transition: `box-shadow ${tokens.transition.base}`,
                         }} />
                       )}
 
                       <Box style={{ flex: 1 }}>
-                        <Card style={{
-                          padding: tokens.spacing[3],
-                          background: tokens.colors.bg.secondary,
-                          border: `1px solid ${tokens.colors.border.primary}`,
-                          borderRadius: tokens.radius.md,
+                        <Card variant="glass" style={{
+                          padding: tokens.spacing[4],
+                          borderRadius: tokens.radius.lg,
                           position: 'relative', overflow: 'hidden',
-                          transition: 'border-color 0.2s ease',
+                          transition: `all ${tokens.transition.base}`,
+                          boxShadow: tokens.shadow.sm,
                         }}>
                           {item.importance !== 'normal' && (
                             <Box style={{
