@@ -19,7 +19,7 @@ import {
 const supabase = getSupabaseClient()
 
 const SOURCE = 'binance_futures'
-const TARGET_COUNT = 500
+const TARGET_COUNT = 2000
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL
 
 // Proxy-aware fetch - tries direct first, then CF Worker proxy

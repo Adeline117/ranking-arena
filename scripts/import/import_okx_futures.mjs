@@ -19,7 +19,7 @@ const supabase = getSupabaseClient()
 
 const SOURCE = 'okx_futures'
 const API_URL = 'https://www.okx.com/api/v5/copytrading/public-lead-traders'
-const TARGET_COUNT = 500
+const TARGET_COUNT = 1000
 const DELAY_MS = 500
 
 const WINDOW_DAYS = { '7D': 7, '30D': 30, '90D': 90 }

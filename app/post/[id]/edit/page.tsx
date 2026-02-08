@@ -587,7 +587,7 @@ export default function EditPostPage() {
                 width: '100%',
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.md,
-                border: `1px solid ${title.length > TITLE_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary}`,
+                border: ('1px solid ' + title.length > TITLE_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary),
                 background: tokens.colors.bg.secondary,
                 color: tokens.colors.text.primary,
                 fontSize: tokens.typography.fontSize.base,
@@ -604,7 +604,7 @@ export default function EditPostPage() {
                 <Text size="sm" weight="bold">
                   {t('contentLabel')}
                 </Text>
-                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
+                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: ('1px solid ' + tokens.colors.border.primary) }}>
                   <button
                     type="button"
                     onClick={() => setShowPreview(false)}
@@ -629,7 +629,7 @@ export default function EditPostPage() {
                     style={{
                       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                       border: 'none',
-                      borderLeft: `1px solid ${tokens.colors.border.primary}`,
+                      borderLeft: ('1px solid ' + tokens.colors.border.primary),
                       background: showPreview ? tokens.colors.accent.brand : 'transparent',
                       color: showPreview ? '#fff' : tokens.colors.text.secondary,
                       fontSize: tokens.typography.fontSize.xs,
@@ -659,12 +659,12 @@ export default function EditPostPage() {
                   minHeight: 288,
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: `2px solid ${tokens.colors.accent.brand}`,
+                  border: ('2px solid ' + tokens.colors.accent.brand),
                   background: `linear-gradient(135deg, rgba(139, 111, 168, 0.05) 0%, rgba(139, 111, 168, 0.1) 100%)`,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
                   lineHeight: 1.6,
-                  whiteSpace: `pre-wrap',
+                  whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   position: 'relative',
                 }}
@@ -711,7 +711,7 @@ export default function EditPostPage() {
                   width: '100%',
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: `1px solid ${content.length > CONTENT_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary}`,
+                  border: ('1px solid ' + content.length > CONTENT_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary),
                   background: tokens.colors.bg.secondary,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
@@ -746,7 +746,7 @@ export default function EditPostPage() {
                 marginBottom: tokens.spacing[3],
                 background: 'rgba(139, 111, 168, 0.1)',
                 borderRadius: tokens.radius.md,
-                border: `1px dashed ${tokens.colors.accent.brand}`,
+                border: ('1px dashed ' + tokens.colors.accent.brand),
               }}
             >
               <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
@@ -776,10 +776,10 @@ export default function EditPostPage() {
                     borderRadius: tokens.radius.md,
                     overflow: 'hidden',
                     border: inContent 
-                      ? `2px solid ${tokens.colors.accent.brand}`
+                      ? ('2px solid ' + tokens.colors.accent.brand)
                       : draggedImageIndex === index 
-                        ? `2px solid ${tokens.colors.accent.brand}` 
-                        : `1px solid ${tokens.colors.border.primary}`,
+                        ? ('2px solid ' + tokens.colors.accent.brand) 
+                        : ('1px solid ' + tokens.colors.border.primary),
                     cursor: 'grab',
                     opacity: draggedImageIndex === index ? 0.7 : 1,
                     transition: 'all 0.2s ease',
@@ -874,7 +874,7 @@ export default function EditPostPage() {
                     width: 100,
                     height: 100,
                     borderRadius: tokens.radius.md,
-                    border: `2px dashed ${tokens.colors.border.primary}`,
+                    border: ('2px dashed ' + tokens.colors.border.primary),
                     background: 'transparent',
                     color: tokens.colors.text.tertiary,
                     fontSize: 32,
