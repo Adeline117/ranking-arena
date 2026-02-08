@@ -62,9 +62,7 @@ export default function TrendingDiscussions() {
         </div>
       ) : error || posts.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '24px 12px' }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.25, color: tokens.colors.text.tertiary, marginBottom: 8 }}>
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
+          <img src="/stickers/thinking.png" alt="" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
           <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 4 }}>
             {isZh ? '暂无讨论' : 'No discussions yet'}
           </p>

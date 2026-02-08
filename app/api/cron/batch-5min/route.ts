@@ -6,7 +6,7 @@
  * - /api/cron/refresh-hot-scores (GET)
  * - /api/trader/sync (POST - triggers sync for all pending authorizations)
  *
- * Schedule: */5 * * * * (see vercel.json)
+ * Schedule: every 5 min (see vercel.json)
  * Saves 2 cron slots by combining 3 jobs into 1.
  */
 
