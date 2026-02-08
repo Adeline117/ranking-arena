@@ -10,6 +10,7 @@ import { Box, Text, Button } from '../base'
 import CopyTradeButton from './CopyTradeButton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { formatDisplayName } from '@/app/components/ranking/utils'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -472,7 +473,7 @@ export default function TraderHeader({
                 textShadow: hasCover ? '0 2px 8px rgba(0,0,0,0.5)' : undefined,
               }}
             >
-              {handle}
+              {formatDisplayName(handle)}
             </Text>
 
             {uid && (
@@ -597,7 +598,7 @@ export default function TraderHeader({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: tokens.spacing[2],
+          gap: tokens.spacing[3],
           flexShrink: 0,
           flexWrap: 'wrap',
           position: 'relative',

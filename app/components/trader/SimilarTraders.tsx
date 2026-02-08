@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { formatDisplayName } from '@/app/components/ranking/utils'
 import type { TraderProfile } from '@/lib/data/trader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -198,13 +199,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {(() => {
-                    const handle = trader.handle || ''
-                    if (handle.startsWith('0x') && handle.length > 20) {
-                      return `${handle.substring(0, 6)}...${handle.substring(handle.length - 4)}`
-                    }
-                    return handle
-                  })()}
+                  {formatDisplayName(trader.handle || '')}
                 </Text>
                 <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                   {/* ROI Badge */}
