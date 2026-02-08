@@ -194,6 +194,26 @@ function ExchangeQuickFilter({
   )
 }
 
+/** CSS fade wrapper — re-triggers enter animation when transitionKey changes */
+function RankingFadeWrapper({ transitionKey, children }: { transitionKey: string; children: React.ReactNode }) {
+  const [animClass, setAnimClass] = useState('ranking-fade-active')
+  const prevKey = useRef(transitionKey)
+
+  useEffect(() => {
+    if (prevKey.current !== transitionKey) {
+      prevKey.current = transitionKey
+      setAnimClass('ranking-fade-enter')
+      // Force reflow then apply active class
+      const raf = requestAnimationFrame(() => {
+        setAnimClass('ranking-fade-active')
+      })
+      return () => cancelAnimationFrame(raf)
+    }
+  }, [transitionKey])
+
+  return <div className={animClass}>{children}</div>
+}
+
 function RankingsContent() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
@@ -445,37 +465,39 @@ function RankingsContent() {
           }}
         />
 
-        <DataStateWrapper
-          isLoading={isLoading}
-          error={error}
-          isEmpty={!filteredData?.traders?.length}
-          emptyMessage={isZh ? '暂无排行榜数据' : 'No ranking data available'}
-          loadingComponent={<RankingSkeleton />}
-        >
-          {filteredData && filteredData.traders.length > 0 && (
-            <div style={{ position: 'relative' }}>
-              {isFiltering && (
-                <div 
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: 2,
-                    background: `linear-gradient(90deg, transparent, ${tokens.colors.accent.brand}, transparent)`,
-                    animation: 'shimmer 1s ease-in-out infinite',
-                    zIndex: 10,
-                  }}
+        <RankingFadeWrapper transitionKey={`${activeWindow}-${activeCategory}-${activePlatform || ''}`}>
+          <DataStateWrapper
+            isLoading={isLoading}
+            error={error}
+            isEmpty={!filteredData?.traders?.length}
+            emptyMessage={isZh ? '暂无排行榜数据' : 'No ranking data available'}
+            loadingComponent={<RankingSkeleton />}
+          >
+            {filteredData && filteredData.traders.length > 0 && (
+              <div style={{ position: 'relative' }}>
+                {isFiltering && (
+                  <div 
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 2,
+                      background: `linear-gradient(90deg, transparent, ${tokens.colors.accent.brand}, transparent)`,
+                      animation: 'shimmer 1s ease-in-out infinite',
+                      zIndex: 10,
+                    }}
+                  />
+                )}
+                <TraderList 
+                  traders={filteredData.traders} 
+                  isZh={isZh} 
+                  isLoading={isLoading || isFiltering}
                 />
-              )}
-              <TraderList 
-                traders={filteredData.traders} 
-                isZh={isZh} 
-                isLoading={isLoading || isFiltering}
-              />
-            </div>
-          )}
-        </DataStateWrapper>
+              </div>
+            )}
+          </DataStateWrapper>
+        </RankingFadeWrapper>
       </div>
       <MobileBottomNav />
     </Box>
@@ -626,7 +648,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
           style={{ background: trader.avatar_url ? undefined : getAvatarGradient(trader.trader_key) }}
         >
           {trader.avatar_url ? (
-            <Image src={trader.avatar_url} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized />
+            <Image src={trader.avatar_url} alt="" width={32} height={32} className="w-full h-full object-cover" loading="lazy" placeholder="empty" unoptimized />
           ) : (
             <span className="text-white">{getAvatarInitial(getTraderDisplayName(trader))}</span>
           )}
