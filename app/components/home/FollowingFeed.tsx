@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -93,7 +94,7 @@ export default function FollowingFeed() {
         textAlign: 'center', padding: '60px 20px',
         color: tokens.colors.text.secondary,
       }}>
-        <img src="/stickers/happy.png" alt="No posts yet" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
+        <Image src="/stickers/happy.png" alt="No posts yet" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
         <p style={{ fontSize: 16, marginBottom: 8 }}>
           {isZh ? '关注你感兴趣的交易员' : "You haven't followed anyone yet"}
         </p>
