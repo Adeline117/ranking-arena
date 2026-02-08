@@ -52,38 +52,45 @@ export default function PopularTraders() {
   useEffect(() => {
     async function load() {
       try {
-        // Try trader_sources first, fall back to trader_snapshots
-        let mapped: Trader[] = []
-        const { data, error: qErr } = await supabase
-          .from('trader_sources')
-          .select('source, source_trader_id, handle, followers, roi')
-          .order('followers', { ascending: false })
+        // Query trader_snapshots for top traders by arena_score
+        const { data: snapData, error: snapErr } = await supabase
+          .from('trader_snapshots')
+          .select('source, source_trader_id, followers, roi, arena_score')
+          .not('arena_score', 'is', null)
+          .order('arena_score', { ascending: false, nullsFirst: false })
           .limit(10)
-        if (qErr || !data || data.length === 0) {
-          // Fallback: query trader_snapshots directly
-          const { data: snapData } = await supabase
-            .from('trader_snapshots')
-            .select('source, source_trader_id, handle, followers, roi, avatar_url, arena_score')
-            .order('arena_score', { ascending: false })
-            .limit(10)
-          mapped = (snapData || []).map((d: any) => ({
-            source: d.source,
-            source_trader_id: d.source_trader_id,
-            handle: d.handle,
-            followers: d.followers,
-            roi: d.roi,
-            avatar_url: d.avatar_url ?? null,
-          }))
-        } else {
-          mapped = (data || []).map((d: any) => ({
-            source: d.source,
-            source_trader_id: d.source_trader_id,
-            handle: d.handle,
-            followers: d.followers,
-            roi: d.roi,
-            avatar_url: null,
-          }))
+
+        if (snapErr || !snapData || snapData.length === 0) {
+          setTraders([])
+          setLoading(false)
+          return
         }
+
+        // Batch fetch handles and avatars from trader_sources
+        const keys = snapData.map(d => `${d.source}:${d.source_trader_id}`)
+        const { data: sourceData } = await supabase
+          .from('trader_sources')
+          .select('source, source_trader_id, handle, avatar_url')
+          .eq('is_active', true)
+          .in('source', snapData.map(d => d.source))
+          .in('source_trader_id', snapData.map(d => d.source_trader_id))
+
+        const sourceMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
+        if (sourceData) {
+          sourceData.forEach(s => sourceMap.set(`${s.source}:${s.source_trader_id}`, { handle: s.handle, avatar_url: s.avatar_url }))
+        }
+
+        const mapped: Trader[] = snapData.map(d => {
+          const src = sourceMap.get(`${d.source}:${d.source_trader_id}`)
+          return {
+            source: d.source,
+            source_trader_id: d.source_trader_id,
+            handle: src?.handle || null,
+            followers: d.followers,
+            roi: d.roi,
+            avatar_url: src?.avatar_url || null,
+          }
+        })
         setTraders(mapped)
       } catch {
         setError(true)
