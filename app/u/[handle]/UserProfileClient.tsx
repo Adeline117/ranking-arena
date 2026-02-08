@@ -229,11 +229,21 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
         })
       } else {
         const defaultHandle = emailHandle || userId.slice(0, 8)
+        // Try insert first; ignore conflict (row may exist from handle_new_user trigger)
+        const { error: insertError } = await supabase
+          .from('user_profiles')
+          .insert({ id: userId, handle: defaultHandle })
+        
+        if (insertError && insertError.code !== '23505') {
+          console.warn('Profile insert failed (non-conflict):', insertError)
+        }
+          
+        // Always fetch the current profile state
         const { data: newProfile, error: createError } = await supabase
           .from('user_profiles')
-          .upsert({ id: userId, handle: defaultHandle }, { onConflict: 'id' })
           .select('id, handle, bio, avatar_url, cover_url')
-          .single()
+          .eq('id', userId)
+          .maybeSingle()
 
         if (newProfile && !createError) {
           if (newProfile.handle && newProfile.handle !== handle) {

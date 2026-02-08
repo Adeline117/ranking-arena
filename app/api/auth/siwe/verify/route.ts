@@ -150,14 +150,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user profile with wallet address
-    await supabase
+    // Use insert + ignore conflict to avoid "ON CONFLICT DO UPDATE cannot affect row a second time"
+    // The handle_new_user trigger may have already created the row
+    const { error: profileInsertError } = await supabase
       .from('user_profiles')
-      .upsert({
+      .insert({
         id: newUser.user.id,
         email: walletEmail,
         handle,
         wallet_address: walletAddress,
-      }, { onConflict: 'id' })
+      })
+    
+    if (profileInsertError?.code === '23505') {
+      // Row already exists from trigger, update wallet address
+      await supabase
+        .from('user_profiles')
+        .update({ wallet_address: walletAddress, email: walletEmail })
+        .eq('id', newUser.user.id)
+    } else if (profileInsertError) {
+      console.error('[SIWE verify] Profile creation failed:', profileInsertError)
+    }
 
     // Generate session for the new user
     const { data: sessionData } = await supabase.auth.admin.generateLink({

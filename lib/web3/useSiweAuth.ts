@@ -242,10 +242,18 @@ export function useSiweAuth(): UseSiweAuthReturn {
         },
         body: JSON.stringify({ message, signature }),
         signal: controller.signal,
+        credentials: 'same-origin',
       })
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+        // Provide more specific error messages
+        if (res.status === 409) {
+          throw new Error(body.error || t('siweAlreadyLinked'))
+        }
+        if (res.status === 400 && body.error?.includes('Nonce')) {
+          throw new Error(t('siweExpired'))
+        }
         throw new Error(body.error || t('siweLinkFailed'))
       }
 

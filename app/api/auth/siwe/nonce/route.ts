@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   cookieStore.set('siwe-nonce', nonce, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 300, // 5 minutes
     path: '/',
   })

@@ -43,15 +43,7 @@ function CompareContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [traders, setTraders] = useState<TraderCompareData[]>([])
-  const [searchInput, setSearchInput] = useState('')
-  const [searchResults, setSearchResults] = useState<Array<{
-    source_trader_id: string
-    source: string
-    roi: number | null
-    arena_score: number | null
-    avatar_url: string | null
-  }>>([])
-  const [searching, setSearching] = useState(false)
+  // Search state removed - traders added from followed list only
   const [isPro, setIsPro] = useState(false)
   const [followedTraders, setFollowedTraders] = useState<Array<{
     id: string
@@ -157,34 +149,6 @@ function CompareContent() {
     }
   }
 
-  // Search
-  const handleSearch = async () => {
-    if (!searchInput.trim()) return
-
-    const sanitizedInput = searchInput.trim()
-      .slice(0, 100)
-      .replace(/[\\%_]/g, c => `\\${c}`)
-
-    if (!sanitizedInput) return
-
-    setSearching(true)
-    try {
-      const { data, error } = await supabase
-        .from('trader_sources')
-        .select('source_trader_id, source, roi, arena_score, avatar_url')
-        .or(`source_trader_id.ilike.%${sanitizedInput}%`)
-        .order('arena_score', { ascending: false, nullsFirst: false })
-        .limit(10)
-
-      if (error) throw error
-      setSearchResults(data || [])
-    } catch (err) {
-      console.error('Search failed:', err)
-    } finally {
-      setSearching(false)
-    }
-  }
-
   // Add trader
   const handleAddTrader = async (traderId: string) => {
     if (traders.length >= 5) {
@@ -199,8 +163,6 @@ function CompareContent() {
     const newIds = [...traders.map(t => t.id), traderId]
     await loadTraders(newIds)
     router.replace(`/compare?ids=${newIds.join(',')}`, { scroll: false })
-    setSearchInput('')
-    setSearchResults([])
   }
 
   // Remove trader
@@ -431,108 +393,7 @@ function CompareContent() {
           </Box>
         )}
 
-        {/* Search bar */}
-        {isPro && (
-          <Box
-            style={{
-              marginBottom: tokens.spacing[6],
-              padding: tokens.spacing[4],
-              background: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.xl,
-              border: `1px solid ${tokens.colors.border.primary}`,
-            }}
-          >
-            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-              {t('compareAddTrader')} ({traders.length}/5)
-            </Text>
-
-            <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder={t('compareSearchPlaceholder')}
-                style={{
-                  flex: 1,
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.sm,
-                  outline: 'none',
-                }}
-              />
-              <Button
-                variant="secondary"
-                onClick={handleSearch}
-                disabled={searching || !searchInput.trim()}
-              >
-                {searching ? t('compareSearching') : t('compareSearchBtn')}
-              </Button>
-            </Box>
-
-            {/* Search results */}
-            {searchResults.length > 0 && (
-              <Box
-                style={{
-                  marginTop: tokens.spacing[3],
-                  maxHeight: 300,
-                  overflowY: 'auto',
-                  background: tokens.colors.bg.primary,
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                }}
-              >
-                {searchResults.map((result) => (
-                  <Box
-                    key={`${result.source_trader_id}-${result.source}`}
-                    onClick={() => handleAddTrader(result.source_trader_id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: tokens.spacing[3],
-                      cursor: 'pointer',
-                      borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = tokens.colors.bg.secondary}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <Box>
-                      <Text size="sm" weight="semibold">
-                        {result.source_trader_id.length > 20
-                          ? `${result.source_trader_id.slice(0, 8)}...${result.source_trader_id.slice(-6)}`
-                          : result.source_trader_id}
-                      </Text>
-                      <Text size="xs" color="tertiary">{result.source}</Text>
-                    </Box>
-                    <Box style={{ textAlign: 'right' }}>
-                      <Text
-                        size="sm"
-                        weight="bold"
-                        style={{
-                          color: (result.roi ?? 0) >= 0
-                            ? tokens.colors.accent.success
-                            : tokens.colors.accent.error,
-                        }}
-                      >
-                        {(result.roi ?? 0) >= 0 ? '+' : ''}{(result.roi ?? 0).toFixed(2)}%
-                      </Text>
-                      {result.arena_score != null && (
-                        <Text size="xs" color="secondary">
-                          Score: {result.arena_score.toFixed(1)}
-                        </Text>
-                      )}
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
-        )}
+        {/* Search bar removed - traders can only be added from followed list above */}
 
         {/* Comparison component */}
         {isPro && (
