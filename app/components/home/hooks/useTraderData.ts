@@ -128,7 +128,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         // Feature 1: Include sort params in fetch URL
         // Load enough data for client-side search/sort. RankingTable caps at 1000 (slice(0,1000)).
         // SSR already provides 50 traders; 500 here covers filtering while being 83% smaller than 3000.
-        let url = `/api/traders?timeRange=${timeRange}&limit=500`
+        let url = `/api/traders?timeRange=${timeRange}&limit=1000`
         if (sortBy && sortBy !== 'arena_score') {
           url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
         }
