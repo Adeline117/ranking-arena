@@ -80,6 +80,64 @@ async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string
 }
 
 /**
+ * 获取所有书库条目
+ */
+async function getAllLibraryItems(): Promise<Array<{ id: string; updated_at: string }>> {
+  try {
+    const supabase = getSupabaseAdmin()
+
+    const { data, error } = await supabase
+      .from('library_items')
+      .select('id, created_at')
+      .order('download_count', { ascending: false })
+      .limit(2000)
+
+    if (error) {
+      dataLogger.error('sitemap library items error:', error)
+      return []
+    }
+
+    return (data || []).map(item => ({
+      id: item.id,
+      updated_at: item.created_at,
+    }))
+  } catch (error) {
+    dataLogger.error('sitemap getAllLibraryItems error:', error)
+    return []
+  }
+}
+
+/**
+ * 获取用户主页
+ */
+async function getUserProfiles(): Promise<Array<{ handle: string; updated_at: string }>> {
+  try {
+    const supabase = getSupabaseAdmin()
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('handle, updated_at')
+      .not('handle', 'is', null)
+      .limit(5000)
+
+    if (error) {
+      dataLogger.error('sitemap user profiles error:', error)
+      return []
+    }
+
+    return (data || [])
+      .filter((u: { handle: string | null }) => u.handle)
+      .map((u: { handle: string; updated_at: string }) => ({
+        handle: u.handle,
+        updated_at: u.updated_at || new Date().toISOString(),
+      }))
+  } catch (error) {
+    dataLogger.error('sitemap getUserProfiles error:', error)
+    return []
+  }
+}
+
+/**
  * 获取所有小组
  */
 async function getAllGroups(): Promise<Array<{ id: string; updated_at: string }>> {
@@ -155,10 +213,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.6,
     },
     {
+      url: `${BASE_URL}/library`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.8,
+    },
+    {
+      url: `${BASE_URL}/flash-news`,
+      lastModified: now,
+      changeFrequency: "hourly",
+      priority: 0.7,
+    },
+    {
       url: `${BASE_URL}/login`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.3,
+    },
+    {
+      url: `${BASE_URL}/about`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.4,
     },
     {
       url: `${BASE_URL}/privacy`,
@@ -172,13 +248,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "yearly",
       priority: 0.2,
     },
+    {
+      url: `${BASE_URL}/disclaimer`,
+      lastModified: now,
+      changeFrequency: "yearly",
+      priority: 0.2,
+    },
   ]
   
   // 并行获取动态数据
-  const [traders, posts, groups] = await Promise.all([
+  const [traders, posts, groups, libraryItems, userProfiles] = await Promise.all([
     getAllTraders(),
     getPopularPosts(),
     getAllGroups(),
+    getAllLibraryItems(),
+    getUserProfiles(),
   ])
   
   // 交易员页面
@@ -205,12 +289,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }))
   
+  // 书库页面
+  const libraryPages: MetadataRoute.Sitemap = libraryItems.map(item => ({
+    url: `${BASE_URL}/library/${item.id}`,
+    lastModified: item.updated_at,
+    changeFrequency: "monthly" as const,
+    priority: 0.5,
+  }))
+
+  // 用户主页
+  const userPages: MetadataRoute.Sitemap = userProfiles.map(user => ({
+    url: `${BASE_URL}/u/${encodeURIComponent(user.handle)}`,
+    lastModified: user.updated_at,
+    changeFrequency: "weekly" as const,
+    priority: 0.5,
+  }))
+
   // 合并所有页面
   const allPages = [
     ...staticPages,
     ...traderPages,
     ...postPages,
     ...groupPages,
+    ...libraryPages,
+    ...userPages,
   ]
   
   // 限制总数量

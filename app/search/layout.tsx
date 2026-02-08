@@ -28,7 +28,7 @@ export async function generateMetadata({
       title,
       description,
       url: `${baseUrl}/search`,
-      siteName: 'Arena',
+      siteName: 'ArenaFi',
       type: 'website',
     },
     robots: {

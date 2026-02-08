@@ -3,24 +3,24 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Compare Traders · Arena',
+  title: '交易员对比',
   description:
-    'Compare crypto traders side by side — ROI, win rate, drawdown, Arena Score, and equity curves across exchanges.',
+    '并排对比加密货币交易员的 ROI、胜率、最大回撤、Arena Score 和权益曲线。',
   alternates: {
     canonical: `${baseUrl}/compare`,
   },
   openGraph: {
-    title: 'Compare Traders · Arena',
-    description: 'Compare crypto traders side by side across 22+ exchanges.',
+    title: '交易员对比 | ArenaFi',
+    description: '跨交易所并排对比交易员数据。',
     url: `${baseUrl}/compare`,
-    siteName: 'Arena',
+    siteName: 'ArenaFi',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena Compare' }],
+    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'ArenaFi 交易员对比' }],
   },
   twitter: {
     card: 'summary',
-    title: 'Compare Traders · Arena',
-    description: 'Compare crypto traders side by side across exchanges.',
+    title: '交易员对比 | ArenaFi',
+    description: '跨交易所并排对比交易员数据。',
   },
 }
 

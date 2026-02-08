@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
           description,
           type: 'article',
           url: canonicalUrl,
-          siteName: 'Arena',
+          siteName: 'ArenaFi',
           publishedTime: post.created_at,
           authors: [`${BASE_URL}/u/${encodeURIComponent(post.author_handle)}`],
           images: ogImage ? [{
@@ -66,7 +66,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   
   // 默认metadata
   return {
-    title: '帖子 · Arena',
+    title: '帖子 | ArenaFi',
     description: '查看帖子详情',
     alternates: {
       canonical: canonicalUrl,

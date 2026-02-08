@@ -3,6 +3,7 @@ const en = {
     home: 'Home',
     rankings: 'Rankings',
     groups: 'Groups',
+    market: 'Market',
     hot: 'Hot',
     flashNews: 'Flash News',
     library: 'Library',

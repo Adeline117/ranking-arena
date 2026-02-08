@@ -3,24 +3,24 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Library · Arena',
+  title: '交易书库',
   description:
-    'Curated trading books, guides, and educational resources for crypto traders. Build your trading knowledge.',
+    '精选加密货币交易书籍、指南和教育资源，帮助你构建交易知识体系。',
   alternates: {
     canonical: `${baseUrl}/library`,
   },
   openGraph: {
-    title: 'Library · Arena',
-    description: 'Curated trading books and educational resources for crypto traders.',
+    title: '交易书库 | ArenaFi',
+    description: '精选加密货币交易书籍和教育资源。',
     url: `${baseUrl}/library`,
-    siteName: 'Arena',
+    siteName: 'ArenaFi',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena Library' }],
+    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'ArenaFi 交易书库' }],
   },
   twitter: {
     card: 'summary',
-    title: 'Library · Arena',
-    description: 'Curated trading books and resources for crypto traders.',
+    title: '交易书库 | ArenaFi',
+    description: '精选加密货币交易书籍和教育资源。',
   },
 }
 
