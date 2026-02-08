@@ -33,7 +33,7 @@ import {
 } from './components'
 
 function ExchangeBindingBanner({ userId }: { userId: string | null }) {
-  const { _t, language } = useLanguage()
+  const { t, language } = useLanguage()
   const [show, setShow] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -333,17 +333,6 @@ function SettingsContent() {
   // ===== Lazy-load sessions and blocked users =====
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [blockedUsersLoaded, setBlockedUsersLoaded] = useState(false)
-
-  useEffect(() => {
-    if (activeSection === 'security' && !sessionsLoaded && !loadingSessions) {
-      setSessionsLoaded(true)
-      loadSessions()
-    }
-    if (activeSection === 'privacy' && userId && !blockedUsersLoaded && !loadingBlockedUsers) {
-      setBlockedUsersLoaded(true)
-      loadBlockedUsers(userId)
-    }
-  }, [activeSection, sessionsLoaded, loadingSessions, blockedUsersLoaded, loadingBlockedUsers, userId, loadBlockedUsers, loadSessions])
 
   // ===== Data loading functions =====
   const loadProfile = async (uid: string) => {
@@ -753,6 +742,18 @@ function SettingsContent() {
     } catch { showToast(t('networkError'), 'error') }
     finally { setUnblockingId(null) }
   }
+
+  // ===== Lazy-load sessions and blocked users =====
+  useEffect(() => {
+    if (activeSection === 'security' && !sessionsLoaded && !loadingSessions) {
+      setSessionsLoaded(true)
+      loadSessions()
+    }
+    if (activeSection === 'privacy' && userId && !blockedUsersLoaded && !loadingBlockedUsers) {
+      setBlockedUsersLoaded(true)
+      loadBlockedUsers(userId)
+    }
+  }, [activeSection, sessionsLoaded, loadingSessions, blockedUsersLoaded, loadingBlockedUsers, userId, loadBlockedUsers, loadSessions])
 
   // ===== Email digest handler =====
   const handleEmailDigestChange = async (value: 'none' | 'daily' | 'weekly') => {
