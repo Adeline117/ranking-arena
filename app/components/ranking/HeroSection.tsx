@@ -105,7 +105,7 @@ function HeroCard({ trader, rank, large }: { trader: Trader; rank: number; large
           {/* Avatar */}
           <TraderAvatar
             traderId={trader.id}
-            displayName={displayName}
+            displayName={!hasRealHandle(trader) ? `#${rank}` : displayName}
             avatarUrl={trader.avatar_url}
             rank={rank}
             size={large ? 48 : 32}
@@ -153,11 +153,22 @@ function HeroCard({ trader, rank, large }: { trader: Trader; rank: number; large
   )
 }
 
+/** Check if a trader has a real (non-numeric) handle */
+function hasRealHandle(t: Trader): boolean {
+  const h = t.handle || t.id
+  return !(/^\d{8,}$/.test(h))
+}
+
 export default function HeroSection({ traders }: { traders: Trader[] }) {
   if (!traders || traders.length < 3) return null
 
-  const top3 = traders.slice(0, 3)
-  const top4to10 = traders.slice(3, 10)
+  // Prioritize traders with real handles for hero display
+  const withHandle = traders.filter(hasRealHandle)
+  const withoutHandle = traders.filter(t => !hasRealHandle(t))
+  const prioritized = [...withHandle, ...withoutHandle].slice(0, 10)
+
+  const top3 = prioritized.slice(0, 3)
+  const top4to10 = prioritized.slice(3, 10)
 
   return (
     <div style={{
