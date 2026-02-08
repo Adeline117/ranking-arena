@@ -28,6 +28,7 @@ import {
   normalizeWinRate,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { interceptApiResponses } from '../scrapers/cloudflare-bypass'
 
 const SOURCE = 'blofin'
 const TARGET = 500
@@ -192,6 +193,33 @@ async function fetchPeriod(
     }
 
     if (allTraders.size > 0) break
+  }
+
+  // Stealth browser fallback when HTTP fetch fails
+  if (allTraders.size === 0) {
+    console.warn(`[${SOURCE}] HTTP fetch failed, trying stealth browser fallback...`)
+    try {
+      const { responses } = await interceptApiResponses(
+        'https://blofin.com/en/copy-trade',
+        ['copy', 'trader', 'lead', 'rank', 'blofin'],
+        { proxy: process.env.STEALTH_PROXY || undefined, maxWaitMs: 20_000 }
+      )
+      for (const resp of responses) {
+        try {
+          const data = JSON.parse(resp.body) as BlofinApiResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.uniqueName || item.traderId || item.uid || item.id || '')
+            if (id && !allTraders.has(id)) allTraders.set(id, item)
+          }
+        } catch { /* skip unparseable */ }
+      }
+      if (allTraders.size > 0) {
+        console.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
+      }
+    } catch (err) {
+      console.warn(`[${SOURCE}] Stealth browser fallback failed:`, err)
+    }
   }
 
   if (allTraders.size === 0) {
