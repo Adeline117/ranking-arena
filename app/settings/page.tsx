@@ -456,7 +456,12 @@ function SettingsContent() {
       formData.append('userId', uid)
       formData.append('bucket', bucket)
 
-      const response = await fetch('/api/upload-profile-image', { method: 'POST', body: formData })
+      const { data: { session } } = await supabase.auth.getSession()
+      const response = await fetch('/api/upload-profile-image', {
+        method: 'POST',
+        body: formData,
+        headers: session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {},
+      })
       const result = await response.json()
       if (!response.ok) { uiLogger.error(`${bucket} upload error:`, result.error); showToast(result.error || t('uploadFailed'), 'error'); return null }
       return result.url
