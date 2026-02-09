@@ -325,6 +325,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     traders,
     window: window.toUpperCase() as '7D' | '30D' | '90D' | 'COMPOSITE',
     totalcount: totalCount || 0,
+    total_count: totalCount || 0,
     as_of: new Date(latestCapturedAt).toISOString(),
     is_stale: isStale,
   };
@@ -517,6 +518,7 @@ async function getCompositeRankings(params: {
     traders,
     window: 'COMPOSITE' as const,
     totalcount: total,
+    total_count: total,
     as_of: new Date().toISOString(),
     is_stale: false,
   };
