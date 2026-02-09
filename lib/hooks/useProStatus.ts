@@ -83,10 +83,10 @@ export function useProStatus(): ProStatus {
         .limit(1)
         .maybeSingle()
 
-      // 备用：user_profiles
+      // 备用：user_profiles (check both is_pro and subscription_tier)
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('subscription_tier')
+        .select('subscription_tier, is_pro')
         .eq('id', user.id)
         .maybeSingle()
 
@@ -98,7 +98,7 @@ export function useProStatus(): ProStatus {
         finalIsPro = sub.tier === 'pro'
         finalPlan = sub.plan || null
         finalExpires = sub.current_period_end || null
-      } else if (profile?.subscription_tier === 'pro') {
+      } else if (profile?.is_pro === true || profile?.subscription_tier === 'pro') {
         finalIsPro = true
       }
 
