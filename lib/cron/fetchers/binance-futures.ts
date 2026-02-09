@@ -62,6 +62,8 @@ interface BinanceTrader {
   portfolioId?: string
   leadPortfolioId?: string
   nickName?: string
+  nickname?: string
+  avatarUrl?: string
   roi?: string | number
   pnl?: string | number
   winRate?: string | number
@@ -180,7 +182,7 @@ async function fetchPeriod(
     traders.push({
       source: SOURCE,
       source_trader_id: id,
-      handle: t.nickName || id,
+      handle: t.nickname || t.nickName || id,
       profile_url: `https://www.binance.com/en/copy-trading/lead-details/${id}`,
       season_id: period,
       roi,
@@ -191,7 +193,7 @@ async function fetchPeriod(
       trades_count: t.tradeCount || null,
       arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
-      avatar_url: t.userPhotoUrl || null,
+      avatar_url: t.userPhotoUrl || t.avatarUrl || null,
     })
   }
 
