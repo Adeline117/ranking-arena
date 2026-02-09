@@ -302,7 +302,7 @@ function MemberRow({ member }: MemberRowProps): React.ReactElement {
   )
 }
 
-export function MembersListModal({ members, memberCount, loading, language, onClose }: MembersListModalProps): React.ReactElement {
+export function MembersListModal({ members, memberCount, loading, language: _language, onClose }: MembersListModalProps): React.ReactElement {
   const { t } = useLanguage()
   const title = `${t('groupMembers')} (${memberCount})`
 
