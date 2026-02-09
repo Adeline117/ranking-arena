@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../../base'
 import { useLanguage } from '../../../Providers/LanguageProvider'
+import { CompactErrorBoundary } from '../../../utils/ErrorBoundary'
 
 // Lazy load heavy chart component
 const TradingViewShell = dynamic(() => import('../../TradingViewShell'), {
@@ -122,7 +123,9 @@ export function EquityCurveSection({
             border: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
-          <TradingViewShell symbol={traderHandle} timeframe={period} />
+          <CompactErrorBoundary>
+            <TradingViewShell symbol={traderHandle} timeframe={period} />
+          </CompactErrorBoundary>
         </Box>
       )}
     </Box>
