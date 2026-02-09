@@ -297,6 +297,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
           roi90d={performance?.roi_90d}
           maxDrawdown={performance?.max_drawdown}
           winRate={performance?.win_rate}
+          currentUserId={currentUserId}
         />
 
         {/* Tabs */}

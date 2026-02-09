@@ -6,6 +6,7 @@ import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TraderPerformance } from '@/lib/data/trader'
 import { Sparkline } from '@/app/components/ui/Sparkline'
+import { ScoreRadar } from '@/app/components/ranking/ScoreRadar'
 import { getScoreColor as getArenaScoreColor } from '@/lib/utils/score-colors'
 
 const arenaScoreColor = (score: number) => getArenaScoreColor(score)
@@ -614,36 +615,51 @@ export default function OverviewPerformanceCard({
                 </Box>
               </Box>
 
-              {/* 分数条 */}
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                <ScoreBar
-                  label={t('returnScore')}
-                  score={periodReturnScore ?? null}
-                  maxScore={70}
-                  isVisible={isVisible}
-                  delay={500}
-                />
-                <ScoreBar
-                  label={t('pnlScore')}
-                  score={periodPnlScore ?? null}
-                  maxScore={15}
-                  isVisible={isVisible}
-                  delay={550}
-                />
-                <ScoreBar
-                  label={t('drawdownScore')}
-                  score={periodDrawdownScore ?? null}
-                  maxScore={8}
-                  isVisible={isVisible}
-                  delay={600}
-                />
-                <ScoreBar
-                  label={t('stabilityScore')}
-                  score={periodStabilityScore ?? null}
-                  maxScore={7}
-                  isVisible={isVisible}
-                  delay={700}
-                />
+              {/* 分数条 + 雷达图 */}
+              <Box
+                className="score-breakdown-layout"
+                style={{ display: 'flex', gap: tokens.spacing[5], alignItems: 'flex-start', flexWrap: 'wrap' }}
+              >
+                <Box style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                  <ScoreBar
+                    label={t('returnScore')}
+                    score={periodReturnScore ?? null}
+                    maxScore={70}
+                    isVisible={isVisible}
+                    delay={500}
+                  />
+                  <ScoreBar
+                    label={t('pnlScore')}
+                    score={periodPnlScore ?? null}
+                    maxScore={15}
+                    isVisible={isVisible}
+                    delay={550}
+                  />
+                  <ScoreBar
+                    label={t('drawdownScore')}
+                    score={periodDrawdownScore ?? null}
+                    maxScore={8}
+                    isVisible={isVisible}
+                    delay={600}
+                  />
+                  <ScoreBar
+                    label={t('stabilityScore')}
+                    score={periodStabilityScore ?? null}
+                    maxScore={7}
+                    isVisible={isVisible}
+                    delay={700}
+                  />
+                </Box>
+                {/* 雷达图：将4维分数映射到3轴 */}
+                <Box style={{ flex: '0 0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <ScoreRadar
+                    profitability={((periodReturnScore ?? 0) / 70) * 35}
+                    riskControl={(((periodDrawdownScore ?? 0) / 8 + (periodStabilityScore ?? 0) / 7) / 2) * 40}
+                    execution={((periodPnlScore ?? 0) / 15) * 25}
+                    arenaScore={periodArenaScore ?? 0}
+                    size={130}
+                  />
+                </Box>
               </Box>
 
               {/* 数据置信度提示 */}
