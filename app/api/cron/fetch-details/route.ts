@@ -22,8 +22,12 @@ import {
   fetchBinancePositionHistory,
   fetchBinanceStatsDetail,
   fetchBybitEquityCurve,
+  fetchBybitPositionHistory,
   fetchBybitStatsDetail,
   fetchOkxStatsDetail,
+  fetchOkxCurrentPositions,
+  fetchHyperliquidPositionHistory,
+  fetchGmxPositionHistory,
   upsertEquityCurve,
   upsertPositionHistory,
   upsertStatsDetail,
@@ -88,12 +92,16 @@ async function enrichTrader(
       }
 
       case 'bybit': {
-        const [curve, stats] = await Promise.all([
+        const [curve, positions, stats] = await Promise.all([
           fetchBybitEquityCurve(traderId, 90),
+          fetchBybitPositionHistory(traderId, 50),
           fetchBybitStatsDetail(traderId),
         ])
         if (curve.length > 0) {
           await upsertEquityCurve(supabase, source, traderId, '90D', curve)
+        }
+        if (positions.length > 0) {
+          await upsertPositionHistory(supabase, source, traderId, positions)
         }
         if (stats) {
           await upsertStatsDetail(supabase, source, traderId, '90D', stats)
@@ -102,24 +110,40 @@ async function enrichTrader(
       }
 
       case 'okx_futures': {
-        const stats = await fetchOkxStatsDetail(traderId)
+        const [stats, positions] = await Promise.all([
+          fetchOkxStatsDetail(traderId),
+          fetchOkxCurrentPositions(traderId),
+        ])
         if (stats) {
           await upsertStatsDetail(supabase, source, traderId, '90D', stats)
+        }
+        if (positions.length > 0) {
+          await upsertPositionHistory(supabase, source, traderId, positions)
+        }
+        return { success: true }
+      }
+
+      case 'hyperliquid': {
+        const positions = await fetchHyperliquidPositionHistory(traderId, 100)
+        if (positions.length > 0) {
+          await upsertPositionHistory(supabase, source, traderId, positions)
+        }
+        return { success: true }
+      }
+
+      case 'gmx': {
+        const positions = await fetchGmxPositionHistory(traderId, 50)
+        if (positions.length > 0) {
+          await upsertPositionHistory(supabase, source, traderId, positions)
         }
         return { success: true }
       }
 
       // These platforms already enrich during their main fetch cycle
-      // via their individual fetcher files. Here we just mark them as processed.
-      case 'hyperliquid':
-      case 'gmx':
+      // or don't have accessible position history APIs
       case 'aevo':
       case 'bitget_futures':
       case 'jupiter_perps': {
-        // Stats are already collected during the main fetch cycle
-        // This endpoint ensures they get refreshed periodically
-        // The individual fetchers (hyperliquid.ts, gmx.ts, etc.) handle
-        // their own enrichment when called from the platform cron
         return { success: true }
       }
 
