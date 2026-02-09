@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useRealtimePrices, type PriceFlashInfo } from '@/lib/hooks/useRealtimePrices'
 import MarketTable, { Column } from './MarketTable'
 
 interface SpotCoin {
@@ -39,12 +40,41 @@ function ChangeCell({ value }: { value: number | null }) {
   return <span style={{ color, fontWeight: 500 }}>{value >= 0 ? '+' : ''}{value.toFixed(2)}%</span>
 }
 
+function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo }) {
+  const bg = flash?.direction === 'up'
+    ? 'rgba(22, 199, 132, 0.25)'
+    : flash?.direction === 'down'
+      ? 'rgba(234, 57, 67, 0.25)'
+      : 'transparent'
+  const color = flash?.direction === 'up'
+    ? tokens.colors.accent.success
+    : flash?.direction === 'down'
+      ? tokens.colors.accent.error
+      : undefined
+
+  return (
+    <span
+      style={{
+        fontFamily: tokens.typography.fontFamily.mono.join(','),
+        transition: 'background-color 0.3s ease, color 0.3s ease',
+        backgroundColor: bg,
+        color,
+        borderRadius: 3,
+        padding: '0 2px',
+      }}
+    >
+      {value}
+    </span>
+  )
+}
+
 export default function SpotMarket() {
   const { t } = useLanguage()
   const [data, setData] = useState<SpotCoin[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const { prices: realtimePrices, flashes } = useRealtimePrices({ enabled: true })
 
   useEffect(() => {
     fetch('/api/market/spot')
@@ -70,11 +100,24 @@ export default function SpotMarket() {
     })
   }
 
+  // Merge realtime prices into data
+  const merged = useMemo(() => {
+    return data.map((coin) => {
+      const rt = realtimePrices[coin.symbol.toUpperCase()]
+      if (!rt) return coin
+      return {
+        ...coin,
+        price: rt.price ?? coin.price,
+        change24h: rt.change24h ?? coin.change24h,
+      }
+    })
+  }, [data, realtimePrices])
+
   const filtered = useMemo(() => {
-    if (!search) return data
+    if (!search) return merged
     const q = search.toLowerCase()
-    return data.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
-  }, [data, search])
+    return merged.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
+  }, [merged, search])
 
   const columns: Column<SpotCoin>[] = [
     {
@@ -113,7 +156,7 @@ export default function SpotMarket() {
       label: t('lastPrice') || '最新价',
       width: '18%',
       sortable: true,
-      render: (r) => <span style={{ fontFamily: tokens.typography.fontFamily.mono.join(',') }}>{formatPrice(r.price)}</span>,
+      render: (r) => <FlashPrice value={formatPrice(r.price)} flash={flashes[r.symbol.toUpperCase()]} />,
     },
     {
       key: 'change24h',
