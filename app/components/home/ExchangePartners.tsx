@@ -6,52 +6,76 @@ import { useLanguage } from '../Providers/LanguageProvider'
 const EXCHANGES = [
   'Binance', 'OKX', 'Bybit', 'Bitget', 'MEXC', 'KuCoin',
   'Gate.io', 'HTX', 'CoinEx', 'BingX', 'Phemex', 'WEEX',
+  'Aevo', 'Hyperliquid', 'GMX', 'dYdX', 'Jupiter', 'Vertex',
+  'Drift', 'Toobit', 'BTSE', 'Crypto.com',
 ]
 
 export default function ExchangePartners() {
-  const { t } = useLanguage()
+  const { language } = useLanguage()
+
+  // Double the list for seamless loop
+  const doubled = [...EXCHANGES, ...EXCHANGES]
 
   return (
     <div style={{
-      textAlign: 'center',
-      padding: '24px 0 8px',
-      marginBottom: 8,
+      overflow: 'hidden',
+      padding: '12px 0',
+      borderBottom: `1px solid ${tokens.colors.border.primary}`,
+      position: 'relative',
     }}>
+      {/* Fade edges */}
       <div style={{
-        fontSize: 12,
-        fontWeight: 600,
-        color: tokens.colors.text.tertiary,
-        textTransform: 'uppercase',
-        letterSpacing: '0.08em',
-        marginBottom: 14,
-      }}>
-        {t('exchangePartnersTitle')}
-      </div>
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
+        background: `linear-gradient(to right, ${tokens.colors.bg.primary}, transparent)`,
+        zIndex: 1, pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
+        background: `linear-gradient(to left, ${tokens.colors.bg.primary}, transparent)`,
+        zIndex: 1, pointerEvents: 'none',
+      }} />
+
       <div style={{
         display: 'flex',
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-        gap: '8px 16px',
-        maxWidth: 600,
-        margin: '0 auto',
+        alignItems: 'center',
+        gap: 24,
+        animation: 'exchange-scroll 30s linear infinite',
+        width: 'max-content',
       }}>
-        {EXCHANGES.map((name) => (
+        <span style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: tokens.colors.text.tertiary,
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          flexShrink: 0,
+          paddingRight: 8,
+        }}>
+          {language === 'zh' ? '数据来源' : 'Sources'}
+        </span>
+        {doubled.map((name, i) => (
           <span
-            key={name}
+            key={`${name}-${i}`}
             style={{
               fontSize: 13,
               fontWeight: 600,
               color: tokens.colors.text.secondary,
-              padding: '4px 8px',
-              borderRadius: 6,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              background: tokens.colors.bg.secondary,
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              transition: `color ${tokens.transition.fast}`,
             }}
           >
             {name}
           </span>
         ))}
       </div>
+
+      <style>{`
+        @keyframes exchange-scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
     </div>
   )
 }

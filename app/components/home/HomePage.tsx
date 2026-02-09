@@ -10,7 +10,7 @@ import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 import Footer from '../layout/Footer'
 import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
-// ExchangePartners removed per Adeline's request
+import ExchangePartners from './ExchangePartners'
 import GuestSignupPrompt from './GuestSignupPrompt'
 import HomePageClient from './HomePageClient'
 // HomePageWithSubNav removed from homepage - only used in groups page
@@ -20,7 +20,7 @@ import type { InitialTrader } from '@/lib/getInitialTraders'
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
-const MarketOverviewBar = lazy(() => import('../market/MarketOverviewBar'))
+// MarketOverviewBar moved to /market page
 
 interface HomePageProps {
   initialTraders?: InitialTrader[]
@@ -68,9 +68,7 @@ export default function HomePage({
           padding: '16px 16px',
         }}
       >
-        <Suspense fallback={null}>
-          <MarketOverviewBar />
-        </Suspense>
+        <ExchangePartners />
         <ThreeColumnLayout
           leftSidebar={
             <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
