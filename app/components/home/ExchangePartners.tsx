@@ -47,13 +47,13 @@ export default function ExchangePartners() {
     <div style={{
       overflow: 'hidden',
       padding: '10px 0',
-      borderBottom: `1px solid ${tokens.colors.border.primary}`,
+      borderBottom: `1px solid var(--color-border-primary)`,
       position: 'relative',
     }}>
       {/* Fade edges */}
       <div style={{
         position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
-        background: `linear-gradient(to right, ${tokens.colors.bg.primary}, transparent)`,
+        background: `linear-gradient(to right, var(--color-bg-primary), transparent)`,
         zIndex: 1, pointerEvents: 'none',
       }} />
       <div style={{

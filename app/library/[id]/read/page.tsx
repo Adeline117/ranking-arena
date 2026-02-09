@@ -309,6 +309,7 @@ export default function ReadPage() {
   const touchStartY = useRef(0)
   const toolbarTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const contentAreaRef = useRef<HTMLDivElement>(null)
+  const readerContainerRef = useRef<HTMLDivElement>(null)
 
   const themeColors = THEME_PRESETS[theme]
   const fontSizeConfig = FONT_SIZES[fontSize]
@@ -566,17 +567,27 @@ export default function ReadPage() {
     }
   }, [currentPage, totalPages, id])
 
+  // Render PDF page when ready, using ResizeObserver for reliable initial sizing
   useEffect(() => {
-    if (contentMode === 'pdf' && pdfDoc && totalPages > 0) {
-      // Initial render may fail if container not sized yet, retry with increasing delays
+    if (contentMode !== 'pdf' || !pdfDoc || totalPages <= 0) return
+    const canvas = canvasRef.current
+    const container = canvas?.parentElement
+    if (!container) return
+
+    // If container has valid size, render immediately
+    if (container.clientWidth > 0 && container.clientHeight > 0) {
       renderCurrentPage()
-      if (currentPage === 1) {
-        const t1 = setTimeout(() => renderCurrentPage(), 200)
-        const t2 = setTimeout(() => renderCurrentPage(), 600)
-        const t3 = setTimeout(() => renderCurrentPage(), 1200)
-        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
-      }
     }
+
+    // Also observe for layout changes (handles first mount when container isn't sized yet)
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+        renderCurrentPage()
+      }
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
   }, [pdfDoc, currentPage, totalPages, renderCurrentPage, contentMode])
 
   // Save HTML progress on page change
@@ -682,6 +693,15 @@ export default function ReadPage() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [goNext, goPrev, goToPage, totalPages, toggleFullscreen, toggleBookmark])
 
+  // Auto-focus reader container for immediate keyboard navigation
+  useEffect(() => {
+    if (!loading && !pdfLoading && !htmlLoading && book && !needsUpgrade && !error) {
+      // Small delay to ensure DOM is ready
+      const t = setTimeout(() => readerContainerRef.current?.focus(), 100)
+      return () => clearTimeout(t)
+    }
+  }, [loading, pdfLoading, htmlLoading, book, needsUpgrade, error])
+
   // Auto-hide toolbar
   useEffect(() => {
     if (showToolbar) {
@@ -772,12 +792,16 @@ export default function ReadPage() {
   const currentHtmlPage = contentMode === 'html' ? (htmlPages[currentPage - 1] || '') : ''
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column',
-      background: themeColors.bg, color: themeColors.text,
-      transition: 'background 0.4s ease, color 0.4s ease',
-      userSelect: contentMode === 'html' ? 'text' : 'none', overflow: 'hidden',
-    }}>
+    <div
+      ref={readerContainerRef}
+      tabIndex={-1}
+      style={{
+        position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column',
+        background: themeColors.bg, color: themeColors.text,
+        transition: 'background 0.4s ease, color 0.4s ease',
+        userSelect: contentMode === 'html' ? 'text' : 'none', overflow: 'hidden',
+        outline: 'none',
+      }}>
 
       {/* ─── Breadcrumb (visible when toolbar shown) ──────── */}
       <div style={{
@@ -800,16 +824,32 @@ export default function ReadPage() {
       </div>
 
       {/* ─── Progress Bar (top, always visible) ──────────── */}
-      <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 3, zIndex: 150,
-        background: 'var(--color-overlay-subtle)',
-      }}>
+      <div
+        onClick={handleProgressClick}
+        style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: showToolbar ? 4 : 3, zIndex: 150,
+          background: 'var(--color-overlay-subtle)',
+          cursor: 'pointer', transition: 'height 0.2s ease',
+        }}
+      >
         <div style={{
           height: '100%', width: `${progressPercent}%`,
           background: 'var(--color-accent-primary)',
           transition: 'width 0.3s ease',
+          borderRadius: '0 2px 2px 0',
         }} />
       </div>
+
+      {/* ─── Page info (shown when toolbar hidden) ────────── */}
+      {!showToolbar && totalPages > 0 && (
+        <div style={{
+          position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 90, fontSize: 11, color: 'var(--color-text-quaternary)',
+          pointerEvents: 'none', opacity: 0.6,
+        }}>
+          {currentPage} / {totalPages}
+        </div>
+      )}
 
       {/* ─── Top Toolbar ─────────────────────────────────── */}
       <div style={{
