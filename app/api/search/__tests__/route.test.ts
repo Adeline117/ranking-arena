@@ -39,8 +39,7 @@ jest.mock('@/lib/api/middleware', () => ({
 }))
 
 jest.mock('@/lib/api/response', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  success: (data: any) => { const { NextResponse } = require('next/server'); return NextResponse.json(data) },
+  success: (data: any) => { const { NextResponse } = require('next/server'); return NextResponse.json(data) }, // eslint-disable-line @typescript-eslint/no-require-imports
 }))
 
 import { NextRequest } from 'next/server'

@@ -5,7 +5,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
-import { Box, Text } from '@/app/components/base'
+import { Box } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -56,7 +56,7 @@ function TabContent({ tab }: { tab: string }) {
 }
 
 export default function MarketPage() {
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
 
   useEffect(() => {

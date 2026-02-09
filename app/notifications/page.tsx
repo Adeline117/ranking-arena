@@ -117,7 +117,7 @@ function NotificationIconSvg({ type, size = 16 }: { type: string; size?: number 
   }
 }
 
-function getNotificationIcon(type: string): string {
+function _getNotificationIcon(type: string): string {
   return NOTIFICATION_TYPE_CONFIG[type]?.icon || 'bell'
 }
 

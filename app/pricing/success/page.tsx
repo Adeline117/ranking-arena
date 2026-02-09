@@ -40,7 +40,7 @@ const LoadingSpinner = ({ size = 24 }: { size?: number }) => (
 export default function PaymentSuccessPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { language, t } = useLanguage()
+  const { language: _language, t } = useLanguage()
   const { showToast } = useToast()
   const { refresh: refreshPremium } = usePremium()
   

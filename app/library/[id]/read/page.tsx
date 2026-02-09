@@ -255,7 +255,7 @@ export default function ReadPage() {
 
   // HTML/text state
   const [htmlContent, setHtmlContent] = useState<string>('')
-  const [htmlChapters, setHtmlChapters] = useState<HtmlChapter[]>([])
+  const [_htmlChapters, setHtmlChapters] = useState<HtmlChapter[]>([])
   const [htmlPages, setHtmlPages] = useState<string[]>([])
   const [htmlLoading, setHtmlLoading] = useState(false)
 

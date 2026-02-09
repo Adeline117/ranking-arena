@@ -26,7 +26,7 @@ interface PostData {
 }
 
 export default function PostDetailPage(props: { params: Promise<{ id: string }> }) {
-  const router = useRouter()
+  const _router = useRouter()
   const { email } = useAuthSession()
   const { language, t } = useLanguage()
   const [postId, setPostId] = useState<string | null>(null)
