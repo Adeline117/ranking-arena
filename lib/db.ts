@@ -13,7 +13,7 @@
  */
 
 import { Pool, type PoolConfig } from 'pg';
-import { createServerClient as createSupabaseServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient as createSupabaseServerClient } from '@supabase/ssr';
 import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
 
 let pool: Pool | null = null;

@@ -22,7 +22,7 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 const TraderPageV2 = dynamic(() => import('@/app/components/trader/TraderPageV2'), {
   loading: () => <RankingSkeleton />,
 })
-const TraderAboutCard = dynamic(() => import('@/app/components/trader/TraderAboutCard'))
+const _TraderAboutCard = dynamic(() => import('@/app/components/trader/TraderAboutCard'))
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {

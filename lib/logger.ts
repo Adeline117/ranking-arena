@@ -6,7 +6,7 @@
  * - Production: sends to Sentry and logs minimal info
  */
 
-type LogLevel = 'error' | 'warn' | 'info' | 'debug'
+type _LogLevel = 'error' | 'warn' | 'info' | 'debug'
 
 interface LogContext {
   [key: string]: unknown

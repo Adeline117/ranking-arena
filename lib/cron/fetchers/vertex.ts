@@ -23,7 +23,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   type FetchResult,
-  type TraderData,
+  
 } from './shared'
 
 const SOURCE = 'vertex'
@@ -39,8 +39,8 @@ const ENDPOINTS_TRIED = [
 // ── Per-period fetch ──
 
 async function fetchPeriod(
-  supabase: SupabaseClient,
-  period: string
+  _supabase: SupabaseClient,
+  _period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
   // Return informative error about API limitations
   return {

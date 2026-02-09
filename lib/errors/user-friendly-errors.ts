@@ -252,7 +252,7 @@ export const ERROR_MAP: Record<string, UserFriendlyError> = {
  */
 export function getUserFriendlyError(
   error: unknown,
-  language: 'en' | 'zh' = 'en'
+  _language: 'en' | 'zh' = 'en'
 ): UserFriendlyError {
   // 提取错误代码
   const errorCode = extractErrorCode(error)

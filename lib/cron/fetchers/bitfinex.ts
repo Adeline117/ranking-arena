@@ -17,7 +17,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { type FetchResult, sleep } from './shared'
+import { type FetchResult } from './shared'
 
 const SOURCE = 'bitfinex'
 

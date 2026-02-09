@@ -393,7 +393,7 @@ export class BybitFuturesConnector {
    */
   private calculateArenaScore(
     metrics: SnapshotMetrics,
-    window: SnapshotWindow
+    _window: SnapshotWindow
   ): { total: number; returnScore: number; drawdownScore: number; stabilityScore: number } {
     const roi = metrics.roi
     let returnScore: number

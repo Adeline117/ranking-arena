@@ -18,7 +18,7 @@ interface TraderLink {
   created_at: string
 }
 
-export function TraderLinksSection({ userId }: { userId: string }) {
+export function TraderLinksSection({ userId: _userId }: { userId: string }) {
   const [links, setLinks] = useState<TraderLink[]>([])
   const [loadingLinks, setLoadingLinks] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
