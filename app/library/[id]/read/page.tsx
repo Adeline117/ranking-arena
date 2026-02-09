@@ -395,7 +395,7 @@ export default function ReadPage() {
   // ─── Load PDF ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!book || contentMode !== 'pdf') return
-    const url = book.pdf_url
+    const url = book.pdf_url || (book.file_key ? `https://cdn.arenafi.org/${book.file_key}` : null)
     if (!url) return
 
     setPdfLoading(true)
@@ -554,7 +554,14 @@ export default function ReadPage() {
   }, [currentPage, totalPages, id])
 
   useEffect(() => {
-    if (contentMode === 'pdf' && pdfDoc && totalPages > 0) renderCurrentPage()
+    if (contentMode === 'pdf' && pdfDoc && totalPages > 0) {
+      // Initial render may fail if container not sized yet, retry after a short delay
+      renderCurrentPage()
+      if (currentPage === 1) {
+        const timer = setTimeout(() => renderCurrentPage(), 300)
+        return () => clearTimeout(timer)
+      }
+    }
   }, [pdfDoc, currentPage, totalPages, renderCurrentPage, contentMode])
 
   // Save HTML progress on page change
@@ -935,13 +942,13 @@ export default function ReadPage() {
           <div onClick={() => setShowToc(false)} style={{ position: 'fixed', inset: 0, background: 'var(--color-overlay-dark)', zIndex: 200 }} />
           <div style={{
             position: 'fixed', top: 0, left: 0, bottom: 0, width: 320, maxWidth: '85vw', zIndex: 201,
-            background: theme === 'dark' ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)',
+            background: themeColors.pageBg,
             boxShadow: '4px 0 24px var(--color-overlay-medium)', overflow: 'auto',
           }}>
             <div style={{
               position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '14px 16px', borderBottom: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
-              background: theme === 'dark' ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)',
+              background: themeColors.pageBg,
             }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: theme === 'dark' ? 'var(--color-on-accent)' : 'var(--color-text-primary)' }}>
                 {isZh ? '目录' : 'Contents'}
@@ -985,7 +992,7 @@ export default function ReadPage() {
           <div onClick={() => setShowSettings(false)} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
           <div style={{
             position: 'fixed', top: 56, right: 12, zIndex: 201,
-            background: theme === 'dark' ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)',
+            background: themeColors.pageBg,
             borderRadius: tokens.radius.xl, boxShadow: '0 8px 32px var(--color-overlay-medium)',
             padding: '20px 24px', width: 280,
             border: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
@@ -1253,7 +1260,7 @@ export default function ReadPage() {
             display: 'block', width: '100%', textAlign: 'left',
             padding: '10px 16px', paddingLeft: 16 + level * 20,
             background: 'none', border: 'none',
-            color: theme === 'dark' ? '#e0e0e0' : '#1a1a2e',
+            color: themeColors.text,
             cursor: 'pointer', fontSize: 14, fontWeight: 500, lineHeight: 1.5,
             transition: 'background 0.15s',
           }}
@@ -1279,15 +1286,15 @@ export default function ReadPage() {
             background: currentPage === item.pageIndex + 1
               ? (theme === 'dark' ? 'var(--color-accent-primary-15)' : 'var(--color-accent-primary-08)')
               : 'none',
-            border: 'none', color: theme === 'dark' ? '#e0e0e0' : '#1a1a2e',
+            border: 'none', color: themeColors.text,
             cursor: 'pointer', fontSize: 14, fontWeight: 500, lineHeight: 1.5, transition: 'background 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'var(--overlay-hover)' : 'var(--overlay-hover)'}
+          onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
           onMouseLeave={e => e.currentTarget.style.background = currentPage === item.pageIndex + 1
-            ? (theme === 'dark' ? 'var(--color-accent-primary-15)' : 'var(--color-accent-primary-08)') : 'transparent'}
+            ? (theme === 'dark' ? 'rgba(139,111,168,0.2)' : 'rgba(139,111,168,0.1)') : 'transparent'}
         >
           <span style={{ flex: 1, marginRight: 12 }}>{item.title}</span>
-          <span style={{ opacity: 0.35, fontSize: 11, flexShrink: 0 }}>{item.pageIndex + 1}</span>
+          <span style={{ opacity: 0.5, fontSize: 11, flexShrink: 0 }}>{item.pageIndex + 1}</span>
         </button>
         {item.children && renderTocItems(item.children)}
       </div>

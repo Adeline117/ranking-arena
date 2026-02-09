@@ -28,7 +28,7 @@ interface FlashNews {
   content?: string
   source: string
   source_url?: string
-  category?: 'crypto' | 'macro' | 'defi' | 'regulation' | 'market'
+  category?: 'crypto' | 'macro' | 'defi' | 'regulation' | 'market' | 'btc_eth' | 'altcoin' | 'exchange'
   importance?: 'breaking' | 'important' | 'normal'
   tags?: string[]
   published_at?: string
