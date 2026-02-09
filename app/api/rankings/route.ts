@@ -54,7 +54,8 @@ export async function GET(request: NextRequest) {
 
     // Parse & validate window (required)
     const window = searchParams.get('window') as RankingWindow | null;
-    if (!window || !VALID_WINDOWS.includes(window)) {
+    const normalizedWindow = window?.toLowerCase() as RankingWindow;
+    if (!normalizedWindow || !VALID_WINDOWS.includes(normalizedWindow)) {
       return NextResponse.json(
         { error: 'Invalid or missing window parameter. Must be one of: 7d, 30d, 90d' },
         { status: 400 },
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
 
     const query: RankingsQuery = {
-      window,
+      window: normalizedWindow,
       category: category || undefined,
       // Cast to Platform for type compat - database uses granular names like 'htx_futures'
       platform: (platform || undefined) as Platform | undefined,
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
     };
 
     // Use tiered cache (memory → Redis → DB) for rankings
-    const cacheKey = `api:rankings:${window}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${offset}:${minPnl || ''}:${minTrades || ''}`
+    const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${offset}:${minPnl || ''}:${minTrades || ''}`
     const result = await tieredGetOrSet(
       cacheKey,
       () => getRankingsFallback(query),
