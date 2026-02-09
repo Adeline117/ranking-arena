@@ -14,6 +14,7 @@ import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import RecommendedGroups from '@/app/components/sidebar/RecommendedGroups'
 
 const MarketOverviewBar = lazy(() => import('@/app/components/market/MarketOverviewBar'))
+const PriceTicker = lazy(() => import('@/app/components/market/PriceTicker'))
 const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))
 const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge'))
 const TopMovers = lazy(() => import('@/app/components/market/TopMovers'))
@@ -38,6 +39,11 @@ export default function MarketPage() {
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
+
+      {/* Real-time price ticker */}
+      <Suspense fallback={null}>
+        <PriceTicker />
+      </Suspense>
 
       {/* Market Overview Bar */}
       <Suspense fallback={<LoadingCard />}>
