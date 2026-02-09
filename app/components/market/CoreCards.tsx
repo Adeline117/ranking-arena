@@ -18,12 +18,7 @@ interface ExchangeInfo {
   trade_volume_24h_btc: number
 }
 
-interface TopTrader {
-  handle: string
-  display_name: string
-  avatar_url: string | null
-  pnl_pct: number
-}
+// TopTrader interface removed - trader card removed from market page
 
 function CardWrapper({ title, linkText, linkHref, children }: {
   title: string
@@ -126,8 +121,6 @@ export default function CoreCards() {
   const [gainers, setGainers] = useState<CoinRow[]>([])
   const [losers, setLosers] = useState<CoinRow[]>([])
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
-  const [traders, setTraders] = useState<TopTrader[]>([])
-
   useEffect(() => {
     // Fetch market data for gainers/losers
     fetch('/api/market')
@@ -146,27 +139,7 @@ export default function CoreCards() {
       .then(json => { if (Array.isArray(json)) setExchanges(json.slice(0, 5)) })
       .catch(() => {})
 
-    // Fetch top traders
-    fetch('/api/rankings?limit=3')
-      .then(r => r.json())
-      .then(json => {
-        if (Array.isArray(json?.rankings)) {
-          setTraders(json.rankings.slice(0, 3).map((t: { handle?: string; username?: string; display_name?: string; avatar_url?: string | null; pnl_pct?: number; roi?: number }) => ({
-            handle: t.handle || t.username || '',
-            display_name: t.display_name || t.handle || '',
-            avatar_url: t.avatar_url || null,
-            pnl_pct: t.pnl_pct ?? t.roi ?? 0,
-          })))
-        }
-      })
-      .catch(() => {
-        setTraders([
-          { handle: 'whale_hunter', display_name: 'WhaleHunter', avatar_url: null, pnl_pct: 342.5 },
-          { handle: 'crypto_sage', display_name: 'CryptoSage', avatar_url: null, pnl_pct: 218.3 },
-          { handle: 'alpha_seeker', display_name: 'AlphaSeeker', avatar_url: null, pnl_pct: 156.7 },
-        ])
-      })
-      .finally(() => setLoading(false))
+    setLoading(false)
   }, [])
 
   return (
@@ -221,74 +194,6 @@ export default function CoreCards() {
         )}
       </CardWrapper>
 
-      {/* Arena Hot Traders */}
-      <CardWrapper title="Arena热门交易员" linkText="查看全部" linkHref="/rankings">
-        {traders.length === 0 ? (
-          <div style={{ height: 120 }} className="skeleton" />
-        ) : (
-          traders.map((trader, i) => (
-            <Link
-              key={trader.handle}
-              href={`/trader/${trader.handle}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '6px 0',
-                textDecoration: 'none',
-              }}
-            >
-              {/* Rank number */}
-              <span style={{
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 11,
-                fontWeight: 700,
-                background: i === 0 ? 'rgba(255, 215, 0, 0.2)' : i === 1 ? 'rgba(192, 192, 192, 0.2)' : 'rgba(205, 127, 50, 0.2)',
-                color: i === 0 ? 'var(--color-medal-gold)' : i === 1 ? 'var(--color-medal-silver)' : 'var(--color-medal-bronze)',
-                flexShrink: 0,
-              }}>
-                {i + 1}
-              </span>
-              {/* Avatar */}
-              <div style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                background: tokens.colors.bg.tertiary,
-                overflow: 'hidden',
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                {trader.avatar_url ? (
-                  <img src={trader.avatar_url} alt={trader.display_name || 'Trader avatar'} width={28} height={28} loading="lazy" style={{ borderRadius: '50%' }} />
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2">
-                    <circle cx="12" cy="8" r="4" />
-                    <path d="M20 21a8 8 0 10-16 0" />
-                  </svg>
-                )}
-              </div>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {trader.display_name}
-              </span>
-              <span style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: trader.pnl_pct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-              }}>
-                {trader.pnl_pct >= 0 ? '+' : ''}{trader.pnl_pct.toFixed(1)}%
-              </span>
-            </Link>
-          ))
-        )}
-      </CardWrapper>
     </div>
   )
 }
