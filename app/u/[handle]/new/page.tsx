@@ -1006,6 +1006,12 @@ export default function NewPostPage() {
                 onSelect={handleTextareaSelect}
                 onClick={handleTextareaSelect}
                 onKeyUp={handleTextareaSelect}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && title.trim() && !loading) {
+                    e.preventDefault()
+                    handleSubmit()
+                  }
+                }}
                 maxLength={CONTENT_MAX_LENGTH}
                 rows={12}
                 style={{
@@ -1056,9 +1062,14 @@ export default function NewPostPage() {
                 }}
               />
             </div>
-            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-              {t('mentionTip')}
-            </Text>
+            <Box style={{ display: 'flex', justifyContent: 'space-between', marginTop: tokens.spacing[1] }}>
+              <Text size="xs" color="tertiary">
+                {t('mentionTip')}
+              </Text>
+              <Text size="xs" color="tertiary">
+                Ctrl+Enter {language === 'zh' ? '快速发布' : 'to publish'}
+              </Text>
+            </Box>
           </Box>
 
           {/* 投票功能开关 */}

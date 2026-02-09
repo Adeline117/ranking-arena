@@ -722,6 +722,12 @@ export default function EditPostPage() {
                 onSelect={handleTextareaSelect}
                 onClick={handleTextareaSelect}
                 onKeyUp={handleTextareaSelect}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && title.trim() && !saving) {
+                    e.preventDefault()
+                    handleSubmit()
+                  }
+                }}
                 maxLength={CONTENT_MAX_LENGTH}
                 rows={12}
                 style={{
