@@ -102,7 +102,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
         <div style={{
           marginBottom: 40,
           padding: '40px 32px',
-          borderRadius: 16,
+          borderRadius: tokens.radius.xl,
           background: tokens.gradient.mesh + ', ' + tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
           position: 'relative',
@@ -134,7 +134,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
             </h1>
             <p style={{
               color: tokens.colors.text.secondary,
-              fontSize: 15,
+              fontSize: 16,
               lineHeight: 1.5,
               maxWidth: 480,
             }}>
@@ -182,7 +182,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                   onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
                 >
                   <div style={{
-                    width: 160, height: 240, borderRadius: 12,
+                    width: 160, height: 240, borderRadius: tokens.radius.lg,
                     overflow: 'hidden',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15)',
                     marginBottom: 10,
@@ -263,7 +263,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                   }}
                   style={{
                     padding: '8px 20px',
-                    borderRadius: 999,
+                    borderRadius: tokens.radius.full,
                     fontSize: 13,
                     fontWeight: active ? 600 : 500,
                     border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
@@ -314,7 +314,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
           }}>
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10, animationDelay: `${i * 40}ms` }}>
-                <div className="skeleton" style={{ aspectRatio: '2/3', borderRadius: 12 }} />
+                <div className="skeleton" style={{ aspectRatio: '2/3', borderRadius: tokens.radius.lg }} />
                 <div className="skeleton" style={{ height: 14, width: '80%', borderRadius: 6 }} />
                 <div className="skeleton" style={{ height: 12, width: '50%', borderRadius: 6 }} />
               </div>
@@ -370,7 +370,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                     {item.publish_date || item.created_at?.substring(0, 10) || ''}
                   </div>
                   <div style={{
-                    fontSize: 15, fontWeight: 700, color: tokens.colors.text.primary,
+                    fontSize: 16, fontWeight: 700, color: tokens.colors.text.primary,
                     marginBottom: 4, lineHeight: 1.4,
                   }}>
                     {isZh ? (item.title_zh || item.title) : (item.title_en || item.title)}

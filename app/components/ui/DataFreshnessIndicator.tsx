@@ -157,7 +157,7 @@ export default function DataFreshnessIndicator({
           style={{
             color: tierInfo.color,
             fontSize: size === 'sm' ? tokens.typography.fontSize.xs : tokens.typography.fontSize.xs,
-            lineHeight: 1,
+            lineHeight: 1.2,
           }}
         >
           {tierInfo.label}
@@ -241,7 +241,7 @@ export function UpdateTierBadge({
         style={{
           color,
           fontSize: tokens.typography.fontSize.xs,
-          lineHeight: 1,
+          lineHeight: 1.2,
         }}
       >
         {label}

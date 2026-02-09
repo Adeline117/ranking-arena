@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Rendition, Book, NavItem, Contents } from 'epubjs'
 import AudioReader from './AudioReader'
 import { supabase } from '@/lib/supabase/client'
+import { tokens } from '@/lib/design-tokens'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -721,17 +722,17 @@ export default function EpubReader({
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '添加高亮和笔记' : 'Add Highlight & Note'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: panelBg, color: panelText, borderRadius: 16, padding: '24px 28px',
+            background: panelBg, color: panelText, borderRadius: tokens.radius.xl, padding: '24px 28px',
             width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: '0 12px 40px rgba(0,0,0,0.3)',
             border: `1px solid ${panelBorder}`,
           }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
               {isZh ? '添加高亮和笔记' : 'Add Highlight & Note'}
             </h3>
             <p style={{
               fontSize: 13, lineHeight: 1.6, marginBottom: 12, padding: '8px 12px',
               background: panelSubtle,
-              borderRadius: 8, borderLeft: `3px solid ${highlightColor}`,
+              borderRadius: tokens.radius.md, borderLeft: `3px solid ${highlightColor}`,
               maxHeight: 80, overflow: 'auto',
             }}>
               {pendingHighlight.text.slice(0, 200)}{pendingHighlight.text.length > 200 ? '...' : ''}
@@ -756,7 +757,7 @@ export default function EpubReader({
               onChange={e => setNoteText(e.target.value)}
               placeholder={isZh ? '添加笔记（可选）...' : 'Add a note (optional)...'}
               style={{
-                width: '100%', minHeight: 72, padding: '10px 12px', borderRadius: 8,
+                width: '100%', minHeight: 72, padding: '10px 12px', borderRadius: tokens.radius.md,
                 border: `1px solid ${panelBorder}`, background: panelSubtle,
                 color: panelText, fontSize: 13, resize: 'vertical', outline: 'none',
                 fontFamily: 'inherit',
@@ -765,13 +766,13 @@ export default function EpubReader({
 
             <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
               <button onClick={() => { setShowNoteInput(false); setPendingHighlight(null) }} style={{
-                padding: '8px 18px', borderRadius: 8, border: `1px solid ${panelBorder}`,
+                padding: '8px 18px', borderRadius: tokens.radius.md, border: `1px solid ${panelBorder}`,
                 background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 13,
               }}>
                 {isZh ? '取消' : 'Cancel'}
               </button>
               <button onClick={confirmHighlight} style={{
-                padding: '8px 18px', borderRadius: 8, border: 'none',
+                padding: '8px 18px', borderRadius: tokens.radius.md, border: 'none',
                 background: accent, color: '#fff',
                 cursor: 'pointer', fontSize: 13, fontWeight: 600,
               }}>
@@ -790,7 +791,7 @@ export default function EpubReader({
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '搜索内容' : 'Search'} style={{
             position: 'fixed', top: 60, right: 12, width: 380, maxWidth: '90vw', maxHeight: '70vh',
-            background: panelBg, color: panelText, borderRadius: 16, zIndex: 301,
+            background: panelBg, color: panelText, borderRadius: tokens.radius.xl, zIndex: 301,
             boxShadow: 'var(--shadow-lg-dark)', border: `1px solid ${panelBorder}`,
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
@@ -805,7 +806,7 @@ export default function EpubReader({
                   onKeyDown={e => { if (e.key === 'Enter') doSearch() }}
                   placeholder={isZh ? '输入关键词...' : 'Enter keyword...'}
                   style={{
-                    flex: 1, padding: '8px 12px', borderRadius: 8,
+                    flex: 1, padding: '8px 12px', borderRadius: tokens.radius.md,
                     border: `1px solid ${panelBorder}`,
                     background: panelSubtle,
                     color: panelText, fontSize: 13, outline: 'none',
@@ -813,7 +814,7 @@ export default function EpubReader({
                   autoFocus
                 />
                 <button onClick={doSearch} disabled={searching} style={{
-                  padding: '8px 16px', borderRadius: 8, border: 'none',
+                  padding: '8px 16px', borderRadius: tokens.radius.md, border: 'none',
                   background: accent, color: '#fff',
                   cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
                   opacity: searching ? 0.6 : 1,
@@ -867,7 +868,7 @@ export default function EpubReader({
               padding: '16px 16px 12px', borderBottom: `1px solid ${panelBorder}`,
             }}>
               <div>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>
+                <span style={{ fontSize: 16, fontWeight: 700 }}>
                   {isZh ? '高亮和笔记' : 'Highlights & Notes'}
                 </span>
                 <span style={{ fontSize: 12, opacity: 0.4, marginLeft: 8 }}>
@@ -1012,7 +1013,7 @@ export default function EpubReader({
                   ).join('\n\n---\n\n')
                   navigator.clipboard?.writeText(text)
                 }} style={{
-                  width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${panelBorder}`,
+                  width: '100%', padding: '8px', borderRadius: tokens.radius.md, border: `1px solid ${panelBorder}`,
                   background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 12,
                   opacity: 0.6, transition: 'opacity 0.15s',
                 }}
@@ -1035,7 +1036,7 @@ export default function EpubReader({
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '阅读统计' : 'Reading Statistics'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: panelBg, color: panelText, borderRadius: 20, padding: '28px 32px',
+            background: panelBg, color: panelText, borderRadius: tokens.radius['2xl'], padding: '28px 32px',
             width: 360, maxWidth: '90vw', zIndex: 301, boxShadow: 'var(--shadow-elevated)',
             border: `1px solid ${panelBorder}`,
           }}>
@@ -1107,7 +1108,7 @@ export default function EpubReader({
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '排版设置' : 'Typography'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: panelBg, color: panelText, borderRadius: 20, padding: '28px 32px',
+            background: panelBg, color: panelText, borderRadius: tokens.radius['2xl'], padding: '28px 32px',
             width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: 'var(--shadow-elevated)',
             border: `1px solid ${panelBorder}`,
           }}>
@@ -1242,7 +1243,7 @@ export default function EpubReader({
 function StatCard({ label, value, themeIsDark }: { label: string; value: string; themeIsDark: boolean }) {
   return (
     <div style={{
-      padding: '14px 12px', borderRadius: 12,
+      padding: '14px 12px', borderRadius: tokens.radius.lg,
       background: themeIsDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
       textAlign: 'center',
     }}>

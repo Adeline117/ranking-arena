@@ -250,7 +250,7 @@ export const TraderRow = memo(function TraderRow({
                 return style ? (
                   <span style={{
                     padding: '1px 6px',
-                    borderRadius: 8,
+                    borderRadius: tokens.radius.md,
                     fontSize: 10,
                     fontWeight: 600,
                     color: style.color,
@@ -309,7 +309,7 @@ export const TraderRow = memo(function TraderRow({
         {/* Win% */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.win_rate ? (
-            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1, fontSize: tokens.typography.fontSize.sm }}>
+            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm }}>
               {trader.win_rate.toFixed(0)}%
             </Text>
           ) : (
@@ -320,7 +320,7 @@ export const TraderRow = memo(function TraderRow({
         {/* MDD */}
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.max_drawdown ? (
-            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1, fontSize: tokens.typography.fontSize.sm }}>
+            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm }}>
               -{Math.abs(trader.max_drawdown).toFixed(0)}%
             </Text>
           ) : (
@@ -337,7 +337,7 @@ export const TraderRow = memo(function TraderRow({
             position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
             width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer', opacity: 0.4, transition: 'opacity 0.15s',
-            borderRadius: 4,
+            borderRadius: tokens.radius.sm,
           }}
           className="expand-btn"
           title={language === 'zh' ? '展开评分详情' : 'Expand score details'}

@@ -64,6 +64,7 @@ export default function PriceTicker() {
         alignItems: 'center',
         gap: 28,
         animation: 'price-ticker-scroll 40s linear infinite',
+        willChange: 'transform',
         width: 'max-content',
       }}>
         {doubled.map((coin, i) => {

@@ -395,7 +395,7 @@ export default function FlashNewsPage() {
                                 {translatedContent[item.id] && (
                                   <span style={{
                                     fontSize: 10, fontWeight: 500, marginLeft: 6,
-                                    padding: '1px 6px', borderRadius: '4px',
+                                    padding: '1px 6px', borderRadius: tokens.radius.sm,
                                     background: `${tokens.colors.accent?.translated || '#6b7280'}15`,
                                     color: tokens.colors.accent?.translated || '#6b7280',
                                     verticalAlign: 'middle',

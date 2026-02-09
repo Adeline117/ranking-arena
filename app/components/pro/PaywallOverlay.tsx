@@ -158,7 +158,7 @@ export default function PaywallOverlay({ feature, compact = false, style }: Payw
         onClick={() => router.push('/pricing')}
         style={{
           padding: '12px 32px',
-          fontSize: 15,
+          fontSize: 16,
           fontWeight: 700,
           background: 'linear-gradient(135deg, #D4A847, #C4963C)',
           color: '#fff',

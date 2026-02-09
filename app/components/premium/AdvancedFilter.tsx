@@ -236,7 +236,7 @@ export default function AdvancedFilter({
                         cursor: 'pointer',
                         fontSize: 12,
                         padding: 0,
-                        lineHeight: 1,
+                        lineHeight: 1.2,
                       }}
                     >
                       ×

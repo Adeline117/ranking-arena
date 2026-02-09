@@ -68,7 +68,7 @@ export default function FollowingFeed() {
           {isZh ? '登录后查看关注动态' : 'Login to see your following feed'}
         </p>
         <a href="/login" style={{
-          display: 'inline-block', padding: '8px 24px', borderRadius: 8,
+          display: 'inline-block', padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
@@ -82,7 +82,7 @@ export default function FollowingFeed() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {[1, 2, 3].map(i => (
-          <div key={i} className="skeleton" style={{ height: 120, borderRadius: 12 }} />
+          <div key={i} className="skeleton" style={{ height: 120, borderRadius: tokens.radius.lg }} />
         ))}
       </div>
     )
@@ -103,7 +103,7 @@ export default function FollowingFeed() {
           {isZh ? '去排行榜发现有趣的交易员吧' : 'Discover interesting traders on the leaderboard'}
         </p>
         <a href="/rankings" style={{
-          display: 'inline-block', marginTop: 16, padding: '8px 24px', borderRadius: 8,
+          display: 'inline-block', marginTop: 16, padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>

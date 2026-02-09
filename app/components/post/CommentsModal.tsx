@@ -32,7 +32,7 @@ const styles = {
   input: {
     flex: 1,
     padding: '6px 10px',
-    borderRadius: 8,
+    borderRadius: tokens.radius.md,
     border: `1px solid ${tokens.colors.border.primary}`,
     background: tokens.colors.bg.tertiary,
     color: tokens.colors.text.primary,
@@ -41,7 +41,7 @@ const styles = {
   } satisfies CSSProperties,
   submitButton: (disabled: boolean) => ({
     padding: '6px 12px',
-    borderRadius: 8,
+    borderRadius: tokens.radius.md,
     border: 'none',
     background: ARENA_PURPLE,
     color: tokens.colors.white,
@@ -106,7 +106,7 @@ function SkeletonBlock({ width, height }: { width: string; height: number }): Re
     <div style={{
       width,
       height,
-      borderRadius: 4,
+      borderRadius: tokens.radius.sm,
       background: tokens.colors.bg.tertiary,
       animation: 'pulse 1.5s ease-in-out infinite',
     }} />
@@ -321,7 +321,7 @@ export default function CommentsModal({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
-                  borderRadius: 4,
+                  borderRadius: tokens.radius.sm,
                   color: comment.user_liked ? ARENA_PURPLE : tokens.colors.text.tertiary,
                 }}
               >
@@ -337,7 +337,7 @@ export default function CommentsModal({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
-                  borderRadius: 4,
+                  borderRadius: tokens.radius.sm,
                   color: comment.user_disliked ? tokens.colors.accent.error : tokens.colors.text.tertiary,
                 }}
               >
@@ -443,7 +443,7 @@ export default function CommentsModal({
         <div
           style={{
             border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: 16,
+            borderRadius: tokens.radius.xl,
             background: tokens.colors.bg.tertiary,
             padding: '10px 14px',
             paddingBottom: 38,
@@ -513,8 +513,8 @@ export default function CommentsModal({
                     padding: 4,
                     borderRadius: 6,
                     color: showStickerPicker ? ARENA_PURPLE : tokens.colors.text.tertiary,
-                    fontSize: 15,
-                    lineHeight: 1,
+                    fontSize: 16,
+                    lineHeight: 1.2,
                     display: 'flex',
                     alignItems: 'center',
                   }}
@@ -546,8 +546,8 @@ export default function CommentsModal({
                     padding: 4,
                     borderRadius: 6,
                     color: showEmojiPicker ? ARENA_PURPLE : tokens.colors.text.tertiary,
-                    fontSize: 15,
-                    lineHeight: 1,
+                    fontSize: 16,
+                    lineHeight: 1.2,
                     display: 'flex',
                     alignItems: 'center',
                   }}
@@ -568,7 +568,7 @@ export default function CommentsModal({
                     transform: 'translateX(-50%)',
                     background: tokens.colors.bg.secondary,
                     border: `1px solid ${tokens.colors.border.primary}`,
-                    borderRadius: 12,
+                    borderRadius: tokens.radius.lg,
                     padding: 8,
                     display: 'grid',
                     gridTemplateColumns: 'repeat(5, 1fr)',
@@ -628,7 +628,7 @@ export default function CommentsModal({
                   color: tokens.colors.text.tertiary,
                   fontSize: 14,
                   fontWeight: 700,
-                  lineHeight: 1,
+                  lineHeight: 1.2,
                 }}
                 title={language === 'zh' ? '@提及用户' : '@Mention'}
               >
@@ -658,8 +658,8 @@ export default function CommentsModal({
                   padding: 4,
                   borderRadius: 6,
                   color: tokens.colors.text.tertiary,
-                  fontSize: 15,
-                  lineHeight: 1,
+                  fontSize: 16,
+                  lineHeight: 1.2,
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -679,7 +679,7 @@ export default function CommentsModal({
               disabled={submittingComment || !newComment.trim()}
               style={{
                 padding: '4px 12px',
-                borderRadius: 8,
+                borderRadius: tokens.radius.md,
                 border: 'none',
                 background: newComment.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
                 color: tokens.colors.white,

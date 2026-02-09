@@ -89,7 +89,7 @@ export default function BookshelfTab() {
           {isZh ? '登录后查看你的书架' : 'Login to see your bookshelf'}
         </p>
         <a href="/login" style={{
-          display: 'inline-block', padding: '8px 24px', borderRadius: 8,
+          display: 'inline-block', padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
@@ -131,7 +131,7 @@ export default function BookshelfTab() {
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ aspectRatio: '2/3', borderRadius: tokens.radius.lg, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
-              <div style={{ height: 12, borderRadius: 4, width: '75%', background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ height: 12, borderRadius: tokens.radius.sm, width: '75%', background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
           ))}
         </div>
@@ -148,7 +148,7 @@ export default function BookshelfTab() {
             {isZh ? '去书城发现感兴趣的书籍吧' : 'Discover books in the library'}
           </p>
           <Link href="/library" style={{
-            display: 'inline-block', padding: '10px 28px', borderRadius: 8,
+            display: 'inline-block', padding: '10px 28px', borderRadius: tokens.radius.md,
             background: tokens.colors.accent.brand, color: tokens.colors.white,
             textDecoration: 'none', fontWeight: 600, fontSize: 14,
           }}>

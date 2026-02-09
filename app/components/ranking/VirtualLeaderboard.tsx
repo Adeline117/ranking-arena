@@ -244,7 +244,7 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
         <span style={{
           fontSize: 11,
           padding: '2px 8px',
-          borderRadius: 4,
+          borderRadius: tokens.radius.sm,
           backgroundColor: tokens.colors.bg.tertiary,
           color: tokens.colors.text.secondary,
           textTransform: 'uppercase',
@@ -352,7 +352,7 @@ export function VirtualLeaderboard({
             <div style={{ 
               width: 50, 
               height: 16, 
-              borderRadius: 4,
+              borderRadius: tokens.radius.sm,
               backgroundColor: tokens.colors.bg.tertiary,
               animation: 'pulse 1.5s infinite',
             }} />
@@ -365,13 +365,13 @@ export function VirtualLeaderboard({
             <div style={{ 
               flex: 1, 
               height: 16, 
-              borderRadius: 4,
+              borderRadius: tokens.radius.sm,
               backgroundColor: tokens.colors.bg.tertiary,
             }} />
             <div style={{ 
               width: 80, 
               height: 16, 
-              borderRadius: 4,
+              borderRadius: tokens.radius.sm,
               backgroundColor: tokens.colors.bg.tertiary,
             }} />
           </div>

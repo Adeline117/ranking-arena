@@ -126,7 +126,7 @@ export default function AdminKolPage() {
                 key={app.id}
                 style={{
                   padding: 20,
-                  borderRadius: 12,
+                  borderRadius: tokens.radius.lg,
                   border: '1px solid var(--color-border-primary)',
                   background: 'var(--color-bg-secondary)',
                 }}
@@ -137,7 +137,7 @@ export default function AdminKolPage() {
                   </span>
                   <span style={{
                     padding: '2px 8px',
-                    borderRadius: 4,
+                    borderRadius: tokens.radius.sm,
                     fontSize: tokens.typography.fontSize.xs,
                     color: STATUS_KEYS[app.status]?.color || 'var(--color-text-tertiary)',
                     background: 'var(--color-bg-tertiary)',

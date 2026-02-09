@@ -85,7 +85,7 @@ function MarketTableInner<T>({
   if (loading) {
     return (
       <div style={{ padding: tokens.spacing[8], textAlign: 'center', color: tokens.colors.text.secondary }}>
-        <div className="skeleton" style={{ height: 400, borderRadius: 8 }} />
+        <div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.md }} />
       </div>
     )
   }

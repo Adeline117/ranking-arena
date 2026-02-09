@@ -48,7 +48,7 @@ export function CustomPollCard({
         marginTop: 16,
         padding: 16,
         background: tokens.colors.bg.secondary,
-        borderRadius: 12,
+        borderRadius: tokens.radius.lg,
         border: `1px solid ${tokens.colors.border.primary}`,
       }}>
         <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('loadingPoll')}</div>
@@ -62,7 +62,7 @@ export function CustomPollCard({
         marginTop: 16,
         padding: 16,
         background: tokens.colors.bg.secondary,
-        borderRadius: 12,
+        borderRadius: tokens.radius.lg,
         border: `1px solid ${tokens.colors.border.primary}`,
       }}>
         <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('noPoll')}</div>
@@ -75,7 +75,7 @@ export function CustomPollCard({
       marginTop: 16,
       padding: 16,
       background: tokens.colors.bg.secondary,
-      borderRadius: 12,
+      borderRadius: tokens.radius.lg,
       border: `1px solid ${tokens.colors.border.primary}`,
     }}>
       {/* Poll header */}
@@ -118,7 +118,7 @@ export function CustomPollCard({
               style={{
                 position: 'relative',
                 padding: '10px 14px',
-                borderRadius: 8,
+                borderRadius: tokens.radius.md,
                 border: isSelected || hasVoted
                   ? `2px solid ${ARENA_PURPLE}`
                   : `1px solid ${tokens.colors.border.primary}`,
@@ -179,7 +179,7 @@ export function CustomPollCard({
               : 'var(--color-accent-primary-30)',
             color: tokens.colors.white,
             border: 'none',
-            borderRadius: 8,
+            borderRadius: tokens.radius.md,
             cursor: selectedOptions.length > 0 && !votingInProgress ? 'pointer' : 'not-allowed',
             fontWeight: 600,
             fontSize: 13,

@@ -80,7 +80,7 @@ export function RepostModal({
           maxWidth: 400,
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: 16,
+          borderRadius: tokens.radius.xl,
           padding: 24,
           boxShadow: '0 25px 50px -12px var(--color-overlay-dark)',
         }}
@@ -99,7 +99,7 @@ export function RepostModal({
             width: '100%',
             minHeight: 80,
             padding: 12,
-            borderRadius: 12,
+            borderRadius: tokens.radius.lg,
             border: `1px solid ${tokens.colors.border.primary}`,
             background: tokens.colors.bg.primary,
             color: tokens.colors.text.primary,
@@ -165,7 +165,7 @@ export function RepostModal({
                 borderRadius: 6,
                 color: tokens.colors.text.tertiary,
                 fontSize: 18,
-                lineHeight: 1,
+                lineHeight: 1.2,
                 display: 'flex',
                 alignItems: 'center',
               }}
@@ -180,7 +180,7 @@ export function RepostModal({
                 left: 0,
                 background: tokens.colors.bg.secondary,
                 border: `1px solid ${tokens.colors.border.primary}`,
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 padding: 8,
                 display: 'grid',
                 gridTemplateColumns: 'repeat(8, 1fr)',
@@ -205,8 +205,8 @@ export function RepostModal({
                       fontSize: 13,
                       cursor: 'pointer',
                       padding: 4,
-                      borderRadius: 4,
-                      lineHeight: 1,
+                      borderRadius: tokens.radius.sm,
+                      lineHeight: 1.2,
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
@@ -233,7 +233,7 @@ export function RepostModal({
               color: tokens.colors.text.tertiary,
               fontSize: 14,
               fontWeight: 700,
-              lineHeight: 1,
+              lineHeight: 1.2,
             }}
             title={language === 'zh' ? '@提及用户' : '@Mention'}
           >

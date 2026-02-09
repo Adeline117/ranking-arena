@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useLanguage } from "@/app/components/Providers/LanguageProvider";
+import { tokens } from '@/lib/design-tokens'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -87,7 +88,7 @@ export default function InstallPrompt() {
         zIndex: 9999,
         background: "linear-gradient(135deg, #1a1825 0%, #0B0A10 100%)",
         border: "1px solid var(--color-accent-primary-30)",
-        borderRadius: 12,
+        borderRadius: tokens.radius.lg,
         padding: "14px 16px",
         display: "flex",
         alignItems: "center",
@@ -102,7 +103,7 @@ export default function InstallPrompt() {
         alt="Arena app icon"
         width={40}
         height={40}
-        style={{ borderRadius: 8, flexShrink: 0 }}
+        style={{ borderRadius: tokens.radius.md, flexShrink: 0 }}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
@@ -133,7 +134,7 @@ export default function InstallPrompt() {
           background: "linear-gradient(135deg, #8b6fa8, #a88bc4)",
           color: "#fff",
           border: "none",
-          borderRadius: 8,
+          borderRadius: tokens.radius.md,
           padding: "8px 16px",
           fontSize: 13,
           fontWeight: 600,
@@ -154,7 +155,7 @@ export default function InstallPrompt() {
           fontSize: 18,
           cursor: "pointer",
           padding: 4,
-          lineHeight: 1,
+          lineHeight: 1.2,
           flexShrink: 0,
         }}
       >

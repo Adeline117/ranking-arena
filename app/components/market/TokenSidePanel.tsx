@@ -416,7 +416,7 @@ export default function TokenSidePanel({ token, onClose }: {
                     borderRadius: tokens.radius.md,
                   }}>
                     <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>历史最高</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: tokens.colors.accent.success, fontFamily: 'var(--font-mono, monospace)' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.accent.success, fontFamily: 'var(--font-mono, monospace)' }}>
                       {formatPrice(md.ath.usd)}
                     </div>
                     <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}>
@@ -432,7 +432,7 @@ export default function TokenSidePanel({ token, onClose }: {
                     borderRadius: tokens.radius.md,
                   }}>
                     <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>历史最低</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: tokens.colors.accent.error, fontFamily: 'var(--font-mono, monospace)' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.accent.error, fontFamily: 'var(--font-mono, monospace)' }}>
                       {formatPrice(md.atl.usd)}
                     </div>
                     <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}>

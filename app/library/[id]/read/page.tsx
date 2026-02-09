@@ -984,7 +984,7 @@ export default function ReadPage() {
           <div style={{
             position: 'fixed', top: 56, right: 12, zIndex: 201,
             background: theme === 'dark' ? '#1e1e36' : '#fff',
-            borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            borderRadius: tokens.radius.xl, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
             padding: '20px 24px', width: 280,
             border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'}`,
           }}>
@@ -1132,7 +1132,7 @@ export default function ReadPage() {
               maxWidth: 680, width: '100%',
               background: themeColors.pageBg,
               color: themeColors.text,
-              borderRadius: 4,
+              borderRadius: tokens.radius.sm,
               padding: '40px 36px',
               minHeight: 'calc(100vh - 160px)',
               boxShadow: theme !== 'dark' ? '0 2px 20px rgba(0,0,0,0.08)' : '0 2px 20px rgba(0,0,0,0.3)',
@@ -1195,18 +1195,18 @@ export default function ReadPage() {
         <div style={{
           position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 150,
           background: theme === 'dark' ? '#2a2a4a' : '#fff',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3)', borderRadius: 16,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)', borderRadius: tokens.radius.xl,
           padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12,
           border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
           animation: 'slideUp 0.3s ease',
         }}>
           <span style={{ fontSize: 13 }}>{isZh ? '加入书架?' : 'Add to shelf?'}</span>
           <button onClick={handleAddToShelf} style={{
-            padding: '5px 14px', borderRadius: 8, background: 'var(--color-accent-primary)',
+            padding: '5px 14px', borderRadius: tokens.radius.md, background: 'var(--color-accent-primary)',
             color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
           }}>{isZh ? '加入' : 'Add'}</button>
           <button onClick={() => setShowBookshelfPrompt(false)} style={{
-            padding: '5px 10px', borderRadius: 8, background: 'transparent',
+            padding: '5px 10px', borderRadius: tokens.radius.md, background: 'transparent',
             color: themeColors.text, border: '1px solid rgba(128,128,128,0.2)',
             cursor: 'pointer', fontSize: 12, opacity: 0.6,
           }}>{isZh ? '稍后' : 'Later'}</button>

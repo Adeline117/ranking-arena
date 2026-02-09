@@ -96,7 +96,7 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
           fontSize: sizeConfig.font,
           fontWeight: 700,
           color: tokens.colors.white,
-          lineHeight: 1,
+          lineHeight: 1.2,
           letterSpacing: '0.5px',
           textTransform: 'uppercase',
         }}

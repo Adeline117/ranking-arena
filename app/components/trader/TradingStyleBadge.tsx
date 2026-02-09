@@ -120,7 +120,7 @@ export default function TradingStyleBadge({
     },
     lg: {
       padding: '8px 16px',
-      fontSize: 15,
+      fontSize: 16,
       iconSize: 18,
       gap: 8,
     },

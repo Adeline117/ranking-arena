@@ -73,7 +73,7 @@ export default function HomePage({
         <ThreeColumnLayout
           leftSidebar={
             <SectionErrorBoundary>
-              <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
+              <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />}>
                 <HotDiscussions />
               </Suspense>
             </SectionErrorBoundary>
@@ -82,14 +82,14 @@ export default function HomePage({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ flexShrink: 0 }}>
                 <SectionErrorBoundary>
-                  <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
+                  <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: tokens.radius.lg }} />}>
                     <WatchlistMarket />
                   </Suspense>
                 </SectionErrorBoundary>
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <SectionErrorBoundary>
-                  <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+                  <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}>
                     <NewsFlash />
                   </Suspense>
                 </SectionErrorBoundary>
@@ -100,7 +100,7 @@ export default function HomePage({
           <SectionErrorBoundary>
             <Suspense fallback={
               <Box style={{ minHeight: '60vh' }}>
-                <div className="skeleton" style={{ height: 400, borderRadius: 12 }} />
+                <div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />
               </Box>
             }>
                 <HomePageClient

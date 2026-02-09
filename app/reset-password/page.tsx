@@ -368,7 +368,7 @@ function ResetPasswordContent() {
           width: '100%',
           background: 'rgba(15, 15, 20, 0.8)',
           border: '1px solid rgba(139, 111, 168, 0.15)',
-          borderRadius: 24,
+          borderRadius: tokens.radius['3xl'],
           padding: '40px 36px',
           position: 'relative',
           zIndex: 1,
@@ -482,11 +482,11 @@ function ResetPasswordContent() {
                 style={{ 
                   width: '100%', 
                   padding: '14px 16px', 
-                  borderRadius: 12,
+                  borderRadius: tokens.radius.lg,
                   border: '1px solid rgba(255, 255, 255, 0.1)',
                   background: 'var(--color-bg-tertiary)',
                   color: tokens.colors.text.primary,
-                  fontSize: 15,
+                  fontSize: 16,
                   outline: 'none',
                 }}
                 placeholder="you@email.com"
@@ -507,14 +507,14 @@ function ResetPasswordContent() {
               style={{ 
                 width: '100%',
                 padding: '14px 16px', 
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 border: 'none',
                 background: loading || !email || countdown > 0 
                   ? 'rgba(139, 111, 168, 0.2)' 
                   : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                 color: tokens.colors.white,
                 fontWeight: 700,
-                fontSize: 15,
+                fontSize: 16,
                 cursor: loading || !email || countdown > 0 ? 'not-allowed' : 'pointer',
                 marginBottom: 20,
                 display: 'flex',
@@ -542,11 +542,11 @@ function ResetPasswordContent() {
                     width: '100%', 
                     padding: '14px 16px', 
                     paddingRight: 50,
-                    borderRadius: 12,
+                    borderRadius: tokens.radius.lg,
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     background: 'var(--color-bg-tertiary)',
                     color: tokens.colors.text.primary,
-                    fontSize: 15,
+                    fontSize: 16,
                     outline: 'none',
                   }}
                   placeholder="••••••"
@@ -616,11 +616,11 @@ function ResetPasswordContent() {
                     width: '100%', 
                     padding: '14px 16px', 
                     paddingRight: 50,
-                    borderRadius: 12,
+                    borderRadius: tokens.radius.lg,
                     border: `1px solid ${confirmPassword && confirmPassword !== newPassword ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
                     background: 'var(--color-bg-tertiary)',
                     color: tokens.colors.text.primary,
-                    fontSize: 15,
+                    fontSize: 16,
                     outline: 'none',
                   }}
                   placeholder="••••••"
@@ -667,14 +667,14 @@ function ResetPasswordContent() {
               style={{ 
                 width: '100%',
                 padding: '14px 16px', 
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 border: 'none',
                 background: loading || !newPassword || !confirmPassword 
                   ? 'rgba(139, 111, 168, 0.2)' 
                   : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                 color: tokens.colors.white,
                 fontWeight: 700,
-                fontSize: 15,
+                fontSize: 16,
                 cursor: loading || !newPassword || !confirmPassword ? 'not-allowed' : 'pointer',
                 marginBottom: 20,
                 display: 'flex',
@@ -718,7 +718,7 @@ function ResetPasswordContent() {
             style={{ 
               marginTop: 20,
               padding: 14,
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               background: 'rgba(255, 77, 77, 0.1)',
               border: '1px solid rgba(255, 77, 77, 0.2)',
               color: tokens.colors.accent.error,
@@ -745,7 +745,7 @@ function ResetPasswordContent() {
             style={{ 
               marginTop: 20,
               padding: 14,
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               background: 'rgba(47, 229, 125, 0.1)',
               border: '1px solid rgba(47, 229, 125, 0.2)',
               color: tokens.colors.accent.success,

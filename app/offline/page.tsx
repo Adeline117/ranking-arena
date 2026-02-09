@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { t } from '@/lib/i18n'
+import { tokens } from '@/lib/design-tokens'
 
 interface CachedTrader {
   nickname?: string
@@ -130,7 +131,7 @@ export default function OfflinePage() {
             color: '#FFFFFF',
             backgroundColor: 'var(--color-brand, #8b6fa8)',
             border: 'none',
-            borderRadius: '8px',
+            borderRadius: tokens.radius.md,
             cursor: 'pointer',
             transition: 'opacity 0.2s',
             width: '100%',
@@ -152,7 +153,7 @@ export default function OfflinePage() {
               marginTop: '2rem',
               padding: '1rem',
               backgroundColor: 'var(--color-bg-secondary, #14121C)',
-              borderRadius: '12px',
+              borderRadius: tokens.radius.lg,
               border: '1px solid var(--color-border-primary, #2A2836)',
               textAlign: 'left',
             }}

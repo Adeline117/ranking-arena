@@ -131,7 +131,7 @@ export default function MembershipPage() {
       <div style={{
         background: tokens.glass.bg.light,
         border: tokens.glass.border.light,
-        borderRadius: 16,
+        borderRadius: tokens.radius.xl,
         padding: 24,
         marginBottom: 24,
       }}>
@@ -162,7 +162,7 @@ export default function MembershipPage() {
                 background: tokens.colors.accent.brand,
                 color: tokens.colors.white,
                 border: 'none',
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 fontWeight: 700,
                 cursor: 'pointer',
               }}
@@ -222,7 +222,7 @@ export default function MembershipPage() {
         <div style={{
           background: tokens.glass.bg.light,
           border: tokens.glass.border.light,
-          borderRadius: 16,
+          borderRadius: tokens.radius.xl,
           padding: 24,
           marginBottom: 24,
         }}>
@@ -241,7 +241,7 @@ export default function MembershipPage() {
                 <div style={{
                   width: 64,
                   height: 64,
-                  borderRadius: 12,
+                  borderRadius: tokens.radius.lg,
                   background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, ${tokens.colors.accent.success})`,
                   display: 'flex',
                   alignItems: 'center',
@@ -274,7 +274,7 @@ export default function MembershipPage() {
                   padding: '10px 20px',
                   background: tokens.glass.bg.medium,
                   border: tokens.glass.border.light,
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   color: tokens.colors.text.primary,
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -291,7 +291,7 @@ export default function MembershipPage() {
       <div style={{
         background: tokens.glass.bg.light,
         border: tokens.glass.border.light,
-        borderRadius: 16,
+        borderRadius: tokens.radius.xl,
         padding: 24,
         marginBottom: 24,
       }}>
@@ -345,7 +345,7 @@ export default function MembershipPage() {
       <div style={{
         background: tokens.glass.bg.light,
         border: tokens.glass.border.light,
-        borderRadius: 16,
+        borderRadius: tokens.radius.xl,
         padding: 24,
       }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
@@ -378,7 +378,7 @@ export default function MembershipPage() {
           marginTop: 24,
           background: tokens.glass.bg.light,
           border: tokens.glass.border.light,
-          borderRadius: 16,
+          borderRadius: tokens.radius.xl,
           padding: 24,
         }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
@@ -408,7 +408,7 @@ export default function MembershipPage() {
                 padding: '12px 24px',
                 background: tokens.colors.accent.brand,
                 border: 'none',
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 color: tokens.colors.white,
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -439,7 +439,7 @@ export default function MembershipPage() {
                 padding: '12px 24px',
                 background: 'transparent',
                 border: `1px solid ${tokens.colors.border.primary}`,
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 color: tokens.colors.text.secondary,
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -466,7 +466,7 @@ export default function MembershipPage() {
                   padding: '12px 24px',
                   background: 'transparent',
                   border: `1px solid ${tokens.colors.accent.error}40`,
-                  borderRadius: 12,
+                  borderRadius: tokens.radius.lg,
                   color: tokens.colors.accent.error,
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -480,7 +480,7 @@ export default function MembershipPage() {
                 padding: '12px 24px',
                 background: `${tokens.colors.accent.warning}15`,
                 border: `1px solid ${tokens.colors.accent.warning}40`,
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 color: tokens.colors.accent.warning,
                 fontWeight: 600,
               }}>
@@ -544,14 +544,14 @@ function UsageStat({ label, value, max }: { label: string; value: number; max: n
       <div style={{
         height: 8,
         background: tokens.colors.bg.tertiary,
-        borderRadius: 4,
+        borderRadius: tokens.radius.sm,
         overflow: 'hidden',
       }}>
         <div style={{
           height: '100%',
           width: `${percentage}%`,
           background: isHigh ? tokens.colors.accent.warning : tokens.colors.accent.brand,
-          borderRadius: 4,
+          borderRadius: tokens.radius.sm,
           transition: 'width 0.3s ease',
         }} />
       </div>

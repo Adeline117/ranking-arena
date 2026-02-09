@@ -105,7 +105,7 @@ export default function AlphaMarket() {
   }, [])
 
   if (loading) {
-    return <div className="skeleton" style={{ height: 400, borderRadius: 8 }} />
+    return <div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.md }} />
   }
 
   const sectionTitle: React.CSSProperties = {

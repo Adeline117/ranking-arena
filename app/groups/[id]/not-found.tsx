@@ -25,7 +25,7 @@ export default function GroupNotFound() {
         href="/groups"
         style={{
           padding: '10px 28px',
-          borderRadius: 8,
+          borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand,
           color: tokens.colors.white,
           textDecoration: 'none',

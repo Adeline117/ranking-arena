@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Box } from '@/app/components/base'
 import Image from 'next/image'
 import type { Exchange } from '@/lib/exchange'
+import { tokens } from '@/lib/design-tokens'
 
 interface ExchangeLogoProps {
   exchange: Exchange
@@ -132,7 +133,7 @@ export default function ExchangeLogo({ exchange, size = 24, className }: Exchang
           unoptimized={true} // 禁用 Next.js 图片优化以避免私有IP解析警告
           style={{
             objectFit: 'contain',
-            borderRadius: '4px',
+            borderRadius: tokens.radius.sm,
           }}
           onError={() => {
             // 如果图片加载失败，使用SVG fallback

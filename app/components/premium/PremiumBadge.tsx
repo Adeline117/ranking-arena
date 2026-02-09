@@ -66,7 +66,7 @@ const SIZE_CONFIG = {
     fontSize: tokens.typography.fontSize.xs,
     iconSize: '12px',
     gap: '2px',
-    borderRadius: '4px',
+    borderRadius: tokens.radius.sm,
   },
   sm: {
     padding: '3px 8px',
@@ -80,7 +80,7 @@ const SIZE_CONFIG = {
     fontSize: tokens.typography.fontSize.sm,
     iconSize: '16px',
     gap: '5px',
-    borderRadius: '8px',
+    borderRadius: tokens.radius.md,
   },
   lg: {
     padding: '6px 12px',
@@ -158,7 +158,7 @@ export function PremiumBadge({
         color: config.color,
         fontSize: sizeConfig.fontSize,
         fontWeight: 600,
-        lineHeight: 1,
+        lineHeight: 1.2,
         whiteSpace: 'nowrap',
         ...style,
       }}

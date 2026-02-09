@@ -166,7 +166,7 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
 
 function StatBlock({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ textAlign: 'center', padding: '6px 0', borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+    <div style={{ textAlign: 'center', padding: '6px 0', borderRadius: tokens.radius.md, background: 'rgba(255,255,255,0.03)' }}>
       <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: 13, fontWeight: 700, color: color || tokens.colors.text.primary }}>{value}</div>
     </div>
@@ -212,7 +212,7 @@ export default function ExchangeRankingClient({
           onClick={() => setViewMode('table')}
           style={{
             padding: '6px 16px',
-            borderRadius: 8,
+            borderRadius: tokens.radius.md,
             border: 'none',
             fontSize: 13,
             fontWeight: viewMode === 'table' ? 700 : 500,
@@ -227,7 +227,7 @@ export default function ExchangeRankingClient({
           onClick={() => setViewMode('card')}
           style={{
             padding: '6px 16px',
-            borderRadius: 8,
+            borderRadius: tokens.radius.md,
             border: 'none',
             fontSize: 13,
             fontWeight: viewMode === 'card' ? 700 : 500,
@@ -249,7 +249,7 @@ export default function ExchangeRankingClient({
       ) : (
         <div
           style={{
-            borderRadius: 12,
+            borderRadius: tokens.radius.lg,
             overflow: 'hidden',
             background: 'rgba(255,255,255,0.03)',
             border: '1px solid rgba(255,255,255,0.06)',

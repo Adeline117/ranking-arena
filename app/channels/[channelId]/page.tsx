@@ -354,7 +354,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             <Box style={{ textAlign: 'center', marginBottom: 12 }}>
               <button onClick={loadOlder} disabled={loadingMore} style={{
                 padding: '6px 16px', background: tokens.colors.bg.secondary,
-                border: `1px solid ${tokens.colors.border.primary}`, borderRadius: 16,
+                border: `1px solid ${tokens.colors.border.primary}`, borderRadius: tokens.radius.xl,
                 color: tokens.colors.text.secondary, fontSize: 13, cursor: loadingMore ? 'not-allowed' : 'pointer',
               }}>
                 {loadingMore ? t('loading') : t('loadOlderMessages')}
@@ -409,7 +409,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                     maxWidth: '75%',
                   }}>
                     {msg.media_url && msg.media_type === 'image' && (
-                      <Image src={msg.media_url} alt="" width={300} height={200} sizes="(max-width: 768px) 100vw, 300px" loading="lazy" style={{ maxWidth: '100%', borderRadius: 12, marginBottom: 4 }} />
+                      <Image src={msg.media_url} alt="" width={300} height={200} sizes="(max-width: 768px) 100vw, 300px" loading="lazy" style={{ maxWidth: '100%', borderRadius: tokens.radius.lg, marginBottom: 4 }} />
                     )}
                     {msg.content && !msg.content.startsWith('[') && (
                       <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
@@ -454,7 +454,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               return (
                 <Box key={m.user_id} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 4px', borderRadius: 8,
+                  padding: '8px 4px', borderRadius: tokens.radius.md,
                 }}>
                   <Box style={{ position: 'relative' }}>
                     <Avatar userId={m.user_id} name={m.handle || m.user_id.slice(0, 8)} avatarUrl={m.avatar_url} size={32} />
@@ -511,7 +511,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             })}
             {myRole !== 'owner' && (
               <button onClick={handleLeave} style={{
-                width: '100%', padding: '10px', marginTop: 16, borderRadius: 8,
+                width: '100%', padding: '10px', marginTop: 16, borderRadius: tokens.radius.md,
                 border: `1px solid ${tokens.colors.accent.error}33`, background: `${tokens.colors.accent.error}11`,
                 color: tokens.colors.accent.error, fontWeight: 600, fontSize: 13, cursor: 'pointer',
               }}>
@@ -529,7 +529,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         <Box style={{
           maxWidth: 800, margin: '0 auto', padding: '8px 16px',
           display: 'flex', alignItems: 'center', gap: 8,
-          background: tokens.colors.bg.tertiary, borderRadius: 12,
+          background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.lg,
         }}>
           <Text size="sm" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {pendingAttachment.originalName}

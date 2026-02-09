@@ -24,30 +24,24 @@ export default function TraderLoading() {
           marginBottom: tokens.spacing[6]
         }}>
           {/* Avatar */}
-          <Box style={{
+          <div className="skeleton" style={{
             width: 80,
             height: 80,
             borderRadius: '50%',
-            background: tokens.colors.bg.tertiary,
-            opacity: 0.6,
           }} />
           
           {/* Name and stats */}
           <Box style={{ flex: 1 }}>
-            <Box style={{
+            <div className="skeleton" style={{
               width: 200,
               height: 24,
               borderRadius: tokens.radius.sm,
-              background: tokens.colors.bg.tertiary,
               marginBottom: tokens.spacing[2],
-              opacity: 0.7,
             }} />
-            <Box style={{
+            <div className="skeleton" style={{
               width: 120,
               height: 16,
               borderRadius: tokens.radius.sm,
-              background: tokens.colors.bg.tertiary,
-              opacity: 0.5,
             }} />
           </Box>
         </Box>
@@ -61,12 +55,10 @@ export default function TraderLoading() {
           paddingBottom: tokens.spacing[3],
         }}>
           {[1, 2, 3].map(i => (
-            <Box key={i} style={{
+            <div key={i} className="skeleton" style={{
               width: 80,
               height: 20,
               borderRadius: tokens.radius.sm,
-              background: tokens.colors.bg.tertiary,
-              opacity: 0.5 + i * 0.1,
             }} />
           ))}
         </Box>

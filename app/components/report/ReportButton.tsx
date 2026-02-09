@@ -108,7 +108,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
             marginTop: 4,
             width: 260,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: tokens.radius.lg,
             border: '1px solid var(--color-border-primary)',
             background: 'var(--color-bg-secondary)',
             boxShadow: '0 4px 12px var(--color-overlay-light)',

@@ -683,7 +683,7 @@ export default function LoginPage() {
           width: '100%',
           background: 'var(--color-bg-secondary, rgba(15, 15, 20, 0.8))',
           border: '1px solid rgba(139, 111, 168, 0.15)',
-          borderRadius: 24,
+          borderRadius: tokens.radius['3xl'],
           padding: '40px 36px',
           position: 'relative',
           zIndex: 1,
@@ -874,11 +874,11 @@ export default function LoginPage() {
             style={{ 
               width: '100%', 
               padding: '14px 16px', 
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               border: `1px solid ${touchedFields.email && !emailValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
               background: 'var(--color-bg-tertiary)',
               color: tokens.colors.text.primary,
-              fontSize: 15,
+              fontSize: 16,
               outline: 'none',
             }}
             placeholder="you@email.com"
@@ -908,14 +908,14 @@ export default function LoginPage() {
                 style={{ 
                   width: '100%',
                   padding: '14px 16px', 
-                  borderRadius: 12,
+                  borderRadius: tokens.radius.lg,
                   border: 'none',
                   background: sendingCode || !email || countdown > 0 
                     ? 'rgba(139, 111, 168, 0.2)' 
                     : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                   color: tokens.colors.white,
                   fontWeight: 700,
-                  fontSize: 15,
+                  fontSize: 16,
                   cursor: sendingCode || !email || countdown > 0 ? 'not-allowed' : 'pointer',
                   marginBottom: 16,
                   display: 'flex',
@@ -939,11 +939,11 @@ export default function LoginPage() {
                     style={{ 
                       width: '100%', 
                       padding: '14px 16px', 
-                      borderRadius: 12,
+                      borderRadius: tokens.radius.lg,
                       border: '1px solid rgba(255, 255, 255, 0.1)',
                       background: 'var(--color-bg-tertiary)',
                       color: tokens.colors.text.primary,
-                      fontSize: 15,
+                      fontSize: 16,
                       outline: 'none',
                       letterSpacing: 4,
                       textAlign: 'center',
@@ -969,14 +969,14 @@ export default function LoginPage() {
                   style={{ 
                     width: '100%',
                     padding: '14px 16px', 
-                    borderRadius: 12,
+                    borderRadius: tokens.radius.lg,
                     border: 'none',
                     background: loading || !code 
                       ? 'rgba(139, 111, 168, 0.2)' 
                       : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                     color: tokens.colors.white,
                     fontWeight: 700,
-                    fontSize: 15,
+                    fontSize: 16,
                     cursor: loading || !code ? 'not-allowed' : 'pointer',
                     marginBottom: 16,
                     display: 'flex',
@@ -1026,11 +1026,11 @@ export default function LoginPage() {
                     style={{ 
                       width: '100%', 
                       padding: '14px 16px', 
-                      borderRadius: 12,
+                      borderRadius: tokens.radius.lg,
                       border: `1px solid ${touchedFields.handle && !handleValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
                       background: 'var(--color-bg-tertiary)',
                       color: tokens.colors.text.primary,
-                      fontSize: 15,
+                      fontSize: 16,
                       outline: 'none',
                     }}
                     placeholder={t('loginUsernamePlaceholder')}
@@ -1058,11 +1058,11 @@ export default function LoginPage() {
                         width: '100%', 
                         padding: '14px 16px', 
                         paddingRight: 50,
-                        borderRadius: 12,
+                        borderRadius: tokens.radius.lg,
                         border: `1px solid ${touchedFields.password && !passwordValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
                         background: 'var(--color-bg-tertiary)',
                         color: tokens.colors.text.primary,
-                        fontSize: 15,
+                        fontSize: 16,
                         outline: 'none',
                       }}
                       placeholder={t('loginSetPasswordPlaceholder')}
@@ -1128,14 +1128,14 @@ export default function LoginPage() {
                   style={{ 
                     width: '100%',
                     padding: '14px 16px', 
-                    borderRadius: 12,
+                    borderRadius: tokens.radius.lg,
                     border: 'none',
                     background: loading || !password || password.length < 6 || !handle || handle.length < 1 
                       ? 'rgba(139, 111, 168, 0.2)' 
                       : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                     color: tokens.colors.white,
                     fontWeight: 700,
-                    fontSize: 15,
+                    fontSize: 16,
                     cursor: loading || !password || password.length < 6 || !handle || handle.length < 1 ? 'not-allowed' : 'pointer',
                     marginBottom: 16,
                     display: 'flex',
@@ -1170,11 +1170,11 @@ export default function LoginPage() {
                         width: '100%', 
                         padding: '14px 16px', 
                         paddingRight: 50,
-                        borderRadius: 12,
+                        borderRadius: tokens.radius.lg,
                         border: `1px solid ${touchedFields.password && password && !passwordValidation.valid ? 'rgba(255, 124, 124, 0.5)' : 'var(--glass-border-light)'}`,
                         background: 'var(--color-bg-tertiary)',
                         color: tokens.colors.text.primary,
-                        fontSize: 15,
+                        fontSize: 16,
                         outline: 'none',
                       }}
                       placeholder={t('loginPasswordPlaceholder')}
@@ -1217,14 +1217,14 @@ export default function LoginPage() {
                   style={{ 
                     width: '100%',
                     padding: '14px 16px', 
-                    borderRadius: 12,
+                    borderRadius: tokens.radius.lg,
                     border: 'none',
                     background: loading || !email || !password 
                       ? 'rgba(139, 111, 168, 0.2)' 
                       : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                     color: tokens.colors.white,
                     fontWeight: 700,
-                    fontSize: 15,
+                    fontSize: 16,
                     cursor: loading || !email || !password ? 'not-allowed' : 'pointer',
                     marginBottom: 12,
                     display: 'flex',
@@ -1287,14 +1287,14 @@ export default function LoginPage() {
                     style={{ 
                       width: '100%',
                       padding: '14px 16px', 
-                      borderRadius: 12,
+                      borderRadius: tokens.radius.lg,
                       border: 'none',
                       background: sendingCode || !email || countdown > 0 
                         ? 'rgba(139, 111, 168, 0.2)' 
                         : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                       color: tokens.colors.white,
                       fontWeight: 700,
-                      fontSize: 15,
+                      fontSize: 16,
                       cursor: sendingCode || !email || countdown > 0 ? 'not-allowed' : 'pointer',
                       marginBottom: 16,
                       display: 'flex',
@@ -1318,11 +1318,11 @@ export default function LoginPage() {
                         style={{ 
                           width: '100%', 
                           padding: '14px 16px', 
-                          borderRadius: 12,
+                          borderRadius: tokens.radius.lg,
                           border: '1px solid rgba(255, 255, 255, 0.1)',
                           background: 'var(--color-bg-tertiary)',
                           color: tokens.colors.text.primary,
-                          fontSize: 15,
+                          fontSize: 16,
                           outline: 'none',
                           letterSpacing: 4,
                           textAlign: 'center',
@@ -1348,14 +1348,14 @@ export default function LoginPage() {
                       style={{ 
                         width: '100%',
                         padding: '14px 16px', 
-                        borderRadius: 12,
+                        borderRadius: tokens.radius.lg,
                         border: 'none',
                         background: loading || !code 
                           ? 'rgba(139, 111, 168, 0.2)' 
                           : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                         color: tokens.colors.white,
                         fontWeight: 700,
-                        fontSize: 15,
+                        fontSize: 16,
                         cursor: loading || !code ? 'not-allowed' : 'pointer',
                         marginBottom: 12,
                         display: 'flex',
@@ -1455,7 +1455,7 @@ export default function LoginPage() {
           style={{
             width: '100%',
             padding: '14px 16px',
-            borderRadius: 12,
+            borderRadius: tokens.radius.lg,
             border: '1px solid rgba(139, 111, 168, 0.3)',
             background: 'transparent',
             color: 'var(--color-text-secondary)',
@@ -1483,7 +1483,7 @@ export default function LoginPage() {
             style={{ 
               marginTop: 20,
               padding: 14,
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               background: 'rgba(255, 77, 77, 0.1)',
               border: '1px solid rgba(255, 77, 77, 0.2)',
               color: 'var(--color-accent-error)',

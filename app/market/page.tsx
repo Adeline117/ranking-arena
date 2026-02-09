@@ -20,7 +20,7 @@ const ArbitrageOpportunities = lazy(() => import('@/app/components/market/Arbitr
 const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
 
 function LoadingCard({ height = 64 }: { height?: number }) {
-  return <div className="skeleton" style={{ height, borderRadius: 8 }} />
+  return <div className="skeleton" style={{ height, borderRadius: tokens.radius.md }} />
 }
 
 function useIsMobile() {
@@ -224,7 +224,7 @@ export default function MarketPage() {
                     padding: 0,
                     color: tokens.colors.text.tertiary,
                     fontSize: 14,
-                    lineHeight: 1,
+                    lineHeight: 1.2,
                   }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

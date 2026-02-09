@@ -165,10 +165,10 @@ const sizeStyles = {
   },
   md: {
     padding: '14px 20px',
-    fontSize: 15,
+    fontSize: 16,
     iconSize: 18,
     gap: 10,
-    borderRadius: 12,
+    borderRadius: tokens.radius.lg,
   },
   lg: {
     padding: '16px 24px',
@@ -339,7 +339,7 @@ export function OneClickWalletButton({
           style={{
             marginTop: 8,
             padding: '10px 12px',
-            borderRadius: 8,
+            borderRadius: tokens.radius.md,
             background: 'var(--color-red-bg-light)',
             border: '1px solid rgba(239, 68, 68, 0.2)',
             fontSize: 12,
@@ -363,7 +363,7 @@ export function OneClickWalletButton({
             style={{
               marginLeft: 'auto',
               padding: '2px 8px',
-              borderRadius: 4,
+              borderRadius: tokens.radius.sm,
               border: 'none',
               background: 'rgba(239, 68, 68, 0.2)',
               color: tokens.colors.accent.error,

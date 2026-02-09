@@ -48,7 +48,7 @@ export function EditPostModal({
           maxWidth: 500,
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: 16,
+          borderRadius: tokens.radius.xl,
           padding: 24,
         }}
       >
@@ -68,7 +68,7 @@ export function EditPostModal({
             style={{
               width: '100%',
               padding: 12,
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: tokens.colors.bg.primary,
               color: tokens.colors.text.primary,
@@ -90,7 +90,7 @@ export function EditPostModal({
             style={{
               width: '100%',
               padding: 12,
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: tokens.colors.bg.primary,
               color: tokens.colors.text.primary,

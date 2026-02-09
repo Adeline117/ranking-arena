@@ -106,7 +106,7 @@ export default function NewsFlash() {
                     <span style={{
                       fontSize: 10, fontWeight: 700, color: tokens.colors.white,
                       background: impConfig.color, padding: '1px 6px',
-                      borderRadius: 4, lineHeight: '16px',
+                      borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
                       {isZh ? impConfig.label : impConfig.label_en}
                     </span>
@@ -115,7 +115,7 @@ export default function NewsFlash() {
                     <span style={{
                       fontSize: 10, fontWeight: 600, color: catConfig.color,
                       background: `${catConfig.color}15`, padding: '1px 6px',
-                      borderRadius: 4, lineHeight: '16px',
+                      borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
                       {isZh ? catConfig.label : catConfig.label_en}
                     </span>

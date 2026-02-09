@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { t } from '@/lib/i18n'
+import { tokens } from '@/lib/design-tokens'
 
 const ARENA_PURPLE = 'var(--color-brand, #8b6fa8)'
 
@@ -304,7 +305,7 @@ export default function GlobalError({
                 color: 'var(--color-text-primary, #EDEDED)',
                 background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, #6b4f88 100%)`,
                 border: 'none',
-                borderRadius: '12px',
+                borderRadius: tokens.radius.lg,
                 cursor: isRetrying ? 'wait' : 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',

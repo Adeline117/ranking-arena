@@ -165,7 +165,7 @@ export default function ConversationsList(): React.ReactElement {
         <div style={{ display: 'flex', gap: 4 }}>
           {(['all', 'direct', 'group'] as const).map(f => (
             <button key={f} onClick={() => setChatFilter(f)} style={{
-              padding: '4px 10px', borderRadius: 12, border: 'none',
+              padding: '4px 10px', borderRadius: tokens.radius.lg, border: 'none',
               background: chatFilter === f ? tokens.colors.accent.brand : 'transparent',
               color: chatFilter === f ? '#fff' : tokens.colors.text.secondary,
               fontSize: 12, fontWeight: 600, cursor: 'pointer',

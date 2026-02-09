@@ -204,7 +204,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
   return (
     <Box style={{
       padding: 16,
-      borderRadius: 12,
+      borderRadius: tokens.radius.lg,
       background: tokens.colors.bg.secondary,
       border: `1px solid ${tokens.colors.border.primary}`,
     }}>
@@ -318,7 +318,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
           style={{
             flex: 1,
             padding: '8px 16px',
-            borderRadius: 8,
+            borderRadius: tokens.radius.md,
             background: tokens.colors.accent.primary,
             color: '#fff',
             border: 'none',
@@ -334,7 +334,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
             onClick={handleDelete}
             style={{
               padding: '8px 16px',
-              borderRadius: 8,
+              borderRadius: tokens.radius.md,
               background: 'transparent',
               color: tokens.colors.accent.error,
               border: `1px solid ${tokens.colors.accent.error}`,
@@ -418,7 +418,7 @@ function AlertRow({
             value={threshold}
             onChange={(e) => onThresholdChange(Number(e.target.value))}
             style={{
-              width: 60, padding: '4px 6px', borderRadius: 4, fontSize: 13,
+              width: 60, padding: '4px 6px', borderRadius: tokens.radius.sm, fontSize: 13,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: tokens.colors.bg.primary,
               color: tokens.colors.text.primary,
@@ -464,7 +464,7 @@ function AlertPriceRow({
             value={symbol || ''}
             onChange={(e) => onSymbolChange(e.target.value || null)}
             style={{
-              width: 50, padding: '4px 6px', borderRadius: 4, fontSize: 13,
+              width: 50, padding: '4px 6px', borderRadius: tokens.radius.sm, fontSize: 13,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: tokens.colors.bg.primary,
               color: tokens.colors.text.primary,
@@ -476,7 +476,7 @@ function AlertPriceRow({
             value={value ?? ''}
             onChange={(e) => onValueChange(e.target.value ? Number(e.target.value) : null)}
             style={{
-              width: 80, padding: '4px 6px', borderRadius: 4, fontSize: 13,
+              width: 80, padding: '4px 6px', borderRadius: tokens.radius.sm, fontSize: 13,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: tokens.colors.bg.primary,
               color: tokens.colors.text.primary,

@@ -85,7 +85,7 @@ export function PostModal({ children, onClose }: PostModalProps) {
           maxHeight: '90vh',
           overflowY: 'auto',
           border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: 16,
+          borderRadius: tokens.radius.xl,
           background: tokens.colors.bg.secondary,
           padding: 16,
         }}

@@ -74,7 +74,7 @@ function parseVideoUrl(url: string): { type: 'youtube' | 'bilibili'; embedUrl: s
 // 视频播放器组件
 function VideoPlayer({ embedUrl, type }: { embedUrl: string; type: string }) {
   return (
-    <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', margin: '8px 0', borderRadius: 8, overflow: 'hidden', background: tokens.colors.black }}>
+    <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', margin: '8px 0', borderRadius: tokens.radius.md, overflow: 'hidden', background: tokens.colors.black }}>
       <iframe
         src={embedUrl}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
@@ -203,7 +203,7 @@ function renderContentWithControls(
             style={{
               maxWidth: '100%',
               maxHeight: 300,
-              borderRadius: 8,
+              borderRadius: tokens.radius.md,
               cursor: 'pointer',
               display: 'block',
               objectFit: 'contain',
@@ -237,7 +237,7 @@ function renderContentWithControls(
                 color: tokens.colors.white,
                 cursor: isFirst ? 'not-allowed' : 'pointer',
                 fontSize: 14,
-                borderRadius: 4,
+                borderRadius: tokens.radius.sm,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -257,7 +257,7 @@ function renderContentWithControls(
                 color: tokens.colors.white,
                 cursor: isLast ? 'not-allowed' : 'pointer',
                 fontSize: 14,
-                borderRadius: 4,
+                borderRadius: tokens.radius.sm,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -276,7 +276,7 @@ function renderContentWithControls(
                 color: tokens.colors.white,
                 cursor: 'pointer',
                 fontSize: 14,
-                borderRadius: 4,
+                borderRadius: tokens.radius.sm,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -980,7 +980,7 @@ export default function NewPostPage() {
                     background: tokens.colors.accent.brand,
                     color: tokens.colors.white,
                     padding: '2px 10px',
-                    borderRadius: 999,
+                    borderRadius: tokens.radius.full,
                     fontSize: 11,
                     fontWeight: 700,
                   }}
@@ -1040,7 +1040,7 @@ export default function NewPostPage() {
                   border: ('1px solid ' + tokens.colors.border.primary),
                   cursor: 'pointer',
                   padding: '4px 10px',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   color: showStickerPicker ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
                   fontSize: 13,
                   display: 'flex',
@@ -1096,7 +1096,7 @@ export default function NewPostPage() {
                 style={{
                   width: 44,
                   height: 24,
-                  borderRadius: 12,
+                  borderRadius: tokens.radius.lg,
                   background: pollEnabled ? tokens.colors.accent.brand : tokens.colors.border.primary,
                   position: 'relative',
                   transition: 'background 0.2s ease',
@@ -1555,7 +1555,7 @@ export default function NewPostPage() {
                       color: tokens.colors.white,
                       cursor: 'pointer',
                       fontSize: 14,
-                      borderRadius: 4,
+                      borderRadius: tokens.radius.sm,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

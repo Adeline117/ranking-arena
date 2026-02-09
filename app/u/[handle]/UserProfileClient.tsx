@@ -29,7 +29,7 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   loading: () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {[1, 2, 3].map(i => (
-        <div key={i} className="skeleton" style={{ height: 120, borderRadius: 12 }} />
+        <div key={i} className="skeleton" style={{ height: 120, borderRadius: tokens.radius.lg }} />
       ))}
     </div>
   ),

@@ -229,7 +229,7 @@ export default function FollowListModal({
               fontSize: 24,
               cursor: 'pointer',
               color: tokens.colors.text.tertiary,
-              lineHeight: 1,
+              lineHeight: 1.2,
               padding: 4,
             }}
           >

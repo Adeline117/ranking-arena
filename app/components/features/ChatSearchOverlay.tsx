@@ -222,7 +222,7 @@ export default function ChatSearchOverlay({
             alignItems: 'center',
             gap: 8,
             background: tokens.colors.bg.primary,
-            borderRadius: 20,
+            borderRadius: tokens.radius['2xl'],
             padding: '6px 14px',
             border: `1px solid ${tokens.colors.border.primary}`,
           }}

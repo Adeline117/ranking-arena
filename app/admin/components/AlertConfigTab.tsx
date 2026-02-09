@@ -69,7 +69,7 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
           style={{
             width: 48,
             height: 24,
-            borderRadius: 12,
+            borderRadius: tokens.radius.lg,
             background: enabled ? tokens.colors.accent.success : tokens.colors.bg.tertiary,
             cursor: 'pointer',
             position: 'relative',

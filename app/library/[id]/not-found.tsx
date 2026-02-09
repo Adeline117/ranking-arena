@@ -25,7 +25,7 @@ export default function LibraryItemNotFound() {
         href="/library"
         style={{
           padding: '10px 28px',
-          borderRadius: 8,
+          borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand,
           color: '#fff',
           textDecoration: 'none',

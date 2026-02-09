@@ -451,16 +451,16 @@ export default function OnboardingPage() {
             <Box style={{ display: 'flex', gap: 14 }}>
               <button className="continue-btn" onClick={() => goToStep('traders')}
                 style={{
-                  flex: 1, padding: '14px 20px', borderRadius: 12,
+                  flex: 1, padding: '14px 20px', borderRadius: tokens.radius.lg,
                   border: `1px solid ${optionBorder}`, background: 'transparent',
-                  color: textSecondary, fontWeight: 600, fontSize: 15, cursor: 'pointer',
+                  color: textSecondary, fontWeight: 600, fontSize: 16, cursor: 'pointer',
                 }}>
                 {tr('skip')}
               </button>
               <button className="continue-btn" onClick={() => goToStep('traders')} style={{
-                flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
+                flex: 2, padding: '14px 20px', borderRadius: tokens.radius.lg, border: 'none',
                 background: brandGradient,
-                color: tokens.colors.white, fontWeight: 700, fontSize: 15, cursor: 'pointer',
+                color: tokens.colors.white, fontWeight: 700, fontSize: 16, cursor: 'pointer',
               }}>
                 {tr('continueButton')}
               </button>
@@ -549,16 +549,16 @@ export default function OnboardingPage() {
             <Box style={{ display: 'flex', gap: 14 }}>
               <button className="continue-btn" onClick={() => goToStep('groups')}
                 style={{
-                  flex: 1, padding: '14px 20px', borderRadius: 12,
+                  flex: 1, padding: '14px 20px', borderRadius: tokens.radius.lg,
                   border: `1px solid ${optionBorder}`, background: 'transparent',
-                  color: textSecondary, fontWeight: 600, fontSize: 15, cursor: 'pointer',
+                  color: textSecondary, fontWeight: 600, fontSize: 16, cursor: 'pointer',
                 }}>
                 {tr('skip')}
               </button>
               <button className="continue-btn" onClick={() => goToStep('groups')} style={{
-                flex: 2, padding: '14px 20px', borderRadius: 12, border: 'none',
+                flex: 2, padding: '14px 20px', borderRadius: tokens.radius.lg, border: 'none',
                 background: brandGradient,
-                color: tokens.colors.white, fontWeight: 700, fontSize: 15, cursor: 'pointer',
+                color: tokens.colors.white, fontWeight: 700, fontSize: 16, cursor: 'pointer',
               }}>
                 {tr('continueButton')}
               </button>
