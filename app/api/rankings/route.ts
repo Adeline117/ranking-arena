@@ -176,8 +176,6 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
 
   const supabase = getSupabaseAdmin();
   const safeLimit = Math.min(limit, 1000);
-  // Fetch more rows to account for duplicates (each trader may have multiple snapshots)
-  const fetchLimit = Math.min(safeLimit * 10, 10000);
 
   // Map sort column for trader_snapshots table
   const sortColumnMap: Record<string, string> = {
@@ -193,16 +191,16 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   const seasonId = window.toUpperCase();
 
   // Build query against trader_snapshots (legacy table with actual data)
-  // Note: this table uses 'season_id' not 'window'
+  // Note: unique constraint on (source, source_trader_id, season_id) guarantees no duplicates
   let dbQuery = supabase
     .from('trader_snapshots')
     .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence', { count: 'exact' })
     .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
-    .lte('roi', ROI_ANOMALY_THRESHOLD) // Filter out extreme ROI anomalies
-    .gte('roi', -ROI_ANOMALY_THRESHOLD) // Filter out extreme negative anomalies too
+    .lte('roi', ROI_ANOMALY_THRESHOLD)
+    .gte('roi', -ROI_ANOMALY_THRESHOLD)
     .order(sortColumn, { ascending: sort_dir === 'asc', nullsFirst: false })
-    .range(0, fetchLimit - 1);
+    .range(offset, offset + safeLimit - 1);
 
   if (platform) {
     dbQuery = dbQuery.eq('source', platform);
@@ -222,23 +220,24 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     dbQuery = dbQuery.gte('trades_count', min_trades);
   }
 
-  const { data: rows, error } = await dbQuery;
+  const { data: rows, count: totalCount, error } = await dbQuery;
 
   if (error) {
     throw new Error(`Supabase fallback failed: ${error.message}`);
   }
 
-  // Fetch display names from trader_profiles and trader_sources
-  const traderKeys = [...new Set((rows || []).map(r => r.source_trader_id))];
-  const platforms = [...new Set((rows || []).map(r => r.source))];
+  const paginatedRows = rows || [];
+
+  // Batch fetch display names from trader_sources (single query)
+  const traderKeys = [...new Set(paginatedRows.map(r => r.source_trader_id))];
+  const platformKeys = [...new Set(paginatedRows.map(r => r.source))];
   const displayNameMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
 
   if (traderKeys.length > 0) {
-    // Fetch display names and avatar URLs from trader_sources
     const { data: sources } = await supabase
       .from('trader_sources')
       .select('source, source_trader_id, handle, avatar_url')
-      .in('source', platforms)
+      .in('source', platformKeys)
       .in('source_trader_id', traderKeys);
 
     if (sources) {
@@ -252,20 +251,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     }
   }
 
-  // Deduplicate by source:source_trader_id (keep first occurrence which has highest score)
-  const seen = new Set<string>();
-  const allDeduped = (rows || []).filter(row => {
-    const key = `${row.source}:${row.source_trader_id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  // Apply pagination after deduplication
-  const totalUniqueTraders = allDeduped.length;
-  const paginatedDeduped = allDeduped.slice(offset, offset + safeLimit);
-
-  const rankedRows = paginatedDeduped.map((row, idx) => {
+  const rankedRows = paginatedRows.map((row, idx) => {
     const sourceInfo = displayNameMap.get(`${row.source}:${row.source_trader_id}`);
     const roi = row.roi ? parseFloat(row.roi) : 0;
     const pnl = row.pnl ? parseFloat(row.pnl) : 0;
@@ -303,15 +289,15 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   });
 
   // Calculate staleness - data older than 1 hour is considered stale
-  const latestCapturedAt = paginatedDeduped.length > 0
-    ? Math.max(...paginatedDeduped.map(r => new Date(r.captured_at).getTime()))
+  const latestCapturedAt = paginatedRows.length > 0
+    ? Math.max(...paginatedRows.map(r => new Date(r.captured_at).getTime()))
     : Date.now();
   const stalenessMs = Date.now() - latestCapturedAt;
   const isStale = stalenessMs > 3600 * 1000; // > 1 hour
 
   // Transform to RankingsResponse format expected by frontend
   const traders = rankedRows.map((row, idx) => {
-    const rawRow = paginatedDeduped[idx];
+    const rawRow = paginatedRows[idx];
     return {
       platform: row.platform,
       trader_key: row.trader_key,
@@ -336,7 +322,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   return {
     traders,
     window: window.toUpperCase() as '7D' | '30D' | '90D' | 'COMPOSITE',
-    totalcount: totalUniqueTraders,
+    totalcount: totalCount,
     as_of: new Date(latestCapturedAt).toISOString(),
     is_stale: isStale,
   };

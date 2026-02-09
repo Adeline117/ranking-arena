@@ -75,6 +75,12 @@ function ensureCsrfToken(): string | null {
  */
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown
+  /** Request timeout in milliseconds (default: 30000) */
+  timeoutMs?: number
+  /** Number of retry attempts for retryable errors (default: 0) */
+  retries?: number
+  /** Base delay between retries in ms, doubles each attempt (default: 1000) */
+  retryBaseDelayMs?: number
 }
 
 /**
@@ -100,8 +106,15 @@ export async function apiRequest<T = unknown>(
   url: string,
   options: ApiRequestOptions = {}
 ): Promise<ApiResponse<T>> {
-  const { body, headers: customHeaders, ...restOptions } = options
-  
+  const {
+    body,
+    headers: customHeaders,
+    timeoutMs = 30_000,
+    retries = 0,
+    retryBaseDelayMs = 1000,
+    ...restOptions
+  } = options
+
   // 构建 headers
   const headers = new Headers(customHeaders)
   
@@ -118,68 +131,94 @@ export async function apiRequest<T = unknown>(
       headers.set(CSRF_HEADER_NAME, csrfToken)
     }
   }
-  
-  try {
-    const response = await fetch(url, {
-      ...restOptions,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'include', // 确保发送 cookies
-    })
 
-    const data = await response.json()
+  let lastResult: ApiResponse<T> | undefined
 
-    if (!response.ok) {
-      // Extract retry-after header if present
-      const retryAfterHeader = response.headers.get('Retry-After')
-      let retryAfter: number | undefined
-      if (retryAfterHeader) {
-        retryAfter = parseInt(retryAfterHeader, 10)
-        if (isNaN(retryAfter)) {
-          // Could be a date string
-          const retryDate = Date.parse(retryAfterHeader)
-          if (!isNaN(retryDate)) {
-            retryAfter = Math.ceil((retryDate - Date.now()) / 1000)
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    // Wait before retry (exponential backoff)
+    if (attempt > 0 && lastResult?.error) {
+      const delay = lastResult.error.retryAfter
+        ? lastResult.error.retryAfter * 1000
+        : retryBaseDelayMs * Math.pow(2, attempt - 1)
+      await new Promise(r => setTimeout(r, delay))
+    }
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const response = await fetch(url, {
+        ...restOptions,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        credentials: 'include',
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        // Extract retry-after header if present
+        const retryAfterHeader = response.headers.get('Retry-After')
+        let retryAfter: number | undefined
+        if (retryAfterHeader) {
+          retryAfter = parseInt(retryAfterHeader, 10)
+          if (isNaN(retryAfter)) {
+            const retryDate = Date.parse(retryAfterHeader)
+            if (!isNaN(retryDate)) {
+              retryAfter = Math.ceil((retryDate - Date.now()) / 1000)
+            }
           }
         }
+
+        const isRateLimited = response.status === 429 || isProviderRateLimitResponse(data)
+        const isRetryable = isRateLimited || [500, 502, 503, 504].includes(response.status)
+
+        if (!retryAfter && data?.error?.details?.retryAfter) {
+          retryAfter = data.error.details.retryAfter
+        }
+
+        lastResult = {
+          success: false,
+          error: {
+            code: isRateLimited ? 'RATE_LIMITED' : (data.error?.code || 'REQUEST_FAILED'),
+            message: data.error?.message || data.message || (isRateLimited ? '请求频率超限' : '请求失败'),
+            details: data.error?.details,
+            retryable: isRetryable,
+            retryAfter,
+          },
+        }
+
+        // Only retry if retryable
+        if (isRetryable && attempt < retries) continue
+        return lastResult
       }
 
-      // Check for provider rate limit error
-      const isRateLimited = response.status === 429 || isProviderRateLimitResponse(data)
-      const isRetryable = isRateLimited || [500, 502, 503, 504].includes(response.status)
+      return { success: true, data: data as T }
+    } catch (error: unknown) {
+      clearTimeout(timeoutId)
 
-      // Extract retryAfter from error response if not in header
-      if (!retryAfter && data?.error?.details?.retryAfter) {
-        retryAfter = data.error.details.retryAfter
-      }
-
-      return {
+      const isAbort = error instanceof DOMException && error.name === 'AbortError'
+      lastResult = {
         success: false,
         error: {
-          code: isRateLimited ? 'RATE_LIMITED' : (data.error?.code || 'REQUEST_FAILED'),
-          message: data.error?.message || data.message || (isRateLimited ? '请求频率超限' : '请求失败'),
-          details: data.error?.details,
-          retryable: isRetryable,
-          retryAfter,
+          code: isAbort ? 'TIMEOUT' : 'NETWORK_ERROR',
+          message: isAbort ? '请求超时，请稍后重试' : '网络错误，请检查网络连接',
+          retryable: true,
         },
       }
-    }
 
-    return {
-      success: true,
-      data: data as T,
-    }
-  } catch (error: unknown) {
-    console.error('API 请求错误:', error)
-    return {
-      success: false,
-      error: {
-        code: 'NETWORK_ERROR',
-        message: '网络错误，请检查网络连接',
-        retryable: true,
-      },
+      if (attempt < retries) continue
+
+      console.error('API 请求错误:', error)
+      return lastResult
     }
   }
+
+  // Should never reach here, but TypeScript needs it
+  return lastResult!
 }
 
 /**

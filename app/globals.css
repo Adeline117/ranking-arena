@@ -97,6 +97,27 @@ html.theme-transition *::after {
   --color-accent-error-20: rgba(255, 124, 124, 0.2);
   --color-accent-warning: #ffc107;
   
+  /* Score tier colors */
+  --color-score-legendary: #8b5cf6;
+  --color-score-great: #10b981;
+  --color-score-average: #f59e0b;
+  --color-score-below: #f97316;
+  --color-score-low: #6b7280;
+  
+  /* Score breakdown dimension colors */
+  --color-score-profitability: #60a5fa;
+  --color-score-risk: #34d399;
+  --color-score-execution: #fbbf24;
+  
+  /* Medal/rank colors */
+  --color-medal-gold: #FFD700;
+  --color-medal-gold-end: #FFA500;
+  --color-medal-silver: #C0C0C0;
+  --color-medal-bronze: #CD7F32;
+  
+  /* Active button text on accent bg */
+  --color-on-accent: #FFFFFF;
+  
   /* Glass backgrounds - Dark */
   --glass-bg-light: rgba(255, 255, 255, 0.08);
   --glass-bg-medium: rgba(255, 255, 255, 0.12);
@@ -169,6 +190,27 @@ html.theme-transition *::after {
   --color-accent-error: #EF4444;
   --color-accent-error-20: rgba(239, 68, 68, 0.2);
   --color-accent-warning: #F59E0B;
+  
+  /* Score tier colors (darker for light bg contrast) */
+  --color-score-legendary: #7c3aed;
+  --color-score-great: #059669;
+  --color-score-average: #d97706;
+  --color-score-below: #ea580c;
+  --color-score-low: #6b7280;
+  
+  /* Score breakdown dimension colors */
+  --color-score-profitability: #3b82f6;
+  --color-score-risk: #10b981;
+  --color-score-execution: #f59e0b;
+  
+  /* Medal/rank colors */
+  --color-medal-gold: #B8860B;
+  --color-medal-gold-end: #CD950C;
+  --color-medal-silver: #808080;
+  --color-medal-bronze: #8B5A2B;
+  
+  /* Active button text on accent bg */
+  --color-on-accent: #FFFFFF;
   
   /* Glass backgrounds - Light */
   --glass-bg-light: rgba(255, 255, 255, 0.7);

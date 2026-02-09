@@ -106,21 +106,26 @@ function generateBlockieSVG(address: string, pixelSize: number = 8): string {
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const address = searchParams.get('address')
-  const size = Math.min(Math.max(parseInt(searchParams.get('size') || '8'), 1), 32)
+  try {
+    const { searchParams } = new URL(request.url)
+    const address = searchParams.get('address')
+    const size = Math.min(Math.max(parseInt(searchParams.get('size') || '8') || 8, 1), 32)
 
-  if (!address) {
-    return new NextResponse('Missing address parameter', { status: 400 })
+    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      return new NextResponse('Missing or invalid address parameter', { status: 400 })
+    }
+
+    const svg = generateBlockieSVG(address, size)
+
+    return new NextResponse(svg, {
+      headers: {
+        'Content-Type': 'image/svg+xml',
+        'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
+        'Access-Control-Allow-Origin': '*',
+      },
+    })
+  } catch (error) {
+    console.error('[blockie] Error:', error)
+    return new NextResponse('Internal server error', { status: 500 })
   }
-
-  const svg = generateBlockieSVG(address, size)
-
-  return new NextResponse(svg, {
-    headers: {
-      'Content-Type': 'image/svg+xml',
-      'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
-      'Access-Control-Allow-Origin': '*',
-    },
-  })
 }
