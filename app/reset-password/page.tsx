@@ -453,7 +453,7 @@ function ResetPasswordContent() {
           marginBottom: 8, 
           fontWeight: tokens.typography.fontWeight.extrabold,
           textAlign: 'center',
-          background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
+          background: 'linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-brand-accent) 100%)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
         }}>
@@ -511,7 +511,7 @@ function ResetPasswordContent() {
                 border: 'none',
                 background: loading || !email || countdown > 0 
                   ? 'var(--color-accent-primary-20)' 
-                  : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                  : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                 color: tokens.colors.white,
                 fontWeight: 700,
                 fontSize: 16,
@@ -671,7 +671,7 @@ function ResetPasswordContent() {
                 border: 'none',
                 background: loading || !newPassword || !confirmPassword 
                   ? 'var(--color-accent-primary-20)' 
-                  : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                  : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                 color: tokens.colors.white,
                 fontWeight: 700,
                 fontSize: 16,

@@ -50,6 +50,7 @@ html.theme-transition *::after {
   --color-brand-muted: var(--color-accent-primary-15);
   --color-brand-light: var(--color-accent-primary-30);
   --color-brand-accent: #c9b8db;
+  --color-brand-deep: #6b4f88;
   --color-verified-onchain: #2fe57d;
   --color-verified-web3: #8B5CF6;
   
@@ -158,6 +159,8 @@ html.theme-transition *::after {
   --color-pro-gold-glow: rgba(212, 168, 71, 0.3);
   --color-pro-gold-bg: rgba(212, 168, 71, 0.12);
   --color-pro-gold-border: rgba(212, 168, 71, 0.3);
+  --color-pro-gold: #D4A847;
+  --color-pro-gold-dark: #C4963C;
   
   /* Copy trade */
   --color-copytrade-success-shadow: 0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px var(--color-accent-success-20);

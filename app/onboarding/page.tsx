@@ -280,7 +280,7 @@ export default function OnboardingPage() {
     ? 'linear-gradient(135deg, var(--color-accent-primary-30) 0%, var(--color-accent-primary-15) 100%)'
     : 'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)'
   const selectedBorder = 'var(--color-accent-primary-60)'
-  const brandGradient = 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)'
+  const brandGradient = 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)'
 
   const stepIndex = STEPS.indexOf(step)
 
@@ -323,7 +323,7 @@ export default function OnboardingPage() {
             <Box style={{ textAlign: 'center', marginBottom: 32 }}>
               <Text size="3xl" weight="black" style={{
                 marginBottom: 8,
-                background: 'linear-gradient(135deg, var(--color-brand) 0%, #c9b8db 100%)',
+                background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-accent) 100%)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               }}>
                 Arena
@@ -415,7 +415,7 @@ export default function OnboardingPage() {
           <div key="interests" className="step-content">
             <Text size="2xl" weight="black" style={{
               marginBottom: 8, textAlign: 'center',
-              background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
+              background: `linear-gradient(135deg, ${textPrimary} 0%, var(--color-brand-accent) 100%)`,
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
               {tr('selectInterests')}
@@ -473,7 +473,7 @@ export default function OnboardingPage() {
           <div key="traders" className="step-content">
             <Text size="2xl" weight="black" style={{
               marginBottom: 8, textAlign: 'center',
-              background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
+              background: `linear-gradient(135deg, ${textPrimary} 0%, var(--color-brand-accent) 100%)`,
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
               {tr('onboardingFollowTitle')}
@@ -571,7 +571,7 @@ export default function OnboardingPage() {
           <div key="groups" className="step-content">
             <Text size="2xl" weight="black" style={{
               marginBottom: 8, textAlign: 'center',
-              background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
+              background: `linear-gradient(135deg, ${textPrimary} 0%, var(--color-brand-accent) 100%)`,
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
               {tr('onboardingGroupTitle')}
@@ -667,7 +667,7 @@ export default function OnboardingPage() {
             </Box>
             <Text size="2xl" weight="black" style={{
               marginBottom: 12,
-              background: `linear-gradient(135deg, ${textPrimary} 0%, #c9b8db 100%)`,
+              background: `linear-gradient(135deg, ${textPrimary} 0%, var(--color-brand-accent) 100%)`,
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
               {tr('onboardingDoneTitle')}

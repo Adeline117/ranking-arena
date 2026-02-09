@@ -831,7 +831,7 @@ export default function LoginPage() {
             fontSize: tokens.typography.fontSize['2xl'], 
             fontWeight: tokens.typography.fontWeight.extrabold, 
             marginBottom: 8,
-            background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
+            background: 'linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-brand-accent) 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>
@@ -912,7 +912,7 @@ export default function LoginPage() {
                   border: 'none',
                   background: sendingCode || !email || countdown > 0 
                     ? 'var(--color-accent-primary-20)' 
-                    : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                    : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                   color: tokens.colors.white,
                   fontWeight: 700,
                   fontSize: 16,
@@ -973,7 +973,7 @@ export default function LoginPage() {
                     border: 'none',
                     background: loading || !code 
                       ? 'var(--color-accent-primary-20)' 
-                      : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                      : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                     color: tokens.colors.white,
                     fontWeight: 700,
                     fontSize: 16,
@@ -1132,7 +1132,7 @@ export default function LoginPage() {
                     border: 'none',
                     background: loading || !password || password.length < 6 || !handle || handle.length < 1 
                       ? 'var(--color-accent-primary-20)' 
-                      : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                      : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                     color: tokens.colors.white,
                     fontWeight: 700,
                     fontSize: 16,
@@ -1221,7 +1221,7 @@ export default function LoginPage() {
                     border: 'none',
                     background: loading || !email || !password 
                       ? 'var(--color-accent-primary-20)' 
-                      : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                      : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                     color: tokens.colors.white,
                     fontWeight: 700,
                     fontSize: 16,
@@ -1291,7 +1291,7 @@ export default function LoginPage() {
                       border: 'none',
                       background: sendingCode || !email || countdown > 0 
                         ? 'var(--color-accent-primary-20)' 
-                        : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                        : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                       color: tokens.colors.white,
                       fontWeight: 700,
                       fontSize: 16,
@@ -1352,7 +1352,7 @@ export default function LoginPage() {
                         border: 'none',
                         background: loading || !code 
                           ? 'var(--color-accent-primary-20)' 
-                          : 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                          : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                         color: tokens.colors.white,
                         fontWeight: 700,
                         fontSize: 16,
