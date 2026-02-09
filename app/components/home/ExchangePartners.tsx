@@ -58,7 +58,7 @@ export default function ExchangePartners() {
       }} />
       <div style={{
         position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
-        background: `linear-gradient(to left, ${tokens.colors.bg.primary}, transparent)`,
+        background: `linear-gradient(to left, var(--color-bg-primary), transparent)`,
         zIndex: 1, pointerEvents: 'none',
       }} />
 
@@ -72,7 +72,7 @@ export default function ExchangePartners() {
         <span style={{
           fontSize: 11,
           fontWeight: 700,
-          color: tokens.colors.text.tertiary,
+          color: 'var(--color-text-tertiary)',
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
           flexShrink: 0,
@@ -90,7 +90,7 @@ export default function ExchangePartners() {
               gap: 6,
               fontSize: 13,
               fontWeight: 600,
-              color: tokens.colors.text.secondary,
+              color: 'var(--color-text-secondary)',
               whiteSpace: 'nowrap',
               flexShrink: 0,
             }}

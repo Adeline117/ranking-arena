@@ -288,7 +288,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
         }}
       >
         {/* 左：Logo + Nav */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
           <Link
             href="/"
             className="top-nav-logo top-nav-logo-link touch-target"
