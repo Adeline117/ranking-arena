@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const userId = authUser.id // Use authenticated user ID, ignore client-provided userId
+    const _userId = authUser.id // Use authenticated user ID, ignore client-provided userId
     const conversationId = formData.get('conversationId') as string
 
     if (!file) {
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Error uploading chat file:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Upload failed'
+    const _errorMessage = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

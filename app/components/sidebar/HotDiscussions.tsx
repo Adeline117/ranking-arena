@@ -96,7 +96,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
 
   function getPreview(post: HotPost): string {
     const text = (post.title || post.content || '').replace(/\[sticker:\w+\]/g, '').trim()
-    return text.length > 40 ? text.slice(0, 40) + '...' : text
+    return text.length > 60 ? text.slice(0, 60) + '...' : text
   }
 
   function timeAgo(dateStr: string): string {
@@ -112,7 +112,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   return (
     <SidebarCard title={t('sidebarHotDiscussions')}>
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="skeleton" style={{ height: 56, borderRadius: tokens.radius.md }} />
           ))}

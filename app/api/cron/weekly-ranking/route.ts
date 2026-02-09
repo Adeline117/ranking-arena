@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin()
 
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const _weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
     // 获取7D快照数据，按收益率排序
      

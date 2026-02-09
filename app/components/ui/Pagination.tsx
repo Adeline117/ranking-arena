@@ -46,14 +46,14 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
     <Box
       className="pagination-container"
       style={{
-        padding: `${tokens.spacing[5]} ${tokens.spacing[4]}`,
-        borderTop: `2px solid ${tokens.colors.border.primary}`,
+        padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+        borderTop: `1px solid var(--glass-border-light)`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: tokens.spacing[3],
-        background: tokens.colors.bg.primary,
-        borderRadius: `0 0 ${tokens.radius.lg} ${tokens.radius.lg}`,
+        gap: tokens.spacing[2],
+        background: tokens.glass.bg.light,
+        borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
       }}
     >
       <button
@@ -61,16 +61,16 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
         onClick={() => onPageChange(Math.max(1, currentPage - 1))}
         disabled={currentPage === 1}
         style={{
-          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-          background: currentPage === 1 ? tokens.colors.bg.secondary : `${tokens.colors.accent.primary}20`,
-          border: `1px solid ${currentPage === 1 ? tokens.colors.border.primary : tokens.colors.accent.primary}40`,
+          padding: `6px ${tokens.spacing[3]}`,
+          background: currentPage === 1 ? 'transparent' : `${tokens.colors.accent.primary}10`,
+          border: `1px solid ${currentPage === 1 ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
           borderRadius: tokens.radius.md,
-          color: currentPage === 1 ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+          color: currentPage === 1 ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
           cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-          fontSize: tokens.typography.fontSize.base,
+          fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.semibold,
-          transition: `all ${tokens.transition.base}`,
-          opacity: currentPage === 1 ? 0.5 : 1,
+          transition: `all ${tokens.transition.fast}`,
+          opacity: currentPage === 1 ? 0.4 : 1,
         }}
       >
         {t('prevPage')}
@@ -96,18 +96,17 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
               className={`pagination-btn pagination-page ${isActive ? 'pagination-active' : ''}`}
               onClick={() => onPageChange(pageNum)}
               style={{
-                minWidth: `${tokens.touchTarget.min}px`,
-                height: `${tokens.touchTarget.min}px`,
-                padding: `0 ${tokens.spacing[2]}`,
-                background: isActive ? `${tokens.colors.accent.primary}30` : `${tokens.colors.accent.primary}10`,
-                border: `1.5px solid ${isActive ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-                borderRadius: tokens.radius.md,
-                color: isActive ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                minWidth: 32,
+                height: 32,
+                padding: `0 ${tokens.spacing[1]}`,
+                background: isActive ? `${tokens.colors.accent.primary}20` : 'transparent',
+                border: `1px solid ${isActive ? `${tokens.colors.accent.primary}60` : 'transparent'}`,
+                borderRadius: tokens.radius.sm,
+                color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
                 cursor: 'pointer',
-                fontSize: tokens.typography.fontSize.base,
-                fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.semibold,
-                transition: `all ${tokens.transition.base}`,
-                boxShadow: isActive ? tokens.shadow.sm : tokens.shadow.none,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                transition: `all ${tokens.transition.fast}`,
               }}
             >
               {pageNum}
@@ -121,16 +120,16 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
         onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
         disabled={currentPage === totalPages}
         style={{
-          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-          background: currentPage === totalPages ? tokens.colors.bg.secondary : `${tokens.colors.accent.primary}20`,
-          border: `1px solid ${currentPage === totalPages ? tokens.colors.border.primary : tokens.colors.accent.primary}40`,
+          padding: `6px ${tokens.spacing[3]}`,
+          background: currentPage === totalPages ? 'transparent' : `${tokens.colors.accent.primary}10`,
+          border: `1px solid ${currentPage === totalPages ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
           borderRadius: tokens.radius.md,
-          color: currentPage === totalPages ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+          color: currentPage === totalPages ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
           cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-          fontSize: tokens.typography.fontSize.base,
+          fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.semibold,
-          transition: `all ${tokens.transition.base}`,
-          opacity: currentPage === totalPages ? 0.5 : 1,
+          transition: `all ${tokens.transition.fast}`,
+          opacity: currentPage === totalPages ? 0.4 : 1,
         }}
       >
         {t('nextPage')}

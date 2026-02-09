@@ -9,14 +9,13 @@ export default function SidebarCard({ title, children }: SidebarCardProps) {
   return (
     <div className="sidebar-card card-hover">
       <h3 style={{
-        fontSize: 13,
-        fontWeight: 600,
-        color: 'var(--color-text-secondary)',
-        marginBottom: 12,
-        paddingBottom: 8,
+        fontSize: 14,
+        fontWeight: 700,
+        color: 'var(--color-text-primary)',
+        marginBottom: 14,
+        paddingBottom: 10,
         borderBottom: '1px solid var(--color-border-primary)',
-        letterSpacing: '0.02em',
-        textTransform: 'uppercase' as const,
+        letterSpacing: '0.01em',
       }}>
         {title}
       </h3>

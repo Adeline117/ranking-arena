@@ -70,7 +70,6 @@ export default function FearGreedGauge() {
         borderRadius: tokens.radius.xl,
         border: tokens.glass.border.light,
         height: '100%',
-        minHeight: 220,
       }}>
         <div className="skeleton" style={{ height: '100%', borderRadius: tokens.radius.lg }} />
       </div>
@@ -116,7 +115,6 @@ export default function FearGreedGauge() {
       borderRadius: tokens.radius.xl,
       border: tokens.glass.border.light,
       height: '100%',
-      minHeight: 220,
       display: 'flex',
       flexDirection: 'column',
       position: 'relative',

@@ -39,6 +39,7 @@ interface UserProfileData {
   isVerifiedTrader?: boolean
   proBadgeTier: 'pro' | null
   role?: string
+  traderHandle?: string
 }
 
 async function fetchUserProfile(handle: string): Promise<UserProfileData | null> {
@@ -67,6 +68,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   let tradersCount = 0
   let hasPro = userProfile.subscription_tier === 'pro'
   let hasClaimedTrader = false
+  let traderHandle: string | undefined
 
   try {
     const [followersRes, followingRes, tradersRes, subscriptionData, claimedTraderRes] = await Promise.all([
@@ -74,13 +76,29 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
       supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', userProfile.id),
       supabase.from('trader_follows').select('*', { count: 'exact', head: true }).eq('user_id', userProfile.id),
       supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('trader_authorizations').select('id', { count: 'exact', head: true }).eq('user_id', userProfile.id).eq('status', 'active'),
+      supabase.from('trader_authorizations').select('id, trader_id').eq('user_id', userProfile.id).eq('status', 'active').limit(1).maybeSingle(),
     ])
     followers = followersRes.count || 0
     following = followingRes.count || 0
     tradersCount = tradersRes.count || 0
     hasPro = hasPro || subscriptionData?.data?.tier === 'pro'
-    hasClaimedTrader = (claimedTraderRes.count || 0) > 0
+    hasClaimedTrader = !!claimedTraderRes?.data
+    
+    // If user has a claimed trader, fetch the trader handle
+    if (claimedTraderRes?.data?.trader_id) {
+      try {
+        const { data: traderRow } = await supabase
+          .from('traders')
+          .select('handle')
+          .eq('id', claimedTraderRes.data.trader_id)
+          .maybeSingle()
+        if (traderRow?.handle) {
+          traderHandle = traderRow.handle
+        }
+      } catch {
+        // ignore
+      }
+    }
   } catch (err) {
     logger.error('[UserProfile] Failed to fetch counts:', err)
   }
@@ -100,6 +118,21 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     isVerifiedTrader: hasClaimedTrader,
     proBadgeTier: hasPro && userProfile.show_pro_badge !== false ? 'pro' : null,
     role: userProfile.role || undefined,
+    traderHandle,
+  }
+}
+
+async function fetchTraderData(traderHandle: string) {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const res = await fetch(
+      `${baseUrl}/api/traders/${encodeURIComponent(traderHandle)}`,
+      { next: { revalidate: 60 } }
+    )
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
   }
 }
 
@@ -108,11 +141,18 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
 
   const profile = await fetchUserProfile(handle)
 
+  // If user is a trader, fetch their trading data
+  let traderData = null
+  if (profile?.traderHandle) {
+    traderData = await fetchTraderData(profile.traderHandle)
+  }
+
   return (
     <Suspense>
       <UserProfileClient
         handle={handle}
         serverProfile={profile}
+        serverTraderData={traderData}
       />
     </Suspense>
   )

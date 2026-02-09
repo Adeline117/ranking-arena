@@ -132,7 +132,7 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
       try {
         handleData(JSON.parse(event.data))
         setMode('sse')
-      } catch {}
+      } catch { /* ignore parse errors */ }
     }
 
     es.onerror = () => {

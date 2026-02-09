@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
+import useSWR from 'swr'
+import { fetcher } from '@/lib/hooks/useSWR'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
@@ -11,6 +13,8 @@ import TopNav from '@/app/components/layout/TopNav'
 const JoinedGroups = dynamic(() => import('@/app/components/trader/JoinedGroups'), { ssr: false })
 const UserBookmarkFolders = dynamic(() => import('@/app/components/trader/UserBookmarkFolders'), { ssr: false })
 import { Box, Text } from '@/app/components/base'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/Dynamic'
@@ -23,6 +27,17 @@ import { logger } from '@/lib/logger'
 
 const ActivityHeatmap = dynamic(() => import('@/app/components/profile/ActivityHeatmap'), { ssr: false })
 const UserStreaks = dynamic(() => import('@/app/components/profile/UserStreaks'), { ssr: false })
+
+// Trader components (lazy-loaded, only for users with bound exchange)
+const OverviewPerformanceCard = dynamic(() => import('@/app/components/trader/OverviewPerformanceCard'), {
+  loading: () => <RankingSkeleton />,
+})
+const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
+  loading: () => <RankingSkeleton />,
+})
+const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
+  loading: () => <RankingSkeleton />,
+})
 
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
@@ -138,18 +153,24 @@ interface ServerProfile {
   isVerifiedTrader?: boolean
   proBadgeTier: 'pro' | null
   role?: string
+  traderHandle?: string
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TraderPageData = any
 
 interface UserProfileClientProps {
   handle: string
   serverProfile: ServerProfile | null
+  serverTraderData?: TraderPageData | null
 }
 
-export default function UserProfileClient({ handle, serverProfile }: UserProfileClientProps) {
+export default function UserProfileClient({ handle, serverProfile, serverTraderData }: UserProfileClientProps) {
   const router = useRouter()
   const { showToast } = useToast()
   const { t, language } = useLanguage()
   const isZh = language === 'zh'
+  const { isPro } = useSubscription()
 
   const [email, setEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -160,10 +181,36 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
   const profileCreationRef = useRef(false) // Prevent race condition in profile creation
   const searchParams = useSearchParams()
   const pathname = usePathname()
-  type ProfileTabKey = 'overview' | 'followers' | 'groups' | 'bookmarks'
+
+  // Trader data - SWR with server fallback
+  const isTrader = !!serverProfile?.traderHandle
+  const { data: traderData } = useSWR<TraderPageData>(
+    isTrader ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}` : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      refreshInterval: 60_000,
+      dedupingInterval: 5000,
+      errorRetryCount: 2,
+      fallbackData: serverTraderData ?? undefined,
+    }
+  )
+
+  const traderProfile = traderData?.profile ?? null
+  const traderPerformance = traderData?.performance ?? null
+  const traderStats = traderData?.stats ?? null
+  const traderPortfolio = traderData?.portfolio ?? []
+  const traderPositionHistory = traderData?.positionHistory ?? []
+  const traderEquityCurve = traderData?.equityCurve
+  const traderAssetBreakdown = traderData?.assetBreakdown
+
+  type ProfileTabKey = 'overview' | 'stats' | 'portfolio' | 'followers' | 'groups' | 'bookmarks'
+  const validTabs: ProfileTabKey[] = isTrader
+    ? ['overview', 'stats', 'portfolio', 'followers', 'groups', 'bookmarks']
+    : ['overview', 'followers', 'groups', 'bookmarks']
   const urlTab = searchParams.get('tab') as ProfileTabKey | null
   const [activeTab, setActiveTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'followers', 'groups', 'bookmarks'].includes(urlTab) ? urlTab : 'overview'
+    urlTab && validTabs.includes(urlTab) ? urlTab : 'overview'
   )
   const [_followersList, _setFollowersList] = useState<Array<{ id: string; handle: string; avatar_url: string | null }>>([])
   const [_loadingFollowers, _setLoadingFollowers] = useState(false)
@@ -324,6 +371,10 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') || '概览' },
+    ...(isTrader ? [
+      { key: 'stats' as ProfileTabKey, label: t('stats') || '统计' },
+      { key: 'portfolio' as ProfileTabKey, label: t('portfolio') || '持仓' },
+    ] : []),
     { key: 'followers', label: `${t('followers') || '粉丝'} (${followersCount})` },
     { key: 'groups', label: t('groups') || '群组' },
     { key: 'bookmarks', label: t('bookmarks') || '收藏' },
@@ -488,6 +539,26 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
                 >
                   {profile.handle}
                 </Text>
+
+                {/* Arena Score badge for traders */}
+                {isTrader && traderPerformance?.arena_score != null && (
+                  <Box
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 8px',
+                      background: `linear-gradient(135deg, ${tokens.colors.accent.primary}25, ${tokens.colors.accent.brand}15)`,
+                      border: `1px solid ${tokens.colors.accent.primary}30`,
+                      borderRadius: tokens.radius.full,
+                    }}
+                    title="Arena Score"
+                  >
+                    <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, fontSize: 11 }}>
+                      Arena {Math.round(traderPerformance.arena_score)}
+                    </Text>
+                  </Box>
+                )}
 
                 {profile.isVerifiedTrader && (
                   <Box
@@ -762,6 +833,54 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           key={activeTab}
           style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
         >
+          {/* Trading overview card for traders */}
+          {activeTab === 'overview' && isTrader && traderPerformance && (
+            <Box style={{ marginBottom: tokens.spacing[6] }}>
+              <OverviewPerformanceCard
+                performance={traderPerformance}
+                equityCurve={traderEquityCurve?.['90D']}
+                source={traderProfile?.source}
+              />
+            </Box>
+          )}
+
+          {/* Stats tab (traders only) */}
+          {activeTab === 'stats' && isTrader && (
+            traderStats ? (
+              <StatsPage
+                stats={traderStats}
+                traderHandle={serverProfile?.traderHandle || ''}
+                assetBreakdown={traderAssetBreakdown}
+                equityCurve={traderEquityCurve}
+                positionHistory={traderPositionHistory}
+                isPro={isPro || (currentUserId === profile.id)}
+                onUnlock={() => router.push('/pricing')}
+              />
+            ) : (
+              <Box style={{
+                padding: tokens.spacing[6],
+                background: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.xl,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                textAlign: 'center',
+              }}>
+                <Text size="sm" color="tertiary">
+                  {t('noStatsData') || '暂无统计数据'}
+                </Text>
+              </Box>
+            )
+          )}
+
+          {/* Portfolio tab (traders only) */}
+          {activeTab === 'portfolio' && isTrader && (
+            <PortfolioTable
+              items={traderPortfolio}
+              history={traderPositionHistory}
+              isPro={isPro || (currentUserId === profile.id)}
+              onUnlock={() => router.push('/pricing')}
+            />
+          )}
+
           {activeTab === 'overview' && (
             <Box
               className="profile-content"

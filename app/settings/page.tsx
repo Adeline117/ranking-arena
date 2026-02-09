@@ -785,8 +785,8 @@ function SettingsContent() {
       const { clearProStatusCache } = await import('@/lib/hooks/useProStatus')
       clearProStatusCache()
       // Clear session-specific storage
-      try { sessionStorage.clear() } catch {}
-      try { localStorage.removeItem('guest-signup-dismissed') } catch {}
+      try { sessionStorage.clear() } catch { /* ignore */ }
+      try { localStorage.removeItem('guest-signup-dismissed') } catch { /* ignore */ }
       await supabase.auth.signOut()
       router.push('/')
     } catch { showToast(t('logoutFailed'), 'error') }

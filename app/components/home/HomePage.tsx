@@ -70,6 +70,7 @@ export default function HomePage({
         }}
       >
         <ExchangePartners />
+        <div style={{ height: 16 }} />
         <ThreeColumnLayout
           leftSidebar={
             <SectionErrorBoundary>
@@ -79,7 +80,7 @@ export default function HomePage({
             </SectionErrorBoundary>
           }
           rightSidebar={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ flexShrink: 0 }}>
                 <SectionErrorBoundary>
                   <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: tokens.radius.lg }} />}>
