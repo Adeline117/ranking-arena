@@ -86,116 +86,28 @@
       "schedule": "0 * * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/binance_futures",
+      "path": "/api/cron/batch-fetch-traders?group=a",
       "schedule": "55 */3 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/binance_spot",
-      "schedule": "56 */3 * * *"
+      "path": "/api/cron/batch-fetch-traders?group=b",
+      "schedule": "2 */4 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/bybit",
-      "schedule": "57 */3 * * *"
+      "path": "/api/cron/batch-fetch-traders?group=c",
+      "schedule": "22 */6 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/bitget_futures",
-      "schedule": "58 */3 * * *"
+      "path": "/api/cron/batch-fetch-traders?group=d",
+      "schedule": "40 */6 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/okx_futures",
-      "schedule": "59 */3 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/mexc",
-      "schedule": "0 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/kucoin",
-      "schedule": "3 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/okx_web3",
-      "schedule": "6 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/hyperliquid",
-      "schedule": "9 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/gmx",
-      "schedule": "12 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/jupiter_perps",
-      "schedule": "15 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/aevo",
-      "schedule": "18 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/coinex",
-      "schedule": "21 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bitget_spot",
-      "schedule": "24 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/xt",
-      "schedule": "27 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/vertex",
-      "schedule": "30 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/bybit_spot",
-      "schedule": "33 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/binance_web3",
-      "schedule": "36 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/lbank",
-      "schedule": "39 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/dydx",
-      "schedule": "42 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/phemex",
-      "schedule": "45 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/gains",
-      "schedule": "48 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/htx_futures",
-      "schedule": "51 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/weex",
-      "schedule": "54 */6 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/blofin",
+      "path": "/api/cron/batch-fetch-traders?group=e",
       "schedule": "57 */8 * * *"
     },
     {
-      "path": "/api/cron/fetch-traders/bingx",
-      "schedule": "0 */8 * * *"
-    },
-    {
-      "path": "/api/cron/enrich?platform=binance_futures&period=90D&limit=100",
+      "path": "/api/cron/batch-enrich",
       "schedule": "10 */4 * * *"
-    },
-    {
-      "path": "/api/cron/enrich?platform=bybit&period=90D&limit=100",
-      "schedule": "20 */4 * * *"
     },
     {
       "path": "/api/cron/check-trader-alerts",
