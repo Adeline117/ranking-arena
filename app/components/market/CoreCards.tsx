@@ -261,7 +261,7 @@ export default function CoreCards() {
                 justifyContent: 'center',
               }}>
                 {trader.avatar_url ? (
-                  <img src={trader.avatar_url} alt="" width={28} height={28} style={{ borderRadius: '50%' }} />
+                  <img src={trader.avatar_url} alt="" width={28} height={28} loading="lazy" style={{ borderRadius: '50%' }} />
                 ) : (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2">
                     <circle cx="12" cy="8" r="4" />
