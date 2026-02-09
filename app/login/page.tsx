@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/app/components/ui/Toast'
@@ -681,7 +681,7 @@ export default function LoginPage() {
         style={{ 
           maxWidth: 440, 
           width: '100%',
-          background: 'rgba(15, 15, 20, 0.8)',
+          background: 'var(--color-bg-secondary, rgba(15, 15, 20, 0.8))',
           border: '1px solid rgba(139, 111, 168, 0.15)',
           borderRadius: 24,
           padding: '40px 36px',

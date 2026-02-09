@@ -335,7 +335,9 @@ export default function GroupsFeedPage() {
             <PostFeed layout="masonry" groupIds={myGroupIds} />
           ) : (
             <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`, textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
-              <Box style={{ fontSize: 40, marginBottom: tokens.spacing[3], opacity: 0.6 }}>👥</Box>
+              <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, marginBottom: 12, color: tokens.colors.text.tertiary }}>
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
               <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
                 {_language === 'zh' ? '还没有关注的小组' : 'No groups followed yet'}
               </Text>
