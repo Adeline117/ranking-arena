@@ -3,7 +3,7 @@ import { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Pro Pricing | Arena',
+  title: 'Pro 会员',
   description:
     'Upgrade to Arena Pro for trader alerts, comparison tools, advanced filters, data export, and 1-year historical data. From $9.90/month.',
   alternates: {
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     'Arena pricing',
   ],
   openGraph: {
-    title: 'Pro Pricing | Arena',
+    title: 'Pro 会员',
     description:
       'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $9.90/month.',
     url: `${baseUrl}/pricing`,
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary',
-    title: 'Pro Pricing | Arena',
+    title: 'Pro 会员',
     description: 'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons.',
     creator: '@arenafi',
   },

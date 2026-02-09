@@ -3,7 +3,7 @@ import { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Trader Rankings | Arena',
+  title: '交易员排行榜',
   description:
     'Real-time crypto trader leaderboard across Binance, Bybit, Bitget, OKX, MEXC, KuCoin, GMX, Hyperliquid and more. Compare 90-day ROI, win rate, drawdown and Arena Score.',
   alternates: {
