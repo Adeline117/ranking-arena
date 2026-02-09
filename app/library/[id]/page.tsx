@@ -136,27 +136,38 @@ export default function BookDetailPage() {
   const [showRatingPrompt, setShowRatingPrompt] = useState(false)
   const ratingRef = useRef<HTMLDivElement>(null)
 
+  const [statusLoading, setStatusLoading] = useState(false)
   const handleStatus = async (status: 'want_to_read' | 'read') => {
     if (!session) {
       alert(isZh ? '请先登录' : 'Please login first')
       return
     }
-    const res = await fetch(`/api/library/${id}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ status }),
-    })
-    if (res.ok) {
-      setUserStatus(status)
-      if (status === 'want_to_read') {
-        setUserRating(null)
-        setShowRatingPrompt(false)
+    if (statusLoading) return
+    setStatusLoading(true)
+    try {
+      const res = await fetch(`/api/library/${id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ status }),
+      })
+      if (res.ok) {
+        setUserStatus(status)
+        if (status === 'want_to_read') {
+          setUserRating(null)
+          setShowRatingPrompt(false)
+        }
+        if (status === 'read') {
+          setShowRatingPrompt(true)
+          setTimeout(() => ratingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200)
+        }
+      } else {
+        const data = await res.json().catch(() => ({}))
+        logger.error('Status update failed', data)
       }
-      if (status === 'read') {
-        setShowRatingPrompt(true)
-        // Scroll to rating area
-        setTimeout(() => ratingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200)
-      }
+    } catch (e) {
+      logger.error('Status update error', e)
+    } finally {
+      setStatusLoading(false)
     }
   }
 

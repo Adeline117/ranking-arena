@@ -87,14 +87,8 @@ export default function FlashNewsPage() {
     try {
       if (append) setLoadingMore(true); else setLoading(true)
       const params = new URLSearchParams({ page: page.toString(), limit: '20' })
-      // Check if this is an importance-based filter or category filter
-      const catDef = CATEGORIES.find(c => c.key === category)
       if (category !== 'all') {
-        if (catDef && 'isImportance' in catDef && catDef.isImportance) {
-          params.append('importance', category)
-        } else {
-          params.append('category', category)
-        }
+        params.append('category', category)
       }
 
       const response = await fetch(`/api/flash-news?${params}`)
