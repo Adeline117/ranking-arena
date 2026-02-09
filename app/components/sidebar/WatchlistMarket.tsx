@@ -90,7 +90,7 @@ function saveWatchlist(ids: string[]) {
 
 export default function WatchlistMarket() {
   const { language, t } = useLanguage()
-  const isZh = language === 'zh'
+  const _isZh = language === 'zh'
   const [watchIds, setWatchIds] = useState<string[]>(DEFAULT_COINS)
   const [showPicker, setShowPicker] = useState(false)
   const [search, setSearch] = useState('')

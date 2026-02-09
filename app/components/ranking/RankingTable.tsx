@@ -28,7 +28,7 @@ import {
   TableViewIcon, CardViewIcon, SettingsIcon,
 } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
-import { classifyStyle, getStyleInfo, getFilterableStyles, type TradingStyle } from '@/lib/utils/trading-style'
+import { classifyStyle, getFilterableStyles, type TradingStyle } from '@/lib/utils/trading-style'
 import { getScoreGradeLetter } from '@/lib/utils/score-explain'
 
 // CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)

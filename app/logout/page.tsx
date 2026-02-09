@@ -25,11 +25,11 @@ export default function LogoutPage() {
           'guest-signup-dismissed',
         ]
         keysToRemove.forEach(key => {
-          try { localStorage.removeItem(key) } catch {}
+          try { localStorage.removeItem(key) } catch { /* ignore */ }
         })
 
         // Clear all sessionStorage
-        try { sessionStorage.clear() } catch {}
+        try { sessionStorage.clear() } catch { /* ignore */ }
 
         await supabase.auth.signOut()
       } catch (err) {

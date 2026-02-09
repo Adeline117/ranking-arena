@@ -34,7 +34,7 @@ export function logError(error: unknown, context?: ErrorContext): ParsedError {
     logger.error('原始错误:', error)
 
     if (context?.meta) {
-
+      // meta logging placeholder
     }
     console.groupEnd()
   } else {
