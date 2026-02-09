@@ -30,6 +30,7 @@ type BookDetail = {
   download_count: number
   is_free: boolean
   buy_url: string | null
+  content_url: string | null
   publisher: string | null
   isbn: string | null
   page_count: number | null
