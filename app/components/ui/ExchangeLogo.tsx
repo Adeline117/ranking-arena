@@ -12,16 +12,18 @@ interface ExchangeLogoProps {
 }
 
 // 交易所logo URL（使用CDN或官方logo）
+// Exchange logos: use CoinGecko /markets/ endpoints (more stable than /coins/)
+// with CoinMarketCap fallbacks for exchanges where CoinGecko returns 403
 const EXCHANGE_LOGOS: Record<string, string> = {
   binance: 'https://assets.coingecko.com/coins/images/825/small/binance-coin-logo.png',
-  bybit: 'https://assets.coingecko.com/coins/images/21149/small/bybit.png',
-  bitget: 'https://assets.coingecko.com/coins/images/11610/small/photo_2022-01-24_14-14-56.jpg',
-  mexc: 'https://assets.coingecko.com/coins/images/12958/small/mexc.png',
+  bybit: 'https://assets.coingecko.com/markets/images/698/small/bybit_spot.png',
+  bitget: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/513.png',
+  mexc: 'https://assets.coingecko.com/markets/images/409/small/MEXC_logo_square.jpeg',
   htx: 'https://assets.coingecko.com/coins/images/2822/small/huobi-token-logo.png',
-  weex: 'https://assets.coingecko.com/coins/images/28526/small/weex.png',
-  coinex: 'https://assets.coingecko.com/coins/images/4812/small/coinex.png',
-  okx: 'https://assets.coingecko.com/coins/images/13708/small/okb_logo.png',
-  kucoin: 'https://assets.coingecko.com/coins/images/1047/small/kucoin.png',
+  weex: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/1170.png',
+  coinex: 'https://assets.coingecko.com/markets/images/135/small/coinex.jpg',
+  okx: 'https://assets.coingecko.com/markets/images/96/small/WeChat_Image_20220117220452.png',
+  kucoin: 'https://assets.coingecko.com/markets/images/61/small/kucoin.png',
   gate: 'https://assets.coingecko.com/coins/images/8183/small/gate.png',
 }
 
