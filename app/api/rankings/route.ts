@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
 
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 2000);
     const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
@@ -177,7 +177,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   } = rankingsQuery;
 
   const supabase = getSupabaseAdmin();
-  const safeLimit = Math.min(limit, 1000);
+  const safeLimit = Math.min(limit, 2000);
 
   // Map sort column for trader_snapshots table
   const sortColumnMap: Record<string, string> = {

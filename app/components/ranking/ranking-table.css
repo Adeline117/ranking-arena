@@ -3,28 +3,28 @@
 /* 奖牌发光效果 — box-shadow is GPU-accelerated (replaces CPU-intensive filter: drop-shadow) */
 @keyframes medalGlowGold {
   0%, 100% {
-    box-shadow: 0 0 4px rgba(255, 215, 0, 0.6), 0 0 8px var(--color-gold-glow);
+    box-shadow: 0 0 4px var(--color-gold-glow), 0 0 8px var(--color-gold-glow);
   }
   50% {
-    box-shadow: 0 0 8px rgba(255, 215, 0, 0.8), 0 0 16px rgba(255, 215, 0, 0.5);
+    box-shadow: 0 0 8px var(--color-gold-glow), 0 0 16px var(--color-gold-glow);
   }
 }
 
 @keyframes medalGlowSilver {
   0%, 100% {
-    box-shadow: 0 0 3px rgba(192, 192, 192, 0.6), 0 0 6px var(--color-silver-glow);
+    box-shadow: 0 0 3px var(--color-silver-glow), 0 0 6px var(--color-silver-glow);
   }
   50% {
-    box-shadow: 0 0 6px rgba(192, 192, 192, 0.8), 0 0 12px rgba(192, 192, 192, 0.5);
+    box-shadow: 0 0 6px var(--color-silver-glow), 0 0 12px var(--color-silver-glow);
   }
 }
 
 @keyframes medalGlowBronze {
   0%, 100% {
-    box-shadow: 0 0 3px rgba(205, 127, 50, 0.6), 0 0 6px var(--color-bronze-glow);
+    box-shadow: 0 0 3px var(--color-bronze-glow), 0 0 6px var(--color-bronze-glow);
   }
   50% {
-    box-shadow: 0 0 6px rgba(205, 127, 50, 0.8), 0 0 12px rgba(205, 127, 50, 0.5);
+    box-shadow: 0 0 6px var(--color-bronze-glow), 0 0 12px var(--color-bronze-glow);
   }
 }
 
@@ -185,8 +185,8 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--color-accent-primary, #8b6fa8);
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.19);
+  background: var(--color-accent-primary-10, rgba(99, 102, 241, 0.08));
+  border: 1px solid var(--color-accent-primary-20, rgba(99, 102, 241, 0.19));
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
@@ -196,8 +196,8 @@
 }
 
 .detail-btn:hover {
-  background: rgba(99, 102, 241, 0.15);
-  border-color: rgba(99, 102, 241, 0.31);
+  background: var(--color-accent-primary-15, rgba(99, 102, 241, 0.15));
+  border-color: var(--color-accent-primary-30, rgba(99, 102, 241, 0.31));
 }
 
 /* Retry button */

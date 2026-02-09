@@ -50,7 +50,7 @@ export function useRankingsV2(options: UseRankingsV2Options = {}): UseRankingsV2
     category,
     sortBy = 'arena_score',
     sortDir = 'desc',
-    limit = 1000,
+    limit = 2000,
     offset = 0,
     refreshInterval = 60000,
   } = options
