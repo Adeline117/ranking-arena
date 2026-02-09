@@ -76,6 +76,13 @@ export interface TraderPerformance {
   return_score?: number | null
   drawdown_score?: number | null
   stability_score?: number | null
+  // V3 三维度评分
+  profitability_score?: number | null
+  risk_control_score?: number | null
+  execution_score?: number | null
+  arena_score_v3?: number | null
+  score_completeness?: string | null
+  score_penalty?: number | null
 }
 
 export interface TraderStats {

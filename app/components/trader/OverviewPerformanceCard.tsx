@@ -650,13 +650,13 @@ export default function OverviewPerformanceCard({
                     delay={700}
                   />
                 </Box>
-                {/* 雷达图：将4维分数映射到3轴 */}
+                {/* 雷达图：优先使用V3三维度分数，回退到4维映射 */}
                 <Box style={{ flex: '0 0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                   <ScoreRadar
-                    profitability={((periodReturnScore ?? 0) / 70) * 35}
-                    riskControl={(((periodDrawdownScore ?? 0) / 8 + (periodStabilityScore ?? 0) / 7) / 2) * 40}
-                    execution={((periodPnlScore ?? 0) / 15) * 25}
-                    arenaScore={periodArenaScore ?? 0}
+                    profitability={performance.profitability_score ?? ((periodReturnScore ?? 0) / 70) * 35}
+                    riskControl={performance.risk_control_score ?? (((periodDrawdownScore ?? 0) / 8 + (periodStabilityScore ?? 0) / 7) / 2) * 40}
+                    execution={performance.execution_score ?? ((periodPnlScore ?? 0) / 15) * 25}
+                    arenaScore={performance.arena_score_v3 ?? periodArenaScore ?? 0}
                     size={130}
                   />
                 </Box>

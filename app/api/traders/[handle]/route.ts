@@ -115,6 +115,12 @@ interface SnapshotData {
   followers?: number | null
   captured_at?: string
   season_id?: string
+  profitability_score?: number | null
+  risk_control_score?: number | null
+  execution_score?: number | null
+  arena_score_v3?: number | null
+  score_completeness?: string | null
+  score_penalty?: number | null
 }
 
 interface AssetBreakdownItem {
@@ -287,11 +293,13 @@ async function getTraderDetails(
     statsDetailResult,
     // 新增：tracked_since
     trackedSinceResult,
+    // V3 scores (may be in a different snapshot than the latest)
+    v3ScoresResult,
   ] = await withTimeout(Promise.all([
     // 最新快照
     supabase
       .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id')
+      .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id, profitability_score, risk_control_score, execution_score, arena_score_v3, score_completeness, score_penalty')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
       .order('captured_at', { ascending: false })
@@ -337,7 +345,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_portfolio')
       .select('symbol, direction, invested_pct, entry_price, pnl')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .order('captured_at', { ascending: false })
       .limit(50)),
@@ -346,7 +354,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_position_history')
       .select('symbol, direction, position_type, margin_mode, open_time, close_time, entry_price, exit_price, max_position_size, closed_size, pnl_usd, pnl_pct, status')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .order('open_time', { ascending: false })
       .limit(100)),
@@ -363,7 +371,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_asset_breakdown')
       .select('symbol, weight_pct, period')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .eq('period', '90D')
       .order('weight_pct', { ascending: false })
@@ -373,7 +381,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_asset_breakdown')
       .select('symbol, weight_pct, period')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .eq('period', '30D')
       .order('weight_pct', { ascending: false })
@@ -383,7 +391,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_asset_breakdown')
       .select('symbol, weight_pct, period')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .eq('period', '7D')
       .order('weight_pct', { ascending: false })
@@ -393,7 +401,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_equity_curve')
       .select('data_date, roi_pct, pnl_usd')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .eq('period', '90D')
       .order('data_date', { ascending: true })
@@ -403,7 +411,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_equity_curve')
       .select('data_date, roi_pct, pnl_usd')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .eq('period', '30D')
       .order('data_date', { ascending: true })
@@ -413,7 +421,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_equity_curve')
       .select('data_date, roi_pct, pnl_usd')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .eq('period', '7D')
       .order('data_date', { ascending: true })
@@ -423,7 +431,7 @@ async function getTraderDetails(
     safeQuery(() => supabase
       .from('trader_stats_detail')
       .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, avg_holding_time_hours, avg_profit, avg_loss, period')
-      .eq('source', sourceType)
+      .in('source', getSourceAliases(sourceType))
       .eq('source_trader_id', traderId)
       .order('captured_at', { ascending: false })
       .limit(3)),
@@ -435,6 +443,17 @@ async function getTraderDetails(
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
       .order('captured_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    
+    // V3 scores — latest snapshot that has profitability_score populated
+    supabase
+      .from('trader_snapshots')
+      .select('profitability_score, risk_control_score, execution_score, arena_score_v3, score_completeness, score_penalty')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+      .not('profitability_score', 'is', null)
+      .order('captured_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
   ]), 10000) // 10s timeout
@@ -467,6 +486,16 @@ async function getTraderDetails(
   
   // tracked_since
   const trackedSince = trackedSinceResult.data?.captured_at || null
+  
+  // V3 scores (from dedicated query that finds the latest snapshot with V3 scores)
+  const v3Scores = v3ScoresResult.data as {
+    profitability_score: number | null
+    risk_control_score: number | null
+    execution_score: number | null
+    arena_score_v3: number | null
+    score_completeness: string | null
+    score_penalty: number | null
+  } | null
   
   // 获取相似交易员（单独查询，因为依赖 snapshot 数据）
   let similarTraders: Array<{ handle: string; id: string; followers: number; avatar_url?: string; source: string }> = []
@@ -594,6 +623,13 @@ async function getTraderDetails(
       stability_score_30d: score30d?.stabilityScore ?? undefined,
       stability_score_7d: score7d?.stabilityScore ?? undefined,
       score_confidence: score90d?.scoreConfidence ?? undefined,
+      // V3 三维度分数 (from dedicated V3 query)
+      profitability_score: v3Scores?.profitability_score ?? snapshot?.profitability_score ?? undefined,
+      risk_control_score: v3Scores?.risk_control_score ?? snapshot?.risk_control_score ?? undefined,
+      execution_score: v3Scores?.execution_score ?? snapshot?.execution_score ?? undefined,
+      arena_score_v3: v3Scores?.arena_score_v3 ?? snapshot?.arena_score_v3 ?? undefined,
+      score_completeness: v3Scores?.score_completeness ?? snapshot?.score_completeness ?? undefined,
+      score_penalty: v3Scores?.score_penalty ?? snapshot?.score_penalty ?? undefined,
       // 详细统计
       sharpe_ratio: statsDetail90d?.sharpe_ratio ?? undefined,
       sharpe_ratio_30d: statsDetail30d?.sharpe_ratio ?? undefined,
