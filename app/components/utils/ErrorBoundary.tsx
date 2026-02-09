@@ -361,7 +361,7 @@ export function CompactErrorBoundary({
           role="alert"
           style={{
             padding: '12px 16px',
-            background: 'rgba(255, 124, 124, 0.08)',
+            background: 'var(--color-accent-error-08)',
             borderRadius: 8,
             border: '1px solid rgba(255, 124, 124, 0.15)',
             display: 'flex',

@@ -43,7 +43,7 @@ export async function GET(
     // 1. 获取交易员基本信息
     const { data: trader, error: traderError } = await supabase
       .from('trader_sources')
-      .select('*')
+      .select('id, handle, nickname, avatar_url, source, source_trader_id, bio, trading_since, created_at, updated_at')
       .eq('handle', handle)
       .eq('is_active', true)
       .single()
@@ -73,7 +73,7 @@ export async function GET(
       // 详细统计
       supabase
         .from('trader_stats_detail')
-        .select('*')
+        .select('period, sharpe_ratio, max_drawdown, copiers_pnl, winning_positions, total_positions')
         .eq('source', source)
         .eq('source_trader_id', source_trader_id)
         .order('period', { ascending: true }),
@@ -81,7 +81,7 @@ export async function GET(
       // 当前持仓
       supabase
         .from('trader_portfolio')
-        .select('*')
+        .select('symbol, direction, invested_pct, entry_price, pnl, captured_at')
         .eq('source', source)
         .eq('source_trader_id', source_trader_id)
         .order('captured_at', { ascending: false })
@@ -90,7 +90,7 @@ export async function GET(
       // 历史仓位 (最近50条)
       supabase
         .from('trader_position_history')
-        .select('*')
+        .select('symbol, direction, entry_price, close_price, pnl, roi_pct, open_time, close_time, leverage')
         .eq('source', source)
         .eq('source_trader_id', source_trader_id)
         .order('close_time', { ascending: false })
@@ -99,7 +99,7 @@ export async function GET(
       // 收益曲线 (30天)
       supabase
         .from('trader_equity_curve')
-        .select('*')
+        .select('data_date, roi_pct, pnl_usd')
         .eq('source', source)
         .eq('source_trader_id', source_trader_id)
         .eq('period', '30D')
@@ -108,7 +108,7 @@ export async function GET(
       // 资产分布
       supabase
         .from('trader_asset_breakdown')
-        .select('*')
+        .select('symbol, weight_pct, pnl_contribution')
         .eq('source', source)
         .eq('source_trader_id', source_trader_id)
         .eq('period', '30D')

@@ -140,7 +140,7 @@ export function ImageCropper({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(0, 0, 0, 0.8)',
+        background: 'var(--color-backdrop-heavy)',
         backdropFilter: 'blur(4px)',
       }}
     >

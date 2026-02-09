@@ -123,7 +123,7 @@ export default function WatchlistMarket() {
     }).filter((r): r is CoinPrice => r !== null)
   }
 
-  const { data: coins = [], isLoading: loading } = useSWR(
+  const { data: coins = [], isLoading: loading, error: swrError } = useSWR(
     pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null,
     marketFetcher,
     {
@@ -157,6 +157,10 @@ export default function WatchlistMarket() {
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="skeleton" style={{ height: 40, borderRadius: tokens.radius.md }} />
           ))}
+        </div>
+      ) : swrError ? (
+        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+          Failed to load market data
         </div>
       ) : (
         <>

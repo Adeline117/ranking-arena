@@ -69,7 +69,7 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0, 0, 0, 0.8)',
+        background: 'var(--color-backdrop-heavy)',
         backdropFilter: tokens.glass.blur.sm,
         WebkitBackdropFilter: tokens.glass.blur.sm,
         display: 'flex',
@@ -339,7 +339,7 @@ function FormulaBox({
 }) {
   return (
     <div style={{
-      background: 'rgba(139, 111, 168, 0.1)',
+      background: 'var(--color-accent-primary-10)',
       border: `1px solid ${tokens.colors.accent.primary}30`,
       borderRadius: tokens.radius.lg,
       padding: small ? '10px 14px' : '14px 18px',

@@ -114,7 +114,7 @@ export default function Avatar({
           style={{
             color: tokens.colors.white,
             fontSize: size * 0.4,
-            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+            textShadow: 'var(--text-shadow-sm)',
           }}
         >
           {initial}
@@ -158,7 +158,7 @@ export function SimpleAvatar({
         style={{
           color: tokens.colors.white,
           fontSize: size * 0.4,
-          textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+          textShadow: 'var(--text-shadow-sm)',
         }}
       >
         {initial}

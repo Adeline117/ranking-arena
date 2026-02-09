@@ -197,7 +197,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0, 0, 0, 0.6)',
+        background: 'var(--color-backdrop)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

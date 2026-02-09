@@ -49,7 +49,7 @@ export const Sparkline = memo(function Sparkline({
           width={width - 4}
           height={6}
           rx={3}
-          fill="rgba(255,255,255,0.08)"
+          fill="var(--glass-bg-light)"
         />
         {/* Value bar */}
         {barWidth > 0 && (

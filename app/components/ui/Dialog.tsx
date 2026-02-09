@@ -254,7 +254,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
+            background: 'var(--color-backdrop-heavy)',
             backdropFilter: tokens.glass.blur.sm,
             WebkitBackdropFilter: tokens.glass.blur.sm,
             display: 'flex',

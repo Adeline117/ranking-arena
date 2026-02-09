@@ -23,15 +23,15 @@ function HotTag({ score, isZh }: { score: number; isZh: boolean }) {
   const config = {
     hot: {
       label: isZh ? '热门' : 'Hot',
-      bg: 'rgba(239, 68, 68, 0.12)',
+      bg: 'var(--color-red-subtle)',
       color: 'var(--color-accent-error)',
-      border: 'rgba(239, 68, 68, 0.2)',
+      border: 'var(--color-red-border)',
     },
     warm: {
       label: isZh ? '升温' : 'Rising',
-      bg: 'rgba(245, 158, 11, 0.12)',
+      bg: 'var(--color-orange-subtle)',
       color: 'var(--color-accent-warning)',
-      border: 'rgba(245, 158, 11, 0.2)',
+      border: 'var(--color-orange-border)',
     },
     normal: {
       label: isZh ? '讨论' : 'Active',

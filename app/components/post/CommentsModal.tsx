@@ -572,7 +572,7 @@ export default function CommentsModal({
                     gridTemplateColumns: 'repeat(5, 1fr)',
                     gap: 4,
                     zIndex: 9999,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                    boxShadow: 'var(--shadow-lg-dark)',
                     width: 'min(300px, calc(100vw - 32px))',
                     maxHeight: 280,
                     overflowY: 'auto',

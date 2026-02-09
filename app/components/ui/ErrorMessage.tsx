@@ -22,8 +22,8 @@ export default function ErrorMessage({ title, message, onRetry }: ErrorMessagePr
       radius="lg"
       border="primary"
       style={{
-        background: `rgba(255, 68, 68, 0.1)`,
-        borderColor: `rgba(255, 68, 68, 0.3)`,
+        background: 'var(--color-accent-error-10)',
+        borderColor: 'var(--color-red-border)',
       }}
     >
       <Text size="md" weight="black" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[2] }}>
