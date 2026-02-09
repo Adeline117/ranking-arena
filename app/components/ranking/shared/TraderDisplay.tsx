@@ -192,12 +192,21 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
 
   const { bgGradient, borderColor, textColor, fillColor } = getScoreStyle(score)
 
+  const glowStyle = score >= 95
+    ? { boxShadow: `0 0 14px ${tokens.colors.accent.primary}60, 0 0 4px ${tokens.colors.accent.primary}40`, animation: 'score-glow 2s ease-in-out infinite' }
+    : score >= 90
+      ? { boxShadow: `0 0 10px ${tokens.colors.accent.primary}40` }
+      : score >= 80
+        ? { boxShadow: `0 0 6px ${tokens.colors.accent.primary}25` }
+        : {}
+
   return (
     <Box style={{
       position: 'relative', minWidth: 46, height: 24, borderRadius: tokens.radius.md,
       background: bgGradient,
       border: `1px solid ${borderColor}`,
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+      ...glowStyle,
     }}>
       <Box style={{
         position: 'absolute', left: 0, top: 0, bottom: 0,

@@ -2044,3 +2044,9 @@ td[data-numeric],
   line-height: 1.4;
   color: var(--color-text-tertiary);
 }
+
+/* Arena Score glow animation for top performers */
+@keyframes score-glow {
+  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.5), 0 0 4px rgba(139, 92, 246, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.7), 0 0 8px rgba(139, 92, 246, 0.5); }
+}
