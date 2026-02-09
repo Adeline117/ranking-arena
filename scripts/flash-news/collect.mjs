@@ -293,6 +293,27 @@ const xmlParser = new XMLParser({
 })
 
 /**
+ * Decode HTML entities in text
+ */
+function decodeHtmlEntities(text) {
+  if (!text) return text
+  const entities = {
+    '&#8217;': '\u2019', '&#8216;': '\u2018', '&#8220;': '\u201c', '&#8221;': '\u201d',
+    '&#038;': '&', '&#8211;': '\u2013', '&#8212;': '\u2014', '&#160;': ' ',
+    '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'",
+    '&#39;': "'", '&nbsp;': ' ',
+  }
+  let result = text
+  for (const [entity, char] of Object.entries(entities)) {
+    result = result.replaceAll(entity, char)
+  }
+  // Decode remaining numeric entities
+  result = result.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
+  result = result.replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
+  return result
+}
+
+/**
  * 生成文章的唯一哈希ID，避免重复插入
  */
 function generateContentHash(title, source, publishedAt) {
@@ -501,7 +522,7 @@ function processNewsItem(item, source) {
     if (typeof title === 'object' && title['#text']) {
       title = title['#text']
     }
-    title = title.trim()
+    title = decodeHtmlEntities(title.replace(/<[^>]*>/g, '')).trim()
     
     // 提取内容/描述
     let content = item.description || item.summary || item.content || ''
@@ -512,8 +533,8 @@ function processNewsItem(item, source) {
       content = content['#text'] || ''
     }
     
-    // 清理 HTML 标签
-    content = content.replace(/<[^>]*>/g, '').trim()
+    // 清理 HTML 标签和实体
+    content = decodeHtmlEntities(content.replace(/<[^>]*>/g, '')).trim()
     
     // 提取链接
     let link = item.link || item.guid || ''

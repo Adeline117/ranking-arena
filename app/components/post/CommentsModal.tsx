@@ -27,7 +27,12 @@ const styles = {
     cursor: 'pointer',
     fontSize: 12,
     color: tokens.colors.text.tertiary,
-    padding: '2px 4px',
+    padding: '8px 10px',
+    minHeight: 44,
+    minWidth: 44,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   } satisfies CSSProperties,
   input: {
     flex: 1,

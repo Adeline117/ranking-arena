@@ -1269,6 +1269,38 @@
 }
 
 /* ============================================
+   Modal mobile full-screen treatment
+   ============================================ */
+
+@media (max-width: 479px) {
+  .dialog-overlay-mobile {
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 16px 16px 0 0 !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    max-height: 85vh !important;
+  }
+}
+
+/* ============================================
+   Textarea and input mobile sizing (prevent iOS zoom)
+   ============================================ */
+
+@media (max-width: 767px) {
+  textarea,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="url"],
+  input[type="number"],
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* ============================================
    Hero section mobile responsive
    ============================================ */
 @media (max-width: 639px) {

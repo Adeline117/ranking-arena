@@ -85,24 +85,32 @@ function BookshelfTab() {
   if (books.length === 0) {
     return (
       <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`, textAlign: 'center' }}>
-        <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, marginBottom: 12, color: tokens.colors.text.tertiary }}>
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5, marginBottom: 16, color: tokens.colors.accent.primary }}>
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /><path d="M8 7h8" /><path d="M8 11h6" />
         </svg>
         <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
           {language === 'zh' ? '书架暂无内容' : 'No books yet'}
         </Text>
-        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.5 }}>
           {language === 'zh' ? '去书城逛逛吧' : 'Browse the library'}
         </Text>
         <a href="/library" style={{
-          padding: '8px 20px',
-          background: tokens.colors.accent.primary,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '10px 24px',
+          background: tokens.gradient.primary,
           color: '#fff',
-          borderRadius: tokens.radius.md,
-          fontSize: 13,
-          fontWeight: 600,
+          borderRadius: tokens.radius.full,
+          fontSize: 14,
+          fontWeight: 700,
           textDecoration: 'none',
+          boxShadow: `0 4px 12px ${tokens.colors.accent.primary}40`,
+          transition: `all ${tokens.transition.base}`,
         }}>
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
           {language === 'zh' ? '进入书城' : 'Browse Library'}
         </a>
       </Box>
@@ -299,10 +307,10 @@ export default function GroupsFeedPage() {
         {/* Tabs: 关注 / 推荐 / 书架 */}
         <Box style={{
           display: 'flex',
-          gap: tokens.spacing[3],
+          gap: tokens.spacing[5],
           marginBottom: tokens.spacing[4],
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
-          paddingBottom: tokens.spacing[2],
+          paddingBottom: 0,
         }}>
           {([
             { key: 'following' as SubTabKey, label: t('following') },
@@ -313,15 +321,16 @@ export default function GroupsFeedPage() {
               key={tab.key}
               onClick={() => setSubTab(tab.key)}
               style={{
-                padding: `${tokens.spacing[1]} 0`,
+                padding: `${tokens.spacing[2]} 0 ${tokens.spacing[2]}`,
                 border: 'none',
                 background: 'transparent',
                 color: subTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.tertiary,
-                fontWeight: subTab === tab.key ? 700 : 400,
-                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: subTab === tab.key ? 700 : 500,
+                fontSize: tokens.typography.fontSize.base,
                 cursor: 'pointer',
-                borderBottom: subTab === tab.key ? `2px solid ${tokens.colors.accent.primary}` : '2px solid transparent',
+                borderBottom: subTab === tab.key ? `2.5px solid ${tokens.colors.accent.primary}` : '2.5px solid transparent',
                 transition: `all ${tokens.transition.base}`,
+                marginBottom: '-1px',
               }}
             >
               {tab.label}
@@ -333,8 +342,8 @@ export default function GroupsFeedPage() {
           myGroups.length > 0 ? (
             <PostFeed layout="masonry" groupIds={myGroupIds} />
           ) : (
-            <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`, textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
-              <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, marginBottom: 12, color: tokens.colors.text.tertiary }}>
+            <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`, textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.xl, border: `1px solid ${tokens.colors.border.primary}` }}>
+              <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5, marginBottom: 16, color: tokens.colors.accent.primary }}>
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
               <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>

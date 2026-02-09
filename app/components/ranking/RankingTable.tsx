@@ -368,11 +368,11 @@ function RankingTableInner(props: {
   }
 
   const desktopGridTemplate = React.useMemo(() => {
-    let template = '44px minmax(140px, 1.5fr)'
-    if (visibleColumns.includes('score')) template += ' 64px'
-    if (visibleColumns.includes('roi')) template += ' 90px'
-    if (visibleColumns.includes('winrate')) template += ' 70px'
-    if (visibleColumns.includes('mdd')) template += ' 70px'
+    let template = '40px minmax(140px, 1.5fr)'
+    if (visibleColumns.includes('score')) template += ' 68px'
+    if (visibleColumns.includes('roi')) template += ' 96px'
+    if (visibleColumns.includes('winrate')) template += ' 64px'
+    if (visibleColumns.includes('mdd')) template += ' 64px'
     if (visibleColumns.includes('sortino')) template += ' 70px'
     if (visibleColumns.includes('alpha')) template += ' 70px'
     if (visibleColumns.includes('style')) template += ' 80px'
