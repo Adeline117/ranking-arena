@@ -118,6 +118,7 @@ interface SnapshotData {
   profitability_score?: number | null
   risk_control_score?: number | null
   execution_score?: number | null
+  arena_score?: number | null
   arena_score_v3?: number | null
   score_completeness?: string | null
   score_penalty?: number | null
@@ -299,7 +300,7 @@ async function getTraderDetails(
     // 最新快照
     supabase
       .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id, profitability_score, risk_control_score, execution_score, arena_score_v3, score_completeness, score_penalty')
+      .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id, profitability_score, risk_control_score, execution_score, arena_score, arena_score_v3, score_completeness, score_penalty')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
       .order('captured_at', { ascending: false })
@@ -497,21 +498,23 @@ async function getTraderDetails(
     score_penalty: number | null
   } | null
   
-  // 获取相似交易员（单独查询，因为依赖 snapshot 数据）
-  let similarTraders: Array<{ handle: string; id: string; followers: number; avatar_url?: string; source: string }> = []
-  if (snapshot?.roi !== null && snapshot?.roi !== undefined) {
-    const currentRoi = snapshot.roi
-    const roiRange = Math.max(Math.abs(currentRoi) * 0.3, 20)
+  // 获取相似交易员 -- 同交易所、相近 arena_score 的交易员
+  let similarTraders: Array<{ handle: string; id: string; followers: number; avatar_url?: string; source: string; roi_90d?: number; arena_score?: number }> = []
+  if (snapshot?.arena_score != null) {
+    const currentScore = typeof snapshot.arena_score === 'number' ? snapshot.arena_score : parseFloat(String(snapshot.arena_score))
+    const scoreRange = Math.max(currentScore * 0.25, 10)
     
     const { data: similarSnapshots } = await supabase
       .from('trader_snapshots')
-      .select('source_trader_id, roi')
+      .select('source_trader_id, roi, arena_score, followers')
       .eq('source', sourceType)
+      .eq('season_id', '90D')
       .neq('source_trader_id', traderId)
-      .gte('roi', currentRoi - roiRange)
-      .lte('roi', currentRoi + roiRange)
-      .order('roi', { ascending: false })
-      .limit(6)
+      .not('arena_score', 'is', null)
+      .gte('arena_score', currentScore - scoreRange)
+      .lte('arena_score', currentScore + scoreRange)
+      .order('arena_score', { ascending: false })
+      .limit(10)
     
     if (similarSnapshots && similarSnapshots.length > 0) {
       const similarIds = similarSnapshots.map(s => s.source_trader_id)
@@ -522,13 +525,63 @@ async function getTraderDetails(
         .in('source_trader_id', similarIds)
       
       if (similarSources) {
-        similarTraders = similarSources.map(s => ({
-          handle: s.handle || s.source_trader_id,
-          id: s.source_trader_id,
-          followers: 0,
-          avatar_url: s.avatar_url || undefined,
-          source: sourceType,
-        }))
+        const sourceMap = new Map(similarSources.map(s => [s.source_trader_id, s]))
+        similarTraders = similarSnapshots
+          .filter(snap => sourceMap.has(snap.source_trader_id))
+          .map(snap => {
+            const src = sourceMap.get(snap.source_trader_id)!
+            return {
+              handle: src.handle || snap.source_trader_id,
+              id: snap.source_trader_id,
+              followers: snap.followers ?? 0,
+              avatar_url: src.avatar_url || undefined,
+              source: sourceType,
+              roi_90d: snap.roi != null ? parseFloat(snap.roi as string) * 100 : undefined,
+              arena_score: snap.arena_score != null ? parseFloat(snap.arena_score as string) : undefined,
+            }
+          })
+      }
+    }
+  } else if (snapshot?.roi !== null && snapshot?.roi !== undefined) {
+    // Fallback: match by ROI if no arena_score
+    const currentRoi = snapshot.roi
+    const roiRange = Math.max(Math.abs(currentRoi) * 0.3, 20)
+    
+    const { data: similarSnapshots } = await supabase
+      .from('trader_snapshots')
+      .select('source_trader_id, roi, arena_score, followers')
+      .eq('source', sourceType)
+      .eq('season_id', '90D')
+      .neq('source_trader_id', traderId)
+      .gte('roi', currentRoi - roiRange)
+      .lte('roi', currentRoi + roiRange)
+      .order('roi', { ascending: false })
+      .limit(10)
+    
+    if (similarSnapshots && similarSnapshots.length > 0) {
+      const similarIds = similarSnapshots.map(s => s.source_trader_id)
+      const { data: similarSources } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id, handle, profile_url, avatar_url')
+        .eq('source', sourceType)
+        .in('source_trader_id', similarIds)
+      
+      if (similarSources) {
+        const sourceMap = new Map(similarSources.map(s => [s.source_trader_id, s]))
+        similarTraders = similarSnapshots
+          .filter(snap => sourceMap.has(snap.source_trader_id))
+          .map(snap => {
+            const src = sourceMap.get(snap.source_trader_id)!
+            return {
+              handle: src.handle || snap.source_trader_id,
+              id: snap.source_trader_id,
+              followers: snap.followers ?? 0,
+              avatar_url: src.avatar_url || undefined,
+              source: sourceType,
+              roi_90d: snap.roi != null ? parseFloat(snap.roi as string) * 100 : undefined,
+              arena_score: snap.arena_score != null ? parseFloat(snap.arena_score as string) : undefined,
+            }
+          })
       }
     }
   }

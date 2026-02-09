@@ -181,7 +181,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'phemex',
   'lbank',
   'blofin',
-  'gateio',
+  'bingx',
   // CEX spot
   'binance_spot',
   'bitget_spot',
@@ -195,8 +195,6 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'dydx',
   'jupiter_perps',
   'binance_web3',
-  // HTX (futures alias)
-  'htx_futures',
 ]
 
 // ---------------------------------------------------------------------------

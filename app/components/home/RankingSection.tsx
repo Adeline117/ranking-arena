@@ -361,7 +361,7 @@ export default function RankingSection({
       // 交易所筛选
       if (config.exchange?.length) {
         const src = (trader.source || '').toLowerCase()
-        if (!config.exchange.some(ex => src.startsWith(ex))) return false
+        if (!config.exchange.some(ex => src === ex || src.startsWith(ex))) return false
       }
       // ROI 范围
       if (config.roi_min != null && (trader.roi || 0) < config.roi_min) return false
