@@ -16,8 +16,7 @@ import RecommendedGroups from '@/app/components/sidebar/RecommendedGroups'
 const MarketOverviewBar = lazy(() => import('@/app/components/market/MarketOverviewBar'))
 const MarketTabs = lazy(() => import('@/app/components/market/MarketTabs'))
 const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))
-const FuturesMarket = lazy(() => import('@/app/components/market/FuturesMarket'))
-const AlphaMarket = lazy(() => import('@/app/components/market/AlphaMarket'))
+// FuturesMarket and AlphaMarket removed per Adeline's request
 const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge'))
 const TopMovers = lazy(() => import('@/app/components/market/TopMovers'))
 const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
@@ -38,18 +37,7 @@ function TabContent({ tab }: { tab: string }) {
           <SpotMarket />
         </Suspense>
       )
-    case 'futures':
-      return (
-        <Suspense fallback={<LoadingCard />}>
-          <FuturesMarket />
-        </Suspense>
-      )
-    case 'alpha':
-      return (
-        <Suspense fallback={<LoadingCard />}>
-          <AlphaMarket />
-        </Suspense>
-      )
+    // futures and alpha tabs removed
     default:
       return null
   }
