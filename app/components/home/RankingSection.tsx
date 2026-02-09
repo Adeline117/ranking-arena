@@ -608,18 +608,7 @@ export default function RankingSection({
         </Box>
       </Box>
 
-      {/* Exchange filter chips */}
-      {!loading && dataSources.length > 1 && (
-        <Box style={{ marginBottom: tokens.spacing[2] }}>
-          <ExchangeFilter
-            availableSources={dataSources}
-            selectedExchange={selectedExchange}
-            onExchangeChange={_handleExchangeChange}
-            isPro={isPro}
-            onProRequired={handleProRequired}
-          />
-        </Box>
-      )}
+      {/* Exchange filter removed - use advanced filter only */}
 
       {/* 高级筛选面板 */}
       {showAdvancedFilter && isPro && (
