@@ -211,8 +211,23 @@ export default function GroupPostList(props: GroupPostListProps) {
       {viewMode === 'list' && (
         <Card title={`${t('posts')} (${sortedPosts.length})`}>
           {sortedPosts.length === 0 ? (
-            <Box style={{ color: tokens.colors.text.tertiary, padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`, textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">{t('noPostsYet')}  {t('beFirstToPost')}</Text>
+            <Box style={{ padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`, textAlign: 'center' }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: tokens.colors.text.tertiary, opacity: 0.4, marginBottom: 12 }}>
+                <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+              <Text size="sm" weight="semibold" color="secondary" style={{ marginBottom: 4 }}>
+                {t('noPostsYet')}
+              </Text>
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.5 }}>
+                {t('beFirstToPost')}
+              </Text>
+              {isMember && (
+                <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
+                  <Button variant="primary" size="sm">
+                    {language === 'zh' ? '✏️ 发第一条帖子' : '✏️ Write the first post'}
+                  </Button>
+                </Link>
+              )}
             </Box>
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -272,8 +287,29 @@ export default function GroupPostList(props: GroupPostListProps) {
 
       {/* Empty masonry state */}
       {viewMode === 'masonry' && sortedPosts.length === 0 && (
-        <Box style={{ color: tokens.colors.text.tertiary, padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`, textAlign: 'center' }}>
-          <Text size="sm" color="tertiary">{t('noPostsYet')}</Text>
+        <Box style={{
+          padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`,
+          textAlign: 'center',
+          background: tokens.colors.bg.secondary,
+          borderRadius: tokens.radius.xl,
+          border: `1px solid ${tokens.colors.border.primary}`,
+        }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: tokens.colors.text.tertiary, opacity: 0.4, marginBottom: 12 }}>
+            <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
+          <Text size="sm" weight="semibold" color="secondary" style={{ marginBottom: 4 }}>
+            {t('noPostsYet')}
+          </Text>
+          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.5 }}>
+            {t('beFirstToPost')}
+          </Text>
+          {isMember && (
+            <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
+              <Button variant="primary" size="sm">
+                {language === 'zh' ? '✏️ 发第一条帖子' : '✏️ Write the first post'}
+              </Button>
+            </Link>
+          )}
         </Box>
       )}
 
