@@ -58,6 +58,10 @@ const JOBS = [
 
   // === Alerts ===
   { name: 'check-trader-alerts', path: '/api/cron/check-trader-alerts', cron: '0 */6 * * *' },
+
+  // === Materialized Views & Snapshots ===
+  { name: 'refresh-materialized-views', path: '/api/cron/refresh-views', cron: '5 * * * *' },
+  { name: 'compute-leaderboard-snapshot', path: '/api/cron/compute-leaderboard-snapshot', cron: '10 * * * *' },
 ];
 
 module.exports = JOBS;
