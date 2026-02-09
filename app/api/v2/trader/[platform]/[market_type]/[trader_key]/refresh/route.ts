@@ -16,6 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { LeaderboardPlatform, MarketType, Window, RefreshResponse } from '@/lib/types/leaderboard'
 import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard'
 import { createRefreshJob } from '@/lib/jobs/processor'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,7 @@ interface RouteParams {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
   const { platform, market_type, trader_key } = await params
 
   // Validate platform
@@ -117,4 +119,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   return NextResponse.json(response, { status: 202 })
+  } catch (error) {
+    logger.error('[v2-trader-refresh] Unexpected error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
 }

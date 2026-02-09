@@ -18,6 +18,7 @@ import type {
   RefreshJobSummary,
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ platform: string; trader_key: string }> }
 ) {
+  try {
   const { platform, trader_key } = await params
 
   // Validate platform
@@ -182,6 +184,13 @@ export async function GET(
   // Short cache for detail pages - fresh data matters
   res.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
   return res
+  } catch (error) {
+    logger.error('[trader-detail] Unexpected error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
 }
 
 function getLatestUpdate(profileUpdated: string, snapshotDates: string[]): string {

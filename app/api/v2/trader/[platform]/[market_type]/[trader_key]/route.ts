@@ -27,6 +27,7 @@ import type {
   QualityFlags,
 } from '@/lib/types/leaderboard'
 import { WINDOWS } from '@/lib/types/leaderboard'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,7 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
   const { platform, market_type, trader_key } = await params
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -278,4 +280,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120',
     },
   })
+  } catch (error) {
+    logger.error('[v2-trader-detail] Unexpected error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
 }
