@@ -303,7 +303,7 @@ function SettingsContent() {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
-      if (!data.user) { router.push('/login'); return }
+      if (!data.user) { router.push('/login?redirect=/settings'); return }
       loadProfile(data.user.id)
     })
   }, [router])

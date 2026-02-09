@@ -20,7 +20,7 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (authChecked && !accessToken) {
-      router.push('/login')
+      router.push('/login?redirect=/inbox')
     }
   }, [authChecked, accessToken, router])
 

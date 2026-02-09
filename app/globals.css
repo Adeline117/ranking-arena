@@ -1731,6 +1731,12 @@ a.ranking-filter-btn:active {
   from { opacity: 0; }
 }
 
+/* Toast close button hover */
+.toast-close-btn:hover {
+  background: var(--color-bg-tertiary) !important;
+  color: var(--color-text-primary) !important;
+}
+
 /* Screen reader only - visually hidden but accessible */
 .sr-only {
   position: absolute;
