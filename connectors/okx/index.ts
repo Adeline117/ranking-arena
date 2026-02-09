@@ -138,8 +138,42 @@ export class OkxConnector extends BaseConnector {
     }
   }
 
-  async fetchTimeseries(_trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
-    return this.success([], { reason: 'OKX timeseries via separate endpoint' });
+  async fetchTimeseries(trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
+    try {
+      // OKX provides weekly PnL data via public API
+      const url = `https://www.okx.com/api/v5/copytrading/public-weekly-pnl?instType=SWAP&uniqueCode=${trader_key}`;
+      const response = await this.fetchJSON<{ code: string; data: Array<{ beginTs: string; pnl: string; pnlRatio: string }> }>(url, {
+        headers: { 'Origin': API_BASE },
+      });
+
+      if (response?.code !== '0' || !response?.data?.length) return this.success([]);
+
+      // Sort by time ascending
+      const sorted = [...response.data].sort((a, b) => Number(a.beginTs) - Number(b.beginTs));
+
+      let cumulativeRoi = 0;
+      const points = sorted.map(p => {
+        const weekRoi = p.pnlRatio ? Number(p.pnlRatio) * 100 : 0;
+        cumulativeRoi += weekRoi;
+        return {
+          ts: new Date(Number(p.beginTs)).toISOString(),
+          value: cumulativeRoi,
+          pnl: p.pnl ? Number(p.pnl) : 0,
+        };
+      });
+
+      return this.success<CanonicalTimeseries[]>([{
+        platform: 'okx',
+        market_type: 'futures',
+        trader_key,
+        series_type: 'equity_curve',
+        as_of_ts: new Date().toISOString(),
+        data: points,
+        provenance: this.buildProvenance(url),
+      }]);
+    } catch (error) {
+      return this.success([], { reason: `OKX timeseries failed: ${(error as Error).message}` });
+    }
   }
 
   normalize(raw: Record<string, unknown>, field_map: Record<string, string>): Partial<SnapshotMetrics> {
