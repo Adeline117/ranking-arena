@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -28,6 +28,13 @@ export default function Button({
 }: ButtonProps) {
   const [ripple, setRipple] = useState<{ x: number; y: number; key: number } | null>(null)
   const rippleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Cleanup ripple timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (rippleTimeoutRef.current) clearTimeout(rippleTimeoutRef.current)
+    }
+  }, [])
 
   // 创建波纹效果
   const createRipple = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
