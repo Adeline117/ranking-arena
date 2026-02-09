@@ -75,7 +75,7 @@ function RiskBadge({ level, t }: { level: string; t: (k: string) => string }) {
 function PortfolioContent() {
   const router = useRouter()
   const { t } = useLanguage()
-  const { showToast } = useToast()
+  const { showToast: _showToast } = useToast()
   const { accessToken, authChecked, email } = useAuthSession()
 
   const [loading, setLoading] = useState(true)
