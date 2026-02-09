@@ -39,6 +39,9 @@ export function EditPostModal({
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('editPost') || 'Edit post'}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
