@@ -53,7 +53,10 @@ function formatPct(val: number | null | undefined): string {
 function formatPnl(val: number | null | undefined): string {
   if (val == null) return '--'
   const abs = Math.abs(val)
-  const str = abs >= 1000 ? `${(abs / 1000).toFixed(1)}K` : abs.toFixed(0)
+  let str: string
+  if (abs >= 1_000_000) str = `${(abs / 1_000_000).toFixed(2)}M`
+  else if (abs >= 1_000) str = `${(abs / 1_000).toFixed(1)}K`
+  else str = abs.toFixed(0)
   return `${val >= 0 ? '+' : '-'}$${str}`
 }
 
@@ -136,17 +139,20 @@ export default function ProfileTradingCard({
 }
 
 function StatItem({ label, value, isPositive }: { label: string; value: string; isPositive?: boolean }) {
+  const color = isPositive === undefined
+    ? tokens.colors.text.primary
+    : isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
   return (
-    <Box>
-      <Text size="xs" color="tertiary">{label}</Text>
+    <Box style={{
+      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+      borderRadius: tokens.radius.md,
+      background: isPositive === undefined ? 'transparent' : `${color}08`,
+    }}>
+      <Text size="xs" color="tertiary" style={{ marginBottom: 2 }}>{label}</Text>
       <Text
         size="lg"
         weight="black"
-        style={{
-          color: isPositive === undefined
-            ? tokens.colors.text.primary
-            : isPositive ? tokens.colors.accent.success : tokens.colors.accent.error,
-        }}
+        style={{ color, fontVariantNumeric: 'tabular-nums' }}
       >
         {value}
       </Text>

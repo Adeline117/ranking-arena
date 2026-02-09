@@ -389,7 +389,7 @@ function SearchContent() {
         )}
 
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 20, marginTop: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))', gap: 16, marginTop: 16 }}>
             {[1, 2, 3, 4].map(i => (
               <div key={i} style={{
                 background: tokens.colors.bg.secondary,
@@ -580,8 +580,8 @@ function SearchContent() {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
-            gap: 20, marginTop: 16,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))',
+            gap: 16, marginTop: 16,
           }}>
             {(activeTab === 'all' || activeTab === 'library') && renderSection(
               isZh ? '书库' : 'Library',

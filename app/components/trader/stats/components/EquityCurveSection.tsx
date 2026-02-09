@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../../base'
 import { useLanguage } from '../../../Providers/LanguageProvider'
@@ -156,7 +156,7 @@ function PeriodSelector({
   )
 }
 
-// Simple Line Chart
+// Simple Line Chart with tooltip
 function SimpleLineChart({
   data,
   dataKey,
@@ -167,6 +167,10 @@ function SimpleLineChart({
   period: string
 }) {
   const { language } = useLanguage()
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
+  const chartRef = useRef<HTMLDivElement>(null)
+
   if (data.length === 0) {
     return null
   }
@@ -188,6 +192,34 @@ function SimpleLineChart({
   const isPositive = values[values.length - 1] >= values[0]
   const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
 
+  const locale = language === 'zh' ? 'zh-CN' : 'en-US'
+
+  const formatTooltipValue = (val: number) => {
+    if (dataKey === 'roi') return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
+    const abs = Math.abs(val)
+    const sign = val >= 0 ? '+' : '-'
+    if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`
+    return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!chartRef.current || data.length === 0) return
+    const rect = chartRef.current.getBoundingClientRect()
+    const relX = e.clientX - rect.left
+    const pct = relX / rect.width
+    const idx = Math.round(pct * (data.length - 1))
+    const clampedIdx = Math.max(0, Math.min(data.length - 1, idx))
+    setHoverIndex(clampedIdx)
+    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+  }
+
+  const handleMouseLeave = () => {
+    setHoverIndex(null)
+    setTooltipPos(null)
+  }
+
+  const hoverData = hoverIndex !== null ? data[hoverIndex] : null
+
   return (
     <Box style={{
       height: '100%',
@@ -207,20 +239,26 @@ function SimpleLineChart({
         flexDirection: 'column',
         justifyContent: 'space-between',
       }}>
-        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}>
           {dataKey === 'roi' ? `${maxValue.toFixed(0)}%` : `$${(maxValue / 1000).toFixed(0)}K`}
         </Text>
-        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}>
           {dataKey === 'roi' ? `${minValue.toFixed(0)}%` : `$${(minValue / 1000).toFixed(0)}K`}
         </Text>
       </Box>
 
       {/* Chart Area */}
-      <Box style={{
-        marginLeft: 55,
-        height: 'calc(100% - 32px)',
-        position: 'relative',
-      }}>
+      <Box
+        ref={chartRef}
+        style={{
+          marginLeft: 55,
+          height: 'calc(100% - 32px)',
+          position: 'relative',
+          cursor: 'crosshair',
+        }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
         <svg
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="none"
@@ -234,33 +272,81 @@ function SimpleLineChart({
           {/* Area Fill */}
           <path
             d={`${pathD} L 100,100 L 0,100 Z`}
-            fill={`url(#gradient-${isPositive ? 'positive' : 'negative'})`}
-            opacity="0.3"
+            fill={`url(#gradient-${period}-${isPositive ? 'positive' : 'negative'})`}
+            opacity="0.4"
           />
 
-          {/* Line */}
+          {/* Line - thicker stroke */}
           <path
             d={pathD}
             fill="none"
             stroke={color}
-            strokeWidth="2.5"
+            strokeWidth="3"
             vectorEffect="non-scaling-stroke"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
 
+          {/* Hover vertical line */}
+          {hoverIndex !== null && (
+            <line
+              x1={(hoverIndex / (data.length - 1)) * width}
+              y1="0"
+              x2={(hoverIndex / (data.length - 1)) * width}
+              y2="100"
+              stroke={tokens.colors.text.tertiary}
+              strokeWidth="1"
+              vectorEffect="non-scaling-stroke"
+              strokeDasharray="3,3"
+            />
+          )}
+
+          {/* Hover dot */}
+          {hoverIndex !== null && (() => {
+            const cx = (hoverIndex / (data.length - 1)) * width
+            const cy = height - ((data[hoverIndex][dataKey] - minValue) / range) * height
+            return <circle cx={cx} cy={cy} r="4" fill={color} stroke={tokens.colors.bg.primary} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          })()}
+
           {/* Gradient Definitions */}
           <defs>
-            <linearGradient id="gradient-positive" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={`gradient-${period}-positive`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={tokens.colors.accent.success} stopOpacity="0.4" />
               <stop offset="100%" stopColor={tokens.colors.accent.success} stopOpacity="0" />
             </linearGradient>
-            <linearGradient id="gradient-negative" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={`gradient-${period}-negative`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={tokens.colors.accent.error} stopOpacity="0.4" />
               <stop offset="100%" stopColor={tokens.colors.accent.error} stopOpacity="0" />
             </linearGradient>
           </defs>
         </svg>
+
+        {/* Tooltip */}
+        {hoverData && tooltipPos && (
+          <Box
+            style={{
+              position: 'absolute',
+              left: tooltipPos.x,
+              top: tooltipPos.y - 60,
+              transform: 'translateX(-50%)',
+              background: tokens.colors.bg.primary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.lg,
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              boxShadow: '0 4px 16px var(--color-overlay-medium)',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+              zIndex: 10,
+            }}
+          >
+            <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>
+              {new Date(hoverData.date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+            </Text>
+            <Text size="sm" weight="bold" style={{ color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+              {formatTooltipValue(hoverData[dataKey])}
+            </Text>
+          </Box>
+        )}
       </Box>
 
       {/* X-axis Labels */}
@@ -270,11 +356,16 @@ function SimpleLineChart({
         marginLeft: 55,
         marginTop: tokens.spacing[2],
       }}>
-        <Text size="xs" color="tertiary">
-          {data[0]?.date ? new Date(data[0].date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
+        <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
+          {data[0]?.date ? new Date(data[0].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) : ''}
         </Text>
-        <Text size="xs" color="tertiary">
-          {data[data.length - 1]?.date ? new Date(data[data.length - 1].date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : ''}
+        {data.length > 4 && (
+          <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
+            {new Date(data[Math.floor(data.length / 2)].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' })}
+          </Text>
+        )}
+        <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
+          {data[data.length - 1]?.date ? new Date(data[data.length - 1].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) : ''}
         </Text>
       </Box>
     </Box>

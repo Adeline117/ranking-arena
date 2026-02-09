@@ -2412,3 +2412,92 @@ td[data-numeric],
     box-shadow: 0 0 22px rgba(139, 92, 246, 0.7), 0 0 8px rgba(139, 92, 246, 0.5), 0 0 32px rgba(139, 92, 246, 0.2), 0 0 4px rgba(212, 175, 55, 0.2);
   }
 }
+
+/* ============================================
+   Groups / Community Layout
+   ============================================ */
+
+/* Content + sidebar grid for group detail page */
+.content-sidebar-grid {
+  grid-template-columns: 1fr 280px;
+}
+@media (max-width: 1023px) {
+  .content-sidebar-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Group card hover */
+.group-card {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.group-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px var(--color-overlay-medium);
+  border-color: var(--color-accent-primary-30, rgba(139, 111, 168, 0.3));
+}
+
+/* Post card hover */
+.post-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.post-card:hover {
+  border-color: var(--color-accent-primary-20, rgba(139, 111, 168, 0.2));
+  box-shadow: 0 2px 12px var(--color-overlay-subtle);
+}
+
+/* Group header responsive */
+@media (max-width: 640px) {
+  .group-header-layout {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+  }
+  .group-header-layout .group-header-info {
+    align-items: center !important;
+  }
+  .group-header-actions {
+    justify-content: center !important;
+  }
+}
+
+/* Post editor focus ring */
+.post-editor-input:focus {
+  border-color: var(--color-accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--color-accent-primary-15, rgba(139, 111, 168, 0.15)) !important;
+}
+
+/* Empty state illustration pulse */
+@keyframes empty-state-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.empty-state-icon {
+  animation: empty-state-float 3s ease-in-out infinite;
+}
+
+/* Activity badge / member count badge */
+.member-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--color-accent-primary-10, rgba(139, 111, 168, 0.1));
+  color: var(--color-accent-primary);
+  border: 1px solid var(--color-accent-primary-20, rgba(139, 111, 168, 0.2));
+}
+
+/* Activity dot indicator */
+.activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.activity-dot--high { background: var(--color-accent-success); }
+.activity-dot--medium { background: var(--color-accent-warning); }
+.activity-dot--low { background: var(--color-border-secondary); }

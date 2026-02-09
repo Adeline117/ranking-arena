@@ -120,7 +120,20 @@ export default function ProfileActivityFeed({ handle }: { handle: string }) {
   if (loading) {
     return (
       <Box bg="secondary" p={4} radius="lg" border="primary">
-        <Text size="sm" color="tertiary">{isZh ? '加载中...' : 'Loading...'}</Text>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+          <Text size="lg" weight="black">🕐 {isZh ? '动态' : 'Activity'}</Text>
+        </Box>
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+          {[1, 2, 3].map(i => (
+            <Box key={i} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+              <Box className="skeleton" style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0 }} />
+              <Box style={{ flex: 1 }}>
+                <Box className="skeleton" style={{ height: 14, borderRadius: 4, width: `${70 - i * 10}%`, marginBottom: 6 }} />
+                <Box className="skeleton" style={{ height: 10, borderRadius: 4, width: 60 }} />
+              </Box>
+            </Box>
+          ))}
+        </Box>
       </Box>
     )
   }
@@ -141,22 +154,36 @@ export default function ProfileActivityFeed({ handle }: { handle: string }) {
       <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
         🕐 {isZh ? '动态' : 'Activity'}
       </Text>
-      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-        {activities.map(item => (
+      <Box style={{ display: 'flex', flexDirection: 'column', position: 'relative', paddingLeft: tokens.spacing[4] }}>
+        {/* Timeline vertical line */}
+        <Box style={{
+          position: 'absolute', left: 13, top: 8, bottom: 8, width: 2,
+          background: `linear-gradient(to bottom, ${tokens.colors.accent.primary}30, ${tokens.colors.border.primary}20)`,
+          borderRadius: 1,
+        }} />
+        {activities.map((item, idx) => (
           <Box
             key={item.id}
             style={{
               display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[3],
-              padding: `${tokens.spacing[2]} 0`,
-              borderBottom: `1px solid ${tokens.colors.border.primary}30`,
+              padding: `${tokens.spacing[3]} 0`,
+              position: 'relative',
             }}
           >
-            <Text style={{ fontSize: 16, flexShrink: 0, marginTop: 2 }}>
+            {/* Timeline dot */}
+            <Box style={{
+              position: 'absolute', left: -20, top: 16,
+              width: 10, height: 10, borderRadius: '50%',
+              background: idx === 0 ? tokens.colors.accent.primary : tokens.colors.bg.tertiary,
+              border: `2px solid ${idx === 0 ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+              zIndex: 1,
+            }} />
+            <Text style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>
               {ICONS[item.type]}
             </Text>
             <Box style={{ flex: 1, minWidth: 0 }}>
               <ActivityDescription item={item} isZh={isZh} />
-              <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+              <Text size="xs" color="tertiary" style={{ marginTop: 3 }}>
                 {formatRelativeTime(item.timestamp, isZh)}
               </Text>
             </Box>

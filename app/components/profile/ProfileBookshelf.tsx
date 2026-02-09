@@ -54,7 +54,17 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
   if (loading) {
     return (
       <Box bg="secondary" p={4} radius="lg" border="primary">
-        <Text size="sm" color="tertiary">{isZh ? '加载中...' : 'Loading...'}</Text>
+        <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
+          📚 {isZh ? '书架' : 'Bookshelf'}
+        </Text>
+        <Box style={{ display: 'grid', gridTemplateColumns: expanded ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(3, 1fr)', gap: tokens.spacing[3] }}>
+          {[1, 2, 3].map(i => (
+            <Box key={i} style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+              <Box className="skeleton" style={{ width: '100%', aspectRatio: '3/4', borderRadius: tokens.radius.md }} />
+              <Box className="skeleton" style={{ height: 12, borderRadius: 4, width: '80%' }} />
+            </Box>
+          ))}
+        </Box>
       </Box>
     )
   }
@@ -109,7 +119,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
       </Box>
 
       {/* Book grid */}
-      <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: tokens.spacing[3] }}>
+      <Box style={{ display: 'grid', gridTemplateColumns: expanded ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(3, 1fr)', gap: tokens.spacing[3] }}>
         {displayItems.map(book => (
           <Link key={book.id} href={`/library/${book.id}`} style={{ textDecoration: 'none' }}>
             <Box style={{
@@ -144,12 +154,13 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
                 )}
                 {/* Status badge */}
                 <Box style={{
-                  position: 'absolute', top: 4, right: 4,
-                  padding: '1px 6px', borderRadius: tokens.radius.full,
-                  background: `${STATUS_COLORS[book.status]}20`,
-                  border: `1px solid ${STATUS_COLORS[book.status]}40`,
+                  position: 'absolute', top: 6, right: 6,
+                  padding: '2px 8px', borderRadius: tokens.radius.full,
+                  background: `${STATUS_COLORS[book.status]}CC`,
+                  backdropFilter: 'blur(4px)',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                 }}>
-                  <Text style={{ fontSize: 9, fontWeight: 700, color: STATUS_COLORS[book.status] }}>
+                  <Text style={{ fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: '0.02em' }}>
                     {(STATUS_LABELS[isZh ? 'zh' : 'en'] as Record<string, string>)[book.status]}
                   </Text>
                 </Box>

@@ -111,7 +111,7 @@ export default function MobileMarketTabs({ children }: {
       </div>
 
       {/* Tab Content - cached: once mounted, keep in DOM but hide */}
-      <div ref={containerRef} style={{ minHeight: '60vh', padding: '12px 0' }}>
+      <div ref={containerRef} style={{ minHeight: '60vh', padding: '16px 0' }}>
         {TABS.map(tab => {
           if (!mountedTabs.has(tab.key)) return null
           const isActive = tab.key === activeTab

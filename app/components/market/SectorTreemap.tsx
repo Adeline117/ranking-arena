@@ -193,21 +193,21 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
         <span style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.text.primary }}>
           板块热力图
         </span>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 2, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.md, padding: 2 }}>
           {timeframes.map(tf => (
             <button
               key={tf.key}
               onClick={() => setTimeframe(tf.key)}
               style={{
-                padding: '4px 12px',
+                padding: '5px 14px',
                 fontSize: 12,
-                fontWeight: 500,
+                fontWeight: timeframe === tf.key ? 700 : 500,
                 borderRadius: tokens.radius.sm,
                 border: 'none',
                 cursor: 'pointer',
-                background: timeframe === tf.key ? tokens.colors.accent.primary : tokens.colors.bg.tertiary,
-                color: timeframe === tf.key ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
-                transition: 'all 0.15s ease',
+                background: timeframe === tf.key ? tokens.colors.accent.primary : 'transparent',
+                color: timeframe === tf.key ? '#FFFFFF' : tokens.colors.text.tertiary,
+                transition: 'all 0.2s ease',
               }}
             >
               {tf.label}

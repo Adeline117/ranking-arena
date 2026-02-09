@@ -107,6 +107,15 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
   const bgGradient = isGainer
     ? 'linear-gradient(90deg, var(--color-accent-success-05) 0%, transparent 100%)'
     : 'linear-gradient(90deg, var(--color-accent-error-04) 0%, transparent 100%)'
+  // Format price with appropriate precision
+  const formattedPrice = (() => {
+    const num = parseFloat(price.replace(/[$,]/g, ''))
+    if (isNaN(num)) return price
+    if (num >= 1000) return `$${num.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+    if (num >= 1) return `$${num.toFixed(2)}`
+    return `$${num.toFixed(4)}`
+  })()
+
   return (
     <div style={{
       display: 'flex',
@@ -116,9 +125,9 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
       borderRadius: tokens.radius.md,
       background: index % 2 === 0 ? bgGradient : 'transparent',
       transition: `background ${tokens.transition.fast}`,
-      minHeight: 36,
+      minHeight: 40,
     }}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <span style={{
           width: 20,
           height: 20,
@@ -130,6 +139,7 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
           fontSize: 10,
           fontWeight: 700,
           color: tokens.colors.text.tertiary,
+          flexShrink: 0,
         }}>
           {index + 1}
         </span>
@@ -141,19 +151,23 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
           color: tokens.colors.text.secondary,
           fontFamily: 'var(--font-mono, monospace)',
           fontSize: tokens.typography.fontSize.sm,
-        }}>
-          {price}
+          tabularNums: true,
+          fontVariantNumeric: 'tabular-nums',
+        } as React.CSSProperties}>
+          {formattedPrice}
         </span>
         <span style={{
           color,
           fontWeight: 700,
           fontSize: tokens.typography.fontSize.sm,
-          minWidth: 64,
+          minWidth: 68,
           textAlign: 'right',
-          padding: `2px ${tokens.spacing[2]}`,
+          padding: `3px ${tokens.spacing[2]}`,
           borderRadius: tokens.radius.sm,
           background: isGainer ? 'var(--color-accent-success-10)' : 'var(--color-accent-error-10)',
-        }}>
+          fontFamily: 'var(--font-mono, monospace)',
+          fontVariantNumeric: 'tabular-nums',
+        } as React.CSSProperties}>
           {changePct}
         </span>
       </span>
@@ -172,7 +186,7 @@ function VolumeBar({ value, max }: { value: number; max: number }) {
   return (
     <div style={{
       width: 80,
-      height: 4,
+      height: 6,
       background: tokens.colors.bg.tertiary,
       borderRadius: tokens.radius.full,
       overflow: 'hidden',
@@ -258,9 +272,9 @@ export default function CoreCards() {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
                 background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
-                minHeight: 36,
+                minHeight: 40,
               }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   <span style={{
                     width: 20,
                     height: 20,
@@ -272,6 +286,7 @@ export default function CoreCards() {
                     fontSize: 10,
                     fontWeight: 700,
                     color: tokens.colors.text.tertiary,
+                    flexShrink: 0,
                   }}>
                     {i + 1}
                   </span>
@@ -283,9 +298,10 @@ export default function CoreCards() {
                     color: tokens.colors.text.secondary,
                     fontFamily: 'var(--font-mono, monospace)',
                     fontSize: tokens.typography.fontSize.xs,
-                    minWidth: 72,
+                    fontVariantNumeric: 'tabular-nums',
+                    minWidth: 76,
                     textAlign: 'right',
-                  }}>
+                  } as React.CSSProperties}>
                     {formatBTC(ex.trade_volume_24h_btc)}
                   </span>
                 </span>
