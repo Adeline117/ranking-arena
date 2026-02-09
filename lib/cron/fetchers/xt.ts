@@ -49,6 +49,14 @@ interface XtTrader {
   maxRetraction?: string | number
   followerCount?: string | number
   tradeDays?: number
+  followerProfit?: string | number
+  totalFollowerProfit?: string | number
+  followerMargin?: string | number
+  totalFollowerMargin?: string | number
+  followNumber?: number
+  newFollowNumber?: number
+  level?: number
+  levelName?: string
 }
 
 interface XtGroupResult {
@@ -255,11 +263,21 @@ async function fetchPeriod(
   const top = traders.slice(0, TARGET)
   const { saved, error } = await upsertTraders(supabase, top)
 
+  // Build a lookup from parsed traders back to raw data for extra fields
+  const rawLookup = new Map<string, XtTrader>()
+  for (const [, item] of Array.from(allTraders)) {
+    const id = String(item.accountId || '')
+    if (id) rawLookup.set(id, item)
+  }
+
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
     console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
+      const raw = rawLookup.get(trader.source_trader_id)
+      const copiersPnl = raw ? parseNum(raw.totalFollowerProfit) : null
+      const aumVal = raw ? parseNum(raw.totalFollowerMargin) : null
       const stats: StatsDetail = {
         totalTrades: null,
         profitableTradesPct: trader.win_rate ?? null,
@@ -273,8 +291,8 @@ async function fetchPeriod(
         currentDrawdown: null,
         volatility: null,
         copiersCount: trader.followers ?? null,
-        copiersPnl: null,
-        aum: null,
+        copiersPnl: copiersPnl,
+        aum: aumVal && aumVal > 0 ? aumVal : null,
         winningPositions: null,
         totalPositions: null,
       }

@@ -4,11 +4,13 @@
  *
  * Phemex copy trading page: https://phemex.com/copy-trading
  *
- * [WARN] CLOUDFRONT-BLOCKED: All API endpoints return 403 (CloudFront geo-restriction).
+ * [WARN] CLOUDFRONT-BLOCKED: Main site endpoints return 403 (CloudFront geo-restriction).
+ * The api.phemex.com endpoint at /phemex-user/users/children/queryTraderWithCopySetting
+ * returns 401 requiring API key auth. The /copy-trading page redirects to /404.
+ * Phemex may have discontinued public copy trading or moved it behind authentication.
  * Original script uses Playwright to browse the page and intercept internal API calls.
- * The browser intercepted API calls with 'copy', 'trader', 'leader', 'rank', 'copyTrad' in URL.
  * Phemex uses E8 scaling for PnL values (divide by 1e8).
- * May work from Vercel datacenter IPs — needs testing on deployment.
+ * Status as of 2026-02: Likely non-functional without authenticated API access.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -165,9 +167,12 @@ const API_ENDPOINTS = [
     `https://phemex.com/api/copy-trading/ranking?pageNo=${page}&pageSize=${PAGE_SIZE}`,
   (page: number, _days: number) =>
     `https://phemex.com/api/copy-trading/trader/list?pageNo=${page}&pageSize=${PAGE_SIZE}`,
-  // Alternative: Phemex REST API
+  // Alternative: Phemex REST API (public)
   (page: number, _days: number) =>
     `https://api.phemex.com/api/copy-trading/traders?pageNo=${page}&pageSize=${PAGE_SIZE}`,
+  // Authenticated endpoint (requires API key — returns 401 without it)
+  (page: number, days: number) =>
+    `https://api.phemex.com/phemex-user/users/children/queryTraderWithCopySetting?pageNo=${page}&pageSize=${PAGE_SIZE}&days=${days}`,
 ]
 
 async function fetchPeriod(

@@ -27,12 +27,15 @@ interface HtxTrader {
   nickName?: string
   imgUrl?: string
   copyUserNum?: number
+  fullUserNum?: number
   winRate?: number
   profitRate90?: number
   profit90?: number
   copyProfit?: number
   mdd?: number
+  aum?: string | number
   profitList?: number[]
+  tradeDays?: number
 }
 
 function calcPeriodRoi(profitList: number[], period: string): number | null {
@@ -115,6 +118,9 @@ async function fetchPeriod(
     if (roi === null || roi === 0) continue
     const winRate = item.winRate != null ? Number(item.winRate) * 100 : null
 
+    const pnl = Number(item.profit90 || item.copyProfit || 0) || null
+    const aumVal = item.aum != null ? Number(item.aum) : null
+
     traders.push({
       source: SOURCE,
       source_trader_id: id,
@@ -122,11 +128,12 @@ async function fetchPeriod(
       profile_url: `https://futures.htx.com/en-us/copytrading/futures/detail/${id}`,
       season_id: period,
       roi,
-      pnl: Number(item.profit90 || item.copyProfit || 0) || null,
+      pnl,
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       followers: item.copyUserNum || null,
-      arena_score: calculateArenaScore(roi, Number(item.profit90 || 0), maxDrawdown, winRate, period),
+      aum: aumVal && aumVal > 0 ? aumVal : null,
+      arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
       avatar_url: item.imgUrl || null,
     })
@@ -155,7 +162,7 @@ async function fetchPeriod(
         volatility: null,
         copiersCount: trader.followers ?? null,
         copiersPnl: null,
-        aum: null,
+        aum: trader.aum ?? null,
         winningPositions: null,
         totalPositions: null,
       }
