@@ -86,7 +86,7 @@ export default function UserStreaks({ userId }: Props) {
           style={{
             background: tokens.colors.bg.secondary,
             border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: 10,
+            borderRadius: tokens.radius.md,
             padding: `${tokens.spacing[3]}px ${tokens.spacing[4]}px`,
             textAlign: 'center',
           }}

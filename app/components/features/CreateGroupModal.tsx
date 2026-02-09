@@ -174,7 +174,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                 onChange={e => { setSearchQuery(e.target.value); searchUsers(e.target.value) }}
                 placeholder={t('searchUsers')}
                 style={{
-                  width: '100%', padding: '10px 14px', borderRadius: 10,
+                  width: '100%', padding: '10px 14px', borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.primary, color: tokens.colors.text.primary,
                   fontSize: 14, outline: 'none', marginBottom: 12,
@@ -216,7 +216,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                 return (
                   <button key={u.id} onClick={() => toggleMember(u)} style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 8px', borderRadius: 10, border: 'none',
+                    padding: '10px 8px', borderRadius: tokens.radius.md, border: 'none',
                     background: isSelected ? `${tokens.colors.accent.brand}15` : 'transparent',
                     cursor: 'pointer', textAlign: 'left',
                     minHeight: 44,
@@ -252,7 +252,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                   placeholder={t('groupNamePlaceholder')}
                   maxLength={50}
                   style={{
-                    width: '100%', padding: '10px 14px', borderRadius: 10,
+                    width: '100%', padding: '10px 14px', borderRadius: tokens.radius.md,
                     border: `1px solid ${tokens.colors.border.primary}`,
                     background: tokens.colors.bg.primary, color: tokens.colors.text.primary,
                     fontSize: 14, outline: 'none',
@@ -268,7 +268,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                   maxLength={200}
                   rows={3}
                   style={{
-                    width: '100%', padding: '10px 14px', borderRadius: 10,
+                    width: '100%', padding: '10px 14px', borderRadius: tokens.radius.md,
                     border: `1px solid ${tokens.colors.border.primary}`,
                     background: tokens.colors.bg.primary, color: tokens.colors.text.primary,
                     fontSize: 14, outline: 'none', resize: 'none',
@@ -289,7 +289,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
         }}>
           {step === 'details' && (
             <button onClick={() => setStep('members')} style={{
-              flex: 1, padding: '10px', borderRadius: 10,
+              flex: 1, padding: '10px', borderRadius: tokens.radius.md,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: 'transparent', color: tokens.colors.text.primary,
               fontWeight: 600, cursor: 'pointer', minHeight: 44,
@@ -301,8 +301,8 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
             onClick={step === 'members' ? () => setStep('details') : handleCreate}
             disabled={step === 'members' ? selectedMembers.length < 1 : !groupName.trim() || creating}
             style={{
-              flex: 1, padding: '10px', borderRadius: 10, border: 'none',
-              background: tokens.gradient.primary, color: '#fff',
+              flex: 1, padding: '10px', borderRadius: tokens.radius.md, border: 'none',
+              background: tokens.gradient.primary, color: 'var(--color-on-accent)',
               fontWeight: 700, cursor: 'pointer', minHeight: 44,
               opacity: (step === 'members' && selectedMembers.length < 1) || (step === 'details' && (!groupName.trim() || creating)) ? 0.5 : 1,
             }}

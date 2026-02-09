@@ -101,7 +101,7 @@ export default function RouteError({
           fontFamily: '"SF Mono", Consolas, monospace',
           padding: '4px 10px',
           background: 'var(--color-accent-error-08)',
-          borderRadius: 6,
+          borderRadius: tokens.radius.sm,
           border: '1px solid var(--color-accent-error-12)',
         }}>
           {t('errorCode') || '错误代码'}: {error.digest}

@@ -97,7 +97,7 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
       return {
         label: t('owner'),
         bg: tokens.colors.accent?.warning,
-        color: '#000'
+        color: tokens.colors.text.primary
       }
     }
     if (role === 'admin') {

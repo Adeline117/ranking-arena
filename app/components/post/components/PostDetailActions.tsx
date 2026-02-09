@@ -110,7 +110,7 @@ export function PostDetailActions({
             cursor: 'pointer',
             padding: '6px 8px',
             fontSize: 12,
-            borderRadius: 6,
+            borderRadius: tokens.radius.sm,
             transition: 'all 0.2s ease',
           }}
           onMouseEnter={(e) => {

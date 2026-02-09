@@ -219,7 +219,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
               style={{
                 padding: '4px 12px',
                 fontSize: 13,
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
                 background: alert.enabled ? tokens.colors.accent.success : tokens.colors.bg.tertiary,
                 color: alert.enabled ? '#fff' : tokens.colors.text.secondary,
                 border: 'none',
@@ -231,7 +231,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
           )}
           {onClose && (
             <Button onClick={onClose} style={{
-              padding: '4px 8px', fontSize: 13, borderRadius: 6,
+              padding: '4px 8px', fontSize: 13, borderRadius: tokens.radius.sm,
               background: 'transparent', border: `1px solid ${tokens.colors.border.primary}`,
               color: tokens.colors.text.secondary, cursor: 'pointer',
             }}>
@@ -320,7 +320,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
             padding: '8px 16px',
             borderRadius: tokens.radius.md,
             background: tokens.colors.accent.primary,
-            color: '#fff',
+            color: 'var(--color-on-accent)',
             border: 'none',
             cursor: saving ? 'not-allowed' : 'pointer',
             opacity: saving ? 0.6 : 1,

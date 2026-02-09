@@ -702,7 +702,7 @@ export default function EpubReader({
           <button
             onClick={() => setShowAudioReader(p => !p)}
             style={{
-              padding: '2px 10px', borderRadius: 6, fontSize: 11,
+              padding: '2px 10px', borderRadius: tokens.radius.sm, fontSize: 11,
               border: `1px solid ${panelBorder}`,
               background: showAudioReader ? accent : 'transparent',
               color: showAudioReader ? '#fff' : 'inherit',
@@ -904,7 +904,7 @@ export default function EpubReader({
                 ))}
                 <div style={{ flex: 1 }} />
                 <select value={highlightSort} onChange={e => setHighlightSort(e.target.value as HighlightSortMode)} style={{
-                  padding: '4px 8px', borderRadius: 6, border: `1px solid ${panelBorder}`,
+                  padding: '4px 8px', borderRadius: tokens.radius.sm, border: `1px solid ${panelBorder}`,
                   background: panelSubtle, color: panelText, fontSize: 11, outline: 'none',
                 }}>
                   <option value="time">{isZh ? '按时间' : 'By time'}</option>
@@ -952,7 +952,7 @@ export default function EpubReader({
                           value={editNoteText}
                           onChange={e => setEditNoteText(e.target.value)}
                           style={{
-                            width: '100%', minHeight: 48, padding: '6px 10px', borderRadius: 6,
+                            width: '100%', minHeight: 48, padding: '6px 10px', borderRadius: tokens.radius.sm,
                             border: `1px solid ${panelBorder}`, background: panelSubtle,
                             color: panelText, fontSize: 12, resize: 'vertical', outline: 'none',
                             fontFamily: 'inherit',
@@ -961,11 +961,11 @@ export default function EpubReader({
                         />
                         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                           <button onClick={(e) => { e.stopPropagation(); updateHighlightNote(realIdx, editNoteText) }} style={{
-                            padding: '4px 12px', borderRadius: 6, border: 'none',
+                            padding: '4px 12px', borderRadius: tokens.radius.sm, border: 'none',
                             background: accent, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 600,
                           }}>{isZh ? '保存' : 'Save'}</button>
                           <button onClick={(e) => { e.stopPropagation(); setEditingNoteIdx(null) }} style={{
-                            padding: '4px 12px', borderRadius: 6, border: `1px solid ${panelBorder}`,
+                            padding: '4px 12px', borderRadius: tokens.radius.sm, border: `1px solid ${panelBorder}`,
                             background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 11,
                           }}>{isZh ? '取消' : 'Cancel'}</button>
                         </div>
@@ -1091,7 +1091,7 @@ export default function EpubReader({
 
             <button onClick={() => setShowStats(false)} style={{
               display: 'block', width: '100%', marginTop: 20, padding: '10px',
-              borderRadius: 10, border: `1px solid ${panelBorder}`,
+              borderRadius: tokens.radius.md, border: `1px solid ${panelBorder}`,
               background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 13,
             }}>
               {isZh ? '关闭' : 'Close'}
@@ -1133,7 +1133,7 @@ export default function EpubReader({
                     <button key={key} onClick={() => {
                       // fontFamily is controlled by parent, but we expose via typography panel
                     }} style={{
-                      padding: '10px 8px', borderRadius: 10,
+                      padding: '10px 8px', borderRadius: tokens.radius.md,
                       background: fontFamily === key ? accent : panelSubtle,
                       color: fontFamily === key ? '#fff' : panelText,
                       border: 'none', cursor: 'pointer', fontSize: 14,
@@ -1160,7 +1160,7 @@ export default function EpubReader({
                   }
                   return (
                     <button key={lh} onClick={() => setLocalLineHeight(lh)} style={{
-                      flex: 1, padding: '8px 4px', borderRadius: 10,
+                      flex: 1, padding: '8px 4px', borderRadius: tokens.radius.md,
                       background: localLineHeight === lh ? accent : panelSubtle,
                       color: localLineHeight === lh ? '#fff' : panelText,
                       border: 'none', cursor: 'pointer', fontSize: 12,
@@ -1187,7 +1187,7 @@ export default function EpubReader({
                   }
                   return (
                     <button key={pm} onClick={() => setLocalPageMargin(pm)} style={{
-                      flex: 1, padding: '8px 4px', borderRadius: 10,
+                      flex: 1, padding: '8px 4px', borderRadius: tokens.radius.md,
                       background: localPageMargin === pm ? accent : panelSubtle,
                       color: localPageMargin === pm ? '#fff' : panelText,
                       border: 'none', cursor: 'pointer', fontSize: 12,

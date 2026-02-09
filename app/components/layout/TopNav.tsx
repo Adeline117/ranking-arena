@@ -589,7 +589,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       right: -3,
                       minWidth: 18,
                       height: 18,
-                      borderRadius: 9,
+                      borderRadius: tokens.radius.md,
                       background: tokens.gradient.error,
                       border: `2px solid var(--color-bg-primary)`,
                       display: 'flex',

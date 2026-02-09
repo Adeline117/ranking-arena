@@ -44,7 +44,7 @@ function UnreadBadge({ count }: { count: number }): React.ReactElement | null {
       style={{
         minWidth: 18,
         height: 18,
-        borderRadius: 9,
+        borderRadius: tokens.radius.md,
         background: tokens.colors.accent.primary,
         color: tokens.colors.white,
         fontSize: 10,
