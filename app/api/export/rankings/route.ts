@@ -19,34 +19,41 @@ function escapeCsv(v: unknown): string {
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url)
-  const format = url.searchParams.get('format') || 'csv'
-  const exchange = url.searchParams.get('exchange') || ''
-  const limit = Math.min(Number(url.searchParams.get('limit') || '500'), 2000)
+  try {
+    const url = new URL(request.url)
+    const format = url.searchParams.get('format') || 'csv'
+    const exchange = url.searchParams.get('exchange') || ''
+    const limitParam = Number(url.searchParams.get('limit') || '500')
+    const limit = Math.min(Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 500, 2000)
 
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
-  }
+    if (!['csv', 'json'].includes(format)) {
+      return NextResponse.json({ error: 'Invalid format. Use csv or json.' }, { status: 400 })
+    }
 
-  const supabase = createClient(supabaseUrl, supabaseKey)
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+    }
 
-  let query = supabase
-    .from('leaderboard_ranks')
-    .select('rank, trader_id, handle, source, arena_score, roi, pnl, win_rate, max_drawdown, followers, trades_count')
-    .order('rank', { ascending: true })
-    .limit(limit)
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
-  if (exchange && exchange !== 'all') {
-    query = query.eq('source', exchange)
-  }
+    let query = supabase
+      .from('leaderboard_ranks')
+      .select('rank, trader_id, handle, source, arena_score, roi, pnl, win_rate, max_drawdown, followers, trades_count')
+      .order('rank', { ascending: true })
+      .limit(limit)
 
-  const { data, error } = await query
+    if (exchange && exchange !== 'all') {
+      query = query.eq('source', exchange)
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+    const { data, error } = await query
 
-  const rows = data || []
+    if (error) {
+      console.error('[export/rankings] Supabase error:', error.message)
+      return NextResponse.json({ error: 'Failed to fetch rankings' }, { status: 500 })
+    }
+
+    const rows = data || []
 
   if (format === 'json') {
     return new Response(JSON.stringify(rows, null, 2), {

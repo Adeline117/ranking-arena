@@ -196,14 +196,14 @@ function ExchangeAuthContent() {
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
             <Text size="lg" weight="bold">
-              安全承诺
+              {t('securityNoticeTitle')}
             </Text>
           </Box>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
             {[
-              '仅需只读权限 (Read-Only)',
-              'API密钥加密存储',
-              '不会执行任何交易操作',
+              t('authSecurityTip1'),
+              t('authSecurityTip2'),
+              t('authSecurityTip3'),
             ].map((item) => (
               <Box key={item} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
