@@ -46,7 +46,7 @@ function clearSearchHistory() {
 function SearchContent() {
   const searchParams = useSearchParams()
   const _router = useRouter()
-  const { t, language } = useLanguage()
+  const { t: _t, language } = useLanguage()
   const isZh = language === 'zh'
   const query = searchParams.get('q') || ''
   const [loading, setLoading] = useState(false)

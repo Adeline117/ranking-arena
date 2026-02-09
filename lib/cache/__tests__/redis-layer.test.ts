@@ -26,7 +26,7 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 // Mock Redis - not configured (no env vars)
-const originalEnv = process.env
+const _originalEnv = process.env
 
 import {
   tieredGet,

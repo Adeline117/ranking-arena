@@ -160,10 +160,9 @@ function StatBlock({ label, value, color }: { label: string; value: string; colo
 
 export default function ExchangeRankingClient({
   traders,
-  exchange,
 }: {
   traders: TraderData[]
-  exchange: string
+  exchange?: string
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
 
