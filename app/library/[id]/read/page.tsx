@@ -1251,8 +1251,8 @@ export default function ReadPage() {
             display: 'block', width: '100%', textAlign: 'left',
             padding: '10px 16px', paddingLeft: 16 + level * 20,
             background: 'none', border: 'none',
-            color: theme === 'dark' ? 'var(--color-on-accent)' : 'var(--color-text-primary)',
-            cursor: 'pointer', fontSize: 13, lineHeight: 1.4,
+            color: theme === 'dark' ? '#e0e0e0' : '#1a1a2e',
+            cursor: 'pointer', fontSize: 14, fontWeight: 500, lineHeight: 1.5,
             transition: 'background 0.15s',
           }}
           onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'var(--overlay-hover)' : 'var(--overlay-hover)'}
@@ -1277,8 +1277,8 @@ export default function ReadPage() {
             background: currentPage === item.pageIndex + 1
               ? (theme === 'dark' ? 'var(--color-accent-primary-15)' : 'var(--color-accent-primary-08)')
               : 'none',
-            border: 'none', color: theme === 'dark' ? 'var(--color-on-accent)' : 'var(--color-text-primary)',
-            cursor: 'pointer', fontSize: 13, lineHeight: 1.4, transition: 'background 0.15s',
+            border: 'none', color: theme === 'dark' ? '#e0e0e0' : '#1a1a2e',
+            cursor: 'pointer', fontSize: 14, fontWeight: 500, lineHeight: 1.5, transition: 'background 0.15s',
           }}
           onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'var(--overlay-hover)' : 'var(--overlay-hover)'}
           onMouseLeave={e => e.currentTarget.style.background = currentPage === item.pageIndex + 1
