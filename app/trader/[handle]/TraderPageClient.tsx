@@ -327,7 +327,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                 {performance ? (
                   <Box style={{ position: 'relative' }}>
                     <OverviewPerformanceCard
-                      performance={performance}
+                      performance={performance as any}
                       equityCurve={equityCurve?.['90D']}
                       source={profile?.source}
                     />
