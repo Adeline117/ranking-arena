@@ -25,7 +25,9 @@ export async function GET(
     }
     const data = await res.json()
     cache.set(key, { data, ts: Date.now() })
-    return NextResponse.json(data)
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
+    })
   } catch {
     return NextResponse.json({ error: 'Failed to fetch OHLC data' }, { status: 500 })
   }
