@@ -60,8 +60,8 @@ export default function TimeRangeSelector({
             disabled={disabled}
             className="touch-target"
             style={{
-              padding: `6px ${tokens.spacing[4]}`,
-              minHeight: 32,
+              padding: `10px ${tokens.spacing[4]}`,
+              minHeight: 44,
               background: isActive
                 ? `${tokens.colors.accent.primary}20`
                 : 'transparent',

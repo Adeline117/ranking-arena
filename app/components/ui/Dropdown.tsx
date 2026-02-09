@@ -105,7 +105,7 @@ export function Dropdown<T = string>({
     sm: {
       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
       fontSize: tokens.typography.fontSize.sm,
-      minHeight: 36,
+      minHeight: 44,
     },
     md: {
       padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
