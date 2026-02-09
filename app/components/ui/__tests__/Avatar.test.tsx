@@ -41,8 +41,7 @@ jest.mock('@/lib/design-tokens', () => ({
 jest.mock('@/lib/utils/avatar', () => ({
   getAvatarGradient: (userId: string) => `linear-gradient(135deg, #${userId?.slice(0, 6) || '667eea'} 0%, #764ba2 100%)`,
   getAvatarInitial: (name: string) => name?.charAt(0)?.toUpperCase() || '?',
-  getUserAvatarUrl: (userId: string, _avatarUrl: string | null, name?: string) =>
-    `https://api.dicebear.com/7.x/identicon/svg?seed=${userId || name}`,
+  getUserAvatarUrl: (_userId: string, _avatarUrl: string | null, _name?: string) => null,
   getTraderAvatarUrl: (avatarUrl: string | null) => avatarUrl?.trim() || null,
 }))
 

@@ -378,12 +378,12 @@ function CompareContent() {
                           style={{
                             width: 32, height: 32,
                             borderRadius: tokens.radius.full,
-                            background: tokens.colors.bg.tertiary,
+                            background: `linear-gradient(135deg, hsl(${Math.abs(ft.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 75%, 45%), hsl(${Math.abs(ft.id.split('').reverse().reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 75%, 55%))`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             flexShrink: 0,
                           }}
                         >
-                          <Text size="xs" color="tertiary">
+                          <Text size="xs" style={{ color: '#fff', fontWeight: 700 }}>
                             {(ft.handle || '?')[0].toUpperCase()}
                           </Text>
                         </Box>
