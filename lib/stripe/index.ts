@@ -51,7 +51,7 @@ export const SUBSCRIPTION_PLANS = {
   monthly: {
     name: 'Pro Monthly',
     nameCn: 'Pro 月付会员',
-    price: 9.99,
+    price: 12.99,
     originalPrice: 15,
     interval: 'month' as const,
     features: [
@@ -68,8 +68,8 @@ export const SUBSCRIPTION_PLANS = {
   yearly: {
     name: 'Pro Yearly',
     nameCn: 'Pro 年付会员',
-    price: 99.99,
-    originalPrice: 180,
+    price: 99,
+    originalPrice: 155.88,
     interval: 'year' as const,
     features: [
       'All monthly features',

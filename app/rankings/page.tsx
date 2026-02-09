@@ -27,9 +27,14 @@ import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/tradi
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { Web3VerifiedBadge } from '@/app/components/trader/Web3VerifiedBadge'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
+import { useProStatus } from '@/lib/hooks/useProStatus'
+import { PaywallGradientOverlay } from '@/app/components/pro/PaywallOverlay'
 
 // Threshold for using virtual scrolling (for large datasets)
 const VIRTUAL_SCROLL_THRESHOLD = 2000
+
+// 免费用户排行榜可见数量限制
+const FREE_RANKING_LIMIT = 100
 
 // Convert RankedTraderV2 to VirtualLeaderboard's TraderRow format
 /** Get a readable trader name — skip pure-numeric IDs */
@@ -296,6 +301,7 @@ function RankingFadeWrapper({ transitionKey, children }: { transitionKey: string
 function RankingsContent() {
   const { language, t } = useLanguage()
   const isZh = language === 'zh'
+  const { isPro } = useProStatus()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -642,6 +648,7 @@ function RankingsContent() {
                   traders={filteredData.traders} 
                   isZh={isZh} 
                   isLoading={isLoading || isFiltering}
+                  isPro={isPro}
                 />
               </div>
             )}
@@ -692,11 +699,13 @@ function SortIndicator({ active, direction }: { active: boolean; direction: Sort
 function TraderList({ 
   traders, 
   isZh, 
-  isLoading 
+  isLoading,
+  isPro = false,
 }: { 
   traders: RankedTraderV2[]
   isZh: boolean
   isLoading: boolean
+  isPro?: boolean
 }) {
   const router = useRouter()
   const [sortField, setSortField] = useState<SortField>('rank')
@@ -809,15 +818,27 @@ function TraderList({
           </div>
         </div>
 
-        {sortedTraders.map((trader, index) => (
+        {(isPro ? sortedTraders : sortedTraders.slice(0, FREE_RANKING_LIMIT)).map((trader, index) => (
           <TraderRow key={`${trader.platform}:${trader.trader_key}`} trader={{ ...trader, rank: index + 1 }} />
         ))}
+
+        {!isPro && sortedTraders.length > FREE_RANKING_LIMIT && (
+          <PaywallGradientOverlay
+            feature={isZh ? '完整排行榜（100名以后）' : 'Full rankings (beyond top 100)'}
+          />
+        )}
 
         <div
           className="px-4 py-3 text-xs text-center border-t"
           style={{ color: tokens.colors.text.tertiary, borderColor: tokens.colors.border.primary }}
         >
-          {isZh ? `共 ${traders.length} 名交易员` : `${traders.length} traders total`}
+          {isZh
+            ? isPro
+              ? `共 ${traders.length} 名交易员`
+              : `显示前 ${Math.min(traders.length, FREE_RANKING_LIMIT)} / ${traders.length} 名交易员`
+            : isPro
+              ? `${traders.length} traders total`
+              : `Showing top ${Math.min(traders.length, FREE_RANKING_LIMIT)} of ${traders.length} traders`}
         </div>
       </div>
     </div>
