@@ -72,7 +72,21 @@ export default function FloatingActionButton() {
           <button
             onClick={() => {
               setMenuOpen(false)
-              router.push('/groups?action=new-post')
+              // Try last-used group, otherwise go to first available group
+              const lastGroup = typeof window !== 'undefined' ? localStorage.getItem('last_post_group_id') : null
+              if (lastGroup) {
+                router.push(`/groups/${lastGroup}/new`)
+              } else {
+                // Fetch user's first group and navigate
+                fetch('/api/groups?limit=1').then(r => r.json()).then(data => {
+                  const groups = data.groups || data
+                  if (Array.isArray(groups) && groups.length > 0) {
+                    router.push(`/groups/${groups[0].id}/new`)
+                  } else {
+                    router.push('/groups')
+                  }
+                }).catch(() => router.push('/groups'))
+              }
             }}
             style={{
               display: 'flex',
@@ -102,7 +116,7 @@ export default function FloatingActionButton() {
           <button
             onClick={() => {
               setMenuOpen(false)
-              router.push('/groups?action=group-post')
+              router.push('/groups')
             }}
             style={{
               display: 'flex',
