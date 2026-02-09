@@ -1,5 +1,7 @@
-"use client"
+'use client'
 
-import Error from "@/app/error"
+import RouteError from '@/app/components/RouteError'
 
-export default Error
+export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  return <RouteError error={error} reset={reset} contextLabel="LibraryRead" />
+}

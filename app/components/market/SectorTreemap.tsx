@@ -69,6 +69,7 @@ function squarify(
   const sorted = [...data].sort((a, b) => b.marketCap - a.marketCap)
   const nodes: TreemapNode[] = []
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function layoutRow(items: typeof sorted, rowArea: number, isHorizontal: boolean, rx: number, ry: number, rw: number, rh: number) {
     const side = isHorizontal ? rh : rw
     const rowWidth = rowArea / side

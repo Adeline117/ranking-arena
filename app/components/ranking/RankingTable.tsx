@@ -17,6 +17,7 @@ const _ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
   { ssr: false }
 )
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const RankingSearch = dynamic(() => import('./RankingSearch'), { ssr: false })
 
 // Extracted components — keep TraderRow/TraderCard static (LCP-critical)
@@ -392,7 +393,7 @@ function RankingTableInner(props: {
     })
   }
 
-  const handleSearchInput = (value: string) => {
+  const _handleSearchInput = (value: string) => {
     if (onSearchChange) onSearchChange(value)
     else setInternalSearchQuery(value)
     startTransition(() => { setCurrentPage(1) })

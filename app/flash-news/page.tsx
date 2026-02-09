@@ -318,7 +318,7 @@ export default function FlashNewsPage() {
           ) : (
             <Box>
               <Box style={{ marginBottom: tokens.spacing[5] }}>
-                {news.map((item, index) => {
+                {news.map((item, _index) => {
                   const impConfig = IMPORTANCE_CONFIG[item.importance]
                   const catColor = CATEGORY_COLORS[item.category] || tokens.colors.text.secondary
                   const content = getNewsContent(item)

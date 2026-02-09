@@ -135,6 +135,7 @@ const QUICK_FILTER_EXCHANGES: { value: string; label: string; logo: string; colo
   { value: 'jupiter_perps', label: 'Jupiter', logo: 'https://jup.ag/favicon.ico', color: 'var(--color-accent-success)' },
 ]
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- reserved component
 function ExchangeQuickFilter({
   activeCategory,
   activePlatform,
