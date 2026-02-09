@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   // Check queue depth for backpressure
   const { count: queueDepth } = await supabase
     .from('refresh_jobs')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .eq('status', 'pending')
 
   const estimatedWait = queueDepth ? Math.min(queueDepth * 5, 300) : 30  // 5s per job, max 5min

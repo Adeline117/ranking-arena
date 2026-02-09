@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
           // 检查发送者已发送的消息数量
           const { count: sentCount } = await supabase
             .from('direct_messages')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('sender_id', senderId)
             .eq('receiver_id', receiverId)
 

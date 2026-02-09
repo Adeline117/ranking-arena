@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
     if (!filter.id) {
       const { count } = await supabase
         .from('saved_filters')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
 
       if ((count || 0) >= MAX_SAVED_FILTERS) {

@@ -54,7 +54,7 @@ export async function GET(
   // Get global rank by counting traders with higher arena_score
   const { count: rankBefore } = await supabase
     .from('trader_snapshots')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .eq('season_id', '90D')
     .gt('arena_score', snapshot.arena_score ?? 0)
 

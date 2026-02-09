@@ -278,7 +278,7 @@ export async function POST(request: NextRequest) {
       if (!receiverReplied) {
         const { count: sentCount, error: countError } = await supabase
           .from('direct_messages')
-          .select('*', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('sender_id', senderId)
           .eq('receiver_id', receiverId)
 

@@ -37,69 +37,69 @@ export async function GET(req: NextRequest) {
     // User statistics
     const { count: totalUsers } = await supabase
       .from('user_profiles')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
     
     const { count: newUsersToday } = await supabase
       .from('user_profiles')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('created_at', today.toISOString())
     
     const { count: newUsersYesterday } = await supabase
       .from('user_profiles')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('created_at', yesterday.toISOString())
       .lt('created_at', today.toISOString())
     
     const { count: bannedUsers } = await supabase
       .from('user_profiles')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .not('banned_at', 'is', null)
     
     // Post statistics
     const { count: totalPosts } = await supabase
       .from('posts')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
     
     const { count: newPostsToday } = await supabase
       .from('posts')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('created_at', today.toISOString())
     
     const { count: newPostsYesterday } = await supabase
       .from('posts')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('created_at', yesterday.toISOString())
       .lt('created_at', today.toISOString())
     
     // Comment statistics
     const { count: totalComments } = await supabase
       .from('comments')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
     
     const { count: newCommentsToday } = await supabase
       .from('comments')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('created_at', today.toISOString())
     
     // Report statistics
     const { count: pendingReports } = await supabase
       .from('content_reports')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('status', 'pending')
     
     const { count: reportsThisWeek } = await supabase
       .from('content_reports')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('created_at', weekAgo.toISOString())
     
     // Group statistics
     const { count: totalGroups } = await supabase
       .from('groups')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
     
     const { count: pendingGroupApplications } = await supabase
       .from('group_applications')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('status', 'pending')
     
     // Scraper health summary
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
     // Trader statistics
     const { count: totalTraders } = await supabase
       .from('trader_sources')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
 
     // Traders per platform
     const { data: tradersByPlatformRaw } = await supabase
@@ -149,17 +149,17 @@ export async function GET(req: NextRequest) {
     // Snapshots in last 24h
     const { count: snapshots24h } = await supabase
       .from('trader_snapshots')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('captured_at', yesterday.toISOString())
 
     // Library items
     const { count: totalLibraryItems } = await supabase
       .from('library_items')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
 
     const { count: libraryWithPdf } = await supabase
       .from('library_items')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .not('pdf_url', 'is', null)
 
     return NextResponse.json({

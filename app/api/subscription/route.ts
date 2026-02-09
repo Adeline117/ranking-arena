@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     // 统计用户关注的交易员数量
     const { count: followsCount } = await supabase
       .from('trader_follows')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
 
     const currentFollows = followsCount || 0

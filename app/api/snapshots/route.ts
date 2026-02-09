@@ -371,7 +371,7 @@ export const GET = withAuth(
     // Get total count
     const { count } = await supabase
       .from('ranking_snapshots')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('created_by', user.id)
 
     return NextResponse.json({
