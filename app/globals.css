@@ -2273,3 +2273,27 @@ td[data-numeric],
   0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.5), 0 0 4px rgba(139, 92, 246, 0.3); }
   50% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.7), 0 0 8px rgba(139, 92, 246, 0.5); }
 }
+
+/* Purple tier (90+) shimmer effect */
+@keyframes score-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes score-legendary-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.4), 0 0 2px rgba(139, 92, 246, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.6), 0 0 6px rgba(139, 92, 246, 0.4), 0 0 24px rgba(139, 92, 246, 0.15);
+  }
+}
+
+@keyframes score-legendary-glow-intense {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.5), 0 0 4px rgba(139, 92, 246, 0.3), 0 0 20px rgba(139, 92, 246, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(139, 92, 246, 0.7), 0 0 8px rgba(139, 92, 246, 0.5), 0 0 32px rgba(139, 92, 246, 0.2), 0 0 4px rgba(212, 175, 55, 0.2);
+  }
+}

@@ -288,7 +288,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
       quality: { is_complete: true, missing_fields: [], confidence: 1.0, is_interpolated: false },
       as_of_ts: row.captured_at,
     } as unknown as RankedTraderRow;
-  });
+  }).filter(row => row.display_name != null);
 
   // Calculate staleness - data older than 1 hour is considered stale
   const latestCapturedAt = paginatedRows.length > 0

@@ -123,8 +123,8 @@ export default function MarketPage() {
   }, [])
 
   const handleTokenClick = useCallback((token: { id: string; symbol: string; name: string; image: string; price: number; change24h: number; marketCap: number; volume24h: number; high24h: number; low24h: number; rank: number }) => {
-    if (!isMobile) setSelectedToken(token)
-  }, [isMobile])
+    setSelectedToken(token)
+  }, [])
 
   const handleClosePanel = useCallback(() => {
     setSelectedToken(null)
@@ -246,12 +246,10 @@ export default function MarketPage() {
         </div>
       )}
 
-      {/* Desktop Side Panel */}
-      {!isMobile && (
-        <Suspense fallback={null}>
-          <TokenSidePanel token={selectedToken} onClose={handleClosePanel} />
-        </Suspense>
-      )}
+      {/* Token Detail Modal */}
+      <Suspense fallback={null}>
+        <TokenSidePanel token={selectedToken} onClose={handleClosePanel} />
+      </Suspense>
 
       <FloatingActionButton />
       <MobileBottomNav />

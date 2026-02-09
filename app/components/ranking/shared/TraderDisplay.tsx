@@ -192,22 +192,46 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
 
   const { bgGradient, borderColor, textColor, fillColor } = getScoreStyle(score)
 
-  const glowStyle = score >= 95
-    ? { boxShadow: `0 0 14px ${tokens.colors.accent.primary}60, 0 0 4px ${tokens.colors.accent.primary}40`, animation: 'score-glow 2s ease-in-out infinite' }
-    : score >= 90
-      ? { boxShadow: `0 0 10px ${tokens.colors.accent.primary}40` }
+  const isLegendary = score >= 90
+  const isElite = score >= 95
+
+  const glowStyle = isElite
+    ? { animation: 'score-legendary-glow-intense 2.5s ease-in-out infinite' }
+    : isLegendary
+      ? { animation: 'score-legendary-glow 3s ease-in-out infinite' }
       : score >= 80
         ? { boxShadow: `0 0 6px ${tokens.colors.accent.primary}25` }
         : {}
 
+  const legendaryBg = isElite
+    ? 'linear-gradient(135deg, rgba(139,92,246,0.22), rgba(168,85,247,0.18), rgba(212,175,55,0.12))'
+    : isLegendary
+      ? 'linear-gradient(135deg, rgba(139,92,246,0.20), rgba(168,85,247,0.15))'
+      : bgGradient
+
+  const legendaryBorder = isLegendary
+    ? `1px solid rgba(139,92,246,0.65)`
+    : `1px solid ${borderColor}`
+
   return (
     <Box style={{
       position: 'relative', minWidth: 46, height: 24, borderRadius: tokens.radius.md,
-      background: bgGradient,
-      border: `1px solid ${borderColor}`,
+      background: legendaryBg,
+      border: legendaryBorder,
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
       ...glowStyle,
     }}>
+      {/* Shimmer overlay for 90+ */}
+      {isLegendary && (
+        <Box style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 40%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.12) 60%, transparent 100%)',
+          backgroundSize: '200% 100%',
+          animation: 'score-shimmer 3s ease-in-out infinite',
+          borderRadius: 'inherit',
+          pointerEvents: 'none',
+        }} />
+      )}
       <Box style={{
         position: 'absolute', left: 0, top: 0, bottom: 0,
         width: `${score}%`,
@@ -217,7 +241,8 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
       <Text size="sm" weight="black" style={{
         position: 'relative',
         color: textColor,
-        fontSize: tokens.typography.fontSize.sm, lineHeight: 1
+        fontSize: tokens.typography.fontSize.sm, lineHeight: 1,
+        ...(isLegendary ? { textShadow: '0 0 8px rgba(139,92,246,0.4)' } : {}),
       }}>
         {score.toFixed(1)}
       </Text>
