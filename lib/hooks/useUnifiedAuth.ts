@@ -53,7 +53,7 @@ export function useUnifiedAuth(options?: {
     if (!ok) return null
     // After refresh, the global state has the new token
     return auth.accessToken
-  }, [auth.refreshSession, auth.accessToken])
+  }, [auth])
 
   const walletAddress = (auth.user?.user_metadata?.wallet_address as string) ?? null
   const isWalletUser = !!walletAddress || (auth.email?.endsWith('@wallet.arena') ?? false)
