@@ -55,7 +55,7 @@ export default function UserCenterPage() {
         // Fetch profile + stats
         const { data: profile } = await supabase
           .from('user_profiles')
-          .select('handle, followers_count, following_count')
+          .select('handle, follower_count, following_count')
           .eq('id', user.id)
           .maybeSingle()
 
@@ -63,7 +63,7 @@ export default function UserCenterPage() {
           setUserHandle(profile.handle)
           setStats(prev => ({
             ...prev,
-            followers: profile.followers_count ?? 0,
+            followers: profile.follower_count ?? 0,
             following: profile.following_count ?? 0,
           }))
         }
