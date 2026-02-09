@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
@@ -25,6 +25,41 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const { showToast } = useToast()
   const { t } = useLanguage()
   const { accessToken } = useAuthSession()
+  const modalRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<Element | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    triggerRef.current = document.activeElement
+    document.body.style.overflow = 'hidden'
+
+    requestAnimationFrame(() => {
+      if (modalRef.current) {
+        const first = modalRef.current.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        first?.focus()
+      }
+    })
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = ''
+      document.removeEventListener('keydown', handleKeyDown)
+      if (triggerRef.current instanceof HTMLElement) triggerRef.current.focus()
+    }
+  }, [isOpen, onClose])
   const [step, setStep] = useState<'members' | 'details'>('members')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<UserResult[]>([])
@@ -102,7 +137,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   if (!isOpen) return null
 
   return (
-    <Box style={{
+    <Box ref={modalRef} role="dialog" aria-modal="true" aria-label={t('createGroupChat')} style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }} onClick={onClose}>

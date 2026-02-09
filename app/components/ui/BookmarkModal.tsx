@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
@@ -37,6 +37,8 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderPublic, setNewFolderPublic] = useState(true)
+  const modalRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<Element | null>(null)
 
   useEffect(() => {
     if (isOpen && authChecked && accessToken) {
@@ -53,12 +55,36 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
   useEffect(() => {
     if (!isOpen) return
 
+    triggerRef.current = document.activeElement
     const originalOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+
+    // Focus first focusable element
+    requestAnimationFrame(() => {
+      if (modalRef.current) {
+        const first = modalRef.current.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        first?.focus()
+      }
+    })
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()
+      }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
       }
     }
     document.addEventListener('keydown', handleKeyDown)
@@ -66,6 +92,9 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
     return () => {
       document.body.style.overflow = originalOverflow
       document.removeEventListener('keydown', handleKeyDown)
+      if (triggerRef.current instanceof HTMLElement) {
+        triggerRef.current.focus()
+      }
     }
   }, [isOpen, onClose])
 
@@ -175,6 +204,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
         zIndex: tokens.zIndex.modal,
       }}
       onClick={onClose}
+      ref={modalRef}
     >
       <Box
         role="dialog"
@@ -204,6 +234,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
               {t('newBookmarkFolder')}
             </Button>
             <button
+              aria-label="Close"
               onClick={onClose}
               style={{
                 background: 'transparent',
@@ -227,6 +258,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
           }}>
             <input
               type="text"
+              aria-label={t('bookmarkFolderName')}
               placeholder={t('bookmarkFolderName')}
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
