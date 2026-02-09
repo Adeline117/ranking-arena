@@ -65,7 +65,7 @@ const TRIANGULAR_PATHS: [string, string, string][] = [
 ]
 
 function getExchange(id: string): Exchange {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const Ex = (ccxt as any)[id] as new (opts: object) => Exchange
   if (!Ex) throw new Error(`Unknown exchange: ${id}`)
   return new Ex({ enableRateLimit: true, timeout: 10_000 })

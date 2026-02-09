@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const type = request.nextUrl.searchParams.get('type') // 'group' | 'all'
 
     // Get channels the user is a member of
-    let query = supabase
+    const query = supabase
       .from('channel_members')
       .select(`
         channel_id,

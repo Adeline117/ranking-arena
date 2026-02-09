@@ -109,7 +109,7 @@ export default function ArbitrageOpportunities() {
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function OppCard({ opp, colors: c }: { opp: Opportunity; colors: any }) {
   const pct = opp.type === 'cross-exchange' ? opp.spreadPct : opp.profitPct
   const color = profitColor(pct)

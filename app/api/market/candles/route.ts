@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: `Unsupported exchange: ${exchangeId}` }, { status: 400 })
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const ExchangeClass = (ccxt.default as any)[exchangeId] as new () => InstanceType<typeof ccxt.default.Exchange>
     const exchange = new ExchangeClass()
 

@@ -58,7 +58,7 @@ describe('GET /api/auth/siwe/nonce', () => {
     expect(mockSet).toHaveBeenCalledWith('siwe-nonce', MOCK_HEX, {
       httpOnly: true,
       secure: false, // NODE_ENV=test
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 300,
       path: '/',
     })

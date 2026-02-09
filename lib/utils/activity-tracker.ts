@@ -23,7 +23,7 @@ interface ActivityEvent {
 const BATCH_INTERVAL = 30_000
 const MAX_BATCH_SIZE = 100
 
-let eventQueue: ActivityEvent[] = []
+const eventQueue: ActivityEvent[] = []
 let flushTimer: ReturnType<typeof setInterval> | null = null
 let initialized = false
 
