@@ -7,7 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { parseError } from '@/lib/utils/error-messages'
 import { logger } from '@/lib/logger'
 
-const FEEDBACK_URL = 'https://github.com/AdelineWen/ranking-arena/issues/new'
+const FEEDBACK_URL = '/u/adelinewen1107'
 
 /**
  * 统一路由级错误组件
