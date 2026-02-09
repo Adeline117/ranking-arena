@@ -219,7 +219,7 @@ export default function TokenSidePanel({ token, onClose }: {
               borderRadius: tokens.radius.xl,
               zIndex: 201,
               overflowY: 'auto',
-              padding: 28,
+              padding: 'clamp(16px, 4vw, 28px)',
             }}
           >
             {/* Header */}
@@ -232,6 +232,7 @@ export default function TokenSidePanel({ token, onClose }: {
                     width={36}
                     height={36}
                     style={{ borderRadius: '50%' }}
+                    unoptimized
                   />
                 ) : (
                   <span style={{ width: 36, height: 36, borderRadius: '50%', background: tokens.colors.bg.tertiary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: tokens.colors.text.secondary }}>
