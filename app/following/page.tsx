@@ -186,7 +186,7 @@ export default function FollowingPage() {
     } finally {
       setUnfollowingId(null)
     }
-  }, [unfollowingId, getAuthHeadersAsync, showToast, t, language])
+  }, [items, unfollowingId, getAuthHeadersAsync, showToast, t, language])
 
   useEffect(() => {
     // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()

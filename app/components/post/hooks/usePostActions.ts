@@ -185,6 +185,10 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
     }
   }, [accessToken])
 
+  // Ref to track current bookmark state for race-condition-safe reads
+  const userBookmarksRef = useRef<Record<string, boolean>>({})
+  userBookmarksRef.current = userBookmarks
+
   // Handle bookmark toggle
   const handleBookmark = useCallback(async (postId: string) => {
     if (!accessToken) {
@@ -192,7 +196,12 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       return
     }
 
-    const isCurrentlyBookmarked = userBookmarks[postId] || false
+    // Prevent concurrent bookmark toggles on same post
+    if (lockRef.current.has(`bookmark-${postId}`)) return
+    lockRef.current.add(`bookmark-${postId}`)
+
+    // Read from ref to avoid stale closure
+    const isCurrentlyBookmarked = userBookmarksRef.current[postId] || false
 
     // Optimistic update
     setUserBookmarks(prev => ({ ...prev, [postId]: !isCurrentlyBookmarked }))
@@ -234,8 +243,10 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       }))
       const message = err instanceof Error ? err.message : 'Failed to bookmark'
       onToast?.(message, 'error')
+    } finally {
+      lockRef.current.delete(`bookmark-${postId}`)
     }
-  }, [accessToken, userBookmarks, onToast])
+  }, [accessToken, onToast])
 
   // Handle repost
   const handleRepost = useCallback(async (postId: string, comment?: string) => {

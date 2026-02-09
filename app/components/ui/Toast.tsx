@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { setGlobalToast } from '@/lib/hooks/useApiMutation'
 import { t } from '@/lib/i18n'
@@ -207,7 +207,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         <button
           onClick={handleClose}
           aria-label="Dismiss notification"
-          className="btn-press"
+          className="btn-press toast-close-btn"
           style={{
             background: 'transparent',
             border: 'none',
@@ -222,15 +222,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: tokens.transition.fast,
-          }}
-          onMouseEnter={(e) => { 
-            e.currentTarget.style.background = tokens.colors.bg.tertiary
-            e.currentTarget.style.color = tokens.colors.text.primary
-          }}
-          onMouseLeave={(e) => { 
-            e.currentTarget.style.background = 'transparent'
-            e.currentTarget.style.color = tokens.colors.text.tertiary
+            transition: 'background 150ms ease, color 150ms ease',
           }}
         >
           ×
@@ -338,7 +330,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, [showToast])
 
   return (
-    <ToastContext.Provider value={{ showToast, hideToast }}>
+    <ToastContext.Provider value={useMemo(() => ({ showToast, hideToast }), [showToast, hideToast])}>
       {children}
       
       {/* Toast Container */}

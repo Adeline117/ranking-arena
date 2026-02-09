@@ -16,7 +16,7 @@ export interface RankingSearchProps {
 
 // ============ Constants ============
 
-const LS_KEY_SEARCH_HISTORY = 'ranking-search-history'
+const LS_KEY_SEARCH_HISTORY = 'arena_search_history'
 const MAX_HISTORY_ITEMS = 10
 
 // ============ localStorage helpers ============

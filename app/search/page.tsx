@@ -20,7 +20,7 @@ interface SearchResult {
 }
 
 const SECTION_LIMIT = 5
-const SEARCH_HISTORY_KEY = 'ranking-arena-search-history'
+const SEARCH_HISTORY_KEY = 'arena_search_history'
 const MAX_HISTORY = 10
 
 function getSearchHistory(): string[] {
