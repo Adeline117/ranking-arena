@@ -54,7 +54,7 @@ type Review = {
   review: string | null
   created_at: string
   user_id: string
-  users: { id: string; nickname: string | null } | null
+  users: { id: string; nickname: string | null; avatar_url: string | null } | null
 }
 
 type SimilarItem = {
@@ -105,6 +105,8 @@ export default function BookDetailPage() {
         setOverview(data.ratingOverview)
         setUserStatus(data.userStatus)
         setUserRating(data.userRating)
+        setUserReview(data.userReview || null)
+        if (data.userReview) setShortReview(data.userReview)
       })
       .catch((e) => logger.error('Unhandled error', e))
       .finally(() => setLoading(false))
@@ -134,6 +136,9 @@ export default function BookDetailPage() {
   }, [id])
 
   const [showRatingPrompt, setShowRatingPrompt] = useState(false)
+  const [shortReview, setShortReview] = useState('')
+  const [userReview, setUserReview] = useState<string | null>(null)
+  const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const ratingRef = useRef<HTMLDivElement>(null)
 
   const [statusLoading, setStatusLoading] = useState(false)
@@ -182,6 +187,27 @@ export default function BookDetailPage() {
       setUserRating(rating)
       const data = await fetch(`/api/library/${id}`, { headers: getAuthHeaders() }).then(r => r.json())
       setOverview(data.ratingOverview)
+    }
+  }
+
+  const handleSubmitReview = async () => {
+    if (!session || !shortReview.trim() || reviewSubmitting) return
+    setReviewSubmitting(true)
+    try {
+      const res = await fetch(`/api/library/${id}/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ rating: userRating, review: shortReview.trim().slice(0, 280) }),
+      })
+      if (res.ok) {
+        setUserReview(shortReview.trim())
+        fetchReviews(1)
+        setReviewPage(1)
+      }
+    } catch (e) {
+      logger.error('Review submit error', e)
+    } finally {
+      setReviewSubmitting(false)
     }
   }
 
@@ -477,6 +503,74 @@ export default function BookDetailPage() {
                     {isZh ? '点击星星评分吧' : 'Tap a star to rate'}
                   </p>
                 )}
+                {/* Short review textarea - show after rating */}
+                {userRating && (
+                  <div style={{ marginTop: 14 }}>
+                    {userReview ? (
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                        <p style={{ fontSize: 14, color: tokens.colors.text.secondary, margin: 0, flex: 1, lineHeight: 1.6 }}>
+                          {userReview}
+                        </p>
+                        <button
+                          onClick={() => { setUserReview(null); setShortReview(userReview || '') }}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontSize: 12, color: tokens.colors.accent.brand, flexShrink: 0, padding: '2px 0',
+                          }}
+                        >
+                          {isZh ? '编辑' : 'Edit'}
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <textarea
+                          value={shortReview}
+                          onChange={e => setShortReview(e.target.value.slice(0, 280))}
+                          placeholder={isZh ? '写一句短评吧' : 'Write a short review...'}
+                          style={{
+                            width: '100%', minHeight: 60, padding: '10px 12px',
+                            borderRadius: tokens.radius.md, fontSize: 14,
+                            background: tokens.colors.bg.primary, color: tokens.colors.text.primary,
+                            border: `1px solid ${tokens.colors.border.primary}`,
+                            resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6,
+                            outline: 'none',
+                          }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                          <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
+                            {shortReview.length}/280
+                          </span>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <Link
+                              href={`/community/new?category=book_review&book_id=${id}&book_title=${encodeURIComponent(book?.title || '')}`}
+                              style={{
+                                fontSize: 13, color: tokens.colors.accent.brand,
+                                textDecoration: 'none', fontWeight: 500,
+                              }}
+                            >
+                              {isZh ? '写长评 →' : 'Write long review →'}
+                            </Link>
+                            <button
+                              onClick={handleSubmitReview}
+                              disabled={!shortReview.trim() || reviewSubmitting}
+                              style={{
+                                padding: '6px 16px', borderRadius: tokens.radius.md,
+                                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                border: 'none',
+                                background: shortReview.trim() ? tokens.colors.accent.brand : tokens.colors.bg.tertiary,
+                                color: shortReview.trim() ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
+                                opacity: reviewSubmitting ? 0.6 : 1,
+                                transition: `all ${tokens.transition.fast}`,
+                              }}
+                            >
+                              {reviewSubmitting ? '...' : (isZh ? '发布' : 'Post')}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -552,7 +646,7 @@ export default function BookDetailPage() {
                       <div style={{
                         width: `${(dist[star as keyof typeof dist] / maxDist) * 100}%`,
                         height: '100%', borderRadius: tokens.radius.sm,
-                        background: 'linear-gradient(90deg, #f5c518, #f7d94e)',
+                        background: tokens.gradient.warning,
                         transition: `width ${tokens.transition.slow}`,
                       }} />
                     </div>
@@ -568,7 +662,20 @@ export default function BookDetailPage() {
 
         {/* ===== Reviews ===== */}
         {reviews.length > 0 && (
-          <Section title={isZh ? '书评' : 'Reviews'}>
+          <Section title={isZh ? '书评' : 'Reviews'} extra={
+            session && (
+              <Link
+                href={`/community/new?category=book_review&book_id=${id}&book_title=${encodeURIComponent(book.title)}`}
+                style={{
+                  fontSize: 13, fontWeight: 500, color: tokens.colors.accent.brand,
+                  textDecoration: 'none', padding: '4px 12px',
+                  borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.accent.brand}`,
+                }}
+              >
+                {isZh ? '写长评' : 'Write Review'}
+              </Link>
+            )
+          }>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {reviews.map(r => (
                 <div key={r.id} style={{
@@ -576,14 +683,22 @@ export default function BookDetailPage() {
                   background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: '50%',
-                      background: tokens.gradient.primarySubtle,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 14, color: tokens.colors.accent.brand, fontWeight: 700,
-                    }}>
-                      {((r.users as any)?.nickname || 'U')[0].toUpperCase()}
-                    </div>
+                    {r.users?.avatar_url ? (
+                      <img
+                        src={r.users.avatar_url}
+                        alt=""
+                        style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: tokens.gradient.primarySubtle,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 14, color: tokens.colors.accent.brand, fontWeight: 700,
+                      }}>
+                        {(r.users?.nickname || 'U')[0].toUpperCase()}
+                      </div>
+                    )}
                     <div style={{ flex: 1 }}>
                       <span style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary }}>
                         {(r.users as any)?.nickname || (isZh ? '匿名用户' : 'Anonymous')}
@@ -671,7 +786,7 @@ export default function BookDetailPage() {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, extra }: { title: string; children: React.ReactNode; extra?: React.ReactNode }) {
   return (
     <div style={{
       marginBottom: 32, padding: '20px 24px',
@@ -679,14 +794,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       background: tokens.colors.bg.secondary,
       border: `1px solid ${tokens.colors.border.primary}`,
     }}>
-      <h2 style={{
-        fontSize: tokens.typography.fontSize.lg,
-        fontWeight: tokens.typography.fontWeight.semibold,
-        color: tokens.colors.text.primary,
-        marginBottom: 16, marginTop: 0,
-      }}>
-        {title}
-      </h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h2 style={{
+          fontSize: tokens.typography.fontSize.lg,
+          fontWeight: tokens.typography.fontWeight.semibold,
+          color: tokens.colors.text.primary,
+          margin: 0,
+        }}>
+          {title}
+        </h2>
+        {extra}
+      </div>
       {children}
     </div>
   )

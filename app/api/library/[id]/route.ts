@@ -40,6 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Check user status if authenticated
     let userStatus = null
     let userRating = null
+    let userReview = null
     const authHeader = req.headers.get('authorization')
     if (authHeader?.startsWith('Bearer ')) {
       const { data: { user } } = await supabase.auth.getUser(authHeader.substring(7))
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         if (ur) {
           userStatus = ur.status
           userRating = ur.rating
+          userReview = ur.review
         }
       }
     }
@@ -72,6 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
       userStatus,
       userRating,
+      userReview,
     }, {
       headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
     })
