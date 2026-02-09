@@ -183,7 +183,7 @@ async function upsertEquityCurve(source, traderKey, period, dataPoints) {
 
 async function getTradersToEnrich(source, limit) {
   let query = supabase.from('trader_snapshots')
-    .select('source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, nickname, avatar_url')
+    .select('source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, aum, sharpe_ratio')
     .eq('source', source)
   
   if (freshOnly) {
@@ -191,7 +191,7 @@ async function getTradersToEnrich(source, limit) {
     query = query.gte('captured_at', since)
   }
   
-  const { data, error } = await query.limit(limit * 3)  // fetch more, then deduplicate
+  const { data, error } = await query.order('captured_at', { ascending: false }).limit(limit * 3)
   if (error) { console.error(`  DB error: ${error.message}`); return [] }
   
   // Deduplicate by source_trader_id
@@ -202,7 +202,24 @@ async function getTradersToEnrich(source, limit) {
     seen.add(t.source_trader_id)
     unique.push(t)
   }
-  return unique.slice(0, limit)
+  
+  // Also get display names from traders table
+  const ids = unique.map(t => t.source_trader_id)
+  const { data: traders } = await supabase.from('traders')
+    .select('source_trader_id, handle, bio')
+    .eq('source', source)
+    .in('source_trader_id', ids.slice(0, 100))
+  
+  const traderMap = new Map()
+  for (const tr of (traders || [])) {
+    traderMap.set(tr.source_trader_id, tr)
+  }
+  
+  return unique.slice(0, limit).map(t => ({
+    ...t,
+    nickname: traderMap.get(t.source_trader_id)?.handle || null,
+    avatar_url: null,
+  }))
 }
 
 // ============================================
