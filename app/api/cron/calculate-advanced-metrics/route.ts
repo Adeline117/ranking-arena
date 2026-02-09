@@ -5,7 +5,7 @@
  * - Sortino Ratio, Calmar Ratio, Profit Factor, Recovery Factor
  * - Max consecutive wins/losses
  * - Volatility metrics
- * - Arena Score V3
+ * - ArenaFi Score V3
  *
  * Schedule: Every 4 hours
  * Priority: Normal

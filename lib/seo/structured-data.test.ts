@@ -21,7 +21,7 @@ describe('generateWebSiteSchema', () => {
 
     expect(schema['@context']).toBe('https://schema.org')
     expect(schema['@type']).toBe('WebSite')
-    expect(schema.name).toBe('Arena')
+    expect(schema.name).toBe('ArenaFi')
     expect(schema.url).toBeDefined()
   })
 
@@ -47,7 +47,7 @@ describe('generateOrganizationSchema', () => {
 
     expect(schema['@context']).toBe('https://schema.org')
     expect(schema['@type']).toBe('Organization')
-    expect(schema.name).toBe('Arena')
+    expect(schema.name).toBe('ArenaFi')
     expect(schema.url).toBeDefined()
     expect(schema.logo).toBeDefined()
   })

@@ -1,8 +1,8 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: '隐私政策 | Arena',
-  description: 'Arena平台隐私政策 Privacy Policy',
+  title: '隐私政策 | ArenaFi',
+  description: 'ArenaFi平台隐私政策 Privacy Policy',
 }
 
 export default function PrivacyPage() {

@@ -3,7 +3,7 @@ import { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Trader Rankings | Arena',
+  title: 'Trader Rankings | ArenaFi',
   description:
     'Real-time crypto trader leaderboard across Binance, Bybit, Bitget, OKX, MEXC, KuCoin, GMX, Hyperliquid and more. Compare 90-day ROI, win rate, drawdown and Arena Score.',
   alternates: {
@@ -19,17 +19,17 @@ export const metadata: Metadata = {
     'Arena Score',
   ],
   openGraph: {
-    title: 'Trader Rankings | Arena',
+    title: 'Trader Rankings | ArenaFi',
     description:
       'Real-time crypto trader leaderboard across 22+ exchanges. Compare ROI, win rate, drawdown and Arena Score.',
     url: `${baseUrl}/rankings`,
-    siteName: 'Arena',
+    siteName: 'ArenaFi',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena Rankings' }],
+    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'ArenaFi Rankings' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Trader Rankings | Arena',
+    title: 'Trader Rankings | ArenaFi',
     description:
       'Real-time crypto trader leaderboard across 22+ exchanges.',
     images: [`${baseUrl}/og.png`],

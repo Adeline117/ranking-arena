@@ -6,7 +6,7 @@ export const runtime = 'edge'
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const type = searchParams.get('type') || 'default'
-  const title = searchParams.get('title') || 'Arena'
+  const title = searchParams.get('title') || 'ArenaFi'
   const subtitle = searchParams.get('subtitle') || ''
   const stat1Label = searchParams.get('s1l') || ''
   const stat1Value = searchParams.get('s1v') || ''
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
           borderTop: '1px solid rgba(255,255,255,0.08)',
         }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>
-            Arena
+            ArenaFi
           </div>
           <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.35)' }}>
             arenafi.org

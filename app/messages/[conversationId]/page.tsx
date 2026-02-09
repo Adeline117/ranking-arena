@@ -810,7 +810,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               style={{
                 display: 'inline-block',
                 padding: '12px 24px',
-                background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`,
+                background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, var(--color-brand-hover) 100%)`,
                 color: tokens.colors.white,
                 borderRadius: 12,
                 textDecoration: 'none',
@@ -1817,7 +1817,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     alignItems: 'center',
                     gap: 8,
                     padding: '12px 24px',
-                    background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #7e57c2 100%)`,
+                    background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, var(--color-brand-hover) 100%)`,
                     color: tokens.colors.white,
                     borderRadius: 12,
                     textDecoration: 'none',

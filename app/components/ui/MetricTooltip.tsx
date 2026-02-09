@@ -64,7 +64,7 @@ const METRIC_EXPLANATIONS: Record<MetricType, MetricExplanation> = {
   },
   arenaScore: {
     title: 'Arena Score',
-    titleZh: 'Arena 评分',
+    titleZh: 'ArenaFi 评分',
     formula: 'Score = w₁×Return + w₂×Risk + w₃×Consistency + w₄×Volume',
     description: 'Weighted composite score (0-100) measuring overall trading performance',
     descriptionZh: '综合衡量交易表现的加权评分 (0-100)',

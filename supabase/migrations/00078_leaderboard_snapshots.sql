@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
   -- Dimensions
   source text NOT NULL,
   market_type text,
-  window text NOT NULL DEFAULT '7D',
+  time_window text NOT NULL DEFAULT '7D',
   
   -- Trader info (denormalized for O(1) read)
   source_trader_id text NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
   
   -- Unique constraint for upsert
   CONSTRAINT uq_leaderboard_snapshot 
-    UNIQUE (source, market_type, window, source_trader_id, computed_at)
+    UNIQUE (source, market_type, time_window, source_trader_id, computed_at)
 );
 
 -- ============================================================
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
 
 -- Primary read pattern: source + window + rank order
 CREATE INDEX IF NOT EXISTS idx_leaderboard_snapshots_read
-  ON leaderboard_snapshots(source, window, rank ASC)
+  ON leaderboard_snapshots(source, time_window, rank ASC)
   WHERE computed_at = (SELECT MAX(computed_at) FROM leaderboard_snapshots);
 
 -- Latest snapshot lookup
@@ -52,7 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_leaderboard_snapshots_latest
 
 -- Source + market_type + window combo
 CREATE INDEX IF NOT EXISTS idx_leaderboard_snapshots_full
-  ON leaderboard_snapshots(source, market_type, window, computed_at DESC, rank ASC);
+  ON leaderboard_snapshots(source, market_type, time_window, computed_at DESC, rank ASC);
 
 -- ============================================================
 -- 3. Function to compute fresh leaderboard snapshot
@@ -65,19 +65,19 @@ DECLARE
   snapshot_time timestamptz := now();
 BEGIN
   INSERT INTO leaderboard_snapshots (
-    source, market_type, window, source_trader_id,
+    source, market_type, time_window, source_trader_id,
     handle, avatar_url, rank, arena_score, roi, pnl,
     win_rate, trade_count, followers_count, computed_at
   )
   SELECT
     ts.source,
     ts.market_type,
-    ts.window,
+    ts.time_window,
     ts.source_trader_id,
     src.handle,
     src.avatar_url,
     ROW_NUMBER() OVER (
-      PARTITION BY ts.source, ts.market_type, ts.window
+      PARTITION BY ts.source, ts.market_type, ts.time_window
       ORDER BY ts.arena_score DESC NULLS LAST
     ) AS rank,
     ts.arena_score,

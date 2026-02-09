@@ -225,6 +225,8 @@ export function useCurrentUser() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUserId(session?.user?.id || null)
+    }).catch(() => {
+      setUserId(null)
     })
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {

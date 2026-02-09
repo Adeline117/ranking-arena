@@ -4,7 +4,7 @@
  * NFTBadge
  *
  * Displays a "Pro (NFT)" badge indicating the user has
- * Pro membership via holding an Arena Pro NFT.
+ * Pro membership via holding an ArenaFiFi Pro NFT.
  */
 
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'

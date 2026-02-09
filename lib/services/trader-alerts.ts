@@ -4,7 +4,7 @@
  * 对比交易员最近两次 snapshot，检测大幅变动并生成告警：
  * - 7D ROI 变化超过 ±20% 触发告警
  * - 30D ROI 变化超过 ±50% 触发告警
- * - Arena Score 变化超过 ±15 分触发告警
+ * - ArenaFi Score 变化超过 ±15 分触发告警
  *
  * 告警存入 notifications 表（复用现有通知系统）
  */

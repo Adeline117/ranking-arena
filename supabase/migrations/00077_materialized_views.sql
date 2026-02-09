@@ -30,8 +30,8 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS mv_daily_rankings AS
 SELECT
   date_trunc('day', ts.captured_at) AS day,
   ts.source,
-  ts.market_type,
-  ts.window,
+  ts2.market_type,
+  ts.season_id,
   ts.source_trader_id,
   ts2.handle,
   ts2.avatar_url,
@@ -46,15 +46,15 @@ WHERE ts.arena_score IS NOT NULL
 GROUP BY
   date_trunc('day', ts.captured_at),
   ts.source,
-  ts.market_type,
-  ts.window,
+  ts2.market_type,
+  ts.season_id,
   ts.source_trader_id,
   ts2.handle,
   ts2.avatar_url
 ORDER BY day DESC, avg_arena_score DESC;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_daily_rankings_composite
-  ON mv_daily_rankings(day, source, market_type, window, source_trader_id);
+  ON mv_daily_rankings(day, source, market_type, season_id, source_trader_id);
 
 -- ============================================================
 -- 3. Refresh function (can be called from pg_cron or app)

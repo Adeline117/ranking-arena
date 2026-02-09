@@ -10,16 +10,16 @@ export const metadata: Metadata = {
     canonical: `${baseUrl}/compare`,
   },
   openGraph: {
-    title: '交易员对比 | Arena',
+    title: '交易员对比 | ArenaFi',
     description: '跨交易所并排对比交易员数据。',
     url: `${baseUrl}/compare`,
-    siteName: 'Arena',
+    siteName: 'ArenaFi',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena 交易员对比' }],
+    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'ArenaFi 交易员对比' }],
   },
   twitter: {
     card: 'summary',
-    title: '交易员对比 | Arena',
+    title: '交易员对比 | ArenaFi',
     description: '跨交易所并排对比交易员数据。',
   },
 }

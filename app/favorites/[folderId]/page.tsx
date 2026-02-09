@@ -613,8 +613,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                       style={{
                         fontSize: 10,
                         padding: '2px 6px',
-                        background: '#4ECDC420',
-                        color: '#4ECDC4',
+                        background: 'var(--color-accent-success-20)',
+                        color: 'var(--color-accent-success)',
                         borderRadius: tokens.radius.sm,
                       }}
                     >

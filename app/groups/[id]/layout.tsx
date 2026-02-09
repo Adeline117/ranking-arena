@@ -12,7 +12,7 @@ export async function generateMetadata({
   const { id } = await params
 
   let groupName = '小组'
-  let groupDescription = '加入 Ranking Arena 社区小组，讨论交易策略和市场动态'
+  let groupDescription = '加入 ArenaFi 社区小组，讨论交易策略和市场动态'
 
   try {
     const supabase = createClient(supabaseUrl, supabaseAnonKey)
@@ -31,7 +31,7 @@ export async function generateMetadata({
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
-  const title = `${groupName} · Arena`
+  const title = `${groupName} · ArenaFi`
 
   return {
     title,
@@ -43,7 +43,7 @@ export async function generateMetadata({
       title,
       description: groupDescription,
       url: `${baseUrl}/groups/${id}`,
-      siteName: 'Arena',
+      siteName: 'ArenaFi',
       type: 'website',
     },
     twitter: {

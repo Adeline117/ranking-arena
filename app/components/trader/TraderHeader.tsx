@@ -205,7 +205,7 @@ function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTr
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.lg,
                 background: tokens.colors.accent.success,
-                color: '#fff',
+                color: 'var(--color-on-accent)',
                 border: 'none',
                 whiteSpace: 'nowrap',
               }}

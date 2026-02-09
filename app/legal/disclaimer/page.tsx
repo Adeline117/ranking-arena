@@ -1,8 +1,8 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: '风险免责声明 | Arena',
-  description: 'Arena平台风险免责声明 Risk Disclaimer',
+  title: '风险免责声明 | ArenaFi',
+  description: 'ArenaFi平台风险免责声明 Risk Disclaimer',
 }
 
 export default function DisclaimerPage() {

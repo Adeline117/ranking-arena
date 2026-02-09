@@ -1,8 +1,8 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: '版权政策 | Arena',
-  description: 'Arena平台版权与DMCA政策 Copyright/DMCA Policy',
+  title: '版权政策 | ArenaFi',
+  description: 'ArenaFi平台版权与DMCA政策 Copyright/DMCA Policy',
 }
 
 export default function DmcaPage() {

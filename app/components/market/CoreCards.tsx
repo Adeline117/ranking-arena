@@ -215,8 +215,8 @@ export default function CoreCards() {
         )}
       </CardWrapper>
 
-      {/* Arena Hot Traders */}
-      <CardWrapper title="Arena热门交易员" linkText="查看全部" linkHref="/rankings">
+      {/* ArenaFi Hot Traders */}
+      <CardWrapper title="ArenaFi热门交易员" linkText="查看全部" linkHref="/rankings">
         {traders.length === 0 ? (
           <div style={{ height: 120 }} className="skeleton" />
         ) : (
@@ -243,7 +243,7 @@ export default function CoreCards() {
                 fontSize: 11,
                 fontWeight: 700,
                 background: i === 0 ? 'rgba(255, 215, 0, 0.2)' : i === 1 ? 'rgba(192, 192, 192, 0.2)' : 'rgba(205, 127, 50, 0.2)',
-                color: i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : '#CD7F32',
+                color: i === 0 ? 'var(--color-medal-gold)' : i === 1 ? 'var(--color-medal-silver)' : 'var(--color-medal-bronze)',
                 flexShrink: 0,
               }}>
                 {i + 1}

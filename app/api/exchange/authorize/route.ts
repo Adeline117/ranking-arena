@@ -84,7 +84,7 @@ function getInstructions(exchange: string): string[] {
       '1. 在新打开的页面中登录您的Binance账号',
       '2. 进入API管理页面，点击"创建API"',
       '3. 选择"系统生成API密钥"',
-      '4. 设置API标签（如：Arena）',
+      '4. 设置API标签（如：ArenaFi）',
       '5. 完成安全验证',
       '6. 创建成功后，复制API Key和Secret',
       '7. 返回此页面，粘贴API Key和Secret',

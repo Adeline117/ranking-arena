@@ -13,6 +13,7 @@ import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } fro
 import ExchangePartners from './ExchangePartners'
 import GuestSignupPrompt from './GuestSignupPrompt'
 import HomePageClient from './HomePageClient'
+import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 // HomePageWithSubNav removed from homepage - only used in groups page
 import type { InitialTrader } from '@/lib/getInitialTraders'
 
@@ -71,35 +72,43 @@ export default function HomePage({
         <ExchangePartners />
         <ThreeColumnLayout
           leftSidebar={
-            <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
-              <HotDiscussions />
-            </Suspense>
+            <SectionErrorBoundary>
+              <Suspense fallback={<div className="skeleton" style={{ height: 400, borderRadius: 12 }} />}>
+                <HotDiscussions />
+              </Suspense>
+            </SectionErrorBoundary>
           }
           rightSidebar={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 72px)' }}>
               <div style={{ flexShrink: 0, maxHeight: '40%', overflow: 'auto' }}>
-                <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
-                  <WatchlistMarket />
-                </Suspense>
+                <SectionErrorBoundary>
+                  <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
+                    <WatchlistMarket />
+                  </Suspense>
+                </SectionErrorBoundary>
               </div>
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
-                  <NewsFlash />
-                </Suspense>
+                <SectionErrorBoundary>
+                  <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+                    <NewsFlash />
+                  </Suspense>
+                </SectionErrorBoundary>
               </div>
             </div>
           }
         >
-          <Suspense fallback={
-            <Box style={{ minHeight: '60vh' }}>
-              <div className="skeleton" style={{ height: 400, borderRadius: 12 }} />
-            </Box>
-          }>
-            <HomePageClient
-              initialTraders={initialTraders}
-              initialLastUpdated={initialLastUpdated}
-            />
-          </Suspense>
+          <SectionErrorBoundary>
+            <Suspense fallback={
+              <Box style={{ minHeight: '60vh' }}>
+                <div className="skeleton" style={{ height: 400, borderRadius: 12 }} />
+              </Box>
+            }>
+                <HomePageClient
+                initialTraders={initialTraders}
+                initialLastUpdated={initialLastUpdated}
+              />
+            </Suspense>
+          </SectionErrorBoundary>
         </ThreeColumnLayout>
       </Box>
 

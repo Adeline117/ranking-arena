@@ -89,15 +89,19 @@ interface MarketIntelligenceResponse {
 // ============================================
 
 export async function GET(request: NextRequest) {
+  try {
   const { searchParams } = new URL(request.url)
 
   // Parse params
   const symbol = (searchParams.get('symbol') || 'BTC').toUpperCase()
   const platform = searchParams.get('platform')
-  const lookbackHours = Math.min(parseInt(searchParams.get('lookback_hours') || '24', 10), 168)
+  const lookbackHours = Math.min(parseInt(searchParams.get('lookback_hours') || '24', 10) || 24, 168)
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+  }
   const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
   const lookbackTime = new Date(Date.now() - lookbackHours * 60 * 60 * 1000).toISOString()
@@ -355,4 +359,8 @@ export async function GET(request: NextRequest) {
       'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
     },
   })
+  } catch (error) {
+    console.error('[v2/market-intelligence] Error:', error)
+    return NextResponse.json({ error: 'Failed to fetch market intelligence' }, { status: 500 })
+  }
 }

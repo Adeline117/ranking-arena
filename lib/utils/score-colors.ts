@@ -27,9 +27,9 @@ function getTier(score: number) {
   return SCORE_TIERS.find(t => score >= t.min) || SCORE_TIERS[SCORE_TIERS.length - 1]
 }
 
-/** Returns the primary color hex for a given score */
+/** Returns the CSS variable color for a given score (theme-aware) */
 export function getScoreColor(score: number): string {
-  return getTier(score).color
+  return getTier(score).cssVar
 }
 
 /** Returns the grade tier name for a given score */
@@ -37,10 +37,18 @@ export function getScoreGrade(score: number): ScoreGrade {
   return getTier(score).grade
 }
 
+/**
+ * Returns the resolved hex fallback for contexts that need raw hex
+ * (e.g. canvas drawing, rgba computation). Prefer getScoreColor() for CSS.
+ */
+export function getScoreColorHex(score: number): string {
+  return getTier(score).fallback
+}
+
 /** Returns full color info including gradients for badges */
 export function getScoreColorInfo(score: number): ScoreColorInfo {
   const tier = getTier(score)
-  const c = tier.color
+  const c = tier.fallback
 
   // Parse hex to rgba components
   const r = parseInt(c.slice(1, 3), 16)
@@ -48,7 +56,7 @@ export function getScoreColorInfo(score: number): ScoreColorInfo {
   const b = parseInt(c.slice(5, 7), 16)
 
   return {
-    color: c,
+    color: tier.cssVar,
     grade: tier.grade,
     label: tier.label,
     bgGradient: `linear-gradient(135deg, rgba(${r},${g},${b},0.18), rgba(${r},${g},${b},0.10))`,

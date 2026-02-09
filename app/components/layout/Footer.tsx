@@ -32,9 +32,10 @@ export default function Footer() {
     {
       title: isZh ? '法律' : 'Legal',
       links: [
-        { href: '/terms', label: isZh ? '服务条款' : 'Terms' },
-        { href: '/privacy', label: isZh ? '隐私政策' : 'Privacy' },
-        { href: '/disclaimer', label: isZh ? '免责声明' : 'Disclaimer' },
+        { href: '/legal/terms', label: isZh ? '服务条款' : 'Terms' },
+        { href: '/legal/privacy', label: isZh ? '隐私政策' : 'Privacy' },
+        { href: '/legal/disclaimer', label: isZh ? '风险免责声明' : 'Disclaimer' },
+        { href: '/legal/dmca', label: isZh ? '版权政策' : 'DMCA' },
       ],
     },
     {
@@ -140,7 +141,7 @@ export default function Footer() {
             margin: 0,
           }}
         >
-          &copy; {new Date().getFullYear()} Arena.{' '}
+          &copy; {new Date().getFullYear()} ArenaFi.{' '}
           {isZh ? '保留所有权利。' : 'All rights reserved.'}
         </p>
 
