@@ -170,7 +170,7 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
 }
 
 // Get styling for arena score based on score value (exported for TraderCard)
-// Tiers: 0-30 gray, 30-50 green, 50-70 blue, 70-85 gold, 85+ purple (highest)
+// Tiers: 0-30 gray, 30-50 orange, 50-70 yellow, 70-85 green, 85+ purple
 export function getScoreStyle(score: number): { bgGradient: string; borderColor: string; textColor: string; fillColor: string } {
   // 85+ 紫色 — 顶尖
   if (score >= 85) {
@@ -181,31 +181,31 @@ export function getScoreStyle(score: number): { bgGradient: string; borderColor:
       fillColor: 'rgba(139,92,246,0.18)',
     }
   }
-  // 70-85 金色 — 优秀
+  // 70-85 绿色 — 良好
   if (score >= 70) {
     return {
-      bgGradient: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.1))',
-      borderColor: 'rgba(255,215,0,0.5)',
-      textColor: tokens.colors.medal.gold,
-      fillColor: 'rgba(255,215,0,0.15)',
+      bgGradient: 'linear-gradient(135deg, rgba(22,199,132,0.15), rgba(16,185,129,0.1))',
+      borderColor: 'rgba(22,199,132,0.5)',
+      textColor: '#34d399',
+      fillColor: 'rgba(22,199,132,0.15)',
     }
   }
-  // 50-70 蓝色 — 良好
+  // 50-70 黄色 — 中等
   if (score >= 50) {
     return {
-      bgGradient: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(96,165,250,0.1))',
-      borderColor: 'rgba(59,130,246,0.45)',
-      textColor: '#60a5fa',
-      fillColor: 'rgba(59,130,246,0.15)',
+      bgGradient: 'linear-gradient(135deg, rgba(250,204,21,0.15), rgba(234,179,8,0.1))',
+      borderColor: 'rgba(250,204,21,0.5)',
+      textColor: '#eab308',
+      fillColor: 'rgba(250,204,21,0.15)',
     }
   }
-  // 30-50 绿色 — 及格
+  // 30-50 橙色 — 一般
   if (score >= 30) {
     return {
-      bgGradient: 'linear-gradient(135deg, rgba(22,199,132,0.12), rgba(16,185,129,0.08))',
-      borderColor: 'rgba(22,199,132,0.4)',
-      textColor: '#34d399',
-      fillColor: 'rgba(22,199,132,0.12)',
+      bgGradient: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(234,88,12,0.1))',
+      borderColor: 'rgba(249,115,22,0.45)',
+      textColor: '#f97316',
+      fillColor: 'rgba(249,115,22,0.15)',
     }
   }
   // 0-30 灰色 — 普通
