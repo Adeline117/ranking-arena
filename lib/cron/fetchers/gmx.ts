@@ -19,9 +19,9 @@ const SOURCE = 'gmx'
 const SUBSQUID_URL =
   'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
 const TARGET = 500
-const ENRICH_LIMIT = 300 // Increased for better MDD coverage
-const CONCURRENCY = 5
-const DELAY_MS = 200
+const ENRICH_LIMIT = 400 // Increased for better MDD coverage (was 300)
+const CONCURRENCY = 8 // Increased from 5 for better throughput
+const DELAY_MS = 150 // Reduced from 200 to process faster
 const VALUE_SCALE = 1e30
 
 const WINDOW_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
