@@ -214,9 +214,7 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
   }
 
   const hints: Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> = [
-    // Google Fonts -- used by next/font
-    { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-    { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
+    // Google Fonts preconnect not needed — next/font inlines font CSS and self-hosts woff2 files.
     // Supabase -- API calls on every page (rankings, auth, etc.)
     { rel: 'preconnect', href: supabaseUrl, crossOrigin: 'anonymous' },
     { rel: 'dns-prefetch', href: supabaseUrl },
