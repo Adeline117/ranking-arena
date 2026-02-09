@@ -7,7 +7,7 @@ import { Box } from '../base'
 import TopNav from '../layout/TopNav'
 import MobileBottomNav from '../layout/MobileBottomNav'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
-import Footer from '../layout/Footer'
+const Footer = lazy(() => import('../layout/Footer'))
 import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 import ExchangePartners from './ExchangePartners'
@@ -112,7 +112,7 @@ export default function HomePage({
         </ThreeColumnLayout>
       </Box>
 
-      <Footer />
+      <Suspense fallback={null}><Footer /></Suspense>
       <MobileBottomNav />
       <GuestSignupPrompt />
     </Box>
