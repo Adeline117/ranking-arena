@@ -198,16 +198,18 @@ export function withApiMiddleware<T>(
       const statusCode = error instanceof Error && 'statusCode' in error
         ? (error as { statusCode: number }).statusCode
         : 500
-      const message = error instanceof Error ? error.message : '服务器内部错误'
+      const internalMessage = error instanceof Error ? error.message : '服务器内部错误'
       const duration = Date.now() - startTime
 
       if (statusCode >= 500) {
-        logger.error(`${name} error: ${message}`, { error: String(error), duration })
+        logger.error(`${name} error: ${internalMessage}`, { error: String(error), duration })
       } else {
-        logger.warn(`${name} client error: ${message}`, { duration })
+        logger.warn(`${name} client error: ${internalMessage}`, { duration })
       }
 
-      const errorResponse = createErrorResponse(message, statusCode)
+      // Don't expose internal error details to clients for 5xx errors
+      const clientMessage = statusCode >= 500 ? '服务器内部错误' : internalMessage
+      const errorResponse = createErrorResponse(clientMessage, statusCode)
       if (versioning) {
         addVersionHeaders(errorResponse, versionContext)
       }
