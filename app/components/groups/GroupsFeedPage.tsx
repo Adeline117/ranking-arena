@@ -72,57 +72,129 @@ function BookshelfTab() {
     )
   }
 
+  // Category colors for type badges
+  const categoryColors: Record<string, string> = {
+    book: tokens.colors.accent.primary,
+    paper: tokens.colors.accent.info,
+    whitepaper: tokens.colors.accent.success,
+    event: tokens.colors.accent.warning,
+    article: tokens.colors.accent.error,
+  }
+
   return (
     <Box>
-      <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: tokens.spacing[3] }}>
-        {books.map((book) => (
-          <Link
-            key={book.id}
-            href={`/library/${book.id}`}
-            style={{
-              background: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.lg,
-              overflow: 'hidden',
-              textDecoration: 'none',
-              color: 'inherit',
-              border: `1px solid ${tokens.colors.border.primary}`,
-              transition: `all ${tokens.transition.base}`,
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = tokens.colors.accent.primary; e.currentTarget.style.transform = 'translateY(-2px)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary; e.currentTarget.style.transform = 'translateY(0)' }}
-          >
-            <Box style={{ width: '100%', aspectRatio: '3/4', background: tokens.colors.bg.tertiary, position: 'relative', overflow: 'hidden' }}>
-              {book.cover_image_url ? (
-                <Image src={book.cover_image_url} alt={book.title} fill sizes="(max-width: 768px) 50vw, 200px" loading="lazy" style={{ objectFit: 'cover' }} />
-              ) : (
-                <Box style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: tokens.spacing[2] }}>
-                  <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', lineHeight: 1.3 }}>
-                    {book.title.slice(0, 30)}
-                  </Text>
-                </Box>
-              )}
-            </Box>
-            <Box style={{ padding: tokens.spacing[2] }}>
-              <Text size="xs" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {book.title}
-              </Text>
-              {book.author && (
-                <Text size="xs" color="tertiary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
-                  {book.author}
+      <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 16 }}>
+        {books.map((book) => {
+          const typeColor = categoryColors[book.type || ''] || tokens.colors.accent.primary
+          return (
+            <Link
+              key={book.id}
+              href={`/library/${book.id}`}
+              className="card-hover"
+              style={{
+                background: tokens.colors.bg.secondary,
+                borderRadius: 12,
+                overflow: 'hidden',
+                textDecoration: 'none',
+                color: 'inherit',
+                border: `1px solid ${tokens.colors.border.primary}`,
+                transition: `all 0.25s cubic-bezier(0.4, 0, 0.2, 1)`,
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = typeColor + '60'
+                e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)'
+                e.currentTarget.style.boxShadow = `0 8px 24px ${typeColor}20`
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = tokens.colors.border.primary
+                e.currentTarget.style.transform = 'none'
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'
+              }}
+            >
+              {/* Cover */}
+              <Box style={{ width: '100%', aspectRatio: '3/4', background: tokens.colors.bg.tertiary, position: 'relative', overflow: 'hidden' }}>
+                {book.cover_image_url ? (
+                  <Image src={book.cover_image_url} alt={book.title} fill sizes="(max-width: 768px) 50vw, 200px" loading="lazy" style={{ objectFit: 'cover' }} />
+                ) : (
+                  <Box style={{
+                    width: '100%', height: '100%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: 12,
+                    background: `linear-gradient(135deg, ${typeColor}15, ${typeColor}08)`,
+                  }}>
+                    <Text size="xs" weight="bold" color="secondary" style={{ textAlign: 'center', lineHeight: 1.4 }}>
+                      {book.title.slice(0, 40)}
+                    </Text>
+                  </Box>
+                )}
+                {/* Type badge */}
+                {book.type && (
+                  <Box style={{
+                    position: 'absolute', top: 6, right: 6,
+                    background: typeColor + 'DD',
+                    color: '#fff',
+                    fontSize: 10, fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    backdropFilter: 'blur(4px)',
+                  }}>
+                    {book.type === 'book' ? (language === 'zh' ? '书籍' : 'Book') :
+                     book.type === 'paper' ? (language === 'zh' ? '论文' : 'Paper') :
+                     book.type === 'whitepaper' ? (language === 'zh' ? '白皮书' : 'WP') :
+                     book.type}
+                  </Box>
+                )}
+              </Box>
+
+              {/* Info */}
+              <Box style={{ padding: '10px 10px 12px', display: 'flex', flexDirection: 'column', gap: 3, flex: 1 }}>
+                <Text size="xs" weight="bold" style={{
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                  lineHeight: 1.4,
+                }}>
+                  {book.title}
                 </Text>
-              )}
-            </Box>
-          </Link>
-        ))}
+                {book.author && (
+                  <Text size="xs" color="tertiary" style={{
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    fontSize: 11,
+                  }}>
+                    {book.author}
+                  </Text>
+                )}
+                {book.category && (
+                  <Text size="xs" color="tertiary" style={{ fontSize: 10, marginTop: 'auto', opacity: 0.7 }}>
+                    {book.category}
+                  </Text>
+                )}
+              </Box>
+            </Link>
+          )
+        })}
       </Box>
-      <Box style={{ textAlign: 'center', marginTop: tokens.spacing[4] }}>
+
+      {/* View all link */}
+      <Box style={{ textAlign: 'center', marginTop: 20 }}>
         <Link href="/library" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
           color: tokens.colors.accent.primary,
           textDecoration: 'none',
           fontWeight: 600,
           fontSize: tokens.typography.fontSize.sm,
+          padding: '10px 24px',
+          borderRadius: tokens.radius.full,
+          border: `1px solid ${tokens.colors.accent.primary}30`,
+          background: `${tokens.colors.accent.primary}08`,
+          transition: `all ${tokens.transition.base}`,
         }}>
-          {language === 'zh' ? '查看全部书库 →' : 'View full library →'}
+          {language === 'zh' ? '查看全部书库' : 'View full library'}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
         </Link>
       </Box>
     </Box>
