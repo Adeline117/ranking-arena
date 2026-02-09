@@ -108,6 +108,7 @@ export default function TokenSidePanel({ token, onClose }: {
                   alt={`${token.symbol} icon`}
                   width={32}
                   height={32}
+                  loading="lazy"
                   style={{ borderRadius: '50%' }}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />

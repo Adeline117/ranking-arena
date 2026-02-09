@@ -248,6 +248,7 @@ function ExchangeQuickFilter({
                 alt=""
                 width={20}
                 height={20}
+                loading="lazy"
                 style={{ borderRadius: '50%', flexShrink: 0 }}
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />

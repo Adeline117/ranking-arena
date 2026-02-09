@@ -439,6 +439,9 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                       <img
                         src={trader.avatarUrl}
                         alt=""
+                        width={36}
+                        height={36}
+                        loading="lazy"
                         style={{
                           position: 'absolute',
                           inset: 0,

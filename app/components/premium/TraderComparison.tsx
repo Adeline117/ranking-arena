@@ -280,6 +280,9 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                         <img
                           src={proxyAvatarUrl}
                           alt={trader.handle || trader.id}
+                          width={48}
+                          height={48}
+                          loading="lazy"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                         />

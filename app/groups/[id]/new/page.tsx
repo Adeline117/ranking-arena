@@ -737,7 +737,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                 display: 'flex', gap: tokens.spacing[3], alignItems: 'flex-start',
               }}>
                 {linkPreview.image && (
-                  <img src={linkPreview.image} alt={linkPreview.title || 'Link preview'} loading="lazy" style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                  <img src={linkPreview.image} alt={linkPreview.title || 'Link preview'} width={80} height={60} loading="lazy" style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
                 )}
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="sm" weight="bold" style={{ marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -975,6 +975,8 @@ export default function NewGroupPostPage(): React.ReactElement {
                   <img
                     src={image.url}
                     alt={`Upload ${index + 1}`}
+                    width={120}
+                    height={120}
                     style={{
                       width: '100%',
                       height: '100%',
