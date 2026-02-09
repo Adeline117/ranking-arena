@@ -685,10 +685,10 @@ function RankingTableInner(props: {
       {/* Table Header (only in table view) - sticky */}
       {viewMode === 'table' && (
       <Box className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
-        style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'var(--color-bg-secondary)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 0, zIndex: 20, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-        <Text size="sm" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.sm }}>{t('rank')}</Text>
+        style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'var(--color-bg-secondary)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 0, zIndex: 20, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+        <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('rank')}</Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="sm" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.sm }}>{t('trader')}</Text>
+          <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('trader')}</Text>
           <button onClick={() => setShowRules(!showRules)}
             className="info-btn-circle"
             title={t('rankingRules')}

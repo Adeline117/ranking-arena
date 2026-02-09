@@ -158,11 +158,11 @@ export const TraderRow = memo(function TraderRow({
           display: 'grid',
           alignItems: 'center',
           gap: tokens.spacing[2],
-          padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`,
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           borderBottom: `1px solid var(--glass-border-light)`,
           cursor: 'pointer',
           position: 'relative',
-          minHeight: 72,
+          minHeight: 56,
           background: top3Bg || zebraBg || 'transparent',
         }}
       >
@@ -310,7 +310,7 @@ export const TraderRow = memo(function TraderRow({
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.win_rate ? (
             <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm }}>
-              {trader.win_rate.toFixed(0)}%
+              {trader.win_rate.toFixed(1)}%
             </Text>
           ) : (
             <NaIndicator source={trader.source || source} metricType="winRate" />
@@ -321,7 +321,7 @@ export const TraderRow = memo(function TraderRow({
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.max_drawdown ? (
             <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm }}>
-              -{Math.abs(trader.max_drawdown).toFixed(0)}%
+              -{Math.abs(trader.max_drawdown).toFixed(1)}%
             </Text>
           ) : (
             <NaIndicator source={trader.source || source} metricType="drawdown" />

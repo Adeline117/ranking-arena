@@ -7,12 +7,13 @@ import { tokens } from '@/lib/design-tokens'
 export function formatPnL(pnl: number): string {
   if (!isFinite(pnl) || isNaN(pnl)) return '$0'
   const absPnL = Math.abs(pnl)
+  const sign = pnl >= 0 ? '+' : '-'
   if (absPnL >= 1000000) {
-    return `$${(pnl / 1000000).toFixed(2)}M`
+    return `${sign}$${(absPnL / 1000000).toFixed(2)}M`
   } else if (absPnL >= 1000) {
-    return `$${(pnl / 1000).toFixed(2)}K`
+    return `${sign}$${(absPnL / 1000).toFixed(1)}K`
   } else {
-    return `$${pnl.toFixed(2)}`
+    return `${sign}$${absPnL.toFixed(2)}`
   }
 }
 
@@ -20,14 +21,16 @@ export function formatPnL(pnl: number): string {
  * 格式化 ROI 显示（处理极端值）
  */
 export function formatROI(roi: number): string {
-  if (!isFinite(roi) || isNaN(roi)) return '+0.0%'
+  if (!isFinite(roi) || isNaN(roi)) return '+0.00%'
   const absRoi = Math.abs(roi)
   if (absRoi >= 10000) {
-    return `${roi >= 0 ? '+' : ''}${(roi / 1000).toFixed(0)}K%`
+    return `${roi >= 0 ? '+' : ''}${(roi / 1000).toFixed(1)}K%`
   } else if (absRoi >= 1000) {
     return `${roi >= 0 ? '+' : ''}${roi.toFixed(0)}%`
-  } else {
+  } else if (absRoi >= 100) {
     return `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
+  } else {
+    return `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`
   }
 }
 

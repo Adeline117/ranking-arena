@@ -168,7 +168,7 @@ export default function MarketPage() {
           </section>
 
           {/* L1: Core Cards */}
-          <section style={{ marginBottom: 16 }}>
+          <section style={{ marginBottom: 20 }}>
             <SectionErrorBoundary fallbackMessage="核心指标加载失败">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <CoreCards />
@@ -177,7 +177,7 @@ export default function MarketPage() {
           </section>
 
           {/* Widgets row: Fear&Greed + Arbitrage + Live Trades */}
-          <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, maxHeight: 220 }}>
+          <section style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, height: 280 }}>
             <SectionErrorBoundary fallbackMessage="恐惧贪婪指数加载失败">
               <Suspense fallback={<LoadingCard height={200} />}>
                 <FearGreedGauge />

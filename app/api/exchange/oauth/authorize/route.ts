@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Error generating OAuth URL', { error })
-    const errorMessage = error instanceof Error ? error.message : 'Failed to generate OAuth URL'
+    const _errorMessage = error instanceof Error ? error.message : 'Failed to generate OAuth URL'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

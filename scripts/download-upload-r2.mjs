@@ -34,7 +34,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const CATEGORY = process.argv[2] || 'paper'
 const LIMIT = parseInt(process.argv[3] || '5000')
 const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5')
-const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB max
+const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30MB max
 
 async function fileExistsInR2(key) {
   try {
@@ -62,35 +62,28 @@ function getExtension(url, contentType) {
 }
 
 async function downloadFile(url) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30000)
   try {
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/pdf,application/epub+zip,*/*',
       },
-      signal: controller.signal,
+      signal: AbortSignal.timeout(20000),
       redirect: 'follow',
     })
-    clearTimeout(timeout)
     if (!res.ok) return null
 
     const contentType = res.headers.get('content-type') || ''
     const contentLength = parseInt(res.headers.get('content-length') || '0')
     
-    // Skip HTML responses (not actual files)
     if (contentType.includes('text/html')) return null
-    // Skip too large
     if (contentLength > MAX_FILE_SIZE) return null
 
     const buffer = Buffer.from(await res.arrayBuffer())
-    // Sanity: skip if too small (< 1KB = probably error page) or too large
     if (buffer.length < 1024 || buffer.length > MAX_FILE_SIZE) return null
 
     return { buffer, contentType, size: buffer.length }
   } catch {
-    clearTimeout(timeout)
     return null
   }
 }

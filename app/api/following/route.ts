@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { getAuthUser } from '@/lib/supabase/server'
-import { ALL_SOURCES } from '@/lib/constants/exchanges'
+import { ALL_SOURCES as _ALL_SOURCES } from '@/lib/constants/exchanges'
 
 export const dynamic = 'force-dynamic'
 

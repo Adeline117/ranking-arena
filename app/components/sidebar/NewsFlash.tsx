@@ -97,7 +97,7 @@ export default function NewsFlash() {
               <div
                 key={item.id}
                 style={{
-                  padding: '10px 4px',
+                  padding: '10px 6px',
                   borderBottom: idx < news.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                 }}
               >

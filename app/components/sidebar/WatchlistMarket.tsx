@@ -170,7 +170,7 @@ export default function WatchlistMarket() {
                 key={coin.id}
                 style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 4px',
+                  padding: '9px 6px',
                   borderBottom: idx < coins.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                   borderRadius: tokens.radius.sm,
                   transition: `background ${tokens.transition.fast}`,

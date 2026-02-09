@@ -31,7 +31,7 @@ interface UserStats {
 
 export default function UserCenterPage() {
   const router = useRouter()
-  const { t, language } = useLanguage()
+  const { language } = useLanguage()
   const isZh = language === 'zh'
   const [activeTab, setActiveTab] = useState<Tab>('level')
   const [levelData, setLevelData] = useState<UserLevelData | null>(null)
