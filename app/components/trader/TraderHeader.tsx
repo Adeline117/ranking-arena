@@ -18,6 +18,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import ShareButton from '../common/ShareButton'
+const AddToCollectionButton = dynamic(() => import('../features/AddToCollectionButton'), { ssr: false })
 
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
@@ -642,6 +643,8 @@ export default function TraderHeader({
           {!isOwnProfile && (
             <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
           )}
+
+          <AddToCollectionButton itemType="trader" itemId={traderId} compact />
 
           <ActionButton onClick={() => router.push('/')} variant="ghost">
             ← {t('back')}

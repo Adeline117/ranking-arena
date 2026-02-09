@@ -197,7 +197,7 @@ const BookCover = memo(function BookCover({
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           wordBreak: 'break-word',
-          textShadow: '0 1px 3px rgba(0,0,0,0.3)',
+          textShadow: 'var(--text-shadow-sm)',
           letterSpacing: '-0.01em',
         }}>
           {title}

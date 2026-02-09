@@ -127,7 +127,7 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.lg,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+          boxShadow: tokens.shadow.lg,
           zIndex: 100,
           overflow: 'hidden',
         }}>

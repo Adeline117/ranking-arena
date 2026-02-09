@@ -1301,9 +1301,9 @@ export default function ReadPage() {
             border: 'none', color: themeColors.text,
             cursor: 'pointer', fontSize: 14, fontWeight: 500, lineHeight: 1.5, transition: 'background 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--glass-bg-light)'}
           onMouseLeave={e => e.currentTarget.style.background = currentPage === item.pageIndex + 1
-            ? (theme === 'dark' ? 'rgba(139,111,168,0.2)' : 'rgba(139,111,168,0.1)') : 'transparent'}
+            ? 'var(--color-accent-primary-15)' : 'transparent'}
         >
           <span style={{ flex: 1, marginRight: 12 }}>{item.title}</span>
           <span style={{ opacity: 0.5, fontSize: 11, flexShrink: 0 }}>{item.pageIndex + 1}</span>
@@ -1329,7 +1329,7 @@ function ToolbarBtn({ children, onClick, active, title }: {
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 36, height: 36, borderRadius: 10,
-        background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
+        background: active ? 'var(--glass-bg-light)' : 'transparent',
         border: 'none', color: 'var(--color-text-primary)',
         cursor: 'pointer', transition: 'background 0.15s', flexShrink: 0,
       }}
