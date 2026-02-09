@@ -41,7 +41,7 @@ const modalBackdropStyle: React.CSSProperties = {
   left: 0,
   right: 0,
   bottom: 0,
-  background: 'rgba(0, 0, 0, 0.6)',
+  background: 'var(--color-backdrop)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -162,7 +162,7 @@ function RoleBadge({ role }: RoleBadgeProps): React.ReactElement {
         padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
         borderRadius: tokens.radius.full,
         background,
-        color: isSpecial ? '#fff' : tokens.colors.text.secondary,
+        color: isSpecial ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
         fontWeight: tokens.typography.fontWeight.semibold,
       }}
     >

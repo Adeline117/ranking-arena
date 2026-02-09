@@ -80,9 +80,9 @@ export function getCompletenessLabel(completeness: string | null | undefined): s
 
 export function getCompletenessColor(completeness: string | null | undefined): string {
   switch (completeness) {
-    case 'full': return '#10b981'
-    case 'partial': return '#f59e0b'
-    case 'minimal': return '#ef4444'
-    default: return '#6b7280'
+    case 'full': return 'var(--color-score-great)'
+    case 'partial': return 'var(--color-score-average)'
+    case 'minimal': return 'var(--color-accent-error)'
+    default: return 'var(--color-score-low)'
   }
 }

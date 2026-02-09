@@ -4,7 +4,7 @@ export default function Loading() {
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       {/* TopNav placeholder */}
-      <div style={{ height: 56, background: 'rgba(11,10,16,0.85)', borderBottom: '1px solid rgba(255,255,255,0.08)' }} />
+      <div style={{ height: 56, background: 'var(--color-blur-overlay)', borderBottom: '1px solid var(--glass-bg-light)' }} />
       
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 16px 100px' }}>
         {/* Hero skeleton */}

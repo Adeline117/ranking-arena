@@ -133,11 +133,11 @@ export const TraderRow = memo(function TraderRow({
 
   // Top 3 background gradients
   const top3Bg = rank === 1
-    ? 'linear-gradient(90deg, rgba(255,215,0,0.08) 0%, transparent 100%)'
+    ? 'linear-gradient(90deg, var(--color-gold-bg) 0%, transparent 100%)'
     : rank === 2
-    ? 'linear-gradient(90deg, rgba(192,192,192,0.08) 0%, transparent 100%)'
+    ? 'linear-gradient(90deg, var(--color-silver-bg) 0%, transparent 100%)'
     : rank === 3
-    ? 'linear-gradient(90deg, rgba(205,127,50,0.08) 0%, transparent 100%)'
+    ? 'linear-gradient(90deg, var(--color-bronze-bg) 0%, transparent 100%)'
     : undefined
 
   // Zebra stripe

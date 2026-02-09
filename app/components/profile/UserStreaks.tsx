@@ -56,7 +56,7 @@ export default function UserStreaks({ userId }: Props) {
       label: t('currentStreak') || '当前连续',
       value: streak.current_streak,
       suffix: t('days') || '天',
-      color: streak.current_streak >= 7 ? '#22c55e' : tokens.colors.text.primary,
+      color: streak.current_streak >= 7 ? 'var(--color-accent-success)' : tokens.colors.text.primary,
     },
     {
       label: t('longestStreak') || '最长连续',

@@ -286,13 +286,13 @@ export function useArenaScoreMemo(score: number | undefined | null) {
 
     if (score >= 90) {
       tier = 'legendary'
-      color = '#FFD700' // Gold
+      color = 'var(--color-medal-gold)' // Gold
     } else if (score >= 75) {
       tier = 'epic'
-      color = '#A855F7' // Purple
+      color = 'var(--color-chart-violet)' // Purple
     } else if (score >= 60) {
       tier = 'rare'
-      color = '#3B82F6' // Blue
+      color = 'var(--color-score-profitability)' // Blue
     } else if (score >= 40) {
       tier = 'common'
       color = 'var(--text-primary)'

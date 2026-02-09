@@ -139,9 +139,9 @@ const BookCover = memo(function BookCover({
 
   // Determine text color based on category (dark gradients need light text, light gradients need dark)
   const needsDarkText = ['research', 'paper'].includes(category)
-  const textColor = needsDarkText ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)'
-  const subtextColor = needsDarkText ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.7)'
-  const badgeBg = needsDarkText ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.15)'
+  const textColor = needsDarkText ? 'var(--color-backdrop-heavy)' : 'var(--glass-bg-heavy)'
+  const subtextColor = needsDarkText ? 'var(--color-backdrop)' : 'var(--glass-bg-light)'
+  const badgeBg = needsDarkText ? 'var(--color-overlay-subtle)' : 'var(--glass-border-medium)'
 
   return (
     <div style={{
@@ -154,14 +154,14 @@ const BookCover = memo(function BookCover({
       {/* Subtle pattern overlay */}
       <div style={{
         position: 'absolute', inset: 0,
-        background: 'repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,0.03) 35px, rgba(255,255,255,0.03) 36px)',
+        background: 'repeating-linear-gradient(45deg, transparent, transparent 35px, var(--overlay-hover) 35px, var(--overlay-hover) 36px)',
         pointerEvents: 'none',
       }} />
 
       {/* Top decorative line */}
       <div style={{
         position: 'absolute', top: '10%', left: '12%', right: '12%',
-        height: 1, background: needsDarkText ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.2)',
+        height: 1, background: needsDarkText ? 'var(--color-overlay-light)' : 'var(--glass-border-heavy)',
       }} />
 
       {/* Category badge */}
@@ -206,7 +206,7 @@ const BookCover = memo(function BookCover({
       {/* Bottom decorative line */}
       <div style={{
         position: 'absolute', bottom: '10%', left: '12%', width: '30%',
-        height: 2, background: needsDarkText ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)',
+        height: 2, background: needsDarkText ? 'var(--color-overlay-light)' : 'var(--glass-border-heavy)',
         borderRadius: 1,
       }} />
     </div>

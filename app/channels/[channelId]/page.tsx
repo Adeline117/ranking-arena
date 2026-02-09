@@ -402,7 +402,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                   <Box style={{
                     padding: '11px 16px', borderRadius: 18,
                     background: isMine ? tokens.gradient.primary : tokens.colors.bg.secondary,
-                    color: isMine ? '#fff' : tokens.colors.text.primary,
+                    color: isMine ? 'var(--color-on-accent)' : tokens.colors.text.primary,
                     border: isMine ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                     boxShadow: tokens.shadow.sm,
                     opacity: msg._status === 'sending' ? 0.6 : 1,
@@ -536,7 +536,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           </Text>
           <button onClick={() => setPendingAttachment(null)} style={{
             width: 24, height: 24, borderRadius: '50%', border: 'none',
-            background: 'rgba(244,67,54,0.15)', color: tokens.colors.accent.error,
+            background: 'var(--color-accent-error-15)', color: tokens.colors.accent.error,
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -583,7 +583,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             style={{
               width: 42, height: 42, borderRadius: '50%', border: 'none',
               background: (newMessage.trim() || pendingAttachment) ? tokens.gradient.primary : tokens.colors.bg.tertiary,
-              color: (newMessage.trim() || pendingAttachment) ? '#fff' : tokens.colors.text.tertiary,
+              color: (newMessage.trim() || pendingAttachment) ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
               cursor: (newMessage.trim() || pendingAttachment) && !sending ? 'pointer' : 'default',
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}

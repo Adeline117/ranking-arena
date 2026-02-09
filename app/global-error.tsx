@@ -78,8 +78,8 @@ export default function GlobalError({
           }
           
           @keyframes glowPulse {
-            0%, 100% { box-shadow: 0 0 30px rgba(255, 124, 124, 0.2); }
-            50% { box-shadow: 0 0 50px rgba(255, 124, 124, 0.35); }
+            0%, 100% { box-shadow: 0 0 30px var(--color-accent-error-20); }
+            50% { box-shadow: 0 0 50px var(--color-accent-error-20); }
           }
           
           .global-error-bg {
@@ -94,7 +94,7 @@ export default function GlobalError({
             width: 500px;
             height: 500px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(255, 124, 124, 0.1) 0%, transparent 70%);
+            background: radial-gradient(circle, var(--color-accent-error-10) 0%, transparent 70%);
             top: 40%;
             left: 50%;
             transform: translate(-50%, -50%);
@@ -110,7 +110,7 @@ export default function GlobalError({
             position: absolute;
             inset: -10px;
             border-radius: 50%;
-            border: 2px solid rgba(255, 124, 124, 0.15);
+            border: 2px solid var(--color-accent-error-15);
             animation: pulseRing 3s ease-in-out infinite;
           }
           
@@ -132,7 +132,7 @@ export default function GlobalError({
           
           .retry-button:hover {
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(139, 111, 168, 0.4);
+            box-shadow: 0 8px 30px var(--color-accent-primary-40);
           }
           
           .retry-button:active {
@@ -169,8 +169,8 @@ export default function GlobalError({
                 width: 6 + i * 2,
                 height: 6 + i * 2,
                 background: i % 2 === 0 
-                  ? 'rgba(255, 124, 124, 0.3)' 
-                  : 'rgba(139, 111, 168, 0.3)',
+                  ? 'var(--color-accent-error-20)' 
+                  : 'var(--color-accent-primary-30)',
                 left: `${20 + i * 15}%`,
                 top: `${25 + (i % 3) * 20}%`,
                 animationDuration: `${4 + i * 0.8}s`,
@@ -186,13 +186,13 @@ export default function GlobalError({
               textAlign: 'center',
               padding: '44px 40px',
               borderRadius: '24px',
-              background: 'rgba(15, 15, 20, 0.85)',
-              border: '1px solid rgba(255, 124, 124, 0.1)',
+              background: 'var(--color-backdrop-heavy)',
+              border: '1px solid var(--color-accent-error-10)',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
               position: 'relative',
               zIndex: 1,
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              boxShadow: '0 25px 50px -12px var(--color-overlay-dark)',
             }}
           >
             {/* Error icon */}
@@ -202,7 +202,7 @@ export default function GlobalError({
                 width: 80,
                 height: 80,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, rgba(255, 124, 124, 0.15) 0%, rgba(255, 124, 124, 0.05) 100%)',
+                background: 'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-04) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -248,7 +248,7 @@ export default function GlobalError({
               className="content-section"
               style={{
                 fontSize: '0.9rem',
-                color: '#A8A8B3',
+                color: 'var(--color-text-secondary)',
                 marginBottom: '0.5rem',
                 lineHeight: 1.6,
                 animationDelay: '0.2s',
@@ -280,12 +280,12 @@ export default function GlobalError({
                 <span
                   style={{
                     fontSize: '0.75rem',
-                    color: 'rgba(255, 124, 124, 0.8)',
+                    color: 'var(--color-accent-error)',
                     fontFamily: '"SF Mono", Consolas, monospace',
                     padding: '6px 12px',
-                    background: 'rgba(255, 124, 124, 0.1)',
+                    background: 'var(--color-accent-error-10)',
                     borderRadius: '6px',
-                    border: '1px solid rgba(255, 124, 124, 0.15)',
+                    border: '1px solid var(--color-accent-error-15)',
                   }}
                 >
                   {t('globalErrorId')}: {error.digest}
@@ -318,8 +318,8 @@ export default function GlobalError({
                   <div style={{
                     width: 16,
                     height: 16,
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: '#fff',
+                    border: '2px solid var(--glass-border-heavy)',
+                    borderTopColor: 'var(--foreground)',
                     borderRadius: '50%',
                     animation: 'spin 1s linear infinite',
                   }} />

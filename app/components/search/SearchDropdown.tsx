@@ -31,7 +31,7 @@ function highlightMatch(text: string, q: string): React.ReactNode {
     if (idx > last) parts.push(text.slice(last, idx))
     parts.push(
       <mark key={`hl-${idx}`} style={{
-        backgroundColor: 'var(--color-accent-primary-25, rgba(139,92,246,0.25))',
+        backgroundColor: 'var(--color-accent-primary-25, var(--color-accent-primary-20))',
         color: 'inherit', borderRadius: 2, padding: '0 1px', fontWeight: 700,
       }}>
         {text.slice(idx, idx + lq.length)}
@@ -60,10 +60,10 @@ interface HotPost {
 
 // 类别配置
 const CATEGORY_CONFIG = {
-  traders: { icon: 'T', labelZh: '交易员', labelEn: 'Traders', color: '#8B5CF6' },
-  posts: { icon: 'P', labelZh: '帖子', labelEn: 'Posts', color: '#3B82F6' },
-  library: { icon: 'L', labelZh: '资料库', labelEn: 'Library', color: '#10B981' },
-  users: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: '#F59E0B' },
+  traders: { icon: 'T', labelZh: '交易员', labelEn: 'Traders', color: 'var(--color-verified-web3)' },
+  posts: { icon: 'P', labelZh: '帖子', labelEn: 'Posts', color: 'var(--color-score-profitability)' },
+  library: { icon: 'L', labelZh: '资料库', labelEn: 'Library', color: 'var(--color-score-great)' },
+  users: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: 'var(--color-score-average)' },
 } as const
 
 type CategoryKey = keyof typeof CATEGORY_CONFIG

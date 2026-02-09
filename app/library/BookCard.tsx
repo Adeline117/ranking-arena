@@ -67,8 +67,8 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
           ...(item.is_free
-            ? { background: 'rgba(16, 185, 129, 0.85)', color: '#fff' }
-            : { background: 'rgba(139, 92, 246, 0.85)', color: '#fff' }),
+            ? { background: 'var(--color-accent-success)', color: 'var(--foreground)' }
+            : { background: 'var(--color-accent-primary)', color: 'var(--foreground)' }),
           zIndex: 1,
         }}>
           {item.is_free ? (isZh ? '免费' : 'Free') : 'Pro'}

@@ -788,7 +788,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               width: 72,
               height: 72,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, rgba(149, 117, 205, 0.15) 0%, rgba(126, 87, 194, 0.08) 100%)',
+              background: 'linear-gradient(135deg, var(--color-accent-primary-15) 0%, var(--color-accent-primary-08) 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -883,7 +883,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       {isDragging && (
         <Box style={{
           position: 'absolute', inset: 0, zIndex: 999,
-          background: 'rgba(149, 117, 205, 0.15)',
+          background: 'var(--color-accent-primary-15)',
           border: `3px dashed ${tokens.colors.accent.brand}`,
           borderRadius: tokens.radius.lg,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -988,7 +988,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 transition: 'background 0.2s',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.05)'
+                e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'transparent'
@@ -1073,7 +1073,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               flexShrink: 0,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--glass-border-light)'
               e.currentTarget.style.color = tokens.colors.text.primary
             }}
             onMouseLeave={(e) => {
@@ -1109,7 +1109,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               flexShrink: 0,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--glass-border-light)'
               e.currentTarget.style.color = tokens.colors.text.primary
             }}
             onMouseLeave={(e) => {
@@ -1144,7 +1144,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               flexShrink: 0,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--glass-border-light)'
               e.currentTarget.style.color = tokens.colors.text.primary
             }}
             onMouseLeave={(e) => {
@@ -1179,7 +1179,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               flexShrink: 0,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--glass-border-light)'
               e.currentTarget.style.color = tokens.colors.text.primary
             }}
             onMouseLeave={(e) => {
@@ -1201,7 +1201,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       {connectionStatus !== 'connected' && (
         <Box style={{
           padding: '6px 16px',
-          background: connectionStatus === 'reconnecting' ? 'rgba(255, 152, 0, 0.15)' : 'rgba(244, 67, 54, 0.15)',
+          background: connectionStatus === 'reconnecting' ? 'var(--color-orange-subtle)' : 'var(--color-accent-error-15)',
           color: connectionStatus === 'reconnecting' ? tokens.colors.accent.warning : tokens.colors.accent.error,
           textAlign: 'center',
           fontSize: 12,
@@ -1315,7 +1315,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     marginBottom: isSameSenderAsNext ? '3px' : tokens.spacing[4],
                     transition: 'background 0.3s',
                     borderRadius: tokens.radius.lg,
-                    background: highlightedMessageId === msg.id ? 'rgba(149, 117, 205, 0.15)' : 'transparent',
+                    background: highlightedMessageId === msg.id ? 'var(--color-accent-primary-15)' : 'transparent',
                     padding: highlightedMessageId === msg.id ? '4px' : '0px',
                   }}
                 >
@@ -1367,12 +1367,12 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                       background: isMine
                         ? tokens.gradient.primary
                         : tokens.colors.bg.secondary,
-                      color: isMine ? '#fff' : tokens.colors.text.primary,
+                      color: isMine ? 'var(--color-on-accent)' : tokens.colors.text.primary,
                       border: isMine
                         ? msg._status === 'failed' ? `1px solid ${tokens.colors.accent.error}99` : 'none'
                         : `1px solid ${tokens.colors.border.primary}`,
                       boxShadow: isMine
-                        ? `${tokens.shadow.sm}, 0 2px 8px rgba(139, 111, 168, 0.15)`
+                        ? `${tokens.shadow.sm}, 0 2px 8px var(--color-accent-primary-15)`
                         : tokens.shadow.sm,
                       opacity: msg._status === 'sending' ? 0.65 : 1,
                       transition: `opacity ${tokens.transition.fast}, transform ${tokens.transition.fast}`,
@@ -1422,13 +1422,13 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          background: 'rgba(0,0,0,0.3)',
+                          background: 'var(--color-overlay-medium)',
                         }}>
                           <Box style={{
                             width: 48,
                             height: 48,
                             borderRadius: '50%',
-                            background: 'rgba(255,255,255,0.9)',
+                            background: 'var(--glass-bg-heavy)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -1467,7 +1467,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           width: 40,
                           height: 40,
                           borderRadius: tokens.radius.md,
-                          background: isMine ? 'rgba(255,255,255,0.2)' : tokens.colors.bg.tertiary,
+                          background: isMine ? 'var(--glass-border-heavy)' : tokens.colors.bg.tertiary,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -1541,8 +1541,8 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           onClick={() => handleRetry(msg)}
                           style={{
                             padding: '2px 8px',
-                            background: 'rgba(244, 67, 54, 0.15)',
-                            border: '1px solid rgba(244, 67, 54, 0.4)',
+                            background: 'var(--color-accent-error-15)',
+                            border: '1px solid var(--color-accent-error-20)',
                             borderRadius: 6,
                             color: tokens.colors.accent.error,
                             fontSize: 11,
@@ -1625,7 +1625,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               width: 64,
               height: 64,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, rgba(149, 117, 205, 0.2) 0%, rgba(126, 87, 194, 0.1) 100%)',
+              background: 'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1691,7 +1691,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.9)',
+            background: 'var(--color-backdrop-heavy)',
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',
@@ -1868,7 +1868,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]} ${tokens.spacing[4]}`,
           background: tokens.colors.bg.secondary,
           borderTop: `1px solid ${tokens.colors.border.primary}`,
-          boxShadow: '0 -2px 12px rgba(0,0,0,0.06)',
+          boxShadow: '0 -2px 12px var(--color-overlay-subtle)',
         }}
       >
         {/* Attachment preview */}
@@ -1954,7 +1954,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 height: 28,
                 borderRadius: '50%',
                 border: 'none',
-                background: 'rgba(244, 67, 54, 0.15)',
+                background: 'var(--color-accent-error-15)',
                 color: tokens.colors.accent.error,
                 cursor: 'pointer',
                 display: 'flex',
@@ -2089,7 +2089,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               const container = e.currentTarget.parentElement
               if (container) {
                 container.style.borderColor = tokens.colors.accent.brand
-                container.style.boxShadow = '0 0 0 2px rgba(149, 117, 205, 0.2)'
+                container.style.boxShadow = '0 0 0 2px var(--color-accent-primary-20)'
               }
             }}
             onBlur={(e) => {
@@ -2146,8 +2146,8 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               border: 'none',
               background: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000
                 ? tokens.gradient.primary
-                : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
-              color: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000 ? '#fff' : tokens.colors.text.tertiary,
+                : tokens.colors.bg.tertiary || 'var(--glass-border-light)',
+              color: (newMessage.trim() || pendingAttachment) && newMessage.length <= 2000 ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
               cursor: (newMessage.trim() || pendingAttachment) && !sending && newMessage.length <= 2000 ? 'pointer' : 'default',
               display: 'flex',
               alignItems: 'center',

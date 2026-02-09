@@ -125,7 +125,7 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
                   size="sm"
                   onClick={() => approveEditApplication(app.id)}
                   disabled={actionLoading[`edit_${app.id}`]}
-                  style={{ background: tokens.colors.accent?.success || '#10B981' }}
+                  style={{ background: tokens.colors.accent?.success || 'var(--color-score-great)' }}
                 >
                   {actionLoading[`edit_${app.id}`] ? t('processing') : t('adminApprove')}
                 </Button>
@@ -152,7 +152,7 @@ export default function GroupEditTab({ accessToken }: GroupEditTabProps) {
                       size="sm"
                       onClick={() => handleReject(app.id)}
                       disabled={actionLoading[`edit_${app.id}`]}
-                      style={{ background: tokens.colors.accent?.error || '#EF4444', color: tokens.colors.white }}
+                      style={{ background: tokens.colors.accent?.error || 'var(--color-accent-error)', color: tokens.colors.white }}
                     >
                       {t('adminConfirmReject')}
                     </Button>

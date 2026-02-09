@@ -310,7 +310,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
               padding: '4px 12px', borderRadius: tokens.radius.sm, fontSize: 13, cursor: 'pointer',
               border: `1px solid ${pairMode === 'blocked' ? c.accent.error : c.border.primary}`,
               background: pairMode === 'blocked' ? c.accent.error : 'transparent',
-              color: pairMode === 'blocked' ? '#fff' : c.text.primary,
+              color: pairMode === 'blocked' ? 'var(--color-on-accent)' : c.text.primary,
             }}
           >
             {t('copyTrade_blockedPairs')}
@@ -321,7 +321,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
               padding: '4px 12px', borderRadius: tokens.radius.sm, fontSize: 13, cursor: 'pointer',
               border: `1px solid ${pairMode === 'allowed' ? c.accent.success : c.border.primary}`,
               background: pairMode === 'allowed' ? c.accent.success : 'transparent',
-              color: pairMode === 'allowed' ? '#fff' : c.text.primary,
+              color: pairMode === 'allowed' ? 'var(--color-on-accent)' : c.text.primary,
             }}
           >
             {t('copyTrade_allowedPairs')}
@@ -468,7 +468,7 @@ function ChipButton({ selected, onClick, children }: { selected: boolean; onClic
         padding: '6px 16px', borderRadius: tokens.radius.sm, fontSize: 14, cursor: 'pointer',
         border: `1px solid ${selected ? c.accent.primary : c.border.primary}`,
         background: selected ? c.accent.primary : 'transparent',
-        color: selected ? '#fff' : c.text.primary,
+        color: selected ? 'var(--color-on-accent)' : c.text.primary,
         textTransform: 'capitalize',
       }}
     >

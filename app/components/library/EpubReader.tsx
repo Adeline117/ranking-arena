@@ -61,10 +61,10 @@ export type EpubReaderProps = {
 // ─── Constants ───────────────────────────────────────────────────────
 
 const THEME_STYLES: Record<ReadingTheme, { body: Record<string, string> }> = {
-  white: { body: { background: '#FFFFFF', color: '#1a1a1a' } },
-  sepia: { body: { background: '#F4ECD8', color: '#5b4636' } },
-  dark:  { body: { background: 'var(--color-bg-secondary)', color: '#d4d4d8' } },
-  green: { body: { background: '#C7EDCC', color: '#2d4a32' } },
+  white: { body: { background: 'var(--color-on-accent)', color: 'var(--color-text-primary)' } },
+  sepia: { body: { background: 'var(--color-bg-secondary)', color: 'var(--color-bg-tertiary)' } },
+  dark:  { body: { background: 'var(--color-bg-secondary)', color: 'var(--color-border-primary)' } },
+  green: { body: { background: 'var(--color-accent-success-20)', color: 'var(--color-accent-success)' } },
 }
 
 const FONT_SIZE_MAP: Record<FontSize, number> = { small: 90, medium: 100, large: 120 }
@@ -88,7 +88,7 @@ const PAGE_MARGIN_MAP: Record<PageMargin, string> = {
   wide: '80px',
 }
 
-const HIGHLIGHT_COLORS = ['#FFEB3B', '#81D4FA', '#A5D6A7', '#FFAB91', '#CE93D8']
+const HIGHLIGHT_COLORS = ['var(--color-chart-yellow)', 'var(--color-chart-blue)', 'var(--color-accent-success-20)', 'var(--color-accent-error)', 'var(--color-chart-pink)']
 
 const LS_PREFIX = 'reader_'
 
@@ -626,10 +626,10 @@ export default function EpubReader({
   // ─── Render ────────────────────────────────────────────────────
 
   const themeIsDark = theme === 'dark'
-  const panelBg = themeIsDark ? '#1e1e36' : '#fff'
-  const panelText = themeIsDark ? '#d4d4d8' : '#1a1a1a'
+  const panelBg = themeIsDark ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)'
+  const panelText = themeIsDark ? 'var(--color-border-primary)' : 'var(--color-text-primary)'
   const panelBorder = themeIsDark ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'
-  const panelSubtle = themeIsDark ? 'var(--overlay-hover)' : 'rgba(0,0,0,0.03)'
+  const panelSubtle = themeIsDark ? 'var(--overlay-hover)' : 'var(--overlay-hover)'
   const accent = 'var(--color-accent-primary, #6366f1)'
 
   const totalSessionTime = readingStats.totalReadingTimeSec + sessionElapsedSec
@@ -658,7 +658,7 @@ export default function EpubReader({
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
         }}>
           <div style={{
-            width: 32, height: 32, border: '3px solid rgba(128,128,128,0.2)',
+            width: 32, height: 32, border: '3px solid var(--color-overlay-medium)',
             borderTopColor: accent, borderRadius: '50%',
             animation: 'epubSpin 0.8s linear infinite',
           }} />
@@ -686,10 +686,10 @@ export default function EpubReader({
           position: 'absolute', bottom: 0, left: 0, right: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '6px 16px',
-          background: themeIsDark ? 'rgba(15,15,26,0.85)' : 'rgba(255,255,255,0.9)',
+          background: themeIsDark ? 'var(--color-blur-overlay)' : 'var(--glass-bg-heavy)',
           backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
           borderTop: `1px solid ${panelBorder}`,
-          fontSize: 11, color: themeIsDark ? 'var(--glass-border-heavy)' : 'rgba(0,0,0,0.4)',
+          fontSize: 11, color: themeIsDark ? 'var(--glass-border-heavy)' : 'var(--color-backdrop-light)',
           zIndex: 50,
         }}>
           <span>{progressPercent}% -- {currentPage}/{totalPages}</span>
@@ -705,7 +705,7 @@ export default function EpubReader({
               padding: '2px 10px', borderRadius: tokens.radius.sm, fontSize: 11,
               border: `1px solid ${panelBorder}`,
               background: showAudioReader ? accent : 'transparent',
-              color: showAudioReader ? '#fff' : 'inherit',
+              color: showAudioReader ? 'var(--color-on-accent)' : 'inherit',
               cursor: 'pointer', transition: 'all 0.15s',
             }}
           >
@@ -719,11 +719,11 @@ export default function EpubReader({
         <>
           <div onClick={() => { setShowNoteInput(false); setPendingHighlight(null) }}
             role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
+            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '添加高亮和笔记' : 'Add Highlight & Note'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: panelBg, color: panelText, borderRadius: tokens.radius.xl, padding: '24px 28px',
-            width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: '0 12px 40px rgba(0,0,0,0.3)',
+            width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: '0 12px 40px var(--color-overlay-medium)',
             border: `1px solid ${panelBorder}`,
           }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
@@ -773,7 +773,7 @@ export default function EpubReader({
               </button>
               <button onClick={confirmHighlight} style={{
                 padding: '8px 18px', borderRadius: tokens.radius.md, border: 'none',
-                background: accent, color: '#fff',
+                background: accent, color: 'var(--foreground)',
                 cursor: 'pointer', fontSize: 13, fontWeight: 600,
               }}>
                 {isZh ? '保存' : 'Save'}
@@ -788,7 +788,7 @@ export default function EpubReader({
         <>
           <div onClick={() => setShowSearch(false)}
             role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
+            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '搜索内容' : 'Search'} style={{
             position: 'fixed', top: 60, right: 12, width: 380, maxWidth: '90vw', maxHeight: '70vh',
             background: panelBg, color: panelText, borderRadius: tokens.radius.xl, zIndex: 301,
@@ -815,7 +815,7 @@ export default function EpubReader({
                 />
                 <button onClick={doSearch} disabled={searching} style={{
                   padding: '8px 16px', borderRadius: tokens.radius.md, border: 'none',
-                  background: accent, color: '#fff',
+                  background: accent, color: 'var(--foreground)',
                   cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
                   opacity: searching ? 0.6 : 1,
                 }}>
@@ -856,10 +856,10 @@ export default function EpubReader({
         <>
           <div onClick={() => setShowNotes(false)}
             role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
+            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '笔记与高亮' : 'Notes & Highlights'} style={{
             position: 'fixed', top: 0, right: 0, bottom: 0, width: 380, maxWidth: '85vw', zIndex: 301,
-            background: panelBg, color: panelText, boxShadow: '-4px 0 24px rgba(0,0,0,0.3)',
+            background: panelBg, color: panelText, boxShadow: '-4px 0 24px var(--color-overlay-medium)',
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
             {/* Header */}
@@ -962,7 +962,7 @@ export default function EpubReader({
                         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                           <button onClick={(e) => { e.stopPropagation(); updateHighlightNote(realIdx, editNoteText) }} style={{
                             padding: '4px 12px', borderRadius: tokens.radius.sm, border: 'none',
-                            background: accent, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                            background: accent, color: 'var(--foreground)', cursor: 'pointer', fontSize: 11, fontWeight: 600,
                           }}>{isZh ? '保存' : 'Save'}</button>
                           <button onClick={(e) => { e.stopPropagation(); setEditingNoteIdx(null) }} style={{
                             padding: '4px 12px', borderRadius: tokens.radius.sm, border: `1px solid ${panelBorder}`,
@@ -992,7 +992,7 @@ export default function EpubReader({
                           {isZh ? '编辑' : 'Edit'}
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); removeHighlight(realIdx) }} style={{
-                          background: 'none', border: 'none', color: '#e57373', cursor: 'pointer',
+                          background: 'none', border: 'none', color: 'var(--color-accent-error)', cursor: 'pointer',
                           fontSize: 11, opacity: 0.5, padding: '2px 4px',
                         }}>
                           {isZh ? '删除' : 'Delete'}
@@ -1033,7 +1033,7 @@ export default function EpubReader({
         <>
           <div onClick={() => setShowStats(false)}
             role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
+            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '阅读统计' : 'Reading Statistics'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: panelBg, color: panelText, borderRadius: tokens.radius['2xl'], padding: '28px 32px',
@@ -1105,7 +1105,7 @@ export default function EpubReader({
         <>
           <div onClick={() => setShowTypography(false)}
             role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
+            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '排版设置' : 'Typography'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: panelBg, color: panelText, borderRadius: tokens.radius['2xl'], padding: '28px 32px',
@@ -1135,7 +1135,7 @@ export default function EpubReader({
                     }} style={{
                       padding: '10px 8px', borderRadius: tokens.radius.md,
                       background: fontFamily === key ? accent : panelSubtle,
-                      color: fontFamily === key ? '#fff' : panelText,
+                      color: fontFamily === key ? 'var(--color-on-accent)' : panelText,
                       border: 'none', cursor: 'pointer', fontSize: 14,
                       fontFamily: css, fontWeight: 600, transition: 'all 0.15s',
                     }}>
@@ -1162,7 +1162,7 @@ export default function EpubReader({
                     <button key={lh} onClick={() => setLocalLineHeight(lh)} style={{
                       flex: 1, padding: '8px 4px', borderRadius: tokens.radius.md,
                       background: localLineHeight === lh ? accent : panelSubtle,
-                      color: localLineHeight === lh ? '#fff' : panelText,
+                      color: localLineHeight === lh ? 'var(--color-on-accent)' : panelText,
                       border: 'none', cursor: 'pointer', fontSize: 12,
                       fontWeight: 600, transition: 'all 0.15s',
                     }}>
@@ -1189,7 +1189,7 @@ export default function EpubReader({
                     <button key={pm} onClick={() => setLocalPageMargin(pm)} style={{
                       flex: 1, padding: '8px 4px', borderRadius: tokens.radius.md,
                       background: localPageMargin === pm ? accent : panelSubtle,
-                      color: localPageMargin === pm ? '#fff' : panelText,
+                      color: localPageMargin === pm ? 'var(--color-on-accent)' : panelText,
                       border: 'none', cursor: 'pointer', fontSize: 12,
                       fontWeight: 600, transition: 'all 0.15s',
                     }}>
@@ -1244,7 +1244,7 @@ function StatCard({ label, value, themeIsDark }: { label: string; value: string;
   return (
     <div style={{
       padding: '14px 12px', borderRadius: tokens.radius.lg,
-      background: themeIsDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+      background: themeIsDark ? 'var(--overlay-hover)' : 'var(--overlay-hover)',
       textAlign: 'center',
     }}>
       <p style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{value}</p>

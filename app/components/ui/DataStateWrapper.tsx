@@ -115,7 +115,7 @@ export default function DataStateWrapper({
                       ? tokens.colors.accent.brand 
                       : tokens.colors.accent.brand + '15',
                     color: action.variant === 'primary' 
-                      ? '#fff' 
+                      ? 'var(--color-on-accent)' 
                       : tokens.colors.accent.brand,
                   }}
                 >

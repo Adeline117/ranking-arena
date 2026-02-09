@@ -754,8 +754,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const tabStyle = (isActive: boolean): React.CSSProperties => ({
     padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
     borderRadius: tokens.radius.lg,
-    background: isActive ? 'rgba(139, 111, 168, 0.2)' : 'transparent',
-    color: isActive ? '#c9b8db' : tokens.colors.text.secondary,
+    background: isActive ? 'var(--color-accent-primary-20)' : 'transparent',
+    color: isActive ? 'var(--color-brand-accent)' : tokens.colors.text.secondary,
     cursor: 'pointer',
     fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
     border: 'none',
@@ -1014,9 +1014,9 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                             background: memberIsOwner
                               ? 'linear-gradient(135deg, #FFD700, #FFA500)'
                               : member.role === 'admin'
-                                ? 'rgba(139, 111, 168, 0.3)'
+                                ? 'var(--color-accent-primary-30)'
                                 : tokens.colors.bg.primary,
-                            color: memberIsOwner ? '#000' : tokens.colors.text.secondary,
+                            color: memberIsOwner ? 'var(--color-text-primary)' : tokens.colors.text.secondary,
                           }}
                         >
                           {memberIsOwner
@@ -1028,8 +1028,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                         {isMuted && (
                           <span style={{ 
                             fontSize: tokens.typography.fontSize.xs, 
-                            color: '#ff6b6b',
-                            background: 'rgba(255, 107, 107, 0.1)',
+                            color: 'var(--color-accent-error)',
+                            background: 'var(--color-accent-error-10)',
                             padding: `2px ${tokens.spacing[2]}`,
                             borderRadius: tokens.radius.full,
                           }}>
@@ -1105,7 +1105,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                               showToast(t('networkError'), 'error')
                             }
                           }}
-                          style={{ color: '#ff6b6b' }}
+                          style={{ color: 'var(--color-accent-error)' }}
                         >
                           {t('kick')}
                         </Button>
@@ -1208,14 +1208,14 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                     style={{
                       padding: tokens.spacing[3],
                       background: post.deleted_at
-                        ? 'rgba(255, 107, 107, 0.1)'
+                        ? 'var(--color-accent-error-10)'
                         : post.is_pinned
                           ? `linear-gradient(135deg, ${tokens.colors.accent?.primary || tokens.colors.accent.brand}15 0%, ${tokens.colors.bg.secondary} 100%)`
                           : tokens.colors.bg.secondary,
                       borderRadius: tokens.radius.lg,
                       border: `1px solid ${
                         post.deleted_at
-                          ? 'rgba(255, 107, 107, 0.3)'
+                          ? 'var(--color-accent-error-20)'
                           : post.is_pinned
                             ? `${tokens.colors.accent?.primary || tokens.colors.accent.brand}50`
                             : tokens.colors.border.primary
@@ -1250,7 +1250,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                           @{post.author_handle} · {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
                         </Text>
                         {post.deleted_at && (
-                          <Text size="xs" style={{ color: '#ff6b6b', marginTop: 4 }}>
+                          <Text size="xs" style={{ color: 'var(--color-accent-error)', marginTop: 4 }}>
                             {t('deletedByAdmin')}
                           </Text>
                         )}
@@ -1276,7 +1276,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                             variant="secondary"
                             size="sm"
                             onClick={() => handleDeletePost(post.id)}
-                            style={{ color: '#ff6b6b' }}
+                            style={{ color: 'var(--color-accent-error)' }}
                           >
                             {t('delete')}
                           </Button>
@@ -1317,9 +1317,9 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                     key={comment.id}
                     style={{
                       padding: tokens.spacing[3],
-                      background: comment.deleted_at ? 'rgba(255, 107, 107, 0.1)' : tokens.colors.bg.secondary,
+                      background: comment.deleted_at ? 'var(--color-accent-error-10)' : tokens.colors.bg.secondary,
                       borderRadius: tokens.radius.lg,
-                      border: `1px solid ${comment.deleted_at ? 'rgba(255, 107, 107, 0.3)' : tokens.colors.border.primary}`,
+                      border: `1px solid ${comment.deleted_at ? 'var(--color-accent-error-20)' : tokens.colors.border.primary}`,
                     }}
                   >
                     <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1331,7 +1331,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                           @{comment.author_handle} · {new Date(comment.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
                         </Text>
                         {comment.deleted_at && (
-                          <Text size="xs" style={{ color: '#ff6b6b', marginTop: 4 }}>
+                          <Text size="xs" style={{ color: 'var(--color-accent-error)', marginTop: 4 }}>
                             {t('deletedByAdmin')}
                           </Text>
                         )}
@@ -1341,7 +1341,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                           variant="secondary"
                           size="sm"
                           onClick={() => handleDeleteComment(comment.id)}
-                          style={{ color: '#ff6b6b' }}
+                          style={{ color: 'var(--color-accent-error)' }}
                         >
                           {t('delete')}
                         </Button>
@@ -1553,7 +1553,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                               variant="text"
                               size="sm"
                               onClick={() => removeRule(index)}
-                              style={{ padding: 0, color: '#ff6b6b', fontSize: tokens.typography.fontSize.xs }}
+                              style={{ padding: 0, color: 'var(--color-accent-error)', fontSize: tokens.typography.fontSize.xs }}
                             >
                               {t('delete')}
                             </Button>
@@ -1720,7 +1720,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                       }}
                     >
                       {isPremiumOnly && (
-                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--color-on-accent)" strokeWidth="3">
                           <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       )}
@@ -1904,7 +1904,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'rgba(0, 0, 0, 0.6)',
+              background: 'var(--color-backdrop)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1980,7 +1980,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'rgba(0, 0, 0, 0.6)',
+              background: 'var(--color-backdrop)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

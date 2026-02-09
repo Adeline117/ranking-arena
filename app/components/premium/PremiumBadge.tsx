@@ -55,8 +55,8 @@ const TIER_CONFIG: Record<SubscriptionTier, {
   pro: {
     icon: '',
     color: tokens.colors.accent.warning,
-    bgColor: 'rgba(245, 158, 11, 0.1)',
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    bgColor: 'var(--color-orange-subtle)',
+    borderColor: 'var(--color-orange-border)',
   },
 }
 

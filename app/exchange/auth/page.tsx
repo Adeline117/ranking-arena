@@ -206,7 +206,7 @@ function ExchangeAuthContent() {
               t('authSecurityTip3'),
             ].map((item) => (
               <Box key={item} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17L4 12" />
                 </svg>
                 <Text size="sm" color="secondary">{item}</Text>

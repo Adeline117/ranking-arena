@@ -257,7 +257,7 @@ export default function WatchlistMarket() {
                         borderRadius: tokens.radius.full,
                         border: selected ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                         background: selected ? tokens.colors.accent.brand : 'transparent',
-                        color: selected ? '#fff' : tokens.colors.text.secondary,
+                        color: selected ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                         fontSize: 11, fontWeight: 500,
                         cursor: 'pointer',
                         transition: `all ${tokens.transition.fast}`,

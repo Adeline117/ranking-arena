@@ -39,9 +39,9 @@ function getFearGreedColor(value: number): string {
 
 function FlashValue({ value, flash }: { value: string; flash?: PriceFlash }) {
   const bg = flash?.direction === 'up'
-    ? 'rgba(22, 199, 132, 0.25)'
+    ? 'var(--color-market-bull-light)'
     : flash?.direction === 'down'
-      ? 'rgba(234, 57, 67, 0.25)'
+      ? 'var(--color-market-bear-light)'
       : 'transparent'
 
   return (
@@ -163,8 +163,8 @@ export default function SentimentBar() {
       {/* BTC */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <svg width="16" height="16" viewBox="0 0 32 32" style={{ flexShrink: 0 }}>
-          <circle cx="16" cy="16" r="16" fill="#F7931A" />
-          <text x="16" y="22" textAnchor="middle" fill="#fff" fontSize="18" fontWeight="bold">B</text>
+          <circle cx="16" cy="16" r="16" fill="var(--color-chart-orange)" />
+          <text x="16" y="22" textAnchor="middle" fill="var(--color-on-accent)" fontSize="18" fontWeight="bold">B</text>
         </svg>
         <span style={{ color: tokens.colors.text.tertiary }}>BTC</span>
         <FlashValue value={formatPrice(btcPrice)} flash={flashes.BTC} />
@@ -178,8 +178,8 @@ export default function SentimentBar() {
       {/* ETH */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <svg width="16" height="16" viewBox="0 0 32 32" style={{ flexShrink: 0 }}>
-          <circle cx="16" cy="16" r="16" fill="#627EEA" />
-          <text x="16" y="22" textAnchor="middle" fill="#fff" fontSize="16" fontWeight="bold">E</text>
+          <circle cx="16" cy="16" r="16" fill="var(--color-chart-indigo)" />
+          <text x="16" y="22" textAnchor="middle" fill="var(--color-on-accent)" fontSize="16" fontWeight="bold">E</text>
         </svg>
         <span style={{ color: tokens.colors.text.tertiary }}>ETH</span>
         <FlashValue value={formatPrice(ethPrice)} flash={flashes.ETH} />

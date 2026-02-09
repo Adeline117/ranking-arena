@@ -58,17 +58,17 @@ const injectStyles = () => {
     @keyframes stepEnter { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
     @keyframes celebrationBurst { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
     @keyframes checkDraw { from { stroke-dashoffset: 50; } to { stroke-dashoffset: 0; } }
-    @keyframes progressPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139, 111, 168, 0.4); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(139, 111, 168, 0); } }
+    @keyframes progressPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--color-accent-primary-40); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px transparent; } }
     @keyframes spin { to { transform: rotate(360deg); } }
     .onboarding-bg { position: fixed; inset: 0; z-index: 0; transition: background 0.5s ease; }
     .onboarding-bg.dark { background: var(--color-bg-primary); }
     .onboarding-bg.light { background: linear-gradient(135deg, #f5f5f7 0%, #e8e8ed 50%, #f0f0f5 100%); }
-    .onboarding-bg::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at center, rgba(139, 111, 168, 0.08) 0%, transparent 50%); }
+    .onboarding-bg::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(ellipse at center, var(--color-accent-primary-08) 0%, transparent 50%); }
     .onboarding-card { animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
     .option-card { cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
     .option-card:hover { transform: translateY(-2px); }
     .continue-btn { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-    .continue-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(139, 111, 168, 0.4); }
+    .continue-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 8px 30px var(--color-accent-primary-40); }
     .continue-btn:not(:disabled):active { transform: translateY(0) scale(0.98); }
     .step-content { animation: stepEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     .interest-card { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; }
@@ -77,7 +77,7 @@ const injectStyles = () => {
     .celebration-icon { animation: celebrationBurst 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
     .check-animation { stroke-dasharray: 50; stroke-dashoffset: 50; animation: checkDraw 0.5s ease 0.3s forwards; }
     .trader-row { transition: all 0.2s ease; cursor: default; }
-    .trader-row:hover { background: rgba(139, 111, 168, 0.06); }
+    .trader-row:hover { background: var(--color-notification-unread); }
     .follow-btn { transition: all 0.2s ease; cursor: pointer; border: none; font-weight: 600; font-size: 13px; padding: 6px 16px; border-radius: 8px; }
     .follow-btn:hover { transform: scale(1.03); }
   `
@@ -264,22 +264,22 @@ export default function OnboardingPage() {
   if (!mounted) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 40, height: 40, border: '3px solid rgba(139, 111, 168, 0.2)', borderTopColor: 'var(--color-brand)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div style={{ width: 40, height: 40, border: '3px solid var(--color-accent-primary-20)', borderTopColor: 'var(--color-brand)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
       </Box>
     )
   }
 
   const isDark = theme === 'dark'
-  const cardBg = isDark ? 'rgba(15, 15, 20, 0.85)' : 'rgba(255, 255, 255, 0.9)'
-  const cardBorder = isDark ? 'rgba(139, 111, 168, 0.15)' : 'rgba(139, 111, 168, 0.2)'
-  const textPrimary = isDark ? '#f2f2f2' : '#1a1a1a'
-  const textSecondary = isDark ? '#8a8a8a' : '#666666'
-  const optionBg = isDark ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'
-  const optionBorder = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+  const cardBg = isDark ? 'var(--color-backdrop-heavy)' : 'var(--glass-bg-heavy)'
+  const cardBorder = isDark ? 'var(--color-accent-primary-15)' : 'var(--color-accent-primary-20)'
+  const textPrimary = isDark ? 'var(--color-bg-tertiary)' : 'var(--color-text-primary)'
+  const textSecondary = isDark ? 'var(--color-text-secondary)' : 'var(--color-text-secondary)'
+  const optionBg = isDark ? 'var(--color-overlay-medium)' : 'var(--color-overlay-subtle)'
+  const optionBorder = isDark ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'
   const selectedBg = isDark
-    ? 'linear-gradient(135deg, rgba(139, 111, 168, 0.3) 0%, rgba(139, 111, 168, 0.15) 100%)'
-    : 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)'
-  const selectedBorder = 'rgba(139, 111, 168, 0.5)'
+    ? 'linear-gradient(135deg, var(--color-accent-primary-30) 0%, var(--color-accent-primary-15) 100%)'
+    : 'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)'
+  const selectedBorder = 'var(--color-accent-primary-60)'
   const brandGradient = 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)'
 
   const stepIndex = STEPS.indexOf(step)
@@ -301,8 +301,8 @@ export default function OnboardingPage() {
         maxWidth: 560, width: '100%', background: cardBg, border: `1px solid ${cardBorder}`,
         borderRadius: 28, padding: '44px 36px', position: 'relative', zIndex: 1,
         boxShadow: isDark
-          ? '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 100px rgba(139, 111, 168, 0.06)'
-          : '0 25px 50px -12px rgba(0, 0, 0, 0.1), 0 0 100px rgba(139, 111, 168, 0.1)',
+          ? '0 25px 50px -12px var(--color-overlay-dark), 0 0 100px var(--color-notification-unread)'
+          : '0 25px 50px -12px var(--color-overlay-subtle), 0 0 100px var(--color-accent-primary-10)',
       }}>
         {/* Progress bar */}
         <Box style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 36 }}>
@@ -311,7 +311,7 @@ export default function OnboardingPage() {
               width: stepIndex === i ? 28 : 10, height: 10, borderRadius: 5,
               background: i <= stepIndex
                 ? brandGradient
-                : isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                : isDark ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)',
               transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
             }} />
           ))}
@@ -351,7 +351,7 @@ export default function OnboardingPage() {
                       background: language === lang ? selectedBg : optionBg, textAlign: 'center',
                     }}>
                     <Text size="lg" weight={language === lang ? 'bold' : 'medium'}
-                      style={{ color: language === lang ? '#c9b8db' : textSecondary }}>
+                      style={{ color: language === lang ? 'var(--color-brand-accent)' : textSecondary }}>
                       {lang === 'zh' ? tr('chineseLabel') : tr('englishLabel')}
                     </Text>
                   </Box>
@@ -380,7 +380,7 @@ export default function OnboardingPage() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       {t === 'dark' ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9b8db" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent)" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
                       ) : (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" strokeWidth="2">
                           <circle cx="12" cy="12" r="5" />
@@ -392,7 +392,7 @@ export default function OnboardingPage() {
                       )}
                     </Box>
                     <Text size="sm" weight={theme === t ? 'bold' : 'medium'}
-                      style={{ color: theme === t ? (t === 'dark' ? '#c9b8db' : 'var(--color-brand)') : textSecondary }}>
+                      style={{ color: theme === t ? (t === 'dark' ? 'var(--color-brand-accent)' : 'var(--color-brand)') : textSecondary }}>
                       {t === 'dark' ? tr('darkMode') : tr('lightMode')}
                     </Text>
                   </Box>
@@ -440,7 +440,7 @@ export default function OnboardingPage() {
                       {interest.icon}
                     </span>
                     <Text size="sm" weight={isSelected ? 'bold' : 'medium'}
-                      style={{ color: isSelected ? '#c9b8db' : textSecondary }}>
+                      style={{ color: isSelected ? 'var(--color-brand-accent)' : textSecondary }}>
                       {tr(interest.labelKey)}
                     </Text>
                   </Box>
@@ -503,14 +503,14 @@ export default function OnboardingPage() {
                       {/* Rank */}
                       <span style={{
                         fontSize: 13, fontWeight: 800, minWidth: 20, textAlign: 'right',
-                        color: idx < 3 ? ['#D4A843', '#A8A8A8', '#CD7F32'][idx] : textSecondary,
+                        color: idx < 3 ? ['var(--color-accent-warning)', 'var(--color-text-tertiary)', 'var(--color-medal-bronze)'][idx] : textSecondary,
                       }}>
                         {idx + 1}
                       </span>
                       {/* Avatar */}
                       <Box style={{
                         width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                        background: 'linear-gradient(135deg, rgba(139,111,168,0.3), rgba(212,168,67,0.3))',
+                        background: 'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-glow))',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 14, fontWeight: 600, color: textPrimary, overflow: 'hidden',
                       }}>
@@ -535,7 +535,7 @@ export default function OnboardingPage() {
                       <button className="follow-btn" onClick={() => handleFollowTrader(tid)}
                         style={{
                           background: isFollowed ? optionBg : brandGradient,
-                          color: isFollowed ? textSecondary : '#fff',
+                          color: isFollowed ? textSecondary : 'var(--color-on-accent)',
                           border: isFollowed ? `1px solid ${optionBorder}` : 'none',
                         }}>
                         {isFollowed ? tr('onboardingFollowedBtn') : tr('onboardingFollowBtn')}
@@ -601,7 +601,7 @@ export default function OnboardingPage() {
                       {/* Avatar */}
                       <Box style={{
                         width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-                        background: 'linear-gradient(135deg, rgba(139,111,168,0.3), rgba(212,168,67,0.3))',
+                        background: 'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-glow))',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 16, fontWeight: 600, color: textPrimary, overflow: 'hidden',
                       }}>
@@ -628,7 +628,7 @@ export default function OnboardingPage() {
                       <button className="follow-btn" onClick={() => handleJoinGroup(g.id)}
                         style={{
                           background: isJoined ? optionBg : brandGradient,
-                          color: isJoined ? textSecondary : '#fff',
+                          color: isJoined ? textSecondary : 'var(--color-on-accent)',
                           border: isJoined ? `1px solid ${optionBorder}` : 'none',
                         }}>
                         {isJoined ? tr('onboardingJoinedBtn') : tr('onboardingJoinBtn')}
@@ -641,12 +641,12 @@ export default function OnboardingPage() {
 
             <button className="continue-btn" onClick={saveAndComplete} disabled={saving} style={{
               width: '100%', padding: '16px 24px', borderRadius: 14, border: 'none',
-              background: saving ? 'rgba(139, 111, 168, 0.2)' : brandGradient,
+              background: saving ? 'var(--color-accent-primary-20)' : brandGradient,
               color: tokens.colors.white, fontWeight: 700, fontSize: 16,
               cursor: saving ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}>
-              {saving && <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
+              {saving && <div style={{ width: 16, height: 16, border: '2px solid var(--glass-border-heavy)', borderTopColor: 'var(--foreground)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
               {saving ? tr('saving') : tr('continueButton')}
             </button>
           </div>
@@ -657,11 +657,11 @@ export default function OnboardingPage() {
           <div key="complete" className="step-content" style={{ textAlign: 'center' }}>
             <Box className="celebration-icon" style={{
               width: 80, height: 80, borderRadius: '50%',
-              background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.3) 0%, rgba(139, 111, 168, 0.1) 100%)',
+              background: 'linear-gradient(135deg, var(--color-accent-primary-30) 0%, var(--color-accent-primary-10) 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 28px', boxShadow: '0 0 40px rgba(139, 111, 168, 0.3)',
+              margin: '0 auto 28px', boxShadow: '0 0 40px var(--color-accent-primary-30)',
             }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c9b8db" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline className="check-animation" points="20 6 9 17 4 12" />
               </svg>
             </Box>

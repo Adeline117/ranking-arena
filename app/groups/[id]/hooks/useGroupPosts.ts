@@ -280,7 +280,7 @@ export function useGroupPosts({
   )
 
   const getHeatColor = (commentCount: number): string => {
-    if (maxComments === 0) return '#FFE4CC'
+    if (maxComments === 0) return 'var(--color-orange-bg-light)'
     const ratio = Math.min(commentCount / maxComments, 1)
     const r = 255
     const g = Math.round(228 - ratio * (228 - 107))

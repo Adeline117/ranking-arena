@@ -329,9 +329,9 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               >
                 <defs>
                   <linearGradient id="infGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#8b5cf6" />
-                    <stop offset="50%" stopColor="#a78bfa" />
-                    <stop offset="100%" stopColor="#d4a574" />
+                    <stop offset="0%" stopColor="var(--color-score-legendary)" />
+                    <stop offset="50%" stopColor="var(--color-brand-accent)" />
+                    <stop offset="100%" stopColor="var(--color-chart-orange)" />
                   </linearGradient>
                 </defs>
                 <path
@@ -757,10 +757,10 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     style={{ ...MENU_LINK_STYLE, cursor: 'pointer' }}
                     onClick={() => setShowUserMenu(false)}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#8B5CF6' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--color-verified-web3)' }}>
                       <path d="M5 16L3 5L8.5 10L12 4L15.5 10L21 5L19 16H5ZM19 19C19 19.6 18.6 20 18 20H6C5.4 20 5 19.6 5 19V18H19V19Z" />
                     </svg>
-                    <span style={{ color: '#8B5CF6', fontWeight: 700 }}>{t('loginProUpgradeCta')}</span>
+                    <span style={{ color: 'var(--color-verified-web3)', fontWeight: 700 }}>{t('loginProUpgradeCta')}</span>
                   </Link>
                   <Link
                     href="/settings"

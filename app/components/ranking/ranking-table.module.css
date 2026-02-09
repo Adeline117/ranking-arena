@@ -110,15 +110,15 @@
 }
 
 .scoreDetailsBtn:hover {
-  background: rgba(139, 111, 168, 0.15);
+  background: var(--color-accent-primary-15);
   border-color: rgba(139, 111, 168, 0.31);
 }
 
 /* ─── Retry Button ─── */
 .retryBtn {
   padding: var(--spacing-2, 8px) var(--spacing-5, 20px);
-  background: rgba(139, 111, 168, 0.12);
-  border: 1px solid rgba(139, 111, 168, 0.25);
+  background: var(--color-accent-primary-12);
+  border: 1px solid var(--color-accent-primary-20);
   border-radius: var(--radius-md, 8px);
   color: var(--color-accent-primary);
   cursor: pointer;
@@ -144,7 +144,7 @@
 .pageBtn:not(:disabled):hover {
   background: rgba(139, 111, 168, 0.19) !important;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px var(--color-overlay-light);
 }
 
 .pageBtn:disabled {
@@ -163,10 +163,10 @@
 }
 
 .pageNumBtn:not(.pageNumBtnActive):hover {
-  background: rgba(139, 111, 168, 0.12) !important;
+  background: var(--color-accent-primary-12) !important;
   border-color: var(--color-accent-primary) !important;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px var(--color-overlay-light);
 }
 
 .pageNumBtnActive {
@@ -204,7 +204,7 @@
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border-primary);
   border-radius: var(--radius-lg, 12px);
-  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.3));
+  box-shadow: var(--shadow-lg, 0 10px 30px var(--color-overlay-medium));
   z-index: 9999;
   min-width: 160px;
 }
@@ -215,7 +215,7 @@
   font-size: var(--font-size-xs, 11px);
   color: var(--color-accent-primary);
   background: transparent;
-  border: 1px solid rgba(139, 111, 168, 0.25);
+  border: 1px solid var(--color-accent-primary-20);
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   width: 100%;
@@ -224,7 +224,7 @@
 
 .resetColumnsBtn:hover {
   background: rgba(139, 111, 168, 0.09);
-  border-color: rgba(139, 111, 168, 0.4);
+  border-color: var(--color-accent-primary-40);
 }
 
 /* ─── Mobile Responsive: Auto-switch to Card View ─── */

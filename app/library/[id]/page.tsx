@@ -244,7 +244,7 @@ export default function BookDetailPage() {
               width: '100%', aspectRatio: '2/3',
               borderRadius: tokens.radius.xl,
               overflow: 'hidden',
-              boxShadow: '4px 4px 12px rgba(0,0,0,0.3), 8px 8px 24px rgba(0,0,0,0.15), -1px 0 2px rgba(0,0,0,0.1), 0 0 0 1px var(--glass-border-light)',
+              boxShadow: '4px 4px 12px var(--color-overlay-medium), 8px 8px 24px var(--color-overlay-light), -1px 0 2px var(--color-overlay-subtle), 0 0 0 1px var(--glass-border-light)',
             }}>
               <BookCover
                 title={book.title}
@@ -319,7 +319,7 @@ export default function BookDetailPage() {
                     style={{
                       padding: '10px 24px', borderRadius: tokens.radius.lg,
                       fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
-                      background: tokens.gradient.primary, color: '#fff',
+                      background: tokens.gradient.primary, color: 'var(--foreground)',
                       textDecoration: 'none',
                       display: 'inline-flex', alignItems: 'center', gap: 8,
                       transition: `all ${tokens.transition.fast}`,
@@ -337,7 +337,7 @@ export default function BookDetailPage() {
                     style={{
                       padding: '10px 24px', borderRadius: tokens.radius.lg,
                       fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
-                      background: tokens.gradient.primary, color: '#fff',
+                      background: tokens.gradient.primary, color: 'var(--foreground)',
                       textDecoration: 'none',
                       display: 'inline-flex', alignItems: 'center', gap: 8,
                       transition: `all ${tokens.transition.fast}`,
@@ -356,7 +356,7 @@ export default function BookDetailPage() {
                     style={{
                       padding: '10px 24px', borderRadius: tokens.radius.lg,
                       fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
-                      background: tokens.gradient.primary, color: '#fff',
+                      background: tokens.gradient.primary, color: 'var(--foreground)',
                       textDecoration: 'none',
                       display: 'inline-flex', alignItems: 'center', gap: 8,
                       transition: `all ${tokens.transition.fast}`,
@@ -393,12 +393,12 @@ export default function BookDetailPage() {
                   cursor: 'pointer',
                   border: userStatus === 'want_to_read' ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                   background: userStatus === 'want_to_read' ? tokens.colors.accent.brand : 'transparent',
-                  color: userStatus === 'want_to_read' ? '#fff' : tokens.colors.text.primary,
+                  color: userStatus === 'want_to_read' ? 'var(--color-on-accent)' : tokens.colors.text.primary,
                   transition: `all ${tokens.transition.fast}`,
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill={userStatus === 'want_to_read' ? '#fff' : 'none'} stroke="currentColor" strokeWidth="2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill={userStatus === 'want_to_read' ? 'var(--color-on-accent)' : 'none'} stroke="currentColor" strokeWidth="2">
                   <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
                 </svg>
                 {isZh ? '想读' : 'Want to Read'}
@@ -413,7 +413,7 @@ export default function BookDetailPage() {
                   cursor: 'pointer',
                   border: userStatus === 'read' ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                   background: userStatus === 'read' ? tokens.colors.accent.success : 'transparent',
-                  color: userStatus === 'read' ? '#fff' : tokens.colors.text.primary,
+                  color: userStatus === 'read' ? 'var(--color-on-accent)' : tokens.colors.text.primary,
                   transition: `all ${tokens.transition.fast}`,
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}

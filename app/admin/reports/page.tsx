@@ -29,10 +29,10 @@ const REASON_KEYS: Record<string, string> = {
 }
 
 const STATUS_MAP: Record<string, { key: string; color: string }> = {
-  pending: { key: 'adminPending', color: '#f59e0b' },
-  reviewed: { key: 'adminResolved', color: '#3b82f6' },
-  actioned: { key: 'adminResolved', color: '#10b981' },
-  dismissed: { key: 'adminDismissed', color: '#6b7280' },
+  pending: { key: 'adminPending', color: 'var(--color-score-average)' },
+  reviewed: { key: 'adminResolved', color: 'var(--color-score-profitability)' },
+  actioned: { key: 'adminResolved', color: 'var(--color-score-great)' },
+  dismissed: { key: 'adminDismissed', color: 'var(--color-score-low)' },
 }
 
 export default function AdminReportsPage() {
@@ -135,8 +135,8 @@ export default function AdminReportsPage() {
                       padding: '2px 8px',
                       borderRadius: tokens.radius.sm,
                       fontSize: tokens.typography.fontSize.xs,
-                      background: '#ef44441a',
-                      color: '#ef4444',
+                      background: 'var(--color-accent-error-10)',
+                      color: 'var(--color-accent-error)',
                     }}>
                       {REASON_KEYS[report.reason] ? t(REASON_KEYS[report.reason]) : report.reason}
                     </span>

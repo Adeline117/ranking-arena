@@ -168,7 +168,7 @@ export function getDataSourceBadge(
   if (isAuthorized) {
     return {
       label: 'Verified',
-      color: '#10b981', // green
+      color: 'var(--color-score-great)', // green
       icon: '[OK]',
     }
   }
@@ -177,25 +177,25 @@ export function getDataSourceBadge(
     case DataSource.OFFICIAL_API:
       return {
         label: 'Official',
-        color: '#3b82f6', // blue
+        color: 'var(--color-score-profitability)', // blue
         icon: '[+]',
       }
     case DataSource.WEB_SCRAPER:
       return {
         label: 'Public',
-        color: '#8b5cf6', // purple
+        color: 'var(--color-score-legendary)', // purple
         icon: '[-]',
       }
     case DataSource.CACHED:
       return {
         label: 'Cached',
-        color: '#6b7280', // gray
+        color: 'var(--color-score-low)', // gray
         icon: '[?]',
       }
     default:
       return {
         label: 'Unknown',
-        color: '#6b7280',
+        color: 'var(--color-score-low)',
       }
   }
 }

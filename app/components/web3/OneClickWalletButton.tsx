@@ -257,7 +257,7 @@ export function OneClickWalletButton({
       case 'verifying':
         return {
           ...baseStyles,
-          background: 'rgba(99, 102, 241, 0.2)',
+          background: 'var(--color-indigo-bg)',
           color: tokens.colors.accent.brandLight,
           opacity: 0.9,
         }
@@ -290,7 +290,7 @@ export function OneClickWalletButton({
           }
           .one-click-wallet-btn:not(:disabled):hover {
             transform: translateY(-1px);
-            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 4px 20px var(--color-indigo-bg);
           }
           .one-click-wallet-btn:not(:disabled):active {
             transform: translateY(0) scale(0.98);
@@ -341,7 +341,7 @@ export function OneClickWalletButton({
             padding: '10px 12px',
             borderRadius: tokens.radius.md,
             background: 'var(--color-red-bg-light)',
-            border: '1px solid rgba(239, 68, 68, 0.2)',
+            border: '1px solid var(--color-accent-error-20)',
             fontSize: 12,
             color: tokens.colors.accent.error,
             display: 'flex',
@@ -365,7 +365,7 @@ export function OneClickWalletButton({
               padding: '2px 8px',
               borderRadius: tokens.radius.sm,
               border: 'none',
-              background: 'rgba(239, 68, 68, 0.2)',
+              background: 'var(--color-accent-error-20)',
               color: tokens.colors.accent.error,
               fontSize: 11,
               fontWeight: 600,

@@ -144,7 +144,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                       size="sm"
                       onClick={() => approveApplication(app.id)}
                       disabled={actionLoading[app.id]}
-                      style={{ background: tokens.colors.accent?.success || '#10B981' }}
+                      style={{ background: tokens.colors.accent?.success || 'var(--color-score-great)' }}
                     >
                       {actionLoading[app.id] ? t('processing') : t('adminApprove')}
                     </Button>
@@ -171,7 +171,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                           size="sm"
                           onClick={() => handleReject(app.id)}
                           disabled={actionLoading[app.id]}
-                          style={{ background: tokens.colors.accent?.error || '#EF4444', color: tokens.colors.white }}
+                          style={{ background: tokens.colors.accent?.error || 'var(--color-accent-error)', color: tokens.colors.white }}
                         >
                           {t('adminConfirmReject')}
                         </Button>

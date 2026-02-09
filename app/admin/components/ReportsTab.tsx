@@ -116,9 +116,9 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                         background: report.content_type === 'post'
                           ? tokens.colors.accent.primary
                           : report.content_type === 'message'
-                            ? '#9575cd'
+                            ? 'var(--color-brand)'
                             : report.content_type === 'user'
-                              ? '#f44336'
+                              ? 'var(--color-accent-error)'
                               : tokens.colors.accent.warning,
                         color: tokens.colors.white,
                         fontSize: tokens.typography.fontSize.xs,
@@ -240,7 +240,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                   <Box
                     style={{
                       padding: tokens.spacing[2],
-                      background: report.status === 'resolved' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(156, 163, 175, 0.1)',
+                      background: report.status === 'resolved' ? 'var(--color-accent-error-10)' : 'var(--color-overlay-subtle)',
                       borderRadius: tokens.radius.sm,
                     }}
                   >

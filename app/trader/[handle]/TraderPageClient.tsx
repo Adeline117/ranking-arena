@@ -341,7 +341,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                         left: 0,
                         right: 0,
                         height: '60%',
-                        background: 'linear-gradient(to bottom, transparent 0%, rgba(10,10,15,0.85) 50%, rgba(10,10,15,0.95) 100%)',
+                        background: 'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 50%, var(--color-lock-bg) 100%)',
                         backdropFilter: 'blur(4px)',
                         WebkitBackdropFilter: 'blur(4px)',
                         borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,

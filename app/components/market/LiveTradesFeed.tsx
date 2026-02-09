@@ -12,15 +12,15 @@ import { t } from '@/lib/i18n'
 import type { NormalizedTrade, ExchangeId } from '@/lib/ws/exchange-feeds'
 
 const EXCHANGE_COLORS: Record<ExchangeId, string> = {
-  binance: '#F0B90B',
-  bybit: '#F7A600',
-  okx: '#00C8FF',
+  binance: 'var(--color-chart-amber)',
+  bybit: 'var(--color-chart-orange)',
+  okx: 'var(--color-chart-blue)',
 }
 
 const EXCHANGE_BG: Record<ExchangeId, string> = {
-  binance: 'rgba(240, 185, 11, 0.15)',
-  bybit: 'rgba(247, 166, 0, 0.15)',
-  okx: 'rgba(0, 200, 255, 0.15)',
+  binance: 'var(--color-orange-subtle)',
+  bybit: 'var(--color-orange-subtle)',
+  okx: 'var(--color-accent-primary-15)',
 }
 
 const EXCHANGE_LABELS: Record<ExchangeId, string> = {
@@ -313,7 +313,7 @@ export default function LiveTradesFeed() {
           fontWeight: 600,
           padding: '2px 6px',
           borderRadius: 3,
-          background: 'rgba(255, 184, 0, 0.1)',
+          background: 'var(--color-orange-subtle)',
         }}>
           已暂停
         </div>

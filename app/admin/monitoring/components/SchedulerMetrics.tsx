@@ -96,28 +96,28 @@ export default function SchedulerMetrics({ data }: SchedulerMetricsProps) {
               count={tierDistribution?.hot?.count || 0}
               percentage={tierDistribution?.hot?.percentage || '0%'}
               interval={tierDistribution?.hot?.refreshInterval || 'N/A'}
-              color="#FF6B6B"
+              color="var(--color-accent-error)"
             />
             <TierCard
               name="Active"
               count={tierDistribution?.active?.count || 0}
               percentage={tierDistribution?.active?.percentage || '0%'}
               interval={tierDistribution?.active?.refreshInterval || 'N/A'}
-              color="#FFD700"
+              color="var(--color-medal-gold)"
             />
             <TierCard
               name="Normal"
               count={tierDistribution?.normal?.count || 0}
               percentage={tierDistribution?.normal?.percentage || '0%'}
               interval={tierDistribution?.normal?.refreshInterval || 'N/A'}
-              color="#7CFFB2"
+              color="var(--color-chart-green)"
             />
             <TierCard
               name="Dormant"
               count={tierDistribution?.dormant?.count || 0}
               percentage={tierDistribution?.dormant?.percentage || '0%'}
               interval={tierDistribution?.dormant?.refreshInterval || 'N/A'}
-              color="#888888"
+              color="var(--color-text-secondary)"
             />
           </Box>
         </Box>
@@ -144,13 +144,13 @@ export default function SchedulerMetrics({ data }: SchedulerMetricsProps) {
               title="Smart Scheduler"
               value={apiEfficiency?.smartScheduler?.callsPerDay?.toLocaleString() || 'N/A'}
               subtitle="calls/day"
-              color="#7CFFB2"
+              color="var(--color-chart-green)"
             />
             <MetricCard
               title="Reduction"
               value={apiEfficiency?.reduction?.percentage || 'N/A'}
               subtitle={`${apiEfficiency?.reduction?.callsSaved?.toLocaleString() || 0} calls saved`}
-              color="#7CFFB2"
+              color="var(--color-chart-green)"
             />
           </Box>
         </Box>
@@ -170,17 +170,17 @@ export default function SchedulerMetrics({ data }: SchedulerMetricsProps) {
             <MetricCard
               title="Per Day"
               value={apiEfficiency?.costSavings?.perDay || 'N/A'}
-              color="#7CFFB2"
+              color="var(--color-chart-green)"
             />
             <MetricCard
               title="Per Month"
               value={apiEfficiency?.costSavings?.perMonth || 'N/A'}
-              color="#7CFFB2"
+              color="var(--color-chart-green)"
             />
             <MetricCard
               title="Per Year"
               value={apiEfficiency?.costSavings?.perYear || 'N/A'}
-              color="#7CFFB2"
+              color="var(--color-chart-green)"
             />
           </Box>
         </Box>
@@ -202,7 +202,7 @@ export default function SchedulerMetrics({ data }: SchedulerMetricsProps) {
               <Text size="sm" color="secondary">
                 Overdue Traders
               </Text>
-              <Text size="sm" weight="bold" style={{ color: (dataFreshness?.overdueTraders ?? 0) > 0 ? '#FFD700' : '#7CFFB2' }}>
+              <Text size="sm" weight="bold" style={{ color: (dataFreshness?.overdueTraders ?? 0) > 0 ? 'var(--color-medal-gold)' : 'var(--color-chart-green)' }}>
                 {dataFreshness?.overdueTraders || 0}
               </Text>
             </Box>

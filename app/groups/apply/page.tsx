@@ -333,9 +333,9 @@ export default function ApplyGroupPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, { bg: string; color: string; text: { zh: string; en: string } }> = {
-      pending: { bg: '#FFF3CD', color: '#856404', text: { zh: '待审核', en: 'Pending' } },
-      approved: { bg: '#D4EDDA', color: '#155724', text: { zh: '已通过', en: 'Approved' } },
-      rejected: { bg: '#F8D7DA', color: '#721C24', text: { zh: '已拒绝', en: 'Rejected' } }
+      pending: { bg: 'var(--color-orange-bg-light)', color: 'var(--color-accent-warning)', text: { zh: '待审核', en: 'Pending' } },
+      approved: { bg: 'var(--color-accent-success-20)', color: 'var(--color-accent-success)', text: { zh: '已通过', en: 'Approved' } },
+      rejected: { bg: 'var(--color-red-bg-light)', color: 'var(--color-accent-error)', text: { zh: '已拒绝', en: 'Rejected' } }
     }
     const style = styles[status] || styles.pending
     return (
@@ -389,7 +389,7 @@ export default function ApplyGroupPage() {
                 width: 64, 
                 height: 64,
                 borderRadius: '50%',
-                background: 'rgba(139,111,168,0.2)',
+                background: 'var(--color-accent-primary-20)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -709,7 +709,7 @@ export default function ApplyGroupPage() {
                             variant="text"
                             size="sm"
                             onClick={() => removeRule(index)}
-                            style={{ padding: 0, color: '#ff6b6b', fontSize: tokens.typography.fontSize.xs }}
+                            style={{ padding: 0, color: 'var(--color-accent-error)', fontSize: tokens.typography.fontSize.xs }}
                           >
                             {language === 'zh' ? '删除' : 'Delete'}
                           </Button>
@@ -946,7 +946,7 @@ export default function ApplyGroupPage() {
                       }}
                     >
                       {isPremiumOnly && (
-                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--color-on-accent)" strokeWidth="3">
                           <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       )}

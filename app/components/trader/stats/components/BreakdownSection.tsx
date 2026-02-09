@@ -224,16 +224,16 @@ function PeriodSelector({
 
 function getColorForIndex(idx: number): string {
   const colors = [
-    '#3B82F6', // Blue
-    '#F59E0B', // Amber
-    '#10B981', // Emerald
-    '#8B5CF6', // Violet
-    '#EF4444', // Red
-    '#06B6D4', // Cyan
-    '#F97316', // Orange
-    '#84CC16', // Lime
-    '#EC4899', // Pink
-    '#6366F1', // Indigo
+    'var(--color-score-profitability)', // Blue
+    'var(--color-score-average)', // Amber
+    'var(--color-score-great)', // Emerald
+    'var(--color-verified-web3)', // Violet
+    'var(--color-accent-error)', // Red
+    'var(--color-enterprise-gradient-start)', // Cyan
+    'var(--color-score-below)', // Orange
+    'var(--color-accent-success)', // Lime
+    'var(--color-chart-pink)', // Pink
+    'var(--color-chart-indigo)', // Indigo
   ]
   return colors[idx % colors.length]
 }

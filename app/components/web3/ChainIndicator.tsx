@@ -20,11 +20,11 @@ interface ChainIndicatorProps {
 }
 
 const CHAIN_ICONS: Record<number, { color: string; bg: string }> = {
-  [CHAIN_IDS.BASE]: { color: '#0052FF', bg: 'rgba(0, 82, 255, 0.1)' },
-  [CHAIN_IDS.BASE_SEPOLIA]: { color: '#0052FF', bg: 'rgba(0, 82, 255, 0.1)' },
-  [CHAIN_IDS.ARBITRUM]: { color: '#28A0F0', bg: 'rgba(40, 160, 240, 0.1)' },
-  [CHAIN_IDS.OPTIMISM]: { color: '#FF0420', bg: 'rgba(255, 4, 32, 0.1)' },
-  [CHAIN_IDS.POLYGON]: { color: '#8247E5', bg: 'rgba(130, 71, 229, 0.1)' },
+  [CHAIN_IDS.BASE]: { color: 'var(--color-chart-indigo)', bg: 'var(--color-accent-primary-10)' },
+  [CHAIN_IDS.BASE_SEPOLIA]: { color: 'var(--color-chart-indigo)', bg: 'var(--color-accent-primary-10)' },
+  [CHAIN_IDS.ARBITRUM]: { color: 'var(--color-chart-blue)', bg: 'var(--color-accent-primary-10)' },
+  [CHAIN_IDS.OPTIMISM]: { color: 'var(--color-accent-error)', bg: 'var(--color-accent-error-10)' },
+  [CHAIN_IDS.POLYGON]: { color: 'var(--color-chart-violet)', bg: 'var(--color-accent-primary-10)' },
 }
 
 export function ChainIndicator({ size = 'sm', showName = true, className = '' }: ChainIndicatorProps) {
@@ -38,7 +38,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
 
   const chainConfig = CHAIN_CONFIGS[chainId as SupportedChainId]
   const isSupported = chainConfig?.isSupported ?? false
-  const chainStyle = CHAIN_ICONS[chainId] || { color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.1)' }
+  const chainStyle = CHAIN_ICONS[chainId] || { color: 'var(--color-text-tertiary)', bg: 'var(--color-overlay-subtle)' }
 
   const sizes = {
     sm: { dot: 8, text: 11, px: 8, py: 4, icon: 12 },
@@ -77,7 +77,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           height={s.icon}
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#EF4444"
+          stroke="var(--color-accent-error)"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -86,7 +86,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           <line x1="12" y1="9" x2="12" y2="13" />
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
-        <span style={{ fontSize: s.text, fontWeight: 600, color: '#EF4444' }}>
+        <span style={{ fontSize: s.text, fontWeight: 600, color: 'var(--color-accent-error)' }}>
           {isPending ? (t('switching') || 'Switching...') : (t('wrongNetwork') || 'Wrong Network')}
         </span>
       </button>
@@ -115,7 +115,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
             width: s.dot,
             height: s.dot,
             borderRadius: '50%',
-            background: '#22C55E',
+            background: 'var(--color-accent-success)',
             boxShadow: '0 0 6px var(--color-accent-success-20)',
           }}
         />
@@ -182,7 +182,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
               background: tokens.colors.bg.secondary,
               border: `1px solid ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.lg,
-              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+              boxShadow: '0 8px 24px var(--color-overlay-medium)',
               zIndex: 50,
               overflow: 'hidden',
             }}
@@ -196,7 +196,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
             {Object.values(CHAIN_CONFIGS)
               .filter(c => c.isSupported || c.id === chainId)
               .map(chain => {
-                const style = CHAIN_ICONS[chain.id] || { color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.1)' }
+                const style = CHAIN_ICONS[chain.id] || { color: 'var(--color-text-tertiary)', bg: 'var(--color-overlay-subtle)' }
                 const isActive = chain.id === chainId
 
                 return (
@@ -226,7 +226,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
                         width: 8,
                         height: 8,
                         borderRadius: '50%',
-                        background: isActive ? '#22C55E' : 'transparent',
+                        background: isActive ? 'var(--color-accent-success)' : 'transparent',
                         border: isActive ? 'none' : `2px solid ${tokens.colors.border.primary}`,
                       }}
                     />

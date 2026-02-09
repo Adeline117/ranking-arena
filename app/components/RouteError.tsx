@@ -56,7 +56,7 @@ export default function RouteError({
         width: 72,
         height: 72,
         borderRadius: '50%',
-        background: 'var(--color-bg-error-subtle, rgba(255, 124, 124, 0.1))',
+        background: 'var(--color-bg-error-subtle, var(--color-accent-error-10))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -129,7 +129,7 @@ export default function RouteError({
             <pre style={{
               marginTop: 8,
               padding: 12,
-              background: 'var(--color-bg-tertiary, rgba(0,0,0,0.3))',
+              background: 'var(--color-bg-tertiary, var(--color-overlay-medium))',
               borderRadius: tokens.radius.md,
               border: '1px solid var(--color-border-primary)',
               fontSize: 11,

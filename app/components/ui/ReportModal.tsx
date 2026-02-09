@@ -370,7 +370,7 @@ export default function ReportModal({
                       aria-label={`Remove image ${i + 1}`}
                       style={{
                         position: 'absolute', top: 2, right: 2, width: 20, height: 20,
-                        borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none',
+                        borderRadius: '50%', background: 'var(--color-backdrop-medium)', border: 'none',
                         color: tokens.colors.white, fontSize: 12, cursor: 'pointer', display: 'flex',
                         alignItems: 'center', justifyContent: 'center',
                       }}
@@ -485,7 +485,7 @@ export default function ReportModal({
                   background: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? 'var(--color-accent-error)' : tokens.colors.bg.tertiary,
                   border: 'none',
                   borderRadius: tokens.radius.md,
-                  color: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? '#fff' : tokens.colors.text.tertiary,
+                  color: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
                   fontSize: tokens.typography.fontSize.sm,
                   fontWeight: 600,
                   cursor: submitting || !reason || description.trim().length < MIN_DESC_LENGTH || images.length === 0 ? 'not-allowed' : 'pointer',

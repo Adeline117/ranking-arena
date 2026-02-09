@@ -60,33 +60,33 @@ export interface TradingViewChartProps {
 function getChartColors(theme: 'dark' | 'light') {
   if (theme === 'dark') {
     return {
-      bg: '#0a0a0a',
-      text: '#9E9E9E',
-      grid: 'rgba(255,255,255,0.04)',
+      bg: 'var(--color-bg-primary)',
+      text: 'var(--color-text-tertiary)',
+      grid: 'var(--overlay-hover)',
       border: 'var(--glass-bg-light)',
-      crosshair: '#555',
-      upColor: '#4DFF9A',
-      downColor: '#FF4D4D',
-      lineColor: '#8b6fa8',
+      crosshair: 'var(--color-text-secondary)',
+      upColor: 'var(--color-accent-success)',
+      downColor: 'var(--color-accent-error)',
+      lineColor: 'var(--color-brand)',
       areaTop: 'var(--color-accent-primary-40)',
       areaBottom: 'var(--color-accent-primary-08)',
-      volumeUp: 'rgba(77,255,154,0.25)',
-      volumeDown: 'rgba(255,77,77,0.25)',
+      volumeUp: 'var(--color-accent-success-20)',
+      volumeDown: 'var(--color-accent-error-20)',
     }
   }
   return {
-    bg: '#FFFFFF',
-    text: '#5A5A6A',
+    bg: 'var(--color-on-accent)',
+    text: 'var(--color-text-secondary)',
     grid: 'var(--color-overlay-subtle)',
     border: 'var(--color-overlay-subtle)',
-    crosshair: '#999',
-    upColor: '#00C853',
-    downColor: '#F44336',
-    lineColor: '#8b6fa8',
+    crosshair: 'var(--color-text-secondary)',
+    upColor: 'var(--color-accent-success)',
+    downColor: 'var(--color-accent-error)',
+    lineColor: 'var(--color-brand)',
     areaTop: 'var(--color-accent-primary-30)',
     areaBottom: 'var(--color-accent-primary-08)',
-    volumeUp: 'rgba(0,200,83,0.2)',
-    volumeDown: 'rgba(244,67,54,0.2)',
+    volumeUp: 'var(--color-accent-success-20)',
+    volumeDown: 'var(--color-accent-error-20)',
   }
 }
 
@@ -211,7 +211,7 @@ export default function TradingViewChart({
       position: absolute; display: none; padding: 8px 12px; z-index: 10;
       background: ${theme === 'dark' ? 'var(--glass-bg-primary)' : 'var(--glass-bg-heavy)'};
       border: 1px solid ${colors.border}; border-radius: 6px;
-      color: ${theme === 'dark' ? '#e0e0e0' : '#333'}; font-size: 12px;
+      color: ${theme === 'dark' ? 'var(--color-border-primary)' : 'var(--color-text-primary)'}; font-size: 12px;
       pointer-events: none; font-family: monospace; line-height: 1.6;
       backdrop-filter: blur(8px); box-shadow: 0 4px 12px var(--color-overlay-medium);
     `

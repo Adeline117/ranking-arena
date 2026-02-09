@@ -93,19 +93,19 @@ function getHealthStatus(score: number): {
   if (score >= 80) {
     return {
       status: 'healthy',
-      color: '#7CFFB2',
+      color: 'var(--color-chart-green)',
       message: 'System operating normally',
     }
   } else if (score >= 60) {
     return {
       status: 'warning',
-      color: '#FFD700',
+      color: 'var(--color-medal-gold)',
       message: 'Minor issues detected',
     }
   } else {
     return {
       status: 'critical',
-      color: '#FF7C7C',
+      color: 'var(--color-accent-error)',
       message: 'Critical issues require attention',
     }
   }

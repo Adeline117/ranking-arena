@@ -193,7 +193,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                 background: viewMode === 'current' 
                   ? `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`
                   : 'transparent',
-                color: viewMode === 'current' ? '#fff' : tokens.colors.text.tertiary,
+                color: viewMode === 'current' ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: viewMode === 'current' ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
                 cursor: 'pointer',
@@ -215,7 +215,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                 background: viewMode === 'history' 
                   ? `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`
                   : 'transparent',
-                color: viewMode === 'history' ? '#fff' : tokens.colors.text.tertiary,
+                color: viewMode === 'history' ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: viewMode === 'history' ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
                 cursor: 'pointer',
@@ -631,7 +631,7 @@ const PositionHistoryCard = memo(function PositionHistoryCard({ position, index 
         padding: tokens.spacing[5],
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         transform: isHovered ? 'translateY(-4px) scale(1.01)' : 'translateY(0) scale(1)',
-        boxShadow: isHovered ? `0 12px 32px rgba(0, 0, 0, 0.12)` : 'none',
+        boxShadow: isHovered ? `0 12px 32px var(--color-overlay-light)` : 'none',
         animationDelay: `${index * 0.05}s`,
       }}
       onMouseEnter={() => setIsHovered(true)}

@@ -145,7 +145,7 @@ export default function FavoritesPage() {
   }
 
   const getDefaultAvatar = (name: string) => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8']
+    const colors = ['var(--color-accent-error)', 'var(--color-chart-teal)', 'var(--color-chart-blue)', 'var(--color-chart-sage)', 'var(--color-chart-yellow)', 'var(--color-chart-pink)', 'var(--color-chart-mint)']
     const index = name.charCodeAt(0) % colors.length
     return colors[index]
   }
@@ -381,7 +381,7 @@ export default function FavoritesPage() {
                     transition: `all ${tokens.transition.base}`,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.05)'
+                    e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)'
                     e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
                     e.currentTarget.style.transform = 'translateX(4px)'
                   }}
@@ -523,7 +523,7 @@ export default function FavoritesPage() {
                     transition: `all ${tokens.transition.base}`,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.05)'
+                    e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)'
                     e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
                     e.currentTarget.style.transform = 'translateX(4px)'
                   }}

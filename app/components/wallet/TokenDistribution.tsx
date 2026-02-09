@@ -23,9 +23,9 @@ const BAR_COLORS = [
   'var(--color-accent-warning, #FFB800)',
   'var(--color-brand)',
   'var(--color-accent-error)',
-  '#8B5CF6',
-  '#06B6D4',
-  '#F97316',
+  'var(--color-verified-web3)',
+  'var(--color-enterprise-gradient-start)',
+  'var(--color-score-below)',
 ]
 
 export default function TokenDistribution({ data }: TokenDistributionProps) {

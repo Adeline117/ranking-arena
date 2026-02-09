@@ -47,7 +47,7 @@ export default function SectorPerformance() {
             <span style={{ color: tokens.colors.text.primary, fontWeight: 500 }}>
               {SECTOR_LABELS[s.id] ?? s.name}
             </span>
-            <span style={{ color: isUp ? '#16c784' : '#ea3943', fontWeight: 600 }}>
+            <span style={{ color: isUp ? 'var(--color-accent-success)' : 'var(--color-accent-error)', fontWeight: 600 }}>
               {isUp ? '+' : ''}{pct.toFixed(2)}%
             </span>
           </div>

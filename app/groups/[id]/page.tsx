@@ -511,7 +511,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     return (
       <PageWrapper email={email}>
         <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[10] }}>
-          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: '#ff7c7c' }}>
+          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2], color: 'var(--color-accent-error)' }}>
             {t('error')}: {error || t('groupNotFound')}
           </Text>
           <Link href="/groups" style={{ color: tokens.colors.accent?.primary || tokens.colors.text.secondary, textDecoration: 'none', marginTop: tokens.spacing[3], display: 'inline-block' }}>
@@ -755,7 +755,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
                   width: 36,
                   height: 36,
                   borderRadius: tokens.radius.md,
-                  background: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.1) 100%)',
+                  background: 'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)',
                   border: `1px solid ${tokens.colors.border.primary}`,
                   display: 'flex',
                   alignItems: 'center',
@@ -775,7 +775,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 ) : (
-                  <Text size="sm" weight="bold" style={{ color: '#c9b8db' }}>
+                  <Text size="sm" weight="bold" style={{ color: 'var(--color-brand-accent)' }}>
                     {relGroup.name.charAt(0).toUpperCase()}
                   </Text>
                 )}

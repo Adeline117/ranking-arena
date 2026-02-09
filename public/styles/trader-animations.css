@@ -260,7 +260,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, #8b6fa8, #6b4f88);
+  background: linear-gradient(180deg, var(--color-brand), var(--color-pro-gradient-end));
   transform: scaleY(0);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }

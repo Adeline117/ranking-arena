@@ -3,7 +3,7 @@
 /* 奖牌发光效果 — box-shadow is GPU-accelerated (replaces CPU-intensive filter: drop-shadow) */
 @keyframes medalGlowGold {
   0%, 100% {
-    box-shadow: 0 0 4px rgba(255, 215, 0, 0.6), 0 0 8px rgba(255, 215, 0, 0.4);
+    box-shadow: 0 0 4px rgba(255, 215, 0, 0.6), 0 0 8px var(--color-gold-glow);
   }
   50% {
     box-shadow: 0 0 8px rgba(255, 215, 0, 0.8), 0 0 16px rgba(255, 215, 0, 0.5);
@@ -12,7 +12,7 @@
 
 @keyframes medalGlowSilver {
   0%, 100% {
-    box-shadow: 0 0 3px rgba(192, 192, 192, 0.6), 0 0 6px rgba(192, 192, 192, 0.4);
+    box-shadow: 0 0 3px rgba(192, 192, 192, 0.6), 0 0 6px var(--color-silver-glow);
   }
   50% {
     box-shadow: 0 0 6px rgba(192, 192, 192, 0.8), 0 0 12px rgba(192, 192, 192, 0.5);
@@ -21,7 +21,7 @@
 
 @keyframes medalGlowBronze {
   0%, 100% {
-    box-shadow: 0 0 3px rgba(205, 127, 50, 0.6), 0 0 6px rgba(205, 127, 50, 0.4);
+    box-shadow: 0 0 3px rgba(205, 127, 50, 0.6), 0 0 6px var(--color-bronze-glow);
   }
   50% {
     box-shadow: 0 0 6px rgba(205, 127, 50, 0.8), 0 0 12px rgba(205, 127, 50, 0.5);
@@ -97,16 +97,16 @@
 
 /* Pagination hover effects (CSS-only, no JS onMouseEnter/Leave) */
 .pagination-btn.pagination-nav:not(.pagination-disabled):hover {
-  background: var(--color-accent-primary-30, rgba(99, 102, 241, 0.3)) !important;
+  background: var(--color-accent-primary-30, var(--color-indigo-bg)) !important;
   transform: translateY(-1px);
-  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.2));
+  box-shadow: var(--shadow-sm, 0 1px 2px var(--color-overlay-medium));
 }
 
 .pagination-btn.pagination-page:not(.pagination-active):hover {
-  background: var(--color-accent-primary-20, rgba(99, 102, 241, 0.2)) !important;
+  background: var(--color-accent-primary-20, var(--color-indigo-bg)) !important;
   border-color: var(--color-accent-primary, #8b6fa8) !important;
   transform: translateY(-1px);
-  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.2));
+  box-shadow: var(--shadow-sm, 0 1px 2px var(--color-overlay-medium));
 }
 
 @media (prefers-reduced-motion: reduce) {

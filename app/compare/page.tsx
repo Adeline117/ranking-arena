@@ -384,7 +384,7 @@ function CompareContent() {
                             flexShrink: 0,
                           }}
                         >
-                          <Text size="xs" style={{ color: '#fff', fontWeight: 700 }}>
+                          <Text size="xs" style={{ color: 'var(--foreground)', fontWeight: 700 }}>
                             {(ft.handle || '?')[0].toUpperCase()}
                           </Text>
                         </Box>
@@ -445,7 +445,7 @@ export default function ComparePage() {
   return (
     <Suspense fallback={
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: '#888' }}>Loading...</Text>
+        <Text style={{ color: 'var(--color-text-secondary)' }}>Loading...</Text>
       </Box>
     }>
       <CompareContent />

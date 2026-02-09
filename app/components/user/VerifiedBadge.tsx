@@ -6,9 +6,9 @@ interface VerifiedBadgeProps {
 }
 
 const TIER_COLORS: Record<string, string> = {
-  tier1: '#FFD700', // 金色
-  tier2: '#C0C0C0', // 银色
-  tier3: '#4A90D9', // 蓝色
+  tier1: 'var(--color-medal-gold)', // 金色
+  tier2: 'var(--color-medal-silver)', // 银色
+  tier3: 'var(--color-chart-blue)', // 蓝色
 }
 
 const TIER_LABELS: Record<string, string> = {

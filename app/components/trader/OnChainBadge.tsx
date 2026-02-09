@@ -91,7 +91,7 @@ export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
             background: tokens.glass.bg.heavy,
             backdropFilter: tokens.glass.blur.lg,
             WebkitBackdropFilter: tokens.glass.blur.lg,
-            border: `1px solid var(--color-verified-onchain, rgba(47,229,125,0.2))`,
+            border: `1px solid var(--color-verified-onchain, var(--color-accent-success-20))`,
             borderRadius: tokens.radius.lg,
             boxShadow: tokens.shadow.lg,
             color: tokens.colors.text.secondary,

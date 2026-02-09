@@ -221,7 +221,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
                 fontSize: 13,
                 borderRadius: tokens.radius.sm,
                 background: alert.enabled ? tokens.colors.accent.success : tokens.colors.bg.tertiary,
-                color: alert.enabled ? '#fff' : tokens.colors.text.secondary,
+                color: alert.enabled ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                 border: 'none',
                 cursor: 'pointer',
               }}

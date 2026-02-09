@@ -393,10 +393,10 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                       style={{
                         color:
                           trader.rank === 1
-                            ? '#FFD700'
+                            ? 'var(--color-medal-gold)'
                             : trader.rank === 2
-                            ? '#C0C0C0'
-                            : '#CD7F32',
+                            ? 'var(--color-medal-silver)'
+                            : 'var(--color-medal-bronze)',
                       }}
                     >
                       {trader.rank}
@@ -430,7 +430,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                         color: tokens.colors.white,
                         fontSize: '12px',
                         fontWeight: 900,
-                        textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                        textShadow: '0 1px 3px var(--color-backdrop-heavy)',
                       }}
                     >
                       {getAvatarInitial(displayName)}

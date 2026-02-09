@@ -33,7 +33,7 @@ export default function GroupsError({
         width: 72,
         height: 72,
         borderRadius: '50%',
-        background: 'rgba(255, 124, 124, 0.1)',
+        background: 'var(--color-accent-error-10)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

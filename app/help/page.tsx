@@ -204,7 +204,7 @@ export default function HelpPage() {
           position: 'fixed',
           inset: 0,
           background: `radial-gradient(ellipse at 30% 20%, var(--color-pro-glow) 0%, transparent 50%),
-                       radial-gradient(ellipse at 70% 80%, rgba(139, 111, 168, 0.05) 0%, transparent 50%)`,
+                       radial-gradient(ellipse at 70% 80%, var(--color-accent-primary-08) 0%, transparent 50%)`,
           pointerEvents: 'none',
           zIndex: 0,
         }}

@@ -63,7 +63,7 @@ export default function TipSuccessPage() {
           <Link
             href="/"
             className="block w-full rounded-lg py-3 text-sm font-medium transition-colors"
-            style={{ background: 'var(--color-accent-primary)', color: '#fff' }}
+            style={{ background: 'var(--color-accent-primary)', color: 'var(--foreground)' }}
           >
             {t('backToHome')}
           </Link>

@@ -29,10 +29,10 @@ interface HealthData {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  healthy: '#22c55e',
-  warning: '#f59e0b',
-  critical: '#ef4444',
-  no_data: '#6b7280',
+  healthy: 'var(--color-accent-success)',
+  warning: 'var(--color-score-average)',
+  critical: 'var(--color-accent-error)',
+  no_data: 'var(--color-score-low)',
 }
 
 export default function DataHealthPage() {
@@ -70,18 +70,18 @@ export default function DataHealthPage() {
       })
   }, [isAdmin])
 
-  if (authChecking) return <div style={{ padding: 40, color: '#999' }}>{t('verifyingPermission')}</div>
+  if (authChecking) return <div style={{ padding: 40, color: 'var(--color-text-secondary)' }}>{t('verifyingPermission')}</div>
   if (!isAdmin) return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
       <div style={{ padding: 40, textAlign: 'center' }}>
         <h2>{t('noPermissionAccess')}</h2>
-        <p style={{ color: '#999' }}>{t('noAdminPermission')}</p>
+        <p style={{ color: 'var(--color-text-secondary)' }}>{t('noAdminPermission')}</p>
       </div>
     </div>
   )
-  if (loading) return <div style={{ padding: 40, color: '#999' }}>{t('loading')}</div>
-  if (error) return <div style={{ padding: 40, color: '#ef4444' }}>{t('error')}: {error}</div>
+  if (loading) return <div style={{ padding: 40, color: 'var(--color-text-secondary)' }}>{t('loading')}</div>
+  if (error) return <div style={{ padding: 40, color: 'var(--color-accent-error)' }}>{t('error')}: {error}</div>
   if (!data) return null
 
   return (

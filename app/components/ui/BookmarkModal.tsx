@@ -182,7 +182,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
   }
 
   const getDefaultAvatar = (name: string) => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8']
+    const colors = ['var(--color-accent-error)', 'var(--color-chart-teal)', 'var(--color-chart-blue)', 'var(--color-chart-sage)', 'var(--color-chart-yellow)', 'var(--color-chart-pink)', 'var(--color-chart-mint)']
     const index = name.charCodeAt(0) % colors.length
     return colors[index]
   }

@@ -404,7 +404,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
             borderRadius: tokens.radius.xl,
             border: `1px solid ${tokens.colors.border.primary}50`,
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+            boxShadow: '0 8px 32px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
             position: 'relative',
             overflow: 'visible',
             minHeight: 200, // Prevent CLS while cover image loads
@@ -426,7 +426,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 <Box style={{
                   position: 'absolute',
                   inset: 0,
-                  background: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 100%)',
+                  background: 'linear-gradient(135deg, var(--color-overlay-dark) 0%, var(--color-overlay-medium) 100%)',
                 }} />
               </>
             ) : (
@@ -488,8 +488,8 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                   color: tokens.colors.white,
                   overflow: 'hidden',
                   boxShadow: avatarHovered
-                    ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
-                    : `0 4px 16px rgba(0, 0, 0, 0.15)`,
+                    ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${tokens.colors.accent.primary}20`
+                    : `0 4px 16px var(--color-overlay-light)`,
                   transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
                   transform: avatarHovered ? 'scale(1.08)' : 'scale(1)',
                   cursor: 'pointer',
@@ -514,7 +514,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                     weight="black"
                     style={{
                       color: tokens.colors.white,
-                      textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
+                      textShadow: '0 2px 8px var(--color-backdrop-light)',
                       fontSize: '32px',
                       lineHeight: '1',
                     }}
@@ -598,7 +598,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                       fontWeight: 700,
                       color: 'var(--color-on-accent)',
                       letterSpacing: '0.02em',
-                      boxShadow: '0 2px 8px rgba(139, 111, 168, 0.4)',
+                      boxShadow: '0 2px 8px var(--color-accent-primary-40)',
                     }}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -623,7 +623,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                       fontWeight: 700,
                       color: tokens.colors.black,
                       letterSpacing: '0.02em',
-                      boxShadow: '0 2px 8px rgba(255, 215, 0, 0.4)',
+                      boxShadow: '0 2px 8px var(--color-gold-glow)',
                     }}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
