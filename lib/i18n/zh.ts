@@ -2993,6 +2993,95 @@ scrollToTop: '返回顶部',
     connecting: '正在连接...',
     waitingForData: '等待交易数据...',
 
+    // PWA 安装提示
+    pwaInstallBanner: '安装应用提示',
+    pwaInstallTitle: '安装竞技场',
+    pwaInstallDesc: '添加到主屏幕，获得更快的访问体验',
+    pwaInstallButton: '安装',
+
+    // 管理后台 - KOL审核
+    kolReviewTitle: 'KOL入驻审核',
+    kolTier1: 'Tier 1 - 头部KOL',
+    kolTier2: 'Tier 2 - 中腰部',
+    kolTier3: 'Tier 3 - 社区原生',
+    kolStatusPending: '待审核',
+    kolStatusApproved: '已通过',
+    kolStatusRejected: '已拒绝',
+    kolNoApplications: '暂无{status}的申请',
+    kolPlatform: '平台',
+    kolAccount: '账号',
+    kolFollowerCount: '粉丝数',
+    kolApplyTime: '申请时间',
+    kolViewProof: '查看实盘证明',
+    kolReviewNote: '审核备注（可选）',
+    kolApprove: '通过',
+    kolReject: '拒绝',
+
+    // 管理后台 - 数据健康
+    dataHealthTitle: '数据健康仪表盘',
+    dataHealthy: '正常',
+    dataWarning: '警告',
+    dataCritical: '异常',
+    dataNoData: '无数据',
+    dataHealthPlatform: '平台',
+    dataHealthCount: '数据量',
+    dataHealthLastUpdate: '最后更新',
+    dataHealthAge: '数据年龄',
+    dataHealthStatus: '状态',
+    dataHealthMinutes: '{n}分钟',
+    dataHealthHours: '{n}小时',
+    dataHealthDays: '{n}天',
+
+    // 管理后台 - 举报处理
+    adminReportSpam: '垃圾广告',
+    adminReportScam: '诈骗',
+    adminReportHarassment2: '骚扰',
+    adminReportMisinformation2: '虚假信息',
+    adminReportNsfw: '不当内容',
+    adminReportOther2: '其他',
+
+    // 交易员授权页面
+    authorizeTitle: '授权展示实盘数据',
+    authorizeDesc: '授权后，您的实盘交易数据将实时展示在排行榜中，获得更高的可信度和关注度。',
+    authorizeBenefits: '授权后可享受：',
+    authorizeRealTimePositions: '实时持仓展示',
+    authorizeSuccess: '授权成功！正在跳转到设置页面...',
+    authorizeSecurityNote: '您的API凭证将使用AES-256加密存储，仅用于读取交易数据，我们无法进行任何交易操作。建议创建只读权限的API Key。',
+    authorizeSubmitSuccess: '授权成功！',
+    authorizeSubmitButton: '授权展示数据',
+    authorizeStep1: '登录交易所账户，进入API管理页面',
+    authorizeStep2: '权限设置：只勾选"读取"权限，不要开启交易和提现权限',
+    authorizeStep3: '可选：设置IP白名单以提高安全性',
+    authorizeStep4: '复制API Key和Secret，粘贴到本页面',
+    authorizeLoginRequired: '请先登录',
+    authorizeLoginRequiredDesc: '您需要先登录才能授权交易账户',
+    authorizeSyncRealtime: '实时同步',
+    authorizeSync5min: '5分钟',
+    authorizeSync15min: '15分钟',
+    authorizeSync1hour: '1小时',
+
+    // 路由错误
+    routeErrorTitle: '页面加载失败',
+    routeErrorDesc: '抱歉，该页面暂时无法访问',
+    routeErrorRetry: '重新加载',
+    routeErrorBack: '返回上一页',
+
+    // 加载动画
+    loadingSpinnerDefault: '加载中',
+
+    // 搜索下拉
+    searchDeleteHistory: '删除搜索记录',
+
+    // 欢迎引导
+    welcomeGuideTitle: '欢迎来到 Arena',
+
+    // 错误边界
+    errorBoundaryTitle: '组件加载出错',
+    errorBoundaryDesc: '请尝试刷新页面',
+
+    // WebVitals
+    webVitalsError: '性能监控初始化失败',
+
 } as const
 
 export default zh

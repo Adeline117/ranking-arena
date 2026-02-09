@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { useAdminAuth } from '../hooks/useAdminAuth'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface ContentReport {
   id: number
@@ -17,23 +19,24 @@ interface ContentReport {
   created_at: string
 }
 
-const REASON_LABELS: Record<string, string> = {
-  spam: '垃圾广告',
-  scam: '诈骗',
-  harassment: '骚扰',
-  misinformation: '虚假信息',
-  nsfw: '不当内容',
-  other: '其他',
+const REASON_KEYS: Record<string, string> = {
+  spam: 'adminReportSpam',
+  scam: 'adminReportScam',
+  harassment: 'adminReportHarassment2',
+  misinformation: 'adminReportMisinformation2',
+  nsfw: 'adminReportNsfw',
+  other: 'adminReportOther2',
 }
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  pending: { label: '待处理', color: '#f59e0b' },
-  reviewed: { label: '已审核', color: '#3b82f6' },
-  actioned: { label: '已处理', color: '#10b981' },
-  dismissed: { label: '已驳回', color: '#6b7280' },
+const STATUS_MAP: Record<string, { key: string; color: string }> = {
+  pending: { key: 'adminPending', color: '#f59e0b' },
+  reviewed: { key: 'adminResolved', color: '#3b82f6' },
+  actioned: { key: 'adminResolved', color: '#10b981' },
+  dismissed: { key: 'adminDismissed', color: '#6b7280' },
 }
 
 export default function AdminReportsPage() {
+  const { t } = useLanguage()
   const { accessToken, isAdmin, authChecking } = useAdminAuth()
   const [reports, setReports] = useState<ContentReport[]>([])
   const [filter, setFilter] = useState('pending')
@@ -61,7 +64,7 @@ export default function AdminReportsPage() {
         setReports(data.data || [])
       }
     } catch {
-      console.error('Failed to fetch reports')
+      logger.error('Failed to fetch reports')
     } finally {
       setLoading(false)
     }
@@ -78,7 +81,7 @@ export default function AdminReportsPage() {
       <TopNav />
       <div style={{ maxWidth: 900, margin: '80px auto', padding: '0 16px' }}>
         <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], color: 'var(--color-text-primary)', marginBottom: 24 }}>
-          举报管理
+          {t('adminReportHandling')}
         </h1>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
@@ -96,15 +99,15 @@ export default function AdminReportsPage() {
                 fontSize: tokens.typography.fontSize.sm,
               }}
             >
-              {STATUS_LABELS[s].label}
+              {t(STATUS_MAP[s].key)}
             </button>
           ))}
         </div>
 
         {loading ? (
-          <p style={{ color: 'var(--color-text-tertiary)' }}>加载中...</p>
+          <p style={{ color: 'var(--color-text-tertiary)' }}>{t('loading')}</p>
         ) : reports.length === 0 ? (
-          <p style={{ color: 'var(--color-text-tertiary)' }}>暂无{STATUS_LABELS[filter].label}的举报</p>
+          <p style={{ color: 'var(--color-text-tertiary)' }}>{t('adminNoReports')}</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {reports.map(report => (
@@ -135,14 +138,14 @@ export default function AdminReportsPage() {
                       background: '#ef44441a',
                       color: '#ef4444',
                     }}>
-                      {REASON_LABELS[report.reason] || report.reason}
+                      {REASON_KEYS[report.reason] ? t(REASON_KEYS[report.reason]) : report.reason}
                     </span>
                   </div>
                   <span style={{
                     fontSize: tokens.typography.fontSize.xs,
-                    color: STATUS_LABELS[report.status]?.color,
+                    color: STATUS_MAP[report.status]?.color,
                   }}>
-                    {STATUS_LABELS[report.status]?.label}
+                    {STATUS_MAP[report.status] ? t(STATUS_MAP[report.status].key) : report.status}
                   </span>
                 </div>
 
@@ -153,7 +156,7 @@ export default function AdminReportsPage() {
                 )}
 
                 <div style={{ fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)' }}>
-                  内容ID: {report.content_id} | {new Date(report.created_at).toLocaleString('zh-CN')}
+                  ID: {report.content_id} | {new Date(report.created_at).toLocaleString()}
                 </div>
               </div>
             ))}

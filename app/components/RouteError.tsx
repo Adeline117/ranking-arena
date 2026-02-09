@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { parseError } from '@/lib/utils/error-messages'
+import { logger } from '@/lib/logger'
 
 const FEEDBACK_URL = 'https://github.com/AdelineWen/ranking-arena/issues/new'
 
@@ -32,7 +33,7 @@ export default function RouteError({
   const parsed = parseError(error)
 
   useEffect(() => {
-    console.error(`[${contextLabel || 'RouteError'}]`, error)
+    logger.error(`[${contextLabel || 'RouteError'}]`, error)
   }, [error, contextLabel])
 
   const handleRetry = () => {
@@ -122,7 +123,7 @@ export default function RouteError({
               padding: 0,
             }}
           >
-            {showDetails ? '收起详情' : '展开错误详情（仅开发环境可见）'}
+            {showDetails ? t('collapse') : t('errorDetails')}
           </button>
           {showDetails && (
             <pre style={{
@@ -139,7 +140,7 @@ export default function RouteError({
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-all',
             }}>
-              {`类型: ${parsed.type}\n可重试: ${parsed.retryable ? '是' : '否'}\n状态码: ${parsed.statusCode ?? '无'}\n\n${error.stack || error.message}`}
+              {`Type: ${parsed.type}\nRetryable: ${parsed.retryable}\nStatus: ${parsed.statusCode ?? 'N/A'}\n\n${error.stack || error.message}`}
             </pre>
           )}
         </div>
@@ -170,7 +171,7 @@ export default function RouteError({
             <polyline points="23 4 23 10 17 10" />
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
           </svg>
-          {isRetrying ? '重试中...' : (t('retry') || '重试')}
+          {isRetrying ? t('globalErrorRetrying') : t('retry')}
         </button>
         <Link
           href="/"
@@ -200,7 +201,7 @@ export default function RouteError({
             fontSize: 14,
           }}
         >
-          反馈问题
+          {t('helpFeedbackQ')}
         </a>
       </div>
     </div>

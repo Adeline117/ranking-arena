@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { useAdminAuth } from '../hooks/useAdminAuth'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface KolApplication {
   id: string
@@ -19,19 +21,20 @@ interface KolApplication {
   created_at: string
 }
 
-const TIER_LABELS: Record<string, string> = {
-  tier1: 'Tier 1 - 头部KOL',
-  tier2: 'Tier 2 - 中腰部',
-  tier3: 'Tier 3 - 社区原生',
+const TIER_KEYS: Record<string, string> = {
+  tier1: 'kolTier1',
+  tier2: 'kolTier2',
+  tier3: 'kolTier3',
 }
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  pending: { label: '待审核', color: '#f59e0b' },
-  approved: { label: '已通过', color: '#10b981' },
-  rejected: { label: '已拒绝', color: '#ef4444' },
+const STATUS_KEYS: Record<string, { key: string; color: string }> = {
+  pending: { key: 'kolStatusPending', color: '#f59e0b' },
+  approved: { key: 'kolStatusApproved', color: '#10b981' },
+  rejected: { key: 'kolStatusRejected', color: '#ef4444' },
 }
 
 export default function AdminKolPage() {
+  const { t } = useLanguage()
   const { accessToken, isAdmin, authChecking } = useAdminAuth()
   const [applications, setApplications] = useState<KolApplication[]>([])
   const [filter, setFilter] = useState('pending')
@@ -48,7 +51,7 @@ export default function AdminKolPage() {
       const data = await res.json()
       setApplications(data.data || [])
     } catch {
-      console.error('Failed to fetch applications')
+      logger.error('Failed to fetch applications')
     } finally {
       setLoading(false)
     }
@@ -76,7 +79,7 @@ export default function AdminKolPage() {
         fetchApplications()
       }
     } catch {
-      console.error('Review failed')
+      logger.error('Review failed')
     }
   }
 
@@ -88,7 +91,7 @@ export default function AdminKolPage() {
       <TopNav />
       <div style={{ maxWidth: 900, margin: '80px auto', padding: '0 16px' }}>
         <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], color: 'var(--color-text-primary)', marginBottom: 24 }}>
-          KOL入驻审核
+          {t('kolReviewTitle')}
         </h1>
 
         {/* Filter tabs */}
@@ -107,15 +110,15 @@ export default function AdminKolPage() {
                 fontSize: tokens.typography.fontSize.sm,
               }}
             >
-              {STATUS_LABELS[s].label}
+              {t(STATUS_KEYS[s].key)}
             </button>
           ))}
         </div>
 
         {loading ? (
-          <p style={{ color: 'var(--color-text-tertiary)' }}>加载中...</p>
+          <p style={{ color: 'var(--color-text-tertiary)' }}>{t('loading')}</p>
         ) : applications.length === 0 ? (
-          <p style={{ color: 'var(--color-text-tertiary)' }}>暂无{STATUS_LABELS[filter].label}的申请</p>
+          <p style={{ color: 'var(--color-text-tertiary)' }}>{t('kolNoApplications').replace('{status}', t(STATUS_KEYS[filter].key))}</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {applications.map(app => (
@@ -130,24 +133,24 @@ export default function AdminKolPage() {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <span style={{ fontWeight: 600, color: 'var(--color-text-primary)', fontSize: tokens.typography.fontSize.sm }}>
-                    {TIER_LABELS[app.tier] || app.tier}
+                    {t(TIER_KEYS[app.tier] || '') || app.tier}
                   </span>
                   <span style={{
                     padding: '2px 8px',
                     borderRadius: 4,
                     fontSize: tokens.typography.fontSize.xs,
-                    color: STATUS_LABELS[app.status]?.color || 'var(--color-text-tertiary)',
+                    color: STATUS_KEYS[app.status]?.color || 'var(--color-text-tertiary)',
                     background: 'var(--color-bg-tertiary)',
                   }}>
-                    {STATUS_LABELS[app.status]?.label || app.status}
+                    {STATUS_KEYS[app.status] ? t(STATUS_KEYS[app.status].key) : app.status}
                   </span>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
-                  {app.platform && <div>平台: {app.platform}</div>}
-                  {app.platform_handle && <div>账号: {app.platform_handle}</div>}
-                  {app.follower_count && <div>粉丝数: {app.follower_count.toLocaleString()}</div>}
-                  <div>申请时间: {new Date(app.created_at).toLocaleDateString('zh-CN')}</div>
+                  {app.platform && <div>{t('kolPlatform')}: {app.platform}</div>}
+                  {app.platform_handle && <div>{t('kolAccount')}: {app.platform_handle}</div>}
+                  {app.follower_count && <div>{t('kolFollowerCount')}: {app.follower_count.toLocaleString()}</div>}
+                  <div>{t('kolApplyTime')}: {new Date(app.created_at).toLocaleDateString()}</div>
                 </div>
 
                 {app.description && (
@@ -163,14 +166,14 @@ export default function AdminKolPage() {
                     rel="noopener noreferrer"
                     style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-accent-primary)', textDecoration: 'underline', display: 'block', marginBottom: 12 }}
                   >
-                    查看实盘证明
+                    {t('kolViewProof')}
                   </a>
                 )}
 
                 {filter === 'pending' && (
                   <div style={{ marginTop: 12 }}>
                     <textarea
-                      placeholder="审核备注（可选）"
+                      placeholder={t('kolReviewNote')}
                       value={reviewNotes[app.id] || ''}
                       onChange={e => setReviewNotes({ ...reviewNotes, [app.id]: e.target.value })}
                       rows={2}
@@ -200,7 +203,7 @@ export default function AdminKolPage() {
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        通过
+                        {t('kolApprove')}
                       </button>
                       <button
                         onClick={() => handleReview(app.id, 'rejected')}
@@ -214,7 +217,7 @@ export default function AdminKolPage() {
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        拒绝
+                        {t('kolReject')}
                       </button>
                     </div>
                   </div>

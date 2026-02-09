@@ -47,7 +47,7 @@ const WELCOME_STEPS: WelcomeStep[] = [
 ]
 
 export function WelcomeGuide(): ReactElement | null {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const [isVisible, setIsVisible] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
 
@@ -209,7 +209,7 @@ export function WelcomeGuide(): ReactElement | null {
               cursor: 'pointer',
             }}
           >
-            {isZh ? '跳过' : 'Skip'}
+            {t('skip')}
           </button>
 
           <button
@@ -226,9 +226,7 @@ export function WelcomeGuide(): ReactElement | null {
               cursor: 'pointer',
             }}
           >
-            {isLastStep
-              ? (isZh ? '开始使用' : 'Get Started')
-              : (isZh ? '下一步' : 'Next')}
+            {isLastStep ? t('getStarted') : t('continueButton')}
           </button>
         </Box>
       </Box>
