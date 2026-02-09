@@ -18,6 +18,47 @@ type HotPost = {
   created_at: string
 }
 
+function HotTag({ score, isZh }: { score: number; isZh: boolean }) {
+  const level = score >= 100 ? 'hot' : score >= 50 ? 'warm' : 'normal'
+  const config = {
+    hot: {
+      label: isZh ? '热门' : 'Hot',
+      bg: 'rgba(239, 68, 68, 0.12)',
+      color: 'var(--color-accent-error)',
+      border: 'rgba(239, 68, 68, 0.2)',
+    },
+    warm: {
+      label: isZh ? '升温' : 'Rising',
+      bg: 'rgba(245, 158, 11, 0.12)',
+      color: 'var(--color-accent-warning)',
+      border: 'rgba(245, 158, 11, 0.2)',
+    },
+    normal: {
+      label: isZh ? '讨论' : 'Active',
+      bg: 'var(--glass-bg-light)',
+      color: 'var(--color-text-tertiary)',
+      border: 'var(--glass-border-light)',
+    },
+  }
+  const c = config[level]
+  return (
+    <span style={{
+      fontSize: tokens.typography.fontSize.xs,
+      fontWeight: tokens.typography.fontWeight.medium,
+      color: c.color,
+      background: c.bg,
+      border: `1px solid ${c.border}`,
+      padding: '1px 6px',
+      borderRadius: tokens.radius.full,
+      lineHeight: 1.6,
+      letterSpacing: '0.01em',
+      flexShrink: 0,
+    }}>
+      {c.label}
+    </span>
+  )
+}
+
 export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language } = useLanguage()
   const isZh = language === 'zh'
@@ -35,7 +76,6 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
 
       if (!alive || !data) return
 
-      // Fetch author handles
       const authorIds = [...new Set(data.map(p => p.author_id).filter(Boolean))]
       let handleMap: Record<string, string> = {}
       if (authorIds.length) {
@@ -58,10 +98,9 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
     return () => { alive = false }
   }, [limit])
 
-  // Extract preview text from content (strip stickers, trim)
   function getPreview(post: HotPost): string {
     const text = (post.title || post.content || '').replace(/\[sticker:\w+\]/g, '').trim()
-    return text.length > 50 ? text.slice(0, 50) + '...' : text
+    return text.length > 40 ? text.slice(0, 40) + '...' : text
   }
 
   function timeAgo(dateStr: string): string {
@@ -77,59 +116,104 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   return (
     <SidebarCard title={isZh ? '热门讨论' : 'Hot Discussions'}>
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 48, borderRadius: 8 }} />
+            <div key={i} className="skeleton" style={{ height: 56, borderRadius: tokens.radius.md }} />
           ))}
         </div>
       ) : posts.length === 0 ? (
-        <p style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-tertiary)', textAlign: 'center', padding: '12px 0' }}>
+        <p style={{
+          fontSize: tokens.typography.fontSize.sm,
+          color: 'var(--color-text-tertiary)',
+          textAlign: 'center',
+          padding: '16px 0',
+        }}>
           {isZh ? '暂无讨论' : 'No discussions yet'}
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {posts.map((post, idx) => (
             <Link
               key={post.id}
               href={`/post/${post.id}`}
               style={{
-                display: 'block',
-                padding: '10px 8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                padding: '10px 10px',
                 borderRadius: tokens.radius.md,
                 textDecoration: 'none',
                 color: 'inherit',
-                transition: `background ${tokens.transition.fast}`,
-                borderBottom: idx < posts.length - 1 ? `1px solid var(--color-border-primary)` : 'none',
+                transition: `all ${tokens.transition.fast}`,
+                position: 'relative',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-hover)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+              onMouseEnter={e => {
+                const el = e.currentTarget
+                el.style.background = 'var(--glass-bg-light)'
+                el.style.transform = 'translateX(2px)'
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget
+                el.style.background = 'transparent'
+                el.style.transform = 'translateX(0)'
+              }}
             >
-              <p style={{
-                fontSize: tokens.typography.fontSize.sm,
-                fontWeight: 500,
-                color: 'var(--color-text-primary)',
-                lineHeight: 1.5,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                margin: 0,
-              }}>
-                {getPreview(post)}
-              </p>
+              {/* 标题行：排名 + 标题 + 热度标签 */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 12,
-                fontSize: 11,
+                gap: 8,
+              }}>
+                <span style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  color: idx < 3 ? 'var(--color-accent-primary)' : 'var(--color-text-tertiary)',
+                  minWidth: 16,
+                  textAlign: 'center',
+                  flexShrink: 0,
+                  fontFeatureSettings: '"tnum"',
+                }}>
+                  {idx + 1}
+                </span>
+                <span style={{
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.medium,
+                  color: 'var(--color-text-primary)',
+                  lineHeight: 1.4,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  flex: 1,
+                  minWidth: 0,
+                }}>
+                  {getPreview(post)}
+                </span>
+                <HotTag score={post.hot_score} isZh={isZh} />
+              </div>
+
+              {/* 底部信息：作者 + 评论数 + 时间 */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: tokens.typography.fontSize.xs,
                 color: 'var(--color-text-tertiary)',
-                marginTop: 4,
+                paddingLeft: 24,
               }}>
                 {post.author_handle && (
-                  <span style={{ fontWeight: 500 }}>{post.author_handle}</span>
+                  <span style={{
+                    fontWeight: tokens.typography.fontWeight.medium,
+                    color: 'var(--color-text-secondary)',
+                  }}>
+                    {post.author_handle}
+                  </span>
                 )}
-                <span>{post.like_count}{isZh ? '赞' : ' likes'}</span>
-                <span>{post.comment_count}{isZh ? '评论' : ' comments'}</span>
-                <span style={{ marginLeft: 'auto' }}>{timeAgo(post.created_at)}</span>
+                <span>
+                  {post.comment_count} {isZh ? '评论' : 'comments'}
+                </span>
+                <span style={{ marginLeft: 'auto', opacity: 0.7 }}>
+                  {timeAgo(post.created_at)}
+                </span>
               </div>
             </Link>
           ))}
