@@ -136,25 +136,53 @@ export default function BookshelfTab() {
           ))}
         </div>
       ) : books.length === 0 ? (
-        /* Empty state */
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: tokens.colors.text.secondary }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.5 }}>
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          </svg>
-          <p style={{ fontSize: 16, marginBottom: 8 }}>
-            {t('sidebarNoBooksYet')}
-          </p>
-          <p style={{ fontSize: 13, marginBottom: 16 }}>
-            {isZh ? '去书城发现感兴趣的书籍吧' : 'Discover books in the library'}
-          </p>
-          <Link href="/library" style={{
-            display: 'inline-block', padding: '10px 28px', borderRadius: tokens.radius.md,
-            background: tokens.colors.accent.brand, color: tokens.colors.white,
-            textDecoration: 'none', fontWeight: 600, fontSize: 14,
+        /* Empty state - attractive library entrance */
+        <Link href="/library" style={{ textDecoration: 'none', display: 'block' }}>
+          <div style={{
+            padding: '40px 24px',
+            borderRadius: tokens.radius.xl,
+            background: `linear-gradient(135deg, var(--color-accent-brand) 0%, var(--color-brand-deep, #6b4f88) 100%)`,
+            color: 'white',
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: `all ${tokens.transition.base}`,
+            boxShadow: '0 8px 32px rgba(139, 111, 168, 0.3)',
+            position: 'relative',
+            overflow: 'hidden',
           }}>
-            {isZh ? '去书城' : 'Browse Library'}
-          </Link>
-        </div>
+            {/* Background decoration */}
+            <div style={{
+              position: 'absolute', top: -20, right: -20, width: 120, height: 120,
+              borderRadius: '50%', background: 'rgba(255,255,255,0.08)',
+            }} />
+            <div style={{
+              position: 'absolute', bottom: -30, left: -10, width: 80, height: 80,
+              borderRadius: '50%', background: 'rgba(255,255,255,0.05)',
+            }} />
+
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.9 }}>
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+            </svg>
+            <p style={{ fontSize: 20, fontWeight: 800, marginBottom: 6, letterSpacing: '0.5px' }}>
+              {isZh ? '探索书城' : 'Explore Library'}
+            </p>
+            <p style={{ fontSize: 14, opacity: 0.85, marginBottom: 20 }}>
+              {isZh ? '60,000+ 本书籍、论文、白皮书等你发现' : '60,000+ books, papers & whitepapers await'}
+            </p>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '12px 32px', borderRadius: tokens.radius.lg,
+              background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)',
+              fontWeight: 700, fontSize: 15, letterSpacing: '0.3px',
+            }}>
+              {isZh ? '立即探索' : 'Browse Now'}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+        </Link>
       ) : (
         /* Book grid */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>

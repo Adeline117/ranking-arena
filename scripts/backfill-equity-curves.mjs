@@ -21,21 +21,40 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 // ─── Get traders needing equity curves ────────────────────────────────
 async function getTradersWithoutCurves(source) {
-  // Get all traders for this source from snapshots
-  const { data: allTraders, error: e1 } = await supabase
-    .from('trader_snapshots')
-    .select('source_trader_id')
-    .eq('source', source)
-  if (e1) throw e1
+  // Get all traders for this source from snapshots (paginated to get all)
+  let allTraders = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('trader_snapshots')
+      .select('source_trader_id')
+      .eq('source', source)
+      .range(from, from + pageSize - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    allTraders.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
 
   const uniqueTraders = [...new Set(allTraders.map(t => t.source_trader_id))]
 
-  // Get traders that already have curves
-  const { data: existing, error: e2 } = await supabase
-    .from('trader_equity_curve')
-    .select('source_trader_id')
-    .eq('source', source)
-  if (e2) throw e2
+  // Get traders that already have curves (paginated)
+  let existing = []
+  let efrom = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('trader_equity_curve')
+      .select('source_trader_id')
+      .eq('source', source)
+      .range(efrom, efrom + pageSize - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    existing.push(...data)
+    if (data.length < pageSize) break
+    efrom += pageSize
+  }
 
   const existingSet = new Set(existing.map(t => t.source_trader_id))
   const missing = uniqueTraders.filter(t => !existingSet.has(t))
@@ -94,6 +113,7 @@ async function fetchHyperliquidCurve(address) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'portfolio', user: address }),
+      signal: AbortSignal.timeout(15000),
     })
     if (!resp.ok) return null
     const data = await resp.json()
@@ -155,7 +175,7 @@ async function processHyperliquid() {
     if (totalPoints > 0) success++
     else fail++
     
-    await sleep(1500) // rate limit
+    await sleep(500) // rate limit - HL API is generous
   }
 
   console.log(`  ✅ Hyperliquid done: ${success} success, ${fail} fail`)
