@@ -47,7 +47,7 @@ export default function SavedFilters({
     clearActiveFilter,
     exportFilters,
     importFilters,
-    isLoading,
+    isLoading: _isLoading,
   } = useSavedFilters({ userId })
   
   // 点击外部关闭下拉菜单

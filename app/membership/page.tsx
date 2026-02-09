@@ -44,7 +44,7 @@ export default function MembershipPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { isLoggedIn, loading: authLoading, getAuthHeadersAsync } = useAuthSession()
-  const { subscription, isPremium: isPro } = usePremium()
+  const { subscription: _subscription, isPremium: isPro } = usePremium()
 
   const [info, setInfo] = useState<MembershipInfo | null>(null)
   const [loading, setLoading] = useState(true)

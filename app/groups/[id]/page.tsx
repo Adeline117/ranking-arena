@@ -309,7 +309,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
         setGroup(groupData ? { ...groupData, owner_handle: ownerHandle } as Group : null)
 
-        let membershipConfirmed = false
+        let _membershipConfirmed = false
         if (userId) {
           const { data: membership } = await supabase
             .from('group_members')
@@ -319,7 +319,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             .maybeSingle()
           setIsMember(!!membership)
           setUserRole(membership?.role as 'owner' | 'admin' | 'member' | null)
-          membershipConfirmed = !!membership
+          _membershipConfirmed = !!membership
         }
 
         // Load posts for all visitors (non-members can browse read-only)
