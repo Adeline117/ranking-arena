@@ -187,7 +187,7 @@ export default function MyPostsPage() {
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
-      <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
+      <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[6] }}>
           <Text size="2xl" weight="black">
             {t('myPosts')}

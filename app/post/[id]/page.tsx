@@ -12,6 +12,7 @@ import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { generatePostArticleSchema, generateBreadcrumbSchema, combineSchemas } from '@/lib/seo'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import ShareButton from '@/app/components/common/ShareButton'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 
 interface PostData {
   id: string
@@ -130,6 +131,7 @@ export default function PostDetailPage(props: { params: Promise<{ id: string }> 
         {/* 帖子内容 - 使用 PostFeed 并设置 initialPostId 自动打开帖子详情 */}
         <PostFeed initialPostId={postId} variant="full" />
       </div>
+      <MobileBottomNav />
     </div>
   )
 }
