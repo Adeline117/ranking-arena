@@ -14,8 +14,7 @@ import { useToast } from '../ui/Toast'
 import type { Comment } from './hooks/usePostComments'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { renderWithStickers, hasStickers } from '../ui/StickerRenderer'
-import { DynamicStickerPicker } from '../ui/Dynamic'
-import { STICKERS, type Sticker } from '@/lib/stickers'
+import { STICKERS } from '@/lib/stickers'
 
 const REPLIES_PREVIEW_COUNT = 2
 
@@ -221,7 +220,6 @@ export default function CommentsModal({
 }: CommentsModalProps) {
   const { language, t } = useLanguage()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [showStickerPicker, setShowStickerPicker] = useState(false)
   const { showToast } = useToast()
 
   // Close emoji picker on outside click
@@ -231,13 +229,6 @@ export default function CommentsModal({
     const timer = setTimeout(() => document.addEventListener('click', handler), 0)
     return () => { clearTimeout(timer); document.removeEventListener('click', handler) }
   }, [showEmojiPicker])
-
-  const handleStickerSelect = (sticker: Sticker) => {
-    const stickerText = `[sticker:${sticker.id}]`
-    setNewComment(newComment + stickerText)
-    setShowStickerPicker(false)
-    commentInputRef.current?.focus()
-  }
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
   const commentsEndRef = useRef<HTMLDivElement>(null)
   const prevCommentCount = useRef(comments.length)
@@ -510,40 +501,7 @@ export default function CommentsModal({
               <div style={{ position: 'relative' }}>
                 <button
                   type="button"
-                  onClick={() => { setShowStickerPicker(prev => !prev); setShowEmojiPicker(false) }}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 4,
-                    borderRadius: tokens.radius.sm,
-                    color: showStickerPicker ? ARENA_PURPLE : tokens.colors.text.tertiary,
-                    fontSize: 16,
-                    lineHeight: 1.2,
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
-                  title={language === 'zh' ? '贴纸' : 'Stickers'}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
-                    <path d="M14 3v4a2 2 0 0 0 2 2h4" />
-                    <circle cx="10" cy="13" r="2" />
-                    <path d="m20 17-1.09-1.09a2 2 0 0 0-2.82 0L10 22" />
-                  </svg>
-                </button>
-                <DynamicStickerPicker
-                  isOpen={showStickerPicker}
-                  onClose={() => setShowStickerPicker(false)}
-                  onSelect={handleStickerSelect}
-                />
-              </div>
-
-              {/* Emoji/Sticker picker - uses custom orca stickers */}
-              <div style={{ position: 'relative' }}>
-                <button
-                  type="button"
-                  onClick={() => { setShowEmojiPicker(prev => !prev); setShowStickerPicker(false) }}
+                  onClick={() => { setShowEmojiPicker(prev => !prev) }}
                   style={{
                     background: 'transparent',
                     border: 'none',

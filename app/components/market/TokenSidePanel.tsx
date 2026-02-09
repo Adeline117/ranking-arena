@@ -201,6 +201,15 @@ export default function TokenSidePanel({ token, onClose }: {
               zIndex: 200,
             }}
           />
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 201,
+            pointerEvents: 'none',
+          }}>
           <motion.div
             ref={panelRef}
             initial={{ opacity: 0, scale: 0.95 }}
@@ -208,18 +217,14 @@ export default function TokenSidePanel({ token, onClose }: {
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2 }}
             style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
               width: 'min(95vw, 900px)',
               maxHeight: '90vh',
               background: tokens.colors.bg.primary,
               border: `1px solid ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.xl,
-              zIndex: 201,
               overflowY: 'auto',
               padding: 'clamp(16px, 4vw, 28px)',
+              pointerEvents: 'auto',
             }}
           >
             {/* Header */}
@@ -501,6 +506,7 @@ export default function TokenSidePanel({ token, onClose }: {
               </div>
             </div>
           </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>

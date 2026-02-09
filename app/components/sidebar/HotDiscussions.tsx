@@ -94,9 +94,20 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
     return () => { alive = false }
   }, [limit])
 
-  function getPreview(post: HotPost): string {
+  function getTitle(post: HotPost): string {
     const text = (post.title || post.content || '').replace(/\[sticker:\w+\]/g, '').trim()
     return text.length > 60 ? text.slice(0, 60) + '...' : text
+  }
+
+  function getContentPreview(post: HotPost): string {
+    // Show content preview below title; if title exists, show content; otherwise show more of content
+    const raw = (post.content || '').replace(/\[sticker:\w+\]/g, '').trim()
+    if (post.title) {
+      return raw.length > 100 ? raw.slice(0, 100) + '...' : raw
+    }
+    // No title: content already shown as title, show more
+    const remaining = raw.slice(60).trim()
+    return remaining.length > 80 ? remaining.slice(0, 80) + '...' : remaining
   }
 
   function timeAgo(dateStr: string): string {
@@ -127,92 +138,102 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           {t('sidebarNoDiscussions')}
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {posts.map((post, idx) => (
-            <Link
-              key={post.id}
-              href={`/post/${post.id}`}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-                padding: '10px 10px',
-                borderRadius: tokens.radius.md,
-                textDecoration: 'none',
-                color: 'inherit',
-                transition: `all ${tokens.transition.fast}`,
-                position: 'relative',
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget
-                el.style.background = 'var(--glass-bg-light)'
-                el.style.transform = 'translateX(2px)'
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget
-                el.style.background = 'transparent'
-                el.style.transform = 'translateX(0)'
-              }}
-            >
-              {/* 标题行：排名 + 标题 + 热度标签 */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}>
-                <span style={{
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: tokens.typography.fontWeight.semibold,
-                  color: idx < 3 ? 'var(--color-accent-primary)' : 'var(--color-text-tertiary)',
-                  minWidth: 16,
-                  textAlign: 'center',
-                  flexShrink: 0,
-                  fontFeatureSettings: '"tnum"',
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {posts.map((post) => {
+            const contentPreview = getContentPreview(post)
+            return (
+              <Link
+                key={post.id}
+                href={`/post/${post.id}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  padding: '12px 14px',
+                  borderRadius: tokens.radius.lg,
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  transition: `all ${tokens.transition.fast}`,
+                  position: 'relative',
+                  background: 'var(--glass-bg-light)',
+                  border: '1px solid var(--glass-border-light)',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget
+                  el.style.background = 'var(--glass-bg-medium)'
+                  el.style.borderColor = 'var(--glass-border-medium)'
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget
+                  el.style.background = 'var(--glass-bg-light)'
+                  el.style.borderColor = 'var(--glass-border-light)'
+                }}
+              >
+                {/* Title + hot tag */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
                 }}>
-                  {idx + 1}
-                </span>
-                <span style={{
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: tokens.typography.fontWeight.medium,
-                  color: 'var(--color-text-primary)',
-                  lineHeight: 1.4,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  flex: 1,
-                  minWidth: 0,
-                }}>
-                  {getPreview(post)}
-                </span>
-                <HotTag score={post.hot_score} isZh={isZh} />
-              </div>
-
-              {/* 底部信息：作者 + 评论数 + 时间 */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                fontSize: tokens.typography.fontSize.xs,
-                color: 'var(--color-text-tertiary)',
-                paddingLeft: 24,
-              }}>
-                {post.author_handle && (
                   <span style={{
-                    fontWeight: tokens.typography.fontWeight.medium,
-                    color: 'var(--color-text-secondary)',
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: tokens.typography.fontWeight.semibold,
+                    color: 'var(--color-text-primary)',
+                    lineHeight: 1.4,
+                    flex: 1,
+                    minWidth: 0,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
                   }}>
-                    {post.author_handle}
+                    {getTitle(post)}
                   </span>
+                  <HotTag score={post.hot_score} isZh={isZh} />
+                </div>
+
+                {/* Content preview */}
+                {contentPreview && (
+                  <p style={{
+                    fontSize: tokens.typography.fontSize.xs,
+                    color: 'var(--color-text-secondary)',
+                    lineHeight: 1.5,
+                    margin: 0,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}>
+                    {contentPreview}
+                  </p>
                 )}
-                <span>
-                  {post.comment_count} {t('comments')}
-                </span>
-                <span style={{ marginLeft: 'auto', opacity: 0.7 }}>
-                  {timeAgo(post.created_at)}
-                </span>
-              </div>
-            </Link>
-          ))}
+
+                {/* Meta: author + comments + time */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: 'var(--color-text-tertiary)',
+                }}>
+                  {post.author_handle && (
+                    <span style={{
+                      fontWeight: tokens.typography.fontWeight.medium,
+                      color: 'var(--color-text-secondary)',
+                    }}>
+                      {post.author_handle}
+                    </span>
+                  )}
+                  <span>
+                    {post.comment_count} {t('comments')}
+                  </span>
+                  <span style={{ marginLeft: 'auto', opacity: 0.7 }}>
+                    {timeAgo(post.created_at)}
+                  </span>
+                </div>
+              </Link>
+            )
+          })}
         </div>
       )}
     </SidebarCard>
