@@ -50,6 +50,8 @@ interface MiddlewareOptions {
   name?: string
   /** 是否启用版本控制（默认 true） */
   versioning?: boolean
+  /** 跳过 CSRF 验证（当有 auth 验证时可安全跳过） */
+  skipCsrf?: boolean
 }
 
 // 导出版本类型供外部使用
@@ -105,6 +107,7 @@ export function withApiMiddleware<T>(
     rateLimit = needsAuth ? 'authenticated' : 'public',
     name = 'api',
     versioning = true,
+    skipCsrf = false,
   } = options
 
   return async (request: NextRequest): Promise<NextResponse> => {
@@ -147,9 +150,9 @@ export function withApiMiddleware<T>(
         user = await getAuthUser(request)
       }
 
-      // 3. CSRF 验证（仅针对写操作）
+      // 3. CSRF 验证（仅针对写操作，可通过 skipCsrf 跳过）
       const method = request.method.toUpperCase()
-      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+      if (!skipCsrf && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
         const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
         const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
 

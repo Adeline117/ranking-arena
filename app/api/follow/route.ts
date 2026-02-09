@@ -130,6 +130,7 @@ export const POST = withApiMiddleware(
   },
   {
     name: 'follow-action',
+    skipCsrf: true,
     requireAuth: true,
     rateLimit: 'write', // 50次/分钟
   }

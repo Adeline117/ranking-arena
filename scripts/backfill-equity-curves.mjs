@@ -161,213 +161,24 @@ async function processHyperliquid() {
   console.log(`  ✅ Hyperliquid done: ${success} success, ${fail} fail`)
 }
 
-// ─── Bitget ───────────────────────────────────────────────────────────
-async function fetchBitgetCurve(traderId) {
-  try {
-    const targetUrl = `https://www.bitget.com/v1/trigger/trace/public/trader/profitList?traderId=${traderId}`
-    const url = CF_PROXY ? `${CF_PROXY}?url=${encodeURIComponent(targetUrl)}` : targetUrl
-    const resp = await fetch(url)
-    if (!resp.ok) return null
-    const json = await resp.json()
-    return json?.data || null
-  } catch (e) {
-    console.log(`    ⚠ Bitget fetch error: ${e.message}`)
-    return null
-  }
-}
-
-async function processBitget() {
-  console.log('\n🟢 Bitget Futures')
-  const traders = await getTradersWithoutCurves('bitget_futures')
+// ─── Generic: Build equity curve from snapshot history ────────────────
+async function processFromSnapshots(source, label) {
+  console.log(`\n🔷 ${label} (from snapshots)`)
+  const traders = await getTradersWithoutCurves(source)
   let success = 0, fail = 0
 
   for (let i = 0; i < traders.length; i++) {
     const tid = traders[i]
-    if (i % 50 === 0) console.log(`  Progress: ${i}/${traders.length} (✅${success} ❌${fail})`)
+    if (i % 100 === 0 && i > 0) console.log(`  Progress: ${i}/${traders.length} (✅${success} ❌${fail})`)
 
-    const data = await fetchBitgetCurve(tid)
-    if (!data?.length) { fail++; await sleep(2000); continue }
-
-    const points = data.filter(p => p.date).map(p => ({
-      date: p.date,
-      roi: p.profitRate != null ? Number(p.profitRate) * 100 : null,
-      pnl: p.profit != null ? Number(p.profit) : null,
-    }))
-
-    if (points.length > 0) {
-      // Bitget profitList is typically 30D
-      await saveEquityCurve('bitget_futures', tid, '30D', points)
-      success++
-    } else {
-      fail++
-    }
-
-    await sleep(2000)
-  }
-
-  console.log(`  ✅ Bitget done: ${success} success, ${fail} fail`)
-}
-
-// ─── Jupiter Perps ────────────────────────────────────────────────────
-async function fetchJupiterTrades(traderId) {
-  // Jupiter trades are already in trader_trades or we need to compute from snapshots
-  // Check if we have trade data
-  try {
-    const { data, error } = await supabase
+    const { data: snaps, error } = await supabase
       .from('trader_snapshots')
       .select('pnl, roi, captured_at')
-      .eq('source', 'jupiter_perps')
-      .eq('source_trader_id', traderId)
-      .order('captured_at', { ascending: true })
-    if (error || !data?.length) return null
-    return data
-  } catch (e) {
-    return null
-  }
-}
-
-async function processJupiterPerps() {
-  console.log('\n🟡 Jupiter Perps')
-  const traders = await getTradersWithoutCurves('jupiter_perps')
-  let success = 0, fail = 0
-
-  for (let i = 0; i < traders.length; i++) {
-    const tid = traders[i]
-    if (i % 50 === 0) console.log(`  Progress: ${i}/${traders.length} (✅${success} ❌${fail})`)
-
-    const snapshots = await fetchJupiterTrades(tid)
-    if (!snapshots?.length) { fail++; continue }
-
-    // Build equity curve from snapshot history
-    const byDate = new Map()
-    for (const s of snapshots) {
-      const date = new Date(s.captured_at).toISOString().split('T')[0]
-      byDate.set(date, {
-        date,
-        pnl: s.pnl != null ? Number(s.pnl) : null,
-        roi: s.roi != null ? Number(s.roi) : null,
-      })
-    }
-    const points = [...byDate.values()]
-
-    if (points.length >= 2) {
-      const period = points.length >= 60 ? '90D' : points.length >= 20 ? '30D' : '7D'
-      await saveEquityCurve('jupiter_perps', tid, period, points)
-      success++
-    } else {
-      fail++
-    }
-  }
-
-  console.log(`  ✅ Jupiter Perps done: ${success} success, ${fail} fail`)
-}
-
-// ─── HTX Futures ──────────────────────────────────────────────────────
-async function fetchHtxCurve(traderId) {
-  try {
-    // HTX copy trading profit chart API
-    const url = `https://www.htx.com/bapi/futures-copy-trading/v1/public/copy-trading/profit-chart?traderId=${traderId}&period=90`
-    const resp = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json',
-      }
-    })
-    if (!resp.ok) return null
-    const json = await resp.json()
-    return json?.data || null
-  } catch (e) {
-    // Try via CF proxy
-    if (CF_PROXY) {
-      try {
-        const targetUrl = `https://www.htx.com/bapi/futures-copy-trading/v1/public/copy-trading/profit-chart?traderId=${traderId}&period=90`
-        const resp = await fetch(`${CF_PROXY}?url=${encodeURIComponent(targetUrl)}`)
-        if (!resp.ok) return null
-        const json = await resp.json()
-        return json?.data || null
-      } catch (e2) {
-        return null
-      }
-    }
-    return null
-  }
-}
-
-async function processHtx() {
-  console.log('\n🔴 HTX Futures')
-  const traders = await getTradersWithoutCurves('htx_futures')
-  let success = 0, fail = 0
-
-  for (let i = 0; i < traders.length; i++) {
-    const tid = traders[i]
-    if (i % 50 === 0) console.log(`  Progress: ${i}/${traders.length} (✅${success} ❌${fail})`)
-
-    const data = await fetchHtxCurve(tid)
-    if (!data?.length && !data?.chartData?.length) {
-      // Fallback: use snapshot history
-      const { data: snaps } = await supabase
-        .from('trader_snapshots')
-        .select('pnl, roi, captured_at')
-        .eq('source', 'htx_futures')
-        .eq('source_trader_id', tid)
-        .order('captured_at', { ascending: true })
-
-      if (snaps?.length >= 2) {
-        const byDate = new Map()
-        for (const s of snaps) {
-          const date = new Date(s.captured_at).toISOString().split('T')[0]
-          byDate.set(date, { date, pnl: s.pnl ? Number(s.pnl) : null, roi: s.roi ? Number(s.roi) : null })
-        }
-        const points = [...byDate.values()]
-        if (points.length >= 2) {
-          await saveEquityCurve('htx_futures', tid, '30D', points)
-          success++
-          continue
-        }
-      }
-      fail++
-      await sleep(2000)
-      continue
-    }
-
-    const chartData = Array.isArray(data) ? data : (data?.chartData || [])
-    const points = chartData.map(p => ({
-      date: p.date || new Date(p.timestamp || p.ts).toISOString().split('T')[0],
-      pnl: p.profit != null ? Number(p.profit) : (p.pnl != null ? Number(p.pnl) : null),
-      roi: p.profitRate != null ? Number(p.profitRate) * 100 : (p.roi != null ? Number(p.roi) : null),
-    })).filter(p => p.date)
-
-    if (points.length > 0) {
-      await saveEquityCurve('htx_futures', tid, '90D', points)
-      success++
-    } else {
-      fail++
-    }
-
-    await sleep(2000)
-  }
-
-  console.log(`  ✅ HTX done: ${success} success, ${fail} fail`)
-}
-
-// ─── Gains (from snapshots) ───────────────────────────────────────────
-async function processGains() {
-  console.log('\n🟣 Gains')
-  const traders = await getTradersWithoutCurves('gains')
-  let success = 0, fail = 0
-
-  for (let i = 0; i < traders.length; i++) {
-    const tid = traders[i]
-    if (i % 50 === 0) console.log(`  Progress: ${i}/${traders.length} (✅${success} ❌${fail})`)
-
-    const { data: snaps } = await supabase
-      .from('trader_snapshots')
-      .select('pnl, roi, captured_at')
-      .eq('source', 'gains')
+      .eq('source', source)
       .eq('source_trader_id', tid)
       .order('captured_at', { ascending: true })
 
-    if (!snaps?.length || snaps.length < 2) { fail++; continue }
+    if (error || !snaps?.length || snaps.length < 2) { fail++; continue }
 
     const byDate = new Map()
     for (const s of snaps) {
@@ -382,15 +193,18 @@ async function processGains() {
 
     if (points.length >= 2) {
       const period = points.length >= 60 ? '90D' : points.length >= 20 ? '30D' : '7D'
-      await saveEquityCurve('gains', tid, period, points)
+      await saveEquityCurve(source, tid, period, points)
       success++
     } else {
       fail++
     }
   }
 
-  console.log(`  ✅ Gains done: ${success} success, ${fail} fail`)
+  console.log(`  ✅ ${label} done: ${success} success, ${fail} fail`)
 }
+
+// Bitget, Jupiter, HTX, Gains all use snapshot-based approach
+// (Their direct APIs are behind Cloudflare or don't expose equity curves)
 
 // ─── Main ─────────────────────────────────────────────────────────────
 async function main() {
@@ -403,13 +217,10 @@ async function main() {
   const sources = SOURCE_FILTER ? [SOURCE_FILTER] : ['hyperliquid', 'bitget_futures', 'jupiter_perps', 'htx_futures', 'gains']
 
   for (const source of sources) {
-    switch (source) {
-      case 'hyperliquid': await processHyperliquid(); break
-      case 'bitget_futures': await processBitget(); break
-      case 'jupiter_perps': await processJupiterPerps(); break
-      case 'htx_futures': await processHtx(); break
-      case 'gains': await processGains(); break
-      default: console.log(`  ⚠ Unknown source: ${source}`)
+    if (source === 'hyperliquid') {
+      await processHyperliquid()
+    } else {
+      await processFromSnapshots(source, source)
     }
   }
 
