@@ -25,7 +25,7 @@ const ExchangeVolume = lazy(() => import('@/app/components/market/ExchangeVolume
 const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
 
 function LoadingCard() {
-  return <div className="skeleton" style={{ height: 120, borderRadius: 12 }} />
+  return <div className="skeleton" style={{ height: 64, borderRadius: 8 }} />
 }
 
 export default function MarketPage() {
@@ -62,8 +62,8 @@ export default function MarketPage() {
           </Suspense>
         }
       >
-        {/* Section 1: Compact Widget Grid — ABOVE price table */}
-        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+        {/* Section 1: Compact Widget Strip — single row above price table */}
+        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
           <Suspense fallback={<LoadingCard />}>
             <FearGreedGauge />
           </Suspense>
@@ -73,9 +73,6 @@ export default function MarketPage() {
           <Suspense fallback={<LoadingCard />}>
             <SectorPerformance />
           </Suspense>
-        </Box>
-
-        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
           <Suspense fallback={<LoadingCard />}>
             <ExchangeVolume />
           </Suspense>

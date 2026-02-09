@@ -36,14 +36,14 @@ export default function FearGreedGauge() {
   if (!data) {
     return (
       <div style={{
-        padding: tokens.spacing[4],
+        padding: '10px 12px',
         background: tokens.glass.bg.secondary,
         backdropFilter: tokens.glass.blur.md,
-        borderRadius: tokens.radius.lg,
+        borderRadius: tokens.radius.md,
         border: tokens.glass.border.light,
-        height: 120,
+        height: 64,
       }}>
-        <div className="skeleton" style={{ height: '100%', borderRadius: 8 }} />
+        <div className="skeleton" style={{ height: '100%', borderRadius: 6 }} />
       </div>
     )
   }
@@ -52,114 +52,27 @@ export default function FearGreedGauge() {
   const color = getColor(value)
   const label = getLabel(value)
 
-  // SVG semi-circle gauge
-  const cx = 80
-  const cy = 72
-  const r = 60
-  // Arc from 180° to 0° (left to right, semi-circle)
-  const startAngle = Math.PI
-  const endAngle = 0
-  const angleRange = startAngle - endAngle
-  const needleAngle = startAngle - (value / 100) * angleRange
-
-  // Arc path helper
-  const arc = (start: number, end: number, radius: number) => {
-    const x1 = cx + radius * Math.cos(start)
-    const y1 = cy - radius * Math.sin(start)
-    const x2 = cx + radius * Math.cos(end)
-    const y2 = cy - radius * Math.sin(end)
-    const largeArc = Math.abs(start - end) > Math.PI ? 1 : 0
-    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`
-  }
-
-  // Color stops for the arc background
-  const segments = [
-    { from: 0, to: 0.25, color: '#ea3943' },
-    { from: 0.25, to: 0.46, color: '#ea8c00' },
-    { from: 0.46, to: 0.54, color: '#f5c623' },
-    { from: 0.54, to: 0.75, color: '#93d900' },
-    { from: 0.75, to: 1, color: '#16c784' },
-  ]
-
-  const needleX = cx + (r - 8) * Math.cos(needleAngle)
-  const needleY = cy - (r - 8) * Math.sin(needleAngle)
-
   return (
     <div style={{
-      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+      padding: '10px 12px',
       background: tokens.glass.bg.secondary,
       backdropFilter: tokens.glass.blur.md,
-      borderRadius: tokens.radius.lg,
+      borderRadius: tokens.radius.md,
       border: tokens.glass.border.light,
     }}>
       <div style={{
-        fontSize: tokens.typography.fontSize.xs,
-        color: tokens.colors.text.secondary,
-        fontWeight: tokens.typography.fontWeight.medium,
-        marginBottom: tokens.spacing[1],
+        fontSize: 10,
+        color: tokens.colors.text.tertiary,
+        fontWeight: 500,
+        marginBottom: 6,
         textTransform: 'uppercase',
         letterSpacing: '0.5px',
       }}>
         {t('fearGreedTitle')}
       </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <svg width="160" height="88" viewBox="0 0 160 88">
-          {/* Background arc segments */}
-          {segments.map((seg, i) => {
-            const a1 = startAngle - seg.from * angleRange
-            const a2 = startAngle - seg.to * angleRange
-            return (
-              <path
-                key={i}
-                d={arc(a1, a2, r)}
-                fill="none"
-                stroke={seg.color}
-                strokeWidth="10"
-                strokeLinecap="round"
-                opacity={0.25}
-              />
-            )
-          })}
-
-          {/* Active arc up to current value */}
-          <path
-            d={arc(startAngle, needleAngle, r)}
-            fill="none"
-            stroke={color}
-            strokeWidth="10"
-            strokeLinecap="round"
-          />
-
-          {/* Needle dot */}
-          <circle cx={needleX} cy={needleY} r="5" fill={color} />
-          <circle cx={needleX} cy={needleY} r="2.5" fill={tokens.colors.bg.primary} />
-
-          {/* Center value */}
-          <text
-            x={cx}
-            y={cy - 8}
-            textAnchor="middle"
-            fill={color}
-            fontSize="28"
-            fontWeight="700"
-            fontFamily="-apple-system, BlinkMacSystemFont, sans-serif"
-          >
-            {value}
-          </text>
-          <text
-            x={cx}
-            y={cy + 10}
-            textAnchor="middle"
-            fill="currentColor"
-            fontSize="11"
-            fontWeight="500"
-            opacity={0.7}
-            fontFamily="-apple-system, BlinkMacSystemFont, sans-serif"
-          >
-            {label}
-          </text>
-        </svg>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color, lineHeight: 1 }}>{label}</span>
       </div>
     </div>
   )
