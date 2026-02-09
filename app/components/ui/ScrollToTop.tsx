@@ -1,9 +1,17 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function ScrollToTop() {
   const [visible, setVisible] = useState(false)
+  const { t } = useLanguage()
+  const pathname = usePathname()
+
+  // Pages where FAB is shown — keep scroll-to-top from overlapping
+  const fabPages = ['/', '/groups']
+  const hasFab = fabPages.some(p => pathname === p || pathname.startsWith('/groups/'))
 
   useEffect(() => {
     const handleScroll = () => {
@@ -20,11 +28,11 @@ export default function ScrollToTop() {
   return (
     <button
       onClick={scrollToTop}
-      aria-label="返回顶部"
+      aria-label={t('scrollToTop')}
       className="scroll-to-top-btn"
       style={{
         position: 'fixed',
-        bottom: 'calc(var(--mobile-nav-height, 60px) + 16px)',
+        bottom: hasFab ? 'calc(var(--mobile-nav-height, 60px) + 80px)' : 'calc(var(--mobile-nav-height, 60px) + 16px)',
         right: 16,
         zIndex: 50,
         width: 36,

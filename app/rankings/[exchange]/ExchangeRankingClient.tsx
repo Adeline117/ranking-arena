@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -32,6 +32,25 @@ function getDisplayName(t: TraderData): string {
     ? `${t.trader_key.slice(0, 4)}...${t.trader_key.slice(-4)}`
     : t.trader_key
   return shortKey
+}
+
+function TraderAvatarImg({ avatarUrl, traderKey, name, size = 32 }: { avatarUrl: string | null; traderKey: string; name: string; size?: number }) {
+  const [error, setError] = useState(false)
+  if (!avatarUrl || error) {
+    return <span style={{ color: tokens.colors.white, fontSize: size * 0.375, fontWeight: 700 }}>{getAvatarInitial(name)}</span>
+  }
+  return (
+    <Image
+      src={avatarUrl}
+      alt=""
+      width={size}
+      height={size}
+      sizes={`${size}px`}
+      loading="lazy"
+      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      onError={() => setError(true)}
+    />
+  )
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -113,14 +132,10 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
               alignItems: 'center',
               justifyContent: 'center',
               overflow: 'hidden',
-              background: trader.avatar_url ? undefined : getAvatarGradient(trader.trader_key),
+              background: getAvatarGradient(trader.trader_key),
             }}
           >
-            {trader.avatar_url ? (
-              <Image src={trader.avatar_url} alt="" width={40} height={40} sizes="40px" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <span style={{ color: tokens.colors.white, fontSize: 14, fontWeight: 700 }}>{getAvatarInitial(name)}</span>
-            )}
+            <TraderAvatarImg avatarUrl={trader.avatar_url} traderKey={trader.trader_key} name={name} size={40} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -178,7 +193,13 @@ export default function ExchangeRankingClient({
   if (traders.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: tokens.spacing[8], color: tokens.colors.text.tertiary }}>
-        暂无排行数据
+        <div style={{ fontSize: 40, marginBottom: tokens.spacing[3] }}>📊</div>
+        <div style={{ fontSize: tokens.typography.fontSize.base, fontWeight: 600, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2] }}>
+          暂无排行数据
+        </div>
+        <div style={{ fontSize: tokens.typography.fontSize.sm }}>
+          该平台的排行数据正在收集中，请稍后再来查看
+        </div>
       </div>
     )
   }
@@ -286,14 +307,10 @@ export default function ExchangeRankingClient({
                       alignItems: 'center',
                       justifyContent: 'center',
                       overflow: 'hidden',
-                      background: t.avatar_url ? undefined : getAvatarGradient(t.trader_key),
+                      background: getAvatarGradient(t.trader_key),
                     }}
                   >
-                    {t.avatar_url ? (
-                      <Image src={t.avatar_url} alt="" width={32} height={32} sizes="32px" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <span style={{ color: tokens.colors.white, fontSize: 12, fontWeight: 700 }}>{getAvatarInitial(name)}</span>
-                    )}
+                    <TraderAvatarImg avatarUrl={t.avatar_url} traderKey={t.trader_key} name={name} size={32} />
                   </div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {name}

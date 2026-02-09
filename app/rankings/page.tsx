@@ -339,11 +339,32 @@ function RankingsContent() {
     : activeCategory === 'onchain_dex' ? 'onchain'
     : undefined
 
-  const { data, error, isLoading, isStale } = useRankingsV2({
+  const { data, error, isLoading, isValidating, isStale } = useRankingsV2({
     window: activeWindow,
     platform: activePlatform as Platform | undefined,
     category: apiCategory,
   })
+  // With keepPreviousData, show skeleton only on first load
+  const showSkeleton = isLoading && !data
+  const showTransitionIndicator = isValidating && !!data
+
+  // Restore scroll position when returning from trader detail page
+  const scrollRestoredRef = useRef(false)
+  useEffect(() => {
+    if (data && !scrollRestoredRef.current) {
+      scrollRestoredRef.current = true
+      try {
+        const savedY = sessionStorage.getItem('rankings_scroll_y')
+        if (savedY) {
+          sessionStorage.removeItem('rankings_scroll_y')
+          // Delay to ensure DOM is rendered
+          requestAnimationFrame(() => {
+            window.scrollTo(0, parseInt(savedY, 10))
+          })
+        }
+      } catch { /* ignore */ }
+    }
+  }, [data])
 
   // Save preferences to localStorage when they change
   const saveCurrentPrefs = useCallback(() => {
@@ -622,15 +643,31 @@ function RankingsContent() {
 
         <RankingFadeWrapper transitionKey={`${activeWindow}-${activeCategory}-${activePlatform || ''}`}>
           <DataStateWrapper
-            isLoading={isLoading}
+            isLoading={showSkeleton}
             error={error}
-            isEmpty={!filteredData?.traders?.length}
-            emptyMessage={isZh ? '暂无排行榜数据' : 'No ranking data available'}
+            isEmpty={!filteredData?.traders?.length && !isValidating}
+            emptyMessage={
+              searchQuery.trim()
+                ? (isZh ? `未找到包含"${searchQuery}"的交易员，试试其他关键词` : `No traders found for "${searchQuery}", try different keywords`)
+                : (isZh ? '当前筛选条件下暂无排行数据，试试切换分类或平台' : 'No ranking data for current filters, try switching category or platform')
+            }
+            emptyActions={
+              (searchQuery.trim() || activePlatform || activeCategory !== 'all')
+                ? [{
+                    label: isZh ? '清除筛选' : 'Clear Filters',
+                    onClick: () => {
+                      setSearchQuery('')
+                      router.replace(pathname, { scroll: false })
+                    },
+                    variant: 'primary' as const,
+                  }]
+                : undefined
+            }
             loadingComponent={<RankingSkeleton />}
           >
             {filteredData && filteredData.traders.length > 0 && (
               <div style={{ position: 'relative' }}>
-                {isFiltering && (
+                {(isFiltering || showTransitionIndicator) && (
                   <div 
                     style={{
                       position: 'absolute',
@@ -647,7 +684,7 @@ function RankingsContent() {
                 <TraderList 
                   traders={filteredData.traders} 
                   isZh={isZh} 
-                  isLoading={isLoading || isFiltering}
+                  isLoading={showSkeleton || isFiltering}
                   isPro={isPro}
                 />
               </div>
@@ -747,6 +784,10 @@ function TraderList({
   )
   
   const handleRowClick = useCallback((row: VirtualTraderRow) => {
+    // Save scroll position before navigating to trader detail
+    try {
+      sessionStorage.setItem('rankings_scroll_y', String(window.scrollY))
+    } catch { /* ignore */ }
     const [platform, traderKey] = row.id.split(':')
     router.push(`/trader/${encodeURIComponent(traderKey)}?platform=${platform}`)
   }, [router])
@@ -845,6 +886,58 @@ function TraderList({
   )
 }
 
+function RankChangeIndicator({ currentRank, metricRank }: { currentRank: number; metricRank: number | null }) {
+  if (metricRank == null || metricRank === 0 || metricRank === currentRank) return null
+  const diff = metricRank - currentRank // positive = rank improved (went up)
+  if (diff === 0) return null
+  const isUp = diff > 0
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        color: isUp ? tokens.colors.accent.success : tokens.colors.accent.error,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 1,
+        marginLeft: 4,
+        animation: 'fadeIn 0.3s ease-in',
+      }}
+      title={isUp ? `↑${diff}` : `↓${Math.abs(diff)}`}
+    >
+      {isUp ? '↑' : '↓'}
+      <span style={{ fontSize: 9 }}>{Math.abs(diff)}</span>
+    </span>
+  )
+}
+
+function TraderAvatar({ trader }: { trader: RankedTraderV2 }) {
+  const [imgError, setImgError] = useState(false)
+  const showFallback = !trader.avatar_url || imgError
+
+  return (
+    <div
+      className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-xs font-bold"
+      style={{ background: getAvatarGradient(trader.trader_key) }}
+    >
+      {!showFallback ? (
+        <Image
+          src={trader.avatar_url!}
+          alt=""
+          width={32}
+          height={32}
+          sizes="32px"
+          className="w-full h-full object-cover"
+          loading="lazy"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <span className="text-white">{getAvatarInitial(getTraderDisplayName(trader))}</span>
+      )}
+    </div>
+  )
+}
+
 function TraderRow({ trader }: { trader: RankedTraderV2 }) {
   const metrics = trader.metrics
   const roiColor = metrics.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
@@ -856,7 +949,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
       className="grid ranking-table-grid gap-2 px-4 py-3 items-center border-b last:border-b-0 ranking-row-hover"
       style={{ borderColor: tokens.colors.border.primary + '40', textDecoration: 'none', transition: `all ${tokens.transition.base}` }}
     >
-      <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary }}>
+      <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary, display: 'flex', alignItems: 'center' }}>
         {trader.rank <= 3 ? (
           <span
             className="inline-flex items-center justify-center"
@@ -879,21 +972,13 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
             {trader.rank}
           </span>
         ) : (
-          trader.rank
+          <span>{trader.rank}</span>
         )}
+        <RankChangeIndicator currentRank={trader.rank} metricRank={metrics.rank} />
       </div>
 
       <div className="flex items-center gap-3 min-w-0">
-        <div
-          className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-xs font-bold"
-          style={{ background: trader.avatar_url ? undefined : getAvatarGradient(trader.trader_key) }}
-        >
-          {trader.avatar_url ? (
-            <Image src={trader.avatar_url} alt="" width={32} height={32} sizes="32px" className="w-full h-full object-cover" loading="lazy" />
-          ) : (
-            <span className="text-white">{getAvatarInitial(getTraderDisplayName(trader))}</span>
-          )}
-        </div>
+        <TraderAvatar trader={trader} />
         <div className="min-w-0">
           <div className="text-sm font-medium truncate" style={{ color: tokens.colors.text.primary }}>
             {getTraderDisplayName(trader)}

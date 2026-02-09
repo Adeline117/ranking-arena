@@ -12,6 +12,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 
 interface BookmarkFolder {
   id: string
@@ -204,6 +205,7 @@ export default function FavoritesPage() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
       <Box className="has-mobile-nav" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], animation: 'fadeIn 0.3s ease-out' }}>
+        <Breadcrumb items={[{ label: t('favorites') }]} />
         {/* 页面头部 */}
         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
           <Text size="2xl" weight="black">
