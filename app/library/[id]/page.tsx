@@ -437,8 +437,8 @@ export default function BookDetailPage() {
               />
             </div>
 
-            {/* User rating when marked as read */}
-            {userStatus === 'read' && (
+            {/* User rating - show for all logged in users */}
+            {session && (
               <div style={{
                 marginTop: 16, padding: '14px 18px', borderRadius: tokens.radius.lg,
                 background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
