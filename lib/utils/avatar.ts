@@ -67,73 +67,6 @@ export function getAvatarInitial(name: string | null | undefined): string {
 
 
 /**
- * 将HSL颜色转换为十六进制（不带#）
- */
-function hslToHex(hsl: string): string {
-  // 解析 HSL 字符串，例如 "hsl(120, 70%, 50%)"
-  const match = hsl.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/)
-  if (!match) return '8b6fa8' // 默认颜色（去掉#）
-  
-  const h = parseInt(match[1]) / 360
-  const s = parseInt(match[2]) / 100
-  const l = parseInt(match[3]) / 100
-  
-  let r, g, b
-  
-  if (s === 0) {
-    r = g = b = l
-  } else {
-    const hue2rgb = (p: number, q: number, t: number) => {
-      if (t < 0) t += 1
-      if (t > 1) t -= 1
-      if (t < 1/6) return p + (q - p) * 6 * t
-      if (t < 1/2) return q
-      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
-      return p
-    }
-    
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s
-    const p = 2 * l - q
-    r = hue2rgb(p, q, h + 1/3)
-    g = hue2rgb(p, q, h)
-    b = hue2rgb(p, q, h - 1/3)
-  }
-  
-  const toHex = (c: number) => {
-    const hex = Math.round(c * 255).toString(16)
-    return hex.length === 1 ? '0' + hex : hex
-  }
-  
-  return `${toHex(r)}${toHex(g)}${toHex(b)}`
-}
-
-/**
- * 生成默认头像URL（使用第三方服务）
- * 选项1: DiceBear Avatars (免费，无需API key，基于seed生成确定性头像)
- * 选项2: UI Avatars (免费，简单)
- */
-export function generateDefaultAvatarUrl(
-  userId: string,
-  name?: string | null,
-  provider: 'dicebear' | 'ui-avatars' = 'dicebear'
-): string {
-  const displayName = name || userId
-  
-  if (provider === 'dicebear') {
-    // 使用 DiceBear Avatars - 基于用户ID生成确定性头像
-    // 使用 initials 风格，seed 确保相同用户ID总是生成相同的头像
-    const seed = userId.replace(/-/g, '').substring(0, 20) // 限制长度
-    // 将HSL颜色转换为十六进制（去掉#）
-    const color = hslToHex(getAvatarColor(userId))
-    return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${color}&fontSize=40`
-  } else {
-    // 使用 UI Avatars - 简单但功能有限
-    const color = hslToHex(getAvatarColor(userId))
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=${color}&color=fff&size=128&bold=true`
-  }
-}
-
-/**
  * 获取用户头像URL（优先使用真实头像，否则返回null由前端显示首字母）
  */
 export function getUserAvatarUrl(
@@ -331,11 +264,6 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
     avatarUrl.includes('default')
   ) {
     return null
-  }
-
-  // Local API routes (e.g. /api/avatar/blockie?address=...) - return directly
-  if (avatarUrl.startsWith('/api/')) {
-    return avatarUrl
   }
 
   // 如果是已知交易所域名，信任并直接代理（不需要 isLikelyImageUrl 检查）

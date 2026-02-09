@@ -43,22 +43,11 @@ async function fetchWithTimeout(url: string, ms = 5000): Promise<Response> {
   }
 }
 
-// ============ Hyperliquid: Use Ethereum identicon service ============
+// ============ Hyperliquid: On-chain addresses have no real avatars ============
 async function backfillHyperliquid() {
   const ids = await fetchMissing("hyperliquid");
-  console.log(`[hyperliquid] ${ids.length} missing avatars`);
-  let updated = 0;
-  // Batch update — these are deterministic URLs, no API calls needed
-  for (let i = 0; i < ids.length; i += 100) {
-    const batch = ids.slice(i, i + 100);
-    for (const id of batch) {
-      const url = `https://effigy.im/a/${id}.svg`;
-      await updateAvatar("hyperliquid", id, url);
-      updated++;
-    }
-    console.log(`[hyperliquid] ${updated}/${ids.length}`);
-  }
-  return updated;
+  console.log(`[hyperliquid] ${ids.length} missing avatars — skipping (no generated avatars)`);
+  return 0;
 }
 
 // ============ Bitget Futures ============
@@ -107,19 +96,11 @@ async function backfillBitgetSpot() {
   return updated;
 }
 
-// ============ On-chain DEX: identicons ============
+// ============ On-chain DEX: no generated avatars ============
 async function backfillOnchain(source: string) {
   const ids = await fetchMissing(source);
-  console.log(`[${source}] ${ids.length} missing avatars`);
-  let updated = 0;
-  for (const id of ids) {
-    if (id.startsWith("0x")) {
-      await updateAvatar(source, id, `https://effigy.im/a/${id}.svg`);
-      updated++;
-    }
-  }
-  console.log(`[${source}] ${updated} updated`);
-  return updated;
+  console.log(`[${source}] ${ids.length} missing avatars — skipping (no generated avatars)`);
+  return 0;
 }
 
 async function main() {

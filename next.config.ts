@@ -110,10 +110,6 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'api.dicebear.com',
-      },
-      {
-        protocol: 'https',
         hostname: 'avatars.githubusercontent.com',
       },
       // Binance 头像 CDN
@@ -253,7 +249,6 @@ const nextConfig: NextConfig = {
     // 最小缓存时间（秒）- 图片缓存 1 小时
     minimumCacheTTL: 3600,
     
-    // 允许 dangerouslyAllowSVG（用于 dicebear 头像）
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",

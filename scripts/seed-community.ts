@@ -362,12 +362,11 @@ async function seed() {
   for (const u of USERS) {
     const userId = userIds.get(u.handle)
     if (!userId) continue
-    const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.handle)}`
     await supabase.from('user_profiles').upsert({
       id: userId,
       handle: u.handle,
       bio: u.bio,
-      avatar_url: avatarUrl,
+      avatar_url: null,
       email: u.email,
     })
   }

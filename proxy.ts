@@ -149,7 +149,6 @@ function generateCsp(): string {
       'blob:',
       'https://*.supabase.co',
       'https://assets.coingecko.com',
-      'https://api.dicebear.com',
       'https://avatars.githubusercontent.com',
       // 交易所头像域名
       'https://*.bgstatic.com',       // Bitget
