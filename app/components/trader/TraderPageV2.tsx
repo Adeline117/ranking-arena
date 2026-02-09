@@ -59,6 +59,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
                     width={64}
                     height={64}
                     className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 ) : (
                   <span className="text-2xl font-bold" style={{ color: tokens.colors.text.tertiary }}>

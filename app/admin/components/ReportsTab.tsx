@@ -204,6 +204,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                               border: `1px solid ${tokens.colors.border.primary}`,
                               cursor: 'pointer',
                             }}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                           />
                         </a>
                       ))}

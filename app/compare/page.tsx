@@ -372,6 +372,7 @@ function CompareContent() {
                             objectFit: 'cover',
                             flexShrink: 0,
                           }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                         />
                       ) : (
                         <Box
