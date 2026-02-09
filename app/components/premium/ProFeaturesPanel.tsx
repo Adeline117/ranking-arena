@@ -14,12 +14,6 @@ const StarIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 )
 
-const LockIcon = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <path d="M19 11H5C3.9 11 3 11.9 3 13V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V13C21 11.9 20.1 11 19 11Z" fill="currentColor" />
-    <path d="M7 11V7C7 4.2 9.2 2 12 2C14.8 2 17 4.2 17 7V11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-)
 
 const ChartIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -177,8 +171,6 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
       >
         {features.map((feature) => {
           const Icon = feature.icon
-          const isLocked = !isPro
-
           return (
             <Box
               key={feature.key}
@@ -193,7 +185,7 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
                 border: '1px solid var(--color-border-secondary)',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                opacity: isLocked ? 0.7 : 1,
+                opacity: 1,
                 position: 'relative',
               }}
               onMouseEnter={(e) => {
@@ -213,15 +205,15 @@ export default function ProFeaturesPanel({ compact = false, showTitle = true }: 
                   width: compact ? 28 : 32,
                   height: compact ? 28 : 32,
                   borderRadius: tokens.radius.md,
-                  background: isLocked ? 'var(--color-bg-secondary)' : 'var(--color-pro-glow)',
+                  background: 'var(--color-pro-glow)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: isLocked ? 'var(--color-text-tertiary)' : 'var(--color-pro-gradient-start)',
+                  color: 'var(--color-pro-gradient-start)',
                   flexShrink: 0,
                 }}
               >
-                {isLocked ? <LockIcon size={compact ? 12 : 14} /> : <Icon size={compact ? 14 : 16} />}
+                <Icon size={compact ? 14 : 16} />
               </Box>
 
               {/* 文字 */}

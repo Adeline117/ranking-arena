@@ -2323,7 +2323,7 @@ const en = {
     freeVsProComparison: 'Free vs Pro Comparison',
     feature: 'Feature',
     compFeatureLeaderboard: 'Leaderboard Access',
-    compFreeTop50: 'Top 50',
+    compFreeTop50: 'Top 100',
     compProFullLeaderboard: 'Full Leaderboard',
     compFeatureBasicFilters: 'Basic Filters',
     compFeatureTraderDetails: 'Trader Details',
