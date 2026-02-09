@@ -147,17 +147,17 @@ export default function MarketPage() {
         <div style={{
           maxWidth: 1400,
           margin: '0 auto',
-          padding: '16px 20px',
+          padding: '20px 24px 40px',
         }}>
           {/* L1: Core Cards */}
-          <section style={{ marginBottom: 20 }}>
-            <Suspense fallback={<LoadingCard height={160} />}>
+          <section style={{ marginBottom: 24 }}>
+            <Suspense fallback={<LoadingCard height={200} />}>
               <CoreCards />
             </Suspense>
           </section>
 
           {/* L2: Sector Treemap */}
-          <section style={{ marginBottom: 20 }}>
+          <section style={{ marginBottom: 24 }}>
             <Suspense fallback={<LoadingCard height={300} />}>
               <SectorTreemap onSectorClick={handleSectorClick} />
             </Suspense>

@@ -169,7 +169,6 @@ export default function WatchlistMarket() {
                   borderBottom: idx < coins.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                   borderRadius: tokens.radius.sm,
                   transition: `background ${tokens.transition.fast}`,
-                  cursor: 'pointer',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}

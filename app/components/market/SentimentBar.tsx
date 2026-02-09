@@ -16,7 +16,7 @@ interface SentimentData {
 }
 
 function formatPrice(n: number): string {
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function formatPct(n: number): string {
@@ -119,7 +119,24 @@ export default function SentimentBar() {
     return { btcPrice, btcChange, ethPrice, ethChange }
   }, [data, prices])
 
-  if (!data) return <div style={{ height: 48 }} />
+  if (!data) return (
+    <div style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 100,
+      height: 48,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      padding: '0 20px',
+      background: tokens.colors.bg.secondary,
+      borderBottom: `1px solid ${tokens.colors.border.primary}`,
+    }}>
+      {[120, 120, 80, 80, 60].map((w, i) => (
+        <div key={i} className="skeleton" style={{ width: w, height: 18, borderRadius: 4 }} />
+      ))}
+    </div>
+  )
 
   const { btcPrice, btcChange, ethPrice, ethChange } = items as any
 

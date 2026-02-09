@@ -73,7 +73,7 @@ export default function NewsFlash() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {loading ? (
           [1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="skeleton" style={{ height: 48, marginBottom: 4, borderRadius: 6 }} />
+            <div key={i} className="skeleton" style={{ height: 52, marginBottom: 4, borderRadius: tokens.radius.md }} />
           ))
         ) : news.length === 0 ? (
           <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
@@ -112,7 +112,7 @@ export default function NewsFlash() {
                     </span>
                   )}
                 </div>
-                <p style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.4, marginBottom: 4 }}>
+                <p style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.4, marginBottom: 4, userSelect: 'text' }}>
                   {getTitle(item)}
                   {(() => {
                     const badge = getLangBadge(item)

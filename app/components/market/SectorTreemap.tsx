@@ -48,16 +48,16 @@ function getChangeColor(changePct: number): string {
   const intensity = Math.abs(clamped) / maxPct
 
   if (clamped >= 0) {
-    // Green: from muted to vivid
-    const r = Math.round(30 - intensity * 20)
-    const g = Math.round(80 + intensity * 120)
-    const b = Math.round(50 - intensity * 20)
+    // Green: light (#4ade80) → deep (#15803d)
+    const r = Math.round(74 - intensity * 53)
+    const g = Math.round(222 - intensity * 94)
+    const b = Math.round(128 - intensity * 67)
     return `rgb(${r}, ${g}, ${b})`
   } else {
-    // Red: from muted to vivid
-    const r = Math.round(120 + intensity * 115)
-    const g = Math.round(60 - intensity * 40)
-    const b = Math.round(60 - intensity * 30)
+    // Red: light (#f87171) → deep (#b91c1c)
+    const r = Math.round(248 - intensity * 63)
+    const g = Math.round(113 - intensity * 85)
+    const b = Math.round(113 - intensity * 85)
     return `rgb(${r}, ${g}, ${b})`
   }
 }
@@ -114,6 +114,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
   const [timeframe, setTimeframe] = useState<TimeFrame>('24h')
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
     const el = containerRef.current
@@ -190,6 +191,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
               key={node.name}
               onClick={() => onSectorClick?.(node.category)}
               onMouseEnter={() => setHoveredNode(node.name)}
+              onMouseMove={(e) => setTooltipPos({ x: e.clientX, y: e.clientY })}
               onMouseLeave={() => setHoveredNode(null)}
               style={{
                 position: 'absolute',
@@ -205,8 +207,10 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 alignItems: 'center',
                 justifyContent: 'center',
                 overflow: 'hidden',
-                transition: 'opacity 0.15s ease',
-                opacity: isHovered ? 0.85 : 1,
+                transition: 'filter 0.15s ease, transform 0.15s ease',
+                filter: isHovered ? 'brightness(1.2)' : 'brightness(1)',
+                zIndex: isHovered ? 10 : 1,
+                boxShadow: isHovered ? '0 0 0 2px rgba(255,255,255,0.6)' : 'none',
                 padding: 4,
               }}
             >
@@ -244,6 +248,31 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
           )
         })}
       </div>
+
+      {/* Tooltip */}
+      {hoveredNode && (() => {
+        const node = nodes.find(n => n.name === hoveredNode)
+        if (!node) return null
+        return (
+          <div style={{
+            position: 'fixed',
+            left: tooltipPos.x + 12,
+            top: tooltipPos.y - 40,
+            background: 'rgba(0,0,0,0.85)',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 6,
+            fontSize: 12,
+            pointerEvents: 'none',
+            zIndex: 1000,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          }}>
+            <strong>{node.name}</strong> · {node.category}<br />
+            市值: ${(node.marketCap / 1e3).toFixed(0)}B · {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
+          </div>
+        )
+      })()}
 
       {/* Legend */}
       <div style={{

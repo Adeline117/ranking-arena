@@ -19,12 +19,21 @@ export default function MobileMarketTabs({ children }: {
   children: Record<string, React.ReactNode>
 }) {
   const [activeTab, setActiveTab] = useState('overview')
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['overview']))
   const containerRef = useRef<HTMLDivElement>(null)
   const startXRef = useRef(0)
   const currentXRef = useRef(0)
   const isDragging = useRef(false)
 
   const currentIndex = TABS.findIndex(t => t.key === activeTab)
+
+  // Track mounted tabs for caching
+  useEffect(() => {
+    setMountedTabs(prev => {
+      if (prev.has(activeTab)) return prev
+      return new Set([...prev, activeTab])
+    })
+  }, [activeTab])
 
   // Swipe handling
   useEffect(() => {
@@ -96,20 +105,31 @@ export default function MobileMarketTabs({ children }: {
         ))}
       </div>
 
-      {/* Tab Content */}
+      {/* Tab Content - cached: once mounted, keep in DOM but hide */}
       <div ref={containerRef} style={{ minHeight: '60vh', padding: '12px 0' }}>
-        {children[activeTab] || (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 200,
-            color: tokens.colors.text.tertiary,
-            fontSize: 14,
-          }}>
-            即将推出
-          </div>
-        )}
+        {TABS.map(tab => {
+          if (!mountedTabs.has(tab.key)) return null
+          const isActive = tab.key === activeTab
+          return (
+            <div
+              key={tab.key}
+              style={{ display: isActive ? 'block' : 'none' }}
+            >
+              {children[tab.key] || (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: 200,
+                  color: tokens.colors.text.tertiary,
+                  fontSize: 14,
+                }}>
+                  即将推出
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
