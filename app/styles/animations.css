@@ -592,9 +592,9 @@
    8. 骨架屏效果
    ============================================ */
 
-/* 背景样式由组件内联样式控制，避免 background 简写与 backgroundSize 冲突 */
+/* Skeleton shimmer — base styles defined in globals.css; this ensures animation applies */
 .skeleton {
-  animation: shimmer 1.5s infinite;
+  animation: shimmer 1.5s ease-in-out infinite;
   border-radius: 4px;
 }
 

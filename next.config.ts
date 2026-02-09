@@ -246,8 +246,8 @@ const nextConfig: NextConfig = {
     deviceSizes: [375, 640, 768, 1024, 1280, 1536, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     
-    // 最小缓存时间（秒）- 图片缓存 1 小时
-    minimumCacheTTL: 3600,
+    // 最小缓存时间（秒）- 图片缓存 24 小时（头像/logo 变更不频繁）
+    minimumCacheTTL: 86400,
     
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
@@ -297,8 +297,8 @@ const nextConfig: NextConfig = {
     // Client-side router cache — keep prefetched pages fresh longer
     // Reduces redundant server requests on back/forward navigation
     staleTimes: {
-      dynamic: 60,   // Cache dynamic pages for 60s on client
-      static: 300,   // Cache static pages for 5min on client
+      dynamic: 120,  // Cache dynamic pages for 2min on client (SWR handles freshness)
+      static: 600,   // Cache static pages for 10min on client
     },
   },
   
