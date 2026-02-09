@@ -7,11 +7,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  // Rate limit: sensitive operation
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const body = await request.json()
     const { email, password } = body as { email?: string; password?: string }
