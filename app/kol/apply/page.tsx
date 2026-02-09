@@ -99,10 +99,10 @@ export default function KolApplyPage() {
         <TopNav />
         <div style={{ maxWidth: 600, margin: '80px auto', padding: '0 16px', textAlign: 'center' }}>
           <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], color: 'var(--color-text-primary)', marginBottom: 16 }}>
-            申请已提交
+            {isZh ? '申请已提交' : 'Application Submitted'}
           </h1>
           <p style={{ color: 'var(--color-text-secondary)', marginBottom: 24 }}>
-            我们会尽快审核你的KOL入驻申请，审核结果将通过站内通知告知。
+            {isZh ? '我们会尽快审核你的KOL入驻申请，审核结果将通过站内通知告知。' : 'We will review your KOL application as soon as possible. Results will be sent via in-app notification.'}
           </p>
           <button
             onClick={() => router.push('/')}
@@ -116,7 +116,7 @@ export default function KolApplyPage() {
               fontSize: tokens.typography.fontSize.sm,
             }}
           >
-            返回首页
+            {isZh ? '返回首页' : 'Back to Home'}
           </button>
         </div>
       </>
@@ -128,17 +128,17 @@ export default function KolApplyPage() {
       <TopNav />
       <div style={{ maxWidth: 600, margin: '80px auto', padding: '0 16px' }}>
         <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], color: 'var(--color-text-primary)', marginBottom: 8 }}>
-          KOL入驻申请
+          {isZh ? 'KOL入驻申请' : 'KOL Application'}
         </h1>
         <p style={{ color: 'var(--color-text-secondary)', marginBottom: 32, fontSize: tokens.typography.fontSize.sm }}>
-          加入Arena认证KOL计划，获得认证标识和更多曝光机会。
+          {isZh ? '加入Arena认证KOL计划，获得认证标识和更多曝光机会。' : 'Join the Arena Verified KOL program. Get a verified badge and more exposure.'}
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Tier Selection */}
           <div>
             <label style={{ display: 'block', marginBottom: 8, color: 'var(--color-text-primary)', fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>
-              申请等级 *
+              {isZh ? '申请等级 *' : 'Application Tier *'}
             </label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {TIERS.map(t => (
@@ -164,8 +164,8 @@ export default function KolApplyPage() {
                     style={{ marginTop: 2 }}
                   />
                   <div>
-                    <div style={{ color: 'var(--color-text-primary)', fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>{t.label}</div>
-                    <div style={{ color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.xs, marginTop: 2 }}>{t.desc}</div>
+                    <div style={{ color: 'var(--color-text-primary)', fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>{isZh ? t.labelZh : t.labelEn}</div>
+                    <div style={{ color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.xs, marginTop: 2 }}>{isZh ? t.descZh : t.descEn}</div>
                   </div>
                 </label>
               ))}
@@ -175,16 +175,16 @@ export default function KolApplyPage() {
           {/* Platform */}
           <div>
             <label style={{ display: 'block', marginBottom: 8, color: 'var(--color-text-primary)', fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>
-              主要平台
+              {isZh ? '主要平台' : 'Primary Platform'}
             </label>
             <select
               value={form.platform}
               onChange={e => setForm({ ...form, platform: e.target.value })}
               style={inputStyle}
             >
-              <option value="">请选择平台</option>
+              <option value="">{isZh ? '请选择平台' : 'Select a platform'}</option>
               {PLATFORMS.map(p => (
-                <option key={p.value} value={p.value}>{p.label}</option>
+                <option key={p.value} value={p.value}>{'labelZh' in p ? (isZh ? p.labelZh : p.labelEn) : p.label}</option>
               ))}
             </select>
           </div>
@@ -192,11 +192,11 @@ export default function KolApplyPage() {
           {/* Handle */}
           <div>
             <label style={{ display: 'block', marginBottom: 8, color: 'var(--color-text-primary)', fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>
-              平台账号
+              {isZh ? '平台账号' : 'Platform Handle'}
             </label>
             <input
               type="text"
-              placeholder="例如: @yourhandle"
+              placeholder={isZh ? '例如: @yourhandle' : 'e.g. @yourhandle'}
               value={form.platform_handle}
               onChange={e => setForm({ ...form, platform_handle: e.target.value })}
               style={inputStyle}
@@ -206,11 +206,11 @@ export default function KolApplyPage() {
           {/* Follower Count */}
           <div>
             <label style={{ display: 'block', marginBottom: 8, color: 'var(--color-text-primary)', fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>
-              粉丝数量
+              {isZh ? '粉丝数量' : 'Follower Count'}
             </label>
             <input
               type="number"
-              placeholder="请输入粉丝数量"
+              placeholder={isZh ? '请输入粉丝数量' : 'Enter follower count'}
               value={form.follower_count}
               onChange={e => setForm({ ...form, follower_count: e.target.value })}
               style={inputStyle}
@@ -220,10 +220,10 @@ export default function KolApplyPage() {
           {/* Description */}
           <div>
             <label style={{ display: 'block', marginBottom: 8, color: 'var(--color-text-primary)', fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>
-              自我介绍
+              {isZh ? '自我介绍' : 'About You'}
             </label>
             <textarea
-              placeholder="请介绍你的交易风格、擅长领域等"
+              placeholder={isZh ? '请介绍你的交易风格、擅长领域等' : 'Describe your trading style, areas of expertise, etc.'}
               value={form.description}
               onChange={e => setForm({ ...form, description: e.target.value })}
               rows={4}
@@ -234,11 +234,11 @@ export default function KolApplyPage() {
           {/* Proof URL */}
           <div>
             <label style={{ display: 'block', marginBottom: 8, color: 'var(--color-text-primary)', fontWeight: 600, fontSize: tokens.typography.fontSize.sm }}>
-              实盘证明链接
+              {isZh ? '实盘证明链接' : 'Trading Proof URL'}
             </label>
             <input
               type="url"
-              placeholder="交易记录截图或链接（Tier1/Tier2建议提供）"
+              placeholder={isZh ? '交易记录截图或链接（Tier1/Tier2建议提供）' : 'Trading records screenshot or link (recommended for Tier 1/2)'}
               value={form.proof_url}
               onChange={e => setForm({ ...form, proof_url: e.target.value })}
               style={inputStyle}
@@ -263,7 +263,7 @@ export default function KolApplyPage() {
               fontWeight: 600,
             }}
           >
-            {loading ? '提交中...' : '提交申请'}
+            {loading ? (isZh ? '提交中...' : 'Submitting...') : (isZh ? '提交申请' : 'Submit Application')}
           </button>
         </form>
       </div>

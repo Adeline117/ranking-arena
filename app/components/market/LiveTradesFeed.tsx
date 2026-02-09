@@ -9,6 +9,7 @@ import { useRef, useState, useEffect, useCallback, memo } from 'react'
 import { useMarketFeed } from '@/lib/hooks/useMarketFeed'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { NormalizedTrade, ExchangeId } from '@/lib/ws/exchange-feeds'
 
 const EXCHANGE_COLORS: Record<ExchangeId, string> = {
@@ -49,11 +50,11 @@ function formatValue(notional: number): string {
   return `$${notional.toFixed(0)}`
 }
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, isZh = true): string {
   const sec = Math.floor((Date.now() - ts) / 1000)
-  if (sec < 1) return '刚刚'
-  if (sec < 60) return `${sec}秒前`
-  return `${Math.floor(sec / 60)}分前`
+  if (sec < 1) return isZh ? '刚刚' : 'now'
+  if (sec < 60) return isZh ? `${sec}秒前` : `${sec}s ago`
+  return isZh ? `${Math.floor(sec / 60)}分前` : `${Math.floor(sec / 60)}m ago`
 }
 
 const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTrade; index: number }) {
@@ -107,7 +108,7 @@ const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTra
         fontWeight: 700,
         fontSize: 10,
       }}>
-        {isBuy ? '买入' : '卖出'}
+        {isBuy ? 'BUY' : 'SELL'}
       </span>
 
       {/* 价格 */}
@@ -147,6 +148,8 @@ function ConnectionDot({ connected }: { connected: boolean }) {
 }
 
 export default function LiveTradesFeed() {
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
   const { trades, connected } = useMarketFeed({ maxTrades: 150 })
   const containerRef = useRef<HTMLDivElement>(null)
   const [paused, setPaused] = useState(false)
@@ -268,13 +271,13 @@ export default function LiveTradesFeed() {
         fontWeight: 600,
         letterSpacing: '0.3px',
       }}>
-        <span>交易所</span>
-        <span>交易对</span>
-        <span>方向</span>
-        <span style={{ textAlign: 'right' }}>价格</span>
-        <span style={{ textAlign: 'right' }}>数量</span>
-        <span style={{ textAlign: 'right' }}>价值</span>
-        <span style={{ textAlign: 'right' }}>时间</span>
+        <span>{isZh ? '交易所' : 'Exchange'}</span>
+        <span>{isZh ? '交易对' : 'Pair'}</span>
+        <span>{isZh ? '方向' : 'Side'}</span>
+        <span style={{ textAlign: 'right' }}>{isZh ? '价格' : 'Price'}</span>
+        <span style={{ textAlign: 'right' }}>{isZh ? '数量' : 'Qty'}</span>
+        <span style={{ textAlign: 'right' }}>{isZh ? '价值' : 'Value'}</span>
+        <span style={{ textAlign: 'right' }}>{isZh ? '时间' : 'Time'}</span>
       </div>
 
       {/* Trade list */}

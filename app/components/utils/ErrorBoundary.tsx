@@ -208,7 +208,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 aria-label={t('retryLoad')}
                 style={{
                   padding: '12px 24px',
-                  background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
+                  background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                   color: tokens.colors.white,
                   borderRadius: tokens.radius.md,
                   border: 'none',

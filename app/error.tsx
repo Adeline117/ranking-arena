@@ -359,7 +359,7 @@ export default function Error({
             className="action-button primary"
             style={{ 
               padding: '14px 28px', 
-              background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, #6b4f88 100%)`,
+              background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, var(--color-brand-deep) 100%)`,
               color: tokens.colors.white, 
               borderRadius: tokens.radius.lg,
               border: 'none',

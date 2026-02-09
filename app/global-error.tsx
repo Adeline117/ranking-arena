@@ -303,7 +303,7 @@ export default function GlobalError({
                 fontSize: '0.95rem',
                 fontWeight: 600,
                 color: 'var(--color-text-primary, #EDEDED)',
-                background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, #6b4f88 100%)`,
+                background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, var(--color-brand-deep) 100%)`,
                 border: 'none',
                 borderRadius: tokens.radius.lg,
                 cursor: isRetrying ? 'wait' : 'pointer',

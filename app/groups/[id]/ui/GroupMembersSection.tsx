@@ -146,7 +146,7 @@ function RoleBadge({ role }: RoleBadgeProps): React.ReactElement {
   const background = isOwner
     ? 'linear-gradient(135deg, #FFD700, #FFA500)'
     : isAdmin
-      ? `linear-gradient(135deg, ${tokens.colors.accent.brand}, #6b4f88)`
+      ? `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-deep))`
       : tokens.colors.bg.tertiary || tokens.colors.bg.secondary
 
   const label = isOwner
