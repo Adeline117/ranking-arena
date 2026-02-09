@@ -151,7 +151,10 @@ export default function TopTraders() {
                   {idx + 1}
                 </span>
 
-                {/* Name + platform */}
+                {/* Avatar */}
+                <TraderAvatar name={displayName} avatarUrl={t.avatar_url} size={32} />
+
+                {/* Name only (no platform) */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
@@ -166,28 +169,30 @@ export default function TopTraders() {
                   >
                     {displayName}
                   </div>
-                  <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, lineHeight: 1.3 }}>
-                    {PLATFORM_LABELS[t.source.toLowerCase()] || t.source}
-                  </div>
                 </div>
 
-                {/* ROI + Score (right aligned, stacked) */}
+                {/* Score on top, ROI below */}
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  {t.arena_score != null && (
+                    <div style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: tokens.colors.accent.brand,
+                      lineHeight: 1.3,
+                    }}>
+                      {t.arena_score.toFixed(0)}
+                    </div>
+                  )}
                   {roiStr && (
                     <div
                       style={{
-                        fontSize: 11,
-                        fontWeight: 700,
+                        fontSize: 10,
+                        fontWeight: 600,
                         color: t.roi! >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                         lineHeight: 1.3,
                       }}
                     >
                       {roiStr}
-                    </div>
-                  )}
-                  {t.arena_score != null && (
-                    <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, lineHeight: 1.3 }}>
-                      {isZh ? '分' : 'Pts'} {t.arena_score.toFixed(0)}
                     </div>
                   )}
                 </div>
