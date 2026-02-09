@@ -18,9 +18,9 @@ export interface ScoreColorInfo {
 const SCORE_TIERS: { min: number; cssVar: string; fallback: string; grade: ScoreGrade; label: string }[] = [
   { min: 90, cssVar: 'var(--color-score-legendary)', fallback: '#8b5cf6', grade: 'legendary', label: 'Legendary' },
   { min: 70, cssVar: 'var(--color-score-great)', fallback: '#10b981', grade: 'great', label: 'Great' },
-  { min: 50, cssVar: 'var(--color-score-average)', fallback: '#f59e0b', grade: 'average', label: 'Average' },
+  { min: 50, cssVar: 'var(--color-score-average)', fallback: '#eab308', grade: 'average', label: 'Average' },
   { min: 30, cssVar: 'var(--color-score-below)', fallback: '#f97316', grade: 'below', label: 'Below Avg' },
-  { min: 0, cssVar: 'var(--color-score-low)', fallback: '#6b7280', grade: 'low', label: 'Low' },
+  { min: 0, cssVar: 'var(--color-score-low)', fallback: '#ef4444', grade: 'low', label: 'Low' },
 ]
 
 function getTier(score: number) {
