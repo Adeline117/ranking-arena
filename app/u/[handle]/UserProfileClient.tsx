@@ -343,18 +343,18 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
               <Box
                 className="profile-header-avatar"
                 style={{
-                  width: 72, height: 72, borderRadius: tokens.radius.full,
+                  width: 88, height: 88, borderRadius: tokens.radius.full,
                   background: profile.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(profile.id),
                   border: `3px solid ${tokens.colors.border.primary}`,
                   display: 'grid', placeItems: 'center',
                   overflow: 'hidden',
-                  boxShadow: `0 4px 16px var(--color-overlay-light)`,
+                  boxShadow: `0 4px 20px var(--color-overlay-light), 0 0 0 4px ${tokens.colors.bg.primary}40`,
                 }}
               >
                 {profile.avatar_url ? (
                   <Image
                     src={`/api/avatar?url=${encodeURIComponent(profile.avatar_url)}`}
-                    alt={profile.handle} width={72} height={72} priority
+                    alt={profile.handle} width={88} height={88} priority
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
@@ -393,11 +393,13 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
                 {isTrader && traderProfile?.source && (
                   <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px',
-                    background: `linear-gradient(135deg, ${tokens.colors.accent.primary}20, ${tokens.colors.accent.brand}20)`,
+                    display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px',
+                    background: `linear-gradient(135deg, ${tokens.colors.accent.primary}18, ${tokens.colors.accent.brand}12)`,
                     borderRadius: tokens.radius.full, fontSize: 11, fontWeight: 700,
-                    color: tokens.colors.accent.primary, letterSpacing: '0.02em',
-                    border: `1px solid ${tokens.colors.accent.primary}30`,
+                    color: tokens.colors.accent.primary, letterSpacing: '0.04em',
+                    border: `1px solid ${tokens.colors.accent.primary}25`,
+                    backdropFilter: 'blur(8px)',
+                    boxShadow: `0 2px 8px ${tokens.colors.accent.primary}10`,
                   }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
@@ -529,48 +531,56 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           className="profile-tabs"
           role="tablist"
           style={{
-            display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4],
-            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, paddingBottom: tokens.spacing[3],
+            display: 'flex', gap: tokens.spacing[1], marginBottom: tokens.spacing[5],
+            padding: `0 ${tokens.spacing[2]}`,
+            borderBottom: `1px solid ${tokens.colors.border.primary}40`,
+            overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
           }}
         >
-          {profileTabs.map((tab) => (
-            <button
-              key={tab.key}
-              className="profile-tab-button interactive-scale"
-              onClick={() => handleProfileTabChange(tab.key)}
-              role="tab"
-              aria-selected={activeProfileTab === tab.key}
-              tabIndex={activeProfileTab === tab.key ? 0 : -1}
-              style={{
-                background: activeProfileTab === tab.key
-                  ? `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.primary}08)`
-                  : 'transparent',
-                border: activeProfileTab === tab.key
-                  ? `1px solid ${tokens.colors.accent.primary}30`
-                  : '1px solid transparent',
-                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                minHeight: 44, cursor: 'pointer', borderRadius: tokens.radius.lg,
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-              onMouseEnter={(e) => {
-                if (activeProfileTab !== tab.key) e.currentTarget.style.background = `${tokens.colors.bg.tertiary}80`
-              }}
-              onMouseLeave={(e) => {
-                if (activeProfileTab !== tab.key) e.currentTarget.style.background = 'transparent'
-              }}
-            >
-              <Text
-                size="sm"
-                weight={activeProfileTab === tab.key ? 'black' : 'medium'}
+          {profileTabs.map((tab) => {
+            const isActive = activeProfileTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                className="profile-tab-button"
+                onClick={() => handleProfileTabChange(tab.key)}
+                role="tab"
+                aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
                 style={{
-                  color: activeProfileTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.secondary,
-                  transition: 'color 0.3s ease',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: isActive
+                    ? `2px solid ${tokens.colors.accent.primary}`
+                    : '2px solid transparent',
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                  minHeight: 44, cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.borderBottomColor = `${tokens.colors.accent.primary}40`
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.borderBottomColor = 'transparent'
                 }}
               >
-                {tab.label}
-              </Text>
-            </button>
-          ))}
+                <Text
+                  size="sm"
+                  weight={isActive ? 'black' : 'medium'}
+                  style={{
+                    color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+                    transition: 'color 0.2s ease',
+                  }}
+                >
+                  {tab.label}
+                </Text>
+              </button>
+            )
+          })}
         </Box>
 
         {/* Tab Content */}

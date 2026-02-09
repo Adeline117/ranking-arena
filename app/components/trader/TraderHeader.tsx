@@ -590,19 +590,23 @@ export default function TraderHeader({
         </Box>
       </Box>
 
-      {/* Action buttons */}
+      {/* Action buttons - all in one row */}
       <Box
         className="profile-header-actions action-buttons"
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: tokens.spacing[3],
+          gap: 8,
           flexShrink: 0,
           flexWrap: 'wrap',
           position: 'relative',
           zIndex: 1,
         }}
       >
+        <ActionButton onClick={() => router.push('/')} variant="ghost">
+          ← {t('back')}
+        </ActionButton>
+
         {isOwnProfile && (
           <ActionButton
             onClick={() => router.push('/settings')}
@@ -618,41 +622,31 @@ export default function TraderHeader({
           </ActionButton>
         )}
 
-        {/* Action buttons - single row */}
-        <Box style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {!isOwnProfile && userId && (
-            isRegistered ? (
-              <UserFollowButton
-                targetUserId={traderId}
-                currentUserId={userId}
-                size="sm"
-              />
-            ) : (
-              <Box style={{ width: 'auto' }}>
-                <TraderFollowButton
-                  traderId={traderId}
-                  userId={userId}
-                  onFollowChange={(isFollowing) => {
-                    setFollowerCount(prev => isFollowing ? prev + 1 : Math.max(0, prev - 1))
-                  }}
-                />
-              </Box>
-            )
-          )}
+        {!isOwnProfile && userId && (
+          isRegistered ? (
+            <UserFollowButton
+              targetUserId={traderId}
+              currentUserId={userId}
+              size="sm"
+            />
+          ) : (
+            <TraderFollowButton
+              traderId={traderId}
+              userId={userId}
+              onFollowChange={(isFollowing) => {
+                setFollowerCount(prev => isFollowing ? prev + 1 : Math.max(0, prev - 1))
+              }}
+            />
+          )
+        )}
 
-          {!isOwnProfile && (
-            <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
-          )}
+        {!isOwnProfile && (
+          <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
+        )}
 
-
-          <ActionButton onClick={() => router.push('/')} variant="ghost">
-            ← {t('back')}
-          </ActionButton>
-
-          {!isOwnProfile && !isRegistered && userId && (
-            <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
-          )}
-        </Box>
+        {!isOwnProfile && !isRegistered && userId && (
+          <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
+        )}
       </Box>
 
     </Box>
