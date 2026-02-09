@@ -46,7 +46,8 @@ export default function ExchangeFilter({ availableSources, selectedExchange, onE
         onClick={() => handleClick(null)}
         style={{
           flexShrink: 0,
-          padding: '6px 14px',
+          padding: '10px 14px',
+          minHeight: 44,
           borderRadius: tokens.radius.full,
           fontSize: tokens.typography.fontSize.xs,
           fontWeight: !selectedExchange ? 700 : 500,
@@ -72,7 +73,8 @@ export default function ExchangeFilter({ availableSources, selectedExchange, onE
             onClick={() => handleClick(source)}
             style={{
               flexShrink: 0,
-              padding: '6px 14px',
+              padding: '10px 14px',
+              minHeight: 44,
               borderRadius: tokens.radius.full,
               fontSize: tokens.typography.fontSize.xs,
               fontWeight: isSelected ? 700 : 500,

@@ -23,14 +23,14 @@ const styles = {
   title: {
     fontSize: '20px',
     fontWeight: 600,
-    color: '#e0e0e0',
+    color: 'var(--color-text-primary)',
   } as React.CSSProperties,
   overallBadge: (health: number) => ({
     padding: '6px 16px',
     borderRadius: '20px',
     fontSize: '14px',
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--color-on-accent)',
     backgroundColor: health >= 80 ? '#2e7d32' : health >= 50 ? '#f57c00' : '#c62828',
   }) as React.CSSProperties,
   grid: {
@@ -40,7 +40,7 @@ const styles = {
     marginBottom: '24px',
   } as React.CSSProperties,
   card: (status: string) => ({
-    backgroundColor: '#1a1a2e',
+    backgroundColor: 'var(--color-bg-secondary)',
     border: `1px solid ${status === 'healthy' ? '#2e7d32' : status === 'degraded' ? '#f57c00' : '#c62828'}`,
     borderRadius: '12px',
     padding: '16px',
@@ -54,7 +54,7 @@ const styles = {
   sourceName: {
     fontSize: '16px',
     fontWeight: 600,
-    color: '#e0e0e0',
+    color: 'var(--color-text-primary)',
   } as React.CSSProperties,
   dot: (status: string) => ({
     width: '10px',
@@ -68,10 +68,10 @@ const styles = {
     justifyContent: 'space-between',
     marginBottom: '6px',
     fontSize: '13px',
-    color: '#aaa',
+    color: 'var(--color-text-tertiary)',
   } as React.CSSProperties,
   statValue: {
-    color: '#e0e0e0',
+    color: 'var(--color-text-primary)',
     fontWeight: 500,
   } as React.CSSProperties,
   errorSection: {
@@ -80,31 +80,31 @@ const styles = {
   errorTitle: {
     fontSize: '16px',
     fontWeight: 600,
-    color: '#e0e0e0',
+    color: 'var(--color-text-primary)',
     marginBottom: '12px',
   } as React.CSSProperties,
   errorRow: {
-    backgroundColor: '#1a1a2e',
-    border: '1px solid #333',
+    backgroundColor: 'var(--color-bg-secondary)',
+    border: '1px solid var(--color-border-primary)',
     borderRadius: '8px',
     padding: '10px 14px',
     marginBottom: '8px',
     fontSize: '13px',
-    color: '#ccc',
+    color: 'var(--color-text-secondary)',
   } as React.CSSProperties,
   refreshBtn: {
     padding: '6px 14px',
     borderRadius: '6px',
-    border: '1px solid #555',
+    border: '1px solid var(--color-border-secondary)',
     backgroundColor: 'transparent',
-    color: '#aaa',
+    color: 'var(--color-text-tertiary)',
     cursor: 'pointer',
     fontSize: '13px',
   } as React.CSSProperties,
   loading: {
     textAlign: 'center' as const,
     padding: '48px',
-    color: '#888',
+    color: 'var(--color-text-tertiary)',
   } as React.CSSProperties,
   tabs: {
     display: 'flex',
@@ -115,8 +115,8 @@ const styles = {
     padding: '6px 14px',
     borderRadius: '6px',
     border: 'none',
-    backgroundColor: active ? '#333' : 'transparent',
-    color: active ? '#fff' : '#888',
+    backgroundColor: active ? 'var(--color-bg-tertiary)' : 'transparent',
+    color: active ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
     cursor: 'pointer',
     fontSize: '13px',
     fontWeight: active ? 600 : 400,
@@ -264,7 +264,7 @@ function SourceCard({ source }: { source: SourceHealth }) {
       <div style={styles.cardHeader}>
         <span style={styles.sourceName}>{source.source}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ fontSize: '13px', color: '#aaa' }}>{source.healthScore}%</span>
+          <span style={{ fontSize: '13px', color: 'var(--color-text-tertiary)' }}>{source.healthScore}%</span>
           <span style={styles.dot(source.status)} />
         </div>
       </div>

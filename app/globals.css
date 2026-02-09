@@ -96,6 +96,92 @@ html.theme-transition *::after {
   --color-accent-error: #ff7c7c;
   --color-accent-error-20: rgba(255, 124, 124, 0.2);
   --color-accent-warning: #ffc107;
+  --color-accent-primary-15: rgba(139, 111, 168, 0.15);
+  --color-accent-primary-10: rgba(139, 111, 168, 0.1);
+  --color-accent-primary-20: rgba(139, 111, 168, 0.2);
+  --color-accent-success-04: rgba(47, 229, 125, 0.04);
+  --color-accent-success-05: rgba(47, 229, 125, 0.05);
+  --color-accent-success-10: rgba(47, 229, 125, 0.1);
+  --color-accent-success-12: rgba(47, 229, 125, 0.12);
+  --color-accent-error-04: rgba(255, 124, 124, 0.04);
+  --color-accent-error-08: rgba(255, 124, 124, 0.08);
+  --color-accent-error-10: rgba(255, 124, 124, 0.1);
+  --color-accent-error-12: rgba(255, 124, 124, 0.12);
+  --color-accent-error-15: rgba(255, 124, 124, 0.15);
+  
+  /* Overlay/backdrop */
+  --color-backdrop: rgba(0, 0, 0, 0.6);
+  --color-backdrop-heavy: rgba(0, 0, 0, 0.8);
+  --color-backdrop-light: rgba(0, 0, 0, 0.4);
+  --color-backdrop-medium: rgba(0, 0, 0, 0.65);
+  --color-overlay-dark: rgba(0, 0, 0, 0.5);
+  --color-overlay-medium: rgba(0, 0, 0, 0.3);
+  --color-overlay-light: rgba(0, 0, 0, 0.15);
+  --color-overlay-subtle: rgba(0, 0, 0, 0.1);
+  
+  /* Text shadow */
+  --text-shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  --text-shadow-md: 0 2px 8px rgba(0,0,0,0.4);
+  --text-shadow-lg: 0 2px 8px rgba(0,0,0,0.5);
+  --text-shadow-heavy: 0 1px 3px rgba(0,0,0,0.8);
+  
+  /* Box shadows */
+  --shadow-sm-dark: 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-md-dark: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-lg-dark: 0 8px 32px rgba(0,0,0,0.3);
+  --shadow-glow-brand: 0 0 80px rgba(139, 111, 168, 0.15);
+  --shadow-glow-brand-sm: 0 0 40px rgba(0, 0, 0, 0.2);
+  --shadow-glow-purple: 0 8px 24px rgba(124, 58, 237, 0.25);
+  
+  /* Semantic status backgrounds */
+  --color-red-subtle: rgba(239, 68, 68, 0.12);
+  --color-red-border: rgba(239, 68, 68, 0.2);
+  --color-red-bg-light: rgba(239, 68, 68, 0.1);
+  --color-orange-subtle: rgba(245, 158, 11, 0.12);
+  --color-orange-border: rgba(245, 158, 11, 0.2);
+  --color-orange-bg-light: rgba(245, 158, 11, 0.1);
+  --color-indigo-subtle: rgba(99, 102, 241, 0.1);
+  --color-indigo-bg: rgba(99, 102, 241, 0.2);
+  --color-violet-subtle: rgba(139, 92, 246, 0.12);
+  --color-violet-border: rgba(139, 92, 246, 0.25);
+  
+  /* Rank glow */
+  --color-gold-glow: rgba(255, 215, 0, 0.4);
+  --color-silver-glow: rgba(192, 192, 192, 0.4);
+  --color-bronze-glow: rgba(205, 127, 50, 0.4);
+  --color-gold-bg: rgba(255, 215, 0, 0.08);
+  --color-silver-bg: rgba(192, 192, 192, 0.08);
+  --color-bronze-bg: rgba(205, 127, 50, 0.08);
+  --color-gold-highlight: rgba(255,215,0,0.15);
+  
+  /* Pro badge */
+  --color-pro-gold-glow: rgba(212, 168, 71, 0.3);
+  --color-pro-gold-bg: rgba(212, 168, 71, 0.12);
+  --color-pro-gold-border: rgba(212, 168, 71, 0.3);
+  
+  /* Copy trade */
+  --color-copytrade-success-shadow: 0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3);
+  
+  /* Activity heatmap */
+  --color-heatmap-1: rgba(34,197,94,0.3);
+  --color-heatmap-2: rgba(34,197,94,0.5);
+  --color-heatmap-3: rgba(34,197,94,0.7);
+  --color-heatmap-4: rgba(34,197,94,0.9);
+  
+  /* Market colors */
+  --color-market-bull: rgba(22, 199, 132, 0.3);
+  --color-market-bear: rgba(234, 57, 67, 0.3);
+  --color-market-bull-light: rgba(22, 199, 132, 0.25);
+  --color-market-bear-light: rgba(234, 57, 67, 0.25);
+  
+  /* Highlight/search */
+  --color-highlight-bg: rgba(149, 117, 205, 0.4);
+  --color-highlight-row: rgba(149, 117, 205, 0.1);
+  --color-unread-bg: rgba(149, 117, 205, 0.06);
+  --color-notification-unread: rgba(139,111,168,0.06);
+  
+  /* Sidebar bg */
+  --color-sidebar-bg: rgba(20, 18, 28, 0.9);
   
   /* Score tier colors */
   --color-score-legendary: #8b5cf6;
@@ -190,6 +276,92 @@ html.theme-transition *::after {
   --color-accent-error: #EF4444;
   --color-accent-error-20: rgba(239, 68, 68, 0.2);
   --color-accent-warning: #F59E0B;
+  --color-accent-primary-15: rgba(123, 95, 152, 0.15);
+  --color-accent-primary-10: rgba(123, 95, 152, 0.1);
+  --color-accent-primary-20: rgba(123, 95, 152, 0.2);
+  --color-accent-success-04: rgba(34, 197, 94, 0.04);
+  --color-accent-success-05: rgba(34, 197, 94, 0.05);
+  --color-accent-success-10: rgba(34, 197, 94, 0.1);
+  --color-accent-success-12: rgba(34, 197, 94, 0.12);
+  --color-accent-error-04: rgba(239, 68, 68, 0.04);
+  --color-accent-error-08: rgba(239, 68, 68, 0.08);
+  --color-accent-error-10: rgba(239, 68, 68, 0.1);
+  --color-accent-error-12: rgba(239, 68, 68, 0.12);
+  --color-accent-error-15: rgba(239, 68, 68, 0.15);
+  
+  /* Overlay/backdrop */
+  --color-backdrop: rgba(0, 0, 0, 0.4);
+  --color-backdrop-heavy: rgba(0, 0, 0, 0.6);
+  --color-backdrop-light: rgba(0, 0, 0, 0.3);
+  --color-backdrop-medium: rgba(0, 0, 0, 0.5);
+  --color-overlay-dark: rgba(0, 0, 0, 0.35);
+  --color-overlay-medium: rgba(0, 0, 0, 0.2);
+  --color-overlay-light: rgba(0, 0, 0, 0.1);
+  --color-overlay-subtle: rgba(0, 0, 0, 0.06);
+  
+  /* Text shadow */
+  --text-shadow-sm: 0 1px 2px rgba(0,0,0,0.1);
+  --text-shadow-md: 0 2px 8px rgba(0,0,0,0.2);
+  --text-shadow-lg: 0 2px 8px rgba(0,0,0,0.3);
+  --text-shadow-heavy: 0 1px 3px rgba(0,0,0,0.5);
+  
+  /* Box shadows */
+  --shadow-sm-dark: 0 2px 8px rgba(0,0,0,0.1);
+  --shadow-md-dark: 0 4px 12px rgba(0,0,0,0.15);
+  --shadow-lg-dark: 0 8px 32px rgba(0,0,0,0.12);
+  --shadow-glow-brand: 0 0 80px rgba(123, 95, 152, 0.1);
+  --shadow-glow-brand-sm: 0 0 40px rgba(0, 0, 0, 0.1);
+  --shadow-glow-purple: 0 8px 24px rgba(123, 95, 152, 0.15);
+  
+  /* Semantic status backgrounds */
+  --color-red-subtle: rgba(239, 68, 68, 0.1);
+  --color-red-border: rgba(239, 68, 68, 0.15);
+  --color-red-bg-light: rgba(239, 68, 68, 0.08);
+  --color-orange-subtle: rgba(245, 158, 11, 0.1);
+  --color-orange-border: rgba(245, 158, 11, 0.15);
+  --color-orange-bg-light: rgba(245, 158, 11, 0.08);
+  --color-indigo-subtle: rgba(99, 102, 241, 0.08);
+  --color-indigo-bg: rgba(99, 102, 241, 0.15);
+  --color-violet-subtle: rgba(139, 92, 246, 0.1);
+  --color-violet-border: rgba(139, 92, 246, 0.2);
+  
+  /* Rank glow */
+  --color-gold-glow: rgba(184, 134, 11, 0.3);
+  --color-silver-glow: rgba(128, 128, 128, 0.3);
+  --color-bronze-glow: rgba(139, 90, 43, 0.3);
+  --color-gold-bg: rgba(184, 134, 11, 0.08);
+  --color-silver-bg: rgba(128, 128, 128, 0.08);
+  --color-bronze-bg: rgba(139, 90, 43, 0.08);
+  --color-gold-highlight: rgba(184,134,11,0.12);
+  
+  /* Pro badge */
+  --color-pro-gold-glow: rgba(180, 140, 50, 0.25);
+  --color-pro-gold-bg: rgba(180, 140, 50, 0.1);
+  --color-pro-gold-border: rgba(180, 140, 50, 0.25);
+  
+  /* Copy trade */
+  --color-copytrade-success-shadow: 0 4px 20px rgba(0, 180, 70, 0.3), 0 0 40px rgba(0, 200, 100, 0.2);
+  
+  /* Activity heatmap */
+  --color-heatmap-1: rgba(34,197,94,0.25);
+  --color-heatmap-2: rgba(34,197,94,0.4);
+  --color-heatmap-3: rgba(34,197,94,0.6);
+  --color-heatmap-4: rgba(34,197,94,0.85);
+  
+  /* Market colors */
+  --color-market-bull: rgba(22, 163, 74, 0.2);
+  --color-market-bear: rgba(220, 38, 38, 0.2);
+  --color-market-bull-light: rgba(22, 163, 74, 0.15);
+  --color-market-bear-light: rgba(220, 38, 38, 0.15);
+  
+  /* Highlight/search */
+  --color-highlight-bg: rgba(123, 95, 152, 0.3);
+  --color-highlight-row: rgba(123, 95, 152, 0.08);
+  --color-unread-bg: rgba(123, 95, 152, 0.05);
+  --color-notification-unread: rgba(123,95,152,0.05);
+  
+  /* Sidebar bg */
+  --color-sidebar-bg: rgba(248, 248, 250, 0.95);
   
   /* Score tier colors (darker for light bg contrast) */
   --color-score-legendary: #7c3aed;

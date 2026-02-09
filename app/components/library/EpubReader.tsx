@@ -717,8 +717,9 @@ export default function EpubReader({
       {showNoteInput && pendingHighlight && (
         <>
           <div onClick={() => { setShowNoteInput(false); setPendingHighlight(null) }}
+            role="presentation"
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
-          <div style={{
+          <div role="dialog" aria-modal="true" aria-label={isZh ? '添加高亮和笔记' : 'Add Highlight & Note'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: panelBg, color: panelText, borderRadius: 16, padding: '24px 28px',
             width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: '0 12px 40px rgba(0,0,0,0.3)',

@@ -74,7 +74,7 @@ export default function GuestSignupPrompt() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(0,0,0,0.7)',
+        background: 'var(--color-backdrop)',
         backdropFilter: 'blur(4px)',
         animation: 'fadeIn 0.3s ease',
       }}

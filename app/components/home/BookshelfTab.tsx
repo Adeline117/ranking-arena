@@ -112,7 +112,7 @@ export default function BookshelfTab() {
             key={opt.key}
             onClick={() => setFilter(opt.key)}
             style={{
-              padding: '5px 14px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: filter === opt.key ? 600 : 500,
+              padding: '10px 14px', borderRadius: tokens.radius.full, fontSize: 12, fontWeight: filter === opt.key ? 600 : 500, minHeight: 44,
               border: filter === opt.key ? 'none' : `1px solid ${tokens.colors.border.primary}`,
               background: filter === opt.key ? tokens.colors.accent.brand : 'transparent',
               color: filter === opt.key ? '#fff' : tokens.colors.text.secondary,
