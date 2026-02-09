@@ -321,6 +321,15 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     };
   });
 
+  // Collect available sources for UI filter
+  const { data: allSourceRows } = await supabase
+    .from('trader_snapshots')
+    .select('source')
+    .eq('season_id', window.toUpperCase())
+    .not('arena_score', 'is', null)
+    .limit(2000);
+  const availableSources = [...new Set((allSourceRows || []).map((r: { source: string }) => r.source))].sort();
+
   return {
     traders,
     window: window.toUpperCase() as '7D' | '30D' | '90D' | 'COMPOSITE',
@@ -328,6 +337,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     total_count: totalCount || 0,
     as_of: new Date(latestCapturedAt).toISOString(),
     is_stale: isStale,
+    availableSources,
   };
 }
 
@@ -516,6 +526,11 @@ async function getCompositeRankings(params: {
 
   const filteredTraders = traders.filter((t: any) => t.display_name != null);
 
+  // Collect all unique sources across all windows for UI filter
+  const allSources = new Set<string>();
+  [map7d, map30d, map90d].forEach(m => m.forEach(r => allSources.add(r.source)));
+  const availableSources = [...allSources].sort();
+
   return {
     traders: filteredTraders,
     window: 'COMPOSITE' as const,
@@ -523,5 +538,6 @@ async function getCompositeRankings(params: {
     total_count: total,
     as_of: new Date().toISOString(),
     is_stale: false,
+    availableSources,
   };
 }

@@ -21,7 +21,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-const PLATFORMS = ['bybit_spot', 'binance_web3']
+const PLATFORMS = ['bybit_spot', 'binance_web3', 'htx_futures']
 const PERIODS = ['7D', '30D', '90D']
 
 interface PlatformResult {
