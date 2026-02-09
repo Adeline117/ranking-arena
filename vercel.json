@@ -10,6 +10,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/flash-news-fetch",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/compute-leaderboard",
       "schedule": "0 * * * *"
     },
