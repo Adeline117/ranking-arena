@@ -166,7 +166,7 @@ export default function ReportModal({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.6)',
+          background: 'var(--color-backdrop)',
           zIndex: tokens.zIndex.modal,
           display: 'flex',
           alignItems: 'center',
@@ -187,7 +187,7 @@ export default function ReportModal({
             maxHeight: 'calc(100vh - 40px)',
             background: tokens.colors.bg.primary,
             borderRadius: tokens.radius.xl,
-            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
+            boxShadow: 'var(--shadow-elevated)',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column' as const,
@@ -446,7 +446,7 @@ export default function ReportModal({
             <Box
               style={{
                 padding: tokens.spacing[3],
-                background: 'rgba(255, 152, 0, 0.1)',
+                background: 'var(--color-orange-bg-light)',
                 borderRadius: tokens.radius.md,
                 marginBottom: tokens.spacing[4],
               }}

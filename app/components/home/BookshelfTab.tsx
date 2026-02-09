@@ -21,7 +21,7 @@ type ShelfBook = {
 }
 
 export default function BookshelfTab() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
 
   const [books, setBooks] = useState<ShelfBook[]>([])

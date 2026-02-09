@@ -49,7 +49,7 @@ export default function PaywallOverlay({ feature, compact = false, style }: Payw
           padding: '16px 20px',
           background: 'var(--color-bg-secondary)',
           borderRadius: tokens.radius.lg,
-          border: '1px solid rgba(212, 168, 71, 0.3)',
+          border: '1px solid var(--color-pro-gold-glow)',
           ...style,
         }}
       >
@@ -165,7 +165,7 @@ export default function PaywallOverlay({ feature, compact = false, style }: Payw
           border: 'none',
           borderRadius: tokens.radius.md,
           cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(212, 168, 71, 0.3)',
+          boxShadow: '0 4px 12px var(--color-pro-gold-glow)',
           transition: 'transform 0.15s, box-shadow 0.15s',
         }}
       >

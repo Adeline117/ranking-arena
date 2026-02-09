@@ -23,7 +23,7 @@ const PRO_CONFIG = {
 // 淡淡发光动画样式（注入一次）
 const glowKeyframes = `
 @keyframes proBadgeGlow {
-  0%, 100% { box-shadow: 0 2px 8px var(--color-pro-badge-shadow), 0 0 12px rgba(212, 168, 71, 0.3); }
+  0%, 100% { box-shadow: 0 2px 8px var(--color-pro-badge-shadow), 0 0 12px var(--color-pro-gold-glow); }
   50% { box-shadow: 0 2px 12px var(--color-pro-badge-shadow), 0 0 20px rgba(212, 168, 71, 0.5); }
 }
 `
@@ -65,7 +65,7 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: `0 2px 8px ${config.glow}, 0 0 12px rgba(212, 168, 71, 0.3)`,
+          boxShadow: `0 2px 8px ${config.glow}, 0 0 12px var(--color-pro-gold-glow)`,
           animation: 'proBadgeGlow 3s ease-in-out infinite',
           flexShrink: 0,
           ...style,
@@ -85,7 +85,7 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
         padding: sizeConfig.padding,
         borderRadius: tokens.radius.full,
         background: config.gradient,
-        boxShadow: `0 2px 8px ${config.glow}, 0 0 12px rgba(212, 168, 71, 0.3)`,
+        boxShadow: `0 2px 8px ${config.glow}, 0 0 12px var(--color-pro-gold-glow)`,
         animation: 'proBadgeGlow 3s ease-in-out infinite',
         ...style,
       }}
@@ -134,7 +134,7 @@ export function ProBadgeOverlay({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        boxShadow: `0 2px 6px ${config.glow}, 0 0 10px rgba(212, 168, 71, 0.3), 0 0 0 2px var(--color-bg-primary)`,
+        boxShadow: `0 2px 6px ${config.glow}, 0 0 10px var(--color-pro-gold-glow), 0 0 0 2px var(--color-bg-primary)`,
         animation: 'proBadgeGlow 3s ease-in-out infinite',
         zIndex: 10,
       }}

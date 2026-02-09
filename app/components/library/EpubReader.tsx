@@ -786,11 +786,12 @@ export default function EpubReader({
       {showSearch && (
         <>
           <div onClick={() => setShowSearch(false)}
+            role="presentation"
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
-          <div style={{
+          <div role="dialog" aria-modal="true" aria-label={isZh ? '搜索内容' : 'Search'} style={{
             position: 'fixed', top: 60, right: 12, width: 380, maxWidth: '90vw', maxHeight: '70vh',
             background: panelBg, color: panelText, borderRadius: 16, zIndex: 301,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.3)', border: `1px solid ${panelBorder}`,
+            boxShadow: 'var(--shadow-lg-dark)', border: `1px solid ${panelBorder}`,
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
             <div style={{ padding: '14px 16px', borderBottom: `1px solid ${panelBorder}` }}>
@@ -853,8 +854,9 @@ export default function EpubReader({
       {showNotes && (
         <>
           <div onClick={() => setShowNotes(false)}
+            role="presentation"
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
-          <div style={{
+          <div role="dialog" aria-modal="true" aria-label={isZh ? '笔记与高亮' : 'Notes & Highlights'} style={{
             position: 'fixed', top: 0, right: 0, bottom: 0, width: 380, maxWidth: '85vw', zIndex: 301,
             background: panelBg, color: panelText, boxShadow: '-4px 0 24px rgba(0,0,0,0.3)',
             display: 'flex', flexDirection: 'column', overflow: 'hidden',

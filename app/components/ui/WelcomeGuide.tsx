@@ -107,7 +107,7 @@ export function WelcomeGuide(): ReactElement | null {
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
+          background: 'var(--color-backdrop)',
           backdropFilter: 'blur(4px)',
         }}
       />

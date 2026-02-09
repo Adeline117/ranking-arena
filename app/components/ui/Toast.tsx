@@ -168,7 +168,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             color: tokens.colors.white, 
             fontSize: 14, 
             fontWeight: 900,
-            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+            textShadow: 'var(--text-shadow-sm)',
           }}>
             {config.icon}
           </span>

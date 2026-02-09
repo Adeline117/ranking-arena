@@ -100,9 +100,9 @@ export default function RouteError({
           marginBottom: 16,
           fontFamily: '"SF Mono", Consolas, monospace',
           padding: '4px 10px',
-          background: 'rgba(255, 124, 124, 0.08)',
+          background: 'var(--color-accent-error-08)',
           borderRadius: 6,
-          border: '1px solid rgba(255, 124, 124, 0.12)',
+          border: '1px solid var(--color-accent-error-12)',
         }}>
           {t('errorCode') || '错误代码'}: {error.digest}
         </p>
