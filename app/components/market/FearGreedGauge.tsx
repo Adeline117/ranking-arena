@@ -34,6 +34,8 @@ function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg
 
 export default function FearGreedGauge() {
   const [data, setData] = useState<FearGreedData | null>(null)
+  const [animatedValue, setAnimatedValue] = useState(0)
+  const prevValueRef = useRef(0)
 
   useEffect(() => {
     fetch('/api/market/fear-greed')
@@ -42,25 +44,8 @@ export default function FearGreedGauge() {
       .catch(() => {})
   }, [])
 
-  if (!data) {
-    return (
-      <div style={{
-        padding: '10px 12px',
-        background: tokens.glass.bg.secondary,
-        backdropFilter: tokens.glass.blur.md,
-        borderRadius: tokens.radius.md,
-        border: tokens.glass.border.light,
-        height: 80,
-      }}>
-        <div className="skeleton" style={{ height: '100%', borderRadius: 6 }} />
-      </div>
-    )
-  }
-
-  const [animatedValue, setAnimatedValue] = useState(0)
-  const prevValueRef = useRef(0)
-
   useEffect(() => {
+    if (!data) return
     const from = prevValueRef.current
     const to = data.value
     const duration = 800
@@ -76,7 +61,22 @@ export default function FearGreedGauge() {
       else prevValueRef.current = to
     }
     requestAnimationFrame(animate)
-  }, [data.value])
+  }, [data?.value])
+
+  if (!data) {
+    return (
+      <div style={{
+        padding: '10px 12px',
+        background: tokens.glass.bg.secondary,
+        backdropFilter: tokens.glass.blur.md,
+        borderRadius: tokens.radius.md,
+        border: tokens.glass.border.light,
+        height: 80,
+      }}>
+        <div className="skeleton" style={{ height: '100%', borderRadius: 6 }} />
+      </div>
+    )
+  }
 
   const value = animatedValue
   const displayValue = data.value
