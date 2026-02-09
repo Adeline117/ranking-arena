@@ -998,7 +998,7 @@ export default function ReadPage() {
             border: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
           }}>
             {/* Theme */}
-            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, opacity: 0.6 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: theme === 'dark' ? 'var(--color-text-secondary)' : '#555' }}>
               {isZh ? '阅读主题' : 'Reading Theme'}
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18 }}>
