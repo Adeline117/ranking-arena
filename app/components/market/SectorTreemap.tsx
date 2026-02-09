@@ -230,9 +230,9 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
         ) : nodes.map(node => {
           const isHovered = hoveredNode === node.name
           const showName = node.width > 36 && node.height > 28
-          const showPct = node.width > 44 && node.height > 40
-          const showCat = node.width > 60 && node.height > 55
-          const fontSize = Math.max(10, Math.min(18, Math.min(node.width / 5, node.height / 3)))
+          const showPct = node.width > 44 && node.height > 44
+          const showCat = node.width > 70 && node.height > 60
+          const fontSize = Math.max(9, Math.min(14, Math.min(node.width / 6, node.height / 4)))
 
           return (
             <div
@@ -268,26 +268,35 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                   fontWeight: 800,
                   color: 'var(--foreground)',
                   textShadow: '0 1px 3px var(--color-overlay-dark)',
-                  lineHeight: 1.2,
+                  lineHeight: 1.1,
+                  maxWidth: '90%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}>
                   {node.name}
                 </span>
               )}
               {showPct && (
                 <span style={{
-                  fontSize: Math.max(9, fontSize * 0.7),
+                  fontSize: Math.max(8, fontSize * 0.65),
                   fontWeight: 600,
                   color: 'var(--glass-bg-heavy)',
                   textShadow: '0 1px 2px var(--color-overlay-dark)',
+                  lineHeight: 1.1,
                 }}>
                   {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
                 </span>
               )}
               {showCat && (
                 <span style={{
-                  fontSize: 9,
+                  fontSize: 8,
                   color: 'var(--glass-bg-medium)',
-                  marginTop: 2,
+                  marginTop: 1,
+                  maxWidth: '90%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}>
                   {node.category}
                 </span>
