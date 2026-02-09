@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
   // Build query for latest snapshots per trader for this window
   let query = supabase
     .from('trader_snapshots')
-    .select('*', { count: 'exact' })
+    .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, rank, sortino_ratio, calmar_ratio, profit_factor, alpha, volatility_pct, avg_holding_hours, trading_style, profitability_score, risk_control_score, execution_score, score_completeness, aum, sharpe_ratio', { count: 'exact' })
     .eq('source', platform)
     .eq('market_type', marketType)
     .eq('window', window)
