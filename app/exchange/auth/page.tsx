@@ -45,7 +45,7 @@ function ExchangeAuthContent() {
   const handleOAuth = async (exchange: string) => {
     if (!userId) {
       showToast(t('pleaseLogin'), 'warning')
-      router.push('/login')
+      router.push('/login?redirect=/exchange')
       return
     }
 

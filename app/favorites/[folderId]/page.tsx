@@ -206,7 +206,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
   const handleSubscribe = async () => {
     if (!accessToken) {
-      router.push('/login')
+      router.push('/login?redirect=/favorites')
       return
     }
     
