@@ -75,7 +75,11 @@ function formatPostContent(item: NewsItem): { title: string; content: string } {
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (!CRON_SECRET) {
+    if (process.env.NODE_ENV !== 'development') {
+      return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+    }
+  } else if (authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
