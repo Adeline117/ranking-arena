@@ -59,7 +59,7 @@ export default function DmcaPage() {
           <br />
           邮箱: copyright@arenafi.org
           <br /><br />
-          请在邮件主题中注明"版权通知"或"DMCA Notice"。
+          请在邮件主题中注明&ldquo;版权通知&rdquo;或&ldquo;DMCA Notice&rdquo;。
           我们将在收到有效通知后尽快处理（通常在5个工作日内）。
         </p>
       </section>
