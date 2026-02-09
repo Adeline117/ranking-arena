@@ -381,6 +381,7 @@ export default function HelpPage() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+      <MobileBottomNav />
     </Box>
   )
 }

@@ -800,6 +800,7 @@ export default function PricingPage() {
           }
         }
       `}</style>
+      <MobileBottomNav />
     </Box>
   )
 }
