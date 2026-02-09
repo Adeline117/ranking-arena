@@ -235,7 +235,7 @@ function RankingTableInner(props: {
   loading: boolean
   loggedIn: boolean
   source?: string
-  timeRange?: '7D' | '30D' | '90D'
+  timeRange?: '7D' | '30D' | '90D' | 'COMPOSITE'
   isPro?: boolean
   category?: CategoryType
   onCategoryChange?: (category: CategoryType) => void

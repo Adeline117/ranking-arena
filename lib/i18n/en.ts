@@ -2983,6 +2983,13 @@ rejectCall: 'Reject',
     shareToWhatsApp: 'Share to WhatsApp',
     scrollToTop: 'Back to top',
 
+    // LiveTradesFeed
+    liveTradesFeed: 'Live Trades Feed',
+    trades: 'trades',
+    paused: 'Paused',
+    connecting: 'Connecting...',
+    waitingForData: 'Waiting for trade data...',
+
 } as const
 
 export default en

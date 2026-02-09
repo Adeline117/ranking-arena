@@ -2986,6 +2986,13 @@ rejectCall: '拒绝',
     shareToWhatsApp: '分享到 WhatsApp',
 scrollToTop: '返回顶部',
 
+    // LiveTradesFeed
+    liveTradesFeed: '实时交易流',
+    trades: '笔',
+    paused: '已暂停',
+    connecting: '正在连接...',
+    waitingForData: '等待交易数据...',
+
 } as const
 
 export default zh

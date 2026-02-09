@@ -76,7 +76,7 @@ function BookshelfTab() {
   // Category colors for type badges
   const categoryColors: Record<string, string> = {
     book: tokens.colors.accent.primary,
-    paper: tokens.colors.accent.info,
+    paper: tokens.colors.accent.primary,
     whitepaper: tokens.colors.accent.success,
     event: tokens.colors.accent.warning,
     article: tokens.colors.accent.error,
@@ -133,9 +133,9 @@ function BookshelfTab() {
               <Box style={{ width: '100%', aspectRatio: '3/4', overflow: 'hidden', position: 'relative' }}>
                 <BookCover
                   title={book.title}
-                  author={book.author}
-                  category={book.category}
-                  coverUrl={book.cover_image_url}
+                  author={book.author ?? undefined}
+                  category={book.category ?? undefined}
+                  coverUrl={book.cover_image_url ?? undefined}
                   fontSize="sm"
                 />
                 {/* Type badge */}

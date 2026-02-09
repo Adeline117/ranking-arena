@@ -145,7 +145,7 @@ export interface FollowChangePayload {
 }
 
 export interface TraderDataPayload {
-  timeRange: '7D' | '30D' | '90D'
+  timeRange: '7D' | '30D' | '90D' | 'COMPOSITE'
   traders: unknown[]
   lastUpdated: string
 }

@@ -30,7 +30,7 @@ class Logger {
 
     if (this.isProduction && error) {
       // Send to Sentry in production
-      this.sendToSentry(error, { message, ...context })
+      this.sendToSentry(error, { message, ...(context && typeof context === 'object' ? context : { context }) })
     }
   }
 
@@ -70,7 +70,7 @@ class Logger {
     try {
       import('@sentry/nextjs').then((Sentry) => {
         Sentry.captureException(error, {
-          extra: context,
+          extra: (context && typeof context === 'object' ? context : { value: context }) as Record<string, unknown>,
           tags: {
             source: 'api-logger',
           },

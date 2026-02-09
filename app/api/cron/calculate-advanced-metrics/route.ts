@@ -19,7 +19,7 @@ import {
   calculateVolatility,
   calculateDownsideVolatility,
 } from '@/lib/utils/advanced-metrics'
-import { calculateArenaScoreV3, type Period } from '@/lib/utils/arena-score'
+import { calculateArenaScoreV3Legacy, type Period } from '@/lib/utils/arena-score'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -166,15 +166,15 @@ export async function POST(request: NextRequest) {
           }
 
           // Calculate Arena Score V3
-          const v3Result = calculateArenaScoreV3({
+          const v3Result = calculateArenaScoreV3Legacy({
             roi,
             pnl,
             maxDrawdown,
             winRate,
-            alpha: null, // Will be calculated by market correlation job
+            alpha: null,
             sortinoRatio,
             calmarRatio,
-            maxConsecutiveWins: null, // Requires trade history
+            maxConsecutiveWins: null,
             maxConsecutiveLosses: null,
           }, window)
 

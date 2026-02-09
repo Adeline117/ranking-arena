@@ -22,12 +22,13 @@ export async function GET(request: NextRequest) {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
     // 获取7D快照数据，按收益率排序
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: snapshots } = await supabase
       .from('trader_snapshots')
       .select('trader_id, roi_7d, roi_30d, nickname, win_rate')
       .not('roi_7d', 'is', null)
       .order('roi_7d', { ascending: false })
-      .limit(10)
+      .limit(10) as { data: any[] | null }
 
     if (!snapshots || snapshots.length === 0) {
       return new Response(JSON.stringify({ message: '无足够数据生成周榜' }))
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
       '',
       ...rankingLines,
       '',
-      darkHorse ? `本周黑马: ${darkHorse.nickname}（排名上升${darkHorse.rise}位）` : '',
+      darkHorse ? `本周黑马: ${(darkHorse as { nickname: string; rise: number }).nickname}（排名上升${(darkHorse as { nickname: string; rise: number }).rise}位）` : '',
       '',
       '数据来源: Arena交易员快照',
       `统计周期: ${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('zh-CN')} - ${now.toLocaleDateString('zh-CN')}`,
