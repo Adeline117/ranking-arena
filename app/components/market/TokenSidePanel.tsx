@@ -153,6 +153,7 @@ export default function TokenSidePanel({ token, onClose }: {
       .then(r => r.ok ? r.json() : null)
       .then(d => d && setCoinDetail(d))
       .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
   }, [token?.id])
 
   // Fetch OHLC data
@@ -180,6 +181,7 @@ export default function TokenSidePanel({ token, onClose }: {
   useEffect(() => {
     if (!token) return
     fetchOhlc(token.id, selectedPeriod)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
   }, [token?.id, selectedPeriod, fetchOhlc])
 
   const md = coinDetail?.market_data

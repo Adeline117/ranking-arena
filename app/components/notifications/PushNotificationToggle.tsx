@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -29,7 +29,8 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
   const [status, setStatus] = useState<PushStatus>('loading')
   const [busy, setBusy] = useState(false)
 
-  const toast = onToast || ((msg: string) => logger.warn(msg))
+   
+  const toast = useMemo(() => onToast || ((msg: string) => logger.warn(msg)), [onToast])
 
   // Check current status on mount
   useEffect(() => {

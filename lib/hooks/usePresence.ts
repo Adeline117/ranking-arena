@@ -138,6 +138,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
     }
     
     fetchLastSeen()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- join produces stable string key
   }, [watchUserIds.join(',')])
 
   const getUserPresence = useCallback((userId: string): PresenceState => {

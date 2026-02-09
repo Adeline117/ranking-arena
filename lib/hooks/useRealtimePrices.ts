@@ -179,16 +179,17 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
     // Initial connect
     connectSSE()
 
+    const timers = flashTimersRef.current
     return () => {
       mountedRef.current = false
       document.removeEventListener('visibilitychange', handleVisibility)
       if (esRef.current) { esRef.current.close(); esRef.current = null }
       stopPoll()
       // Clear all pending flash timers
-      for (const timer of flashTimersRef.current) {
+      for (const timer of timers) {
         clearTimeout(timer)
       }
-      flashTimersRef.current.clear()
+      timers.clear()
     }
   }, [enabled, connectSSE, stopPoll])
 

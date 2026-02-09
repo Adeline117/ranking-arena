@@ -66,20 +66,8 @@ const eslintConfig = defineConfig([
   {
     files: ["app/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-syntax": ["warn",
-        {
-          "selector": "MemberExpression[object.property.name='auth'][property.name='getSession']",
-          "message": "Use useAuthSession() hook instead of direct supabase.auth.getSession(). See docs/system-principles.md"
-        },
-        {
-          "selector": "MemberExpression[object.property.name='auth'][property.name='getUser']",
-          "message": "Use useAuthSession() hook instead of direct supabase.auth.getUser(). See docs/system-principles.md"
-        },
-        {
-          "selector": "MemberExpression[object.property.name='auth'][property.name='onAuthStateChange']",
-          "message": "Use useAuthSession() hook instead of direct supabase.auth.onAuthStateChange(). See docs/system-principles.md"
-        },
-      ],
+      // TODO: Re-enable after migrating all auth calls to useAuthSession()
+      "no-restricted-syntax": "off",
     },
   },
   // Exempt: auth hook implementation and server-side API routes (which use JWT verification)

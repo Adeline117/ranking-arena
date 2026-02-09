@@ -132,7 +132,7 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
@@ -155,7 +155,7 @@ export default function PricingPage() {
     
     try {
       // 获取当前会话的 access token，如果过期则尝试刷新
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       let { data: { session } } = await supabase.auth.getSession()
 
       if (!session?.access_token) {

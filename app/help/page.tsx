@@ -163,7 +163,7 @@ export default function HelpPage() {
   const faqData = getFaqData(t)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
     })

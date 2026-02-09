@@ -37,7 +37,7 @@ export default function ContactSupportButton({
 
   useEffect(() => {
     const init = async () => {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUserId(user?.id || null)
 
@@ -91,7 +91,7 @@ export default function ContactSupportButton({
 
     setLoading(true)
     try {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { session } } = await supabase.auth.getSession()
 
       const response = await fetch('/api/messages/start', {

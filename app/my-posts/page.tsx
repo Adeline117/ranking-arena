@@ -42,7 +42,7 @@ export default function MyPostsPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)

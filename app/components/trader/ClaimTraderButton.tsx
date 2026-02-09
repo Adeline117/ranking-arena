@@ -29,7 +29,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   useEffect(() => {
     async function checkConnection(): Promise<void> {
       try {
-        // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+         
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
           setHasConnection(false)
@@ -86,7 +86,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     }
 
     // Check session before entering loading state to avoid leaked loading on missing auth
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       showToast(t('pleaseLoginFirst'), 'warning')

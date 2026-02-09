@@ -45,7 +45,7 @@ export default function TraderAuthorizePage() {
   const [success, setSuccess] = useState(false)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user)
     })
@@ -70,7 +70,7 @@ export default function TraderAuthorizePage() {
     setError(null)
 
     try {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { session } } = await supabase.auth.getSession()
 
       const response = await fetch('/api/trader/authorize', {

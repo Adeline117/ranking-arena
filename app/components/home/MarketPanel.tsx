@@ -66,7 +66,7 @@ export default function MarketPanel() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
       if (data.user?.id) {

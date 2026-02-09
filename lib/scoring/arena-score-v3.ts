@@ -329,7 +329,7 @@ export function calculateMultiWindowScore(
     }
   }
 
-  const total = totalWeight > 0 ? round2(clip(weightedTotal / totalWeight * totalWeight, 0, 100)) : 0
+  const _total = totalWeight > 0 ? round2(clip(weightedTotal / totalWeight * totalWeight, 0, 100)) : 0
   // Normalize if not all windows present
   const finalTotal = totalWeight > 0 && totalWeight < 1
     ? round2(clip(weightedTotal / totalWeight, 0, 100))

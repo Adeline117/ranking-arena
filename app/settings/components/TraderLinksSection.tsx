@@ -29,7 +29,7 @@ export function TraderLinksSection({ userId: _userId }: { userId: string }) {
 
   const loadLinks = useCallback(async () => {
     try {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
 
@@ -57,7 +57,7 @@ export function TraderLinksSection({ userId: _userId }: { userId: string }) {
 
     setDeleting(linkId)
     try {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
 
