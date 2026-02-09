@@ -217,7 +217,7 @@ export default function SavedFilters({
             background: tokens.colors.bg.primary,
             border: `1px solid ${tokens.colors.border.primary}`,
             borderRadius: tokens.radius.xl,
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+            boxShadow: tokens.shadow.lg,
             zIndex: 100,
             overflow: 'hidden',
           }}
@@ -552,7 +552,7 @@ function SaveFilterModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(0, 0, 0, 0.5)',
+        background: 'var(--color-backdrop, rgba(0, 0, 0, 0.5))',
         backdropFilter: 'blur(4px)',
         zIndex: 1000,
       }}
@@ -565,7 +565,7 @@ function SaveFilterModal({
           padding: tokens.spacing[6],
           width: '100%',
           maxWidth: 360,
-          boxShadow: '0 16px 64px rgba(0, 0, 0, 0.3)',
+          boxShadow: tokens.shadow.xl,
         }}
         onClick={(e) => e.stopPropagation()}
       >

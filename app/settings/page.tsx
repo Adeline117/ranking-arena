@@ -7,15 +7,15 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box, Text, Button } from '@/app/components/base'
-import ExchangeConnectionManager from '@/app/components/exchange/ExchangeConnection'
+const ExchangeConnectionManager = dynamic(() => import('@/app/components/exchange/ExchangeConnection'), { ssr: false })
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { uiLogger } from '@/lib/utils/logger'
-import AdvancedAlerts from '@/app/components/pro/AdvancedAlerts'
+const AdvancedAlerts = dynamic(() => import('@/app/components/pro/AdvancedAlerts'), { ssr: false })
 import dynamic from 'next/dynamic'
 const WalletSection = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.WalletSection })), { ssr: false })
 const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.Web3Boundary })), { ssr: false })
-import { ImageCropper } from '@/app/components/ui/ImageCropper'
+const ImageCropper = dynamic(() => import('@/app/components/ui/ImageCropper').then(m => ({ default: m.ImageCropper })), { ssr: false })
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
