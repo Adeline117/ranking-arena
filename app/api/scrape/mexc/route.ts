@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -77,7 +78,7 @@ async function fetchMexcData(period: string): Promise<MexcTrader[]> {
       
       await new Promise(resolve => setTimeout(resolve, 300))
     } catch (error: unknown) {
-      console.error(`Page ${page} error:`, error)
+      logger.error(`Page ${page} error:`, error)
       break
     }
   }
@@ -170,7 +171,7 @@ export async function GET(request: Request) {
       avatarCount,
     })
   } catch (error: unknown) {
-    console.error('[MEXC Scrape] Error:', error)
+    logger.error('[MEXC Scrape] Error:', error)
     return NextResponse.json({
       success: false,
       error: String(error),

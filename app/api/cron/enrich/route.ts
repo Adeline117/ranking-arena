@@ -127,7 +127,10 @@ function getSupabaseClient() {
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET
-  if (!secret) return true // No secret = allow all (dev mode)
+  if (!secret) {
+    console.error('[enrich] CRON_SECRET not configured')
+    return process.env.NODE_ENV === 'development' // Only allow in dev mode
+  }
 
   const authHeader = req.headers.get('authorization')
   if (authHeader === `Bearer ${secret}`) return true
