@@ -115,8 +115,8 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
   const traderPositionHistory = traderData?.positionHistory ?? []
   const traderEquityCurve = traderData?.equityCurve
   const traderAssetBreakdown = traderData?.assetBreakdown
-  const traderFeed = traderData?.feed ?? []
-  const traderSimilar = traderData?.similarTraders ?? []
+  const _traderFeed = traderData?.feed ?? []
+  const _traderSimilar = traderData?.similarTraders ?? []
 
   // Tabs: unified profile tabs (includes trading tabs when user is a trader)
   type ProfileTabKey = 'overview' | 'activity' | 'followers' | 'groups' | 'bookmarks' | 'bookshelf' | 'stats' | 'portfolio'
