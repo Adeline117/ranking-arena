@@ -1,5 +1,6 @@
 /**
  * LiveTradesFeed - 实时交易流组件
+ * 表格格式: 交易所(彩色badge) | 交易对 | 方向 | 价格 | 数量 | 价值 | 时间
  */
 
 'use client'
@@ -10,17 +11,25 @@ import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
 import type { NormalizedTrade, ExchangeId } from '@/lib/ws/exchange-feeds'
 
-const _EXCHANGE_COLORS: Record<ExchangeId, string> = {
+const EXCHANGE_COLORS: Record<ExchangeId, string> = {
   binance: '#F0B90B',
   bybit: '#F7A600',
-  okx: tokens.colors.text.primary,
+  okx: '#00C8FF',
 }
 
-const _EXCHANGE_LABELS: Record<ExchangeId, string> = {
+const EXCHANGE_BG: Record<ExchangeId, string> = {
+  binance: 'rgba(240, 185, 11, 0.15)',
+  bybit: 'rgba(247, 166, 0, 0.15)',
+  okx: 'rgba(0, 200, 255, 0.15)',
+}
+
+const EXCHANGE_LABELS: Record<ExchangeId, string> = {
   binance: 'Binance',
   bybit: 'Bybit',
   okx: 'OKX',
 }
+
+const ALL_EXCHANGES: ExchangeId[] = ['binance', 'bybit', 'okx']
 
 function formatPrice(price: number): string {
   if (price >= 1000) return price.toLocaleString(undefined, { maximumFractionDigits: 2 })
@@ -28,79 +37,97 @@ function formatPrice(price: number): string {
   return price.toFixed(6)
 }
 
-function _formatAmount(amount: number): string {
+function formatAmount(amount: number): string {
   if (amount >= 1000) return `${(amount / 1000).toFixed(1)}K`
   if (amount >= 1) return amount.toFixed(4)
   return amount.toFixed(6)
 }
 
-function getVolumeWeight(notional: number): number {
-  if (notional <= 100) return 0
-  const log = Math.log10(notional / 100) / Math.log10(10000)
-  return Math.min(Math.max(log, 0), 1)
+function formatValue(notional: number): string {
+  if (notional >= 1000000) return `$${(notional / 1000000).toFixed(1)}M`
+  if (notional >= 1000) return `$${(notional / 1000).toFixed(1)}K`
+  return `$${notional.toFixed(0)}`
 }
 
-function _timeAgo(ts: number): string {
+function timeAgo(ts: number): string {
   const sec = Math.floor((Date.now() - ts) / 1000)
-  if (sec < 1) return 'now'
-  if (sec < 60) return `${sec}s`
-  return `${Math.floor(sec / 60)}m`
+  if (sec < 1) return '刚刚'
+  if (sec < 60) return `${sec}秒前`
+  return `${Math.floor(sec / 60)}分前`
 }
 
 const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTrade; index: number }) {
   const isBuy = trade.side === 'buy'
   const sideColor = isBuy ? tokens.colors.accent.success : tokens.colors.accent.error
-  const weight = getVolumeWeight(trade.notional)
   const isEven = index % 2 === 0
-
-  const rowBg = isBuy
-    ? isEven ? 'rgba(47, 229, 125, 0.04)' : 'rgba(47, 229, 125, 0.02)'
-    : isEven ? 'rgba(255, 124, 124, 0.04)' : 'rgba(255, 124, 124, 0.02)'
-
   const sym = trade.pair.replace('/USDT', '').replace('USDT', '')
+  const exchColor = EXCHANGE_COLORS[trade.exchange] || tokens.colors.text.tertiary
+  const exchBg = EXCHANGE_BG[trade.exchange] || 'transparent'
 
   return (
     <div
       style={{
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: '58px 40px 38px 1fr 52px 52px 42px',
         alignItems: 'center',
-        gap: 6,
-        padding: `3px ${tokens.spacing[3]}`,
-        background: rowBg,
+        gap: 4,
+        padding: `3px ${tokens.spacing[2]}`,
+        background: isEven ? tokens.glass.bg.light : 'transparent',
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        fontSize: 11,
-        fontFamily: 'monospace',
-        transition: `background ${tokens.transition.fast}`,
-        minHeight: 28,
+        fontSize: 10,
+        fontFamily: 'var(--font-mono, monospace)',
+        minHeight: 26,
       }}
     >
+      {/* 交易所 badge */}
       <span style={{
-        width: 16,
-        color: sideColor,
-        fontWeight: 800,
-        flexShrink: 0,
-        fontSize: 10,
+        display: 'inline-block',
+        padding: '1px 5px',
+        borderRadius: 3,
+        background: exchBg,
+        color: exchColor,
+        fontWeight: 700,
+        fontSize: 9,
         textAlign: 'center',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
       }}>
-        {isBuy ? 'B' : 'S'}
+        {EXCHANGE_LABELS[trade.exchange] || trade.exchange}
       </span>
-      <span style={{ width: 36, color: tokens.colors.text.secondary, flexShrink: 0, fontSize: 11, fontWeight: 600 }}>
+
+      {/* 交易对 */}
+      <span style={{ color: tokens.colors.text.primary, fontWeight: 600, fontSize: 10 }}>
         {sym}
       </span>
-      <span style={{ flex: 1, color: sideColor, textAlign: 'right', flexShrink: 0, fontWeight: 600 }}>
+
+      {/* 方向 */}
+      <span style={{
+        color: sideColor,
+        fontWeight: 700,
+        fontSize: 10,
+      }}>
+        {isBuy ? '买入' : '卖出'}
+      </span>
+
+      {/* 价格 */}
+      <span style={{ color: sideColor, textAlign: 'right', fontWeight: 600 }}>
         ${formatPrice(trade.price)}
       </span>
-      <span style={{ width: 48, color: tokens.colors.text.tertiary, textAlign: 'right', flexShrink: 0, fontSize: 10 }}>
-        ${trade.notional >= 1000 ? `${(trade.notional / 1000).toFixed(1)}K` : trade.notional.toFixed(0)}
+
+      {/* 数量 */}
+      <span style={{ color: tokens.colors.text.secondary, textAlign: 'right', fontSize: 9 }}>
+        {formatAmount(trade.amount)}
       </span>
-      <span style={{ width: 8, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-        <div style={{
-          width: 4,
-          height: Math.max(4, weight * 16),
-          background: sideColor,
-          opacity: 0.6,
-          borderRadius: 2,
-        }} />
+
+      {/* 价值 */}
+      <span style={{ color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 9 }}>
+        {formatValue(trade.notional)}
+      </span>
+
+      {/* 时间 */}
+      <span style={{ color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 9 }}>
+        {timeAgo(trade.timestamp)}
       </span>
     </div>
   )
@@ -115,15 +142,15 @@ function ConnectionDot({ connected }: { connected: boolean }) {
       borderRadius: '50%',
       background: connected ? tokens.colors.accent.success : tokens.colors.accent.error,
       marginRight: 4,
-      boxShadow: connected ? '0 0 6px var(--color-accent-success-20)' : '0 0 6px var(--color-accent-error-20)',
     }} />
   )
 }
 
 export default function LiveTradesFeed() {
-  const { trades, connectionStatus: _connectionStatus, connected } = useMarketFeed({ maxTrades: 150 })
+  const { trades, connected } = useMarketFeed({ maxTrades: 150 })
   const containerRef = useRef<HTMLDivElement>(null)
   const [paused, setPaused] = useState(false)
+  const [exchangeFilter, setExchangeFilter] = useState<Set<ExchangeId>>(new Set(ALL_EXCHANGES))
 
   useEffect(() => {
     if (!paused && containerRef.current) containerRef.current.scrollTop = 0
@@ -131,6 +158,20 @@ export default function LiveTradesFeed() {
 
   const handleMouseEnter = useCallback(() => setPaused(true), [])
   const handleMouseLeave = useCallback(() => setPaused(false), [])
+
+  const toggleExchange = useCallback((ex: ExchangeId) => {
+    setExchangeFilter(prev => {
+      const next = new Set(prev)
+      if (next.has(ex)) {
+        if (next.size > 1) next.delete(ex)
+      } else {
+        next.add(ex)
+      }
+      return next
+    })
+  }, [])
+
+  const filteredTrades = trades.filter(tr => exchangeFilter.has(tr.exchange))
 
   return (
     <div style={{
@@ -160,54 +201,80 @@ export default function LiveTradesFeed() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
       }}>
-        <span style={{
-          color: tokens.colors.text.primary,
-          fontSize: tokens.typography.fontSize.base,
-          fontWeight: 700,
-          letterSpacing: '0.3px',
-        }}>
-          {t('liveTradesFeed') || '实时交易流'}
-        </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <ConnectionDot connected={connected} />
-          {paused && (
+          <span style={{
+            color: tokens.colors.text.primary,
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: 700,
+          }}>
+            {t('liveTradesFeed') || '实时交易流'}
+          </span>
+          {filteredTrades.length > 0 && (
             <span style={{
               fontSize: 10,
-              color: tokens.colors.accent.warning,
-              fontWeight: 600,
+              color: tokens.colors.text.tertiary,
+              fontWeight: 500,
+              padding: '1px 6px',
+              borderRadius: 3,
+              background: tokens.colors.bg.tertiary,
             }}>
-              {t('paused') || '暂停'}
+              {filteredTrades.length}笔
             </span>
           )}
-          {!connected && (
-            <span style={{ fontSize: 10, color: tokens.colors.accent.error }}>
-              {t('connecting') || '连接中...'}
-            </span>
-          )}
+        </div>
+
+        {/* Exchange filters */}
+        <div style={{ display: 'flex', gap: 3 }}>
+          {ALL_EXCHANGES.map(ex => {
+            const active = exchangeFilter.has(ex)
+            return (
+              <button
+                key={ex}
+                onClick={() => toggleExchange(ex)}
+                style={{
+                  padding: '1px 6px',
+                  fontSize: 9,
+                  fontWeight: 600,
+                  borderRadius: 3,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: active ? EXCHANGE_BG[ex] : 'transparent',
+                  color: active ? EXCHANGE_COLORS[ex] : tokens.colors.text.tertiary,
+                  opacity: active ? 1 : 0.5,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {EXCHANGE_LABELS[ex]}
+              </button>
+            )
+          })}
         </div>
       </div>
 
       {/* Column headers */}
       <div style={{
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: '58px 40px 38px 1fr 52px 52px 42px',
         alignItems: 'center',
-        gap: 6,
-        padding: `4px ${tokens.spacing[3]}`,
+        gap: 4,
+        padding: `3px ${tokens.spacing[2]}`,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        fontSize: 10,
+        fontSize: 9,
         color: tokens.colors.text.tertiary,
-        fontFamily: 'monospace',
         fontWeight: 600,
         letterSpacing: '0.3px',
       }}>
-        <span style={{ width: 16 }}></span>
-        <span style={{ width: 36 }}>币种</span>
-        <span style={{ flex: 1, textAlign: 'right' }}>价格</span>
-        <span style={{ width: 48, textAlign: 'right' }}>价值</span>
-        <span style={{ width: 8 }}></span>
+        <span>交易所</span>
+        <span>交易对</span>
+        <span>方向</span>
+        <span style={{ textAlign: 'right' }}>价格</span>
+        <span style={{ textAlign: 'right' }}>数量</span>
+        <span style={{ textAlign: 'right' }}>价值</span>
+        <span style={{ textAlign: 'right' }}>时间</span>
       </div>
 
       {/* Trade list */}
@@ -221,7 +288,7 @@ export default function LiveTradesFeed() {
           overflowX: 'hidden',
         }}
       >
-        {trades.length === 0 ? (
+        {filteredTrades.length === 0 ? (
           <div style={{
             padding: 40,
             textAlign: 'center',
@@ -231,9 +298,26 @@ export default function LiveTradesFeed() {
             {t('waitingForData') || '等待交易数据...'}
           </div>
         ) : (
-          trades.map((trade, i) => <TradeRow key={trade.id} trade={trade} index={i} />)
+          filteredTrades.map((trade, i) => <TradeRow key={trade.id} trade={trade} index={i} />)
         )}
       </div>
+
+      {/* Pause indicator */}
+      {paused && (
+        <div style={{
+          position: 'absolute',
+          bottom: 8,
+          right: 8,
+          fontSize: 9,
+          color: tokens.colors.accent.warning,
+          fontWeight: 600,
+          padding: '2px 6px',
+          borderRadius: 3,
+          background: 'rgba(255, 184, 0, 0.1)',
+        }}>
+          已暂停
+        </div>
+      )}
     </div>
   )
 }
