@@ -11,6 +11,8 @@ import {
   handleError,
   validateString,
   validateEnum,
+  checkRateLimit,
+  RateLimitPresets,
 } from '@/lib/api'
 import { validateExchangeCredentials, SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
 import { encrypt } from '@/lib/exchange/encryption'
@@ -19,6 +21,10 @@ import { createLogger } from '@/lib/utils/logger'
 const logger = createLogger('exchange-connect')
 
 export async function POST(req: NextRequest) {
+  // Rate limit: sensitive operation
+  const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.sensitive)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const user = await requireAuth(req)
     const adminSupabase = getSupabaseAdmin()

@@ -835,8 +835,8 @@ export default function LoginPage() {
         {/* Title */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <h1 style={{ 
-            fontSize: 28, 
-            fontWeight: 800, 
+            fontSize: tokens.typography.fontSize['2xl'], 
+            fontWeight: tokens.typography.fontWeight.extrabold, 
             marginBottom: 8,
             background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
             WebkitBackgroundClip: 'text',

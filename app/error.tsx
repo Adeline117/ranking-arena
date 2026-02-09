@@ -274,8 +274,8 @@ export default function Error({
         <h1 
           className="content-section"
           style={{ 
-            fontSize: 30, 
-            fontWeight: 700,
+            fontSize: tokens.typography.fontSize['2xl'], 
+            fontWeight: tokens.typography.fontWeight.bold,
             marginBottom: 12,
             background: `linear-gradient(135deg, var(--color-text-primary, #EDEDED) 0%, ${ARENA_PURPLE} 100%)`,
             WebkitBackgroundClip: 'text',

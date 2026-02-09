@@ -282,6 +282,7 @@ const nextConfig: NextConfig = {
       'stripe',
       '@coinbase/wallet-sdk',
       '@metamask/sdk',
+      'epubjs',
     ],
 
     // Enable optimized CSS loading

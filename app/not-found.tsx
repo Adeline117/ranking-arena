@@ -289,8 +289,8 @@ export default function NotFoundPage() {
         <h1 
           className="content-section"
           style={{ 
-            fontSize: 28, 
-            fontWeight: 700,
+            fontSize: tokens.typography.fontSize['2xl'], 
+            fontWeight: tokens.typography.fontWeight.bold,
             marginBottom: 12,
             animationDelay: '0.2s',
           }}

@@ -43,8 +43,8 @@ export default function TermsOfServicePage() {
           borderBottom: '2px solid var(--color-accent-primary)',
         }}>
           <h1 style={{
-            fontSize: '1.75rem',
-            fontWeight: 700,
+            fontSize: tokens.typography.fontSize['2xl'],
+            fontWeight: tokens.typography.fontWeight.black,
             color: 'var(--color-text-primary)',
             marginBottom: tokens.spacing[2],
           }}>

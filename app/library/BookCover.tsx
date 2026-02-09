@@ -130,7 +130,6 @@ const BookCover = memo(function BookCover({
           priority={priority}
           style={{ objectFit: 'cover' }}
           sizes="(max-width: 768px) 50vw, 200px"
-          unoptimized
           onError={() => setImgError(true)}
         />
       </div>

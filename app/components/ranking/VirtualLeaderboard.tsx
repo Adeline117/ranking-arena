@@ -174,7 +174,7 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
             style={{ 
               borderRadius: '50%',
               objectFit: 'cover',
-            }
+            }}
           />
         ) : (
           <div style={{

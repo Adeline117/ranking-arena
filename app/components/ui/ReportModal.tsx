@@ -362,7 +362,7 @@ export default function ReportModal({
               <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                 {images.map((img, i) => (
                   <Box key={i} style={{ position: 'relative', width: 72, height: 72, borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
-                    <Image src={img} alt="Report evidence" fill style={{ objectFit: 'cover' }} unoptimized />
+                    <Image src={img} alt="Report evidence" fill sizes="80px" loading="lazy" style={{ objectFit: 'cover' }} />
                     <button
                       onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
                       aria-label={`Remove image ${i + 1}`}

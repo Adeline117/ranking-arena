@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
+import CryptoIcon from '@/app/components/common/CryptoIcon'
 
 type CoinPrice = {
   id: string
@@ -173,7 +174,8 @@ export default function WatchlistMarket() {
                 onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                <span style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary }}>
+                  <CryptoIcon symbol={coin.symbol} size={18} />
                   {coin.symbol}
                 </span>
                 <div style={{ textAlign: 'right' }}>

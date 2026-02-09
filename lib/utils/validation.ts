@@ -16,16 +16,24 @@ const messages = {
     passwordTooShort: (min: number) => `密码至少需要${min}个字符`,
     passwordMismatch: '两次输入的密码不一致',
     handleTooShort: (min: number) => `用户名至少需要${min}个字符`,
+    handleTooLong: (max: number) => `用户名不能超过${max}个字符`,
     handleInvalidChars: '用户名只能包含字母、数字、下划线和中文',
     invalidUrl: '请输入有效的URL地址',
+    required: (field: string) => `请输入${field}`,
+    tooLong: (field: string, max: number) => `${field}不能超过${max}个字符`,
+    tooShort: (field: string, min: number) => `${field}至少需要${min}个字符`,
   },
   en: {
     invalidEmail: 'Please enter a valid email address',
     passwordTooShort: (min: number) => `Password must be at least ${min} characters`,
     passwordMismatch: 'Passwords do not match',
     handleTooShort: (min: number) => `Username must be at least ${min} characters`,
+    handleTooLong: (max: number) => `Username cannot exceed ${max} characters`,
     handleInvalidChars: 'Username can only contain letters, numbers, underscores and Chinese characters',
     invalidUrl: 'Please enter a valid URL',
+    required: (field: string) => `Please enter ${field}`,
+    tooLong: (field: string, max: number) => `${field} cannot exceed ${max} characters`,
+    tooShort: (field: string, min: number) => `${field} must be at least ${min} characters`,
   },
 }
 
@@ -69,6 +77,7 @@ export function validatePasswordMatch(password: string, confirmPassword: string,
 export function validateHandle(handle: string, minLength = 1, locale: Locale = 'zh'): ValidationResult {
   if (!handle) return VALID_RESULT
   if (handle.length < minLength) return invalid(messages[locale].handleTooShort(minLength))
+  if (handle.length > 30) return invalid(messages[locale].handleTooLong(30))
   if (!HANDLE_REGEX.test(handle)) return invalid(messages[locale].handleInvalidChars)
   return VALID_RESULT
 }
@@ -109,5 +118,28 @@ export function validateUrl(url: string, locale: Locale = 'zh'): ValidationResul
   } catch {
     return invalid(messages[locale].invalidUrl)
   }
+}
+
+/**
+ * 验证必填字段
+ */
+export function validateRequired(value: string, fieldName: string, locale: Locale = 'zh'): ValidationResult {
+  if (!value || !value.trim()) return invalid(messages[locale].required(fieldName))
+  return VALID_RESULT
+}
+
+/**
+ * 验证字符长度范围
+ */
+export function validateLength(
+  value: string,
+  fieldName: string,
+  options: { min?: number; max?: number },
+  locale: Locale = 'zh'
+): ValidationResult {
+  if (!value) return VALID_RESULT
+  if (options.min && value.length < options.min) return invalid(messages[locale].tooShort(fieldName, options.min))
+  if (options.max && value.length > options.max) return invalid(messages[locale].tooLong(fieldName, options.max))
+  return VALID_RESULT
 }
 

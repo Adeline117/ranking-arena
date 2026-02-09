@@ -483,15 +483,22 @@ export default function EditPostPage() {
     setDraggedImageIndex(null)
   }
 
+  const submitRef = useRef(false)
+
   // 提交更新
   const handleSubmit = async () => {
+    if (submitRef.current || saving) return
+    submitRef.current = true
+
     if (!title.trim()) {
       showToast(t('pleaseEnterTitle'), 'warning')
+      submitRef.current = false
       return
     }
 
     if (!userId || !originalPost) {
       showToast(t('cannotSave'), 'error')
+      submitRef.current = false
       return
     }
 
@@ -529,6 +536,7 @@ export default function EditPostPage() {
       showToast(errorMessage, 'error')
     } finally {
       setSaving(false)
+      submitRef.current = false
     }
   }
 
@@ -584,7 +592,14 @@ export default function EditPostPage() {
               placeholder={t('enterTitle')}
               value={title}
               onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && title.trim()) {
+                  e.preventDefault()
+                  textareaRef.current?.focus()
+                }
+              }}
               maxLength={TITLE_MAX_LENGTH}
+              autoFocus
               style={{
                 width: '100%',
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,

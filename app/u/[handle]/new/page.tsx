@@ -872,7 +872,14 @@ export default function NewPostPage() {
               placeholder={t('enterTitle')}
               value={title}
               onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && title.trim()) {
+                  e.preventDefault()
+                  textareaRef.current?.focus()
+                }
+              }}
               maxLength={TITLE_MAX_LENGTH}
+              autoFocus
               style={{
                 width: '100%',
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
