@@ -36,6 +36,16 @@ export default function KolApplyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!form.platform) {
+      setError('请选择主要平台')
+      return
+    }
+    if (!form.platform_handle.trim()) {
+      setError('请填写平台账号')
+      return
+    }
+
     setLoading(true)
     setError('')
 

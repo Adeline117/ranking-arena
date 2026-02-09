@@ -61,6 +61,11 @@ export default function TraderAuthorizePage() {
       return
     }
 
+    if (!apiKey.trim() || !apiSecret.trim()) {
+      setError(language === 'zh' ? '请填写API Key和API Secret' : 'Please fill in API Key and API Secret')
+      return
+    }
+
     setLoading(true)
     setError(null)
 

@@ -74,7 +74,15 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) {
+            // Reset form when opening
+            setReason('')
+            setDescription('')
+            setError('')
+          }
+          setOpen(!open)
+        }}
         style={{
           background: 'none',
           border: 'none',
