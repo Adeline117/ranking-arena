@@ -172,7 +172,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   // Note: this table uses 'season_id' not 'window'
   let dbQuery = supabase
     .from('trader_snapshots')
-    .select('id, source, source_trader_id, season_id, captured_at, arena_score, roi, pnl, max_drawdown, win_rate, tradescount, followers', { count: 'exact' })
+    .select('id, source, source_trader_id, season_id, captured_at, arena_score, roi, pnl, max_drawdown, win_rate, trades_count, followers', { count: 'exact' })
     .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
     .lte('roi', ROI_ANOMALY_THRESHOLD) // Filter out extreme ROI anomalies
@@ -195,7 +195,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     dbQuery = dbQuery.gte('pnl', min_pnl);
   }
   if (min_trades != null) {
-    dbQuery = dbQuery.gte('tradescount', min_trades);
+    dbQuery = dbQuery.gte('trades_count', min_trades);
   }
 
   const { data: rows, error } = await dbQuery;
@@ -261,7 +261,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
         pnl,
         win_rate: winRate,
         max_drawdown: maxDrawdown,
-        tradescount: row.tradescount ?? null,
+        trades_count: row.trades_count ?? null,
         followers: row.followers ?? null,
         copiers: null, // Not available in this table
         aum: null, // Not available in this table
