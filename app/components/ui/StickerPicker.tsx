@@ -40,7 +40,7 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
     padding: 8,
     zIndex: 9999,
     boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-    width: 300,
+    width: 'min(300px, calc(100vw - 32px))',
     maxHeight: 320,
     overflowY: 'auto',
   }

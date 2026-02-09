@@ -90,7 +90,7 @@ export default function TokenSidePanel({ token, onClose }: {
               position: 'fixed',
               top: 0,
               right: 0,
-              width: '100%',
+              width: 'min(100%, max(40vw, 380px))',
               maxWidth: 600,
               height: '100vh',
               background: tokens.colors.bg.primary,

@@ -23,6 +23,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import CreatePostFAB from '@/app/components/ui/CreatePostFAB'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 
 // Use design token for brand color
 const ARENA_PURPLE = tokens.colors.accent.brand
@@ -1500,6 +1501,7 @@ function HotContent() {
         document.body
       )}
       <CreatePostFAB />
+      <MobileBottomNav />
     </Box>
   )
 }

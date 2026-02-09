@@ -13,6 +13,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import ExportButton from '@/app/components/common/ExportButton'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 
 interface TraderCompareData {
   id: string
@@ -203,7 +204,7 @@ function CompareContent() {
 
       <TopNav email={email} />
 
-      <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], position: 'relative', zIndex: 1 }}>
+      <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100, position: 'relative', zIndex: 1 }}>
         {/* Title */}
         <Box style={{ marginBottom: tokens.spacing[6], display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box>
@@ -430,6 +431,7 @@ function CompareContent() {
           />
         )}
       </Box>
+      <MobileBottomNav />
     </Box>
   )
 }
