@@ -61,7 +61,7 @@ function AuthCallbackContent() {
           margin: '0 auto 16px',
         }} />
         <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
-          Logging in...
+          登录中...
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
