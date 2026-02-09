@@ -58,12 +58,11 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
               <button
                 key={tab}
                 onClick={() => setFilter(tab)}
-                className={`px-3.5 py-1.5 rounded-lg border-none text-[13px] cursor-pointer transition-all duration-200 ${
-                  filter === tab
-                    ? 'bg-purple-500/15 text-purple-300 font-semibold'
-                    : 'bg-transparent font-medium'
-                }`}
-                style={filter !== tab ? { color: 'var(--color-text-secondary)' } : undefined}
+                className="px-3.5 py-1.5 rounded-lg border-none text-[13px] cursor-pointer transition-all duration-200"
+                style={filter === tab
+                  ? { background: `color-mix(in srgb, var(--color-brand) 15%, transparent)`, color: 'var(--color-brand-accent)', fontWeight: 600 }
+                  : { background: 'transparent', color: 'var(--color-text-secondary)', fontWeight: 500 }
+                }
               >
                 {tab === 'all' ? 'All' : tab === 'active' ? 'Active' : 'Closed'}
               </button>
@@ -74,7 +73,8 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
               href={getSpaceUrl(spaceId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3 py-1.5 rounded-lg border border-purple-400/30 bg-transparent text-purple-400 text-xs font-semibold no-underline inline-flex items-center gap-1 hover:bg-purple-400/5 transition-colors"
+              className="px-3 py-1.5 rounded-lg bg-transparent text-xs font-semibold no-underline inline-flex items-center gap-1 transition-colors"
+              style={{ border: `1px solid color-mix(in srgb, var(--color-brand) 30%, transparent)`, color: 'var(--color-brand)' }}
             >
               Snapshot
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

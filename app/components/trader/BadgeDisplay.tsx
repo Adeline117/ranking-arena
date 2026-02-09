@@ -8,6 +8,7 @@
 
 import { useState, useEffect, type ReactNode } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 import type { EarnedBadge } from '@/lib/badges'
 
 interface BadgeDisplayProps {
@@ -176,8 +177,15 @@ export function BadgeDisplay({
           {hoveredBadge === badge.id && (
             <div
               className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2
-                         bg-[rgba(15,15,20,0.95)] border border-neutral-700 rounded-lg
-                         text-xs whitespace-nowrap z-50 shadow-lg"
+                         text-xs whitespace-nowrap z-50"
+              style={{
+                background: tokens.glass.bg.heavy,
+                backdropFilter: tokens.glass.blur.lg,
+                WebkitBackdropFilter: tokens.glass.blur.lg,
+                border: tokens.glass.border.medium,
+                borderRadius: tokens.radius.md,
+                boxShadow: tokens.shadow.lg,
+              }}
             >
               <div className="font-semibold mb-0.5" style={{ color: badge.color }}>
                 {badge.name[language as 'en' | 'zh'] || badge.name.en}

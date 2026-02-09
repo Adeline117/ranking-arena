@@ -13,6 +13,7 @@ import { useState, useCallback } from 'react'
 import { useAccount, useSignTypedData } from 'wagmi'
 import { getArenaSpaceId } from '@/lib/web3/snapshot'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 interface VoteButtonProps {
   proposalId: string
@@ -152,7 +153,8 @@ export function VoteButton({
     return (
       <button
         disabled
-        className="w-full px-3 py-2 rounded-lg border border-green-500/20 bg-green-500/5 text-green-400 text-sm font-semibold cursor-default flex items-center justify-center gap-1.5"
+        className="w-full px-3 py-2 rounded-lg text-sm font-semibold cursor-default flex items-center justify-center gap-1.5"
+        style={{ border: `1px solid color-mix(in srgb, var(--color-accent-success) 20%, transparent)`, background: `color-mix(in srgb, var(--color-accent-success) 5%, transparent)`, color: tokens.colors.accent.success }}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12" />
@@ -168,15 +170,18 @@ export function VoteButton({
         onClick={handleVote}
         disabled={disabled || isVoting}
         className={`w-full px-3 py-2 rounded-lg border text-sm font-semibold transition-all duration-200 ${
-          isVoting
-            ? 'border-purple-500/20 bg-purple-500/5 text-purple-300 cursor-wait'
-            : 'border-purple-500/30 bg-purple-500/10 text-purple-300 cursor-pointer hover:bg-purple-500/15 hover:border-purple-500/40'
+          isVoting ? 'cursor-wait' : 'cursor-pointer'
         }`}
+        style={{
+          borderColor: `color-mix(in srgb, var(--color-brand) ${isVoting ? '20%' : '30%'}, transparent)`,
+          background: `color-mix(in srgb, var(--color-brand) ${isVoting ? '5%' : '10%'}, transparent)`,
+          color: tokens.colors.accent.brandLight,
+        }}
       >
         {isVoting ? t('voteSigning') : `${t('voteLabel')}: ${choiceLabel}`}
       </button>
       {error && (
-        <p className="mt-1 text-[11px] text-red-400">{error}</p>
+        <p className="mt-1 text-[11px]" style={{ color: tokens.colors.accent.error }}>{error}</p>
       )}
     </div>
   )
