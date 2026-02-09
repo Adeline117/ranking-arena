@@ -18,90 +18,139 @@ interface ExchangeInfo {
   trade_volume_24h_btc: number
 }
 
-// TopTrader interface removed - trader card removed from market page
-
-function CardWrapper({ title, linkText, linkHref, children }: {
+function CardWrapper({ title, linkText, linkHref, accentColor, children }: {
   title: string
   linkText: string
   linkHref: string
+  accentColor?: string
   children: React.ReactNode
 }) {
   return (
     <div style={{
       flex: '1 1 0',
       minWidth: 0,
-      minHeight: 200,
-      padding: '16px',
-      background: tokens.glass.bg.secondary,
-      backdropFilter: tokens.glass.blur.md,
-      borderRadius: tokens.radius.lg,
+      minHeight: 220,
+      padding: 0,
+      background: tokens.glass.bg.medium,
+      backdropFilter: tokens.glass.blur.lg,
+      borderRadius: tokens.radius.xl,
       border: tokens.glass.border.light,
       display: 'flex',
       flexDirection: 'column',
+      overflow: 'hidden',
+      position: 'relative',
+      transition: `all ${tokens.transition.base}`,
     }}>
+      {/* Subtle top accent line */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 2,
+        background: accentColor || tokens.gradient.purple,
+        opacity: 0.6,
+      }} />
+      {/* Header */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        padding: `${tokens.spacing[4]} ${tokens.spacing[5]} ${tokens.spacing[2]}`,
       }}>
         <span style={{
-          fontSize: 14,
-          fontWeight: 600,
+          fontSize: tokens.typography.fontSize.base,
+          fontWeight: 700,
           color: tokens.colors.text.primary,
+          letterSpacing: '0.3px',
         }}>
           {title}
         </span>
         <Link
           href={linkHref}
           style={{
-            fontSize: 12,
+            fontSize: tokens.typography.fontSize.xs,
             color: tokens.colors.accent.primary,
             textDecoration: 'none',
             display: 'inline-flex',
             alignItems: 'center',
             gap: 2,
+            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+            borderRadius: tokens.radius.sm,
+            transition: `all ${tokens.transition.fast}`,
           }}
         >
           {linkText}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 18l6-6-6-6" />
           </svg>
         </Link>
       </div>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflow: 'hidden', padding: `0 ${tokens.spacing[5]} ${tokens.spacing[4]}` }}>
         {children}
       </div>
     </div>
   )
 }
 
-function CoinItem({ symbol, price, changePct, isGainer }: {
+function CoinItem({ symbol, price, changePct, isGainer, index }: {
   symbol: string
   price: string
   changePct: string
   isGainer: boolean
+  index: number
 }) {
   const sym = symbol.replace('-USD', '').replace('USDT', '')
   const color = isGainer ? tokens.colors.accent.success : tokens.colors.accent.error
+  const bgGradient = isGainer
+    ? 'linear-gradient(90deg, rgba(47, 229, 125, 0.06) 0%, transparent 100%)'
+    : 'linear-gradient(90deg, rgba(255, 124, 124, 0.06) 0%, transparent 100%)'
   return (
     <div style={{
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '4px 0',
+      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+      borderRadius: tokens.radius.md,
+      background: index % 2 === 0 ? bgGradient : 'transparent',
+      transition: `background ${tokens.transition.fast}`,
+      minHeight: 36,
     }}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-        <CryptoIcon symbol={sym} size={18} />
-        <span style={{ fontWeight: 500, color: tokens.colors.text.primary }}>{sym}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          width: 20,
+          height: 20,
+          borderRadius: tokens.radius.sm,
+          background: tokens.colors.bg.tertiary,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 10,
+          fontWeight: 700,
+          color: tokens.colors.text.tertiary,
+        }}>
+          {index + 1}
+        </span>
+        <CryptoIcon symbol={sym} size={20} />
+        <span style={{ fontWeight: 600, color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.sm }}>{sym}</span>
       </span>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-        <span style={{ color: tokens.colors.text.secondary, fontFamily: 'var(--font-mono, monospace)' }}>{price}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+        <span style={{
+          color: tokens.colors.text.secondary,
+          fontFamily: 'var(--font-mono, monospace)',
+          fontSize: tokens.typography.fontSize.sm,
+        }}>
+          {price}
+        </span>
         <span style={{
           color,
-          fontWeight: 600,
-          minWidth: 60,
+          fontWeight: 700,
+          fontSize: tokens.typography.fontSize.sm,
+          minWidth: 64,
           textAlign: 'right',
+          padding: `2px ${tokens.spacing[2]}`,
+          borderRadius: tokens.radius.sm,
+          background: isGainer ? 'rgba(47, 229, 125, 0.1)' : 'rgba(255, 124, 124, 0.1)',
         }}>
           {changePct}
         </span>
@@ -116,13 +165,33 @@ function formatBTC(value: number): string {
   return `${value.toFixed(0)} BTC`
 }
 
+function VolumeBar({ value, max }: { value: number; max: number }) {
+  const pct = max > 0 ? (value / max) * 100 : 0
+  return (
+    <div style={{
+      width: 80,
+      height: 4,
+      background: tokens.colors.bg.tertiary,
+      borderRadius: tokens.radius.full,
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        width: `${pct}%`,
+        height: '100%',
+        background: tokens.gradient.purple,
+        borderRadius: tokens.radius.full,
+        transition: `width ${tokens.transition.slow}`,
+      }} />
+    </div>
+  )
+}
+
 export default function CoreCards() {
-  const [loading, setLoading] = useState(true)
   const [gainers, setGainers] = useState<CoinRow[]>([])
   const [losers, setLosers] = useState<CoinRow[]>([])
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
+
   useEffect(() => {
-    // Fetch market data for gainers/losers
     fetch('/api/market')
       .then(r => r.json())
       .then(json => {
@@ -133,67 +202,96 @@ export default function CoreCards() {
       })
       .catch(() => {})
 
-    // Fetch exchange volume
     fetch('/api/market/exchanges')
       .then(r => r.json())
       .then(json => { if (Array.isArray(json)) setExchanges(json.slice(0, 5)) })
       .catch(() => {})
-
-    setLoading(false)
   }, [])
+
+  const maxVol = exchanges.length > 0 ? Math.max(...exchanges.map(e => e.trade_volume_24h_btc)) : 0
 
   return (
     <div style={{
-      display: 'flex',
-      gap: 12,
-      overflowX: 'auto',
-      scrollbarWidth: 'none',
-      padding: '0 0 4px 0',
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3, 1fr)',
+      gap: tokens.spacing[4],
     }}>
       {/* Gainers Top 5 */}
-      <CardWrapper title="涨幅榜 Top5" linkText="查看全部" linkHref="/market?tab=gainers">
+      <CardWrapper title="涨幅榜 Top5" linkText="查看全部" linkHref="/market?tab=gainers" accentColor={tokens.gradient.success}>
         {gainers.length === 0 ? (
-          <div style={{ height: 120 }} className="skeleton" />
+          <div style={{ height: 160 }} className="skeleton" />
         ) : (
-          gainers.map(row => (
-            <CoinItem key={row.symbol} symbol={row.symbol} price={row.price} changePct={row.changePct} isGainer={true} />
-          ))
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {gainers.map((row, i) => (
+              <CoinItem key={row.symbol} symbol={row.symbol} price={row.price} changePct={row.changePct} isGainer={true} index={i} />
+            ))}
+          </div>
         )}
       </CardWrapper>
 
       {/* Losers Top 5 */}
-      <CardWrapper title="跌幅榜 Top5" linkText="查看全部" linkHref="/market?tab=losers">
+      <CardWrapper title="跌幅榜 Top5" linkText="查看全部" linkHref="/market?tab=losers" accentColor={tokens.gradient.error}>
         {losers.length === 0 ? (
-          <div style={{ height: 120 }} className="skeleton" />
+          <div style={{ height: 160 }} className="skeleton" />
         ) : (
-          losers.map(row => (
-            <CoinItem key={row.symbol} symbol={row.symbol} price={row.price} changePct={row.changePct} isGainer={false} />
-          ))
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {losers.map((row, i) => (
+              <CoinItem key={row.symbol} symbol={row.symbol} price={row.price} changePct={row.changePct} isGainer={false} index={i} />
+            ))}
+          </div>
         )}
       </CardWrapper>
 
       {/* Exchange Volume / Fund Flow */}
-      <CardWrapper title="资金流向" linkText="查看全部" linkHref="/market?tab=flow">
+      <CardWrapper title="资金流向" linkText="查看全部" linkHref="/market?tab=flow" accentColor={tokens.gradient.purple}>
         {exchanges.length === 0 ? (
-          <div style={{ height: 120 }} className="skeleton" />
+          <div style={{ height: 160 }} className="skeleton" />
         ) : (
-          exchanges.map(ex => (
-            <div key={ex.id} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '4px 0',
-              fontSize: 13,
-            }}>
-              <span style={{ fontWeight: 500, color: tokens.colors.text.primary }}>{ex.name}</span>
-              <span style={{ color: tokens.colors.text.secondary, fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>
-                {formatBTC(ex.trade_volume_24h_btc)}
-              </span>
-            </div>
-          ))
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {exchanges.map((ex, i) => (
+              <div key={ex.id} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
+                minHeight: 36,
+              }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: tokens.radius.sm,
+                    background: tokens.colors.bg.tertiary,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: tokens.colors.text.tertiary,
+                  }}>
+                    {i + 1}
+                  </span>
+                  <span style={{ fontWeight: 600, color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.sm }}>{ex.name}</span>
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                  <VolumeBar value={ex.trade_volume_24h_btc} max={maxVol} />
+                  <span style={{
+                    color: tokens.colors.text.secondary,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    fontSize: tokens.typography.fontSize.xs,
+                    minWidth: 72,
+                    textAlign: 'right',
+                  }}>
+                    {formatBTC(ex.trade_volume_24h_btc)}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
         )}
       </CardWrapper>
-
     </div>
   )
 }

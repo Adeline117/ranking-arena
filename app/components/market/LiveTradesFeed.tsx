@@ -47,14 +47,17 @@ function timeAgo(ts: number): string {
   return `${Math.floor(sec / 60)}m`
 }
 
-const TradeRow = memo(function TradeRow({ trade }: { trade: NormalizedTrade }) {
+const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTrade; index: number }) {
   const isBuy = trade.side === 'buy'
-  const textColor = isBuy ? tokens.colors.accent.success : tokens.colors.accent.error
+  const sideColor = isBuy ? tokens.colors.accent.success : tokens.colors.accent.error
   const weight = getVolumeWeight(trade.notional)
-  const bgOpacity = Math.max(weight * 0.08, 0)
-  const bgColor = isBuy
-    ? `rgba(22, 199, 132, ${bgOpacity})`
-    : `rgba(234, 57, 67, ${bgOpacity})`
+  const isEven = index % 2 === 0
+
+  // Subtle row bg with alternating + directional tint
+  const rowBg = isBuy
+    ? isEven ? 'rgba(47, 229, 125, 0.04)' : 'rgba(47, 229, 125, 0.02)'
+    : isEven ? 'rgba(255, 124, 124, 0.04)' : 'rgba(255, 124, 124, 0.02)'
+
   const baseFontSize = 12
   const fontSize = baseFontSize + weight * 2
 
@@ -64,37 +67,62 @@ const TradeRow = memo(function TradeRow({ trade }: { trade: NormalizedTrade }) {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '3px 12px',
-        background: bgColor,
-        borderBottom: `1px solid ${tokens.colors.border.primary}10`,
+        padding: `4px ${tokens.spacing[4]}`,
+        background: rowBg,
+        borderBottom: `1px solid ${tokens.colors.border.primary}`,
         fontSize,
         fontFamily: 'monospace',
-        transition: 'background 0.15s',
+        transition: `background ${tokens.transition.fast}`,
+        minHeight: 32,
       }}
     >
-      <span style={{ width: 56, fontSize: 10, color: EXCHANGE_COLORS[trade.exchange], opacity: 0.8, flexShrink: 0 }}>
+      <span style={{ width: 52, fontSize: 10, color: EXCHANGE_COLORS[trade.exchange], fontWeight: 600, flexShrink: 0 }}>
         {EXCHANGE_LABELS[trade.exchange]}
       </span>
-      <span style={{ width: 80, color: tokens.colors.text.secondary, flexShrink: 0, fontSize: 11 }}>
+      <span style={{ width: 76, color: tokens.colors.text.secondary, flexShrink: 0, fontSize: 11 }}>
         {trade.pair}
       </span>
-      <span style={{ width: 32, color: textColor, fontWeight: 600, flexShrink: 0 }}>
+      <span style={{
+        width: 36,
+        color: sideColor,
+        fontWeight: 800,
+        flexShrink: 0,
+        fontSize: 11,
+        padding: '1px 4px',
+        borderRadius: tokens.radius.sm,
+        background: isBuy ? 'rgba(47, 229, 125, 0.12)' : 'rgba(255, 124, 124, 0.12)',
+        textAlign: 'center',
+      }}>
         {isBuy ? t('tradeBuy') : t('tradeSell')}
       </span>
-      <span style={{ width: 100, color: textColor, textAlign: 'right', flexShrink: 0 }}>
+      <span style={{ width: 96, color: sideColor, textAlign: 'right', flexShrink: 0, fontWeight: 600 }}>
         ${formatPrice(trade.price)}
       </span>
-      <span style={{ width: 80, color: tokens.colors.text.tertiary, textAlign: 'right', flexShrink: 0 }}>
+      <span style={{ width: 76, color: tokens.colors.text.tertiary, textAlign: 'right', flexShrink: 0 }}>
         {formatAmount(trade.amount)}
       </span>
       <span style={{ flex: 1, color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 10 }}>
         ${trade.notional >= 1000 ? `${(trade.notional / 1000).toFixed(1)}K` : trade.notional.toFixed(0)}
       </span>
-      <span style={{ width: 32, color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 10 }}>
+      <span style={{ width: 28, color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 10 }}>
         {timeAgo(trade.exchangeTimestamp)}
       </span>
-      <div style={{ width: 40, height: 4, background: `${tokens.colors.border.primary}30`, borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
-        <div style={{ width: `${weight * 100}%`, height: '100%', background: textColor, opacity: 0.6, borderRadius: 2 }} />
+      <div style={{
+        width: 36,
+        height: 4,
+        background: tokens.colors.bg.tertiary,
+        borderRadius: tokens.radius.full,
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          width: `${weight * 100}%`,
+          height: '100%',
+          background: sideColor,
+          opacity: 0.7,
+          borderRadius: tokens.radius.full,
+          transition: `width ${tokens.transition.fast}`,
+        }} />
       </div>
     </div>
   )
@@ -103,9 +131,13 @@ const TradeRow = memo(function TradeRow({ trade }: { trade: NormalizedTrade }) {
 function ConnectionDot({ connected }: { connected: boolean }) {
   return (
     <span style={{
-      display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+      display: 'inline-block',
+      width: 6,
+      height: 6,
+      borderRadius: '50%',
       background: connected ? tokens.colors.accent.success : tokens.colors.accent.error,
       marginRight: 4,
+      boxShadow: connected ? '0 0 6px rgba(47, 229, 125, 0.4)' : '0 0 6px rgba(255, 124, 124, 0.4)',
     }} />
   )
 }
@@ -124,53 +156,104 @@ export default function LiveTradesFeed() {
 
   return (
     <div style={{
-      background: tokens.glass.bg.secondary,
+      background: tokens.glass.bg.medium,
       border: tokens.glass.border.light,
-      borderRadius: tokens.radius.lg,
+      borderRadius: tokens.radius.xl,
       overflow: 'hidden',
       width: '100%',
+      height: '100%',
+      minHeight: 220,
+      display: 'flex',
+      flexDirection: 'column',
+      position: 'relative',
     }}>
+      {/* Top accent line */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 2,
+        background: tokens.gradient.purple,
+        opacity: 0.6,
+      }} />
+
       {/* Header */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        background: tokens.glass.bg.light,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: tokens.colors.text.primary, fontSize: 13, fontWeight: 600 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            color: tokens.colors.text.primary,
+            fontSize: tokens.typography.fontSize.base,
+            fontWeight: 700,
+            letterSpacing: '0.3px',
+          }}>
             {t('liveTradesFeed') || '实时交易流'}
           </span>
-          <span style={{ color: tokens.colors.text.tertiary, fontSize: 11 }}>
+          <span style={{
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.xs,
+            padding: `2px ${tokens.spacing[2]}`,
+            background: tokens.colors.bg.tertiary,
+            borderRadius: tokens.radius.sm,
+          }}>
             {trades.length} {t('trades') || '笔'}
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {(Object.entries(connectionStatus) as [ExchangeId, boolean][]).map(([exchange, status]) => (
             <span key={exchange} style={{ display: 'flex', alignItems: 'center', fontSize: 10, color: tokens.colors.text.tertiary }}>
               <ConnectionDot connected={status} />
               {EXCHANGE_LABELS[exchange]}
             </span>
           ))}
-          {paused && <span style={{ fontSize: 10, color: tokens.colors.accent.warning }}>{t('paused') || '已暂停'}</span>}
-          {!connected && <span style={{ fontSize: 10, color: tokens.colors.accent.error }}>{t('connecting') || '正在连接...'}</span>}
+          {paused && (
+            <span style={{
+              fontSize: 10,
+              color: tokens.colors.accent.warning,
+              fontWeight: 600,
+              padding: '1px 6px',
+              borderRadius: tokens.radius.sm,
+              background: 'rgba(255, 184, 0, 0.1)',
+            }}>
+              {t('paused') || '已暂停'}
+            </span>
+          )}
+          {!connected && (
+            <span style={{ fontSize: 10, color: tokens.colors.accent.error }}>
+              {t('connecting') || '正在连接...'}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Column headers */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: `6px ${tokens.spacing[4]}`,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        fontSize: 10, color: tokens.colors.text.tertiary, fontFamily: 'monospace',
+        fontSize: 10,
+        color: tokens.colors.text.tertiary,
+        fontFamily: 'monospace',
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
       }}>
-        <span style={{ width: 56 }}>交易所</span>
-        <span style={{ width: 80 }}>交易对</span>
-        <span style={{ width: 32 }}>方向</span>
-        <span style={{ width: 100, textAlign: 'right' }}>价格</span>
-        <span style={{ width: 80, textAlign: 'right' }}>数量</span>
+        <span style={{ width: 52 }}>交易所</span>
+        <span style={{ width: 76 }}>交易对</span>
+        <span style={{ width: 36, textAlign: 'center' }}>方向</span>
+        <span style={{ width: 96, textAlign: 'right' }}>价格</span>
+        <span style={{ width: 76, textAlign: 'right' }}>数量</span>
         <span style={{ flex: 1, textAlign: 'right' }}>价值</span>
-        <span style={{ width: 32, textAlign: 'right' }}>时间</span>
-        <span style={{ width: 40 }}>量</span>
+        <span style={{ width: 28, textAlign: 'right' }}>时间</span>
+        <span style={{ width: 36 }}>量</span>
       </div>
 
       {/* Trade list */}
@@ -178,14 +261,24 @@ export default function LiveTradesFeed() {
         ref={containerRef}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'hidden' }}
+        style={{
+          flex: 1,
+          maxHeight: 400,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
       >
         {trades.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+          <div style={{
+            padding: 40,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}>
             {t('waitingForData') || '等待交易数据...'}
           </div>
         ) : (
-          trades.map((trade) => <TradeRow key={trade.id} trade={trade} />)
+          trades.map((trade, i) => <TradeRow key={trade.id} trade={trade} index={i} />)
         )}
       </div>
     </div>

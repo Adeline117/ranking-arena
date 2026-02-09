@@ -21,7 +21,6 @@ function getLabel(value: number): string {
   return t('fearGreedExtremeGreed')
 }
 
-// SVG arc path helper
 function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
   const toRad = (d: number) => (d * Math.PI) / 180
   const x1 = cx + r * Math.cos(toRad(startDeg))
@@ -48,32 +47,32 @@ export default function FearGreedGauge() {
     if (!data) return
     const from = prevValueRef.current
     const to = data.value
-    const duration = 800
+    const duration = 1000
     const startTime = performance.now()
 
     function animate(now: number) {
       const elapsed = now - startTime
       const progress = Math.min(elapsed / duration, 1)
-      // ease-out cubic
       const eased = 1 - Math.pow(1 - progress, 3)
       setAnimatedValue(from + (to - from) * eased)
       if (progress < 1) requestAnimationFrame(animate)
       else prevValueRef.current = to
     }
     requestAnimationFrame(animate)
-  }, [data?.value])
+  }, [data?.value]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!data) {
     return (
       <div style={{
-        padding: '10px 12px',
-        background: tokens.glass.bg.secondary,
-        backdropFilter: tokens.glass.blur.md,
-        borderRadius: tokens.radius.md,
+        padding: tokens.spacing[5],
+        background: tokens.glass.bg.medium,
+        backdropFilter: tokens.glass.blur.lg,
+        borderRadius: tokens.radius.xl,
         border: tokens.glass.border.light,
-        height: 80,
+        height: '100%',
+        minHeight: 220,
       }}>
-        <div className="skeleton" style={{ height: '100%', borderRadius: 6 }} />
+        <div className="skeleton" style={{ height: '100%', borderRadius: tokens.radius.lg }} />
       </div>
     )
   }
@@ -83,9 +82,8 @@ export default function FearGreedGauge() {
   const color = getColor(displayValue)
   const label = getLabel(displayValue)
 
-  // Gauge geometry: semi-circle from 180deg to 0deg (left to right)
-  const cx = 50, cy = 44, r = 34, strokeW = 7
-  // Color segments: Extreme Fear(red) -> Fear(orange) -> Neutral(yellow) -> Greed(green) -> Extreme Greed(teal)
+  // Gauge geometry - larger semi-circle
+  const cx = 100, cy = 88, r = 70, strokeW = 14
   const segments = [
     { from: 180, to: 144, color: '#ea3943' },
     { from: 144, to: 108, color: '#ea8c00' },
@@ -94,27 +92,75 @@ export default function FearGreedGauge() {
     { from: 36, to: 0, color: '#16c784' },
   ]
 
-  // Needle angle: 180 (value=0) to 0 (value=100)
+  // Needle
   const needleDeg = 180 - (value / 100) * 180
   const needleRad = (needleDeg * Math.PI) / 180
-  const needleLen = r - 6
+  const needleLen = r - 12
   const nx = cx + needleLen * Math.cos(needleRad)
   const ny = cy - needleLen * Math.sin(needleRad)
 
+  // Scale labels positions
+  const scaleLabels = [
+    { val: 0, deg: 180, text: '0' },
+    { val: 25, deg: 135, text: '25' },
+    { val: 50, deg: 90, text: '50' },
+    { val: 75, deg: 45, text: '75' },
+    { val: 100, deg: 0, text: '100' },
+  ]
+
   return (
     <div style={{
-      padding: '10px 12px',
-      background: tokens.glass.bg.secondary,
-      backdropFilter: tokens.glass.blur.md,
-      borderRadius: tokens.radius.md,
+      padding: tokens.spacing[5],
+      background: tokens.glass.bg.medium,
+      backdropFilter: tokens.glass.blur.lg,
+      borderRadius: tokens.radius.xl,
       border: tokens.glass.border.light,
+      height: '100%',
+      minHeight: 220,
+      display: 'flex',
+      flexDirection: 'column',
+      position: 'relative',
+      overflow: 'hidden',
     }}>
-      <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>
+      {/* Top accent line */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 2,
+        background: `linear-gradient(90deg, #ea3943, #ea8c00, #f5c623, #93d900, #16c784)`,
+        opacity: 0.6,
+      }} />
+
+      {/* Title */}
+      <div style={{
+        fontSize: tokens.typography.fontSize.base,
+        fontWeight: 700,
+        color: tokens.colors.text.primary,
+        marginBottom: tokens.spacing[3],
+        letterSpacing: '0.3px',
+      }}>
         {t('fearGreedTitle')}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <svg width="80" height="48" viewBox="0 0 100 52" style={{ flexShrink: 0 }}>
-          {/* Background segments */}
+
+      {/* Gauge SVG - centered */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="200" height="110" viewBox="0 0 200 110" style={{ overflow: 'visible' }}>
+          <defs>
+            <filter id="gaugeGlow">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="needleShadow">
+              <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor={color} floodOpacity="0.5" />
+            </filter>
+          </defs>
+
+          {/* Background track segments */}
           {segments.map((seg, i) => (
             <path
               key={i}
@@ -123,12 +169,12 @@ export default function FearGreedGauge() {
               stroke={seg.color}
               strokeWidth={strokeW}
               strokeLinecap="butt"
-              opacity={0.25}
+              opacity={0.15}
             />
           ))}
-          {/* Active arc up to current value */}
+
+          {/* Active arc segments */}
           {segments.map((seg, i) => {
-            // Only draw segments that the value has reached
             const segStart = ((180 - seg.from) / 180) * 100
             const segEnd = ((180 - seg.to) / 180) * 100
             if (value <= segStart) return null
@@ -144,17 +190,87 @@ export default function FearGreedGauge() {
                 stroke={seg.color}
                 strokeWidth={strokeW}
                 strokeLinecap="butt"
+                filter="url(#gaugeGlow)"
               />
             )
           })}
+
+          {/* Scale labels */}
+          {scaleLabels.map(sl => {
+            const rad = (sl.deg * Math.PI) / 180
+            const lx = cx + (r + 16) * Math.cos(rad)
+            const ly = cy - (r + 16) * Math.sin(rad)
+            return (
+              <text
+                key={sl.val}
+                x={lx}
+                y={ly}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={tokens.colors.text.tertiary}
+                fontSize="9"
+                fontWeight="500"
+              >
+                {sl.text}
+              </text>
+            )
+          })}
+
           {/* Needle */}
-          <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={color} strokeWidth="2" strokeLinecap="round" />
-          <circle cx={cx} cy={cy} r="3" fill={color} />
-          <circle cx={cx} cy={cy} r="1.5" fill={tokens.colors.bg.primary} />
+          <line
+            x1={cx}
+            y1={cy}
+            x2={nx}
+            y2={ny}
+            stroke={color}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            filter="url(#needleShadow)"
+          />
+          {/* Needle center */}
+          <circle cx={cx} cy={cy} r="5" fill={color} />
+          <circle cx={cx} cy={cy} r="2.5" fill={tokens.colors.bg.primary} />
+
+          {/* Value text in center */}
+          <text
+            x={cx}
+            y={cy + 20}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={color}
+            fontSize="28"
+            fontWeight="800"
+            fontFamily="monospace"
+          >
+            {displayValue}
+          </text>
         </svg>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1, transition: 'color 0.3s ease' }}>{displayValue}</div>
-          <div style={{ fontSize: 10, fontWeight: 600, color, lineHeight: 1.4, whiteSpace: 'nowrap' }}>{label}</div>
+
+        {/* Label below gauge */}
+        <div style={{
+          marginTop: tokens.spacing[2],
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 4,
+        }}>
+          <span style={{
+            fontSize: tokens.typography.fontSize.md,
+            fontWeight: 700,
+            color,
+            letterSpacing: '0.5px',
+            transition: `color ${tokens.transition.slow}`,
+          }}>
+            {label}
+          </span>
+          {data.timestamp && (
+            <span style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: tokens.colors.text.tertiary,
+            }}>
+              {new Date(data.timestamp).toLocaleDateString('zh-CN')}
+            </span>
+          )}
         </div>
       </div>
     </div>
