@@ -44,7 +44,15 @@ jest.mock('siwe', () => ({
 
 const mockMaybeSingle = jest.fn()
 const mockNeq = jest.fn().mockReturnValue({ maybeSingle: mockMaybeSingle })
-const mockEq = jest.fn().mockReturnValue({ neq: mockNeq })
+const mockProfileMaybeSingle = jest.fn().mockResolvedValue({ data: { id: 'user-1' }, error: null })
+const _mockProfileEq = jest.fn().mockReturnValue({ maybeSingle: mockProfileMaybeSingle })
+let selectCallCount = 0
+const mockEq = jest.fn().mockImplementation(() => {
+  selectCallCount++
+  // First eq chain = wallet check (has neq), second = profile check (has maybeSingle)
+  if (selectCallCount % 2 === 1) return { neq: mockNeq }
+  return { maybeSingle: mockProfileMaybeSingle }
+})
 const mockSelect = jest.fn().mockReturnValue({ eq: mockEq })
 const mockUpdateEq = jest.fn().mockResolvedValue({ error: null })
 const mockUpdate = jest.fn().mockReturnValue({ eq: mockUpdateEq })
@@ -80,6 +88,7 @@ function makeRequest(body: Record<string, unknown>, token?: string) {
 describe('POST /api/auth/siwe/link', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    selectCallCount = 0
     mockGet.mockReturnValue({ value: STORED_NONCE })
     mockGetAuthUser.mockResolvedValue(null)
   })

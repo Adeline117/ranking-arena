@@ -197,7 +197,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     dbQuery = dbQuery.gte('tradescount', min_trades);
   }
 
-  const { data: rows, error, count } = await dbQuery;
+  const { data: rows, error, _count } = await dbQuery;
 
   if (error) {
     throw new Error(`Supabase fallback failed: ${error.message}`);

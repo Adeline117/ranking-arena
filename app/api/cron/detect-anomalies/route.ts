@@ -22,8 +22,10 @@ function verifyCronSecret(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
 
   if (!cronSecret) {
-    console.warn('CRON_SECRET not configured, skipping verification')
-    return true // Allow in development
+    // Only allow without secret in development
+    if (process.env.NODE_ENV === 'development') return true
+    console.error('CRON_SECRET not configured in production')
+    return false
   }
 
   return authHeader === `Bearer ${cronSecret}`

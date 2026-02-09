@@ -253,7 +253,7 @@ function RankingTableInner(props: {
   // Load ranking-table.css asynchronously (animations, hover effects)
   useRankingTableStyles()
 
-  const [, startTransition] = useTransition()
+  const [isSortPending, startTransition] = useTransition()
 
   const [internalPage, setInternalPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
@@ -668,13 +668,13 @@ function RankingTableInner(props: {
           </svg>
           <Text size="md" weight="semibold" style={{ color: tokens.colors.text.secondary }}>
             {debouncedSearch.trim() || hasActiveFilters
-              ? '没有符合条件的交易员'
+              ? (language === 'zh' ? '没有符合条件的交易员' : 'No traders match your criteria')
               : t('noTraderData')}
           </Text>
           {(debouncedSearch.trim() || hasActiveFilters) && (
             <>
               <Text size="sm" style={{ color: tokens.colors.text.tertiary }}>
-                试试放宽筛选条件
+                {language === 'zh' ? '试试放宽筛选条件' : 'Try broadening your filters'}
               </Text>
               <button
                 onClick={() => {
@@ -738,7 +738,23 @@ function RankingTableInner(props: {
         </>
       ) : (
         <>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
+            {isSortPending && (
+              <Box style={{
+                position: 'absolute', inset: 0, zIndex: 10,
+                background: 'rgba(0,0,0,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                backdropFilter: 'blur(1px)',
+                borderRadius: tokens.radius.md,
+                pointerEvents: 'none',
+              }}>
+                <Box style={{
+                  width: 24, height: 24, border: `2px solid ${tokens.colors.accent.primary}`,
+                  borderTopColor: 'transparent', borderRadius: '50%',
+                  animation: 'spin 0.6s linear infinite',
+                }} />
+              </Box>
+            )}
             {paginatedTraders.map((trader, idx) => {
               const rank = startIndex + idx + 1
               return (
@@ -754,16 +770,25 @@ function RankingTableInner(props: {
             <Link href="/login" style={{ textDecoration: 'none' }}>
               <Box style={{
                 margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
-                background: `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.brand}10)`,
-                border: `1px solid ${tokens.colors.accent.primary}30`,
+                padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+                background: `linear-gradient(135deg, ${tokens.colors.accent.primary}18, ${tokens.colors.accent.brand}12)`,
+                border: `1px solid ${tokens.colors.accent.primary}40`,
                 borderRadius: tokens.radius.lg,
                 textAlign: 'center',
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.base}`,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: tokens.spacing[1],
               }}>
                 <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                  {language === 'zh' ? '🔓 注册免费查看更多交易员' : '🔓 Sign up free to see more traders'}
+                  {language === 'zh' ? '免费注册，查看完整排行榜' : 'Sign up free to see the full leaderboard'}
+                </Text>
+                <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
+                  {language === 'zh'
+                    ? `当前显示前 ${itemsPerPage} 名，共 ${sortedTraders.length} 名交易员`
+                    : `Showing top ${itemsPerPage} of ${sortedTraders.length} traders`}
                 </Text>
               </Box>
             </Link>

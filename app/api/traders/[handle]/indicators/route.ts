@@ -121,7 +121,7 @@ export async function GET(
     setServerCache(cacheKey, results, CacheTTL.MEDIUM)
 
     return NextResponse.json(results)
-  } catch (err) {
+  } catch (_err) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

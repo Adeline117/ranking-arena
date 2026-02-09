@@ -35,7 +35,7 @@ interface EnrichmentStatus {
 
 export async function GET(req: Request) {
   // 验证授权
-  if (process.env.CRON_SECRET && !isAuthorized(req)) {
+  if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

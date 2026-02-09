@@ -1250,7 +1250,7 @@ const zh = {
     rankingRule3: '③ Score 相同时，回撤更小的靠前',
     rankingRuleROINote: '* ROI 计算方式因交易所而异，跨所对比时请注意差异',
     detailButton: '详细',
-    arenaScoreTooltip: 'Arena Score: 综合评分 (0-100)',
+    arenaScoreTooltip: 'Arena Score: 综合评分 (0-100)\n收益70% + 盈亏15% + 回撤8% + 稳定7%\n点击表头 ? 查看详细规则',
     roiTooltip: 'ROI: 投资回报率 ({range})',
     winRateTooltip: 'Win%: 胜率',
     mddTooltip: 'MDD: 最大回撤',

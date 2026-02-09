@@ -7,7 +7,7 @@ import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
     const data = await tieredGetOrSet(
       'api:market:spot:top100',
