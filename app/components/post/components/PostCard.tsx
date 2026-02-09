@@ -8,6 +8,7 @@ import { renderContentWithLinks, ARENA_PURPLE, truncateText } from '@/lib/utils/
 import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'
 import { ReactButton } from './PostActions'
 import { AvatarLink } from './AvatarLink'
+import { memo } from 'react'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
 type Post = PostWithUserState
@@ -35,7 +36,7 @@ function pollColor(choice: PollChoice | 'tie') {
   return tokens.colors.sentiment.neutral
 }
 
-export function PostCard({
+export const PostCard = memo(function PostCard({
   post,
   variant = 'compact',
   onClick,
@@ -305,7 +306,7 @@ export function PostCard({
       </div>
     </div>
   )
-}
+})
 
 export default PostCard
 

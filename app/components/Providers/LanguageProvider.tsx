@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
 import { Language, getLanguage, setLanguage as setLang, translations, loadEnTranslations } from '@/lib/i18n'
 
 // Translation function type - accepts any string but returns the key if not found
@@ -43,14 +43,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('languageChange', handleLanguageChange as EventListener)
   }, [])
 
-  const setLanguage = (lang: Language) => {
+  const setLanguage = useCallback((lang: Language) => {
     setLang(lang)
     if (lang === 'en') {
       loadEnTranslations().then(() => setLanguageState(lang))
     } else {
       setLanguageState(lang)
     }
-  }
+  }, [])
 
   // 创建一个响应式的翻译函数，依赖于 language 状态
   // 在 hydration 完成前，始终使用 'zh' 避免不匹配
@@ -62,8 +62,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, [language, isMounted])
 
+  const contextValue = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t])
+
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider value={contextValue}>
       {children}
     </LanguageContext.Provider>
   )

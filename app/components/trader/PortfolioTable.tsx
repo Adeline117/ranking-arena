@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
@@ -612,7 +612,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
 }
 
 // 详细的仓位历史卡片组件
-function PositionHistoryCard({ position, index }: { position: ExtendedPositionHistoryItem; index: number }) {
+const PositionHistoryCard = memo(function PositionHistoryCard({ position, index }: { position: ExtendedPositionHistoryItem; index: number }) {
   const { t } = useLanguage()
   const [isHovered, setIsHovered] = useState(false)
   const isLong = position.direction === 'long'
@@ -711,10 +711,10 @@ function PositionHistoryCard({ position, index }: { position: ExtendedPositionHi
       </Box>
     </Box>
   )
-}
+})
 
 // 数据单元格组件
-function DataCell({ 
+const DataCell = memo(function DataCell({ 
   label, 
   value, 
   highlight, 
@@ -746,7 +746,7 @@ function DataCell({
       </Text>
     </Box>
   )
-}
+})
 
 // 格式化函数
 function formatPriceWithComma(price: number | undefined): string {

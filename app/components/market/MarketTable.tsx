@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, CSSProperties } from 'react'
+import { useState, useMemo, useCallback, memo, CSSProperties } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 export interface Column<T> {
@@ -23,7 +23,7 @@ interface MarketTableProps<T> {
   onRowClick?: (row: T) => void
 }
 
-export default function MarketTable<T>({
+function MarketTableInner<T>({
   columns,
   data,
   loading,
@@ -178,3 +178,6 @@ export default function MarketTable<T>({
     </div>
   )
 }
+
+const MarketTable = memo(MarketTableInner) as typeof MarketTableInner
+export default MarketTable
