@@ -117,7 +117,7 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
             }}
           >
             {trader.avatar_url ? (
-              <Image src={trader.avatar_url} alt="" width={40} height={40} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
+              <Image src={trader.avatar_url} alt="" width={40} height={40} sizes="40px" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <span style={{ color: tokens.colors.white, fontSize: 14, fontWeight: 700 }}>{getAvatarInitial(name)}</span>
             )}
@@ -291,7 +291,7 @@ export default function ExchangeRankingClient({
                     }}
                   >
                     {t.avatar_url ? (
-                      <Image src={t.avatar_url} alt="" width={32} height={32} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
+                      <Image src={t.avatar_url} alt="" width={32} height={32} sizes="32px" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <span style={{ color: tokens.colors.white, fontSize: 12, fontWeight: 700 }}>{getAvatarInitial(name)}</span>
                     )}

@@ -990,7 +990,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                       }}
                     >
                       {member.avatar_url ? (
-                        <Image src={member.avatar_url} alt="" fill style={{ objectFit: 'cover' }} unoptimized />
+                        <Image src={member.avatar_url} alt="" fill sizes="36px" style={{ objectFit: 'cover' }} />
                       ) : (
                         <Text size="sm" color="tertiary">{(member.handle || 'U').charAt(0).toUpperCase()}</Text>
                       )}

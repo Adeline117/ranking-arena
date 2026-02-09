@@ -179,7 +179,7 @@ function CommentAvatar({ handle, avatarUrl, isReply, isPro, showProBadge }: { ha
   return (
     <Link href={href} onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none', flexShrink: 0, position: 'relative' }}>
       {avatarUrl ? (
-        <Image src={avatarUrl} alt="" width={size} height={size} style={styles.avatar(size)} unoptimized />
+        <Image src={avatarUrl} alt="" width={size} height={size} sizes={`${size}px`} loading="lazy" style={styles.avatar(size)} />
       ) : (
         <div style={styles.avatarPlaceholder(size)}>
           {(handle?.[0] || 'A').toUpperCase()}

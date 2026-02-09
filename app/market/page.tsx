@@ -14,6 +14,10 @@ import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import RecommendedGroups from '@/app/components/sidebar/RecommendedGroups'
 
 const MarketOverviewBar = lazy(() => import('@/app/components/market/MarketOverviewBar'))
+const MarketTabs = lazy(() => import('@/app/components/market/MarketTabs'))
+const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))
+const FuturesMarket = lazy(() => import('@/app/components/market/FuturesMarket'))
+const AlphaMarket = lazy(() => import('@/app/components/market/AlphaMarket'))
 const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge'))
 const TopMovers = lazy(() => import('@/app/components/market/TopMovers'))
 const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
@@ -24,6 +28,31 @@ const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed
 
 function LoadingCard() {
   return <div className="skeleton" style={{ height: 200, borderRadius: 12 }} />
+}
+
+function TabContent({ tab }: { tab: string }) {
+  switch (tab) {
+    case 'spot':
+      return (
+        <Suspense fallback={<LoadingCard />}>
+          <SpotMarket />
+        </Suspense>
+      )
+    case 'futures':
+      return (
+        <Suspense fallback={<LoadingCard />}>
+          <FuturesMarket />
+        </Suspense>
+      )
+    case 'alpha':
+      return (
+        <Suspense fallback={<LoadingCard />}>
+          <AlphaMarket />
+        </Suspense>
+      )
+    default:
+      return null
+  }
 }
 
 export default function MarketPage() {
@@ -55,42 +84,51 @@ export default function MarketPage() {
           </Suspense>
         }
       >
-        <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-          {t('market') || '市场'}
-        </Text>
+        {/* Section 1: Market Data Tabs */}
+        <Suspense fallback={<LoadingCard />}>
+          <MarketTabs>
+            {(activeTab) => <TabContent tab={activeTab} />}
+          </MarketTabs>
+        </Suspense>
 
-        {/* Two-column grid for market widgets */}
-        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: tokens.spacing[4] }}>
-          <Suspense fallback={<LoadingCard />}>
-            <FearGreedGauge />
-          </Suspense>
+        {/* Section 2: Market Widgets Grid */}
+        <Box style={{
+          marginTop: tokens.spacing[6],
+          paddingTop: tokens.spacing[6],
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
+        }}>
+          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: tokens.spacing[4] }}>
+            <Suspense fallback={<LoadingCard />}>
+              <FearGreedGauge />
+            </Suspense>
 
-          <Suspense fallback={<LoadingCard />}>
-            <TopMovers />
-          </Suspense>
+            <Suspense fallback={<LoadingCard />}>
+              <TopMovers />
+            </Suspense>
 
-          <Suspense fallback={<LoadingCard />}>
-            <SectorPerformance />
-          </Suspense>
+            <Suspense fallback={<LoadingCard />}>
+              <SectorPerformance />
+            </Suspense>
 
-          <Suspense fallback={<LoadingCard />}>
-            <ExchangeVolume />
-          </Suspense>
+            <Suspense fallback={<LoadingCard />}>
+              <ExchangeVolume />
+            </Suspense>
 
-          <Suspense fallback={<LoadingCard />}>
-            <ArbitrageOpportunities />
-          </Suspense>
+            <Suspense fallback={<LoadingCard />}>
+              <ArbitrageOpportunities />
+            </Suspense>
 
-          <Suspense fallback={<LoadingCard />}>
-            <DefiOverview />
-          </Suspense>
-        </Box>
+            <Suspense fallback={<LoadingCard />}>
+              <DefiOverview />
+            </Suspense>
+          </Box>
 
-        {/* Full-width live trades */}
-        <Box style={{ marginTop: tokens.spacing[4] }}>
-          <Suspense fallback={<LoadingCard />}>
-            <LiveTradesFeed />
-          </Suspense>
+          {/* Full-width live trades */}
+          <Box style={{ marginTop: tokens.spacing[4] }}>
+            <Suspense fallback={<LoadingCard />}>
+              <LiveTradesFeed />
+            </Suspense>
+          </Box>
         </Box>
       </ThreeColumnLayout>
 

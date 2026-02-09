@@ -96,8 +96,9 @@ export default function PinnedPost({ item }: PinnedPostProps) {
                   src={url} 
                   alt={`${t('imageAlt')} ${idx + 1}`}
                   fill
+                  sizes="(max-width: 768px) 33vw, 120px"
+                  loading="lazy"
                   style={{ objectFit: 'cover' }}
-                  unoptimized
                 />
               </Box>
             ))}

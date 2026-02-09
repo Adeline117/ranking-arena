@@ -76,7 +76,7 @@ function AnimatedAvatar({
           src={avatarUrl} 
           alt={handle} 
           fill
-          unoptimized
+          sizes="64px"
           style={{ 
             objectFit: 'cover',
             opacity: imageLoaded ? 1 : 0,

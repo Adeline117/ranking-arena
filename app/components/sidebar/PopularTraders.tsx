@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -23,11 +24,13 @@ function TraderAvatar({ name, avatarUrl, size = 40 }: { name: string; avatarUrl:
 
   if (avatarUrl && !imgError) {
     return (
-      <img
-        src={avatarUrl}
+      <Image
+        src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
         alt={name}
         width={size}
         height={size}
+        sizes={`${size}px`}
+        loading="lazy"
         style={{
           borderRadius: tokens.radius.full,
           objectFit: 'cover',

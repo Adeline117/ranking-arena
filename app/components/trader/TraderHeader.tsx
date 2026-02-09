@@ -511,10 +511,15 @@ export default function TraderHeader({
             <Text
               size="2xl"
               weight="black"
+              className="trader-name-truncate"
               style={{
                 color: hasCover ? tokens.colors.white : tokens.colors.text.primary,
                 lineHeight: tokens.typography.lineHeight.tight,
                 textShadow: hasCover ? '0 2px 8px rgba(0,0,0,0.5)' : undefined,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '100%',
               }}
             >
               {formatDisplayName(handle, source)}

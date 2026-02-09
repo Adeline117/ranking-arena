@@ -149,6 +149,7 @@ export default function MarketOverviewBar() {
 
   return (
     <div
+      className="market-overview-bar"
       style={{
         display: 'flex',
         alignItems: 'center',

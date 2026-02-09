@@ -169,11 +169,12 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
             alt={trader.name}
             width={32}
             height={32}
+            sizes="32px"
+            loading="lazy"
             style={{ 
               borderRadius: '50%',
               objectFit: 'cover',
-            }}
-            unoptimized
+            }
           />
         ) : (
           <div style={{

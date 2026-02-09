@@ -122,8 +122,8 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
 
           <div style={{ position: 'relative', zIndex: 1 }}>
             <h1 style={{
-              fontSize: 28,
-              fontWeight: 700,
+              fontSize: tokens.typography.fontSize['2xl'],
+              fontWeight: tokens.typography.fontWeight.black,
               color: tokens.colors.text.primary,
               marginBottom: 8,
               lineHeight: 1.2,

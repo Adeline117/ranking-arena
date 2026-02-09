@@ -102,7 +102,7 @@ export const tokens = {
   // Typography
   typography: {
     fontFamily: {
-      sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+      sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', '"PingFang SC"', '"Microsoft YaHei"', '"Noto Sans CJK SC"', 'sans-serif'],
       mono: ['Menlo', 'Monaco', '"Courier New"', 'monospace'],
     },
     fontSize: {
