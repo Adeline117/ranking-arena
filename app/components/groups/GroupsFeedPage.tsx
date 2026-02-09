@@ -13,7 +13,6 @@ import RecommendedGroups from '@/app/components/sidebar/RecommendedGroups'
 import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text } from '@/app/components/base'
-import Image from 'next/image'
 import BookCover from '@/app/library/BookCover'
 import { logger } from '@/lib/logger'
 
