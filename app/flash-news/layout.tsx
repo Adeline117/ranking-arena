@@ -18,9 +18,10 @@ export const metadata: Metadata = {
     images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena Flash News' }],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: 'Flash News | Arena',
     description: 'Real-time crypto market news curated for traders.',
+    images: [`${baseUrl}/og.png`],
   },
 }
 
