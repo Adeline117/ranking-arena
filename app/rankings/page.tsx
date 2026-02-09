@@ -29,6 +29,7 @@ import { Web3VerifiedBadge } from '@/app/components/trader/Web3VerifiedBadge'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { useProStatus } from '@/lib/hooks/useProStatus'
 import { PaywallGradientOverlay } from '@/app/components/pro/PaywallOverlay'
+import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
 
 // Threshold for using virtual scrolling (for large datasets)
 const VIRTUAL_SCROLL_THRESHOLD = 2000
@@ -1021,29 +1022,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
 
       <div className="text-right col-score">
         {metrics.arena_score != null ? (
-          <span
-            className="arena-score-badge"
-            style={{
-              display: 'inline-block',
-              padding: '2px 10px',
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 700,
-              fontFamily: tokens.typography.fontFamily.mono.join(','),
-              background: `linear-gradient(135deg, ${tokens.colors.accent.primary}30, ${tokens.colors.accent.brand}20)`,
-              color: tokens.colors.accent.primary,
-              border: `1px solid ${tokens.colors.accent.primary}40`,
-              boxShadow: metrics.arena_score >= 90
-                ? `0 0 12px ${tokens.colors.accent.primary}50, 0 0 4px ${tokens.colors.accent.primary}30`
-                : metrics.arena_score >= 70
-                  ? `0 0 8px ${tokens.colors.accent.primary}30`
-                  : 'none',
-              textShadow: metrics.arena_score >= 90 ? `0 0 8px ${tokens.colors.accent.primary}60` : 'none',
-              animation: metrics.arena_score >= 95 ? 'score-glow 2s ease-in-out infinite' : undefined,
-            }}
-          >
-            {metrics.arena_score.toFixed(1)}
-          </span>
+          <ScoreBadge score={metrics.arena_score} />
         ) : (
           <span className="text-sm" style={{ color: tokens.colors.text.tertiary }}>--</span>
         )}

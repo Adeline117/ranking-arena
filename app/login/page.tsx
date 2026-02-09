@@ -254,7 +254,7 @@ export default function LoginPage() {
 
   // Get returnUrl from query params for post-login redirect
   // Support both 'returnUrl' and 'redirect' parameters for compatibility
-  const getRedirectUrl = (userHandle?: string | null, userEmail?: string | null): string => {
+  const getRedirectUrl = useCallback((userHandle?: string | null, userEmail?: string | null): string => {
     const returnUrl = searchParams.get('returnUrl') || searchParams.get('redirect')
     if (returnUrl && returnUrl.startsWith('/')) {
       return returnUrl
@@ -262,7 +262,7 @@ export default function LoginPage() {
     if (userHandle) return `/u/${userHandle}`
     if (userEmail) return `/u/${userEmail.split('@')[0]}`
     return '/'
-  }
+  }, [searchParams])
 
 
   const passwordStrength = getPasswordStrength(password)
