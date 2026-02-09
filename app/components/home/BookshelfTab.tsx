@@ -146,18 +146,18 @@ export default function BookshelfTab() {
             textAlign: 'center',
             cursor: 'pointer',
             transition: `all ${tokens.transition.base}`,
-            boxShadow: '0 8px 32px rgba(139, 111, 168, 0.3)',
+            boxShadow: tokens.shadow.glow,
             position: 'relative',
             overflow: 'hidden',
           }}>
             {/* Background decoration */}
             <div style={{
               position: 'absolute', top: -20, right: -20, width: 120, height: 120,
-              borderRadius: '50%', background: 'rgba(255,255,255,0.08)',
+              borderRadius: '50%', background: 'var(--glass-bg-light)',
             }} />
             <div style={{
               position: 'absolute', bottom: -30, left: -10, width: 80, height: 80,
-              borderRadius: '50%', background: 'rgba(255,255,255,0.05)',
+              borderRadius: '50%', background: 'var(--glass-bg-light)',
             }} />
 
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" style={{ marginBottom: 16, opacity: 0.9 }}>

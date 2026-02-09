@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     // Ensure default collections exist
-    await supabase.rpc('ensure_default_collections', { p_user_id: user.id }).catch(() => {})
+    try { await supabase.rpc('ensure_default_collections', { p_user_id: user.id }) } catch { /* ignore */ }
 
     const { data: collections, error } = await supabase
       .from('user_collections')

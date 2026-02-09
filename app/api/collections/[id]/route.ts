@@ -23,7 +23,8 @@ export async function GET(
   try {
     const { id } = await params
     const supabase = getSupabaseAdmin()
-    const user = await getUserFromToken(request).catch(() => null)
+    const token = request.headers.get('authorization')?.substring(7) || ''
+    const user = await getUserFromToken(token).catch(() => null)
 
     const { data: collection, error } = await supabase
       .from('user_collections')

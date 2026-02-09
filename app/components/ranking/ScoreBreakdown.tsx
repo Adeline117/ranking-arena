@@ -52,7 +52,7 @@ function ScoreBar({ label, score, maxScore, color }: BarProps) {
           transform: 'translateY(-50%)',
           fontSize: 11,
           color: pct > 60 ? 'white' : (score != null ? color : tokens.colors.text.tertiary),
-          textShadow: pct > 60 ? '0 1px 2px rgba(0,0,0,0.3)' : 'none',
+          textShadow: pct > 60 ? 'var(--text-shadow-sm)' : 'none',
         }}>
           {score != null ? `${score.toFixed(1)}` : '--'} / {maxScore}
         </Text>

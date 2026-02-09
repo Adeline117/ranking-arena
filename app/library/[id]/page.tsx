@@ -13,6 +13,7 @@ import { usePremium } from '@/lib/premium/hooks'
 import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '../BookCover'
 import ShareButton from '@/app/components/common/ShareButton'
+import AddToCollectionButton from '@/app/components/features/AddToCollectionButton'
 import { logger } from '@/lib/logger'
 
 type BookDetail = {
@@ -142,7 +143,7 @@ export default function BookDetailPage() {
   const ratingRef = useRef<HTMLDivElement>(null)
 
   const [statusLoading, setStatusLoading] = useState(false)
-  const handleStatus = async (status: 'want_to_read' | 'read') => {
+  const handleStatus = async (status: 'want_to_read' | 'reading' | 'read') => {
     if (!session) {
       alert(isZh ? '请先登录' : 'Please login first')
       return
@@ -435,44 +436,31 @@ export default function BookDetailPage() {
               )}
 
               {/* Want to Read */}
-              <button
+              <StatusButton
+                active={userStatus === 'want_to_read'}
                 onClick={() => handleStatus('want_to_read')}
-                style={{
-                  padding: '10px 20px', borderRadius: tokens.radius.lg,
-                  fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
-                  cursor: 'pointer',
-                  border: userStatus === 'want_to_read' ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-                  background: userStatus === 'want_to_read' ? tokens.colors.accent.brand : 'transparent',
-                  color: userStatus === 'want_to_read' ? 'var(--color-on-accent)' : tokens.colors.text.primary,
-                  transition: `all ${tokens.transition.fast}`,
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill={userStatus === 'want_to_read' ? 'var(--color-on-accent)' : 'none'} stroke="currentColor" strokeWidth="2">
-                  <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
-                </svg>
-                {isZh ? '想读' : 'Want to Read'}
-              </button>
+                activeColor={tokens.colors.accent.brand}
+                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill={userStatus === 'want_to_read' ? 'var(--color-on-accent)' : 'none'} stroke="currentColor" strokeWidth="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" /></svg>}
+                label={isZh ? '想读' : 'Want to Read'}
+              />
+
+              {/* Reading */}
+              <StatusButton
+                active={userStatus === 'reading'}
+                onClick={() => handleStatus('reading')}
+                activeColor="var(--color-accent-warning, #FFB800)"
+                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>}
+                label={isZh ? '在读' : 'Reading'}
+              />
 
               {/* Mark as Read */}
-              <button
+              <StatusButton
+                active={userStatus === 'read'}
                 onClick={() => handleStatus('read')}
-                style={{
-                  padding: '10px 20px', borderRadius: tokens.radius.lg,
-                  fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
-                  cursor: 'pointer',
-                  border: userStatus === 'read' ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-                  background: userStatus === 'read' ? tokens.colors.accent.success : 'transparent',
-                  color: userStatus === 'read' ? 'var(--color-on-accent)' : tokens.colors.text.primary,
-                  transition: `all ${tokens.transition.fast}`,
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                {isZh ? '已读' : 'Read'}
-              </button>
+                activeColor={tokens.colors.accent.success}
+                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>}
+                label={isZh ? '读过' : 'Read'}
+              />
 
               {/* Share */}
               <ShareButton
@@ -484,6 +472,9 @@ export default function BookDetailPage() {
                 }}
                 variant="outline"
               />
+
+              {/* Add to Collection */}
+              <AddToCollectionButton itemType="book" itemId={book.id} compact />
             </div>
 
             {/* User rating - show for all logged in users */}
@@ -819,5 +810,28 @@ function MetaPill({ label }: { label: string }) {
     }}>
       {label}
     </span>
+  )
+}
+
+function StatusButton({ active, onClick, activeColor, icon, label }: {
+  active: boolean; onClick: () => void; activeColor: string; icon: React.ReactNode; label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '10px 20px', borderRadius: tokens.radius.lg,
+        fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
+        cursor: 'pointer',
+        border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+        background: active ? activeColor : 'transparent',
+        color: active ? 'var(--color-on-accent)' : tokens.colors.text.primary,
+        transition: `all ${tokens.transition.fast}`,
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }

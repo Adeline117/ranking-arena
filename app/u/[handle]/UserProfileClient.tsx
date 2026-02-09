@@ -121,7 +121,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
   // Tabs: trader mode uses trader tabs, non-trader uses profile tabs
   type TraderTabKey = 'overview' | 'stats' | 'portfolio'
-  type ProfileTabKey = 'overview' | 'activity' | 'followers' | 'groups' | 'bookmarks'
+  type ProfileTabKey = 'overview' | 'activity' | 'followers' | 'groups' | 'bookmarks' | 'bookshelf' | 'stats' | 'portfolio'
   const urlTab = searchParams.get('tab')
   const [activeTraderTab, setActiveTraderTab] = useState<TraderTabKey>(
     urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as TraderTabKey : 'overview'
