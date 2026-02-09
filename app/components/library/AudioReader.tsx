@@ -142,7 +142,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
               {' '}{currentSentence + 1}/{sentences.length}
             </span>
           )}
-          <button onClick={onClose} style={{
+          <button aria-label="Close" onClick={onClose} style={{
             background: 'none', border: 'none', color: panelText,
             cursor: 'pointer', padding: 4, opacity: 0.5,
           }}>

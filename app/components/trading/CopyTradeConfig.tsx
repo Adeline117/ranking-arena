@@ -190,7 +190,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
           {t('copyTrade_title')}{traderName ? ` - ${traderName}` : ''}
         </Text>
         {onClose && (
-          <button onClick={onClose} style={{
+          <button aria-label="Close" onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',
             fontSize: 20, color: c.text.secondary, padding: 4,
           }}>

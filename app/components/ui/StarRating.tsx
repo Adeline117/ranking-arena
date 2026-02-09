@@ -69,8 +69,12 @@ export default function StarRating({
           return (
             <span
               key={star}
+              role={interactive ? 'button' : undefined}
+              tabIndex={interactive ? 0 : undefined}
+              aria-label={interactive ? `${star} star${star > 1 ? 's' : ''}` : undefined}
               onMouseEnter={() => interactive && setHoverRating(star)}
               onClick={() => interactive && onRate?.(star)}
+              onKeyDown={(e) => { if (interactive && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onRate?.(star) } }}
               style={{ display: 'inline-flex', transition: 'transform 0.15s' }}
               onMouseDown={e => {
                 if (interactive) (e.currentTarget as HTMLElement).style.transform = 'scale(1.2)'

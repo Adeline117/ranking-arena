@@ -149,7 +149,7 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
         }}
       >
         <ShareIcon />
-        {showLabel && t('share')}
+        {showLabel ? t('share') : <span className="sr-only">{t('share')}</span>}
       </button>
 
       {open && (
