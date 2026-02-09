@@ -19,6 +19,31 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
 import { logger } from '@/lib/logger'
 
+/** 高亮搜索关键词 */
+function highlightMatch(text: string, q: string): React.ReactNode {
+  if (!text || !q.trim()) return text
+  const lower = text.toLowerCase()
+  const lq = q.toLowerCase().trim()
+  const parts: React.ReactNode[] = []
+  let last = 0
+  let idx = lower.indexOf(lq)
+  while (idx !== -1) {
+    if (idx > last) parts.push(text.slice(last, idx))
+    parts.push(
+      <mark key={`hl-${idx}`} style={{
+        backgroundColor: 'var(--color-accent-primary-25, rgba(139,92,246,0.25))',
+        color: 'inherit', borderRadius: 2, padding: '0 1px', fontWeight: 700,
+      }}>
+        {text.slice(idx, idx + lq.length)}
+      </mark>
+    )
+    last = idx + lq.length
+    idx = lower.indexOf(lq, last)
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return parts.length > 0 ? parts : text
+}
+
 interface SearchDropdownProps {
   open: boolean
   query: string
@@ -461,7 +486,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {result.title}
+                    {highlightMatch(result.title, query)}
                   </Text>
                   {result.subtitle && (
                     <Text
@@ -473,7 +498,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {result.subtitle}
+                      {highlightMatch(result.subtitle, query)}
                     </Text>
                   )}
                 </Box>
