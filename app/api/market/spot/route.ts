@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest) {
           id: c.id,
           symbol: (c.symbol as string).toUpperCase(),
           name: c.name,
-          image: c.image,
+          image: typeof c.image === 'string' ? c.image.replace('/large/', '/small/') : c.image,
           price: c.current_price,
           change24h: c.price_change_percentage_24h,
           high24h: c.high_24h,
