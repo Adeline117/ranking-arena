@@ -20,8 +20,8 @@ interface ExchangeInfo {
 
 function CardWrapper({ title, linkText, linkHref, accentColor, children }: {
   title: string
-  linkText: string
-  linkHref: string
+  linkText?: string
+  linkHref?: string
   accentColor?: string
   children: React.ReactNode
 }) {
@@ -66,25 +66,27 @@ function CardWrapper({ title, linkText, linkHref, accentColor, children }: {
         }}>
           {title}
         </span>
-        <Link
-          href={linkHref}
-          style={{
-            fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.accent.primary,
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 2,
-            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-            borderRadius: tokens.radius.sm,
-            transition: `all ${tokens.transition.fast}`,
-          }}
-        >
-          {linkText}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </Link>
+        {linkText && linkHref && (
+          <Link
+            href={linkHref}
+            style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: tokens.colors.accent.primary,
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 2,
+              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+              borderRadius: tokens.radius.sm,
+              transition: `all ${tokens.transition.fast}`,
+            }}
+          >
+            {linkText}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </Link>
+        )}
       </div>
       <div style={{ flex: 1, overflow: 'hidden', padding: `0 ${tokens.spacing[5]} ${tokens.spacing[4]}` }}>
         {children}
@@ -217,7 +219,7 @@ export default function CoreCards() {
       gap: tokens.spacing[4],
     }}>
       {/* Gainers Top 5 */}
-      <CardWrapper title="涨幅榜 Top5" linkText="查看全部" linkHref="/market?tab=gainers" accentColor={tokens.gradient.success}>
+      <CardWrapper title="涨幅榜 Top5" accentColor={tokens.gradient.success}>
         {gainers.length === 0 ? (
           <div style={{ height: 160 }} className="skeleton" />
         ) : (
@@ -230,7 +232,7 @@ export default function CoreCards() {
       </CardWrapper>
 
       {/* Losers Top 5 */}
-      <CardWrapper title="跌幅榜 Top5" linkText="查看全部" linkHref="/market?tab=losers" accentColor={tokens.gradient.error}>
+      <CardWrapper title="跌幅榜 Top5" accentColor={tokens.gradient.error}>
         {losers.length === 0 ? (
           <div style={{ height: 160 }} className="skeleton" />
         ) : (
@@ -243,7 +245,7 @@ export default function CoreCards() {
       </CardWrapper>
 
       {/* Exchange Volume / Fund Flow */}
-      <CardWrapper title="资金流向" linkText="查看全部" linkHref="/market?tab=flow" accentColor={tokens.gradient.purple}>
+      <CardWrapper title="资金流向" accentColor={tokens.gradient.purple}>
         {exchanges.length === 0 ? (
           <div style={{ height: 160 }} className="skeleton" />
         ) : (
