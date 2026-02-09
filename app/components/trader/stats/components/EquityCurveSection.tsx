@@ -1,28 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../../base'
 import { useLanguage } from '../../../Providers/LanguageProvider'
-import { CompactErrorBoundary } from '../../../utils/ErrorBoundary'
-
-// Lazy load heavy chart component
-const TradingViewShell = dynamic(() => import('../../TradingViewShell'), {
-  loading: () => (
-    <Box style={{
-      height: 300,
-      background: tokens.colors.bg.tertiary,
-      borderRadius: tokens.radius.lg,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
-      <Text size="sm" color="tertiary">Loading chart...</Text>
-    </Box>
-  ),
-  ssr: false,
-})
 
 interface EquityCurveData {
   '90D': Array<{ date: string; roi: number; pnl: number }>
@@ -53,6 +34,17 @@ export function EquityCurveSection({
 
   const currentData = equityCurve?.[period] || []
   const hasData = currentData.length > 0
+
+  // 所有周期都没有数据时，隐藏整个section
+  const allPeriodsEmpty = !equityCurve || (
+    (!equityCurve['90D'] || equityCurve['90D'].length === 0) &&
+    (!equityCurve['30D'] || equityCurve['30D'].length === 0) &&
+    (!equityCurve['7D'] || equityCurve['7D'].length === 0)
+  )
+
+  if (allPeriodsEmpty) {
+    return null
+  }
 
   return (
     <Box
@@ -115,19 +107,7 @@ export function EquityCurveSection({
             period={period}
           />
         </Box>
-      ) : (
-        <Box
-          style={{
-            overflow: 'hidden',
-            borderRadius: tokens.radius.xl,
-            border: `1px solid ${tokens.colors.border.primary}`,
-          }}
-        >
-          <CompactErrorBoundary>
-            <TradingViewShell symbol={traderHandle} timeframe={period} />
-          </CompactErrorBoundary>
-        </Box>
-      )}
+      ) : null}
     </Box>
   )
 }
@@ -188,18 +168,7 @@ function SimpleLineChart({
 }) {
   const { language } = useLanguage()
   if (data.length === 0) {
-    return (
-      <Box style={{
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: tokens.colors.bg.primary,
-        borderRadius: tokens.radius.lg,
-      }}>
-        <Text size="sm" color="tertiary">{language === 'zh' ? `该时段 (${period}) 暂无链上记录` : `No on-chain activity for ${period}`}</Text>
-      </Box>
-    )
+    return null
   }
 
   const values = data.map(d => d[dataKey])
