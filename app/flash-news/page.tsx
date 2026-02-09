@@ -42,7 +42,11 @@ const CATEGORIES = [
   { key: 'all', label: '全部', label_en: 'All' },
   { key: 'breaking', label: '突发', label_en: 'Breaking', isImportance: true },
   { key: 'important', label: '重要', label_en: 'Important', isImportance: true },
+  { key: 'crypto', label: '加密货币', label_en: 'Crypto' },
   { key: 'defi', label: 'DeFi', label_en: 'DeFi' },
+  { key: 'macro', label: '宏观经济', label_en: 'Macro' },
+  { key: 'regulation', label: '监管政策', label_en: 'Regulation' },
+  { key: 'market', label: '市场动态', label_en: 'Market' },
 ]
 
 const IMPORTANCE_CONFIG = {
