@@ -31,19 +31,24 @@ const CATEGORY_CONFIG: Record<string, { color: string; label: string; label_en: 
   market: { color: newsCategories.market.color, label: '市场动态', label_en: 'Market' },
 }
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = async (url: string) => {
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
 
 export default function NewsFlash() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
 
-  const { data, isLoading } = useSWR(
+  const { data, error, isLoading } = useSWR(
     '/api/flash-news?limit=5&sort=published_at',
     fetcher,
     {
       revalidateOnFocus: false,
       dedupingInterval: 60000,
       refreshInterval: 120000, // Refresh every 2 minutes
+      errorRetryCount: 2,
     }
   )
 

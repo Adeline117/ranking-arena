@@ -871,10 +871,10 @@ export default function EpubReader({
                   {highlights.length}{isZh ? ' 条' : ''}
                 </span>
               </div>
-              <button onClick={() => setShowNotes(false)} style={{
+              <button aria-label="Close notes panel" onClick={() => setShowNotes(false)} style={{
                 background: 'none', border: 'none', color: panelText, cursor: 'pointer', padding: 4, opacity: 0.5,
               }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
 

@@ -105,7 +105,7 @@ export default function TokenSidePanel({ token, onClose }: {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <img
                   src={token.image || `/crypto-icons/${token.symbol.toLowerCase()}.svg`}
-                  alt=""
+                  alt={`${token.symbol} icon`}
                   width={32}
                   height={32}
                   style={{ borderRadius: '50%' }}

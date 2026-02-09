@@ -99,7 +99,7 @@ export default function InstallPrompt() {
     >
       <img
         src="/icons/icon-192x192.png"
-        alt=""
+        alt="Arena app icon"
         width={40}
         height={40}
         style={{ borderRadius: 8, flexShrink: 0 }}

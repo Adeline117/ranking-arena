@@ -179,8 +179,8 @@ export default function ConversationsList(): React.ReactElement {
           width: 32, height: 32, borderRadius: '50%', border: 'none',
           background: tokens.colors.bg.tertiary, color: tokens.colors.text.secondary,
           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }} title={t('createGroupChat')}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        }} title={t('createGroupChat')} aria-label={t('createGroupChat')}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
             <path d="M12 5v14M5 12h14"/>
           </svg>
         </button>
