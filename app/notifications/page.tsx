@@ -66,9 +66,9 @@ function getSeverityFromMessage(message: string): 'critical' | 'warning' | 'info
 }
 
 const severityColors = {
-  critical: '#EF4444',
-  warning: '#F59E0B',
-  info: '#3B82F6',
+  critical: 'var(--color-accent-error)',
+  warning: 'var(--color-score-average)',
+  info: 'var(--color-score-profitability)',
 }
 
 const severityIcons = {
@@ -79,21 +79,21 @@ const severityIcons = {
 
 // Notification type display config
 const NOTIFICATION_TYPE_CONFIG: Record<string, { icon: string; color: string; filterLabel?: { zh: string; en: string } }> = {
-  trader_alert: { icon: 'chart', color: '#3B82F6' },
-  post_reply: { icon: 'reply', color: '#8B5CF6', filterLabel: { zh: '帖子回复', en: 'Replies' } },
-  new_follower: { icon: 'user', color: '#10B981', filterLabel: { zh: '新粉丝', en: 'Followers' } },
-  group_update: { icon: 'megaphone', color: '#F59E0B', filterLabel: { zh: '群组更新', en: 'Groups' } },
-  follow: { icon: 'user', color: '#10B981' },
-  like: { icon: 'heart', color: '#EF4444' },
-  comment: { icon: 'reply', color: '#8B5CF6' },
-  system: { icon: 'bell', color: '#6B7280' },
-  mention: { icon: '@', color: '#3B82F6' },
-  message: { icon: 'mail', color: '#6366F1' },
+  trader_alert: { icon: 'chart', color: 'var(--color-score-profitability)' },
+  post_reply: { icon: 'reply', color: 'var(--color-verified-web3)', filterLabel: { zh: '帖子回复', en: 'Replies' } },
+  new_follower: { icon: 'user', color: 'var(--color-score-great)', filterLabel: { zh: '新粉丝', en: 'Followers' } },
+  group_update: { icon: 'megaphone', color: 'var(--color-score-average)', filterLabel: { zh: '群组更新', en: 'Groups' } },
+  follow: { icon: 'user', color: 'var(--color-score-great)' },
+  like: { icon: 'heart', color: 'var(--color-accent-error)' },
+  comment: { icon: 'reply', color: 'var(--color-verified-web3)' },
+  system: { icon: 'bell', color: 'var(--color-score-low)' },
+  mention: { icon: '@', color: 'var(--color-score-profitability)' },
+  message: { icon: 'mail', color: 'var(--color-chart-indigo)' },
 }
 
 // SVG icon renderer for notification types (no emoji)
 function NotificationIconSvg({ type, size = 16 }: { type: string; size?: number }) {
-  const color = NOTIFICATION_TYPE_CONFIG[type]?.color || '#6B7280'
+  const color = NOTIFICATION_TYPE_CONFIG[type]?.color || 'var(--color-score-low)'
   const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
   const iconKey = NOTIFICATION_TYPE_CONFIG[type]?.icon || 'bell'
 

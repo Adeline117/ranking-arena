@@ -48,10 +48,10 @@ type HtmlChapter = {
 // ─── Constants ───────────────────────────────────────────────────────
 
 const THEME_PRESETS: Record<ReadingTheme, { bg: string; pageBg: string; text: string; labelZh: string; label: string; dot: string }> = {
-  white:  { bg: '#e8e4df', pageBg: '#FFFFFF', text: '#1a1a1a', label: 'White',  labelZh: '白色',   dot: '#FFFFFF' },
-  sepia:  { bg: '#d4cbb8', pageBg: '#F4ECD8', text: '#5b4636', label: 'Sepia',  labelZh: '暖黄',   dot: '#F4ECD8' },
-  dark:   { bg: '#0f0f1a', pageBg: '#1a1a2e', text: '#d4d4d8', label: 'Dark',   labelZh: '暗黑',   dot: '#1a1a2e' },
-  green:  { bg: '#a8d4ad', pageBg: '#C7EDCC', text: '#2d4a32', label: 'Green',  labelZh: '护眼绿', dot: '#C7EDCC' },
+  white:  { bg: 'var(--color-bg-tertiary)', pageBg: 'var(--color-on-accent)', text: 'var(--color-text-primary)', label: 'White',  labelZh: '白色',   dot: 'var(--color-on-accent)' },
+  sepia:  { bg: 'var(--color-border-primary)', pageBg: 'var(--color-bg-secondary)', text: 'var(--color-bg-tertiary)', label: 'Sepia',  labelZh: '暖黄',   dot: 'var(--color-bg-secondary)' },
+  dark:   { bg: 'var(--color-bg-primary)', pageBg: 'var(--color-bg-secondary)', text: 'var(--color-border-primary)', label: 'Dark',   labelZh: '暗黑',   dot: 'var(--color-bg-secondary)' },
+  green:  { bg: 'var(--color-accent-success-20)', pageBg: 'var(--color-accent-success-20)', text: 'var(--color-accent-success)', label: 'Green',  labelZh: '护眼绿', dot: 'var(--color-accent-success-20)' },
 }
 
 const FONT_SIZES: Record<FontSize, { body: number; heading: number; labelZh: string; label: string }> = {
@@ -680,7 +680,7 @@ export default function ReadPage() {
   if (isLoading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-        <div style={{ width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--color-accent-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div style={{ width: 40, height: 40, border: '3px solid var(--glass-border-light)', borderTopColor: 'var(--color-accent-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <p style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
           {pdfLoading || htmlLoading ? (isZh ? '正在加载文档...' : 'Loading document...') : (isZh ? '加载中...' : 'Loading...')}
         </p>
@@ -695,7 +695,7 @@ export default function ReadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <div style={{
           width: 80, height: 80, borderRadius: '50%',
-          background: 'var(--color-bg-secondary, rgba(255,255,255,0.05))',
+          background: 'var(--color-bg-secondary, var(--overlay-hover))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           marginBottom: 20,
         }}>
@@ -713,7 +713,7 @@ export default function ReadPage() {
             ? (isZh ? '该书籍暂无电子版阅读资源，请稍后再来查看。' : 'No digital reading resource is available for this book yet. Please check back later.')
             : (error || (isZh ? '未找到该书籍' : 'Book not found'))}
         </p>
-        <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: 'var(--color-accent-primary)', color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+        <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: 'var(--color-accent-primary)', color: 'var(--foreground)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
           {isZh ? '返回书籍详情' : 'Back to Book'}
         </Link>
       </div>
@@ -733,7 +733,7 @@ export default function ReadPage() {
           {isZh ? '该书籍仅对会员开放，升级会员即可畅读所有付费内容。' : 'This book is available to members only.'}
         </p>
         <div style={{ display: 'flex', gap: 12 }}>
-          <Link href="/membership" style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: tokens.gradient.primary, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+          <Link href="/membership" style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: tokens.gradient.primary, color: 'var(--foreground)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
             {isZh ? '升级会员' : 'Upgrade'}
           </Link>
           <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, border: '1px solid var(--color-border-primary)', color: 'var(--color-text-primary)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
@@ -764,7 +764,7 @@ export default function ReadPage() {
       }}>
         <div style={{
           padding: '2px 16px',
-          background: theme === 'dark' ? 'rgba(15,15,26,0.9)' : 'rgba(0,0,0,0.75)',
+          background: theme === 'dark' ? 'var(--color-blur-overlay)' : 'var(--color-backdrop-heavy)',
           backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         }}>
           <Breadcrumb items={[
@@ -778,7 +778,7 @@ export default function ReadPage() {
       {/* ─── Progress Bar (top, always visible) ──────────── */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: 3, zIndex: 150,
-        background: 'rgba(128,128,128,0.15)',
+        background: 'var(--color-overlay-subtle)',
       }}>
         <div style={{
           height: '100%', width: `${progressPercent}%`,
@@ -797,7 +797,7 @@ export default function ReadPage() {
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '10px 12px',
           paddingTop: 'max(10px, env(safe-area-inset-top))',
-          background: theme === 'dark' ? 'rgba(15,15,26,0.96)' : 'rgba(0,0,0,0.85)',
+          background: theme === 'dark' ? 'var(--color-backdrop-heavy)' : 'var(--color-backdrop-heavy)',
           backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
         }}>
           <ToolbarBtn onClick={() => router.push(`/library/${id}`)} title={isZh ? '返回' : 'Back'}>
@@ -805,10 +805,10 @@ export default function ReadPage() {
           </ToolbarBtn>
 
           <div style={{ flex: 1, overflow: 'hidden', textAlign: 'center', padding: '0 8px' }}>
-            <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {book.title}
             </p>
-            {book.author && <p style={{ fontSize: 11, margin: 0, color: 'rgba(255,255,255,0.45)' }}>{book.author}</p>}
+            {book.author && <p style={{ fontSize: 11, margin: 0, color: 'var(--glass-bg-medium)' }}>{book.author}</p>}
           </div>
 
           {(toc.length > 0 || epubToc.length > 0) && (
@@ -867,14 +867,14 @@ export default function ReadPage() {
         <div style={{
           padding: '10px 16px',
           paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
-          background: theme === 'dark' ? 'rgba(15,15,26,0.96)' : 'rgba(0,0,0,0.85)',
+          background: theme === 'dark' ? 'var(--color-backdrop-heavy)' : 'var(--color-backdrop-heavy)',
           backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
           display: 'flex', flexDirection: 'column', gap: 8,
         }}>
           {/* Clickable progress bar */}
           <div onClick={handleProgressClick} style={{
             height: 6, borderRadius: 3, cursor: 'pointer', position: 'relative',
-            background: 'rgba(255,255,255,0.12)',
+            background: 'var(--glass-bg-medium)',
           }}>
             <div style={{
               height: '100%', borderRadius: 3,
@@ -888,7 +888,7 @@ export default function ReadPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <button onClick={goPrev} disabled={currentPage <= 1} style={{
               background: 'none', border: 'none',
-              color: currentPage <= 1 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.7)',
+              color: currentPage <= 1 ? 'var(--glass-border-medium)' : 'var(--glass-bg-light)',
               cursor: currentPage <= 1 ? 'default' : 'pointer',
               padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 13, fontWeight: 500,
@@ -897,15 +897,15 @@ export default function ReadPage() {
               <span className="reader-hide-mobile">{isZh ? '上一页' : 'Prev'}</span>
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)', fontSize: 13 }}>
               <input
                 type="number"
                 value={currentPage}
                 onChange={e => { const val = parseInt(e.target.value); if (!isNaN(val)) goToPage(val) }}
                 style={{
-                  width: 48, textAlign: 'center', background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.15)', borderRadius: tokens.radius.sm,
-                  color: '#fff', fontSize: 13, fontWeight: 600, padding: '3px 4px', outline: 'none',
+                  width: 48, textAlign: 'center', background: 'var(--glass-bg-light)',
+                  border: '1px solid var(--glass-border-medium)', borderRadius: tokens.radius.sm,
+                  color: 'var(--foreground)', fontSize: 13, fontWeight: 600, padding: '3px 4px', outline: 'none',
                 }}
                 min={1} max={totalPages}
               />
@@ -915,7 +915,7 @@ export default function ReadPage() {
 
             <button onClick={goNext} disabled={currentPage >= totalPages} style={{
               background: 'none', border: 'none',
-              color: currentPage >= totalPages ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.7)',
+              color: currentPage >= totalPages ? 'var(--glass-border-medium)' : 'var(--glass-bg-light)',
               cursor: currentPage >= totalPages ? 'default' : 'pointer',
               padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 13, fontWeight: 500,
@@ -930,37 +930,37 @@ export default function ReadPage() {
       {/* ─── TOC Drawer ──────────────────────────────────── */}
       {showToc && (
         <>
-          <div onClick={() => setShowToc(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200 }} />
+          <div onClick={() => setShowToc(false)} style={{ position: 'fixed', inset: 0, background: 'var(--color-overlay-dark)', zIndex: 200 }} />
           <div style={{
             position: 'fixed', top: 0, left: 0, bottom: 0, width: 320, maxWidth: '85vw', zIndex: 201,
-            background: theme === 'dark' ? '#16162a' : '#fff',
-            boxShadow: '4px 0 24px rgba(0,0,0,0.3)', overflow: 'auto',
+            background: theme === 'dark' ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)',
+            boxShadow: '4px 0 24px var(--color-overlay-medium)', overflow: 'auto',
           }}>
             <div style={{
               position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 16px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'}`,
-              background: theme === 'dark' ? '#16162a' : '#fff',
+              padding: '14px 16px', borderBottom: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
+              background: theme === 'dark' ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)',
             }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: theme === 'dark' ? '#fff' : '#1a1a1a' }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: theme === 'dark' ? 'var(--color-on-accent)' : 'var(--color-text-primary)' }}>
                 {isZh ? '目录' : 'Contents'}
               </span>
-              <button onClick={() => setShowToc(false)} style={{ background: 'none', border: 'none', color: theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)', cursor: 'pointer', padding: 4 }}>
+              <button onClick={() => setShowToc(false)} style={{ background: 'none', border: 'none', color: theme === 'dark' ? 'var(--glass-border-heavy)' : 'var(--color-backdrop-light)', cursor: 'pointer', padding: 4 }}>
                 <IconClose />
               </button>
             </div>
 
             {/* Bookmarks section */}
             {bookmarks.length > 0 && (
-              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'}` }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}` }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: theme === 'dark' ? 'var(--glass-bg-medium)' : 'var(--color-backdrop-light)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
                   {isZh ? '书签' : 'Bookmarks'}
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {bookmarks.map(page => (
                     <button key={page} onClick={() => goToPage(page)} style={{
                       padding: '4px 10px', borderRadius: tokens.radius.sm, fontSize: 12, fontWeight: 500,
-                      background: currentPage === page ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'),
-                      color: currentPage === page ? '#fff' : (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
+                      background: currentPage === page ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'),
+                      color: currentPage === page ? 'var(--color-on-accent)' : (theme === 'dark' ? 'var(--color-text-secondary)' : 'var(--color-backdrop)'),
                       border: 'none', cursor: 'pointer',
                     }}>
                       {isZh ? '第' : 'p.'}{page}{isZh ? '页' : ''}
@@ -983,10 +983,10 @@ export default function ReadPage() {
           <div onClick={() => setShowSettings(false)} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
           <div style={{
             position: 'fixed', top: 56, right: 12, zIndex: 201,
-            background: theme === 'dark' ? '#1e1e36' : '#fff',
-            borderRadius: tokens.radius.xl, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            background: theme === 'dark' ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)',
+            borderRadius: tokens.radius.xl, boxShadow: '0 8px 32px var(--color-overlay-medium)',
             padding: '20px 24px', width: 280,
-            border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'}`,
+            border: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
           }}>
             {/* Theme */}
             <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, opacity: 0.6 }}>
@@ -1001,12 +1001,12 @@ export default function ReadPage() {
                   <div style={{
                     width: 36, height: 36, borderRadius: '50%',
                     background: THEME_PRESETS[t].dot,
-                    border: theme === t ? '3px solid var(--color-accent-primary)' : `2px solid ${theme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`,
+                    border: theme === t ? '3px solid var(--color-accent-primary)' : `2px solid ${theme === 'dark' ? 'var(--glass-border-medium)' : 'var(--color-overlay-light)'}`,
                     transition: 'border 0.2s',
                   }} />
                   <span style={{
                     fontSize: 11,
-                    color: theme === t ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'),
+                    color: theme === t ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--glass-bg-medium)' : 'var(--color-backdrop-light)'),
                     fontWeight: theme === t ? 600 : 400,
                   }}>
                     {isZh ? THEME_PRESETS[t].labelZh : THEME_PRESETS[t].label}
@@ -1016,7 +1016,7 @@ export default function ReadPage() {
             </div>
 
             {/* Font Size */}
-            <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, paddingTop: 14, marginBottom: 14 }}>
+            <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
               <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, opacity: 0.6 }}>
                 {isZh ? '字号' : 'Font Size'}
               </p>
@@ -1024,8 +1024,8 @@ export default function ReadPage() {
                 {(Object.keys(FONT_SIZES) as FontSize[]).map(s => (
                   <button key={s} onClick={() => setFontSize(s)} style={{
                     flex: 1, padding: '8px 4px', borderRadius: 10,
-                    background: fontSize === s ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
-                    color: fontSize === s ? '#fff' : (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
+                    background: fontSize === s ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'),
+                    color: fontSize === s ? 'var(--color-on-accent)' : (theme === 'dark' ? 'var(--color-text-secondary)' : 'var(--color-backdrop)'),
                     border: 'none', cursor: 'pointer', fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15,
                     fontWeight: 600, transition: 'all 0.15s',
                   }}>
@@ -1037,7 +1037,7 @@ export default function ReadPage() {
 
             {/* Font Family (HTML/ePub mode) */}
             {(contentMode === 'html' || contentMode === 'epub') && (
-              <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, paddingTop: 14, marginBottom: 14 }}>
+              <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, opacity: 0.6 }}>
                   {isZh ? '字体' : 'Font'}
                 </p>
@@ -1045,8 +1045,8 @@ export default function ReadPage() {
                   {(Object.keys(FONT_FAMILIES) as FontFamily[]).map(f => (
                     <button key={f} onClick={() => setFontFamily(f)} style={{
                       flex: 1, padding: '8px 4px', borderRadius: 10,
-                      background: fontFamily === f ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
-                      color: fontFamily === f ? '#fff' : (theme === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'),
+                      background: fontFamily === f ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'),
+                      color: fontFamily === f ? 'var(--color-on-accent)' : (theme === 'dark' ? 'var(--color-text-secondary)' : 'var(--color-backdrop)'),
                       border: 'none', cursor: 'pointer', fontSize: 14,
                       fontFamily: FONT_FAMILIES[f].css,
                       fontWeight: 600, transition: 'all 0.15s',
@@ -1060,7 +1060,7 @@ export default function ReadPage() {
 
             <div style={{
               paddingTop: 14,
-              borderTop: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+              borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
             }}>
               <p style={{ fontSize: 11, opacity: 0.4, textAlign: 'center', lineHeight: 1.6 }}>
                 {isZh
@@ -1111,7 +1111,7 @@ export default function ReadPage() {
               ref={canvasRef}
               style={{
                 maxWidth: '100%', maxHeight: '100%',
-                boxShadow: theme !== 'dark' ? '0 2px 20px rgba(0,0,0,0.15)' : '0 2px 20px rgba(0,0,0,0.4)',
+                boxShadow: theme !== 'dark' ? '0 2px 20px var(--color-overlay-light)' : '0 2px 20px var(--color-backdrop-light)',
                 borderRadius: 2, background: themeColors.pageBg,
                 animation: flipDirection ? `page-flip-${flipDirection} 0.3s ease` : 'none',
               }}
@@ -1135,7 +1135,7 @@ export default function ReadPage() {
               borderRadius: tokens.radius.sm,
               padding: '40px 36px',
               minHeight: 'calc(100vh - 160px)',
-              boxShadow: theme !== 'dark' ? '0 2px 20px rgba(0,0,0,0.08)' : '0 2px 20px rgba(0,0,0,0.3)',
+              boxShadow: theme !== 'dark' ? '0 2px 20px var(--color-overlay-subtle)' : '0 2px 20px var(--color-overlay-medium)',
               fontFamily: fontFamilyConfig.css,
               fontSize: fontSizeConfig.body,
               lineHeight: 1.85,
@@ -1183,7 +1183,7 @@ export default function ReadPage() {
         {pageRendering && (
           <div style={{
             position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            width: 24, height: 24, border: '2px solid rgba(128,128,128,0.2)',
+            width: 24, height: 24, border: '2px solid var(--color-overlay-medium)',
             borderTopColor: 'var(--color-accent-primary)', borderRadius: '50%',
             animation: 'spin 0.6s linear infinite', zIndex: 5,
           }} />
@@ -1194,20 +1194,20 @@ export default function ReadPage() {
       {showBookshelfPrompt && !addedToShelf && (
         <div style={{
           position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 150,
-          background: theme === 'dark' ? '#2a2a4a' : '#fff',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3)', borderRadius: tokens.radius.xl,
+          background: theme === 'dark' ? 'var(--color-bg-tertiary)' : 'var(--color-on-accent)',
+          boxShadow: '0 8px 32px var(--color-overlay-medium)', borderRadius: tokens.radius.xl,
           padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12,
-          border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
+          border: `1px solid ${theme === 'dark' ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'}`,
           animation: 'slideUp 0.3s ease',
         }}>
           <span style={{ fontSize: 13 }}>{isZh ? '加入书架?' : 'Add to shelf?'}</span>
           <button onClick={handleAddToShelf} style={{
             padding: '5px 14px', borderRadius: tokens.radius.md, background: 'var(--color-accent-primary)',
-            color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            color: 'var(--foreground)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
           }}>{isZh ? '加入' : 'Add'}</button>
           <button onClick={() => setShowBookshelfPrompt(false)} style={{
             padding: '5px 10px', borderRadius: tokens.radius.md, background: 'transparent',
-            color: themeColors.text, border: '1px solid rgba(128,128,128,0.2)',
+            color: themeColors.text, border: '1px solid var(--color-overlay-medium)',
             cursor: 'pointer', fontSize: 12, opacity: 0.6,
           }}>{isZh ? '稍后' : 'Later'}</button>
         </div>
@@ -1251,11 +1251,11 @@ export default function ReadPage() {
             display: 'block', width: '100%', textAlign: 'left',
             padding: '10px 16px', paddingLeft: 16 + level * 20,
             background: 'none', border: 'none',
-            color: theme === 'dark' ? '#fff' : '#1a1a1a',
+            color: theme === 'dark' ? 'var(--color-on-accent)' : 'var(--color-text-primary)',
             cursor: 'pointer', fontSize: 13, lineHeight: 1.4,
             transition: 'background 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'}
+          onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'var(--overlay-hover)' : 'var(--overlay-hover)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
           {item.label}
@@ -1275,14 +1275,14 @@ export default function ReadPage() {
             width: '100%', textAlign: 'left', padding: '10px 16px',
             paddingLeft: 16 + item.level * 20,
             background: currentPage === item.pageIndex + 1
-              ? (theme === 'dark' ? 'rgba(139,111,168,0.15)' : 'rgba(139,111,168,0.08)')
+              ? (theme === 'dark' ? 'var(--color-accent-primary-15)' : 'var(--color-accent-primary-08)')
               : 'none',
-            border: 'none', color: theme === 'dark' ? '#fff' : '#1a1a1a',
+            border: 'none', color: theme === 'dark' ? 'var(--color-on-accent)' : 'var(--color-text-primary)',
             cursor: 'pointer', fontSize: 13, lineHeight: 1.4, transition: 'background 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'}
+          onMouseEnter={e => e.currentTarget.style.background = theme === 'dark' ? 'var(--overlay-hover)' : 'var(--overlay-hover)'}
           onMouseLeave={e => e.currentTarget.style.background = currentPage === item.pageIndex + 1
-            ? (theme === 'dark' ? 'rgba(139,111,168,0.15)' : 'rgba(139,111,168,0.08)') : 'transparent'}
+            ? (theme === 'dark' ? 'var(--color-accent-primary-15)' : 'var(--color-accent-primary-08)') : 'transparent'}
         >
           <span style={{ flex: 1, marginRight: 12 }}>{item.title}</span>
           <span style={{ opacity: 0.35, fontSize: 11, flexShrink: 0 }}>{item.pageIndex + 1}</span>
@@ -1308,11 +1308,11 @@ function ToolbarBtn({ children, onClick, active, title }: {
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 36, height: 36, borderRadius: 10,
-        background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
-        border: 'none', color: 'rgba(255,255,255,0.75)',
+        background: active ? 'var(--glass-bg-medium)' : 'transparent',
+        border: 'none', color: 'var(--glass-bg-light)',
         cursor: 'pointer', transition: 'background 0.15s', flexShrink: 0,
       }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--glass-bg-light)' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
     >
       {children}

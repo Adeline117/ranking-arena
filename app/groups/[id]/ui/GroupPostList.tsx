@@ -294,7 +294,7 @@ export default function GroupPostList(props: GroupPostListProps) {
           style={{
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0, 0, 0, 0.6)',
+            background: 'var(--color-backdrop)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -542,7 +542,7 @@ function PostListItem(props: PostListItemProps) {
                 fontSize: tokens.typography.fontSize.xs,
                 padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                 borderRadius: tokens.radius.md,
-                background: 'rgba(139, 111, 168, 0.1)',
+                background: 'var(--color-accent-primary-10)',
                 transition: `all ${tokens.transition.base}`,
               }}
             >
@@ -652,11 +652,11 @@ function PostListItem(props: PostListItemProps) {
             variant="text" size="sm"
             onClick={() => handleBookmark(post.id)}
             disabled={bookmarkLoading[post.id]}
-            style={{ padding: 0, minWidth: 'auto', color: post.user_bookmarked ? '#FFB020' : undefined }}
+            style={{ padding: 0, minWidth: 'auto', color: post.user_bookmarked ? 'var(--color-accent-warning)' : undefined }}
             title={language === 'zh' ? (post.user_bookmarked ? '取消收藏' : '收藏') : (post.user_bookmarked ? 'Remove bookmark' : 'Bookmark')}
           >
             <span style={{ fontSize: 14 }}>{post.user_bookmarked ? '[S]' : '[+]'}</span>
-            <Text size="xs" style={{ marginLeft: tokens.spacing[1], color: post.user_bookmarked ? '#FFB020' : tokens.colors.text.secondary }}>
+            <Text size="xs" style={{ marginLeft: tokens.spacing[1], color: post.user_bookmarked ? 'var(--color-accent-warning)' : tokens.colors.text.secondary }}>
               {post.bookmark_count || 0}
             </Text>
           </Button>

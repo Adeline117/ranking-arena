@@ -27,7 +27,7 @@ export default function LibraryItemNotFound() {
           padding: '10px 28px',
           borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand,
-          color: '#fff',
+          color: 'var(--foreground)',
           textDecoration: 'none',
           fontWeight: 600,
           fontSize: 14,

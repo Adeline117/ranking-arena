@@ -193,7 +193,7 @@ export default function Button({
             top: ripple.y,
             width: 8,
             height: 8,
-            background: 'rgba(255, 255, 255, 0.5)',
+            background: 'var(--glass-border-heavy)',
             borderRadius: '50%',
             transform: 'translate(-50%, -50%)',
             animation: 'ripple 0.6s ease-out forwards',

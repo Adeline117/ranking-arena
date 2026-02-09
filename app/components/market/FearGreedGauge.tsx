@@ -6,11 +6,11 @@ import { t } from '@/lib/i18n'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
 
 function getColor(value: number): string {
-  if (value <= 25) return '#ea3943'
-  if (value <= 46) return '#ea8c00'
-  if (value <= 54) return '#f5c623'
-  if (value <= 75) return '#93d900'
-  return '#16c784'
+  if (value <= 25) return 'var(--color-accent-error)'
+  if (value <= 46) return 'var(--color-score-average)'
+  if (value <= 54) return 'var(--color-accent-warning)'
+  if (value <= 75) return 'var(--color-accent-success)'
+  return 'var(--color-accent-success)'
 }
 
 function getLabel(value: number): string {
@@ -84,11 +84,11 @@ export default function FearGreedGauge() {
   // Gauge geometry - larger semi-circle
   const cx = 100, cy = 88, r = 70, strokeW = 14
   const segments = [
-    { from: 180, to: 144, color: '#ea3943' },
-    { from: 144, to: 108, color: '#ea8c00' },
-    { from: 108, to: 72, color: '#f5c623' },
-    { from: 72, to: 36, color: '#93d900' },
-    { from: 36, to: 0, color: '#16c784' },
+    { from: 180, to: 144, color: 'var(--color-accent-error)' },
+    { from: 144, to: 108, color: 'var(--color-score-average)' },
+    { from: 108, to: 72, color: 'var(--color-accent-warning)' },
+    { from: 72, to: 36, color: 'var(--color-accent-success)' },
+    { from: 36, to: 0, color: 'var(--color-accent-success)' },
   ]
 
   // Needle

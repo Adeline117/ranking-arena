@@ -108,7 +108,7 @@ export default function InstallPrompt() {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            color: "#EDEDED",
+            color: "var(--color-text-primary)",
             fontSize: 14,
             fontWeight: 600,
             lineHeight: 1.3,
@@ -118,7 +118,7 @@ export default function InstallPrompt() {
         </div>
         <div
           style={{
-            color: "#9CA3AF",
+            color: "var(--color-text-tertiary)",
             fontSize: 12,
             lineHeight: 1.4,
             marginTop: 2,
@@ -132,7 +132,7 @@ export default function InstallPrompt() {
         aria-label={t('pwaInstallButton')}
         style={{
           background: "linear-gradient(135deg, #8b6fa8, #a88bc4)",
-          color: "#fff",
+          color: "var(--foreground)",
           border: "none",
           borderRadius: tokens.radius.md,
           padding: "8px 16px",
@@ -151,7 +151,7 @@ export default function InstallPrompt() {
         style={{
           background: "none",
           border: "none",
-          color: "#6B7280",
+          color: "var(--color-score-low)",
           fontSize: 18,
           cursor: "pointer",
           padding: 4,

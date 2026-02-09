@@ -98,12 +98,12 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
   const progress = sentences.length > 0 ? ((currentSentence) / sentences.length) * 100 : 0
 
   // Styles
-  const panelBg = themeIsDark ? '#1e1e36' : '#fff'
-  const panelText = themeIsDark ? '#d4d4d8' : '#1a1a1a'
+  const panelBg = themeIsDark ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)'
+  const panelText = themeIsDark ? 'var(--color-border-primary)' : 'var(--color-text-primary)'
   const panelBorder = themeIsDark ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'
-  const panelSubtle = themeIsDark ? 'var(--overlay-hover)' : 'rgba(0,0,0,0.03)'
+  const panelSubtle = themeIsDark ? 'var(--overlay-hover)' : 'var(--overlay-hover)'
   const accent = 'var(--color-accent-primary, #6366f1)'
-  const highlightBg = themeIsDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.12)'
+  const highlightBg = themeIsDark ? 'var(--color-indigo-bg)' : 'var(--color-indigo-subtle)'
 
   // Voice display name
   const voiceLabel = (v: SpeechSynthesisVoice) => {
@@ -269,7 +269,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
           {/* Play/Pause */}
           <button aria-label={ttsState === 'playing' ? 'Pause' : 'Play'} onClick={handlePlayPause} style={{
             width: 48, height: 48, borderRadius: '50%', border: 'none',
-            background: accent, color: '#fff', cursor: 'pointer',
+            background: accent, color: 'var(--foreground)', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 20,
           }}>

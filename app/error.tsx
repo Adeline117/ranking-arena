@@ -40,8 +40,8 @@ const injectStyles = () => {
     }
     
     @keyframes glowPulse {
-      0%, 100% { box-shadow: 0 0 30px rgba(255, 124, 124, 0.2); }
-      50% { box-shadow: 0 0 50px rgba(255, 124, 124, 0.35); }
+      0%, 100% { box-shadow: 0 0 30px var(--color-accent-error-20); }
+      50% { box-shadow: 0 0 50px var(--color-accent-error-20); }
     }
     
     @keyframes floatParticle {
@@ -66,7 +66,7 @@ const injectStyles = () => {
       width: 500px;
       height: 500px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(255, 124, 124, 0.08) 0%, transparent 70%);
+      background: radial-gradient(circle, var(--color-accent-error-08) 0%, transparent 70%);
       top: 40%;
       left: 50%;
       transform: translate(-50%, -50%);
@@ -82,7 +82,7 @@ const injectStyles = () => {
       position: absolute;
       inset: -12px;
       border-radius: 50%;
-      border: 2px solid rgba(255, 124, 124, 0.15);
+      border: 2px solid var(--color-accent-error-15);
       animation: pulseRing 3s ease-in-out infinite;
     }
     
@@ -101,7 +101,7 @@ const injectStyles = () => {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+      background: linear-gradient(135deg, var(--glass-border-light) 0%, transparent 50%);
       opacity: 0;
       transition: opacity 0.3s ease;
     }
@@ -116,7 +116,7 @@ const injectStyles = () => {
     
     .action-button.primary:hover {
       transform: translateY(-3px);
-      box-shadow: 0 8px 30px rgba(139, 111, 168, 0.4);
+      box-shadow: 0 8px 30px var(--color-accent-primary-40);
     }
     
     .action-button.secondary:hover {
@@ -133,15 +133,15 @@ const injectStyles = () => {
     
     .error-code {
       font-family: 'SF Mono', 'Consolas', monospace;
-      background: rgba(255, 124, 124, 0.1);
+      background: var(--color-accent-error-10);
       padding: 6px 12px;
       border-radius: 6px;
-      border: 1px solid rgba(255, 124, 124, 0.15);
+      border: 1px solid var(--color-accent-error-15);
     }
     
     .decorative-line {
       height: 1px;
-      background: linear-gradient(90deg, transparent 0%, rgba(255, 124, 124, 0.2) 50%, transparent 100%);
+      background: linear-gradient(90deg, transparent 0%, var(--color-accent-error-20) 50%, transparent 100%);
       animation: lineExpand 1s ease 0.5s forwards;
       transform: scaleX(0);
     }
@@ -152,8 +152,8 @@ const injectStyles = () => {
     
     .help-card:hover {
       transform: translateY(-2px);
-      background: rgba(139, 111, 168, 0.08) !important;
-      border-color: rgba(139, 111, 168, 0.2) !important;
+      background: var(--color-accent-primary-08) !important;
+      border-color: var(--color-accent-primary-20) !important;
     }
   `
   document.head.appendChild(style)
@@ -222,8 +222,8 @@ export default function Error({
             width: 6 + i * 2,
             height: 6 + i * 2,
             background: i % 2 === 0 
-              ? 'rgba(255, 124, 124, 0.3)' 
-              : 'rgba(139, 111, 168, 0.3)',
+              ? 'var(--color-accent-error-20)' 
+              : 'var(--color-accent-primary-30)',
             left: `${20 + i * 15}%`,
             top: `${25 + (i % 3) * 20}%`,
             animationDuration: `${4 + i * 0.8}s`,
@@ -246,7 +246,7 @@ export default function Error({
             width: 90,
             height: 90,
             borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(255, 124, 124, 0.15) 0%, rgba(255, 124, 124, 0.05) 100%)',
+            background: 'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-04) 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -325,7 +325,7 @@ export default function Error({
               className="error-code"
               style={{
                 fontSize: 12,
-                color: 'rgba(255, 124, 124, 0.8)',
+                color: 'var(--color-accent-error)',
               }}
             >
               {t('errorCode')}: {error.digest}
@@ -377,8 +377,8 @@ export default function Error({
                 <div style={{
                   width: 16,
                   height: 16,
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  borderTopColor: '#fff',
+                  border: '2px solid var(--glass-border-heavy)',
+                  borderTopColor: 'var(--foreground)',
                   borderRadius: '50%',
                   animation: 'spin 1s linear infinite',
                 }} />
@@ -403,7 +403,7 @@ export default function Error({
               background: 'transparent',
               color: 'var(--color-text-primary, #EDEDED)', 
               borderRadius: tokens.radius.lg,
-              border: '1px solid var(--color-border-primary, rgba(255,255,255,0.15))',
+              border: '1px solid var(--color-border-primary, var(--glass-border-medium))',
               textDecoration: 'none',
               fontSize: 16,
               fontWeight: 500,

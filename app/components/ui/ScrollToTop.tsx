@@ -38,7 +38,7 @@ export default function ScrollToTop() {
         width: 44,
         height: 44,
         borderRadius: '50%',
-        border: '1px solid var(--color-border-secondary, rgba(255,255,255,0.1))',
+        border: '1px solid var(--color-border-secondary, var(--glass-border-light))',
         background: 'var(--color-bg-secondary, #14121C)',
         color: 'var(--color-text-secondary, #A8A8B3)',
         cursor: 'pointer',
@@ -56,7 +56,7 @@ export default function ScrollToTop() {
         e.currentTarget.style.color = 'var(--color-brand, #8b6fa8)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'var(--color-border-secondary, rgba(255,255,255,0.1))'
+        e.currentTarget.style.borderColor = 'var(--color-border-secondary, var(--glass-border-light))'
         e.currentTarget.style.color = 'var(--color-text-secondary, #A8A8B3)'
       }}
     >

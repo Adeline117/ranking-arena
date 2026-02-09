@@ -44,9 +44,9 @@ async function getAlertConfig() {
 
 async function sendSlackAlert(webhookUrl: string, payload: AlertPayload) {
   const colorMap = {
-    info: '#36a64f',
-    warning: '#ffcc00',
-    critical: '#ff0000',
+    info: 'var(--color-accent-success)',
+    warning: 'var(--color-accent-warning)',
+    critical: 'var(--color-accent-error)',
   }
   
   const slackPayload = {
@@ -173,7 +173,7 @@ async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
     subject: `${levelEmoji[payload.level]} ${payload.title}`,
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: ${payload.level === 'critical' ? '#dc2626' : payload.level === 'warning' ? '#ca8a04' : '#16a34a'};">
+        <h2 style="color: ${payload.level === 'critical' ? 'var(--color-accent-error)' : payload.level === 'warning' ? 'var(--color-accent-warning)' : 'var(--color-accent-success)'};">
           ${levelEmoji[payload.level]} ${payload.title}
         </h2>
         <p style="color: #374151; font-size: 16px; line-height: 1.6;">

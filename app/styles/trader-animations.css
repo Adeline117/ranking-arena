@@ -74,10 +74,10 @@
 /* 脉冲动画 - 用于强调重要指标 */
 @keyframes subtlePulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(139, 111, 168, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(139, 111, 168, 0.1);
+    box-shadow: 0 0 0 8px var(--color-accent-primary-10);
   }
 }
 
@@ -199,7 +199,7 @@
 
 .performance-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 40px var(--color-overlay-light);
 }
 
 /* Arena Score 徽章 */
@@ -227,7 +227,7 @@
 
 .metric-item:hover {
   transform: translateY(-2px);
-  background: rgba(139, 111, 168, 0.05);
+  background: var(--color-accent-primary-08);
   border-radius: 8px;
 }
 
@@ -239,7 +239,7 @@
 
 .about-card:hover {
   transform: translateY(-4px) scale(1.01);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 24px 48px var(--color-overlay-light);
 }
 
 /* Feed 卡片 */
@@ -260,7 +260,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, var(--color-brand), #6b4f88);
+  background: linear-gradient(180deg, var(--color-brand), var(--color-pro-gradient-end));
   transform: scaleY(0);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -288,7 +288,7 @@
 
 .stats-card:hover {
   transform: translateY(-6px);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 16px 32px var(--color-overlay-light);
 }
 
 /* Portfolio 表格 */
@@ -302,7 +302,7 @@
 
 .portfolio-row:hover {
   transform: scale(1.01);
-  background: rgba(139, 111, 168, 0.05);
+  background: var(--color-accent-primary-08);
 }
 
 /* Position History 卡片 */
@@ -320,8 +320,8 @@
 
 .position-card:hover {
   transform: translateY(-4px) scale(1.01);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-  border-color: rgba(139, 111, 168, 0.3);
+  box-shadow: 0 12px 24px var(--color-overlay-subtle);
+  border-color: var(--color-accent-primary-30);
 }
 
 /* Similar Traders */
@@ -335,7 +335,7 @@
 
 .similar-trader-item:hover {
   transform: translateX(4px);
-  background: rgba(139, 111, 168, 0.05);
+  background: var(--color-accent-primary-08);
 }
 
 /* 资产分布横条 */
@@ -360,10 +360,10 @@
 }
 
 .glass-card-light {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay-hover);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--glass-border-light);
 }
 
 /* ============================================
@@ -374,7 +374,7 @@
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.05) 50%,
+    var(--overlay-hover) 50%,
     rgba(255, 255, 255, 0) 100%
   );
   background-size: 200% 100%;

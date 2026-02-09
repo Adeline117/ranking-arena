@@ -157,7 +157,7 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
           style={{
             padding: tokens.spacing[5],
             borderRadius: tokens.radius.lg,
-            background: `linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.05) 100%)`,
+            background: `linear-gradient(135deg, var(--color-accent-primary-08) 0%, var(--color-accent-primary-08) 100%)`,
             border: `1px dashed ${tokens.colors.accent.primary}40`,
             textAlign: 'center',
           }}

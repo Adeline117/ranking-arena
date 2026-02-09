@@ -41,10 +41,10 @@ function formatAgo(iso: string): string {
 function StatusDot({ status }: { status: string }) {
   const color =
     status === 'pass' || status === 'healthy' || status === 'ok'
-      ? "#22c55e"
+      ? "var(--color-accent-success)"
       : status === 'degraded' || status === 'skip'
-        ? "#f59e0b"
-        : "#ef4444"
+        ? "var(--color-score-average)"
+        : "var(--color-accent-error)"
   return (
     <span
       style={{
@@ -254,7 +254,7 @@ export default function StatusPage() {
                     <span
                       style={{
                         fontSize: tokens.typography.fontSize.xs,
-                        color: isStale ? "#f59e0b" : tokens.colors.text.tertiary,
+                        color: isStale ? "var(--color-score-average)" : tokens.colors.text.tertiary,
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >

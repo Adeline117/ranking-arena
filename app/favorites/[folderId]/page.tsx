@@ -240,7 +240,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   }
 
   const getDefaultAvatar = (name: string) => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8']
+    const colors = ['var(--color-accent-error)', 'var(--color-chart-teal)', 'var(--color-chart-blue)', 'var(--color-chart-sage)', 'var(--color-chart-yellow)', 'var(--color-chart-pink)', 'var(--color-chart-mint)']
     const index = name.charCodeAt(0) % colors.length
     return colors[index]
   }
@@ -330,7 +330,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.65)',
+          background: 'var(--color-backdrop-medium)',
           display: 'grid',
           placeItems: 'center',
           padding: 16,
@@ -670,7 +670,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   variant="text" 
                   size="sm" 
                   onClick={handleDelete}
-                  style={{ color: tokens.colors.accent?.error || '#FF6B6B' }}
+                  style={{ color: tokens.colors.accent?.error || 'var(--color-accent-error)' }}
                 >
                   {t('delete')}
                 </Button>
@@ -731,7 +731,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   transition: `all ${tokens.transition.base}`,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.05)'
+                  e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)'
                   e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
                   e.currentTarget.style.transform = 'translateX(4px)'
                 }}
@@ -798,8 +798,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                         opacity: removingBookmark[post.id] ? 0.5 : 1,
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.color = tokens.colors.accent?.error || '#FF6B6B'
-                        e.currentTarget.style.background = 'rgba(255,107,107,0.1)'
+                        e.currentTarget.style.color = tokens.colors.accent?.error || 'var(--color-accent-error)'
+                        e.currentTarget.style.background = 'var(--color-accent-error-10)'
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.color = tokens.colors.text.tertiary

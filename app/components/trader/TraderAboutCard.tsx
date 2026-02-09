@@ -224,7 +224,7 @@ export default function TraderAboutCard({
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}60`,
         padding: tokens.spacing[6],
-        boxShadow: `0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 var(--glass-bg-light)`,
+        boxShadow: `0 8px 32px var(--color-overlay-light), inset 0 1px 0 var(--glass-bg-light)`,
         transition: `all ${tokens.transition.smooth}`,
         zIndex: 10,
         opacity: mounted ? 1 : 0,
@@ -233,11 +233,11 @@ export default function TraderAboutCard({
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.boxShadow = '0 20px 48px rgba(0, 0, 0, 0.18), inset 0 1px 0 var(--glass-bg-light)'
+        e.currentTarget.style.boxShadow = '0 20px 48px var(--color-overlay-light), inset 0 1px 0 var(--glass-bg-light)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 var(--glass-bg-light)'
+        e.currentTarget.style.boxShadow = '0 8px 32px var(--color-overlay-light), inset 0 1px 0 var(--glass-bg-light)'
       }}
     >
       {/* 装饰背景 */}

@@ -167,7 +167,7 @@ export default function ConversationsList(): React.ReactElement {
             <button key={f} onClick={() => setChatFilter(f)} style={{
               padding: '4px 10px', borderRadius: tokens.radius.lg, border: 'none',
               background: chatFilter === f ? tokens.colors.accent.brand : 'transparent',
-              color: chatFilter === f ? '#fff' : tokens.colors.text.secondary,
+              color: chatFilter === f ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
               fontSize: 12, fontWeight: 600, cursor: 'pointer',
               minHeight: 28,
             }}>
@@ -277,12 +277,12 @@ export default function ConversationsList(): React.ReactElement {
                   alignItems: 'center',
                   gap: tokens.spacing[3],
                   padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                  background: conv.unread_count > 0 ? 'rgba(149,117,205,0.06)' : 'transparent',
+                  background: conv.unread_count > 0 ? 'var(--color-notification-unread)' : 'transparent',
                   transition: 'background 0.15s',
                   cursor: 'pointer',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = conv.unread_count > 0 ? 'rgba(149,117,205,0.06)' : 'transparent' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = conv.unread_count > 0 ? 'var(--color-notification-unread)' : 'transparent' }}
               >
                 <div style={{ flexShrink: 0 }}>
                   <Avatar

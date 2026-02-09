@@ -153,7 +153,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
   }
 
   const getDefaultAvatar = (name: string) => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8']
+    const colors = ['var(--color-accent-error)', 'var(--color-chart-teal)', 'var(--color-chart-blue)', 'var(--color-chart-sage)', 'var(--color-chart-yellow)', 'var(--color-chart-pink)', 'var(--color-chart-mint)']
     const index = name.charCodeAt(0) % colors.length
     return colors[index]
   }
@@ -219,7 +219,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
                     style={{
                       fontSize: 10,
                       padding: '1px 4px',
-                      background: tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
+                      background: tokens.colors.bg.tertiary || 'var(--glass-border-light)',
                       color: tokens.colors.text.tertiary,
                       borderRadius: tokens.radius.sm,
                     }}
@@ -247,7 +247,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
                   border: 'none',
                   background: subscriptions[folder.id] 
                     ? 'var(--color-gold-highlight)' 
-                    : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
+                    : tokens.colors.bg.tertiary || 'var(--glass-border-light)',
                   color: subscriptions[folder.id] 
                     ? tokens.colors.medal.gold 
                     : tokens.colors.text.secondary,

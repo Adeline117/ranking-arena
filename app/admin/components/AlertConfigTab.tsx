@@ -86,7 +86,7 @@ function ConfigItem({ label, description, configKey, placeholder, value: initial
               top: 2,
               left: enabled ? 26 : 2,
               transition: 'left 0.2s',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              boxShadow: '0 1px 3px var(--color-overlay-medium)',
             }}
           />
         </Box>

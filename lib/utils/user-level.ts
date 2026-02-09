@@ -24,11 +24,11 @@ export interface LevelInfo {
 }
 
 export const LEVELS: LevelDefinition[] = [
-  { level: 1, name: '磷虾', nameEn: 'Krill', minExp: 0, color: 'gray', colorHex: '#9CA3AF' },
-  { level: 2, name: '沙丁鱼', nameEn: 'Sardine', minExp: 500, color: 'blue', colorHex: '#3B82F6' },
-  { level: 3, name: '海豚', nameEn: 'Dolphin', minExp: 2000, color: 'green', colorHex: '#22C55E' },
-  { level: 4, name: '鲨鱼', nameEn: 'Shark', minExp: 10000, color: 'purple', colorHex: '#A855F7' },
-  { level: 5, name: '虎鲸', nameEn: 'Orca', minExp: 50000, color: 'gold', colorHex: '#EAB308' },
+  { level: 1, name: '磷虾', nameEn: 'Krill', minExp: 0, color: 'gray', colorHex: 'var(--color-text-tertiary)' },
+  { level: 2, name: '沙丁鱼', nameEn: 'Sardine', minExp: 500, color: 'blue', colorHex: 'var(--color-score-profitability)' },
+  { level: 3, name: '海豚', nameEn: 'Dolphin', minExp: 2000, color: 'green', colorHex: 'var(--color-accent-success)' },
+  { level: 4, name: '鲨鱼', nameEn: 'Shark', minExp: 10000, color: 'purple', colorHex: 'var(--color-chart-violet)' },
+  { level: 5, name: '虎鲸', nameEn: 'Orca', minExp: 50000, color: 'gold', colorHex: 'var(--color-accent-warning)' },
 ]
 
 export function getLevelInfo(exp: number): LevelInfo {

@@ -168,7 +168,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
             }}
           />
 
-          {error && <p style={{ color: '#ef4444', fontSize: tokens.typography.fontSize.xs, margin: '0 0 8px' }}>{error}</p>}
+          {error && <p style={{ color: 'var(--color-accent-error)', fontSize: tokens.typography.fontSize.xs, margin: '0 0 8px' }}>{error}</p>}
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -179,7 +179,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
                 padding: '6px 12px',
                 borderRadius: tokens.radius.sm,
                 border: 'none',
-                background: !reason || loading ? 'var(--color-bg-tertiary)' : '#ef4444',
+                background: !reason || loading ? 'var(--color-bg-tertiary)' : 'var(--color-accent-error)',
                 color: 'white',
                 cursor: !reason || loading ? 'not-allowed' : 'pointer',
                 fontSize: tokens.typography.fontSize.xs,

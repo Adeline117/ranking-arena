@@ -98,7 +98,7 @@ function SearchContent() {
       if (idx > last) parts.push(text.slice(last, idx))
       parts.push(
         <span key={`hl-${idx}`} style={{
-          backgroundColor: 'var(--color-accent-primary-25, rgba(139, 111, 168, 0.25))',
+          backgroundColor: 'var(--color-accent-primary-25, var(--color-accent-primary-20))',
           color: 'inherit', borderRadius: 2, padding: '0 2px', fontWeight: 600,
         }}>
           {text.slice(idx, idx + lq.length)}
@@ -297,7 +297,7 @@ function SearchContent() {
               borderBottom: idx < results.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
               transition: 'background 0.15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--overlay-hover)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -375,8 +375,8 @@ function SearchContent() {
                 href={`/search?q=${encodeURIComponent(query)}${tab.key !== 'all' ? `&tab=${tab.key}` : ''}`}
                 style={{
                   padding: '6px 16px', borderRadius: tokens.radius.full,
-                  background: activeTab === tab.key ? 'var(--color-accent-primary-15, rgba(139,92,246,0.15))' : tokens.colors.bg.secondary,
-                  border: `1px solid ${activeTab === tab.key ? 'var(--color-accent-primary-40, rgba(139,92,246,0.4))' : tokens.colors.border.primary}`,
+                  background: activeTab === tab.key ? 'var(--color-accent-primary-15, var(--color-accent-primary-15))' : tokens.colors.bg.secondary,
+                  border: `1px solid ${activeTab === tab.key ? 'var(--color-accent-primary-40, var(--color-accent-primary-40))' : tokens.colors.border.primary}`,
                   color: activeTab === tab.key ? tokens.colors.accent.brand : tokens.colors.text.secondary,
                   fontSize: 13, fontWeight: activeTab === tab.key ? 700 : 500,
                   textDecoration: 'none', transition: 'all 0.15s',
@@ -409,11 +409,11 @@ function SearchContent() {
           <div style={{ textAlign: 'center', padding: '80px 24px' }}>
             <div style={{
               width: 72, height: 72, borderRadius: '50%',
-              background: 'rgba(239, 68, 68, 0.1)',
+              background: 'var(--color-accent-error-10)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               margin: '0 auto 20px',
             }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-error)" strokeWidth="1.5">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
               </svg>
@@ -586,22 +586,22 @@ function SearchContent() {
             {(activeTab === 'all' || activeTab === 'library') && renderSection(
               isZh ? '书库' : 'Library',
               libraryResults, libTotal, 'library',
-              'L', tokens.colors.accent.brand, tokens.colors.accent.brandMuted || 'rgba(139, 111, 168, 0.15)',
+              'L', tokens.colors.accent.brand, tokens.colors.accent.brandMuted || 'var(--color-accent-primary-15)',
             )}
             {(activeTab === 'all' || activeTab === 'groups') && renderSection(
               isZh ? '小组' : 'Groups',
               groupResults, groupTotal, 'groups',
-              'G', tokens.colors.accent.warning || '#f59e0b', 'rgba(245, 158, 11, 0.12)',
+              'G', tokens.colors.accent.warning || 'var(--color-score-average)', 'var(--color-orange-subtle)',
             )}
             {(activeTab === 'all' || activeTab === 'posts') && renderSection(
               isZh ? '动态/帖子' : 'Posts',
               postResults, postTotal, 'posts',
-              'P', tokens.colors.accent.primary, tokens.gradient.primarySubtle || 'rgba(99, 102, 241, 0.12)',
+              'P', tokens.colors.accent.primary, tokens.gradient.primarySubtle || 'var(--color-indigo-subtle)',
             )}
             {(activeTab === 'all' || activeTab === 'traders') && renderSection(
               isZh ? '交易员' : 'Traders',
               traderResults, traderTotal, 'traders',
-              'T', tokens.colors.accent.success || '#10b981', 'rgba(16, 185, 129, 0.12)',
+              'T', tokens.colors.accent.success || 'var(--color-score-great)', 'var(--color-accent-success-12)',
             )}
           </div>
         )}

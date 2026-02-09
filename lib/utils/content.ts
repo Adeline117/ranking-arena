@@ -8,7 +8,7 @@ import { getStickerById, isPureSticker, extractStickerId, STICKER_PATTERN } from
 import { logger } from '@/lib/logger'
 
 // Arena 主题色
-export const ARENA_PURPLE = '#8b6fa8'
+export const ARENA_PURPLE = 'var(--color-brand)'
 
 // 视频嵌入信息
 interface VideoEmbed {
@@ -195,7 +195,7 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
                 min-width: 120px;
                 border: 1px dashed #444;
               ">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff7c7c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 8px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 8px;">
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                   <circle cx="8.5" cy="8.5" r="1.5"></circle>
                   <polyline points="21 15 16 10 5 21"></polyline>
@@ -231,7 +231,7 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
             marginBottom: 8,
             borderRadius: 8,
             overflow: 'hidden',
-            background: '#000',
+            background: 'var(--color-text-primary)',
           },
         }, createElement('video', {
           src: part.video.embedUrl,
@@ -260,7 +260,7 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
           marginBottom: 8,
           borderRadius: 8,
           overflow: 'hidden',
-          background: '#000',
+          background: 'var(--color-text-primary)',
         },
       }, createElement('iframe', {
         src: part.video.embedUrl,
@@ -394,8 +394,8 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
       result.push(createElement('pre', {
         key: `cb-${keyIdx++}`,
         style: {
-          background: 'rgba(0, 0, 0, 0.3)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          background: 'var(--color-overlay-medium)',
+          border: '1px solid var(--glass-border-light)',
           borderRadius: 8,
           padding: '12px 16px',
           margin: '8px 0',
@@ -403,7 +403,7 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
           fontSize: 13,
           lineHeight: 1.5,
           fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-          color: '#e0e0e0',
+          color: 'var(--color-border-primary)',
         },
       }, createElement('code', null, seg.content)))
       continue
@@ -433,8 +433,8 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
         result.push(createElement('code', {
           key: `ic-${keyIdx++}`,
           style: {
-            background: 'rgba(139, 111, 168, 0.15)',
-            border: '1px solid rgba(139, 111, 168, 0.25)',
+            background: 'var(--color-accent-primary-15)',
+            border: '1px solid var(--color-accent-primary-20)',
             borderRadius: 4,
             padding: '2px 6px',
             fontSize: '0.9em',

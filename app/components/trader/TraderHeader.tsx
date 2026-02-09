@@ -300,7 +300,7 @@ interface StatItemProps {
 }
 
 function StatItem({ icon, value, label, hasCover }: StatItemProps): React.ReactElement {
-  const textColor = hasCover ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary
+  const textColor = hasCover ? 'var(--glass-bg-medium)' : tokens.colors.text.secondary
   const valueColor = hasCover ? tokens.colors.white : tokens.colors.text.primary
   const textShadow = hasCover ? '0 1px 4px var(--color-overlay-dark)' : undefined
 
@@ -375,7 +375,7 @@ export default function TraderHeader({
   const hasCover = Boolean(coverUrl)
   const activeDays = getActiveDays(activeSince)
   const tags = getTradingStyleTags(t, source, roi90d, maxDrawdown, winRate)
-  const iconStroke = hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary
+  const iconStroke = hasCover ? 'var(--glass-bg-light)' : tokens.colors.text.tertiary
 
   const containerBackground = hasCover
     ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${coverUrl}) center/cover no-repeat`

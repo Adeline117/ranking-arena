@@ -352,7 +352,7 @@ export default function ChatSearchOverlay({
               gap: 4,
               padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
               border: 'none',
-              background: index === currentIndex ? 'rgba(149, 117, 205, 0.1)' : 'transparent',
+              background: index === currentIndex ? 'var(--color-accent-primary-10)' : 'transparent',
               borderRadius: tokens.radius.md,
               cursor: 'pointer',
               textAlign: 'left',

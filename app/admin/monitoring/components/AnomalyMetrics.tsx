@@ -28,10 +28,10 @@ interface AnomalyMetricsProps {
 }
 
 const SEVERITY_COLORS = {
-  critical: '#FF7C7C',
-  high: '#FFB347',
-  medium: '#FFD700',
-  low: '#7CFFB2',
+  critical: 'var(--color-accent-error)',
+  high: 'var(--color-chart-orange)',
+  medium: 'var(--color-medal-gold)',
+  low: 'var(--color-chart-green)',
 }
 
 export default function AnomalyMetrics({ data }: AnomalyMetricsProps) {

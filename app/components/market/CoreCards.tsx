@@ -103,8 +103,8 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
   const sym = symbol.replace('-USD', '').replace('USDT', '')
   const color = isGainer ? tokens.colors.accent.success : tokens.colors.accent.error
   const bgGradient = isGainer
-    ? 'linear-gradient(90deg, rgba(47, 229, 125, 0.06) 0%, transparent 100%)'
-    : 'linear-gradient(90deg, rgba(255, 124, 124, 0.06) 0%, transparent 100%)'
+    ? 'linear-gradient(90deg, var(--color-accent-success-05) 0%, transparent 100%)'
+    : 'linear-gradient(90deg, var(--color-accent-error-04) 0%, transparent 100%)'
   return (
     <div style={{
       display: 'flex',
@@ -150,7 +150,7 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
           textAlign: 'right',
           padding: `2px ${tokens.spacing[2]}`,
           borderRadius: tokens.radius.sm,
-          background: isGainer ? 'rgba(47, 229, 125, 0.1)' : 'var(--color-accent-error-10)',
+          background: isGainer ? 'var(--color-accent-success-10)' : 'var(--color-accent-error-10)',
         }}>
           {changePct}
         </span>

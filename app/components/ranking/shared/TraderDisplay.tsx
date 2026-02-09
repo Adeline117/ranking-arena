@@ -204,13 +204,13 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
         : {}
 
   const legendaryBg = isElite
-    ? 'linear-gradient(135deg, rgba(139,92,246,0.22), rgba(168,85,247,0.18), rgba(212,175,55,0.12))'
+    ? 'linear-gradient(135deg, var(--color-accent-primary-20), var(--color-accent-primary-20), var(--color-pro-gold-bg))'
     : isLegendary
-      ? 'linear-gradient(135deg, rgba(139,92,246,0.20), rgba(168,85,247,0.15))'
+      ? 'linear-gradient(135deg, var(--color-accent-primary-20), var(--color-accent-primary-15))'
       : bgGradient
 
   const legendaryBorder = isLegendary
-    ? `1px solid rgba(139,92,246,0.65)`
+    ? `1px solid var(--color-accent-primary-60)`
     : `1px solid ${borderColor}`
 
   return (
@@ -225,7 +225,7 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
       {isLegendary && (
         <Box style={{
           position: 'absolute', inset: 0,
-          background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 40%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.12) 60%, transparent 100%)',
+          background: 'linear-gradient(90deg, transparent 0%, var(--glass-bg-medium) 40%, var(--glass-border-heavy) 50%, var(--glass-bg-medium) 60%, transparent 100%)',
           backgroundSize: '200% 100%',
           animation: 'score-shimmer 3s ease-in-out infinite',
           borderRadius: 'inherit',
@@ -242,7 +242,7 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
         position: 'relative',
         color: textColor,
         fontSize: tokens.typography.fontSize.sm, lineHeight: 1,
-        ...(isLegendary ? { textShadow: '0 0 8px rgba(139,92,246,0.4)' } : {}),
+        ...(isLegendary ? { textShadow: '0 0 8px var(--color-accent-primary-40)' } : {}),
       }}>
         {score.toFixed(1)}
       </Text>

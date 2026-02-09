@@ -118,8 +118,8 @@ function ExchangeCallbackPageContent() {
               style={{
                 padding: tokens.spacing[3],
                 borderRadius: tokens.radius.md,
-                background: 'rgba(255, 0, 0, 0.1)',
-                border: '1px solid rgba(255, 0, 0, 0.3)',
+                background: 'var(--color-accent-error-10)',
+                border: '1px solid var(--color-accent-error-20)',
                 marginBottom: tokens.spacing[4],
               }}
             >

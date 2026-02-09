@@ -32,7 +32,7 @@ function formatPct(n: number): string {
 }
 
 function ChangeSpan({ value }: { value: number }) {
-  const color = value >= 0 ? '#16c784' : '#ea3943'
+  const color = value >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)'
   return <span style={{ color, fontWeight: 600 }}>{formatPct(value)}</span>
 }
 
@@ -45,9 +45,9 @@ function FlashPrice({
   flash: PriceFlash | undefined
 }) {
   const flashColor = flash?.direction === 'up'
-    ? 'rgba(22, 199, 132, 0.3)'
+    ? 'var(--color-market-bull)'
     : flash?.direction === 'down'
-      ? 'rgba(234, 57, 67, 0.3)'
+      ? 'var(--color-market-bear)'
       : 'transparent'
 
   return (

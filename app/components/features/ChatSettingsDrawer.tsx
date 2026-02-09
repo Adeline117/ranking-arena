@@ -580,7 +580,7 @@ function SettingsToggle({
           width: 44,
           height: 24,
           borderRadius: tokens.radius.lg,
-          background: checked ? 'linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)' : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.15)',
+          background: checked ? 'linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)' : tokens.colors.bg.tertiary || 'var(--glass-border-medium)',
           position: 'relative',
           transition: 'background 0.2s',
           flexShrink: 0,

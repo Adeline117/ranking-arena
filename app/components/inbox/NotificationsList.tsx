@@ -255,7 +255,7 @@ export default function NotificationsList() {
                     alignItems: 'flex-start',
                     gap: tokens.spacing[3],
                     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                    background: notif.read ? 'transparent' : 'rgba(139,111,168,0.06)',
+                    background: notif.read ? 'transparent' : 'var(--color-notification-unread)',
                     transition: 'background 0.15s',
                     cursor: notif.link ? 'pointer' : 'default',
                   }}

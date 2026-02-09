@@ -36,7 +36,7 @@ export async function exportToPDF(element: HTMLElement, filename: string): Promi
   const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
-    backgroundColor: '#0a0a0f',
+    backgroundColor: 'var(--color-bg-primary)',
   })
   const link = document.createElement('a')
   link.download = `${filename}.png`

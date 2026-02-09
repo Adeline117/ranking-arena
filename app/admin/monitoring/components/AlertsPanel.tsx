@@ -24,21 +24,21 @@ interface AlertsPanelProps {
 
 const SEVERITY_CONFIG = {
   critical: {
-    color: '#FF7C7C',
-    bgColor: '#FF7C7C20',
-    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="#FF7C7C" stroke="none"><circle cx="12" cy="12" r="10"/></svg>,
+    color: 'var(--color-accent-error)',
+    bgColor: 'var(--color-accent-error-10)',
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--color-accent-error)" stroke="none"><circle cx="12" cy="12" r="10"/></svg>,
     label: 'Critical',
   },
   warning: {
-    color: '#FFD700',
-    bgColor: '#FFD70020',
-    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    color: 'var(--color-medal-gold)',
+    bgColor: 'var(--color-gold-bg)',
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-medal-gold)" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
     label: 'Warning',
   },
   info: {
-    color: '#7CFFB2',
-    bgColor: '#7CFFB220',
-    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7CFFB2" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+    color: 'var(--color-chart-green)',
+    bgColor: 'var(--color-accent-success-20)',
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-chart-green)" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
     label: 'Info',
   },
 }

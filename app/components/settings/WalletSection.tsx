@@ -249,7 +249,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
             background: hasNFT
               ? 'var(--color-accent-success-05)'
               : tokens.colors.bg.tertiary,
-            border: `1px solid ${hasNFT ? 'rgba(47, 229, 125, 0.2)' : tokens.colors.border.primary}`,
+            border: `1px solid ${hasNFT ? 'var(--color-accent-success-20)' : tokens.colors.border.primary}`,
           }}
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>

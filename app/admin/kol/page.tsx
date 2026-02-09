@@ -28,9 +28,9 @@ const TIER_KEYS: Record<string, string> = {
 }
 
 const STATUS_KEYS: Record<string, { key: string; color: string }> = {
-  pending: { key: 'kolStatusPending', color: '#f59e0b' },
-  approved: { key: 'kolStatusApproved', color: '#10b981' },
-  rejected: { key: 'kolStatusRejected', color: '#ef4444' },
+  pending: { key: 'kolStatusPending', color: 'var(--color-score-average)' },
+  approved: { key: 'kolStatusApproved', color: 'var(--color-score-great)' },
+  rejected: { key: 'kolStatusRejected', color: 'var(--color-accent-error)' },
 }
 
 export default function AdminKolPage() {
@@ -197,7 +197,7 @@ export default function AdminKolPage() {
                           padding: '6px 16px',
                           borderRadius: 6,
                           border: 'none',
-                          background: '#10b981',
+                          background: 'var(--color-score-great)',
                           color: tokens.colors.white,
                           cursor: 'pointer',
                           fontSize: tokens.typography.fontSize.sm,
@@ -211,7 +211,7 @@ export default function AdminKolPage() {
                           padding: '6px 16px',
                           borderRadius: 6,
                           border: 'none',
-                          background: '#ef4444',
+                          background: 'var(--color-accent-error)',
                           color: tokens.colors.white,
                           cursor: 'pointer',
                           fontSize: tokens.typography.fontSize.sm,

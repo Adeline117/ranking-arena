@@ -248,7 +248,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 width: node.width,
                 height: node.height,
                 background: getChangeColor(node.changePct),
-                border: '1px solid rgba(0,0,0,0.15)',
+                border: '1px solid var(--color-overlay-light)',
                 cursor: 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
@@ -258,7 +258,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 transition: 'filter 0.15s ease',
                 filter: isHovered ? 'brightness(1.25)' : 'brightness(1)',
                 zIndex: isHovered ? 10 : 1,
-                boxShadow: isHovered ? '0 0 0 2px rgba(255,255,255,0.3)' : 'none',
+                boxShadow: isHovered ? '0 0 0 2px var(--glass-border-heavy)' : 'none',
                 padding: 2,
               }}
             >
@@ -266,8 +266,8 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 <span style={{
                   fontSize,
                   fontWeight: 800,
-                  color: '#fff',
-                  textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                  color: 'var(--foreground)',
+                  textShadow: '0 1px 3px var(--color-overlay-dark)',
                   lineHeight: 1.2,
                 }}>
                   {node.name}
@@ -277,8 +277,8 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 <span style={{
                   fontSize: Math.max(9, fontSize * 0.7),
                   fontWeight: 600,
-                  color: 'rgba(255,255,255,0.85)',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                  color: 'var(--glass-bg-heavy)',
+                  textShadow: '0 1px 2px var(--color-overlay-dark)',
                 }}>
                   {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
                 </span>
@@ -286,7 +286,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
               {showCat && (
                 <span style={{
                   fontSize: 9,
-                  color: 'rgba(255,255,255,0.55)',
+                  color: 'var(--glass-bg-medium)',
                   marginTop: 2,
                 }}>
                   {node.category}
@@ -306,8 +306,8 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
             position: 'fixed',
             left: tooltipPos.x + 12,
             top: tooltipPos.y - 40,
-            background: 'rgba(0,0,0,0.88)',
-            color: '#fff',
+            background: 'var(--color-backdrop-heavy)',
+            color: 'var(--foreground)',
             padding: '6px 10px',
             borderRadius: tokens.radius.sm,
             fontSize: 12,

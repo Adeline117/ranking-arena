@@ -336,15 +336,15 @@ function HotContent() {
 
     // 沸: 极高热度，真正的广泛讨论 (top 3 only, score>95 且 comments>=150)
     if (score >= 95 && comments >= 150) {
-      return { label: isZh ? '沸' : 'BOOM', color: '#FF4500' }
+      return { label: isZh ? '沸' : 'BOOM', color: 'var(--color-accent-error)' }
     }
     // 热: 短时间内热度持续攀升 (score>80 且不到24小时)
     if (score >= 80 && hoursAgo < 24) {
-      return { label: isZh ? '热' : 'HOT', color: '#FF8C00' }
+      return { label: isZh ? '热' : 'HOT', color: 'var(--color-chart-orange)' }
     }
     // 新: 最近上榜的新鲜内容 (不到6小时)
     if (hoursAgo < 6) {
-      return { label: isZh ? '新' : 'NEW', color: '#00BFFF' }
+      return { label: isZh ? '新' : 'NEW', color: 'var(--color-chart-blue)' }
     }
     return null
   }, [language])
@@ -792,7 +792,7 @@ function HotContent() {
                       background: activeHotTab === tab.value ? tokens.gradient.primary : tokens.glass.bg.light,
                       backdropFilter: tokens.glass.blur.sm,
                       WebkitBackdropFilter: tokens.glass.blur.sm,
-                      color: activeHotTab === tab.value ? '#fff' : 'var(--color-text-secondary)',
+                      color: activeHotTab === tab.value ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
                       fontWeight: activeHotTab === tab.value ? 900 : 600,
                       fontSize: '12px',
                       cursor: 'pointer',
@@ -879,7 +879,7 @@ function HotContent() {
                               handleOpenPost(p)
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.boxShadow = `0 4px 16px rgba(139, 111, 168, 0.12)`
+                              e.currentTarget.style.boxShadow = `0 4px 16px var(--color-accent-primary-12)`
                               e.currentTarget.style.borderColor = `${ARENA_PURPLE}40`
                               e.currentTarget.style.transform = 'translateY(-1px)'
                             }}
@@ -1149,7 +1149,7 @@ function HotContent() {
                           }}
                           onClick={() => router.push(`/groups/${group.id}`)}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.boxShadow = `0 4px 16px rgba(139, 111, 168, 0.12)`
+                            e.currentTarget.style.boxShadow = `0 4px 16px var(--color-accent-primary-12)`
                             e.currentTarget.style.borderColor = `${ARENA_PURPLE}40`
                             e.currentTarget.style.transform = 'translateY(-1px)'
                           }}
@@ -1403,7 +1403,7 @@ function HotContent() {
                     style={{
                       marginTop: 8,
                       padding: '8px 16px',
-                      background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
+                      background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'var(--color-accent-primary-30)',
                       color: tokens.colors.white,
                       border: 'none',
                       borderRadius: tokens.radius.md,

@@ -24,10 +24,10 @@ const injectStyles = () => {
     }
     
     @keyframes glitch {
-      0%, 100% { text-shadow: 0 0 60px rgba(139, 111, 168, 0.3); }
-      20% { text-shadow: -3px 0 rgba(255, 124, 124, 0.5), 3px 0 rgba(139, 111, 168, 0.5); }
-      40% { text-shadow: 3px 0 rgba(255, 124, 124, 0.5), -3px 0 rgba(139, 111, 168, 0.5); }
-      60% { text-shadow: 0 0 60px rgba(139, 111, 168, 0.3); }
+      0%, 100% { text-shadow: 0 0 60px var(--color-accent-primary-30); }
+      20% { text-shadow: -3px 0 var(--color-accent-error), 3px 0 var(--color-accent-primary-60); }
+      40% { text-shadow: 3px 0 var(--color-accent-error), -3px 0 var(--color-accent-primary-60); }
+      60% { text-shadow: 0 0 60px var(--color-accent-primary-30); }
     }
     
     @keyframes orbitParticle {
@@ -57,8 +57,8 @@ const injectStyles = () => {
     }
     
     @keyframes buttonHover {
-      0%, 100% { box-shadow: 0 4px 20px rgba(139, 111, 168, 0.3); }
-      50% { box-shadow: 0 6px 30px rgba(139, 111, 168, 0.5); }
+      0%, 100% { box-shadow: 0 4px 20px var(--color-accent-primary-30); }
+      50% { box-shadow: 0 6px 30px var(--color-accent-primary-60); }
     }
     
     @keyframes lineGrow {
@@ -125,7 +125,7 @@ const injectStyles = () => {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+      background: linear-gradient(135deg, var(--glass-border-light) 0%, transparent 50%);
       opacity: 0;
       transition: opacity 0.3s ease;
     }
@@ -143,12 +143,12 @@ const injectStyles = () => {
       transform: translateY(-2px);
       border-color: ${tokens.colors.accent.brand} !important;
       color: ${tokens.colors.accent.brand} !important;
-      box-shadow: 0 4px 20px rgba(139, 111, 168, 0.2);
+      box-shadow: 0 4px 20px var(--color-accent-primary-20);
     }
     
     .decorative-line {
       height: 1px;
-      background: linear-gradient(90deg, transparent 0%, rgba(139, 111, 168, 0.3) 50%, transparent 100%);
+      background: linear-gradient(90deg, transparent 0%, var(--color-accent-primary-30) 50%, transparent 100%);
       animation: lineGrow 1.5s ease forwards;
     }
     
@@ -159,8 +159,8 @@ const injectStyles = () => {
     
     .suggestion-card:hover {
       transform: translateY(-4px);
-      background: rgba(139, 111, 168, 0.1) !important;
-      border-color: rgba(139, 111, 168, 0.3) !important;
+      background: var(--color-accent-primary-10) !important;
+      border-color: var(--color-accent-primary-30) !important;
     }
   `
   document.head.appendChild(style)
@@ -205,7 +205,7 @@ export default function NotFoundPage() {
         style={{
           width: 400,
           height: 400,
-          background: `radial-gradient(circle, rgba(139, 111, 168, 0.15) 0%, transparent 70%)`,
+          background: `radial-gradient(circle, var(--color-accent-primary-15) 0%, transparent 70%)`,
           top: '30%',
           left: '40%',
           transform: 'translate(-50%, -50%)',
@@ -216,7 +216,7 @@ export default function NotFoundPage() {
         style={{
           width: 300,
           height: 300,
-          background: `radial-gradient(circle, rgba(107, 79, 136, 0.1) 0%, transparent 70%)`,
+          background: `radial-gradient(circle, var(--color-accent-primary-10) 0%, transparent 70%)`,
           top: '60%',
           left: '60%',
           transform: 'translate(-50%, -50%)',
@@ -274,7 +274,7 @@ export default function NotFoundPage() {
               fontSize: 140,
               fontWeight: 900,
               lineHeight: 1.2,
-              background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, rgba(139, 111, 168, 0.3) 100%)`,
+              background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, var(--color-accent-primary-30) 100%)`,
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               position: 'relative',

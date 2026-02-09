@@ -9,10 +9,10 @@ import type { UnifiedSearchResult } from '@/app/api/search/route'
 
 // 类别配置 - 与 SearchDropdown 保持一致
 const CATEGORY_CONFIG = {
-  trader: { icon: 'T', labelZh: '交易员', labelEn: 'Traders', color: '#8B5CF6' },
-  post: { icon: 'P', labelZh: '帖子', labelEn: 'Posts', color: '#3B82F6' },
-  library: { icon: 'L', labelZh: '资料库', labelEn: 'Library', color: '#10B981' },
-  user: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: '#F59E0B' },
+  trader: { icon: 'T', labelZh: '交易员', labelEn: 'Traders', color: 'var(--color-verified-web3)' },
+  post: { icon: 'P', labelZh: '帖子', labelEn: 'Posts', color: 'var(--color-score-profitability)' },
+  library: { icon: 'L', labelZh: '资料库', labelEn: 'Library', color: 'var(--color-score-great)' },
+  user: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: 'var(--color-score-average)' },
 } as const
 
 interface SearchResultsProps {

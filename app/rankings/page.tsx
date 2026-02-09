@@ -118,21 +118,21 @@ function saveFilterPrefs(prefs: FilterPrefs): void {
 
 /** Quick exchange filter chips shown above the leaderboard */
 const QUICK_FILTER_EXCHANGES: { value: string; label: string; logo: string; color: string }[] = [
-  { value: 'binance_futures', label: 'Binance', logo: 'https://bin.bnbstatic.com/static/images/common/favicon.ico', color: '#F3BA2F' },
-  { value: 'bitget_futures', label: 'Bitget', logo: 'https://img.bitgetimg.com/image/third/1723701408221.png', color: '#00D7D5' },
-  { value: 'okx_futures', label: 'OKX', logo: 'https://static.okx.com/cdn/assets/imgs/226/DF679B1DADBF90E3.png', color: '#000000' },
-  { value: 'bybit', label: 'Bybit', logo: 'https://www.bybit.com/favicon.ico', color: '#F7A600' },
-  { value: 'mexc', label: 'MEXC', logo: 'https://www.mexc.com/favicon.png', color: '#00B897' },
-  { value: 'htx_futures', label: 'HTX', logo: 'https://www.htx.com/favicon.ico', color: '#1B4AEF' },
-  { value: 'gateio', label: 'Gate.io', logo: 'https://www.gate.io/favicon.ico', color: '#2354E6' },
-  { value: 'binance_spot', label: 'Binance', logo: 'https://bin.bnbstatic.com/static/images/common/favicon.ico', color: '#F3BA2F' },
-  { value: 'bitget_spot', label: 'Bitget', logo: 'https://img.bitgetimg.com/image/third/1723701408221.png', color: '#00D7D5' },
-  { value: 'bybit_spot', label: 'Bybit', logo: 'https://www.bybit.com/favicon.ico', color: '#F7A600' },
-  { value: 'hyperliquid', label: 'Hyperliquid', logo: 'https://app.hyperliquid.xyz/favicon.ico', color: '#50E3C2' },
-  { value: 'gmx', label: 'GMX', logo: 'https://app.gmx.io/favicon.ico', color: '#4F8FEA' },
-  { value: 'dydx', label: 'dYdX', logo: 'https://dydx.exchange/favicon.ico', color: '#6966FF' },
-  { value: 'gains', label: 'gTrade', logo: 'https://gains.trade/favicon.ico', color: '#5741D9' },
-  { value: 'jupiter_perps', label: 'Jupiter', logo: 'https://jup.ag/favicon.ico', color: '#00D18C' },
+  { value: 'binance_futures', label: 'Binance', logo: 'https://bin.bnbstatic.com/static/images/common/favicon.ico', color: 'var(--color-chart-amber)' },
+  { value: 'bitget_futures', label: 'Bitget', logo: 'https://img.bitgetimg.com/image/third/1723701408221.png', color: 'var(--color-chart-teal)' },
+  { value: 'okx_futures', label: 'OKX', logo: 'https://static.okx.com/cdn/assets/imgs/226/DF679B1DADBF90E3.png', color: 'var(--color-text-primary)' },
+  { value: 'bybit', label: 'Bybit', logo: 'https://www.bybit.com/favicon.ico', color: 'var(--color-chart-orange)' },
+  { value: 'mexc', label: 'MEXC', logo: 'https://www.mexc.com/favicon.png', color: 'var(--color-accent-success)' },
+  { value: 'htx_futures', label: 'HTX', logo: 'https://www.htx.com/favicon.ico', color: 'var(--color-chart-indigo)' },
+  { value: 'gateio', label: 'Gate.io', logo: 'https://www.gate.io/favicon.ico', color: 'var(--color-chart-indigo)' },
+  { value: 'binance_spot', label: 'Binance', logo: 'https://bin.bnbstatic.com/static/images/common/favicon.ico', color: 'var(--color-chart-amber)' },
+  { value: 'bitget_spot', label: 'Bitget', logo: 'https://img.bitgetimg.com/image/third/1723701408221.png', color: 'var(--color-chart-teal)' },
+  { value: 'bybit_spot', label: 'Bybit', logo: 'https://www.bybit.com/favicon.ico', color: 'var(--color-chart-orange)' },
+  { value: 'hyperliquid', label: 'Hyperliquid', logo: 'https://app.hyperliquid.xyz/favicon.ico', color: 'var(--color-chart-teal)' },
+  { value: 'gmx', label: 'GMX', logo: 'https://app.gmx.io/favicon.ico', color: 'var(--color-chart-blue)' },
+  { value: 'dydx', label: 'dYdX', logo: 'https://dydx.exchange/favicon.ico', color: 'var(--color-chart-indigo)' },
+  { value: 'gains', label: 'gTrade', logo: 'https://gains.trade/favicon.ico', color: 'var(--color-chart-violet)' },
+  { value: 'jupiter_perps', label: 'Jupiter', logo: 'https://jup.ag/favicon.ico', color: 'var(--color-accent-success)' },
 ]
 
 function ExchangeQuickFilter({
@@ -219,7 +219,7 @@ function ExchangeQuickFilter({
               background: isActive
                 ? `${ex.color}18`
                 : tokens.glass.bg.light,
-              color: isActive ? (ex.color === '#FFFFFF' ? tokens.colors.text.primary : ex.color) : tokens.colors.text.secondary,
+              color: isActive ? (ex.color === 'var(--color-on-accent)' ? tokens.colors.text.primary : ex.color) : tokens.colors.text.secondary,
               border: `1px solid ${isActive ? ex.color + '60' : tokens.colors.border.primary}`,
               cursor: 'pointer',
               transition: `all ${tokens.transition.base}`,
@@ -265,7 +265,7 @@ function ExchangeQuickFilter({
                   justifyContent: 'center',
                   fontSize: 10,
                   fontWeight: 800,
-                  color: '#fff',
+                  color: 'var(--foreground)',
                   flexShrink: 0,
                 }}
               >
@@ -996,10 +996,10 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
                 : 'linear-gradient(135deg, var(--color-medal-bronze), #A0522D)',
               color: trader.rank === 1 ? tokens.colors.bg.primary : tokens.colors.text.primary,
               boxShadow: trader.rank === 1
-                ? '0 0 8px rgba(255,215,0,0.4)'
+                ? '0 0 8px var(--color-gold-glow)'
                 : trader.rank === 2
-                ? '0 0 6px rgba(192,192,192,0.3)'
-                : '0 0 6px rgba(205,127,50,0.3)',
+                ? '0 0 6px var(--color-silver-glow)'
+                : '0 0 6px var(--color-bronze-glow)',
             }}
           >
             {trader.rank}

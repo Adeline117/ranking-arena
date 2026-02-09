@@ -81,7 +81,7 @@ export default function FeedPage() {
                 borderRadius: tokens.radius.lg,
                 border: 'none',
                 background: activeTab === tab.key ? tokens.gradient.primary : 'transparent',
-                color: activeTab === tab.key ? '#fff' : tokens.colors.text.secondary,
+                color: activeTab === tab.key ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                 fontWeight: activeTab === tab.key ? 800 : 600,
                 fontSize: tokens.typography.fontSize.base,
                 cursor: 'pointer',

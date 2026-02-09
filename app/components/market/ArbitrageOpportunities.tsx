@@ -130,7 +130,7 @@ export default function ArbitrageOpportunities() {
           fontWeight: 600,
           padding: `2px ${tokens.spacing[2]}`,
           borderRadius: tokens.radius.sm,
-          background: hasOpps ? 'rgba(47, 229, 125, 0.1)' : tokens.colors.bg.tertiary,
+          background: hasOpps ? 'var(--color-accent-success-10)' : tokens.colors.bg.tertiary,
         }}>
           {hasOpps ? `${opps.length}个机会` : showComparisons ? `${priceComparisons.length}个币种` : '0个机会'}
         </span>

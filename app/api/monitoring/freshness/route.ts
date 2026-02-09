@@ -230,10 +230,10 @@ function generateHtml(results: FreshnessResult): string {
     th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #334155; }
     th { background: #0f172a; color: #64748b; font-size: 11px; text-transform: uppercase; }
     .badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
-    .badge-healthy { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
-    .badge-warning { background: rgba(234, 179, 8, 0.2); color: #eab308; }
-    .badge-critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-    .badge-no_data { background: rgba(100, 116, 139, 0.2); color: #64748b; }
+    .badge-healthy { background: var(--color-accent-success-20); color: #22c55e; }
+    .badge-warning { background: var(--color-orange-border); color: #eab308; }
+    .badge-critical { background: var(--color-accent-error-20); color: #ef4444; }
+    .badge-no_data { background: var(--color-overlay-subtle); color: #64748b; }
   </style>
 </head>
 <body>

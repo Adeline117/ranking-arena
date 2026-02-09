@@ -169,7 +169,7 @@ function ProBadge({ size = 14 }: { size?: number }): React.ReactNode {
         flexShrink: 0,
       }}
     >
-      <svg width={size * 0.57} height={size * 0.57} viewBox="0 0 24 24" fill="#fff">
+      <svg width={size * 0.57} height={size * 0.57} viewBox="0 0 24 24" fill="var(--color-on-accent)">
         <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
       </svg>
     </span>

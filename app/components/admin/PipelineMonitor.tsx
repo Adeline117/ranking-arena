@@ -42,7 +42,7 @@ const styles = {
   } as React.CSSProperties,
   card: (status: string) => ({
     backgroundColor: 'var(--color-bg-secondary)',
-    border: `1px solid ${status === 'healthy' ? '#2e7d32' : status === 'degraded' ? '#f57c00' : '#c62828'}`,
+    border: `1px solid ${status === 'healthy' ? 'var(--color-accent-success)' : status === 'degraded' ? 'var(--color-score-below)' : 'var(--color-accent-error)'}`,
     borderRadius: tokens.radius.lg,
     padding: '16px',
   }) as React.CSSProperties,
@@ -169,7 +169,7 @@ export default function PipelineMonitor() {
   if (error && !data) {
     return (
       <div style={styles.loading}>
-        <p style={{ color: '#f44336' }}>Error: {error}</p>
+        <p style={{ color: 'var(--color-accent-error)' }}>Error: {error}</p>
         <button style={styles.refreshBtn} onClick={fetchData}>Retry</button>
       </div>
     )
@@ -234,15 +234,15 @@ export default function PipelineMonitor() {
       {tab === 'errors' && (
         <div style={styles.errorSection}>
           {allErrors.length === 0 && (
-            <div style={{ color: '#4caf50', textAlign: 'center', padding: '24px' }}>
+            <div style={{ color: 'var(--color-accent-success)', textAlign: 'center', padding: '24px' }}>
               No errors in the selected time window.
             </div>
           )}
           {allErrors.map((e, i) => (
             <div key={i} style={styles.errorRow}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontWeight: 600, color: '#f44336' }}>{e.source}</span>
-                <span style={{ fontSize: '12px', color: '#666' }}>
+                <span style={{ fontWeight: 600, color: 'var(--color-accent-error)' }}>{e.source}</span>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                   {new Date(e.created_at).toLocaleString()}
                 </span>
               </div>
@@ -286,7 +286,7 @@ function SourceCard({ source }: { source: SourceHealth }) {
         <span style={styles.statValue}>{source.totalRecords.toLocaleString()}</span>
       </div>
       {source.recentErrors.length > 0 && (
-        <div style={{ marginTop: '8px', fontSize: '12px', color: '#f44336' }}>
+        <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--color-accent-error)' }}>
           {source.recentErrors.length} recent error(s)
         </div>
       )}

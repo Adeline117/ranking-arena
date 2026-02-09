@@ -128,7 +128,7 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
           borderRadius: '50%',
           border: 'none',
           background: recording ? tokens.colors.accent.error : tokens.colors.bg.secondary,
-          color: recording ? '#fff' : tokens.colors.text.secondary,
+          color: recording ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
           cursor: disabled || uploading ? 'not-allowed' : 'pointer',
           display: 'flex',
           alignItems: 'center',

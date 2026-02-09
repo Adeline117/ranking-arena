@@ -117,7 +117,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
           <div style={{
             position: 'absolute', bottom: -60, left: -40,
             width: 180, height: 180, borderRadius: '50%',
-            background: 'rgba(139, 111, 168, 0.08)',
+            background: 'var(--color-accent-primary-08)',
             filter: 'blur(60px)', pointerEvents: 'none',
           }} />
 
@@ -184,7 +184,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                   <div style={{
                     width: 160, height: 240, borderRadius: tokens.radius.lg,
                     overflow: 'hidden',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15)',
+                    boxShadow: '0 8px 24px var(--color-overlay-medium), 0 2px 8px var(--color-overlay-light)',
                     marginBottom: 10,
                   }}>
                     <BookCover
@@ -268,7 +268,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                     fontWeight: active ? 600 : 500,
                     border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                     background: active ? tokens.gradient.purpleGold : 'transparent',
-                    color: active ? '#fff' : tokens.colors.text.secondary,
+                    color: active ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
                     whiteSpace: 'nowrap',
@@ -432,7 +432,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                     width: 36, height: 36, borderRadius: 10,
                     border: p === page ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                     background: p === page ? tokens.gradient.purpleGold : 'transparent',
-                    color: p === page ? '#fff' : tokens.colors.text.primary,
+                    color: p === page ? 'var(--color-on-accent)' : tokens.colors.text.primary,
                     cursor: 'pointer', fontSize: 13, fontWeight: p === page ? 600 : 400,
                     transition: 'all 0.15s ease',
                   }}

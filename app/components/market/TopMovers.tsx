@@ -47,7 +47,7 @@ export default function TopMovers() {
               <CryptoIcon symbol={symbol} size={14} />
               <span style={{ color: tokens.colors.text.primary, fontWeight: 500 }}>{symbol}</span>
             </span>
-            <span style={{ color: '#16c784', fontWeight: 600 }}>{row.changePct}</span>
+            <span style={{ color: 'var(--color-accent-success)', fontWeight: 600 }}>{row.changePct}</span>
           </div>
         )
       })}

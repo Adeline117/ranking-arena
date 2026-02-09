@@ -101,10 +101,10 @@ export function getPasswordStrength(password: string): {
   if (/\d/.test(password)) score++
   if (/[^a-zA-Z0-9]/.test(password)) score++
   
-  if (score <= 1) return { level: 1, label: '弱', labelEn: 'Weak', color: '#ff4d4d' }
-  if (score === 2) return { level: 2, label: '一般', labelEn: 'Fair', color: '#ffa500' }
-  if (score === 3) return { level: 3, label: '中等', labelEn: 'Good', color: '#ffc107' }
-  return { level: 4, label: '强', labelEn: 'Strong', color: '#2fe57d' }
+  if (score <= 1) return { level: 1, label: '弱', labelEn: 'Weak', color: 'var(--color-accent-error)' }
+  if (score === 2) return { level: 2, label: '一般', labelEn: 'Fair', color: 'var(--color-medal-gold-end)' }
+  if (score === 3) return { level: 3, label: '中等', labelEn: 'Good', color: 'var(--color-accent-warning)' }
+  return { level: 4, label: '强', labelEn: 'Strong', color: 'var(--color-accent-success)' }
 }
 
 /**

@@ -50,17 +50,17 @@ const CATEGORIES = [
 ]
 
 const IMPORTANCE_CONFIG = {
-  breaking: { color: '#ef4444', label: '突发', label_en: 'Breaking' },
-  important: { color: '#f97316', label: '重要', label_en: 'Important' },
-  normal: { color: '#6b7280', label: '一般', label_en: 'Normal' },
+  breaking: { color: 'var(--color-accent-error)', label: '突发', label_en: 'Breaking' },
+  important: { color: 'var(--color-score-below)', label: '重要', label_en: 'Important' },
+  normal: { color: 'var(--color-score-low)', label: '一般', label_en: 'Normal' },
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  crypto: '#f59e0b',
-  macro: '#3b82f6',
-  defi: '#10b981',
-  regulation: '#8b5cf6',
-  market: '#06b6d4',
+  crypto: 'var(--color-score-average)',
+  macro: 'var(--color-score-profitability)',
+  defi: 'var(--color-score-great)',
+  regulation: 'var(--color-score-legendary)',
+  market: 'var(--color-enterprise-gradient-start)',
 }
 
 export default function FlashNewsPage() {
@@ -276,7 +276,7 @@ export default function FlashNewsPage() {
                   background: isActive ? tokens.gradient.primary : tokens.glass.bg.light,
                   backdropFilter: isActive ? 'none' : tokens.glass.blur.sm,
                   WebkitBackdropFilter: isActive ? 'none' : tokens.glass.blur.sm,
-                  color: isActive ? '#fff' : tokens.colors.text.secondary,
+                  color: isActive ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                   border: isActive ? 'none' : tokens.glass.border.light,
                   cursor: 'pointer',
                   transition: `all ${tokens.transition.base}`,
@@ -386,8 +386,8 @@ export default function FlashNewsPage() {
                                   <span style={{
                                     fontSize: 10, fontWeight: 500, marginLeft: 6,
                                     padding: '1px 6px', borderRadius: tokens.radius.sm,
-                                    background: `${tokens.colors.accent?.translated || '#6b7280'}15`,
-                                    color: tokens.colors.accent?.translated || '#6b7280',
+                                    background: `${tokens.colors.accent?.translated || 'var(--color-score-low)'}15`,
+                                    color: tokens.colors.accent?.translated || 'var(--color-score-low)',
                                     verticalAlign: 'middle',
                                   }}>
                                     {language === 'zh' ? '自动翻译' : 'Auto-translated'}

@@ -126,8 +126,8 @@ export default function CopyTradeButton({
           gap: tokens.spacing[3],
           padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
           borderRadius: tokens.radius.xl,
-          background: `linear-gradient(135deg, rgba(156, 163, 175, 0.2) 0%, rgba(107, 114, 128, 0.15) 100%)`,
-          border: `2px dashed rgba(156, 163, 175, 0.5)`,
+          background: `linear-gradient(135deg, var(--color-overlay-subtle) 0%, var(--color-overlay-subtle) 100%)`,
+          border: `2px dashed var(--color-overlay-medium)`,
           cursor: 'not-allowed',
           boxShadow: `0 2px 8px var(--color-overlay-subtle)`,
         }}
@@ -137,18 +137,18 @@ export default function CopyTradeButton({
             width: 28,
             height: 28,
             borderRadius: tokens.radius.full,
-            background: 'rgba(156, 163, 175, 0.2)',
+            background: 'var(--color-overlay-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(107, 114, 128, 0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
         </Box>
-        <Text size="sm" weight="bold" style={{ color: 'rgba(107, 114, 128, 0.9)', fontSize: 14 }}>
+        <Text size="sm" weight="bold" style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
           {t('copyTradeUnavailable')}
         </Text>
       </Box>
@@ -184,7 +184,7 @@ export default function CopyTradeButton({
           border: '2px solid var(--glass-border-heavy)',
           padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
           borderRadius: tokens.radius.xl,
-          boxShadow: `0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3), inset 0 1px 0 var(--glass-border-heavy)`,
+          boxShadow: `0 4px 20px var(--color-accent-success-20), 0 0 40px var(--color-accent-success-20), inset 0 1px 0 var(--glass-border-heavy)`,
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[2],
@@ -195,17 +195,17 @@ export default function CopyTradeButton({
         }}
         onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
           e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'
-          e.currentTarget.style.boxShadow = `0 8px 30px rgba(0, 200, 83, 0.6), 0 0 60px rgba(0, 230, 118, 0.4)`
+          e.currentTarget.style.boxShadow = `0 8px 30px var(--color-accent-success), 0 0 60px var(--color-accent-success-20)`
         }}
         onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
           e.currentTarget.style.transform = 'translateY(0) scale(1)'
-          e.currentTarget.style.boxShadow = `0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3), inset 0 1px 0 var(--glass-border-heavy)`
+          e.currentTarget.style.boxShadow = `0 4px 20px var(--color-accent-success-20), 0 0 40px var(--color-accent-success-20), inset 0 1px 0 var(--glass-border-heavy)`
         }}
       >
         <style>{`
           @keyframes pulseGlow {
-            0%, 100% { box-shadow: 0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3); }
-            50% { box-shadow: 0 4px 25px rgba(0, 200, 83, 0.7), 0 0 50px rgba(0, 230, 118, 0.5); }
+            0%, 100% { box-shadow: 0 4px 20px var(--color-accent-success-20), 0 0 40px var(--color-accent-success-20); }
+            50% { box-shadow: 0 4px 25px var(--color-accent-success), 0 0 50px var(--color-accent-success-20); }
           }
         `}</style>
         <Box
@@ -252,7 +252,7 @@ export default function CopyTradeButton({
               border: `1px solid ${tokens.colors.border.primary}`,
               maxWidth: 420,
               width: '100%',
-              boxShadow: '0 24px 48px rgba(0, 0, 0, 0.3)',
+              boxShadow: '0 24px 48px var(--color-overlay-medium)',
               overflow: 'hidden',
             }}
             onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}

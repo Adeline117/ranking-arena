@@ -133,7 +133,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 height={this.props.level === 'component' ? 24 : 40}
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#ff7c7c"
+                stroke="var(--color-accent-error)"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -234,7 +234,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   background: 'transparent',
                   color: 'var(--color-text-primary, #EDEDED)',
                   borderRadius: tokens.radius.md,
-                  border: '1px solid var(--glass-border-medium, rgba(255,255,255,0.15))',
+                  border: '1px solid var(--glass-border-medium, var(--glass-border-medium))',
                   textDecoration: 'none',
                   fontSize: 14,
                   fontWeight: 500,
@@ -309,7 +309,7 @@ export function SectionErrorBoundary({
             height="32"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#ff7c7c"
+            stroke="var(--color-accent-error)"
             strokeWidth="2"
             style={{ marginBottom: 12, opacity: 0.8 }}
           >
@@ -374,7 +374,7 @@ export function CompactErrorBoundary({
             height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#ff7c7c"
+            stroke="var(--color-accent-error)"
             strokeWidth="2"
           >
             <circle cx="12" cy="12" r="10" />

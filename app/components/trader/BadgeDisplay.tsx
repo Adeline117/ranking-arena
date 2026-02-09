@@ -89,9 +89,9 @@ const BADGE_ICONS: Record<string, ReactNode> = {
 }
 
 const RARITY_GLOW: Record<string, string> = {
-  legendary: 'shadow-[0_0_12px_rgba(255,215,0,0.4)]',
-  epic: 'shadow-[0_0_10px_rgba(147,51,234,0.4)]',
-  rare: 'shadow-[0_0_8px_rgba(59,130,246,0.3)]',
+  legendary: 'shadow-[0_0_12px_var(--color-gold-glow)]',
+  epic: 'shadow-[0_0_10px_var(--color-accent-primary-40)]',
+  rare: 'shadow-[0_0_8px_var(--color-accent-primary-30)]',
   common: '',
 }
 

@@ -3,7 +3,7 @@
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 
-export const CHART_COLORS = [tokens.colors.accent.brand, '#06B6D4', '#F59E0B', '#10B981', '#EF4444']
+export const CHART_COLORS = [tokens.colors.accent.brand, 'var(--color-enterprise-gradient-start)', 'var(--color-score-average)', 'var(--color-score-great)', 'var(--color-accent-error)']
 
 interface EquityTrader {
   traderId: string

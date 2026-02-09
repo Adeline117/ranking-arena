@@ -128,7 +128,7 @@ export default function OfflinePage() {
             padding: '0.75rem 2rem',
             fontSize: '0.875rem',
             fontWeight: '500',
-            color: '#FFFFFF',
+            color: 'var(--color-on-accent)',
             backgroundColor: 'var(--color-brand, #8b6fa8)',
             border: 'none',
             borderRadius: tokens.radius.md,

@@ -39,7 +39,7 @@ export default function DefiOverview() {
         <span style={{ fontSize: 16, fontWeight: 800, color: tokens.colors.text.primary, lineHeight: 1 }}>
           {formatTVL(data.totalTVL)}
         </span>
-        <span style={{ fontSize: 11, fontWeight: 600, color: data.tvlChange24h >= 0 ? '#16c784' : '#ea3943' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: data.tvlChange24h >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)' }}>
           {data.tvlChange24h >= 0 ? '+' : ''}{data.tvlChange24h.toFixed(2)}%
         </span>
       </div>

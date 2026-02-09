@@ -88,7 +88,7 @@ function RankBadge({ rank }: { rank: number }) {
         fontSize: 13,
         fontWeight: 700,
         background: bg,
-        color: rank === 1 ? '#0B0A10' : '#fff',
+        color: rank === 1 ? 'var(--color-bg-primary)' : 'var(--color-on-accent)',
       }}
     >
       {rank}
@@ -110,8 +110,8 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
         style={{
           padding: tokens.spacing[4],
           borderRadius: tokens.radius.lg,
-          background: 'rgba(255,255,255,0.04)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          background: 'var(--overlay-hover)',
+          border: '1px solid var(--glass-border-light)',
           display: 'flex',
           flexDirection: 'column',
           gap: tokens.spacing[3],
@@ -166,7 +166,7 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
 
 function StatBlock({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ textAlign: 'center', padding: '6px 0', borderRadius: tokens.radius.md, background: 'rgba(255,255,255,0.03)' }}>
+    <div style={{ textAlign: 'center', padding: '6px 0', borderRadius: tokens.radius.md, background: 'var(--overlay-hover)' }}>
       <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, marginBottom: 2 }}>{label}</div>
       <div style={{ fontSize: 13, fontWeight: 700, color: color || tokens.colors.text.primary }}>{value}</div>
     </div>
@@ -216,7 +216,7 @@ export default function ExchangeRankingClient({
             border: 'none',
             fontSize: 13,
             fontWeight: viewMode === 'table' ? 700 : 500,
-            background: viewMode === 'table' ? tokens.colors.accent.brand + '30' : 'rgba(255,255,255,0.06)',
+            background: viewMode === 'table' ? tokens.colors.accent.brand + '30' : 'var(--glass-border-light)',
             color: viewMode === 'table' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
             cursor: 'pointer',
           }}
@@ -231,7 +231,7 @@ export default function ExchangeRankingClient({
             border: 'none',
             fontSize: 13,
             fontWeight: viewMode === 'card' ? 700 : 500,
-            background: viewMode === 'card' ? tokens.colors.accent.brand + '30' : 'rgba(255,255,255,0.06)',
+            background: viewMode === 'card' ? tokens.colors.accent.brand + '30' : 'var(--glass-border-light)',
             color: viewMode === 'card' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
             cursor: 'pointer',
           }}
@@ -251,8 +251,8 @@ export default function ExchangeRankingClient({
           style={{
             borderRadius: tokens.radius.lg,
             overflow: 'hidden',
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.06)',
+            background: 'var(--overlay-hover)',
+            border: '1px solid var(--glass-border-light)',
           }}
         >
           {/* Header */}
@@ -265,7 +265,7 @@ export default function ExchangeRankingClient({
               fontSize: 12,
               fontWeight: 600,
               color: tokens.colors.text.secondary,
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              borderBottom: '1px solid var(--glass-border-light)',
             }}
           >
             <div>#</div>
@@ -291,7 +291,7 @@ export default function ExchangeRankingClient({
                   padding: '10px 16px',
                   alignItems: 'center',
                   textDecoration: 'none',
-                  borderBottom: '1px solid rgba(255,255,255,0.03)',
+                  borderBottom: '1px solid var(--overlay-hover)',
                   transition: 'background 0.15s',
                 }}
               >

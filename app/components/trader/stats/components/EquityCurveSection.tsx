@@ -90,7 +90,7 @@ export function EquityCurveSection({
                 background: chartType === type
                   ? `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`
                   : 'transparent',
-                color: chartType === type ? '#fff' : tokens.colors.text.tertiary,
+                color: chartType === type ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: tokens.typography.fontWeight.bold,
                 cursor: 'pointer',

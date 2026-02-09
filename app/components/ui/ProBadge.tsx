@@ -24,7 +24,7 @@ const PRO_CONFIG = {
 const glowKeyframes = `
 @keyframes proBadgeGlow {
   0%, 100% { box-shadow: 0 2px 8px var(--color-pro-badge-shadow), 0 0 12px var(--color-pro-gold-glow); }
-  50% { box-shadow: 0 2px 12px var(--color-pro-badge-shadow), 0 0 20px rgba(212, 168, 71, 0.5); }
+  50% { box-shadow: 0 2px 12px var(--color-pro-badge-shadow), 0 0 20px var(--color-pro-gold-glow); }
 }
 `
 if (typeof document !== 'undefined' && !document.getElementById('pro-badge-glow')) {
@@ -42,7 +42,7 @@ const SIZE_CONFIG = {
 }
 
 // 星星图标
-const StarIcon = ({ size = 12, color = '#fff' }: { size?: number; color?: string }) => (
+const StarIcon = ({ size = 12, color = 'var(--color-on-accent)' }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={color} xmlns="http://www.w3.org/2000/svg">
     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
   </svg>

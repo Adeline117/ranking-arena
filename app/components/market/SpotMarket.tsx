@@ -38,7 +38,7 @@ function formatPrice(n: number | null): string {
 function ChangeCell({ value }: { value: number | null }) {
   if (value == null) return <span>--</span>
   const color = value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
-  const bg = value >= 0 ? 'rgba(47, 229, 125, 0.1)' : 'var(--color-accent-error-10)'
+  const bg = value >= 0 ? 'var(--color-accent-success-10)' : 'var(--color-accent-error-10)'
   return (
     <span style={{
       color,
@@ -55,9 +55,9 @@ function ChangeCell({ value }: { value: number | null }) {
 
 function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo }) {
   const bg = flash?.direction === 'up'
-    ? 'rgba(47, 229, 125, 0.2)'
+    ? 'var(--color-accent-success-20)'
     : flash?.direction === 'down'
-      ? 'rgba(255, 124, 124, 0.2)'
+      ? 'var(--color-accent-error-20)'
       : 'transparent'
   const color = flash?.direction === 'up'
     ? tokens.colors.accent.success
@@ -321,7 +321,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
           style={{
             padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
             background: showFavOnly ? tokens.colors.accent.warning : tokens.glass.bg.medium,
-            color: showFavOnly ? '#000' : tokens.colors.text.secondary,
+            color: showFavOnly ? 'var(--color-text-primary)' : tokens.colors.text.secondary,
             border: showFavOnly ? 'none' : tokens.glass.border.light,
             borderRadius: tokens.radius.lg,
             cursor: 'pointer',

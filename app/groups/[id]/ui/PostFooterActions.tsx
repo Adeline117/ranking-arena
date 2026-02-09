@@ -122,7 +122,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
                   className="rounded-lg py-2 text-sm font-medium transition-colors"
                   style={{
                     background: selectedAmount === cents ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary)',
-                    color: selectedAmount === cents ? '#fff' : 'var(--color-text-secondary)',
+                    color: selectedAmount === cents ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
                   }}
                   onClick={() => setSelectedAmount(cents)}
                 >
@@ -141,7 +141,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
               </button>
               <button
                 className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
-                style={{ background: 'var(--color-accent-primary)', color: '#fff' }}
+                style={{ background: 'var(--color-accent-primary)', color: 'var(--foreground)' }}
                 onClick={handleTip}
                 disabled={loading}
               >

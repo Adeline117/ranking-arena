@@ -41,12 +41,12 @@ type RiskTab = 'conservative' | 'balanced' | 'aggressive'
 // ── Helpers ────────────────────────────────────────────────
 
 const RISK_COLORS: Record<string, string> = {
-  low: '#10b981',
-  medium: '#f59e0b',
-  high: '#ef4444',
+  low: 'var(--color-score-great)',
+  medium: 'var(--color-score-average)',
+  high: 'var(--color-accent-error)',
 }
 
-const CHART_COLORS = ['#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#10b981']
+const CHART_COLORS = ['var(--color-score-legendary)', 'var(--color-enterprise-gradient-start)', 'var(--color-score-average)', 'var(--color-accent-error)', 'var(--color-score-great)']
 
 function RiskBadge({ level, t }: { level: string; t: (k: string) => string }) {
   const labelMap: Record<string, string> = {
@@ -468,7 +468,7 @@ export default function PortfolioPage() {
   return (
     <Suspense fallback={
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: '#888' }}>Loading...</Text>
+        <Text style={{ color: 'var(--color-text-secondary)' }}>Loading...</Text>
       </Box>
     }>
       <PortfolioContent />
