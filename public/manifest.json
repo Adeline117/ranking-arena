@@ -38,22 +38,7 @@
     }
   ],
   "categories": ["finance", "social"],
-  "screenshots": [
-    {
-      "src": "/screenshots/desktop.png",
-      "sizes": "1920x1080",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "桌面端视图"
-    },
-    {
-      "src": "/screenshots/mobile.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "移动端视图"
-    }
-  ],
+  "screenshots": [],
   "related_applications": [],
   "prefer_related_applications": false
 }
