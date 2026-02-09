@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAuthorized } from '@/lib/cron/utils'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
       .lt('deletion_scheduled_at', new Date().toISOString())
 
     if (error) {
-      console.error('[cleanup-deleted-accounts] Query error:', error)
+      logger.error('[cleanup-deleted-accounts] Query error:', error)
       return NextResponse.json({ error: 'Query failed' }, { status: 500 })
     }
 
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error: unknown) {
-    console.error('[cleanup-deleted-accounts] Error:', error)
+    logger.error('[cleanup-deleted-accounts] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

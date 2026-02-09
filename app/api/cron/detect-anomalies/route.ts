@@ -15,6 +15,7 @@ import {
   saveAnomalies,
   type TraderData,
 } from '@/lib/services/anomaly-manager'
+import logger from '@/lib/logger'
 
 // Verify cron secret
 function verifyCronSecret(request: NextRequest): boolean {
@@ -24,7 +25,7 @@ function verifyCronSecret(request: NextRequest): boolean {
   if (!cronSecret) {
     // Only allow without secret in development
     if (process.env.NODE_ENV === 'development') return true
-    console.error('CRON_SECRET not configured in production')
+    logger.error('CRON_SECRET not configured in production')
     return false
   }
 
@@ -64,7 +65,7 @@ async function getActiveTraders(): Promise<TraderData[]> {
     .order('captured_at', { ascending: false })
 
   if (error) {
-    console.error('Failed to fetch active traders:', error)
+    logger.error('Failed to fetch active traders:', error)
     throw new Error(`Failed to fetch active traders: ${error.message}`)
   }
 
@@ -168,7 +169,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    console.error('[Anomaly Detection] Error:', error)
+    logger.error('[Anomaly Detection] Error:', error)
 
     return NextResponse.json(
       {

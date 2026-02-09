@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { JobRunner } from '@/lib/services/job-runner';
 import type { Platform, LeaderboardPlatform, RefreshResponse } from '@/lib/types/leaderboard';
 import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard';
+import logger from '@/lib/logger'
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -95,7 +96,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json(response, { status: 202 });
   } catch (error: unknown) {
-    console.error('[API /trader/by-id/:id/refresh] Error:', error);
+    logger.error('[API /trader/by-id/:id/refresh] Error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 },

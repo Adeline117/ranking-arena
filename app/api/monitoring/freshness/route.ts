@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 const PLATFORM_THRESHOLDS: Record<string, number> = {
   okx_futures: 8,
@@ -194,7 +195,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(results)
   } catch (error) {
-    console.error('[monitoring/freshness] Error:', error)
+    logger.error('[monitoring/freshness] Error:', error)
     return NextResponse.json({ error: 'Failed to check freshness' }, { status: 500 })
   }
 }

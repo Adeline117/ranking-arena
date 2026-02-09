@@ -15,6 +15,7 @@ import { togglePostReaction, getPostById } from '@/lib/data/posts'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     } catch (fetchError) {
       // 点赞已成功，只是无法获取最新计数
       // 根据操作类型估算计数变化
-      console.warn('[posts/[id]/like] Failed to fetch updated counts:', fetchError)
+      logger.warn('[posts/[id]/like] Failed to fetch updated counts:', fetchError)
       likeCount = result.action === 'added' && reactionType === 'up' ? 1 : 0
       dislikeCount = result.action === 'added' && reactionType === 'down' ? 1 : 0
     }

@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -19,7 +20,7 @@ function isAuthorized(req: Request): boolean {
   const cronSecret = process.env.CRON_SECRET
 
   if (!cronSecret) {
-    console.warn('[TraderAlerts Cron] CRON_SECRET 未配置')
+    logger.warn('[TraderAlerts Cron] CRON_SECRET 未配置')
     return false
   }
 
@@ -121,7 +122,7 @@ export async function POST(req: Request) {
       .limit(MAX_ALERTS_PER_RUN)
 
     if (alertsError) {
-      console.error('[TraderAlerts Cron] 获取提醒配置失败:', alertsError)
+      logger.error('[TraderAlerts Cron] 获取提醒配置失败:', alertsError)
       return NextResponse.json({ ok: false, error: alertsError.message }, { status: 500 })
     }
 
@@ -144,7 +145,7 @@ export async function POST(req: Request) {
       .in('source_trader_id', traderIds)
 
     if (tradersError) {
-      console.error('[TraderAlerts Cron] 获取交易员数据失败:', tradersError)
+      logger.error('[TraderAlerts Cron] 获取交易员数据失败:', tradersError)
       return NextResponse.json({ ok: false, error: tradersError.message }, { status: 500 })
     }
 
@@ -161,7 +162,7 @@ export async function POST(req: Request) {
       .limit(MAX_ALERTS_PER_RUN)
 
     if (snapshotsError) {
-      console.error('[TraderAlerts Cron] 获取快照失败:', snapshotsError)
+      logger.error('[TraderAlerts Cron] 获取快照失败:', snapshotsError)
       // 继续执行，可能是第一次运行
     }
 
@@ -207,7 +208,7 @@ export async function POST(req: Request) {
         })
 
       if (insertError) {
-        console.error('[TraderAlerts Cron] 保存快照失败:', insertError)
+        logger.error('[TraderAlerts Cron] 保存快照失败:', insertError)
       }
     }
 
@@ -335,7 +336,7 @@ export async function POST(req: Request) {
         .insert(alertLogsToInsert)
 
       if (logsError) {
-        console.error('[TraderAlerts Cron] 批量保存日志失败:', logsError)
+        logger.error('[TraderAlerts Cron] 批量保存日志失败:', logsError)
       }
     }
 
@@ -360,7 +361,7 @@ export async function POST(req: Request) {
         .insert(historyToInsert)
 
       if (historyError) {
-        console.error('[TraderAlerts Cron] 保存 alert_history 失败:', historyError)
+        logger.error('[TraderAlerts Cron] 保存 alert_history 失败:', historyError)
       }
     }
 
@@ -400,7 +401,7 @@ export async function POST(req: Request) {
         .insert(notifications)
 
       if (notifyError) {
-        console.error('[TraderAlerts Cron] 发送通知失败:', notifyError)
+        logger.error('[TraderAlerts Cron] 发送通知失败:', notifyError)
       } else {
         alertsSent = alertsToSend.length
       }
@@ -419,7 +420,7 @@ export async function POST(req: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error: unknown) {
-    console.error('[TraderAlerts Cron] 执行失败:', error)
+    logger.error('[TraderAlerts Cron] 执行失败:', error)
     return NextResponse.json(
       {
         ok: false,

@@ -11,6 +11,7 @@ import {
   handleError,
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .neq('id', postId)
 
         if (unpinError) {
-          console.error('Failed to unpin other posts:', unpinError)
+          logger.error('Failed to unpin other posts:', unpinError)
         }
       } else {
         // Personal pin: unpin user's other posts
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .neq('id', postId)
 
         if (unpinError) {
-          console.error('Failed to unpin other posts:', unpinError)
+          logger.error('Failed to unpin other posts:', unpinError)
         }
       }
     }

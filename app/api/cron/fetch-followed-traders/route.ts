@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { runTraderAlertDetection } from '@/lib/services/trader-alerts'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,7 +25,7 @@ function isAuthorized(req: Request): boolean {
   }
 
   if (!cronSecret) {
-    console.warn('[FollowedTraders Cron] CRON_SECRET 未配置')
+    logger.warn('[FollowedTraders Cron] CRON_SECRET 未配置')
     return false
   }
 
@@ -66,7 +67,7 @@ export async function GET(req: Request) {
       .order('created_at', { ascending: false })
 
     if (fetchError) {
-      console.error('[FollowedTraders Cron] 获取关注列表失败:', fetchError)
+      logger.error('[FollowedTraders Cron] 获取关注列表失败:', fetchError)
       return NextResponse.json(
         { ok: false, error: fetchError.message },
         { status: 500 }
@@ -110,7 +111,7 @@ export async function GET(req: Request) {
         alertResult = await runTraderAlertDetection(supabaseUrl, supabaseKey)
       }
     } catch (alertError) {
-      console.error('[FollowedTraders Cron] 异动检测失败:', alertError)
+      logger.error('[FollowedTraders Cron] 异动检测失败:', alertError)
     }
 
     const duration = Date.now() - startTime
@@ -125,7 +126,7 @@ export async function GET(req: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error: unknown) {
-    console.error('[FollowedTraders Cron] 执行失败:', error)
+    logger.error('[FollowedTraders Cron] 执行失败:', error)
     return NextResponse.json(
       {
         ok: false,

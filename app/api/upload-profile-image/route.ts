@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (uploadError) {
-      console.error(`[upload-profile-image] ${bucket} upload error:`, uploadError)
+      logger.error(`[upload-profile-image] ${bucket} upload error:`, uploadError)
 
       if (uploadError.message?.includes('Bucket not found')) {
         return NextResponse.json({
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: unknown) {
-    console.error('[upload-profile-image] Error:', error)
+    logger.error('[upload-profile-image] Error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

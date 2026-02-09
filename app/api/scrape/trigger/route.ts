@@ -13,7 +13,7 @@ export const maxDuration = 300 // 5 分钟
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-const _CRON_SECRET = process.env.CRON_SECRET
+const CRON_SECRET = process.env.CRON_SECRET
 
 interface TraderData {
   traderId: string
@@ -204,8 +204,17 @@ async function saveTraders(source: string, traders: TraderData[], period: string
 }
 
 export async function GET(request: Request) {
+  // Security: Verify CRON_SECRET
+  const authHeader = request.headers.get('authorization')
   const { searchParams } = new URL(request.url)
-  
+  const secretParam = searchParams.get('secret')
+  if (!CRON_SECRET) {
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+  }
+  if (authHeader !== `Bearer ${CRON_SECRET}` && secretParam !== CRON_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const period = searchParams.get('period') || '90D'
   const results: Array<{ source: string; fetched: number; avatars: number; saved: number }> = []
   

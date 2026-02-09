@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (followError && !followError.message?.includes('Could not find')) {
-      console.error('[User Follow API] 查询错误:', followError)
+      logger.error('[User Follow API] 查询错误:', followError)
       return NextResponse.json({ error: followError.message }, { status: 500 })
     }
 
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
       mutual: !!followData && !!reverseData
     })
   } catch (error: unknown) {
-    console.error('[User Follow API] 错误:', error)
+    logger.error('[User Follow API] 错误:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
         if (error.message?.includes('Could not find the table')) {
           return NextResponse.json({ error: '关注功能暂未开放', tableNotFound: true }, { status: 503 })
         }
-        console.error('[User Follow API] 关注错误:', error)
+        logger.error('[User Follow API] 关注错误:', error)
         return NextResponse.json({ error: '关注操作失败' }, { status: 500 })
       }
 
@@ -164,7 +165,7 @@ export async function POST(request: NextRequest) {
         if (error.message?.includes('Could not find the table')) {
           return NextResponse.json({ error: '关注功能暂未开放', tableNotFound: true }, { status: 503 })
         }
-        console.error('[User Follow API] 取消关注错误:', error)
+        logger.error('[User Follow API] 取消关注错误:', error)
         return NextResponse.json({ error: '取消关注操作失败' }, { status: 500 })
       }
 
@@ -173,7 +174,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
   } catch (error: unknown) {
-    console.error('[User Follow API] 错误:', error)
+    logger.error('[User Follow API] 错误:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

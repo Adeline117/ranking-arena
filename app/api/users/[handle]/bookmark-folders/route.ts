@@ -10,6 +10,7 @@ import {
   success,
   handleError,
 } from '@/lib/api'
+import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ handle: string }> }
 
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const { data: folders, error: foldersError } = await query
 
     if (foldersError) {
-      console.error('Error fetching bookmark folders:', foldersError)
+      logger.error('Error fetching bookmark folders:', foldersError)
       return success({ folders: [] })
     }
 

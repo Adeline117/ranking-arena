@@ -16,6 +16,7 @@ import { getBinanceAccount } from '@/lib/exchange/binance'
 import type { BinanceConfig } from '@/lib/exchange/binance'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import logger from '@/lib/logger'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -43,7 +44,7 @@ async function _getBinanceAccountId(config: BinanceConfig): Promise<string | nul
     // 实际验证需要通过对比交易数据或其他方式
     return null
   } catch (error: unknown) {
-    console.error('[verify-ownership] 获取Binance账号ID失败:', error)
+    logger.error('[verify-ownership] 获取Binance账号ID失败:', error)
     return null
   }
 }
@@ -132,7 +133,7 @@ export async function POST(req: NextRequest) {
         message: '账号验证成功',
       })
     } catch (verifyError: unknown) {
-      console.error('[verify-ownership] 验证失败:', verifyError)
+      logger.error('[verify-ownership] 验证失败:', verifyError)
       const msg = verifyError instanceof Error ? verifyError.message : '无法验证账号所有权，请检查您的API凭证是否正确。'
       return NextResponse.json(
         { 
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
       )
     }
   } catch (error: unknown) {
-    console.error('[verify-ownership] 错误:', error)
+    logger.error('[verify-ownership] 错误:', error)
     const message = error instanceof Error ? error.message : '验证失败'
     return NextResponse.json(
       { error: message },

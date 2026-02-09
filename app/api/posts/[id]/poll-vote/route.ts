@@ -12,6 +12,7 @@ import {
   handleError,
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -178,7 +179,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (refetchError || !latestPoll) {
-      console.error('Failed to refetch poll:', refetchError)
+      logger.error('Failed to refetch poll:', refetchError)
       // Return the user's vote anyway - the counts may be stale but vote is recorded
       return success({
         poll: {
@@ -222,7 +223,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (updateError) {
-      console.error('更新投票计数失败:', updateError)
+      logger.error('更新投票计数失败:', updateError)
       // CRITICAL FIX: Return success with vote recorded but indicate counts may be stale
       // This is better than failing completely since the vote was already inserted
       return success({

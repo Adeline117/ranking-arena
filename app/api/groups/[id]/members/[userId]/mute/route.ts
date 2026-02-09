@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/data/notifications'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -79,7 +80,7 @@ export async function POST(
       .eq('user_id', targetUserId)
 
     if (updateError) {
-      console.error('Mute error:', updateError)
+      logger.error('Mute error:', updateError)
       return NextResponse.json({ error: '禁言失败' }, { status: 500 })
     }
 
@@ -163,7 +164,7 @@ export async function POST(
       })
     } catch (notifyError) {
       // 通知发送失败不影响禁言操作
-      console.error('Failed to send mute notification:', notifyError)
+      logger.error('Failed to send mute notification:', notifyError)
     }
 
     // Audit log (fire-and-forget)
@@ -179,7 +180,7 @@ export async function POST(
     return NextResponse.json({ success: true })
 
   } catch (error: unknown) {
-    console.error('Mute error:', error)
+    logger.error('Mute error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
@@ -223,7 +224,7 @@ export async function DELETE(
       .eq('user_id', targetUserId)
 
     if (updateError) {
-      console.error('Unmute error:', updateError)
+      logger.error('Unmute error:', updateError)
       return NextResponse.json({ error: '解除禁言失败' }, { status: 500 })
     }
 
@@ -239,7 +240,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
 
   } catch (error: unknown) {
-    console.error('Unmute error:', error)
+    logger.error('Unmute error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

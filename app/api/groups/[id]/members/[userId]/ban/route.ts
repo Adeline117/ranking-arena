@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getGroupRole, canManageMembers } from '@/lib/services/group-permissions'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })
 
     if (banError) {
-      console.error('Ban insert error:', banError)
+      logger.error('Ban insert error:', banError)
       return NextResponse.json({ error: '封禁失败' }, { status: 500 })
     }
 
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .eq('user_id', targetUserId)
 
       if (deleteError) {
-        console.error('Soft delete member error:', deleteError)
+        logger.error('Soft delete member error:', deleteError)
       }
 
       // Decrement member count
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    console.error('Ban user error:', error)
+    logger.error('Ban user error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
@@ -143,7 +144,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       .eq('user_id', targetUserId)
 
     if (unbanError) {
-      console.error('Unban error:', unbanError)
+      logger.error('Unban error:', unbanError)
       return NextResponse.json({ error: '解除封禁失败' }, { status: 500 })
     }
 
@@ -158,7 +159,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    console.error('Unban user error:', error)
+    logger.error('Unban user error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAllAnomalies, type GetAnomaliesOptions } from '@/lib/services/anomaly-manager'
+import logger from '@/lib/logger'
 
 // Verify admin access
 async function verifyAdmin(request: NextRequest): Promise<boolean> {
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    console.error('[Admin Anomalies] Error fetching anomalies:', error)
+    logger.error('[Admin Anomalies] Error fetching anomalies:', error)
 
     return NextResponse.json(
       {

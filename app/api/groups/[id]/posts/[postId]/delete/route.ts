@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -76,7 +77,7 @@ export async function POST(
       .eq('id', postId)
 
     if (updateError) {
-      console.error('Delete post error:', updateError)
+      logger.error('Delete post error:', updateError)
       return NextResponse.json({ error: '删除失败' }, { status: 500 })
     }
 
@@ -95,7 +96,7 @@ export async function POST(
         })
 
       if (notifyError) {
-        console.error('Notification error:', notifyError)
+        logger.error('Notification error:', notifyError)
       }
     }
 
@@ -111,7 +112,7 @@ export async function POST(
     return NextResponse.json({ success: true })
 
   } catch (error: unknown) {
-    console.error('Delete post error:', error)
+    logger.error('Delete post error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

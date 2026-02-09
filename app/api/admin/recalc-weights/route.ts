@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import logger from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
           .rpc('calculate_user_weight', { p_user_id: userId })
         
         if (error) {
-          console.error(`Error calculating weight for user ${userId}:`, error)
+          logger.error(`Error calculating weight for user ${userId}:`, error)
           return null
         }
         return { userId, weight: data }
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
       const { data, error } = await supabase.rpc('recalculate_all_user_weights')
       
       if (error) {
-        console.error('Error recalculating all weights:', error)
+        logger.error('Error recalculating all weights:', error)
         return NextResponse.json(
           { error: 'Failed to recalculate weights', details: error.message },
           { status: 500 }
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Weight recalculation error:', error)
+    logger.error('Weight recalculation error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -175,7 +176,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Weight statistics error:', error)
+    logger.error('Weight statistics error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

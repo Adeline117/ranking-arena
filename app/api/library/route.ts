@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import logger from '@/lib/logger'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
     headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' }
   })
   } catch (e) {
-    console.error('Library API error:', e)
+    logger.error('Library API error:', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -70,7 +71,7 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
       }
     }
     // Fallback to simple query if RPC doesn't exist
-    console.warn('RPC fallback:', error?.message)
+    logger.warn('RPC fallback:', error?.message)
   }
 
   let query = supabase

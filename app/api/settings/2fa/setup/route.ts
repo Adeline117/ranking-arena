@@ -10,6 +10,7 @@ import { generateTotpSecret } from '@/lib/services/totp'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (profileError) {
-      console.error('[2FA Setup] Profile fetch error:', profileError)
+      logger.error('[2FA Setup] Profile fetch error:', profileError)
       return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
     }
 
@@ -73,13 +74,13 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
 
     if (updateError) {
-      console.error('[2FA Setup] Secret storage error:', updateError)
+      logger.error('[2FA Setup] Secret storage error:', updateError)
       return NextResponse.json({ error: 'Failed to store TOTP secret' }, { status: 500 })
     }
 
     return NextResponse.json({ qrCode, secret, uri })
   } catch (error: unknown) {
-    console.error('[2FA Setup] Unexpected error:', error)
+    logger.error('[2FA Setup] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

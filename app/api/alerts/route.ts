@@ -13,6 +13,7 @@ import {
   error,
   handleError,
 } from '@/lib/api'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     const { data: history, error: queryError, count } = await query
 
     if (queryError) {
-      console.error('[alerts] 查询历史失败:', queryError)
+      logger.error('[alerts] 查询历史失败:', queryError)
       return error('获取提醒历史失败', 500)
     }
 

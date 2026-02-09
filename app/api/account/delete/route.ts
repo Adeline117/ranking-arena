@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
       message: 'Account marked for deletion, recoverable within 30 days',
     })
   } catch (error: unknown) {
-    console.error('[account/delete] Error:', error)
+    logger.error('[account/delete] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

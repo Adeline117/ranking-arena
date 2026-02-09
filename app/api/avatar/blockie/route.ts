@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,7 +126,7 @@ export async function GET(request: Request) {
       },
     })
   } catch (error) {
-    console.error('[blockie] Error:', error)
+    logger.error('[blockie] Error:', error)
     return new NextResponse('Internal server error', { status: 500 })
   }
 }

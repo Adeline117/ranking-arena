@@ -9,6 +9,7 @@ import { verifyTotpCode, generateBackupCodes, hashBackupCode } from '@/lib/servi
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (profileError || !profile) {
-      console.error('[2FA Verify] Profile fetch error:', profileError)
+      logger.error('[2FA Verify] Profile fetch error:', profileError)
       return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
     }
 
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
 
     if (updateError) {
-      console.error('[2FA Verify] Enable error:', updateError)
+      logger.error('[2FA Verify] Enable error:', updateError)
       return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
     }
 
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
       .insert(hashedCodes)
 
     if (insertError) {
-      console.error('[2FA Verify] Backup codes insert error:', insertError)
+      logger.error('[2FA Verify] Backup codes insert error:', insertError)
       // 2FA is already enabled, but backup codes failed - log but don't fail
       return NextResponse.json({
         success: true,
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
       backupCodes,
     })
   } catch (error: unknown) {
-    console.error('[2FA Verify] Unexpected error:', error)
+    logger.error('[2FA Verify] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
             .single()
           conversation = existingConv
         } else {
-          console.error('[Start Message API] 创建会话错误:', convError)
+          logger.error('[Start Message API] 创建会话错误:', convError)
           return NextResponse.json({ error: '创建会话失败' }, { status: 500 })
         }
       } else {
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
       receiver_handle: receiverProfile.handle
     })
   } catch (error: unknown) {
-    console.error('[Start Message API] 错误:', error)
+    logger.error('[Start Message API] 错误:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

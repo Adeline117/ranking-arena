@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     // 检查 posts bucket 是否存在
     const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
     if (bucketsError) {
-      console.error('Error listing buckets:', bucketsError)
+      logger.error('Error listing buckets:', bucketsError)
       return NextResponse.json({
         error: 'Storage service unavailable. Please contact administrator.',
       }, { status: 503 })
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     const postsBucketExists = buckets?.some(b => b.id === 'posts')
     if (!postsBucketExists) {
-      console.error('Posts bucket does not exist. Please run scripts/setup_posts_storage.sql')
+      logger.error('Posts bucket does not exist. Please run scripts/setup_posts_storage.sql')
       return NextResponse.json({
         error: 'Storage not configured. Please contact administrator to run setup_posts_storage.sql',
         code: 'BUCKET_NOT_FOUND'
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (error) {
-      console.error('Upload error:', error)
+      logger.error('Upload error:', error)
       // 提供更详细的错误信息
       if (error.message?.includes('Bucket not found')) {
         return NextResponse.json({
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (listError || !fileList || fileList.length === 0) {
-      console.error('Upload verification failed - file not found after upload:', listError)
+      logger.error('Upload verification failed - file not found after upload:', listError)
       return NextResponse.json({
         error: 'Upload verification failed. File may not have been saved correctly.',
         code: 'VERIFICATION_FAILED'
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
       verified: true, // 标记已验证
     })
   } catch (error: unknown) {
-    console.error('Error uploading image:', error)
+    logger.error('Error uploading image:', error)
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
 }

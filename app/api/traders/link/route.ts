@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
           { status: 409 }
         )
       }
-      console.error('[trader-link] Insert error:', insertError)
+      logger.error('[trader-link] Insert error:', insertError)
       return NextResponse.json(
         { error: '关联失败' },
         { status: 500 }
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, link })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '未知错误'
-    console.error('[trader-link] POST error:', message)
+    logger.error('[trader-link] POST error:', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
@@ -124,14 +125,14 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('[trader-link] GET error:', error)
+      logger.error('[trader-link] GET error:', error)
       return NextResponse.json({ error: '获取失败' }, { status: 500 })
     }
 
     return NextResponse.json({ links: links || [] })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '未知错误'
-    console.error('[trader-link] GET error:', message)
+    logger.error('[trader-link] GET error:', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
@@ -176,14 +177,14 @@ export async function DELETE(req: NextRequest) {
       .eq('user_id', user.id)
 
     if (deleteError) {
-      console.error('[trader-link] DELETE error:', deleteError)
+      logger.error('[trader-link] DELETE error:', deleteError)
       return NextResponse.json({ error: '取消关联失败' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '未知错误'
-    console.error('[trader-link] DELETE error:', message)
+    logger.error('[trader-link] DELETE error:', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

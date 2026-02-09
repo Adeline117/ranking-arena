@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import type { PushProvider } from '@/lib/services/push-notification'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +49,7 @@ export const POST = withAuth(
         data: subscription,
       })
     } catch (error: unknown) {
-      console.error('[push/subscribe] 注册订阅失败:', error)
+      logger.error('[push/subscribe] 注册订阅失败:', error)
       return NextResponse.json({
         success: false,
         error: '注册订阅失败',
@@ -79,7 +80,7 @@ export const DELETE = withAuth(
         success: true,
       })
     } catch (error: unknown) {
-      console.error('[push/subscribe] 取消订阅失败:', error)
+      logger.error('[push/subscribe] 取消订阅失败:', error)
       return NextResponse.json({
         success: false,
         error: '取消订阅失败',

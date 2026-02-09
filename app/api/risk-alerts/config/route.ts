@@ -12,6 +12,7 @@ import { getRiskAlertService, DEFAULT_THRESHOLDS } from '@/lib/services/risk-ale
 import { hasFeatureAccess } from '@/lib/types/premium'
 import type { SubscriptionTier } from '@/lib/types/premium'
 import type { AlertType } from '@/lib/services/risk-alert'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,7 +57,7 @@ export const GET = withAuth(
         },
       })
     } catch (error: unknown) {
-      console.error('[risk-alerts/config] 获取配置失败:', error)
+      logger.error('[risk-alerts/config] 获取配置失败:', error)
       return NextResponse.json({
         success: false,
         error: '获取配置失败',
@@ -124,7 +125,7 @@ export const POST = withAuth(
         data: config,
       })
     } catch (error: unknown) {
-      console.error('[risk-alerts/config] 创建配置失败:', error)
+      logger.error('[risk-alerts/config] 创建配置失败:', error)
       return NextResponse.json({
         success: false,
         error: '创建配置失败',
@@ -173,7 +174,7 @@ export const DELETE = withAuth(
         success: true,
       })
     } catch (error: unknown) {
-      console.error('[risk-alerts/config] 删除配置失败:', error)
+      logger.error('[risk-alerts/config] 删除配置失败:', error)
       return NextResponse.json({
         success: false,
         error: '删除配置失败',

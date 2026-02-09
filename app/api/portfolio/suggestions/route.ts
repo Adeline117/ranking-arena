@@ -20,6 +20,7 @@ import {
   type TraderForPortfolio,
 } from '@/lib/utils/portfolio-builder'
 import { getFeatureLimits } from '@/lib/types/premium'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,7 +81,7 @@ export async function GET(request: NextRequest) {
       .limit(200)
 
     if (tradersError) {
-      console.error('[Portfolio] 获取交易员数据失败:', tradersError)
+      logger.error('[Portfolio] 获取交易员数据失败:', tradersError)
       return handleError(tradersError, 'portfolio suggestions')
     }
 

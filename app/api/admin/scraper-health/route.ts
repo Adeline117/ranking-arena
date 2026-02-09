@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSystemHealth, getAllPlatformStats, getRecentAlerts } from '@/lib/scraper/telemetry'
 import { getCronCircuitBreakerStats } from '@/lib/cron/utils'
 import { getEnabledPlatforms } from '@/lib/scraper/config'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -118,7 +119,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('[ScraperHealth] Error:', error)
+    logger.error('[ScraperHealth] Error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch health data' },
       { status: 500 }

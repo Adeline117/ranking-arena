@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (profileError || !profile) {
-      console.error('[2FA Disable] Profile fetch error:', profileError)
+      logger.error('[2FA Disable] Profile fetch error:', profileError)
       return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
     }
 
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
 
     if (updateError) {
-      console.error('[2FA Disable] Update error:', updateError)
+      logger.error('[2FA Disable] Update error:', updateError)
       return NextResponse.json({ error: 'Failed to disable 2FA' }, { status: 500 })
     }
 
@@ -107,13 +108,13 @@ export async function POST(request: NextRequest) {
       .eq('user_id', user.id)
 
     if (deleteError) {
-      console.error('[2FA Disable] Backup codes deletion error:', deleteError)
+      logger.error('[2FA Disable] Backup codes deletion error:', deleteError)
       // Non-critical: 2FA is already disabled
     }
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    console.error('[2FA Disable] Unexpected error:', error)
+    logger.error('[2FA Disable] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

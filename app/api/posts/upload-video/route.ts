@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (error) {
-      console.error('Video upload error:', error)
+      logger.error('Video upload error:', error)
       return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
 
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
       fileType: file.type,
     })
   } catch (error: unknown) {
-    console.error('Error uploading video:', error)
+    logger.error('Error uploading video:', error)
     const errorMessage = error instanceof Error ? error.message : '视频上传失败'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

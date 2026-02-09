@@ -16,6 +16,7 @@ import {
   validateBoolean,
   validateNumber,
 } from '@/lib/api'
+import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .range(offset, offset + limit - 1)
 
     if (bookmarksError) {
-      console.error('Error fetching bookmarks:', bookmarksError)
+      logger.error('Error fetching bookmarks:', bookmarksError)
     }
 
     // 格式化帖子列表，并收集需要清理的孤立书签
@@ -136,7 +137,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
             .update({ post_count: Math.max(0, folder.post_count - orphanedBookmarkIds.length) })
             .eq('id', id)
         } catch (err: unknown) {
-          console.error('Error cleaning orphaned bookmarks:', err)
+          logger.error('Error cleaning orphaned bookmarks:', err)
         }
       })()
     }

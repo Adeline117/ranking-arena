@@ -113,10 +113,10 @@ export async function GET(request: NextRequest) {
             }),
           })
         } catch (e) {
-          console.error('[compute-leaderboard] Telegram alert failed:', e)
+          logger.error('[compute-leaderboard] Telegram alert failed:', e)
         }
       } else {
-        console.error('[compute-leaderboard] DEGRADATION WARNING:', warnings)
+        logger.error('[compute-leaderboard] DEGRADATION WARNING:', warnings)
       }
     }
 

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
+import logger from '@/lib/logger'
 
 export const revalidate = 60 // 1分钟缓存，持仓数据需要更频繁更新
 
@@ -115,7 +116,7 @@ export async function GET(
       .order('updated_at', { ascending: false })
     
     if (error) {
-      console.error('[Positions API] Error:', error)
+      logger.error('[Positions API] Error:', error)
       return NextResponse.json({ error: 'Failed to fetch positions' }, { status: 500 })
     }
 
@@ -152,7 +153,7 @@ export async function GET(
     return response
 
   } catch (error: unknown) {
-    console.error('[Positions API] Error:', error)
+    logger.error('[Positions API] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

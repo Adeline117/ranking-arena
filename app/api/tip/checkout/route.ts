@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (tipError) {
-      console.error('[Tip Checkout] Insert error:', tipError)
+      logger.error('[Tip Checkout] Insert error:', tipError)
       return NextResponse.json(
         { error: '创建打赏记录失败' },
         { status: 500 }
@@ -205,7 +206,7 @@ export async function POST(request: NextRequest) {
       url: session.url,
     })
   } catch (error: unknown) {
-    console.error('[Tip Checkout] Error:', error)
+    logger.error('[Tip Checkout] Error:', error)
     
     const message = error instanceof Error ? error.message : 'Internal server error'
     

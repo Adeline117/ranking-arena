@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser } from '@/lib/supabase/server'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (profileError || !profile) {
-      console.error('[2FA Backup Codes] Profile fetch error:', profileError)
+      logger.error('[2FA Backup Codes] Profile fetch error:', profileError)
       return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
     }
 
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
 
     if (deleteError) {
-      console.error('[2FA Backup Codes] Delete old codes error:', deleteError)
+      logger.error('[2FA Backup Codes] Delete old codes error:', deleteError)
       return NextResponse.json({ error: 'Failed to regenerate backup codes' }, { status: 500 })
     }
 
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
       .insert(hashedCodes)
 
     if (insertError) {
-      console.error('[2FA Backup Codes] Insert error:', insertError)
+      logger.error('[2FA Backup Codes] Insert error:', insertError)
       return NextResponse.json({ error: 'Failed to store new backup codes' }, { status: 500 })
     }
 
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
       backupCodes,
     })
   } catch (error: unknown) {
-    console.error('[2FA Backup Codes] Unexpected error:', error)
+    logger.error('[2FA Backup Codes] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

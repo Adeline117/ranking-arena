@@ -5,6 +5,7 @@ import {
   fetchPancakeSwapTopTraders,
   type DexTrader,
 } from '@/lib/web3/dex-tracker'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ traders, count: traders.length })
   } catch (err) {
-    console.error('[dex/traders] Error:', err)
+    logger.error('[dex/traders] Error:', err)
     return NextResponse.json(
       { error: 'Failed to fetch DEX traders' },
       { status: 500 },

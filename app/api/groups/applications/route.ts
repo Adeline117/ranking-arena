@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -57,14 +58,14 @@ export async function GET(request: NextRequest) {
     const { data: applications, error } = await query
 
     if (error) {
-      console.error('Error fetching applications:', error)
+      logger.error('Error fetching applications:', error)
       return NextResponse.json({ error: '获取申请列表失败' }, { status: 500 })
     }
 
     return NextResponse.json({ applications })
 
   } catch (error: unknown) {
-    console.error('Error fetching applications:', error)
+    logger.error('Error fetching applications:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

@@ -19,6 +19,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 300 // ISR: revalidate every 5 minutes
@@ -360,7 +361,7 @@ export async function GET(request: NextRequest) {
     },
   })
   } catch (error) {
-    console.error('[v2/market-intelligence] Error:', error)
+    logger.error('[v2/market-intelligence] Error:', error)
     return NextResponse.json({ error: 'Failed to fetch market intelligence' }, { status: 500 })
   }
 }

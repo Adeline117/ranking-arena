@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { LeaderboardService } from '@/lib/services/leaderboard';
 import type { Platform, LeaderboardPlatform } from '@/lib/types/leaderboard';
 import { LEADERBOARD_PLATFORMS } from '@/lib/types/leaderboard';
+import logger from '@/lib/logger'
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
 
-    console.error('[API /trader/by-id/:id] Error:', error);
+    logger.error('[API /trader/by-id/:id] Error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 },

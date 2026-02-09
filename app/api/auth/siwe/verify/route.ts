@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { isAddress } from 'viem'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 const EXPECTED_CHAIN_ID = 8453 // Base mainnet (must match client's chainId)
 
@@ -168,7 +169,7 @@ export async function POST(request: NextRequest) {
         .update({ wallet_address: walletAddress, email: walletEmail })
         .eq('id', newUser.user.id)
     } else if (profileInsertError) {
-      console.error('[SIWE verify] Profile creation failed:', profileInsertError)
+      logger.error('[SIWE verify] Profile creation failed:', profileInsertError)
     }
 
     // Generate session for the new user
@@ -189,7 +190,7 @@ export async function POST(request: NextRequest) {
       email: walletEmail,
     })
   } catch (err) {
-    console.error('[SIWE verify] Error:', err)
+    logger.error('[SIWE verify] Error:', err)
     return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
   }
 }

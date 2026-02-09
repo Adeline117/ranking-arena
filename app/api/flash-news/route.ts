@@ -15,6 +15,7 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) {
-      console.error('[flash-news] 创建失败:', insertError)
+      logger.error('[flash-news] 创建失败:', insertError)
       return error('创建快讯失败', 500)
     }
 
@@ -270,7 +271,7 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (updateError) {
-      console.error('[flash-news] 更新失败:', updateError)
+      logger.error('[flash-news] 更新失败:', updateError)
       return error('更新快讯失败', 500)
     }
 
@@ -313,7 +314,7 @@ export async function DELETE(request: NextRequest) {
       .eq('id', newsId)
 
     if (deleteError) {
-      console.error('[flash-news] 删除失败:', deleteError)
+      logger.error('[flash-news] 删除失败:', deleteError)
       return error('删除快讯失败', 500)
     }
 

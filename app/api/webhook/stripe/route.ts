@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     const result = await response.json()
     return NextResponse.json(result, { status: response.status })
   } catch (error: unknown) {
-    console.error('[webhook/stripe] Proxy to /api/stripe/webhook failed:', error)
+    logger.error('[webhook/stripe] Proxy to /api/stripe/webhook failed:', error)
     return NextResponse.json(
       { error: 'Webhook proxy failed' },
       { status: 500 }

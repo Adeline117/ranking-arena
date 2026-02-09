@@ -15,6 +15,7 @@ import { getAvailablePlatforms } from '@/lib/connectors/registry';
 import type { Platform } from '@/lib/types/leaderboard';
 import { createClient } from '@supabase/supabase-js';
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor';
+import logger from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
-    console.error('[Cron /discover-traders] Error:', error);
+    logger.error('[Cron /discover-traders] Error:', error);
 
     // Record error metric
     try {

@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
         .eq('read', false)
 
       if (error) {
-        console.error('[API] 标记全部已读失败:', error)
+        logger.error('[API] 标记全部已读失败:', error)
         return NextResponse.json({ error: '操作失败' }, { status: 500 })
       }
 
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
       .in('id', notification_ids)
 
     if (error) {
-      console.error('[API] 标记已读失败:', error)
+      logger.error('[API] 标记已读失败:', error)
       return NextResponse.json({ error: '操作失败' }, { status: 500 })
     }
 
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       message: `已标记 ${notification_ids.length} 条通知为已读`,
     })
   } catch (error: unknown) {
-    console.error('[API] 标记已读错误:', error)
+    logger.error('[API] 标记已读错误:', error)
     return NextResponse.json(
       { error: '服务器错误' },
       { status: 500 }

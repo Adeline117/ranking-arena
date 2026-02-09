@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTraderByHandle, getTraderPerformance, getTraderStats, getTraderPortfolio } from '@/lib/data/trader'
+import logger from '@/lib/logger'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -117,7 +118,7 @@ export async function GET(
     })
   } catch (error: unknown) {
     // Log server-side only; never expose internal details to client
-    console.error('[API] Error fetching user full data:', error)
+    logger.error('[API] Error fetching user full data:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

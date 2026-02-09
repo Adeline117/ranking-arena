@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { JobRunner, prewarmTopTraders } from '@/lib/services/job-runner';
 import type { Platform } from '@/lib/types/leaderboard';
+import logger from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
   // Verify cron secret
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
-    console.error('[Cron /run-jobs] Error:', error);
+    logger.error('[Cron /run-jobs] Error:', error);
     return NextResponse.json(
       { error: 'Job processing failed', details: error instanceof Error ? error.message : 'Unknown' },
       { status: 500 },

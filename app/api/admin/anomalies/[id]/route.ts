@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { updateAnomalyStatus } from '@/lib/services/anomaly-manager'
+import logger from '@/lib/logger'
 
 // Verify admin access and get user ID
 async function verifyAdminAndGetUserId(request: NextRequest): Promise<string | null> {
@@ -93,7 +94,7 @@ export async function GET(
       data,
     })
   } catch (error: unknown) {
-    console.error('[Admin Anomalies] Error fetching anomaly:', error)
+    logger.error('[Admin Anomalies] Error fetching anomaly:', error)
 
     return NextResponse.json(
       {
@@ -140,7 +141,7 @@ export async function PATCH(
       message: 'Anomaly updated successfully',
     })
   } catch (error: unknown) {
-    console.error('[Admin Anomalies] Error updating anomaly:', error)
+    logger.error('[Admin Anomalies] Error updating anomaly:', error)
 
     return NextResponse.json(
       {
