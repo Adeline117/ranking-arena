@@ -6,6 +6,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/auto-news-post",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/compute-leaderboard",
       "schedule": "0 * * * *"
     },
