@@ -210,11 +210,22 @@ export default function MarketPanel() {
     }
 
     load()
-    // 增加刷新间隔到10秒，减少跳动频率
-    const interval = setInterval(load, 10000)
+    // Refresh every 30s instead of 10s — market data API already has s-maxage=30,
+    // so polling faster than that just hits stale CDN cache anyway.
+    const interval = setInterval(load, 30000)
+
+    // Pause polling when tab is hidden to save bandwidth
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        load() // Refresh immediately when tab becomes visible
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
     return () => {
       alive = false
       clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customPairs, t])
@@ -313,7 +324,7 @@ export default function MarketPanel() {
                 textAlign: 'center',
               }}
             >
-              Auto refresh every 10s
+              Auto refresh every 30s
             </Box>
             {userId && (
               <Button

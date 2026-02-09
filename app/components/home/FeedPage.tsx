@@ -21,9 +21,9 @@ export default function FeedPage() {
   const [activeTab, setActiveTab] = useState<FeedTab>('hot')
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
+    // Use getSession() — reads from local storage, no network request
+    supabase.auth.getSession().then(({ data }) => {
+      setEmail(data.session?.user?.email ?? null)
     })
   }, [])
 

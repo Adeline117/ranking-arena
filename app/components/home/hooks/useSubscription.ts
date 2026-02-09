@@ -29,8 +29,9 @@ export function useSubscription() {
 
   const checkSubscription = useCallback(async (forceRefresh = false) => {
     try {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-      const { data: { user } } = await supabase.auth.getUser()
+      // Use getSession() — reads from local storage instead of making a network request
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
       
       if (!user) {
         if (isMountedRef.current) {

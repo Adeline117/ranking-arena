@@ -278,6 +278,7 @@ const nextConfig: NextConfig = {
       'otpauth',
       'lightweight-charts',
       '@tanstack/react-query',
+      'framer-motion',
       'ethers',
       'viem',
       '@rainbow-me/rainbowkit',
