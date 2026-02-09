@@ -48,11 +48,23 @@ type HtmlChapter = {
 
 // ─── Constants ───────────────────────────────────────────────────────
 
-const THEME_PRESETS: Record<ReadingTheme, { bg: string; pageBg: string; text: string; labelZh: string; label: string; dot: string }> = {
-  white:  { bg: 'var(--color-bg-tertiary)', pageBg: 'var(--color-on-accent)', text: 'var(--color-text-primary)', label: 'White',  labelZh: '白色',   dot: 'var(--color-on-accent)' },
-  sepia:  { bg: 'var(--color-border-primary)', pageBg: 'var(--color-bg-secondary)', text: 'var(--color-bg-tertiary)', label: 'Sepia',  labelZh: '暖黄',   dot: 'var(--color-bg-secondary)' },
-  dark:   { bg: 'var(--color-bg-primary)', pageBg: 'var(--color-bg-secondary)', text: 'var(--color-border-primary)', label: 'Dark',   labelZh: '暗黑',   dot: 'var(--color-bg-secondary)' },
-  green:  { bg: 'var(--color-accent-success-20)', pageBg: 'var(--color-accent-success-20)', text: 'var(--color-accent-success)', label: 'Green',  labelZh: '护眼绿', dot: 'var(--color-accent-success-20)' },
+const THEME_PRESETS: Record<ReadingTheme, {
+  bg: string; pageBg: string; text: string; labelZh: string; label: string; dot: string;
+  settingsLabel: string; settingsOption: string; settingsOptionInactive: string;
+  settingsControlBg: string; settingsHint: string;
+}> = {
+  white:  { bg: 'var(--color-bg-tertiary)', pageBg: 'var(--color-on-accent)', text: 'var(--color-text-primary)', label: 'White',  labelZh: '白色',   dot: 'var(--color-on-accent)',
+    settingsLabel: 'var(--color-text-tertiary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
+    settingsControlBg: 'var(--color-overlay-subtle)', settingsHint: 'var(--color-overlay-light)' },
+  sepia:  { bg: 'var(--color-border-primary)', pageBg: 'var(--color-bg-secondary)', text: 'var(--color-bg-tertiary)', label: 'Sepia',  labelZh: '暖黄',   dot: 'var(--color-bg-secondary)',
+    settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
+    settingsControlBg: 'var(--glass-bg-light)', settingsHint: 'var(--color-overlay-light)' },
+  dark:   { bg: 'var(--color-bg-primary)', pageBg: 'var(--color-bg-secondary)', text: 'var(--color-border-primary)', label: 'Dark',   labelZh: '暗黑',   dot: 'var(--color-bg-secondary)',
+    settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
+    settingsControlBg: 'var(--glass-bg-light)', settingsHint: 'var(--color-text-quaternary)' },
+  green:  { bg: 'var(--color-accent-success-20)', pageBg: 'var(--color-accent-success-20)', text: 'var(--color-accent-success)', label: 'Green',  labelZh: '护眼绿', dot: 'var(--color-accent-success-20)',
+    settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
+    settingsControlBg: 'var(--glass-bg-light)', settingsHint: 'var(--color-text-quaternary)' },
 }
 
 const FONT_SIZES: Record<FontSize, { body: number; heading: number; labelZh: string; label: string }> = {
@@ -998,7 +1010,7 @@ export default function ReadPage() {
             border: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
           }}>
             {/* Theme */}
-            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: theme === 'dark' ? 'var(--color-text-secondary)' : '#555' }}>
+            <p style={{ fontSize: tokens.typography.fontSize.sm, fontWeight: 600, marginBottom: 12, color: themeColors.settingsLabel }}>
               {isZh ? '阅读主题' : 'Reading Theme'}
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18 }}>
@@ -1015,7 +1027,7 @@ export default function ReadPage() {
                   }} />
                   <span style={{
                     fontSize: 11,
-                    color: theme === t ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--color-text-tertiary)' : '#666'),
+                    color: theme === t ? 'var(--color-accent-primary)' : themeColors.settingsOption,
                     fontWeight: theme === t ? 600 : 400,
                   }}>
                     {isZh ? THEME_PRESETS[t].labelZh : THEME_PRESETS[t].label}
@@ -1026,15 +1038,15 @@ export default function ReadPage() {
 
             {/* Font Size */}
             <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
-              <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: theme === 'dark' ? 'var(--color-text-secondary)' : '#555' }}>
+              <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: themeColors.settingsLabel }}>
                 {isZh ? '字号' : 'Font Size'}
               </p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                 {(Object.keys(FONT_SIZES) as FontSize[]).map(s => (
                   <button key={s} onClick={() => setFontSize(s)} style={{
                     flex: 1, padding: '8px 4px', borderRadius: 10,
-                    background: fontSize === s ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'),
-                    color: fontSize === s ? '#fff' : (theme === 'dark' ? '#e0e0e0' : '#333'),
+                    background: fontSize === s ? 'var(--color-accent-primary)' : themeColors.settingsControlBg,
+                    color: fontSize === s ? 'var(--color-on-accent)' : themeColors.settingsOptionInactive,
                     border: 'none', cursor: 'pointer', fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15,
                     fontWeight: 600, transition: 'all 0.15s',
                   }}>
@@ -1047,15 +1059,15 @@ export default function ReadPage() {
             {/* Font Family (HTML/ePub mode) */}
             {(contentMode === 'html' || contentMode === 'epub') && (
               <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: theme === 'dark' ? 'var(--color-text-secondary)' : '#555' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: themeColors.settingsLabel }}>
                   {isZh ? '字体' : 'Font'}
                 </p>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                   {(Object.keys(FONT_FAMILIES) as FontFamily[]).map(f => (
                     <button key={f} onClick={() => setFontFamily(f)} style={{
                       flex: 1, padding: '8px 4px', borderRadius: 10,
-                      background: fontFamily === f ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'),
-                      color: fontFamily === f ? '#fff' : (theme === 'dark' ? '#e0e0e0' : '#333'),
+                      background: fontFamily === f ? 'var(--color-accent-primary)' : themeColors.settingsControlBg,
+                      color: fontFamily === f ? 'var(--color-on-accent)' : themeColors.settingsOptionInactive,
                       border: 'none', cursor: 'pointer', fontSize: 14,
                       fontFamily: FONT_FAMILIES[f].css,
                       fontWeight: 600, transition: 'all 0.15s',
@@ -1071,7 +1083,7 @@ export default function ReadPage() {
               paddingTop: 14,
               borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
             }}>
-              <p style={{ fontSize: 11, color: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', textAlign: 'center', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 11, color: themeColors.settingsHint, textAlign: 'center', lineHeight: 1.6 }}>
                 {isZh
                   ? '快捷键: 左右方向键/空格翻页, B 书签, F 全屏'
                   : 'Keys: Arrows/Space flip, B bookmark, F fullscreen'}
@@ -1321,7 +1333,7 @@ function ToolbarBtn({ children, onClick, active, title }: {
         border: 'none', color: 'var(--color-text-primary)',
         cursor: 'pointer', transition: 'background 0.15s', flexShrink: 0,
       }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--glass-bg-light)' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
     >
       {children}
