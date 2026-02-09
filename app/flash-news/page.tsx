@@ -40,13 +40,11 @@ interface FlashNewsResponse {
 
 const CATEGORIES = [
   { key: 'all', label: '全部', label_en: 'All' },
-  { key: 'breaking', label: '突发', label_en: 'Breaking', isImportance: true },
-  { key: 'important', label: '重要', label_en: 'Important', isImportance: true },
-  { key: 'crypto', label: '加密货币', label_en: 'Crypto' },
+  { key: 'btc_eth', label: 'BTC/ETH', label_en: 'BTC/ETH' },
+  { key: 'altcoin', label: '山寨币', label_en: 'Altcoins' },
   { key: 'defi', label: 'DeFi', label_en: 'DeFi' },
-  { key: 'macro', label: '宏观经济', label_en: 'Macro' },
-  { key: 'regulation', label: '监管政策', label_en: 'Regulation' },
-  { key: 'market', label: '市场动态', label_en: 'Market' },
+  { key: 'macro', label: '宏观/监管', label_en: 'Macro/Regulation' },
+  { key: 'exchange', label: '交易所', label_en: 'Exchanges' },
 ]
 
 const IMPORTANCE_CONFIG = {
@@ -56,10 +54,14 @@ const IMPORTANCE_CONFIG = {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  crypto: 'var(--color-score-average)',
-  macro: 'var(--color-score-profitability)',
+  btc_eth: 'var(--color-score-average)',
+  altcoin: 'var(--color-enterprise-gradient-start)',
   defi: 'var(--color-score-great)',
-  regulation: 'var(--color-score-legendary)',
+  macro: 'var(--color-score-profitability)',
+  exchange: 'var(--color-score-legendary)',
+  // Legacy mappings
+  crypto: 'var(--color-score-average)',
+  regulation: 'var(--color-score-profitability)',
   market: 'var(--color-enterprise-gradient-start)',
 }
 

@@ -24,6 +24,7 @@ type BookInfo = {
   source_url: string | null
   content_url: string | null
   epub_url: string | null
+  file_key: string | null
   category: string
   is_free: boolean
 }
@@ -117,7 +118,8 @@ async function loadProgressFromServer(bookId: string): Promise<{ page: number; t
 function detectContentMode(book: BookInfo): ContentMode {
   if (book.epub_url) return 'epub'
   if (book.pdf_url) return 'pdf'
-  if (book.content_url || book.source_url) return 'html'
+  // file_key without pdf_url: construct CDN URL for PDF
+  if (book.file_key) return 'pdf'
   return 'none'
 }
 
