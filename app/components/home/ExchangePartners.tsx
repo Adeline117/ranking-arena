@@ -2,26 +2,51 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
+import ExchangeLogo from '../ui/ExchangeLogo'
+import type { Exchange } from '@/lib/exchange'
 
-const EXCHANGES = [
-  'Binance', 'OKX', 'Bybit', 'Bitget', 'MEXC', 'KuCoin',
-  'Gate.io', 'HTX', 'CoinEx', 'BingX', 'Phemex', 'WEEX',
-  'Aevo', 'Hyperliquid', 'GMX', 'dYdX', 'Jupiter', 'Vertex',
-  'Drift', 'Toobit', 'BTSE', 'Crypto.com', 'Bitfinex', 'WhiteBit',
-  'LBank', 'Pionex', 'BloFin', 'XT.com', 'Kwenta', 'Synthetix',
-  'MUX', 'Gains Network', 'Uniswap', 'PancakeSwap',
+const EXCHANGES: { name: string; key: Exchange }[] = [
+  { name: 'Binance', key: 'binance' },
+  { name: 'OKX', key: 'okx' },
+  { name: 'Bybit', key: 'bybit' },
+  { name: 'Bitget', key: 'bitget' },
+  { name: 'MEXC', key: 'mexc' },
+  { name: 'KuCoin', key: 'kucoin' },
+  { name: 'Gate.io', key: 'gate' },
+  { name: 'HTX', key: 'htx' },
+  { name: 'CoinEx', key: 'coinex' },
+  { name: 'BingX', key: 'bingx' as Exchange },
+  { name: 'Phemex', key: 'phemex' as Exchange },
+  { name: 'WEEX', key: 'weex' },
+  { name: 'Aevo', key: 'aevo' as Exchange },
+  { name: 'Hyperliquid', key: 'hyperliquid' as Exchange },
+  { name: 'GMX', key: 'gmx' as Exchange },
+  { name: 'dYdX', key: 'dydx' as Exchange },
+  { name: 'Jupiter', key: 'jupiter' as Exchange },
+  { name: 'Vertex', key: 'vertex' as Exchange },
+  { name: 'Drift', key: 'drift' as Exchange },
+  { name: 'Toobit', key: 'toobit' as Exchange },
+  { name: 'BTSE', key: 'btse' as Exchange },
+  { name: 'Crypto.com', key: 'cryptocom' as Exchange },
+  { name: 'Bitfinex', key: 'bitfinex' as Exchange },
+  { name: 'WhiteBit', key: 'whitebit' as Exchange },
+  { name: 'LBank', key: 'lbank' as Exchange },
+  { name: 'Pionex', key: 'pionex' as Exchange },
+  { name: 'BloFin', key: 'blofin' as Exchange },
+  { name: 'XT.com', key: 'xt' as Exchange },
+  { name: 'Uniswap', key: 'uniswap' as Exchange },
+  { name: 'PancakeSwap', key: 'pancakeswap' as Exchange },
 ]
 
 export default function ExchangePartners() {
   const { language } = useLanguage()
 
-  // Double the list for seamless loop
   const doubled = [...EXCHANGES, ...EXCHANGES]
 
   return (
     <div style={{
       overflow: 'hidden',
-      padding: '12px 0',
+      padding: '10px 0',
       borderBottom: `1px solid ${tokens.colors.border.primary}`,
       position: 'relative',
     }}>
@@ -40,8 +65,8 @@ export default function ExchangePartners() {
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 24,
-        animation: 'exchange-scroll 30s linear infinite',
+        gap: 20,
+        animation: 'exchange-scroll 35s linear infinite',
         width: 'max-content',
       }}>
         <span style={{
@@ -51,23 +76,27 @@ export default function ExchangePartners() {
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
           flexShrink: 0,
-          paddingRight: 8,
+          paddingLeft: 8,
+          paddingRight: 4,
         }}>
           {language === 'zh' ? '数据来源' : 'Sources'}
         </span>
-        {doubled.map((name, i) => (
+        {doubled.map((ex, i) => (
           <span
-            key={`${name}-${i}`}
+            key={`${ex.key}-${i}`}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
               fontSize: 13,
               fontWeight: 600,
               color: tokens.colors.text.secondary,
               whiteSpace: 'nowrap',
               flexShrink: 0,
-              transition: `color ${tokens.transition.fast}`,
             }}
           >
-            {name}
+            <ExchangeLogo exchange={ex.key} size={18} />
+            {ex.name}
           </span>
         ))}
       </div>
