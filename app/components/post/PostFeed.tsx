@@ -473,6 +473,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               fetch(`/api/posts/${props.initialPostId}/comments`)
                 .then(res => res.json())
                 .then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) })
+                .catch(() => {})
             }
           } catch (err) {
             logger.error('Failed to load single post:', err)
@@ -1641,6 +1642,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                           height: '100%',
                           objectFit: 'cover',
                         }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                       />
                     </div>
                   ))}

@@ -118,6 +118,7 @@ export default function BookDetailPage() {
         setReviews(paginated)
         setHasMoreReviews(paginated.length < allReviews.length)
       })
+      .catch(() => {})
   }, [id])
 
   useEffect(() => { if (id) fetchReviews(reviewPage) }, [id, reviewPage, fetchReviews])
