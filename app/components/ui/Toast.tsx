@@ -350,8 +350,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           style={{
             position: 'fixed',
             top: 80,
-            right: 20,
+            right: 16,
             zIndex: tokens.zIndex.toast,
+            maxWidth: 'calc(100vw - 32px)',
             display: 'flex',
             flexDirection: 'column',
             gap: tokens.spacing[3],

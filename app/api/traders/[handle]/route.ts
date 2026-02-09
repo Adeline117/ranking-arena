@@ -90,6 +90,11 @@ const TRADER_SOURCES = [
 ] as const
 type SourceType = typeof TRADER_SOURCES[number]
 
+// Helper: get all source aliases for a given source type
+function getSourceAliases(sourceType: string): string[] {
+  return SOURCE_ALIASES[sourceType] || [sourceType]
+}
+
 // 缓存键前缀
 const CACHE_PREFIX = 'trader:'
 
