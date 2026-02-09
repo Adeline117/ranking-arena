@@ -75,6 +75,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [showFavOnly, setShowFavOnly] = useState(false)
   const { prices: realtimePrices, flashes } = useRealtimePrices({ enabled: true })
 
   useEffect(() => {
@@ -115,10 +116,14 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
   }, [data, realtimePrices])
 
   const filtered = useMemo(() => {
-    if (!search) return merged
-    const q = search.toLowerCase()
-    return merged.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
-  }, [merged, search])
+    let list = merged
+    if (showFavOnly) list = list.filter((c) => favorites.has(c.id))
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
+    }
+    return list
+  }, [merged, search, showFavOnly, favorites])
 
   const columns: Column<SpotCoin>[] = [
     {
@@ -209,7 +214,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
 
   return (
     <div>
-      <div style={{ marginBottom: tokens.spacing[3] }}>
+      <div style={{ marginBottom: tokens.spacing[3], display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
         <input
           type="text"
           value={search}
@@ -227,6 +232,24 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
             outline: 'none',
           }}
         />
+        <button
+          onClick={() => setShowFavOnly((v) => !v)}
+          style={{
+            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+            background: showFavOnly ? tokens.colors.accent.warning : tokens.colors.bg.tertiary,
+            color: showFavOnly ? '#000' : tokens.colors.text.secondary,
+            border: `1px solid ${showFavOnly ? tokens.colors.accent.warning : tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.md,
+            cursor: 'pointer',
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            transition: tokens.transition.fast,
+          }}
+        >
+          {'\u2605'} {t('favorites') || '收藏'}
+          {favorites.size > 0 && ` (${favorites.size})`}
+        </button>
       </div>
       <MarketTable
         columns={columns}
