@@ -91,7 +91,7 @@ function parseTrader(item: ToobitTrader, period: string, rank: number): TraderDa
   if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
 
   const pnl = parseNum(item.pnl ?? item.profit)
-  let winRate = normalizeWinRate(parseNum(item.winRate ?? item.win_rate))
+  const winRate = normalizeWinRate(parseNum(item.winRate ?? item.win_rate))
   let maxDrawdown = parseNum(item.maxDrawdown ?? item.max_drawdown)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) maxDrawdown *= 100
 

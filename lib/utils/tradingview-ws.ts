@@ -74,9 +74,9 @@ interface TradingViewClientWrapper {
   prices: Map<string, RealtimePrice>
   ta: Map<string, TechnicalAnalysis>
   lastTaFetch: number
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   client: any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   charts: Map<string, any>
   connected: boolean
   destroy: () => void

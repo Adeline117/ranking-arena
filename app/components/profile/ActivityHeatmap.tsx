@@ -70,7 +70,7 @@ export default function ActivityHeatmap({ userId }: Props) {
     // 调整到周日开始
     start.setDate(start.getDate() - start.getDay())
 
-    let current = new Date(start)
+    const current = new Date(start)
     let week: DayData[] = []
 
     while (current <= today) {

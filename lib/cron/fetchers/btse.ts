@@ -76,7 +76,7 @@ function parseTrader(item: BtseTrader, period: string, rank: number): TraderData
   if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
 
   const pnl = parseNum(item.pnl)
-  let winRate = normalizeWinRate(parseNum(item.winRate))
+  const winRate = normalizeWinRate(parseNum(item.winRate))
   let maxDrawdown = parseNum(item.maxDrawdown)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) maxDrawdown *= 100
 

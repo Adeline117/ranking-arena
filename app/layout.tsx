@@ -150,9 +150,6 @@ export default function RootLayout({
         {/* Prefetch rankings data for faster homepage load */}
         <link rel="prefetch" href="/api/rankings?window=90D&limit=20" as="fetch" crossOrigin="anonymous" />
         
-        {/* DNS prefetch for Sentry error reporting */}
-        <link rel="dns-prefetch" href="https://o4509384792580096.ingest.us.sentry.io" />
-
         {/* Font preloading is handled automatically by next/font.
             Removed hardcoded preload link — the hashed filename (e.g. be2afef9-s.woff2)
             never matched the static path, so this was a wasted network request. */}

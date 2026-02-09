@@ -65,7 +65,7 @@ export async function GET() {
 
     // Also fetch current prices from CoinGecko for the symbols we have
     const ids = Object.keys(symbolMap).map(s => s.toLowerCase()).join(',')
-    let priceMap: Record<string, any> = {}
+    const priceMap: Record<string, any> = {}
     try {
       const cgRes = await fetch(
         `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&sparkline=false&price_change_percentage=24h`,
