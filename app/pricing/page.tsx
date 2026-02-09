@@ -102,8 +102,8 @@ const getFaqData = (t: (key: string) => string) => [
 
 // 价格配置 - 与 Stripe 保持一致
 const PRICING = {
-  monthly: { price: 9.9, original: 15 },
-  yearly: { price: 99.9, original: 180 },
+  monthly: { price: 12.99, original: 15 },
+  yearly: { price: 99, original: 155.88 },
 }
 
 // Pro 功能配置
