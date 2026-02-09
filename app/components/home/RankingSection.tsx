@@ -9,7 +9,6 @@ import { useToast } from '../ui/Toast'
 import { RankingTable, type Trader } from '../ranking/RankingTable'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
-import ExchangeFilter from '../ranking/ExchangeFilter'
 import TimeRangeSelector from './TimeRangeSelector'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'

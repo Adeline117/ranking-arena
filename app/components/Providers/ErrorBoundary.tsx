@@ -35,7 +35,22 @@ export class ErrorBoundary extends Component<Props, State> {
           textAlign: 'center',
           color: 'var(--color-text-secondary)'
         }}>
-          <p>Something went wrong. Please refresh the page.</p>
+          <p>出了点问题，请刷新页面重试</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: 12,
+              padding: '8px 20px',
+              background: 'var(--color-brand, #8b6fa8)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+          >
+            刷新页面
+          </button>
         </div>
       )
     }

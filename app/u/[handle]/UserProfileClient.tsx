@@ -69,7 +69,6 @@ interface ServerProfile {
   traderHandle?: string
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TraderPageData = any
 
 interface UserProfileClientProps {

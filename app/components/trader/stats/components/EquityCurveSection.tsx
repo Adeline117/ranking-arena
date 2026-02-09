@@ -19,7 +19,7 @@ interface EquityCurveSectionProps {
 
 export function EquityCurveSection({
   equityCurve,
-  traderHandle,
+  traderHandle: _traderHandle,
   delay
 }: EquityCurveSectionProps) {
   const { t } = useLanguage()

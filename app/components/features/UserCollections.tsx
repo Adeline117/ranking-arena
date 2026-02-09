@@ -7,7 +7,7 @@ import { Box, Text } from '@/app/components/base'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import { getCsrfHeaders } from '@/lib/api/client'
+
 import { logger } from '@/lib/logger'
 
 interface Collection {
@@ -42,7 +42,7 @@ function getColor(name: string) {
 
 export default function UserCollections({ userHandle, isOwnProfile }: UserCollectionsProps) {
   const { accessToken } = useAuthSession()
-  const { t, language } = useLanguage()
+  const { language } = useLanguage()
   const { showToast } = useToast()
   const isZh = language === 'zh'
 

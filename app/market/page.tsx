@@ -14,6 +14,7 @@ const SectorTreemap = lazy(() => import('@/app/components/market/SectorTreemap')
 const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))
 const TokenSidePanel = lazy(() => import('@/app/components/market/TokenSidePanel'))
 const MobileMarketTabs = lazy(() => import('@/app/components/market/MobileMarketTabs'))
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
 const PriceTicker = lazy(() => import('@/app/components/market/PriceTicker'))
 const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge'))
 const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))

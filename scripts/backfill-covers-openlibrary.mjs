@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * Backfill cover_url for library_items where source='openlibrary'
- * using Open Library Covers API.
+ * using Open Library Works API + Covers API.
  *
  * Strategy:
  *   1. Extract OL work ID from source_url
- *   2. Fetch /works/{ID}/editions.json to find a cover ID
+ *   2. Fetch /works/{ID}.json → covers array
  *   3. Build cover URL: https://covers.openlibrary.org/b/id/{COVER_ID}-M.jpg
  *
  * Usage:
@@ -20,8 +20,8 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 const apply = process.argv.includes('--apply')
-const CONCURRENCY = 5  // Be polite to OL API
-const BATCH = 500
+const CONCURRENCY = 15
+const BATCH = 1000
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -33,18 +33,13 @@ function extractWorkId(sourceUrl) {
 async function getCoverUrl(workId) {
   try {
     const res = await fetch(
-      `https://openlibrary.org/works/${workId}/editions.json?limit=10`,
+      `https://openlibrary.org/works/${workId}.json`,
       { signal: AbortSignal.timeout(15000) }
     )
     if (!res.ok) return null
     const data = await res.json()
-    // Find first edition with a cover
-    for (const ed of data.entries || []) {
-      if (ed.covers?.length) {
-        const coverId = ed.covers.find(c => c > 0)
-        if (coverId) return `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
-      }
-    }
+    const coverId = data.covers?.find(c => c > 0)
+    if (coverId) return `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
     return null
   } catch {
     return null
@@ -53,6 +48,7 @@ async function getCoverUrl(workId) {
 
 async function main() {
   console.log(`Mode: ${apply ? 'APPLY' : 'DRY RUN'}`)
+  const t0 = Date.now()
 
   let offset = 0
   let total = 0, found = 0, skipped = 0, noId = 0, updated = 0, errors = 0
@@ -102,16 +98,16 @@ async function main() {
         }
       }
 
-      if (total % 100 === 0 || i + CONCURRENCY >= rows.length) {
+      if (total % 50 === 0) {
         const valid = total - noId
         const pct = valid > 0 ? ((found / valid) * 100).toFixed(1) : '0.0'
-        console.log(`  processed=${total} found=${found} miss=${skipped} noId=${noId} hitRate=${pct}%${apply ? ` updated=${updated}` : ''}`)
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(0)
+        console.log(`  [${elapsed}s] processed=${total} found=${found} miss=${skipped} noId=${noId} hitRate=${pct}%${apply ? ` updated=${updated}` : ''}`)
       }
-
-      // Rate limit: ~5 req/s to OL API
-      await sleep(100)
     }
 
+    // Print newline after batch
+    console.log()
     offset += BATCH
   }
 
@@ -124,6 +120,7 @@ async function main() {
   console.log(`Hit rate:        ${valid > 0 ? ((found / valid) * 100).toFixed(1) : 0}%`)
   if (apply) console.log(`Updated in DB:   ${updated}`)
   if (errors) console.log(`Errors:          ${errors}`)
+  console.log(`Time:            ${((Date.now() - t0) / 1000).toFixed(0)}s`)
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
