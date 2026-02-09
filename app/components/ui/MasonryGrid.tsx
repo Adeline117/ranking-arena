@@ -9,7 +9,7 @@ interface MasonryGridProps {
 }
 
 export default function MasonryGrid({
-  columns = { mobile: 2, desktop: 3 },
+  columns = { mobile: 1, desktop: 3 },
   gap = '16px',
   children,
 }: MasonryGridProps) {

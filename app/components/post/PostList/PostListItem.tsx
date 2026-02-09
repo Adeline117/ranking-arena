@@ -173,12 +173,15 @@ export const PostListItem = memo(function PostListItem({
                 borderRadius: 8,
                 overflow: 'hidden',
                 position: 'relative',
+                background: tokens.colors.bg.tertiary,
+                flexShrink: 0,
               }}
             >
               <img
                 src={imgUrl}
                 alt={`Image ${idx + 1}`}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                loading="lazy"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
               />
               {idx === 3 && p.images!.length > 4 && (
                 <div style={{
@@ -385,6 +388,7 @@ export const PostListItem = memo(function PostListItem({
     prev.post.is_pinned === next.post.is_pinned &&
     prev.isMasonry === next.isMasonry &&
     prev.language === next.language &&
-    prev.currentUserId === next.currentUserId
+    prev.currentUserId === next.currentUserId &&
+    prev.translatedListPosts[prev.post.id] === next.translatedListPosts[next.post.id]
   )
 })
