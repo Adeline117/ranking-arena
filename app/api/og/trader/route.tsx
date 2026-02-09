@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
 
           {/* Branding */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 24 }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: colors.brand }}>ArenaFi</span>
+            <span style={{ fontSize: 18, fontWeight: 700, color: colors.brand }}>Arena</span>
             <span style={{ fontSize: 14, color: colors.sub }}>arenafi.org</span>
           </div>
         </div>

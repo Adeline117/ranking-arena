@@ -43,7 +43,7 @@ export async function generateMetadata({
       title,
       description: groupDescription,
       url: `${baseUrl}/groups/${id}`,
-      siteName: 'ArenaFi',
+      siteName: 'Arena',
       type: 'website',
     },
     twitter: {

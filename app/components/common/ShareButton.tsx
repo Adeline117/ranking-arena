@@ -28,14 +28,14 @@ function buildShareText(data: ShareData, lang: string): string {
       const period = data.period || '90D'
       const roi = data.roi != null ? data.roi.toFixed(1) : '0'
       return isZh
-        ? `在ArenaFi发现了一位表现优异的交易员 ${name}，${period} ROI ${roi}% ${data.url}`
-        : `Found a top trader ${name} on ArenaFi, ${period} ROI ${roi}% ${data.url}`
+        ? `在Arena发现了一位表现优异的交易员 ${name}，${period} ROI ${roi}% ${data.url}`
+        : `Found a top trader ${name} on Arena, ${period} ROI ${roi}% ${data.url}`
     }
     case 'post': {
       const title = data.title || ''
       return isZh
-        ? `${title} - 来自ArenaFi社区 ${data.url}`
-        : `${title} - from ArenaFi Community ${data.url}`
+        ? `${title} - 来自Arena社区 ${data.url}`
+        : `${title} - from Arena Community ${data.url}`
     }
     case 'library': {
       const title = data.title || ''

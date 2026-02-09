@@ -2628,11 +2628,11 @@ const en = {
     backToGroups2: 'Back to Groups',
 
     // About page
-    aboutTitle: 'About ArenaFi',
+    aboutTitle: 'About Arena',
     aboutSubtitle: 'The open ranking platform for crypto traders',
-    aboutIntroTitle: 'What is ArenaFi?',
-    aboutIntroP1: 'ArenaFi is a data-driven crypto trader ranking platform. We aggregate on-chain and exchange data from 30+ centralized and decentralized exchanges to build transparent, verifiable performance leaderboards.',
-    aboutIntroP2: 'Whether you are looking for top-performing traders to follow, comparing strategies across exchanges, or showcasing your own track record, ArenaFi provides the tools and data you need.',
+    aboutIntroTitle: 'What is Arena?',
+    aboutIntroP1: 'Arena is a data-driven crypto trader ranking platform. We aggregate on-chain and exchange data from 30+ centralized and decentralized exchanges to build transparent, verifiable performance leaderboards.',
+    aboutIntroP2: 'Whether you are looking for top-performing traders to follow, comparing strategies across exchanges, or showcasing your own track record, Arena provides the tools and data you need.',
     aboutFeaturesTitle: 'Core Features',
     aboutFeature1Title: 'Real-Time Leaderboard',
     aboutFeature1Desc: 'Rankings updated continuously with verified PnL, ROI, win rate, and risk metrics across multiple timeframes.',
@@ -2652,7 +2652,7 @@ const en = {
     aboutDataDEX: 'DEX: Hyperliquid, dYdX, GMX, Jupiter, Drift, and more',
     aboutDataOnChain: 'On-chain data verified through blockchain explorers and API integrations',
     aboutVisionTitle: 'Our Vision',
-    aboutVisionDesc: 'We believe transparency breeds trust. In a space where inflated screenshots and fake PnL run rampant, ArenaFi provides a neutral, data-backed arena where performance speaks for itself. Our goal is to become the standard for crypto trader evaluation worldwide.',
+    aboutVisionDesc: 'We believe transparency breeds trust. In a space where inflated screenshots and fake PnL run rampant, Arena provides a neutral, data-backed arena where performance speaks for itself. Our goal is to become the standard for crypto trader evaluation worldwide.',
     aboutLink: 'About',
 
     // FAQ search

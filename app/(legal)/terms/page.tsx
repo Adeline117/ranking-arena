@@ -61,7 +61,7 @@ export default function TermsOfServicePage() {
             color: 'var(--color-text-tertiary)',
             marginTop: tokens.spacing[1],
           }}>
-            ArenaFi (arenafi.org)
+            Arena (arenafi.org)
           </p>
         </div>
 
