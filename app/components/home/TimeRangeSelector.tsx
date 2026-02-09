@@ -61,13 +61,13 @@ export default function TimeRangeSelector({
               padding: `6px ${tokens.spacing[4]}`,
               minHeight: 32,
               background: isActive
-                ? tokens.colors.bg.primary
+                ? `${tokens.colors.accent.primary}20`
                 : 'transparent',
               color: isActive
-                ? tokens.colors.text.primary
+                ? tokens.colors.accent.primary
                 : tokens.colors.text.tertiary,
               border: isActive
-                ? `1px solid ${tokens.colors.border.primary}`
+                ? `1px solid ${tokens.colors.accent.primary}60`
                 : '1px solid transparent',
               borderRadius: tokens.radius.md,
               fontSize: tokens.typography.fontSize.sm,

@@ -130,15 +130,15 @@ function BookshelfTab() {
 }
 
 export default function GroupsFeedPage() {
-  const { language, t } = useLanguage()
+  const { language: _language, t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
   const [myGroups, setMyGroups] = useState<Group[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(true)
+  const [_loadingGroups, setLoadingGroups] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [subTab, setSubTab] = useState<SubTabKey>('recommended')
-  const [activeTab, setActiveTab] = useState<'feed' | 'discover'>('feed')
-  const [allGroups, setAllGroups] = useState<Group[]>([])
-  const [loadingDiscover, setLoadingDiscover] = useState(false)
+  const [_activeTab, _setActiveTab] = useState<'feed' | 'discover'>('feed')
+  const [_allGroups, _setAllGroups] = useState<Group[]>([])
+  const [_loadingDiscover, _setLoadingDiscover] = useState(false)
 
   useEffect(() => {
     // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()

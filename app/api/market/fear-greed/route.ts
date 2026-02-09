@@ -12,7 +12,7 @@ export async function GET() {
         },
       }
     )
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: 'Failed to fetch Fear & Greed Index' },
       { status: 500 }

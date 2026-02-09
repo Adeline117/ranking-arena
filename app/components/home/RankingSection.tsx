@@ -527,6 +527,15 @@ export default function RankingSection({
             onChange={onTimeRangeChange}
             disabled={loading}
           />
+          {dataSources.length > 1 && (
+            <ExchangeFilter
+              availableSources={dataSources}
+              selectedExchange={selectedExchange}
+              onExchangeChange={handleExchangeChange}
+              isPro={isPro}
+              onProRequired={handleProRequired}
+            />
+          )}
         </Box>
 
         {/* 右侧: 操作按钮 */}
@@ -629,7 +638,9 @@ export default function RankingSection({
           background: tokens.glass.bg.light,
           borderRadius: tokens.radius.md,
         }}>
-          {`该平台共 ${advancedFiltered.length} 名交易员`}
+          {language === 'zh'
+            ? `该平台共 ${advancedFiltered.length} 名交易员`
+            : `${advancedFiltered.length} traders on this exchange`}
         </Box>
       )}
 

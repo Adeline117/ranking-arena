@@ -34,13 +34,15 @@ interface Alert {
 }
 
 export async function GET(req: Request) {
-  // Optional auth via CRON_SECRET
+  // Auth via CRON_SECRET
   const cronSecret = process.env.CRON_SECRET
-  if (cronSecret) {
+  if (!cronSecret) {
+    if (process.env.NODE_ENV !== 'development') {
+      return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+    }
+  } else {
     const authHeader = req.headers.get('authorization')
-    const url = new URL(req.url)
-    const queryToken = url.searchParams.get('token')
-    const token = authHeader?.replace('Bearer ', '') || queryToken
+    const token = authHeader?.replace('Bearer ', '')
     if (token !== cronSecret) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }

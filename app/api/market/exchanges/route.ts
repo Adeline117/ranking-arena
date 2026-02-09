@@ -9,7 +9,7 @@ export async function GET() {
         'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=900',
       },
     })
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: 'Failed to fetch exchange volumes' },
       { status: 500 }

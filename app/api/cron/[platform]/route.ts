@@ -56,10 +56,14 @@ export async function POST(
         logger.warn(`Invalid QStash signature for ${platform}`)
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
-    } else if (process.env.NODE_ENV === 'production') {
-      // 生产环境要求签名
+    } else {
+      // Require CRON_SECRET auth
       const authHeader = request.headers.get('authorization')
-      if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      if (!process.env.CRON_SECRET) {
+        if (process.env.NODE_ENV !== 'development') {
+          return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+        }
+      } else if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
     }

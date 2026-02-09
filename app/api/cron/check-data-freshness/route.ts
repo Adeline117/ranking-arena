@@ -188,8 +188,8 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
  * GET - 检查各平台数据新鲜度（cron 触发）
  */
 export async function GET(req: Request) {
-  // 验证授权（如果配置了 CRON_SECRET）
-  if (process.env.CRON_SECRET && !isAuthorized(req)) {
+  // 验证授权
+  if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
