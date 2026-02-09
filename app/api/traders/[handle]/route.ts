@@ -39,7 +39,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback?: T): Promise<
 const logger = createLogger('trader-api')
 
 // Next.js 缓存配置
-export const revalidate = 300 // 5分钟
+export const revalidate = 60 // 1分钟，与 Cache-Control s-maxage 一致
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''

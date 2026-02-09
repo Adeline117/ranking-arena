@@ -9,7 +9,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import logger from '@/lib/logger'
 
-export const revalidate = 300 // 5分钟
+export const revalidate = 60 // 1分钟，与 Cache-Control s-maxage 一致
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''

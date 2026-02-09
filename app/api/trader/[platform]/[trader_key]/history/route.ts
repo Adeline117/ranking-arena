@@ -51,7 +51,7 @@ export async function GET(
   if (cached) {
     return NextResponse.json(cached, {
       headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60',
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
         'X-Cache': 'HIT',
       },
     })
@@ -166,7 +166,7 @@ export async function GET(
     
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60',
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
         'X-Cache': 'MISS',
       },
     })
