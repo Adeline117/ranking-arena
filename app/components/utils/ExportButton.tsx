@@ -53,8 +53,8 @@ export default function ExportButton({ data, filename, format = 'csv' }: ExportB
       style={{
         padding: '8px 16px',
         borderRadius: tokens.radius.md,
-        border: '1px solid rgba(255,255,255,0.1)',
-        background: 'rgba(255,255,255,0.05)',
+        border: '1px solid var(--glass-border-light)',
+        background: 'var(--overlay-hover)',
         color: tokens.colors.text.primary,
         fontWeight: 700,
         fontSize: tokens.typography.fontSize.sm,
@@ -62,10 +62,10 @@ export default function ExportButton({ data, filename, format = 'csv' }: ExportB
         transition: 'all 200ms ease',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+        e.currentTarget.style.background = 'var(--glass-bg-light)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+        e.currentTarget.style.background = 'var(--overlay-hover)'
       }}
     >
       {t('export')} {format.toUpperCase()}

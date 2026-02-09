@@ -128,7 +128,7 @@ export default function LevelBadge({ exp, isPro, size = 'sm', showName = false }
       {isPro && (
         <span
           className={`${s.text} font-bold px-1 rounded`}
-          style={{ color: '#EAB308', background: 'rgba(234,179,8,0.1)' }}
+          style={{ color: 'var(--color-accent-warning)', background: 'var(--color-orange-bg-light)' }}
         >
           PRO
         </span>

@@ -81,7 +81,7 @@ export default function TimeRangeSelector({
               transition: `all ${tokens.transition.fast}`,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
               boxShadow: isActive
-                ? '0 1px 3px rgba(0,0,0,0.08)'
+                ? '0 1px 3px var(--color-overlay-subtle)'
                 : 'none',
               lineHeight: 1,
             }}

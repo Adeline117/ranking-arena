@@ -170,7 +170,7 @@ export default function ChatSettingsDrawer({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
+          background: 'var(--color-overlay-dark)',
           zIndex: tokens.zIndex.overlay,
           transition: 'opacity 0.2s',
         }}
@@ -189,7 +189,7 @@ export default function ChatSettingsDrawer({
           zIndex: tokens.zIndex.modal,
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.3)',
+          boxShadow: 'var(--shadow-elevated)',
           overflow: 'auto',
         }}
       >
@@ -595,7 +595,7 @@ function SettingsToggle({
             height: 20,
             borderRadius: '50%',
             background: tokens.colors.white,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+            boxShadow: tokens.shadow.sm,
             transition: 'left 0.2s',
           }}
         />

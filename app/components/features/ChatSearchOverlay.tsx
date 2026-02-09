@@ -156,7 +156,7 @@ export default function ChatSearchOverlay({
     const parts = snippet.split(regex)
     return parts.map((part, i) =>
       regex.test(part) ? (
-        <span key={i} style={{ background: 'rgba(149, 117, 205, 0.4)', borderRadius: 2, padding: '0 1px' }}>
+        <span key={i} style={{ background: 'var(--color-highlight-bg)', borderRadius: 2, padding: '0 1px' }}>
           {part}
         </span>
       ) : (

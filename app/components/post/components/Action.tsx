@@ -42,7 +42,7 @@ export function Action({
       onMouseUp={() => setIsPressed(false)}
       style={{
         border: 'none',
-        background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
+        background: active ? 'var(--color-accent-primary-15)' : 'transparent',
         color: active ? tokens.colors.accent.brand : tokens.colors.interactive.inactive,
         cursor: 'pointer',
         padding: '6px 12px',
@@ -54,7 +54,7 @@ export function Action({
         borderRadius: 8,
         transition: 'all 0.2s ease',
         transform: isPressed ? 'scale(0.95)' : 'scale(1)',
-        boxShadow: active ? '0 0 0 1px rgba(139, 111, 168, 0.3)' : 'none',
+        boxShadow: active ? '0 0 0 1px var(--color-accent-primary-30)' : 'none',
       }}
       onMouseEnter={(e) => {
         if (!active) {

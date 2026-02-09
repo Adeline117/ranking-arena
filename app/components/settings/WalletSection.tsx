@@ -111,7 +111,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                   width: 40,
                   height: 40,
                   borderRadius: tokens.radius.md,
-                  background: 'rgba(99, 102, 241, 0.1)',
+                  background: 'var(--color-indigo-subtle)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -217,8 +217,8 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                     borderRadius: tokens.radius.md,
-                    border: `1px solid rgba(139, 111, 168, 0.3)`,
-                    background: 'rgba(139, 111, 168, 0.08)',
+                    border: `1px solid var(--color-accent-primary-30)`,
+                    background: 'var(--color-accent-primary-08)',
                     color: tokens.colors.accent.brandLight,
                     fontWeight: 700,
                     fontSize: tokens.typography.fontSize.sm,
@@ -247,7 +247,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.lg,
             background: hasNFT
-              ? 'rgba(47, 229, 125, 0.05)'
+              ? 'var(--color-accent-success-05)'
               : tokens.colors.bg.tertiary,
             border: `1px solid ${hasNFT ? 'rgba(47, 229, 125, 0.2)' : tokens.colors.border.primary}`,
           }}
@@ -258,7 +258,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 width: 40,
                 height: 40,
                 borderRadius: tokens.radius.md,
-                background: hasNFT ? 'rgba(47, 229, 125, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                background: hasNFT ? 'var(--color-accent-success-10)' : 'var(--overlay-hover)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

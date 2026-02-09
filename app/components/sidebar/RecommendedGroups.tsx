@@ -42,7 +42,7 @@ function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: 
         height: size,
         minWidth: size,
         borderRadius: tokens.radius.md,
-        background: 'linear-gradient(135deg, rgba(139,111,168,0.3), rgba(212,168,67,0.3))',
+        background: 'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -57,7 +57,7 @@ function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: 
 }
 
 export default function RecommendedGroups() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
@@ -82,7 +82,7 @@ export default function RecommendedGroups() {
   }, [])
 
   return (
-    <SidebarCard title={isZh ? '推荐小组' : 'Recommended Groups'}>
+    <SidebarCard title={t('sidebarRecommendedGroups')}>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[1, 2, 3].map(i => (
@@ -91,13 +91,13 @@ export default function RecommendedGroups() {
         </div>
       ) : error ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {isZh ? '加载失败' : 'Failed to load'}
+          {t('sidebarLoadFailedShort')}
         </div>
       ) : groups.length === 0 ? (
         <div style={{ padding: '24px 12px', textAlign: 'center' }}>
           <Image src="/stickers/confused.png" alt="No groups found" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
           <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-            {isZh ? '暂无小组' : 'No groups available'}
+            {t('sidebarNoGroups')}
           </p>
         </div>
       ) : (
@@ -145,7 +145,7 @@ export default function RecommendedGroups() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {(g.member_count || 0).toLocaleString()} {isZh ? '成员' : 'members'}
+                    {(g.member_count || 0).toLocaleString()} {t('members')}
                     {desc && (
                       <span style={{ marginLeft: 6, color: tokens.colors.text.secondary }}>
                         {desc.length > 20 ? desc.slice(0, 20) + '...' : desc}

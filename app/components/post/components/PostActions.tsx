@@ -54,7 +54,7 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
       onMouseUp={() => setIsPressed(false)}
       aria-pressed={active}
       style={{
-        background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
+        background: active ? 'var(--color-accent-primary-15)' : 'transparent',
         border: 'none',
         color: active ? tokens.colors.accent.primary : tokens.colors.text.secondary,
         cursor: 'pointer',
@@ -66,7 +66,7 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
         transition: 'all 0.2s ease',
         transform: isPressed ? 'scale(0.9)' : 'scale(1)',
         fontWeight: active ? 900 : 400,
-        boxShadow: active ? '0 0 0 1px rgba(139, 111, 168, 0.2)' : 'none',
+        boxShadow: active ? '0 0 0 1px var(--color-accent-primary-20)' : 'none',
       }}
       onMouseEnter={(e) => {
         if (!active) {
@@ -135,7 +135,7 @@ export function Action({ icon, text, onClick, active, count, showCount }: Action
       aria-pressed={active}
       style={{
         border: 'none',
-        background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
+        background: active ? 'var(--color-accent-primary-15)' : 'transparent',
         color: active ? ARENA_PURPLE : tokens.colors.interactive.inactive,
         cursor: 'pointer',
         padding: '6px 12px',
@@ -147,7 +147,7 @@ export function Action({ icon, text, onClick, active, count, showCount }: Action
         borderRadius: 8,
         transition: 'all 0.2s ease',
         transform: isPressed ? 'scale(0.95)' : 'scale(1)',
-        boxShadow: active ? '0 0 0 1px rgba(139, 111, 168, 0.3)' : 'none',
+        boxShadow: active ? '0 0 0 1px var(--color-accent-primary-30)' : 'none',
       }}
       onMouseEnter={(e) => {
         if (!active) {

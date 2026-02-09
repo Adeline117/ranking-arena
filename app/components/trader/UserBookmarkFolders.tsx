@@ -246,7 +246,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
                   borderRadius: tokens.radius.sm,
                   border: 'none',
                   background: subscriptions[folder.id] 
-                    ? 'rgba(255,215,0,0.15)' 
+                    ? 'var(--color-gold-highlight)' 
                     : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.1)',
                   color: subscriptions[folder.id] 
                     ? tokens.colors.medal.gold 

@@ -129,7 +129,7 @@ function BookshelfTab() {
                 transition: `all 0.25s cubic-bezier(0.4, 0, 0.2, 1)`,
                 display: 'flex',
                 flexDirection: 'column',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                boxShadow: '0 2px 8px var(--color-overlay-subtle)',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = typeColor + '60'
@@ -139,7 +139,7 @@ function BookshelfTab() {
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = tokens.colors.border.primary
                 e.currentTarget.style.transform = 'none'
-                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'
+                e.currentTarget.style.boxShadow = '0 2px 8px var(--color-overlay-subtle)'
               }}
             >
               {/* Cover */}

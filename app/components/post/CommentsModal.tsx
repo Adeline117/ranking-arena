@@ -380,6 +380,7 @@ export default function CommentsModal({
                     ta.style.height = Math.min(ta.scrollHeight, 100) + 'px'
                   }}
                   placeholder={`${t('reply')} @${replyingTo.handle}`}
+                  aria-label={`${t('reply')} @${replyingTo.handle}`}
                   onKeyDown={handleKeyDown}
                   rows={1}
                   style={{
@@ -462,6 +463,7 @@ export default function CommentsModal({
               ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
             }}
             placeholder={t('writeComment')}
+            aria-label={t('writeComment')}
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {

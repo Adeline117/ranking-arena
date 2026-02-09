@@ -224,7 +224,7 @@ export default function OverviewPerformanceCard({
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(20px)',
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: `0 4px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.05)`,
+        boxShadow: `0 4px 24px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)`,
       }}
     >
       <Box style={{ padding: tokens.spacing[5] }}>
@@ -318,7 +318,7 @@ export default function OverviewPerformanceCard({
                       cursor: isDisabled ? 'not-allowed' : 'pointer',
                       transition: 'all 0.2s ease',
                       fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                      boxShadow: period === p ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
+                      boxShadow: period === p ? '0 2px 8px var(--color-overlay-subtle)' : 'none',
                       opacity: isDisabled ? 0.5 : 1,
                     }}
                     title={isDisabled ? t('noDataForPeriod') : undefined}
@@ -541,7 +541,7 @@ export default function OverviewPerformanceCard({
                       background: tokens.colors.bg.primary,
                       border: `1px solid ${tokens.colors.border.primary}`,
                       borderRadius: tokens.radius.lg,
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                      boxShadow: '0 8px 24px var(--color-overlay-medium)',
                       width: 280,
                       zIndex: 50,
                       display: 'none',
@@ -759,7 +759,7 @@ function ScoreBar({
           borderRadius: tokens.radius.full,
           overflow: 'hidden',
           position: 'relative',
-          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.15)',
+          boxShadow: 'inset 0 1px 2px var(--color-overlay-light)',
         }}
       >
         <Box

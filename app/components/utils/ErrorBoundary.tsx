@@ -121,7 +121,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 width: this.props.level === 'component' ? 48 : 80,
                 height: this.props.level === 'component' ? 48 : 80,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, rgba(255, 124, 124, 0.15) 0%, rgba(255, 124, 124, 0.05) 100%)',
+                background: 'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-08) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -171,9 +171,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 style={{
                   marginBottom: 24,
                   padding: 16,
-                  background: 'rgba(255, 124, 124, 0.1)',
+                  background: 'var(--color-accent-error-10)',
                   borderRadius: 8,
-                  border: '1px solid rgba(255, 124, 124, 0.2)',
+                  border: '1px solid var(--color-accent-error-20)',
                   textAlign: 'left',
                   fontSize: 12,
                   fontFamily: 'monospace',
@@ -299,9 +299,9 @@ export function SectionErrorBoundary({
             alignItems: 'center',
             justifyContent: 'center',
             padding: 24,
-            background: 'rgba(255, 124, 124, 0.05)',
+            background: 'var(--color-accent-error-08)',
             borderRadius: 12,
-            border: '1px solid rgba(255, 124, 124, 0.1)',
+            border: '1px solid var(--color-accent-error-10)',
           }}
         >
           <svg
@@ -323,10 +323,10 @@ export function SectionErrorBoundary({
             style={{
               marginTop: 12,
               padding: '8px 16px',
-              background: 'rgba(139, 111, 168, 0.2)',
+              background: 'var(--color-accent-primary-20)',
               color: 'var(--color-brand)',
               borderRadius: 6,
-              border: '1px solid rgba(139, 111, 168, 0.3)',
+              border: '1px solid var(--color-accent-primary-30)',
               cursor: 'pointer',
               fontSize: 13,
             }}
@@ -363,7 +363,7 @@ export function CompactErrorBoundary({
             padding: '12px 16px',
             background: 'var(--color-accent-error-08)',
             borderRadius: 8,
-            border: '1px solid rgba(255, 124, 124, 0.15)',
+            border: '1px solid var(--color-accent-error-15)',
             display: 'flex',
             alignItems: 'center',
             gap: 10,
@@ -389,7 +389,7 @@ export function CompactErrorBoundary({
               background: 'transparent',
               color: 'var(--color-brand)',
               borderRadius: 4,
-              border: '1px solid rgba(139, 111, 168, 0.3)',
+              border: '1px solid var(--color-accent-primary-30)',
               cursor: 'pointer',
               fontSize: 12,
             }}

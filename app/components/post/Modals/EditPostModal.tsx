@@ -30,7 +30,7 @@ export function EditPostModal({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0, 0, 0, 0.65)',
+        background: 'var(--color-backdrop-medium)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -57,10 +57,11 @@ export function EditPostModal({
         </h2>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
+          <label htmlFor="edit-post-title" style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
             {t('title')}
           </label>
           <input
+            id="edit-post-title"
             type="text"
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
@@ -78,10 +79,11 @@ export function EditPostModal({
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
+          <label htmlFor="edit-post-content" style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
             {t('content')}
           </label>
           <textarea
+            id="edit-post-content"
             value={content}
             onChange={(e) => onContentChange(e.target.value)}
             rows={8}
@@ -124,7 +126,7 @@ export function EditPostModal({
               padding: '10px 20px',
               borderRadius: 10,
               border: 'none',
-              background: saving || !title.trim() ? 'rgba(139,111,168,0.3)' : tokens.colors.accent.brand,
+              background: saving || !title.trim() ? 'var(--color-accent-primary-30)' : tokens.colors.accent.brand,
               color: tokens.colors.white,
               fontWeight: 900,
               fontSize: 14,

@@ -41,7 +41,7 @@ function GroupAvatar({ name, avatarUrl, size = 32 }: { name: string; avatarUrl: 
         height: size,
         minWidth: size,
         borderRadius: tokens.radius.md,
-        background: 'linear-gradient(135deg, rgba(139,111,168,0.3), rgba(212,168,67,0.3))',
+        background: 'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -69,7 +69,7 @@ function formatRelativeTime(dateStr: string, isZh: boolean): string {
 }
 
 export default function MyGroups() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
   const { user } = useAuthSession()
   const [groups, setGroups] = useState<Group[]>([])
@@ -92,10 +92,10 @@ export default function MyGroups() {
   }, [user])
 
   return (
-    <SidebarCard title={isZh ? '我的小组' : 'My Groups'}>
+    <SidebarCard title={t('sidebarMyGroups')}>
       {!user ? (
         <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
-          {isZh ? '登录后查看' : 'Login to view'}
+          {t('sidebarLoginToView')}
         </p>
       ) : loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -103,7 +103,7 @@ export default function MyGroups() {
         </div>
       ) : groups.length === 0 ? (
         <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
-          {isZh ? '还没有加入小组' : 'No groups joined yet'}
+          {t('sidebarNoGroupsJoined')}
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

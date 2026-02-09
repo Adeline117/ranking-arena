@@ -297,8 +297,8 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                 style={{
                   padding: tokens.spacing[2],
                   borderRadius: tokens.radius.md,
-                  background: 'rgba(255, 0, 0, 0.1)',
-                  border: '1px solid rgba(255, 0, 0, 0.3)',
+                  background: 'var(--color-accent-error-10)',
+                  border: '1px solid var(--color-red-border)',
                   marginBottom: tokens.spacing[2],
                 }}
               >

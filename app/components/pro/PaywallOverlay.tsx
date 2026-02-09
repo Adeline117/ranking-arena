@@ -101,7 +101,7 @@ export default function PaywallOverlay({ feature, compact = false, style }: Payw
           width: 56,
           height: 56,
           borderRadius: tokens.radius.full,
-          background: 'rgba(212, 168, 71, 0.12)',
+          background: 'var(--color-pro-gold-bg)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

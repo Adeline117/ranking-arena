@@ -38,7 +38,7 @@ function formatPrice(n: number | null): string {
 function ChangeCell({ value }: { value: number | null }) {
   if (value == null) return <span>--</span>
   const color = value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
-  const bg = value >= 0 ? 'rgba(47, 229, 125, 0.1)' : 'rgba(255, 124, 124, 0.1)'
+  const bg = value >= 0 ? 'rgba(47, 229, 125, 0.1)' : 'var(--color-accent-error-10)'
   return (
     <span style={{
       color,
@@ -342,7 +342,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
             <span style={{
               padding: '1px 6px',
               borderRadius: tokens.radius.full,
-              background: showFavOnly ? 'rgba(0,0,0,0.15)' : tokens.colors.bg.tertiary,
+              background: showFavOnly ? 'var(--color-overlay-light)' : tokens.colors.bg.tertiary,
               fontSize: tokens.typography.fontSize.xs,
               fontWeight: 700,
             }}>

@@ -307,6 +307,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               placeholder={auth.isAuthenticated ? t('writeComment') : t('loginBeforeComment')}
+              aria-label={t('writeComment')}
               disabled={!auth.isAuthenticated || submittingComment}
               style={{
                 width: '100%',
@@ -328,7 +329,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                 style={{
                   marginTop: 8,
                   padding: '8px 16px',
-                  background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
+                  background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'var(--color-accent-primary-30)',
                   color: tokens.colors.white,
                   border: 'none',
                   borderRadius: 8,

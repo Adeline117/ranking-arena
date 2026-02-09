@@ -97,6 +97,10 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
             />
           ))}
         </div>
+      ) : error ? (
+        <div className="p-8 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+          Failed to load proposals. Please try again later.
+        </div>
       ) : !proposals?.length ? (
         <div className="p-8 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
           No proposals found.

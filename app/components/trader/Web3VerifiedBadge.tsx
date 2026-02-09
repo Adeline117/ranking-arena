@@ -22,8 +22,8 @@ export function Web3VerifiedBadge({ size = 'sm' }: Web3VerifiedBadgeProps) {
         gap: 3,
         padding: size === 'sm' ? '1px 6px' : '2px 8px',
         borderRadius: tokens.radius.full,
-        background: 'rgba(139, 92, 246, 0.12)',
-        border: '1px solid rgba(139, 92, 246, 0.25)',
+        background: 'var(--color-violet-subtle)',
+        border: '1px solid var(--color-violet-border)',
         whiteSpace: 'nowrap',
         lineHeight: 1,
       }}

@@ -139,7 +139,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   return (
     <Box ref={modalRef} role="dialog" aria-modal="true" aria-label={t('createGroupChat')} style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'var(--color-backdrop)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }} onClick={onClose}>
       <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{
         width: 420, maxWidth: '90vw', maxHeight: '80vh',

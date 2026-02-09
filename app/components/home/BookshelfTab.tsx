@@ -142,7 +142,7 @@ export default function BookshelfTab() {
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
           </svg>
           <p style={{ fontSize: 16, marginBottom: 8 }}>
-            {isZh ? '还没有收藏的书籍' : 'No books in your shelf yet'}
+            {t('sidebarNoBooksYet')}
           </p>
           <p style={{ fontSize: 13, marginBottom: 16 }}>
             {isZh ? '去书城发现感兴趣的书籍吧' : 'Discover books in the library'}

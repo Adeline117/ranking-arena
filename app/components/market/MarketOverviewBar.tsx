@@ -187,7 +187,7 @@ export default function MarketOverviewBar() {
               width: 6,
               height: 6,
               borderRadius: '50%',
-              backgroundColor: '#16c784',
+              backgroundColor: 'var(--color-accent-success)',
               display: 'inline-block',
             }}
             title="实时数据已连接"

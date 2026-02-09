@@ -111,7 +111,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
             borderRadius: 12,
             border: '1px solid var(--color-border-primary)',
             background: 'var(--color-bg-secondary)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            boxShadow: '0 4px 12px var(--color-overlay-light)',
             zIndex: 100,
           }}
         >

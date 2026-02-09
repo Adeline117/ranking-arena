@@ -218,7 +218,7 @@ export default function Button({
           <span
             className="spinner-sm"
             style={{
-              borderColor: 'rgba(255, 255, 255, 0.3)',
+              borderColor: 'var(--glass-border-heavy)',
               borderTopColor: 'currentColor',
             }}
           />

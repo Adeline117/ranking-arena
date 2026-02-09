@@ -104,7 +104,7 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
           alignItems: 'center',
           gap: tokens.spacing[2],
           padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-          background: 'rgba(239, 68, 68, 0.15)',
+          background: 'var(--color-accent-error-15)',
           borderRadius: tokens.radius.full,
           fontSize: tokens.typography.fontSize.sm,
           color: tokens.colors.accent.error,

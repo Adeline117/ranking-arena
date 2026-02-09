@@ -99,8 +99,8 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
   // Styles
   const panelBg = themeIsDark ? '#1e1e36' : '#fff'
   const panelText = themeIsDark ? '#d4d4d8' : '#1a1a1a'
-  const panelBorder = themeIsDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
-  const panelSubtle = themeIsDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
+  const panelBorder = themeIsDark ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'
+  const panelSubtle = themeIsDark ? 'var(--overlay-hover)' : 'rgba(0,0,0,0.03)'
   const accent = 'var(--color-accent-primary, #6366f1)'
   const highlightBg = themeIsDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.12)'
 

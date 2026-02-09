@@ -140,8 +140,8 @@ export function CustomPollCard({
                   bottom: 0,
                   width: `${votePercentage}%`,
                   background: hasVoted
-                    ? 'rgba(139, 111, 168, 0.2)'
-                    : 'rgba(139, 111, 168, 0.1)',
+                    ? 'var(--color-accent-primary-20)'
+                    : 'var(--color-accent-primary-10)',
                   transition: 'width 0.3s ease',
                 }} />
               )}
@@ -176,7 +176,7 @@ export function CustomPollCard({
             padding: '8px 16px',
             background: selectedOptions.length > 0 && !votingInProgress
               ? ARENA_PURPLE
-              : 'rgba(139, 111, 168, 0.3)',
+              : 'var(--color-accent-primary-30)',
             color: tokens.colors.white,
             border: 'none',
             borderRadius: 8,

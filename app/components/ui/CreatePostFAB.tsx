@@ -40,8 +40,8 @@ export default function CreatePostFAB() {
         color: tokens.colors.white,
         cursor: 'pointer',
         boxShadow: hover
-          ? '0 8px 24px rgba(124, 58, 237, 0.4)'
-          : '0 4px 16px rgba(124, 58, 237, 0.25)',
+          ? '0 8px 24px var(--color-accent-primary-40)'
+          : '0 4px 16px var(--color-accent-primary-20)',
         transform: hover ? 'scale(1.08)' : 'scale(1)',
         transition: 'all 0.2s ease',
         display: 'flex',

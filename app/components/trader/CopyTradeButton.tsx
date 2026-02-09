@@ -129,7 +129,7 @@ export default function CopyTradeButton({
           background: `linear-gradient(135deg, rgba(156, 163, 175, 0.2) 0%, rgba(107, 114, 128, 0.15) 100%)`,
           border: `2px dashed rgba(156, 163, 175, 0.5)`,
           cursor: 'not-allowed',
-          boxShadow: `0 2px 8px rgba(0, 0, 0, 0.1)`,
+          boxShadow: `0 2px 8px var(--color-overlay-subtle)`,
         }}
       >
         <Box
@@ -181,10 +181,10 @@ export default function CopyTradeButton({
         onClick={() => setShowWarning(true)}
         style={{
           background: `linear-gradient(135deg, ${tokens.colors.accent.success} 0%, ${tokens.colors.accent.success} 50%, ${tokens.colors.accent.success} 100%)`,
-          border: '2px solid rgba(255, 255, 255, 0.3)',
+          border: '2px solid var(--glass-border-heavy)',
           padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
           borderRadius: tokens.radius.xl,
-          boxShadow: `0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)`,
+          boxShadow: `0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3), inset 0 1px 0 var(--glass-border-heavy)`,
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[2],
@@ -199,7 +199,7 @@ export default function CopyTradeButton({
         }}
         onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
           e.currentTarget.style.transform = 'translateY(0) scale(1)'
-          e.currentTarget.style.boxShadow = `0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)`
+          e.currentTarget.style.boxShadow = `0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3), inset 0 1px 0 var(--glass-border-heavy)`
         }}
       >
         <style>{`
@@ -213,7 +213,7 @@ export default function CopyTradeButton({
             width: 24,
             height: 24,
             borderRadius: tokens.radius.full,
-            background: 'rgba(255, 255, 255, 0.25)',
+            background: 'var(--glass-bg-heavy)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

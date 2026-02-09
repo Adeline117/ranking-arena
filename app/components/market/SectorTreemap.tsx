@@ -256,7 +256,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 width: node.width,
                 height: node.height,
                 background: getChangeColor(node.changePct),
-                border: '1px solid rgba(0,0,0,0.15)',
+                border: '1px solid var(--color-overlay-light)',
                 cursor: 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
@@ -266,7 +266,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 transition: 'filter 0.15s ease, transform 0.15s ease',
                 filter: isHovered ? 'brightness(1.2)' : 'brightness(1)',
                 zIndex: isHovered ? 10 : 1,
-                boxShadow: isHovered ? '0 0 0 2px rgba(255,255,255,0.6)' : 'none',
+                boxShadow: isHovered ? '0 0 0 2px var(--glass-border-heavy)' : 'none',
                 padding: 4,
               }}
             >
@@ -276,7 +276,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                     fontSize: Math.max(10, Math.min(16, node.width / 6)),
                     fontWeight: 700,
                     color: '#fff',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                    textShadow: '0 1px 2px var(--color-overlay-dark)',
                     lineHeight: 1.2,
                   }}>
                     {node.name}
@@ -284,8 +284,8 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                   <span style={{
                     fontSize: Math.max(9, Math.min(12, node.width / 8)),
                     fontWeight: 600,
-                    color: 'rgba(255,255,255,0.85)',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                    color: 'var(--glass-bg-heavy)',
+                    textShadow: '0 1px 2px var(--color-overlay-dark)',
                   }}>
                     {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
                   </span>
@@ -294,7 +294,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
               {node.width > 60 && node.height > 50 && (
                 <span style={{
                   fontSize: 9,
-                  color: 'rgba(255,255,255,0.6)',
+                  color: 'var(--glass-border-heavy)',
                   marginTop: 2,
                 }}>
                   {node.category}
@@ -322,7 +322,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
             pointerEvents: 'none',
             zIndex: 1000,
             whiteSpace: 'nowrap',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            boxShadow: 'var(--shadow-sm-dark)',
           }}>
             <strong>{node.name}</strong> · {node.category}<br />
             市值: ${(node.marketCap / 1e3).toFixed(0)}B · {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
