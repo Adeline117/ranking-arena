@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 
 // 缓存配置
 const CACHE_TTL = 5 * 60 * 1000 // 5分钟
@@ -115,7 +116,7 @@ export function useProStatus(): ProStatus {
         setExpiresAt(finalExpires)
       }
     } catch (err) {
-      console.error('Error checking pro status:', err)
+      logger.error('Error checking pro status:', err)
       if (isMountedRef.current) {
         setIsPro(false)
         setPlan(null)

@@ -21,6 +21,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react'
+import { logger } from '@/lib/logger'
 
 export type SyncEventType =
   | 'FOLLOW_CHANGED'
@@ -71,7 +72,7 @@ export function useBroadcastSync<T = unknown>(channelName: string) {
         try {
           listener(event.data)
         } catch (error) {
-          console.error('[BroadcastSync] Listener error:', error)
+          logger.error('[BroadcastSync] Listener error:', error)
         }
       })
     }
@@ -98,7 +99,7 @@ export function useBroadcastSync<T = unknown>(channelName: string) {
     try {
       channelRef.current.postMessage(event)
     } catch (error) {
-      console.error('[BroadcastSync] Broadcast error:', error)
+      logger.error('[BroadcastSync] Broadcast error:', error)
     }
   }, [])
 

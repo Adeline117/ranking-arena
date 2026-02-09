@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
 
@@ -76,7 +77,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         setUsers([])
       }
     } catch (err) {
-      console.error('Error loading users:', err)
+      logger.error('Error loading users:', err)
       setError(t('adminNetworkErrorRetry'))
       setUsers([])
     } finally {

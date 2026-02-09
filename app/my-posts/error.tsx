@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 export default function MyPostsError({
   error,
@@ -15,7 +16,7 @@ export default function MyPostsError({
   const { t } = useLanguage()
 
   useEffect(() => {
-    console.error('[MyPostsPage Error]', error)
+    logger.error('[MyPostsPage Error]', error)
   }, [error])
 
   return (

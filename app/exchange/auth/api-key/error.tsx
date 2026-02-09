@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 export default function ExchangeApiKeyError({
   error,
@@ -15,7 +16,7 @@ export default function ExchangeApiKeyError({
   const { t } = useLanguage()
 
   useEffect(() => {
-    console.error('[ExchangeApiKeyPage Error]', error)
+    logger.error('[ExchangeApiKeyPage Error]', error)
   }, [error])
 
   return (

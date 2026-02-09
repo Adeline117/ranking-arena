@@ -5,6 +5,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { PostWithAuthor, PostListOptions } from './posts'
+import { logger } from '@/lib/logger'
 
 /** Raw post row returned from the weighted query join */
 interface WeightedPostRow {
@@ -356,7 +357,7 @@ export async function getWeightedSearchResults(
     })
 
   if (error) {
-    console.error('Weighted search RPC failed, falling back to standard search:', error)
+    logger.error('Weighted search RPC failed, falling back to standard search:', error)
     
     // 回退到标准搜索
     const { data: fallbackData, error: fallbackError } = await supabase

@@ -11,6 +11,7 @@ import { tokens } from '@/lib/design-tokens'
 import type { LibraryItem } from '@/lib/types/library'
 import BookCard from './BookCard'
 import BookCover from './BookCover'
+import { logger } from '@/lib/logger'
 
 const CATEGORIES = [
   { key: 'all', en: 'All', zh: '全部' },
@@ -57,7 +58,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
     fetch(`/api/library?sort=rating&limit=6&language=${language}`)
       .then(r => r.json())
       .then(data => setFeatured((data.items || []).filter((i: LibraryItem) => i.cover_url || i.rating)))
-      .catch(console.error)
+      .catch((e) => logger.error('Unhandled error', e))
   }, [language])
 
   const fetchItems = useCallback(async () => {
@@ -75,7 +76,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
       setItems(data.items || [])
       setTotal(data.total || 0)
     } catch (e) {
-      console.error('Failed to fetch library:', e)
+      logger.error('Failed to fetch library:', e)
     } finally {
       setLoading(false)
     }

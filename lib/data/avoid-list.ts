@@ -3,6 +3,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 类型定义
@@ -212,7 +213,7 @@ export async function getUserAvoidVote(
     .maybeSingle()
 
   if (error) {
-    console.error('[avoid-list] 获取用户投票失败:', error)
+    logger.error('[avoid-list] 获取用户投票失败:', error)
     throw error
   }
 
@@ -281,7 +282,7 @@ export async function updateAvoidVote(
     .single()
 
   if (error) {
-    console.error('[avoid-list] 更新避雷投票失败:', error)
+    logger.error('[avoid-list] 更新避雷投票失败:', error)
     throw error
   }
 

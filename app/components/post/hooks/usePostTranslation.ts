@@ -7,6 +7,7 @@
 
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { logger } from '@/lib/logger'
 
 export interface UsePostTranslationOptions {
   targetLanguage: 'zh' | 'en'
@@ -220,7 +221,7 @@ export function usePostTranslation(options: UsePostTranslationOptions): UsePostT
       setTranslatedListPosts(prev => ({ ...prev, ...translatedMap }))
     } catch (err: unknown) {
       // Silent fail for batch translation
-      console.error('Batch translation failed:', err)
+      logger.error('Batch translation failed:', err)
     } finally {
       setTranslatingList(false)
     }
@@ -263,7 +264,7 @@ export function usePostTranslation(options: UsePostTranslationOptions): UsePostT
       setTranslatedComments(prev => ({ ...prev, ...translatedMap }))
     } catch (err: unknown) {
       // Silent fail for comment translation
-      console.error('Comment translation failed:', err)
+      logger.error('Comment translation failed:', err)
     } finally {
       setTranslatingComments(false)
     }

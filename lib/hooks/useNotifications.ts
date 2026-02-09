@@ -9,6 +9,7 @@ import { useAuthSession } from './useAuthSession'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { type NotificationWithActor } from '@/lib/types'
+import { logger } from '@/lib/logger'
 
 interface UseNotificationsOptions {
   /** 每页数量 */
@@ -81,7 +82,7 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
       setHasMore(items.length === limit)
       setOffset(fetchOffset + items.length)
     } catch (err) {
-      console.error('[useNotifications] fetch error:', err)
+      logger.error('[useNotifications] fetch error:', err)
     } finally {
       setLoading(false)
       pendingRef.current = false

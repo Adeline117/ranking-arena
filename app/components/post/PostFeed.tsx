@@ -22,6 +22,7 @@ import { PostSkeleton } from '../ui/Skeleton'
 import { SortButtons, type SortType, AvatarLink, PostModal, CustomPollCard, PostDetailActions } from './components'
 import { PostListItem } from './PostList'
 import { EditPostModal, RepostModal } from './Modals'
+import { logger } from '@/lib/logger'
 
 // 本地类型（扩展后端类型）
 type Post = PostWithUserState
@@ -321,7 +322,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       setRepostCounts(prev => ({ ...prev, ...newRepostCounts }))
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
-      console.error('加载更多失败:', err)
+      logger.error('加载更多失败:', err)
     } finally {
       setLoadingMore(false)
     }
@@ -474,7 +475,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 .then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) })
             }
           } catch (err) {
-            console.error('Failed to load single post:', err)
+            logger.error('Failed to load single post:', err)
           }
         }
         loadSinglePost()
@@ -544,7 +545,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       }
     } catch (err) {
       // FIX: Show error toast for network/unexpected errors
-      console.error('[PostFeed] toggleReaction error:', err)
+      logger.error('[PostFeed] toggleReaction error:', err)
       showToast(t('networkError'), 'error')
     } finally {
       lockRef.current.delete(key)
@@ -610,7 +611,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       }
     } catch (err) {
       // FIX: Show error toast for network/unexpected errors
-      console.error('[PostFeed] toggleVote error:', err)
+      logger.error('[PostFeed] toggleVote error:', err)
       showToast(t('networkError'), 'error')
     } finally {
       lockRef.current.delete(key)
@@ -679,7 +680,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         showToast(data.error || t('voteFailed'), 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] custom poll vote failed:', err)
+      logger.error('[PostFeed] custom poll vote failed:', err)
       showToast(t('voteFailed'), 'error')
     } finally {
       setVotingCustomPoll(false)
@@ -805,7 +806,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         showToast(result.error || t('repostFailed'), 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] repost failed:', err)
+      logger.error('[PostFeed] repost failed:', err)
       showToast(t('networkError'), 'error')
     } finally {
       setRepostLoading(prev => ({ ...prev, [postId]: false }))
@@ -866,7 +867,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         showToast(data.error || t('editFailed'), 'error')
       }
     } catch (err) {
-      console.error('[PostFeed] edit failed:', err)
+      logger.error('[PostFeed] edit failed:', err)
       showToast(t('editFailed'), 'error')
     } finally {
       setSavingEdit(false)

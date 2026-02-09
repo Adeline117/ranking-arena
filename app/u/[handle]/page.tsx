@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import UserProfileClient from './UserProfileClient'
+import { logger } from '@/lib/logger'
 
 export const revalidate = 60
 
@@ -81,7 +82,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     hasPro = hasPro || subscriptionData?.data?.tier === 'pro'
     hasClaimedTrader = (claimedTraderRes.count || 0) > 0
   } catch (err) {
-    console.error('[UserProfile] Failed to fetch counts:', err)
+    logger.error('[UserProfile] Failed to fetch counts:', err)
   }
 
   return {

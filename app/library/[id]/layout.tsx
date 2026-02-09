@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -54,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       }
     }
   } catch (error) {
-    console.error('[Metadata] library item metadata error:', error)
+    logger.error('[Metadata] library item metadata error:', error)
   }
 
   return {

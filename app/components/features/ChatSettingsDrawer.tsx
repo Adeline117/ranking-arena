@@ -10,6 +10,7 @@ import { getProfileUrl } from '@/lib/utils/profile-navigation'
 import dynamic from 'next/dynamic'
 const ReportModal = dynamic(() => import('@/app/components/ui/ReportModal'), { ssr: false })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type ChatSettings = {
   remark: string | null
@@ -74,7 +75,7 @@ export default function ChatSettingsDrawer({
         setRemarkInput(data.settings.remark || '')
       }
     } catch (error) {
-      console.error('Failed to load settings:', error)
+      logger.error('Failed to load settings:', error)
     } finally {
       setLoading(false)
     }
@@ -119,7 +120,7 @@ export default function ChatSettingsDrawer({
         showToast(t('remarkUpdated'), 'success')
       }
     } catch (error) {
-      console.error('Failed to update setting:', error)
+      logger.error('Failed to update setting:', error)
       showToast(t('updateFailed'), 'error')
     } finally {
       setSaving(false)

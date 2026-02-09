@@ -8,6 +8,7 @@
 import { useState, useCallback, useRef } from 'react'
 import type { PostWithUserState } from '@/lib/types'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { logger } from '@/lib/logger'
 
 type Post = PostWithUserState
 
@@ -180,7 +181,7 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       setBookmarkCounts(prev => ({ ...prev, ...countMap }))
     } catch (err: unknown) {
       // Silent fail for bookmark status fetch
-      console.error('Failed to fetch bookmark status:', err)
+      logger.error('Failed to fetch bookmark status:', err)
     }
   }, [accessToken])
 

@@ -51,7 +51,7 @@ export function PostModal({ children, onClose }: PostModalProps) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             style={{
               border: 'none',

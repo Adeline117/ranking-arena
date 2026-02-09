@@ -15,6 +15,7 @@
 import { Pool, type PoolConfig } from 'pg';
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr';
 import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
+import { logger } from '@/lib/logger'
 
 let pool: Pool | null = null;
 
@@ -80,7 +81,7 @@ export function getPool(): Pool {
 
     // Handle pool-level errors to prevent unhandled rejections
     pool.on('error', (err) => {
-      console.error('[db/pool] Unexpected pool error:', err.message);
+      logger.error('[db/pool] Unexpected pool error:', err.message);
       resetPool();
     });
   }

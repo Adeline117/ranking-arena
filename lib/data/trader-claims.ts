@@ -3,6 +3,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 类型定义
@@ -109,7 +110,7 @@ export async function isTraderVerified(
     .maybeSingle()
 
   if (error) {
-    console.error('[trader-claims] 检查认证状态失败:', error)
+    logger.error('[trader-claims] 检查认证状态失败:', error)
     throw error
   }
 
@@ -154,7 +155,7 @@ export async function getUserClaim(
     .maybeSingle()
 
   if (error) {
-    console.error('[trader-claims] 获取用户认领失败:', error)
+    logger.error('[trader-claims] 获取用户认领失败:', error)
     throw error
   }
 
@@ -198,7 +199,7 @@ export async function getPendingClaims(
     .range(offset, offset + limit - 1)
 
   if (error) {
-    console.error('[trader-claims] 获取待审核申请失败:', error)
+    logger.error('[trader-claims] 获取待审核申请失败:', error)
     throw error
   }
 
@@ -281,7 +282,7 @@ export async function reviewClaim(
     .single()
 
   if (updateError) {
-    console.error('[trader-claims] 更新申请状态失败:', updateError)
+    logger.error('[trader-claims] 更新申请状态失败:', updateError)
     throw updateError
   }
 
@@ -332,7 +333,7 @@ export async function updateVerifiedTrader(
     .single()
 
   if (error) {
-    console.error('[trader-claims] 更新认证资料失败:', error)
+    logger.error('[trader-claims] 更新认证资料失败:', error)
     throw error
   }
 

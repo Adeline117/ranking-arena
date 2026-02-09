@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type Group = {
   id: string
@@ -74,7 +75,7 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
 
         setGroups(groupsWithRole)
       } catch (err) {
-        console.error('Error:', err)
+        logger.error('Error:', err)
       } finally {
         setLoading(false)
       }

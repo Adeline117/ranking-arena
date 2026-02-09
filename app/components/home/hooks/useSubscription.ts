@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 
 // 缓存配置
 const CACHE_TTL = 5 * 60 * 1000 // 5 分钟缓存
@@ -99,7 +100,7 @@ export function useSubscription() {
         setTier(finalTier)
       }
     } catch (error) {
-      console.error('Error checking subscription:', error)
+      logger.error('Error checking subscription:', error)
       if (isMountedRef.current) {
         setIsPro(false)
         setTier('free')

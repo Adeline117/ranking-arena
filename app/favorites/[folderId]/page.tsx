@@ -15,6 +15,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface BookmarkFolder {
   id: string
@@ -123,7 +124,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           setEditIsPublic(data.data.folder.is_public)
         }
       } catch (err) {
-        console.error('Error loading folder:', err)
+        logger.error('Error loading folder:', err)
         setError(t('networkError'))
       } finally {
         setLoading(false)
@@ -162,7 +163,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         showToast(data.error || t('saveFailed2'), 'error')
       }
     } catch (err) {
-      console.error('Error saving folder:', err)
+      logger.error('Error saving folder:', err)
       showToast(t('networkError'), 'error')
     } finally {
       setSaving(false)
@@ -198,7 +199,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         showToast(data.error || t('deleteFailed'), 'error')
       }
     } catch (err) {
-      console.error('Error deleting folder:', err)
+      logger.error('Error deleting folder:', err)
       showToast(t('networkError'), 'error')
     }
   }
@@ -231,7 +232,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         showToast(data.error || (isSubscribed ? t('unbookmarkFailed') : t('bookmarkFailed')), 'error')
       }
     } catch (err) {
-      console.error('Error subscribing to folder:', err)
+      logger.error('Error subscribing to folder:', err)
       showToast(t('networkError'), 'error')
     } finally {
       setSubscribing(false)
@@ -259,7 +260,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           setFullPostContent(data.data.content)
         }
       } catch (err) {
-        console.error('Error loading post:', err)
+        logger.error('Error loading post:', err)
       } finally {
         setPostDetailLoading(false)
       }
@@ -310,7 +311,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         }
       }
     } catch (err) {
-      console.error('Error removing bookmark:', err)
+      logger.error('Error removing bookmark:', err)
       showToast(t('networkError'), 'error')
     } finally {
       setRemovingBookmark(prev => ({ ...prev, [postId]: false }))

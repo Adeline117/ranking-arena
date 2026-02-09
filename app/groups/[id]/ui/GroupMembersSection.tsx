@@ -51,7 +51,7 @@ const modalBackdropStyle: React.CSSProperties = {
 // Shared close button component
 function CloseButton({ onClick }: { onClick: () => void }): React.ReactElement {
   return (
-    <button
+    <button aria-label="Close"
       onClick={onClick}
       style={{
         background: 'transparent',

@@ -7,6 +7,7 @@ import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 const SUPPORT_HANDLE = 'adeline'
 const SUPPORT_EMAIL = 'adelinewen1107@outlook.com'
@@ -118,7 +119,7 @@ export default function ContactSupportButton({
         }
       }
     } catch (error) {
-      console.error('Contact support error:', error)
+      logger.error('Contact support error:', error)
       showToast(t('operationFailedRetry'), 'error')
     } finally {
       setLoading(false)

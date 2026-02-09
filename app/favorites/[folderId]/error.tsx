@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 export default function FavoriteFolderError({
   error,
@@ -15,7 +16,7 @@ export default function FavoriteFolderError({
   const { t } = useLanguage()
 
   useEffect(() => {
-    console.error('[FavoriteFolderPage Error]', error)
+    logger.error('[FavoriteFolderPage Error]', error)
   }, [error])
 
   return (

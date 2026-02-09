@@ -9,6 +9,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 类型定义
@@ -307,7 +308,7 @@ export class RiskAlertService {
       .single()
 
     if (error) {
-      console.error('[RiskAlert] 创建预警失败:', error)
+      logger.error('[RiskAlert] 创建预警失败:', error)
       throw error
     }
 
@@ -338,7 +339,7 @@ export class RiskAlertService {
       .eq('enabled', true)
 
     if (error) {
-      console.error('[RiskAlert] 获取预警配置失败:', error)
+      logger.error('[RiskAlert] 获取预警配置失败:', error)
       throw error
     }
 
@@ -378,7 +379,7 @@ export class RiskAlertService {
       .single()
 
     if (error) {
-      console.error('[RiskAlert] 更新预警配置失败:', error)
+      logger.error('[RiskAlert] 更新预警配置失败:', error)
       throw error
     }
 
@@ -407,7 +408,7 @@ export class RiskAlertService {
       .eq('alert_type', alertType)
 
     if (error) {
-      console.error('[RiskAlert] 删除预警配置失败:', error)
+      logger.error('[RiskAlert] 删除预警配置失败:', error)
       throw error
     }
   }
@@ -425,7 +426,7 @@ export class RiskAlertService {
       .limit(limit)
 
     if (error) {
-      console.error('[RiskAlert] 获取预警失败:', error)
+      logger.error('[RiskAlert] 获取预警失败:', error)
       throw error
     }
 
@@ -458,7 +459,7 @@ export class RiskAlertService {
       .eq('user_id', userId)
 
     if (error) {
-      console.error('[RiskAlert] 标记预警失败:', error)
+      logger.error('[RiskAlert] 标记预警失败:', error)
       throw error
     }
   }
@@ -474,7 +475,7 @@ export class RiskAlertService {
       .eq('is_read', false)
 
     if (error) {
-      console.error('[RiskAlert] 标记所有预警失败:', error)
+      logger.error('[RiskAlert] 标记所有预警失败:', error)
       throw error
     }
   }

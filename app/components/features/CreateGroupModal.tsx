@@ -118,7 +118,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
           padding: '16px 20px', borderBottom: `1px solid ${tokens.colors.border.primary}`,
         }}>
           <Text size="lg" weight="bold">{t('createGroupChat')}</Text>
-          <button onClick={onClose} style={{
+          <button aria-label="Close" onClick={onClose} style={{
             width: 32, height: 32, borderRadius: '50%', border: 'none',
             background: 'transparent', color: tokens.colors.text.secondary, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',

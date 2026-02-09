@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 export default function MessagesError({
   error,
@@ -15,7 +16,7 @@ export default function MessagesError({
   const { t } = useLanguage()
 
   useEffect(() => {
-    console.error('[Messages Error]', error)
+    logger.error('[Messages Error]', error)
   }, [error])
 
   return (

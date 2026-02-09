@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase/client'
 import { usePremium } from '@/lib/premium/hooks'
 import { clearSubscriptionCache } from '@/app/components/home/hooks/useSubscription'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { logger } from '@/lib/logger'
 
 // 图标组件
 const CheckCircleIcon = ({ size = 64 }: { size?: number }) => (
@@ -182,9 +183,9 @@ export default function PaymentSuccessPage() {
       // API 返回非 200，记录错误
       try {
         const errorData = await response.json()
-        console.error('[Payment Success] Verification API error:', errorData)
+        logger.error('[Payment Success] Verification API error:', errorData)
       } catch {
-        console.error('[Payment Success] Verification API error:', response.status)
+        logger.error('[Payment Success] Verification API error:', response.status)
       }
 
       // 验证 API 失败，可能 webhook 已经处理了，通过轮询数据库确认
@@ -213,7 +214,7 @@ export default function PaymentSuccessPage() {
       // 所有重试都失败
       setVerificationStatus('error')
     } catch (error) {
-      console.error('Failed to verify subscription:', error)
+      logger.error('Failed to verify subscription:', error)
 
       // 清除缓存，尝试刷新 session 后直接查询确认
       await supabase.auth.refreshSession()

@@ -11,6 +11,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { type NotificationWithActor } from '@/lib/types'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type Notification = NotificationWithActor
 
@@ -51,7 +52,7 @@ export default function NotificationsList() {
     } catch (err) {
       if (abortSignal?.aborted) return
 
-      console.error('Failed to load notifications:', err)
+      logger.error('Failed to load notifications:', err)
       showToast(t('unexpectedError'), 'error')
     } finally {
       if (!abortSignal?.aborted) {

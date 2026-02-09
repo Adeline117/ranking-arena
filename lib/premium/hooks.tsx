@@ -13,6 +13,7 @@ import {
   type PremiumFeatureId,
   SUBSCRIPTION_PLANS,
 } from './index'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Feature Limits Export (for UI display)
@@ -122,10 +123,10 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
             return
           }
         } else {
-          console.warn('[PremiumProvider] Subscription API returned error:', response.status)
+          logger.warn('[PremiumProvider] Subscription API returned error:', response.status)
         }
       } catch (fetchError) {
-        console.error('[PremiumProvider] Failed to fetch subscription:', fetchError)
+        logger.error('[PremiumProvider] Failed to fetch subscription:', fetchError)
       }
       
       // API 未实现或失败时，尝试直接从数据库查询（降级方案）
@@ -190,7 +191,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
           return
         }
       } catch (dbError) {
-        console.error('[PremiumProvider] Failed to query database:', dbError)
+        logger.error('[PremiumProvider] Failed to query database:', dbError)
       }
       
       // 所有方法都失败时使用默认值

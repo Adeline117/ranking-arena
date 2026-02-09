@@ -8,6 +8,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from './Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type BookmarkFolder = {
   id: string
@@ -97,7 +98,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
       const data = await response.json()
       setFolders(data.data?.folders || data.folders || [])
     } catch (error) {
-      console.error('Load bookmarks failed:', error)
+      logger.error('Load bookmarks failed:', error)
       showToast(t('loadBookmarksFailed'), 'error')
       setFolders([])
     } finally {
@@ -139,7 +140,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
       setShowCreateForm(false)
       showToast(t('bookmarkFolderCreated'), 'success')
     } catch (error) {
-      console.error('Create bookmark folder failed:', error)
+      logger.error('Create bookmark folder failed:', error)
       showToast(t('createFailed'), 'error')
     } finally {
       setCreating(false)

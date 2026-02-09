@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 export default function PostError({
   error,
@@ -15,7 +16,7 @@ export default function PostError({
   const { t } = useLanguage()
 
   useEffect(() => {
-    console.error('[PostPage Error]', error)
+    logger.error('[PostPage Error]', error)
   }, [error])
 
   return (

@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { logger } from '@/lib/logger'
 
 interface SearchResult {
   type: 'library' | 'group' | 'post' | 'trader'
@@ -204,7 +205,7 @@ function SearchContent() {
           }))
         }
       } catch (error) {
-        console.error('Search error:', error)
+        logger.error('Search error:', error)
         setSearchError(true)
         showToast(isZh ? '搜索失败' : 'Search failed', 'error')
       } finally {

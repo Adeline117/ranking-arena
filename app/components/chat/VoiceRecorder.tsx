@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface VoiceRecorderProps {
   onVoiceSent: (url: string, duration: number) => void
@@ -67,7 +68,7 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
 
           onVoiceSent(urlData.publicUrl, recordedDuration)
         } catch (err) {
-          console.error('Voice upload failed:', err)
+          logger.error('Voice upload failed:', err)
         } finally {
           setUploading(false)
           setDuration(0)
@@ -82,7 +83,7 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
         setDuration(Math.round((Date.now() - startTimeRef.current) / 1000))
       }, 1000)
     } catch (err) {
-      console.error('Microphone access denied:', err)
+      logger.error('Microphone access denied:', err)
     }
   }, [onVoiceSent])
 

@@ -4,6 +4,7 @@ import React, { Component, ReactNode } from 'react'
 import Link from 'next/link'
 import { t } from '@/lib/i18n'
 import { tokens } from '@/lib/design-tokens'
+import { logger } from '@/lib/logger'
 
 interface Props {
   children: ReactNode
@@ -47,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary 捕获到错误:', error, errorInfo)
+    logger.error('ErrorBoundary 捕获到错误:', { errorInfo }, error)
 
     this.setState({
       error,

@@ -14,6 +14,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { logger } from '@/lib/logger'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -205,7 +206,7 @@ export default function FollowingPage() {
         const data = await response.json()
         
         if (!response.ok) {
-          console.error('Error fetching following:', data.error)
+          logger.error('Error fetching following:', data.error)
           setItems([])
           showToast(t('loadFollowingFailed'), 'error')
           return
@@ -213,7 +214,7 @@ export default function FollowingPage() {
 
         setItems(data.items || [])
       } catch (error) {
-        console.error('Error loading following:', error)
+        logger.error('Error loading following:', error)
         setItems([])
         showToast(t('loadFollowingFailed'), 'error')
       } finally {

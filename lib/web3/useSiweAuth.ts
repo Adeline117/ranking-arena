@@ -20,6 +20,7 @@ import { useAccount, useSignMessage } from 'wagmi'
 import { SiweMessage } from 'siwe'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface SiweAuthResult {
   action: 'existing_user' | 'new_user'
@@ -191,7 +192,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
         })
 
         if (otpError) {
-          console.warn('[SIWE] OTP verification failed, session may require email confirmation:', otpError)
+          logger.warn('[SIWE] OTP verification failed, session may require email confirmation:', otpError)
         }
       }
 

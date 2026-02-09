@@ -7,6 +7,7 @@ import { ButtonSpinner } from './LoadingSpinner'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type UserFollowButtonProps = {
   targetUserId: string
@@ -76,7 +77,7 @@ export default function UserFollowButton({
         }
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-          console.error('Check following error:', error)
+          logger.error('Check following error:', error)
         }
       } finally {
         setInitialLoading(false)

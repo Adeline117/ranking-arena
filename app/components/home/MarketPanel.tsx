@@ -11,6 +11,7 @@ import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { getCache, setCache } from '@/lib/cache'
 import { useToast } from '../ui/Toast'
+import { logger } from '@/lib/logger'
 
 type MarketRow = {
   symbol: string
@@ -47,7 +48,7 @@ export default function MarketPanel() {
         setCustomPairs(data.market_pairs)
       }
     } catch (err) {
-      console.error('[MarketPanel] Load custom pairs error:', err)
+      logger.error('[MarketPanel] Load custom pairs error:', err)
       loadPairsFromLocalStorage()
     }
   }
@@ -84,7 +85,7 @@ export default function MarketPanel() {
       setCustomPairs(pairs)
       setShowCustomize(false)
     } catch (err) {
-      console.error('Save custom pairs error:', err)
+      logger.error('Save custom pairs error:', err)
       // fallback: localStorage
       try {
         localStorage.setItem('market_pairs', JSON.stringify(pairs))
@@ -197,7 +198,7 @@ export default function MarketPanel() {
         }
       } catch (err: unknown) {
         if (!alive) return
-        console.error('[MarketPanel] 加载市场数据异常:', err)
+        logger.error('[MarketPanel] 加载市场数据异常:', err)
         setError(err instanceof Error ? err.message : t('loadFailed'))
         if (market.length === 0) {
           setMarket([])

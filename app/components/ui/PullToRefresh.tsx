@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface PullToRefreshProps {
   onRefresh: () => Promise<void>
@@ -82,7 +83,7 @@ export default function PullToRefresh({
       try {
         await onRefresh()
       } catch (error) {
-        console.error('Refresh failed:', error)
+        logger.error('Refresh failed:', error)
       } finally {
         setIsRefreshing(false)
         setPullDistance(0)

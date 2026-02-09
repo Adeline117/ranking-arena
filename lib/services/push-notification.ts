@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { sendPushNotification as sendWebPush } from '@/lib/utils/web-push'
 import type { PushPayload } from '@/lib/utils/web-push'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 类型定义
@@ -133,7 +134,7 @@ export class PushNotificationService {
       .single()
 
     if (error) {
-      console.error('[PushNotification] 注册订阅失败:', error)
+      logger.error('[PushNotification] 注册订阅失败:', error)
       throw error
     }
 
@@ -152,7 +153,7 @@ export class PushNotificationService {
       .eq('token', token)
 
     if (error) {
-      console.error('[PushNotification] 取消订阅失败:', error)
+      logger.error('[PushNotification] 取消订阅失败:', error)
       throw error
     }
   }
@@ -169,7 +170,7 @@ export class PushNotificationService {
       .eq('token', token)
 
     if (error) {
-      console.error('[PushNotification] 禁用订阅失败:', error)
+      logger.error('[PushNotification] 禁用订阅失败:', error)
       throw error
     }
   }
@@ -186,7 +187,7 @@ export class PushNotificationService {
       .eq('enabled', true)
 
     if (error) {
-      console.error('[PushNotification] 获取订阅失败:', error)
+      logger.error('[PushNotification] 获取订阅失败:', error)
       throw error
     }
 
@@ -286,7 +287,7 @@ export class PushNotificationService {
     notification: PushNotification
   ): Promise<SendResult> {
     if (!this.fcmServerKey) {
-      console.warn('[PushNotification] FCM_SERVER_KEY 未配置')
+      logger.warn('[PushNotification] FCM_SERVER_KEY 未配置')
       return { success: false, error: 'FCM 未配置' }
     }
 
@@ -335,14 +336,14 @@ export class PushNotificationService {
 
       if (!response.ok) {
         const error = await response.text()
-        console.error('[PushNotification] FCM 发送失败:', error)
+        logger.error('[PushNotification] FCM 发送失败:', error)
         return { success: false, error }
       }
 
       const result = await response.json()
       return { success: true, messageId: result.name }
     } catch (error) {
-      console.error('[PushNotification] FCM 请求失败:', error)
+      logger.error('[PushNotification] FCM 请求失败:', error)
       return { success: false, error: String(error) }
     }
   }

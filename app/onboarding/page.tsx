@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { tokens } from '@/lib/design-tokens'
 import { lightTokens, darkTokens } from '@/lib/theme-tokens'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { logger } from '@/lib/logger'
 
 type Theme = 'dark' | 'light'
 type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
@@ -137,7 +138,7 @@ export default function OnboardingPage() {
       const data = await res.json()
       setTraders(data.traders || [])
     } catch {
-      console.error('Failed to fetch traders')
+      logger.error('Failed to fetch traders')
     } finally {
       setLoadingTraders(false)
     }
@@ -151,7 +152,7 @@ export default function OnboardingPage() {
       const data = await res.json()
       setGroups(data.data || data.groups || [])
     } catch {
-      console.error('Failed to fetch groups')
+      logger.error('Failed to fetch groups')
     } finally {
       setLoadingGroups(false)
     }
@@ -236,13 +237,13 @@ export default function OnboardingPage() {
           .update(updates)
           .eq('id', userId)
         if (error) {
-          console.error('Error saving onboarding:', error)
+          logger.error('Error saving onboarding:', error)
         }
       }
       localStorage.setItem('hasOnboarded', 'true')
       setStep('complete')
     } catch (err) {
-      console.error('Error completing onboarding:', err)
+      logger.error('Error completing onboarding:', err)
       showToast(tr('saveFailed'), 'error')
     } finally {
       setSaving(false)

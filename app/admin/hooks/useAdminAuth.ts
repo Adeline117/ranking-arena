@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 
 // 管理员邮箱白名单（必须通过环境变量 NEXT_PUBLIC_ADMIN_EMAILS 配置，逗号分隔）
 // 安全默认值：空数组，不允许任何未配置的管理员
@@ -59,7 +60,7 @@ export function useAdminAuth() {
       setIsAdmin(true)
       setAuthChecking(false)
     } catch (error) {
-      console.error('Auth check failed:', error)
+      logger.error('Auth check failed:', error)
       router.push('/login')
     }
   }

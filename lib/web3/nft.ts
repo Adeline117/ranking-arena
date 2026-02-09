@@ -7,6 +7,7 @@
 
 import { type Address } from 'viem'
 import { CONTRACT_ADDRESSES, basePublicClient } from './contracts'
+import { logger } from '@/lib/logger'
 
 // ── ABI fragment for the membership check functions ──
 const MEMBERSHIP_ABI = [
@@ -61,7 +62,7 @@ export async function checkNFTMembership(walletAddress: string): Promise<boolean
     })
     return result as boolean
   } catch (err) {
-    console.error('[NFT] Failed to check membership:', err)
+    logger.error('[NFT] Failed to check membership:', err)
     return false
   }
 }

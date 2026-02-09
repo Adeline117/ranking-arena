@@ -15,6 +15,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from './useAuthSession'
+import { logger } from '@/lib/logger'
 
 export type Comment = {
   id: string
@@ -82,7 +83,7 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
         setHasMore(false)
       }
     } catch (err) {
-      console.error('[usePostComments] Failed to load comments:', err)
+      logger.error('[usePostComments] Failed to load comments:', err)
       setComments([])
       setHasMore(false)
     } finally {
@@ -118,7 +119,7 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
         setHasMore(false)
       }
     } catch (err) {
-      console.error('[usePostComments] Failed to load more:', err)
+      logger.error('[usePostComments] Failed to load more:', err)
     } finally {
       setLoadingMore(false)
     }
@@ -185,7 +186,7 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
         return null
       }
     } catch (err) {
-      console.error('[usePostComments] Submit failed:', err)
+      logger.error('[usePostComments] Submit failed:', err)
       setSubmitError('网络错误，请重试')
       setSubmitState('error')
       return null
@@ -265,7 +266,7 @@ export function usePostReaction() {
         return null
       }
     } catch (err) {
-      console.error('[usePostReaction] Failed:', err)
+      logger.error('[usePostReaction] Failed:', err)
       options?.onError?.('网络错误')
       return null
     } finally {

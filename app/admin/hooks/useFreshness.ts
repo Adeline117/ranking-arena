@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { logger } from '@/lib/logger'
 
 export interface PlatformFreshnessStatus {
   platform: string
@@ -41,7 +42,7 @@ export function useFreshness() {
       const data = await res.json()
       setFreshnessReport(data)
     } catch (err) {
-      console.error('Error loading freshness report:', err)
+      logger.error('Error loading freshness report:', err)
     } finally {
       setLoading(false)
     }

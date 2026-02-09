@@ -5,6 +5,7 @@
 
 import { ReactNode, createElement } from 'react'
 import { getStickerById, isPureSticker, extractStickerId, STICKER_PATTERN } from '@/lib/stickers'
+import { logger } from '@/lib/logger'
 
 // Arena 主题色
 export const ARENA_PURPLE = '#8b6fa8'
@@ -242,7 +243,7 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
             display: 'block',
           },
           onError: () => {
-            console.error('Video failed to load:', part.video?.originalUrl)
+            logger.error('Video failed to load:', part.video?.originalUrl)
           },
         }))
       }
@@ -276,7 +277,7 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
         title: part.video.type === 'youtube' ? 'YouTube 视频' : 'Bilibili 视频',
         onError: () => {
           // 视频加载失败时的处理
-          console.error('Video failed to load:', part.video?.originalUrl)
+          logger.error('Video failed to load:', part.video?.originalUrl)
         },
       }))
     }

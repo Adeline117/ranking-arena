@@ -8,6 +8,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import PostCard from '@/app/components/post/components/PostCard'
 import type { PostWithUserState } from '@/lib/types'
+import { logger } from '@/lib/logger'
 
 export default function FollowingFeed() {
   const { user, loading: authLoading } = useAuthSession()
@@ -46,7 +47,7 @@ export default function FollowingFeed() {
 
         setPosts((postsData as PostWithUserState[]) || [])
       } catch (e) {
-        console.error('Failed to fetch following feed:', e)
+        logger.error('Failed to fetch following feed:', e)
       } finally {
         setLoading(false)
       }

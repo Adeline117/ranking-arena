@@ -10,6 +10,7 @@
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
+import { logger } from '@/lib/logger'
 
 // 构建时使用占位符，运行时使用真实环境变量
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
@@ -81,7 +82,7 @@ export async function getUserFromToken(token: string): Promise<User | null> {
 
     return user
   } catch (error) {
-    console.error('[supabase/server] getUserFromToken 错误:', error)
+    logger.error('[supabase/server] getUserFromToken 错误:', error)
     return null
   }
 }
@@ -146,7 +147,7 @@ export async function getUserHandle(userId: string, fallbackEmail?: string): Pro
     
     return userId.slice(0, 8)
   } catch (error) {
-    console.error('[supabase/server] getUserHandle 错误:', error)
+    logger.error('[supabase/server] getUserHandle 错误:', error)
     return userId.slice(0, 8)
   }
 }
@@ -167,7 +168,7 @@ export async function getUserProfile(userId: string) {
     if (error) throw error
     return data
   } catch (error) {
-    console.error('[supabase/server] getUserProfile 错误:', error)
+    logger.error('[supabase/server] getUserProfile 错误:', error)
     return null
   }
 }

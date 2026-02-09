@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { PresetId } from '@/app/components/ranking/FilterPresets'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 类型定义
@@ -142,7 +143,7 @@ export function useSavedFilters(options: UseSavedFiltersOptions = {}): UseSavedF
         setActiveFilterId(activeId)
       }
     } catch (error) {
-      console.error('Failed to load saved filters:', error)
+      logger.error('Failed to load saved filters:', error)
     } finally {
       setIsLoading(false)
     }
@@ -153,7 +154,7 @@ export function useSavedFilters(options: UseSavedFiltersOptions = {}): UseSavedF
     try {
       localStorage.setItem(fullStorageKey, JSON.stringify(filters))
     } catch (error) {
-      console.error('Failed to persist filters:', error)
+      logger.error('Failed to persist filters:', error)
     }
   }, [fullStorageKey])
   
@@ -166,7 +167,7 @@ export function useSavedFilters(options: UseSavedFiltersOptions = {}): UseSavedF
         localStorage.removeItem(`${fullStorageKey}:active`)
       }
     } catch (error) {
-      console.error('Failed to persist active filter:', error)
+      logger.error('Failed to persist active filter:', error)
     }
   }, [fullStorageKey])
   

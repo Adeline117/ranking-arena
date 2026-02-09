@@ -6,6 +6,7 @@
  */
 
 import webpush from 'web-push'
+import { logger } from '@/lib/logger'
 
 // ── VAPID configuration ──
 
@@ -49,7 +50,7 @@ export async function sendPushNotification(
   payload: PushPayload
 ): Promise<boolean> {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    console.warn('[web-push] VAPID keys not configured')
+    logger.warn('[web-push] VAPID keys not configured')
     return false
   }
 
@@ -67,10 +68,10 @@ export async function sendPushNotification(
     const statusCode = (error as { statusCode?: number }).statusCode
     if (statusCode === 404 || statusCode === 410) {
       // Subscription expired or unsubscribed
-      console.warn('[web-push] Subscription expired:', subscription.endpoint)
+      logger.warn('[web-push] Subscription expired:', subscription.endpoint)
       return false
     }
-    console.error('[web-push] Send failed:', error)
+    logger.error('[web-push] Send failed:', error)
     throw error
   }
 }

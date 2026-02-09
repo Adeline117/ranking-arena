@@ -13,6 +13,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import { logger } from '@/lib/logger'
 
 interface BookmarkFolder {
   id: string
@@ -79,7 +80,7 @@ export default function FavoritesPage() {
         if (foldersResponse.ok) {
           setFolders(foldersData.data?.folders || [])
         } else {
-          console.error('Error fetching folders:', foldersData.error)
+          logger.error('Error fetching folders:', foldersData.error)
           setFolders([])
           showToast(t('loadFoldersFailed'), 'error')
         }
@@ -89,12 +90,12 @@ export default function FavoritesPage() {
         } else {
           // 订阅功能可能未启用，静默处理
           if (subscribedResponse.status !== 404) {
-            console.warn('[Favorites] Subscribed folders not available:', subscribedData.error?.message || subscribedResponse.status)
+            logger.warn('[Favorites] Subscribed folders not available:', subscribedData.error?.message || subscribedResponse.status)
           }
           setSubscribedFolders([])
         }
       } catch (error) {
-        console.error('Error loading folders:', error)
+        logger.error('Error loading folders:', error)
         setFolders([])
         setSubscribedFolders([])
         showToast(t('loadFoldersFailedRetry'), 'error')
@@ -136,7 +137,7 @@ export default function FavoritesPage() {
         showToast(data.error || t('createFailed'), 'error')
       }
     } catch (error) {
-      console.error('Error creating folder:', error)
+      logger.error('Error creating folder:', error)
       showToast(t('createFailed'), 'error')
     } finally {
       setCreating(false)

@@ -19,6 +19,7 @@ const UserFollowButton = dynamic(() => import('@/app/components/ui/UserFollowBut
 const MessageButton = dynamic(() => import('@/app/components/ui/MessageButton'), { ssr: false })
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
+import { logger } from '@/lib/logger'
 
 const ActivityHeatmap = dynamic(() => import('@/app/components/profile/ActivityHeatmap'), { ssr: false })
 const UserStreaks = dynamic(() => import('@/app/components/profile/UserStreaks'), { ssr: false })
@@ -194,7 +195,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
         }
       }
     }).catch((err) => {
-      console.error('[UserProfile] Auth check failed:', err)
+      logger.error('[UserProfile] Auth check failed:', err)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -238,7 +239,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
           .insert({ id: userId, handle: defaultHandle })
         
         if (insertError && insertError.code !== '23505') {
-          console.warn('Profile insert failed (non-conflict):', insertError)
+          logger.warn('Profile insert failed (non-conflict):', insertError)
         }
           
         // Always fetch the current profile state
@@ -268,7 +269,7 @@ export default function UserProfileClient({ handle, serverProfile }: UserProfile
         }
       }
     } catch (error) {
-      console.error('Error creating own profile:', error)
+      logger.error('Error creating own profile:', error)
       showToast(t('loadUserDataFailed'), 'error')
     }
   }

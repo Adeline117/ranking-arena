@@ -4,6 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 interface AlertPayload {
   title: string
@@ -70,12 +71,12 @@ async function sendSlackAlert(webhookUrl: string, payload: AlertPayload) {
     })
     
     if (!response.ok) {
-      console.error('[Alert] Slack webhook failed:', response.status)
+      logger.error('[Alert] Slack webhook failed:', response.status)
       return false
     }
     return true
   } catch (error) {
-    console.error('[Alert] Slack webhook error:', error)
+    logger.error('[Alert] Slack webhook error:', error)
     return false
   }
 }
@@ -127,12 +128,12 @@ async function sendFeishuAlert(webhookUrl: string, payload: AlertPayload) {
     })
     
     if (!response.ok) {
-      console.error('[Alert] Feishu webhook failed:', response.status)
+      logger.error('[Alert] Feishu webhook failed:', response.status)
       return false
     }
     return true
   } catch (error) {
-    console.error('[Alert] Feishu webhook error:', error)
+    logger.error('[Alert] Feishu webhook error:', error)
     return false
   }
 }
@@ -140,7 +141,7 @@ async function sendFeishuAlert(webhookUrl: string, payload: AlertPayload) {
 async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
   const resendApiKey = process.env.RESEND_API_KEY
   if (!resendApiKey) {
-    console.error('[Alert] RESEND_API_KEY not configured')
+    logger.error('[Alert] RESEND_API_KEY not configured')
     return false
   }
 
@@ -199,12 +200,12 @@ async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('[Alert] Email send failed:', response.status, errorText)
+      logger.error(`[Alert] Email send failed: ${response.status}`, { errorText })
       return false
     }
     return true
   } catch (error) {
-    console.error('[Alert] Email send error:', error)
+    logger.error('[Alert] Email send error:', error)
     return false
   }
 }

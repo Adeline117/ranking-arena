@@ -3,6 +3,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 export interface Post {
   id: string
@@ -433,7 +434,7 @@ export async function incrementViewCount(
   const { error } = await supabase.rpc('increment_post_view', { post_id: postId })
   if (error) {
     // RPC 不存在时的降级处理（view_count 在数据库层自增更安全）
-    console.warn('increment_post_view RPC not available:', error.message)
+    logger.warn('increment_post_view RPC not available:', error.message)
   }
 }
 

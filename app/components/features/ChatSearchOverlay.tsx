@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type SearchMatch = {
   message_id: string
@@ -81,7 +82,7 @@ export default function ChatSearchOverlay({
         setNextCursor(data.next_cursor)
       }
     } catch (error) {
-      console.error('Search failed:', error)
+      logger.error('Search failed:', error)
     } finally {
       setLoading(false)
       setHasSearched(true)

@@ -21,6 +21,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { SiweMessage } from 'siwe'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Types
@@ -232,7 +233,7 @@ export function useOneClickSiwe(options: UseOneClickSiweOptions = {}): UseOneCli
         })
 
         if (otpError) {
-          console.warn('[OneClickSIWE] OTP verification warning:', otpError)
+          logger.warn('[OneClickSIWE] OTP verification warning:', otpError)
         }
       }
 

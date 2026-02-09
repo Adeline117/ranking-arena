@@ -9,6 +9,7 @@
  */
 
 import { supabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 
 const STORAGE_KEY = 'arena_search_history'
 const MAX_HISTORY_ITEMS = 10
@@ -67,7 +68,7 @@ export async function addToHistory(query: string, userId?: string): Promise<stri
     try {
       await syncHistoryToServer(userId, newHistory)
     } catch (error) {
-      console.error('Failed to sync search history:', error)
+      logger.error('Failed to sync search history:', error)
     }
   }
 
@@ -88,7 +89,7 @@ export async function removeFromHistory(query: string, userId?: string): Promise
     try {
       await syncHistoryToServer(userId, newHistory)
     } catch (error) {
-      console.error('Failed to sync search history:', error)
+      logger.error('Failed to sync search history:', error)
     }
   }
 
@@ -106,7 +107,7 @@ export async function clearHistory(userId?: string): Promise<void> {
     try {
       await syncHistoryToServer(userId, [])
     } catch (error) {
-      console.error('Failed to clear search history:', error)
+      logger.error('Failed to clear search history:', error)
     }
   }
 }
@@ -182,7 +183,7 @@ export async function loadAndMergeHistory(userId: string): Promise<string[]> {
 
     return merged
   } catch (error) {
-    console.error('Failed to load search history from server:', error)
+    logger.error('Failed to load search history from server:', error)
     return getLocalHistory()
   }
 }

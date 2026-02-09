@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 export default function SettingsError({
   error,
@@ -15,7 +16,7 @@ export default function SettingsError({
   const { t } = useLanguage()
 
   useEffect(() => {
-    console.error('[SettingsPage Error]', error)
+    logger.error('[SettingsPage Error]', error)
   }, [error])
 
   return (

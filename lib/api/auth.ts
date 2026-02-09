@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server'
 import { User } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SubscriptionTier } from '@/lib/types/premium'
+import { logger } from '@/lib/logger'
 
 /**
  * 验证结果类型
@@ -39,7 +40,7 @@ export async function verifyAuth(
       .maybeSingle()
 
     if (error) {
-      console.error('[verifyAuth] 获取用户资料失败:', error)
+      logger.error('[verifyAuth] 获取用户资料失败:', error)
       return { error: '获取用户信息失败', status: 500 }
     }
 
@@ -47,7 +48,7 @@ export async function verifyAuth(
     const tier = (profile?.subscription_tier || 'free') as SubscriptionTier
     return { user, tier }
   } catch (error: unknown) {
-    console.error('[verifyAuth] 验证失败:', error)
+    logger.error('[verifyAuth] 验证失败:', error)
     return { error: '身份验证失败', status: 500 }
   }
 }

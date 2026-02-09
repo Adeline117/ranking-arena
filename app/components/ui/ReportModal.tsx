@@ -7,6 +7,7 @@ import { Box, Text } from '../base'
 import { useToast } from './Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 export type ReportContentType = 'post' | 'comment' | 'message' | 'user'
 export type ReportReason = 'spam' | 'harassment' | 'inappropriate' | 'misinformation' | 'fraud' | 'other'
@@ -148,7 +149,7 @@ export default function ReportModal({
       setDescription('')
       setImages([])
     } catch (error) {
-      console.error('Report error:', error)
+      logger.error('Report error:', error)
       showToast(t('networkError'), 'error')
     } finally {
       setSubmitting(false)

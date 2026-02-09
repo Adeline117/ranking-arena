@@ -9,6 +9,7 @@ const OneClickWalletButton = dynamic(() => import('@/lib/web3/wallet-components'
 const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').then(m => ({ default: m.Web3Boundary })), { ssr: false })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
+import { logger } from '@/lib/logger'
 
 // 密码强度计算函数
 function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labelKey: string; color: string } {
@@ -372,7 +373,7 @@ export default function LoginPage() {
         setError(t('loginSendFailed'))
       }
     } catch (err: unknown) {
-      console.error('Login OTP error:', err)
+      logger.error('Login OTP error:', err)
       setError(t('loginSendFailedNetwork'))
     } finally {
       setSendingCode(false)
@@ -418,7 +419,7 @@ export default function LoginPage() {
         setError(t('loginSendFailedShort'))
       }
     } catch (err: unknown) {
-      console.error('Login OTP error:', err)
+      logger.error('Login OTP error:', err)
       setError(t('loginSendFailedSimple'))
     } finally {
       setSendingCode(false)
@@ -514,7 +515,7 @@ export default function LoginPage() {
         .from('user_profiles')
         .upsert(updateData, { onConflict: 'id' })
     } catch (err) {
-      console.error('Error creating profile:', err)
+      logger.error('Error creating profile:', err)
     }
   }
 
@@ -561,7 +562,7 @@ export default function LoginPage() {
             .eq('id', user.id)
           
           if (updateError) {
-            console.error('Error updating handle:', updateError)
+            logger.error('Error updating handle:', updateError)
           }
         }
         

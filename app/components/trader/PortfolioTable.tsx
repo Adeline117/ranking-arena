@@ -581,7 +581,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                   {selectedMarket}
                 </Text>
               </Box>
-              <button
+              <button aria-label="Close"
                 onClick={() => setSelectedMarket(null)}
                 style={{
                   background: tokens.colors.bg.tertiary,

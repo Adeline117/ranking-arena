@@ -9,6 +9,7 @@ import Avatar from '@/app/components/ui/Avatar'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import CreateGroupModal from '@/app/components/features/CreateGroupModal'
+import { logger } from '@/lib/logger'
 
 type GroupChannel = {
   id: string
@@ -112,7 +113,7 @@ export default function ConversationsList(): React.ReactElement {
     } catch (err) {
       if (abortSignal?.aborted) return
 
-      console.error('Failed to load conversations:', err)
+      logger.error('Failed to load conversations:', err)
       const errorMessage = err instanceof Error ? err.message : t('unexpectedError')
       setError(errorMessage)
       showToast(t('failedToLoadConversations'), 'error')

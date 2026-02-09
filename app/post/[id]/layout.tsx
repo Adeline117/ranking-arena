@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
@@ -61,7 +62,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       }
     }
   } catch (error) {
-    console.error('[Metadata] Failed to generate post metadata:', error)
+    logger.error('[Metadata] Failed to generate post metadata:', error)
   }
   
   return {

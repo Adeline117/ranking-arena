@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface DayData {
   date: string
@@ -46,7 +47,7 @@ export default function ActivityHeatmap({ userId }: Props) {
         .order('created_at', { ascending: true })
 
       if (error) {
-        console.error('[ActivityHeatmap]', error)
+        logger.error('[ActivityHeatmap]', error)
         setLoading(false)
         return
       }

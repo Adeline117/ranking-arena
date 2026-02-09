@@ -8,6 +8,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface ClaimTraderButtonProps {
   traderId: string
@@ -51,7 +52,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
         setHasConnection(!!data)
       } catch (err: unknown) {
         if (err instanceof Error) {
-          console.error('[ClaimTrader] Connection check failed:', {
+          logger.error('[ClaimTrader] Connection check failed:', {
             message: err.message,
             userId,
             source,

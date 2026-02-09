@@ -3,6 +3,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 export interface Notification {
   id: string
@@ -168,7 +169,7 @@ export async function markAllNotificationsAsRead(
     .eq('read', false)
 
   if (error) {
-    console.error('[notifications] 标记全部已读失败:', error)
+    logger.error('[notifications] 标记全部已读失败:', error)
     throw error
   }
 }
@@ -216,7 +217,7 @@ export async function deleteNotification(
     .eq('user_id', userId)
 
   if (error) {
-    console.error('[notifications] 删除通知失败:', error)
+    logger.error('[notifications] 删除通知失败:', error)
     throw error
   }
 }
