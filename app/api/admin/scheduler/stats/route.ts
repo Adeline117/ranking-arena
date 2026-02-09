@@ -34,6 +34,15 @@ function isSmartSchedulerEnabled(): boolean {
  */
 export async function GET(_req: Request) {
   try {
+    // Security: Verify admin/cron secret
+    const authHeader = _req.headers.get('authorization')
+    const token = authHeader?.replace('Bearer ', '')
+    const cronSecret = process.env.CRON_SECRET
+    const adminSecret = process.env.ADMIN_SECRET
+    if (!token || (token !== cronSecret && token !== adminSecret)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Check if smart scheduler is enabled
     if (!isSmartSchedulerEnabled()) {
       return NextResponse.json({
