@@ -116,7 +116,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   return (
     <SidebarCard title={isZh ? '热门讨论' : 'Hot Discussions'}>
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="skeleton" style={{ height: 56, borderRadius: tokens.radius.md }} />
           ))}

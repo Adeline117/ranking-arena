@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
@@ -57,9 +57,31 @@ export default function FearGreedGauge() {
     )
   }
 
-  const value = data.value
-  const color = getColor(value)
-  const label = getLabel(value)
+  const [animatedValue, setAnimatedValue] = useState(0)
+  const prevValueRef = useRef(0)
+
+  useEffect(() => {
+    const from = prevValueRef.current
+    const to = data.value
+    const duration = 800
+    const startTime = performance.now()
+
+    function animate(now: number) {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setAnimatedValue(from + (to - from) * eased)
+      if (progress < 1) requestAnimationFrame(animate)
+      else prevValueRef.current = to
+    }
+    requestAnimationFrame(animate)
+  }, [data.value])
+
+  const value = animatedValue
+  const displayValue = data.value
+  const color = getColor(displayValue)
+  const label = getLabel(displayValue)
 
   // Gauge geometry: semi-circle from 180deg to 0deg (left to right)
   const cx = 50, cy = 44, r = 34, strokeW = 7
@@ -131,7 +153,7 @@ export default function FearGreedGauge() {
           <circle cx={cx} cy={cy} r="1.5" fill={tokens.colors.bg.primary} />
         </svg>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1, transition: 'color 0.3s ease' }}>{displayValue}</div>
           <div style={{ fontSize: 10, fontWeight: 600, color, lineHeight: 1.4, whiteSpace: 'nowrap' }}>{label}</div>
         </div>
       </div>

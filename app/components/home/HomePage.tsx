@@ -79,15 +79,15 @@ export default function HomePage({
             </SectionErrorBoundary>
           }
           rightSidebar={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 72px)' }}>
-              <div style={{ flexShrink: 0, maxHeight: '40%', overflow: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ flexShrink: 0 }}>
                 <SectionErrorBoundary>
                   <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}>
                     <WatchlistMarket />
                   </Suspense>
                 </SectionErrorBoundary>
               </div>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+              <div style={{ flex: 1, minHeight: 0 }}>
                 <SectionErrorBoundary>
                   <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
                     <NewsFlash />

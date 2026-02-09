@@ -35,11 +35,14 @@ function CardWrapper({ title, linkText, linkHref, children }: {
     <div style={{
       flex: '1 1 0',
       minWidth: 220,
+      minHeight: 200,
       padding: '16px',
       background: tokens.glass.bg.secondary,
       backdropFilter: tokens.glass.blur.md,
       borderRadius: tokens.radius.lg,
       border: tokens.glass.border.light,
+      display: 'flex',
+      flexDirection: 'column',
     }}>
       <div style={{
         display: 'flex',
@@ -71,7 +74,9 @@ function CardWrapper({ title, linkText, linkHref, children }: {
           </svg>
         </Link>
       </div>
-      {children}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        {children}
+      </div>
     </div>
   )
 }
@@ -117,6 +122,7 @@ function formatBTC(value: number): string {
 }
 
 export default function CoreCards() {
+  const [loading, setLoading] = useState(true)
   const [gainers, setGainers] = useState<CoinRow[]>([])
   const [losers, setLosers] = useState<CoinRow[]>([])
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
@@ -140,7 +146,7 @@ export default function CoreCards() {
       .then(json => { if (Array.isArray(json)) setExchanges(json.slice(0, 5)) })
       .catch(() => {})
 
-    // Fetch top traders (mock for now - use rankings API)
+    // Fetch top traders
     fetch('/api/rankings?limit=3')
       .then(r => r.json())
       .then(json => {
@@ -154,13 +160,13 @@ export default function CoreCards() {
         }
       })
       .catch(() => {
-        // Fallback mock data
         setTraders([
           { handle: 'whale_hunter', display_name: 'WhaleHunter', avatar_url: null, pnl_pct: 342.5 },
           { handle: 'crypto_sage', display_name: 'CryptoSage', avatar_url: null, pnl_pct: 218.3 },
           { handle: 'alpha_seeker', display_name: 'AlphaSeeker', avatar_url: null, pnl_pct: 156.7 },
         ])
       })
+      .finally(() => setLoading(false))
   }, [])
 
   return (

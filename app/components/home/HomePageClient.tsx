@@ -76,13 +76,9 @@ export default function HomePageClient({
     <PullToRefresh onRefresh={handlePullRefresh} disabled={loading}>
       <Box
         as="main"
-        className="container-padding page-enter has-mobile-nav"
         style={{
-          maxWidth: 1400,
-          margin: '0 auto',
           position: 'relative',
           zIndex: 1,
-          padding: '16px 16px',
         }}
       >
         {/* 排名榜区域 - 单栏布局，侧边栏由父组件处理 */}
