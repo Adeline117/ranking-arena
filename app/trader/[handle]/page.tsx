@@ -17,10 +17,13 @@ export async function generateStaticParams() {
     if (!supabaseUrl || !supabaseKey) return []
     
     const supabase = createClient(supabaseUrl, supabaseKey)
+    // Use trader_sources (real data) instead of legacy traders table
+    // Join with snapshots to get high-follower traders for pre-rendering
     const { data } = await supabase
-      .from('traders')
+      .from('trader_sources')
       .select('handle')
-      .order('followers', { ascending: false })
+      .not('handle', 'is', null)
+      .order('created_at', { ascending: false })
       .limit(50)
     
     return (data || [])

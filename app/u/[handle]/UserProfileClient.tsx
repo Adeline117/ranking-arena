@@ -10,12 +10,7 @@ import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
-import Breadcrumb from '@/app/components/ui/Breadcrumb'
-import TraderHeader from '@/app/components/trader/TraderHeader'
-import TraderTabs from '@/app/components/trader/TraderTabs'
-import OverviewPerformanceCard from '@/app/components/trader/OverviewPerformanceCard'
-const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
-const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
+// Trader components for stats/portfolio tabs
 const JoinedGroups = dynamic(() => import('@/app/components/trader/JoinedGroups'), { ssr: false })
 const UserBookmarkFolders = dynamic(() => import('@/app/components/trader/UserBookmarkFolders'), { ssr: false })
 const UserCollections = dynamic(() => import('@/app/components/features/UserCollections'), { ssr: false })
@@ -34,6 +29,9 @@ import { logger } from '@/lib/logger'
 const ActivityHeatmap = dynamic(() => import('@/app/components/profile/ActivityHeatmap'), { ssr: false })
 const UserStreaks = dynamic(() => import('@/app/components/profile/UserStreaks'), { ssr: false })
 const UserActivityFeed = dynamic(() => import('@/app/components/profile/UserActivityFeed'), { ssr: false })
+const ProfileTradingCard = dynamic(() => import('@/app/components/profile/ProfileTradingCard'), { ssr: false })
+const ProfileBookshelf = dynamic(() => import('@/app/components/profile/ProfileBookshelf'), { ssr: false })
+const ProfileActivityFeed = dynamic(() => import('@/app/components/profile/ProfileActivityFeed'), { ssr: false })
 
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
@@ -120,13 +118,9 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
   const traderFeed = traderData?.feed ?? []
   const traderSimilar = traderData?.similarTraders ?? []
 
-  // Tabs: trader mode uses trader tabs, non-trader uses profile tabs
-  type TraderTabKey = 'overview' | 'stats' | 'portfolio'
+  // Tabs: unified profile tabs (includes trading tabs when user is a trader)
   type ProfileTabKey = 'overview' | 'activity' | 'followers' | 'groups' | 'bookmarks' | 'bookshelf' | 'stats' | 'portfolio'
   const urlTab = searchParams.get('tab')
-  const [activeTraderTab, setActiveTraderTab] = useState<TraderTabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as TraderTabKey : 'overview'
-  )
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTabKey>(
     urlTab && ['overview', 'activity', 'followers', 'groups', 'bookmarks', 'bookshelf', 'stats', 'portfolio'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
   )
@@ -141,11 +135,6 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     const qs = params.toString()
     router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
   }, [searchParams, pathname, router])
-
-  const handleTraderTabChange = useCallback((tab: TraderTabKey) => {
-    setActiveTraderTab(tab)
-    updateUrl(tab)
-  }, [updateUrl])
 
   const handleProfileTabChange = useCallback((tab: ProfileTabKey) => {
     setActiveProfileTab(tab)
@@ -591,8 +580,20 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
               className="profile-content"
               style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: tokens.spacing[6] }}
             >
+              {/* Main column */}
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                {isOwnProfile && (
+                {/* Trading data card (if trader) */}
+                {isTrader && traderPerformance && (
+                  <ProfileTradingCard
+                    performance={traderPerformance}
+                    equityCurve={traderEquityCurve?.['90D']}
+                    traderHandle={serverProfile?.traderHandle || ''}
+                    source={traderProfile?.source}
+                  />
+                )}
+
+                {/* Guidance cards for own profile */}
+                {isOwnProfile && !isTrader && (
                   <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                     {[
                       {
@@ -638,6 +639,11 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                     ))}
                   </Box>
                 )}
+
+                {/* Recent activity feed */}
+                <ProfileActivityFeed handle={profile.handle} />
+
+                {/* Posts */}
                 <Box bg="secondary" p={4} radius="lg" border="primary">
                   <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
                     <Text size="lg" weight="black">{t('posts')}</Text>
@@ -660,6 +666,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 </Box>
               </Box>
 
+              {/* Sidebar column */}
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
                 <Box bg="secondary" p={4} radius="lg" border="primary">
                   <UserStreaks userId={profile.id} />
@@ -667,6 +674,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 <Box bg="secondary" p={4} radius="lg" border="primary">
                   <ActivityHeatmap userId={profile.id} />
                 </Box>
+                <ProfileBookshelf handle={profile.handle} />
                 <JoinedGroups userId={profile.id} />
                 <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
                 <Box style={{ marginTop: tokens.spacing[4] }}>
@@ -676,9 +684,52 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             </Box>
           )}
 
+          {/* Stats tab (trader only) */}
+          {activeProfileTab === 'stats' && isTrader && (
+            traderStats ? (
+              <StatsPage
+                stats={traderStats}
+                traderHandle={serverProfile?.traderHandle || ''}
+                assetBreakdown={traderAssetBreakdown}
+                equityCurve={traderEquityCurve}
+                positionHistory={traderPositionHistory}
+                isPro={canViewFull}
+                onUnlock={() => router.push('/pricing')}
+              />
+            ) : (
+              <Box style={{
+                padding: tokens.spacing[6],
+                background: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.xl,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                textAlign: 'center',
+              }}>
+                <Text size="sm" color="tertiary">
+                  {t('noStatsData') || (isZh ? '暂无统计数据' : 'No stats data')}
+                </Text>
+              </Box>
+            )
+          )}
+
+          {/* Portfolio tab (trader only) */}
+          {activeProfileTab === 'portfolio' && isTrader && (
+            <PortfolioTable
+              items={traderPortfolio}
+              history={traderPositionHistory}
+              isPro={canViewFull}
+              onUnlock={() => router.push('/pricing')}
+            />
+          )}
+
           {activeProfileTab === 'activity' && (
             <Box style={{ maxWidth: 700 }}>
               <UserActivityFeed handle={profile.handle} />
+            </Box>
+          )}
+
+          {activeProfileTab === 'bookshelf' && (
+            <Box style={{ maxWidth: 800 }}>
+              <ProfileBookshelf handle={profile.handle} expanded />
             </Box>
           )}
 

@@ -164,8 +164,9 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
       </Box>
 
       {/* Data Grid */}
-      <Box className="trading-stats-grid" style={{
+      <Box className="trading-stats-grid trading-grid" style={{
         display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
         gap: tokens.spacing[4],
       }}>
         <Box>

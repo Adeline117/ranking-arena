@@ -39,8 +39,8 @@ export async function POST(
     const item_id = validateString(body.item_id, { required: true, fieldName: 'item_id' })!
     const note = validateString(body.note, { maxLength: 500 })
 
-    if (!['trader', 'book', 'post'].includes(item_type)) {
-      return success({ error: 'Invalid item_type' }, 400)
+    if (!['post', 'activity'].includes(item_type)) {
+      return success({ error: 'Invalid item_type, only post and activity allowed' }, 400)
     }
 
     const { data: item, error } = await supabase

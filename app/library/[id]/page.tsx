@@ -480,7 +480,6 @@ export default function BookDetailPage() {
               />
 
               {/* Add to Collection */}
-              <AddToCollectionButton itemType="book" itemId={book.id} compact />
             </div>
 
             {/* User rating - show for all logged in users */}
