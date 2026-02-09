@@ -31,7 +31,7 @@ async function getLatestPrices(): Promise<Record<string, PriceData>> {
   for (let i = 0; i < result.length; i += 2) {
     try {
       prices[result[i]] = JSON.parse(result[i + 1])
-    } catch {}
+    } catch { /* ignore parse errors */ }
   }
   return prices
 }
@@ -58,7 +58,7 @@ export async function GET() {
             const data = `data: ${JSON.stringify(prices)}\n\n`
             controller.enqueue(encoder.encode(data))
           }
-        } catch (err) {
+        } catch (_err) {
           // skip errors, keep streaming
         }
       }

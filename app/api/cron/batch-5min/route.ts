@@ -80,13 +80,6 @@ export async function GET(request: NextRequest) {
     callInternal(baseUrl, '/api/trader/sync', 'POST', {}),
   ])
 
-  // Every 6 hours (at minute 0, 5, 10... — check if hour is 0,6,12,18 and minute < 6)
-  const now = new Date()
-  if (now.getUTCHours() % 6 === 0 && now.getUTCMinutes() < 6) {
-    const extraResult = await callInternal(baseUrl, '/api/cron/batch-fetch-extra')
-    results.push(extraResult)
-  }
-
   const totalDuration = Date.now() - startTime
   const hasErrors = results.some(r => r.status === 'error')
 

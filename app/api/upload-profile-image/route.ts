@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: unknown) {
     logger.error('[upload-profile-image] Error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Upload failed'
+    const _errorMessage = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
