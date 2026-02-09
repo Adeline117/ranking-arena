@@ -19,7 +19,7 @@ import {
   rankByArenaScore,
   ARENA_CONFIG,
   type TraderScoreInput,
-  type ScoreConfidence,
+  type ScoreConfidence as _ScoreConfidence,
   getScoreConfidence,
 } from '../arena-score'
 
