@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { formatDistanceToNow } from '@/lib/utils/date'
+import { formatTimeAgo } from '@/lib/utils/date'
 
 interface Activity {
   id: string
@@ -290,7 +290,7 @@ export default function UserActivityFeed({ handle }: { handle: string }) {
                     <ActivityDescription activity={activity} isZh={isZh} />
                   </Text>
                   <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
-                    {formatDistanceToNow(new Date(activity.created_at), isZh)}
+                    {formatTimeAgo(activity.created_at, isZh ? 'zh' : 'en')}
                   </Text>
                 </Box>
               </Box>

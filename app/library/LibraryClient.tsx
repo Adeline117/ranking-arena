@@ -11,15 +11,16 @@ import { tokens } from '@/lib/design-tokens'
 import type { LibraryItem } from '@/lib/types/library'
 import BookCard from './BookCard'
 import BookCover from './BookCover'
+import StarRating from '@/app/components/ui/StarRating'
 import { logger } from '@/lib/logger'
 
 const CATEGORIES = [
-  { key: 'all', en: 'All', zh: '全部' },
-  { key: 'book', en: 'Books', zh: '书籍' },
-  { key: 'paper', en: 'Papers', zh: '论文' },
-  { key: 'finance', en: 'Finance', zh: '金融' },
-  { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书' },
-  { key: 'event', en: 'Events', zh: '事件' },
+  { key: 'all', en: 'All', zh: '全部', icon: 'M4 6h16M4 12h16M4 18h16' },
+  { key: 'book', en: 'Books', zh: '书籍', icon: 'M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z' },
+  { key: 'paper', en: 'Papers', zh: '论文', icon: 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8' },
+  { key: 'finance', en: 'Finance', zh: '金融', icon: 'M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6' },
+  { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书', icon: 'M9 12h6M9 16h6M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7zM13 2v7h7' },
+  { key: 'event', en: 'Events', zh: '事件', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z' },
 ]
 
 const SORT_OPTIONS = [
@@ -29,7 +30,7 @@ const SORT_OPTIONS = [
   { key: 'date', en: 'Publish Date', zh: '出版日期' },
 ]
 
-const PAGE_SIZE = 25
+const PAGE_SIZE = 24
 
 interface LibraryClientProps {
   initialItems: LibraryItem[]
@@ -50,13 +51,13 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1'))
+  const [searchFocused, setSearchFocused] = useState(false)
   const categoryScrollRef = useRef<HTMLDivElement>(null)
   const isInitialRender = useRef(true)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const isZh = language === 'zh'
 
-  // Fetch featured books when language changes (skip initial -- we have server data)
   useEffect(() => {
     if (isInitialRender.current) return
     fetch(`/api/library?sort=rating&limit=6&language=${language}`)
@@ -87,7 +88,6 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
     }
   }, [category, sort, search, page, language])
 
-  // Fetch when filters change, but skip initial render (we have server data)
   useEffect(() => {
     if (isInitialRender.current) {
       isInitialRender.current = false
@@ -96,7 +96,6 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
     fetchItems()
   }, [fetchItems])
 
-  // Debounced search
   const handleSearchInput = useCallback((value: string) => {
     setSearchInput(value)
     clearTimeout(searchTimeoutRef.current)
@@ -113,37 +112,38 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
       <TopNav />
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 20px 100px' }}>
 
-        {/* ===== Hero Section ===== */}
+        {/* ===== Hero + Search ===== */}
         <div style={{
-          marginBottom: 40,
-          padding: '40px 32px',
-          borderRadius: tokens.radius.xl,
+          marginBottom: 32,
+          padding: '48px 32px 40px',
+          borderRadius: tokens.radius['2xl'],
           background: tokens.gradient.mesh + ', ' + tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
           position: 'relative',
           overflow: 'hidden',
         }}>
+          {/* Decorative orbs */}
           <div style={{
-            position: 'absolute', top: -80, right: -80,
-            width: 240, height: 240, borderRadius: '50%',
+            position: 'absolute', top: -100, right: -60,
+            width: 280, height: 280, borderRadius: '50%',
             background: tokens.gradient.primarySubtle,
             filter: 'blur(80px)', pointerEvents: 'none',
           }} />
           <div style={{
-            position: 'absolute', bottom: -60, left: -40,
-            width: 180, height: 180, borderRadius: '50%',
+            position: 'absolute', bottom: -80, left: -40,
+            width: 200, height: 200, borderRadius: '50%',
             background: 'var(--color-accent-primary-08)',
             filter: 'blur(60px)', pointerEvents: 'none',
           }} />
 
           <div style={{ position: 'relative', zIndex: 1 }}>
             <h1 style={{
-              fontSize: tokens.typography.fontSize['2xl'],
+              fontSize: tokens.typography.fontSize['3xl'],
               fontWeight: tokens.typography.fontWeight.black,
               color: tokens.colors.text.primary,
               marginBottom: 8,
-              lineHeight: 1.2,
-              letterSpacing: '-0.02em',
+              lineHeight: 1.15,
+              letterSpacing: '-0.03em',
             }}>
               {isZh ? 'Crypto Library' : 'Crypto Library'}
             </h1>
@@ -151,138 +151,79 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
               color: tokens.colors.text.secondary,
               fontSize: 16,
               lineHeight: 1.5,
-              maxWidth: 480,
+              maxWidth: 500,
+              marginBottom: 24,
             }}>
               {isZh
-                ? `收录 ${total.toLocaleString()} 篇白皮书、研报、书籍与论文`
+                ? `${total.toLocaleString()} 篇白皮书、研报、书籍与论文`
                 : `${total.toLocaleString()} whitepapers, research reports, books & papers`}
             </p>
+
+            {/* Search Bar - prominent */}
+            <div style={{
+              position: 'relative',
+              maxWidth: 560,
+              transition: 'transform 0.2s ease',
+              transform: searchFocused ? 'scale(1.01)' : 'scale(1)',
+            }}>
+              <svg
+                width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke={searchFocused ? tokens.colors.accent.brand : tokens.colors.text.tertiary}
+                strokeWidth="2" strokeLinecap="round"
+                style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', transition: 'stroke 0.2s' }}
+              >
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                value={searchInput}
+                onChange={e => handleSearchInput(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                placeholder={isZh ? '搜索书名、作者或关键词...' : 'Search by title, author, or keyword...'}
+                style={{
+                  width: '100%',
+                  padding: '14px 44px 14px 48px',
+                  borderRadius: tokens.radius.xl,
+                  border: `2px solid ${searchFocused ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.primary,
+                  color: tokens.colors.text.primary,
+                  fontSize: 15,
+                  outline: 'none',
+                  transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                  boxSizing: 'border-box',
+                  boxShadow: searchFocused ? tokens.shadow.glow : 'none',
+                }}
+              />
+              {searchInput && (
+                <button
+                  onClick={() => { setSearchInput(''); setSearch(''); setPage(1) }}
+                  style={{
+                    position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: tokens.colors.text.tertiary, padding: 4,
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* ===== Search Bar ===== */}
-        <div style={{ marginBottom: 24, position: 'relative' }}>
-          <svg
-            width="18" height="18" viewBox="0 0 24 24" fill="none"
-            stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round"
-            style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-          >
-            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={e => handleSearchInput(e.target.value)}
-            placeholder={isZh ? '搜索书名、作者或关键词...' : 'Search by title, author, or keyword...'}
-            style={{
-              width: '100%',
-              padding: '12px 16px 12px 42px',
-              borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              background: tokens.colors.bg.secondary,
-              color: tokens.colors.text.primary,
-              fontSize: 14,
-              outline: 'none',
-              transition: 'border-color 0.15s ease',
-              boxSizing: 'border-box',
-            }}
-            onFocus={e => { e.currentTarget.style.borderColor = tokens.colors.accent.brand }}
-            onBlur={e => { e.currentTarget.style.borderColor = tokens.colors.border.primary }}
-          />
-          {searchInput && (
-            <button
-              onClick={() => { setSearchInput(''); setSearch(''); setPage(1) }}
-              style={{
-                position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: tokens.colors.text.tertiary, padding: 4,
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          )}
-        </div>
-
-        {/* ===== Featured Section (vertical grid, not horizontal scroll) ===== */}
-        {featured.length > 0 && !search && category === 'all' && (
-          <section style={{ marginBottom: 40 }}>
-            <h2 style={{
-              fontSize: 18,
-              fontWeight: 600,
-              color: tokens.colors.text.primary,
-              letterSpacing: '-0.01em',
-              marginBottom: 16,
-            }}>
-              {isZh ? '精选推荐' : 'Featured'}
-            </h2>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-              gap: 20,
-            }}>
-              {featured.slice(0, 6).map(item => (
-                <a
-                  key={item.id}
-                  href={`/library/${item.id}`}
-                  style={{
-                    textDecoration: 'none',
-                    transition: 'transform 0.2s ease',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-4px)')}
-                  onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
-                >
-                  <div style={{
-                    width: '100%', aspectRatio: '2/3', borderRadius: tokens.radius.lg,
-                    overflow: 'hidden',
-                    boxShadow: '0 8px 24px var(--color-overlay-medium), 0 2px 8px var(--color-overlay-light)',
-                    marginBottom: 10,
-                  }}>
-                    <BookCover
-                      title={item.title}
-                      author={item.author}
-                      category={item.category}
-                      coverUrl={item.cover_url}
-                      fontSize="sm"
-                    />
-                  </div>
-                  <p style={{
-                    fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary,
-                    lineHeight: 1.35, margin: 0,
-                    overflow: 'hidden', textOverflow: 'ellipsis',
-                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-                  }}>
-                    {item.title}
-                  </p>
-                  {item.author && (
-                    <p style={{
-                      fontSize: 11, color: tokens.colors.text.tertiary,
-                      margin: '3px 0 0', overflow: 'hidden',
-                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {item.author}
-                    </p>
-                  )}
-                </a>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ===== Filters Row ===== */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24,
-          flexWrap: 'wrap',
-        }}>
+        {/* ===== Category Navigation ===== */}
+        <div style={{ marginBottom: 28 }}>
           <div
             ref={categoryScrollRef}
             role="tablist"
             aria-label={isZh ? '书城分类' : 'Library categories'}
             style={{
-              display: 'flex', gap: 6, flex: 1,
-              flexWrap: 'wrap',
-              paddingBottom: 2,
+              display: 'flex', gap: 8,
+              overflowX: 'auto',
+              paddingBottom: 4,
+              scrollbarWidth: 'none',
             }}
           >
             {CATEGORIES.map(cat => {
@@ -292,77 +233,219 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                   key={cat.key}
                   role="tab"
                   aria-selected={active}
-                  aria-label={isZh ? cat.zh : cat.en}
-                  tabIndex={active ? 0 : -1}
                   onClick={() => { setCategory(cat.key); setPage(1) }}
-                  onKeyDown={(e) => {
-                    const cats = CATEGORIES
-                    const idx = cats.findIndex(c => c.key === cat.key)
-                    let nextIdx = -1
-                    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % cats.length
-                    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + cats.length) % cats.length
-                    if (nextIdx >= 0) {
-                      e.preventDefault()
-                      setCategory(cats[nextIdx].key)
-                      setPage(1)
-                      const container = categoryScrollRef.current
-                      if (container) {
-                        const buttons = container.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-                        buttons[nextIdx]?.focus()
-                      }
-                    }
-                  }}
                   style={{
-                    padding: '8px 20px',
-                    borderRadius: tokens.radius.full,
-                    fontSize: 13,
+                    padding: '10px 20px',
+                    borderRadius: tokens.radius.lg,
+                    fontSize: 14,
                     fontWeight: active ? 600 : 500,
                     border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-                    background: active ? tokens.gradient.purpleGold : 'transparent',
+                    background: active ? tokens.gradient.purpleGold : tokens.colors.bg.secondary,
                     color: active ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease',
+                    transition: 'all 0.2s ease',
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
-                    lineHeight: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
                   }}
                 >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d={cat.icon} />
+                  </svg>
                   {isZh ? cat.zh : cat.en}
                 </button>
               )
             })}
-          </div>
 
-          <select
-            value={sort}
-            onChange={e => { setSort(e.target.value); setPage(1) }}
-            style={{
-              padding: '8px 14px',
-              borderRadius: 10,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              background: tokens.colors.bg.secondary,
-              color: tokens.colors.text.primary,
-              fontSize: 13,
-              cursor: 'pointer',
-              outline: 'none',
-              flexShrink: 0,
-            }}
-          >
-            {SORT_OPTIONS.map(opt => (
-              <option key={opt.key} value={opt.key}>
-                {isZh ? opt.zh : opt.en}
-              </option>
-            ))}
-          </select>
+            {/* Sort dropdown */}
+            <select
+              value={sort}
+              onChange={e => { setSort(e.target.value); setPage(1) }}
+              style={{
+                padding: '10px 16px',
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                background: tokens.colors.bg.secondary,
+                color: tokens.colors.text.primary,
+                fontSize: 13,
+                cursor: 'pointer',
+                outline: 'none',
+                flexShrink: 0,
+                marginLeft: 'auto',
+              }}
+            >
+              {SORT_OPTIONS.map(opt => (
+                <option key={opt.key} value={opt.key}>
+                  {isZh ? opt.zh : opt.en}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
+        {/* ===== Featured / Top Rated Section ===== */}
+        {featured.length > 0 && !search && category === 'all' && (
+          <section style={{ marginBottom: 40 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: tokens.colors.text.primary,
+                letterSpacing: '-0.02em',
+                margin: 0,
+              }}>
+                {isZh ? '精选推荐' : 'Featured'}
+              </h2>
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+              gap: 20,
+            }}>
+              {featured.slice(0, 6).map(item => (
+                <Link
+                  key={item.id}
+                  href={`/library/${item.id}`}
+                  style={{ textDecoration: 'none', display: 'block' }}
+                >
+                  <div
+                    className="card-hover"
+                    style={{
+                      transition: 'transform 0.25s ease, box-shadow 0.25s ease',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = 'translateY(-6px)'
+                      e.currentTarget.style.boxShadow = tokens.shadow.cardHover
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  >
+                    <div style={{
+                      width: '100%', aspectRatio: '2/3', borderRadius: tokens.radius.lg,
+                      overflow: 'hidden',
+                      boxShadow: '0 8px 24px var(--color-overlay-medium), 0 2px 8px var(--color-overlay-light)',
+                      marginBottom: 12,
+                    }}>
+                      <BookCover
+                        title={item.title}
+                        author={item.author}
+                        category={item.category}
+                        coverUrl={item.cover_url}
+                        fontSize="sm"
+                      />
+                    </div>
+                    <p style={{
+                      fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary,
+                      lineHeight: 1.35, margin: 0,
+                      overflow: 'hidden', textOverflow: 'ellipsis',
+                      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                    }}>
+                      {item.title}
+                    </p>
+                    {item.author && (
+                      <p style={{
+                        fontSize: 11, color: tokens.colors.text.tertiary,
+                        margin: '4px 0 0', overflow: 'hidden',
+                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {item.author}
+                      </p>
+                    )}
+                    {(item.rating != null && item.rating > 0) && (
+                      <div style={{ marginTop: 4 }}>
+                        <StarRating rating={item.rating} ratingCount={item.rating_count || 0} size={12} readonly />
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ===== New Arrivals Section ===== */}
+        {!search && category === 'all' && items.length > 6 && (
+          <section style={{ marginBottom: 40 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: tokens.colors.text.primary,
+                letterSpacing: '-0.02em',
+                margin: 0,
+              }}>
+                {isZh ? '最新上架' : 'New Arrivals'}
+              </h2>
+            </div>
+            <div style={{
+              display: 'flex', gap: 16, overflowX: 'auto',
+              paddingBottom: 8,
+              scrollbarWidth: 'none',
+            }}>
+              {items.slice(0, 8).map(item => (
+                <Link
+                  key={item.id}
+                  href={`/library/${item.id}`}
+                  style={{ textDecoration: 'none', flexShrink: 0, width: 140 }}
+                >
+                  <div style={{
+                    width: 140, aspectRatio: '2/3', borderRadius: tokens.radius.lg,
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 16px var(--color-overlay-light)',
+                    marginBottom: 8,
+                    transition: 'transform 0.2s ease',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  >
+                    <BookCover
+                      title={item.title}
+                      author={item.author}
+                      category={item.category}
+                      coverUrl={item.cover_url}
+                      fontSize="sm"
+                    />
+                  </div>
+                  <p style={{
+                    fontSize: 12, fontWeight: 600, color: tokens.colors.text.primary,
+                    lineHeight: 1.3, margin: 0,
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                  }}>
+                    {item.title}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* ===== Results count ===== */}
-        {search && (
-          <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 16 }}>
-            {isZh
-              ? `找到 ${total.toLocaleString()} 个结果`
-              : `${total.toLocaleString()} results found`}
-          </p>
+        {(search || category !== 'all') && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <p style={{ fontSize: 14, color: tokens.colors.text.secondary, margin: 0 }}>
+              {isZh
+                ? `${total.toLocaleString()} 个结果`
+                : `${total.toLocaleString()} results`}
+            </p>
+          </div>
+        )}
+
+        {/* ===== All Books heading (when on "all" tab without search) ===== */}
+        {!search && category === 'all' && (
+          <h2 style={{
+            fontSize: 20, fontWeight: 700,
+            color: tokens.colors.text.primary,
+            letterSpacing: '-0.02em',
+            marginBottom: 20, marginTop: 8,
+          }}>
+            {isZh ? '全部藏书' : 'All Books'}
+          </h2>
         )}
 
         {/* ===== Grid ===== */}
@@ -381,10 +464,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '80px 24px',
-          }}>
+          <div style={{ textAlign: 'center', padding: '80px 24px' }}>
             <div style={{
               width: 72, height: 72, borderRadius: '50%',
               background: tokens.gradient.primarySubtle,
@@ -395,45 +475,45 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
               </svg>
             </div>
-            <p style={{
-              fontSize: 16, fontWeight: 600,
-              color: tokens.colors.text.primary, marginBottom: 6,
-            }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 6 }}>
               {search
                 ? (isZh ? '未找到匹配结果' : 'No matching results')
                 : (isZh ? '该分类暂无内容' : 'No items in this category yet')}
             </p>
-            <p style={{
-              fontSize: 13, color: tokens.colors.text.tertiary,
-            }}>
+            <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
               {search
                 ? (isZh ? '换个关键词试试' : 'Try different keywords')
                 : (isZh ? '试试其他分类' : 'Try a different category')}
             </p>
           </div>
         ) : category === 'event' ? (
-          /* Timeline layout for events — sorted newest first */
           <div style={{ position: 'relative', paddingLeft: 24 }}>
             <div style={{
               position: 'absolute', left: 8, top: 0, bottom: 0, width: 2,
-              background: tokens.colors.border.primary,
+              background: `linear-gradient(180deg, ${tokens.colors.accent.brand}, ${tokens.colors.border.primary})`,
             }} />
             {[...items].sort((a, b) => {
               const dateA = a.publish_date || a.created_at || ''
               const dateB = b.publish_date || b.created_at || ''
-              return dateB.localeCompare(dateA) // descending (newest first)
+              return dateB.localeCompare(dateA)
             }).map((item) => (
               <Link key={item.id} href={`/library/${item.id}`} style={{ textDecoration: 'none', display: 'block' }}>
                 <div style={{
-                  position: 'relative', paddingLeft: 20, paddingBottom: 24,
-                }}>
+                  position: 'relative', paddingLeft: 20, paddingBottom: 28,
+                  transition: 'opacity 0.15s',
+                }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                >
                   <div style={{
-                    position: 'absolute', left: -20, top: 4, width: 12, height: 12,
-                    borderRadius: '50%', background: tokens.colors.accent.brand,
-                    border: `2px solid ${tokens.colors.bg.primary}`,
+                    position: 'absolute', left: -20, top: 4, width: 14, height: 14,
+                    borderRadius: '50%', background: tokens.gradient.purpleGold,
+                    border: `3px solid ${tokens.colors.bg.primary}`,
+                    boxShadow: tokens.shadow.glow,
                   }} />
                   <div style={{
-                    fontSize: 12, color: tokens.colors.text.tertiary, marginBottom: 4, fontWeight: 600,
+                    fontSize: 12, color: tokens.colors.text.tertiary, marginBottom: 6, fontWeight: 600,
+                    letterSpacing: '0.02em',
                   }}>
                     {item.publish_date || item.created_at?.substring(0, 10) || ''}
                   </div>
@@ -450,7 +530,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                   )}
                   {item.description && (
                     <div style={{
-                      fontSize: 13, color: tokens.colors.text.secondary, marginTop: 4,
+                      fontSize: 13, color: tokens.colors.text.secondary, marginTop: 6,
                       lineHeight: 1.5, maxHeight: 60, overflow: 'hidden',
                     }}>
                       {item.description.substring(0, 150)}{item.description.length > 150 ? '...' : ''}
@@ -497,11 +577,11 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                   key={p}
                   onClick={() => setPage(p)}
                   style={{
-                    width: 36, height: 36, borderRadius: 10,
+                    width: 38, height: 38, borderRadius: tokens.radius.lg,
                     border: p === page ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                     background: p === page ? tokens.gradient.purpleGold : 'transparent',
                     color: p === page ? 'var(--color-on-accent)' : tokens.colors.text.primary,
-                    cursor: 'pointer', fontSize: 13, fontWeight: p === page ? 600 : 400,
+                    cursor: 'pointer', fontSize: 13, fontWeight: p === page ? 700 : 400,
                     transition: 'all 0.15s ease',
                   }}
                 >
@@ -525,6 +605,10 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
 
       </main>
       <MobileBottomNav />
+
+      <style>{`
+        div::-webkit-scrollbar { display: none; }
+      `}</style>
     </div>
   )
 }
@@ -535,7 +619,7 @@ function PaginationButton({ disabled, onClick, label }: { disabled: boolean; onC
       disabled={disabled}
       onClick={onClick}
       style={{
-        padding: '8px 14px', borderRadius: 10,
+        padding: '8px 14px', borderRadius: tokens.radius.lg,
         border: `1px solid ${tokens.colors.border.primary}`,
         background: 'transparent', color: tokens.colors.text.primary,
         cursor: disabled ? 'default' : 'pointer',

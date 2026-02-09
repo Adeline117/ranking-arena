@@ -433,6 +433,9 @@ export const newsCategories = {
   defi:       { color: '#10b981' },
   regulation: { color: '#8b5cf6' },
   market:     { color: '#06b6d4' },
+  // Extended category colors for news display
+  btcEth:     { color: '#f7931a' },
+  exchange:   { color: '#f59e0b' },
 } as const
 
 // News importance color map

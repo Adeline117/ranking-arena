@@ -188,7 +188,7 @@ const BookCover = memo(function BookCover({
         <div style={{
           fontSize: sizes.title,
           fontWeight: 700,
-          color: '#FFFFFF',
+          color: tokens.colors.white,
           lineHeight: 1.3,
           textAlign: 'left',
           display: '-webkit-box',

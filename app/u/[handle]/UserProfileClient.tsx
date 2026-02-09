@@ -32,6 +32,7 @@ import { logger } from '@/lib/logger'
 
 const ActivityHeatmap = dynamic(() => import('@/app/components/profile/ActivityHeatmap'), { ssr: false })
 const UserStreaks = dynamic(() => import('@/app/components/profile/UserStreaks'), { ssr: false })
+const UserActivityFeed = dynamic(() => import('@/app/components/profile/UserActivityFeed'), { ssr: false })
 
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
@@ -120,13 +121,13 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
   // Tabs: trader mode uses trader tabs, non-trader uses profile tabs
   type TraderTabKey = 'overview' | 'stats' | 'portfolio'
-  type ProfileTabKey = 'overview' | 'followers' | 'groups' | 'bookmarks'
+  type ProfileTabKey = 'overview' | 'activity' | 'followers' | 'groups' | 'bookmarks'
   const urlTab = searchParams.get('tab')
   const [activeTraderTab, setActiveTraderTab] = useState<TraderTabKey>(
     urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as TraderTabKey : 'overview'
   )
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'followers', 'groups', 'bookmarks'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
+    urlTab && ['overview', 'activity', 'followers', 'groups', 'bookmarks'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
   )
 
   const updateUrl = useCallback((tab: string) => {
@@ -435,6 +436,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') || (isZh ? '概览' : 'Overview') },
+    { key: 'activity', label: isZh ? '动态' : 'Activity' },
     { key: 'followers', label: `${t('followers') || (isZh ? '粉丝' : 'Followers')} (${followersCount})` },
     { key: 'groups', label: t('groups') || (isZh ? '群组' : 'Groups') },
     { key: 'bookmarks', label: t('bookmarks') || (isZh ? '收藏' : 'Bookmarks') },
@@ -791,6 +793,12 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 <JoinedGroups userId={profile.id} />
                 <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
               </Box>
+            </Box>
+          )}
+
+          {activeProfileTab === 'activity' && (
+            <Box style={{ maxWidth: 700 }}>
+              <UserActivityFeed handle={profile.handle} />
             </Box>
           )}
 
