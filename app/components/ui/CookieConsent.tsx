@@ -25,7 +25,7 @@ const styles = {
     right: 0,
     zIndex: tokens.zIndex.toast,
     padding: '16px',
-    background: 'rgba(0, 0, 0, 0.8)',
+    background: tokens.glass.heavy,
     backdropFilter: 'blur(10px)',
   },
   container: {
