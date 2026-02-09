@@ -211,6 +211,15 @@ export default function RankingSection({
 
   // Debounce ref for URL sync
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cleanup syncTimeoutRef on unmount
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current)
+      }
+    }
+  }, [])
   const [, startTransition] = useTransition()
 
   // Feature 8: Sync all state to URL via replaceState (debounced for performance)

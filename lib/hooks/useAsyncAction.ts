@@ -3,7 +3,7 @@
  * 处理 loading 状态、防重复点击、超时保护、错误处理
  */
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 export interface AsyncActionOptions<T> {
   /** 超时时间 (ms)，默认 10000 */
@@ -145,6 +145,15 @@ export function useAsyncAction<T, Args extends unknown[] = []>(
     },
     [action, timeout, onSuccess, onError, optimisticUpdate, rollback]
   )
+
+  // Cleanup on unmount: abort in-flight request
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
 
   return {
     execute,

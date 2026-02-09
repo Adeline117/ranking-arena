@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 interface UseSubmitOptions {
   /** 防抖延迟（毫秒） */
@@ -157,6 +157,13 @@ export function useDebounceClick(
   const cleanup = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
+    }
+  }, [])
+
+  // Auto-cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [])
 
