@@ -131,6 +131,7 @@ export default function WatchlistMarket() {
       dedupingInterval: 30000,
       refreshInterval: 60000, // Refresh every 60s
       keepPreviousData: true,
+      errorRetryCount: 2,
     }
   )
 
@@ -228,6 +229,7 @@ export default function WatchlistMarket() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder={isZh ? '搜索币种...' : 'Search coins...'}
+                aria-label={isZh ? '搜索币种' : 'Search coins'}
                 style={{
                   width: '100%', padding: '6px 10px', marginBottom: 8,
                   borderRadius: tokens.radius.md,

@@ -44,6 +44,7 @@ export function useDataFreshness() {
       refreshInterval: 5 * 60 * 1000, // Refresh every 5 minutes
       revalidateOnFocus: false,
       dedupingInterval: 60 * 1000, // Dedupe requests within 1 minute
+      errorRetryCount: 2,
     }
   )
 

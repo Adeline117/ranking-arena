@@ -73,9 +73,20 @@ export async function apiFetcher<T>(
 export const swrDefaultConfig: SWRConfiguration = {
   revalidateOnFocus: true,
   revalidateOnReconnect: true,
-  shouldRetryOnError: true,
-  errorRetryCount: 3,
-  errorRetryInterval: 1000,
+  shouldRetryOnError: (error: Error) => {
+    // Don't retry on 4xx client errors
+    const status = (error as Error & { status?: number }).status
+    if (status && status >= 400 && status < 500) return false
+    // Check error message for HTTP status codes
+    const match = error.message?.match(/HTTP (\d+)/)
+    if (match) {
+      const code = parseInt(match[1], 10)
+      if (code >= 400 && code < 500) return false
+    }
+    return true
+  },
+  errorRetryCount: 2,
+  errorRetryInterval: 2000,
   dedupingInterval: 2000,
   focusThrottleInterval: 5000,
 }

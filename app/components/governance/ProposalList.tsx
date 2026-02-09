@@ -27,13 +27,13 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
   const [filter, setFilter] = useState<'all' | 'active' | 'closed'>(state as 'active' | 'closed' || 'all')
   const spaceId = spaceIdProp || getArenaSpaceId()
 
-  const { data: proposals, isLoading } = useSWR<SnapshotProposal[]>(
+  const { data: proposals, error, isLoading } = useSWR<SnapshotProposal[]>(
     spaceId ? ['snapshot-proposals', spaceId, filter, limit] : null,
     () => getProposals(spaceId!, {
       state: filter === 'all' ? undefined : filter as 'active' | 'closed' | 'pending',
       first: limit,
     }),
-    { revalidateOnFocus: false, dedupingInterval: 30_000 }
+    { revalidateOnFocus: false, dedupingInterval: 30_000, errorRetryCount: 2 }
   )
 
   if (!spaceId) {

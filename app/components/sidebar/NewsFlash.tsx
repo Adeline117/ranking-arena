@@ -80,6 +80,10 @@ export default function NewsFlash() {
           [1, 2, 3, 4, 5].map(i => (
             <div key={i} className="skeleton" style={{ height: 52, marginBottom: 4, borderRadius: tokens.radius.md }} />
           ))
+        ) : error ? (
+          <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
+            {isZh ? '加载失败，请刷新重试' : 'Failed to load. Refresh to retry.'}
+          </p>
         ) : news.length === 0 ? (
           <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
             {isZh ? '暂无快讯' : 'No news yet'}
