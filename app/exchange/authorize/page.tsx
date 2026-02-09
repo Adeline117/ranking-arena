@@ -44,7 +44,7 @@ function ExchangeAuthorizePageContent() {
       // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        router.push('/login')
+        router.push('/login?redirect=/exchange')
         return
       }
 

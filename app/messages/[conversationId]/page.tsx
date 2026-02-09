@@ -306,7 +306,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
         const auth = await getAuthSession()
         if (!auth) {
           showToast(t('pleaseLogin'), 'error')
-          router.push('/login')
+          router.push('/login?redirect=/inbox')
           return
         }
         authToken = auth.accessToken
@@ -332,7 +332,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           }
         }
         showToast(t('loginExpiredPleaseRelogin'), 'error')
-        router.push('/login')
+        router.push('/login?redirect=/inbox')
         return
       }
 
@@ -479,7 +479,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
     const auth = await getAuthSession()
     if (!auth) {
       showToast(t('pleaseLogin'), 'error')
-      router.push('/login')
+      router.push('/login?redirect=/inbox')
       return
     }
 
@@ -567,7 +567,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       const refreshed = await refreshAuthToken()
       if (!refreshed) {
         showToast(t('loginExpiredPleaseRelogin'), 'error')
-        router.push('/login')
+        router.push('/login?redirect=/inbox')
         return
       }
       setUserId(refreshed.userId)
@@ -576,7 +576,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
     const currentAuth = auth || (await getAuthSession())
     if (!currentAuth) {
       showToast(t('pleaseLogin'), 'error')
-      router.push('/login')
+      router.push('/login?redirect=/inbox')
       return
     }
 

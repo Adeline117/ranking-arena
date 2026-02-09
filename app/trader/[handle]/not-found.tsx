@@ -21,20 +21,37 @@ export default function TraderNotFound() {
       <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
         {t('traderNotFoundDesc')}
       </p>
-      <Link
-        href="/"
-        style={{
-          padding: '10px 28px',
-          borderRadius: tokens.radius.md,
-          background: tokens.colors.accent.brand,
-          color: tokens.colors.white,
-          textDecoration: 'none',
-          fontWeight: 600,
-          fontSize: 14,
-        }}
-      >
-        {t('backToHome')}
-      </Link>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Link
+          href="/rankings"
+          style={{
+            padding: '10px 28px',
+            borderRadius: tokens.radius.md,
+            background: tokens.colors.accent.brand,
+            color: tokens.colors.white,
+            textDecoration: 'none',
+            fontWeight: 600,
+            fontSize: 14,
+          }}
+        >
+          {t('goToRankings')}
+        </Link>
+        <Link
+          href="/"
+          style={{
+            padding: '10px 28px',
+            borderRadius: tokens.radius.md,
+            background: 'transparent',
+            border: `1px solid ${tokens.colors.border.primary}`,
+            color: tokens.colors.text.primary,
+            textDecoration: 'none',
+            fontWeight: 500,
+            fontSize: 14,
+          }}
+        >
+          {t('backToHome')}
+        </Link>
+      </div>
     </div>
   )
 }

@@ -187,7 +187,7 @@ function ApiKeyAuthContent() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLogin'), 'warning')
-        router.push('/login')
+        router.push('/login?redirect=/exchange')
         return
       }
 
