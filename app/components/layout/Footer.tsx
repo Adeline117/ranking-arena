@@ -4,157 +4,180 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 
-const CURRENT_YEAR = new Date().getFullYear()
+interface FooterColumn {
+  title: string
+  links: { href: string; label: string; external?: boolean }[]
+}
 
 export default function Footer() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
 
-  const navLinks = [
-    { href: '/', label: isZh ? '排行榜' : 'Rankings' },
-    { href: '/groups', label: isZh ? '社区' : 'Groups' },
-    { href: '/hot', label: isZh ? '热门' : 'Hot' },
-    { href: '/library', label: isZh ? '知识库' : 'Library' },
-  ]
-
-  const legalLinks = [
-    { href: '/about', label: isZh ? '关于' : 'About' },
-    { href: '/help', label: isZh ? '帮助' : 'Help' },
-    { href: '/terms', label: isZh ? '服务条款' : 'Terms of Service' },
-    { href: '/privacy', label: isZh ? '隐私政策' : 'Privacy Policy' },
-    { href: '/disclaimer', label: isZh ? '免责声明' : 'Disclaimer' },
-  ]
-
-  const socialLinks = [
-    { href: 'https://x.com/ArenaFi_com', label: 'X / Twitter', icon: 'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z' },
-    { href: '/u/adelinewen1107', label: isZh ? '联系我们' : 'Contact Us', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+  const columns: FooterColumn[] = [
+    {
+      title: isZh ? '产品' : 'Product',
+      links: [
+        { href: '/', label: isZh ? '排行榜' : 'Rankings' },
+        { href: '/market', label: isZh ? '市场' : 'Market' },
+        { href: '/library', label: isZh ? '知识库' : 'Library' },
+      ],
+    },
+    {
+      title: isZh ? '社区' : 'Community',
+      links: [
+        { href: '/groups', label: isZh ? '小组' : 'Groups' },
+        { href: '/hot', label: isZh ? '热门' : 'Hot' },
+      ],
+    },
+    {
+      title: isZh ? '法律' : 'Legal',
+      links: [
+        { href: '/terms', label: isZh ? '服务条款' : 'Terms' },
+        { href: '/privacy', label: isZh ? '隐私政策' : 'Privacy' },
+        { href: '/disclaimer', label: isZh ? '免责声明' : 'Disclaimer' },
+      ],
+    },
+    {
+      title: isZh ? '关于' : 'About',
+      links: [
+        { href: '/about', label: isZh ? '关于我们' : 'About' },
+        { href: '/u/adelinewen1107', label: isZh ? '联系我们' : 'Contact' },
+      ],
+    },
   ]
 
   return (
     <footer
+      className="hide-mobile-nav"
       style={{
-        marginTop: 48,
-        padding: '32px 16px 24px',
+        marginTop: 64,
         borderTop: `1px solid var(--color-border-primary)`,
-        maxWidth: 1400,
+        maxWidth: 1200,
         marginLeft: 'auto',
         marginRight: 'auto',
+        padding: '40px 16px 32px',
       }}
     >
-      {/* Navigation links */}
+      {/* Column grid */}
       <div
+        className="footer-columns"
         style={{
-          display: 'flex',
-          justifyContent: 'center',
-          gap: 24,
-          flexWrap: 'wrap',
-          marginBottom: 20,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 32,
+          marginBottom: 32,
         }}
       >
-        {navLinks.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            style={{
-              fontSize: tokens.typography.fontSize.sm,
-              color: 'var(--color-text-secondary)',
-              textDecoration: 'none',
-              fontWeight: tokens.typography.fontWeight.medium,
-              transition: `color ${tokens.transition.fast}`,
-            }}
-          >
-            {link.label}
-          </Link>
+        {columns.map((col) => (
+          <div key={col.title}>
+            <p
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.bold,
+                color: 'var(--color-text-primary)',
+                marginBottom: 12,
+                letterSpacing: '0.5px',
+                textTransform: language === 'en' ? 'uppercase' : undefined,
+              }}
+            >
+              {col.title}
+            </p>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {col.links.map((link) => (
+                <li key={link.href}>
+                  {link.external ? (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="footer-link"
+                      style={{
+                        fontSize: tokens.typography.fontSize.sm,
+                        color: 'var(--color-text-tertiary)',
+                        textDecoration: 'none',
+                        transition: `color ${tokens.transition.fast}`,
+                      }}
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link
+                      href={link.href}
+                      className="footer-link"
+                      style={{
+                        fontSize: tokens.typography.fontSize.sm,
+                        color: 'var(--color-text-tertiary)',
+                        textDecoration: 'none',
+                        transition: `color ${tokens.transition.fast}`,
+                      }}
+                    >
+                      {link.label}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
       </div>
 
-      {/* Legal links */}
+      {/* Social + copyright row */}
       <div
         style={{
           display: 'flex',
-          justifyContent: 'center',
-          gap: 20,
+          alignItems: 'center',
+          justifyContent: 'space-between',
           flexWrap: 'wrap',
-          marginBottom: 16,
-        }}
-      >
-        {legalLinks.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            style={{
-              fontSize: tokens.typography.fontSize.xs,
-              color: 'var(--color-text-tertiary)',
-              textDecoration: 'none',
-            }}
-          >
-            {link.label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Social links */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
           gap: 16,
-          marginBottom: 20,
+          paddingTop: 20,
+          borderTop: `1px solid var(--color-border-primary)`,
         }}
       >
-        {socialLinks.map((link) => (
-          <a
-            key={link.label}
-            href={link.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={link.label}
-            style={{
-              color: 'var(--color-text-tertiary)',
-              transition: `color ${tokens.transition.fast}`,
-              display: 'flex',
-              alignItems: 'center',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--color-text-primary)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--color-text-tertiary)'
-            }}
-          >
-            <svg width={18} height={18} viewBox="0 0 24 24" fill="currentColor">
-              <path d={link.icon} />
-            </svg>
-          </a>
-        ))}
+        <p
+          style={{
+            fontSize: tokens.typography.fontSize.xs,
+            color: 'var(--color-text-tertiary)',
+            margin: 0,
+          }}
+        >
+          &copy; {new Date().getFullYear()} Arena.{' '}
+          {isZh ? '保留所有权利。' : 'All rights reserved.'}
+        </p>
+
+        {/* X / Twitter */}
+        <a
+          href="https://x.com/ArenaFi_com"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="X / Twitter"
+          className="footer-link"
+          style={{
+            color: 'var(--color-text-tertiary)',
+            transition: `color ${tokens.transition.fast}`,
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+        </a>
       </div>
 
       {/* Disclaimer */}
       <p
         style={{
-          textAlign: 'center',
           fontSize: tokens.typography.fontSize.xs,
           color: 'var(--color-text-tertiary)',
           lineHeight: 1.6,
-          maxWidth: 600,
-          margin: '0 auto 12px',
+          marginTop: 16,
+          marginBottom: 0,
+          opacity: 0.7,
         }}
       >
         {isZh
           ? '本站数据仅供参考，不构成任何投资建议。加密货币交易存在高风险，请谨慎决策。'
-          : 'Data provided on this site is for informational purposes only and does not constitute investment advice. Cryptocurrency trading involves significant risk.'}
-      </p>
-
-      {/* Copyright */}
-      <p
-        style={{
-          textAlign: 'center',
-          fontSize: tokens.typography.fontSize.xs,
-          color: 'var(--color-text-tertiary)',
-          margin: 0,
-        }}
-      >
-        &copy; {CURRENT_YEAR} Arena. All rights reserved.
+          : 'Data provided is for informational purposes only and does not constitute investment advice. Cryptocurrency trading involves significant risk.'}
       </p>
     </footer>
   )

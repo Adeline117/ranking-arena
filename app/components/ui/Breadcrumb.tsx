@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export interface BreadcrumbItem {
@@ -22,7 +23,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
   ]
 
   return (
-    <nav aria-label="Breadcrumb" style={{ padding: '8px 0', fontSize: 13 }}>
+    <nav aria-label="Breadcrumb" style={{ padding: '8px 0', fontSize: tokens.typography.fontSize.xs }}>
       <ol
         style={{
           display: 'flex',

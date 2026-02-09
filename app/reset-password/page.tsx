@@ -449,9 +449,9 @@ function ResetPasswordContent() {
 
         {/* Title */}
         <h1 style={{ 
-          fontSize: 26, 
+          fontSize: tokens.typography.fontSize['2xl'], 
           marginBottom: 8, 
-          fontWeight: 800,
+          fontWeight: tokens.typography.fontWeight.extrabold,
           textAlign: 'center',
           background: 'linear-gradient(135deg, #f2f2f2 0%, #c9b8db 100%)',
           WebkitBackgroundClip: 'text',

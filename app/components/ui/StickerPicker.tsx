@@ -84,7 +84,8 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
                 alt={label}
                 width={48}
                 height={48}
-                unoptimized
+                sizes="48px"
+                loading="lazy"
                 style={{ objectFit: 'contain' }}
               />
               <span style={{

@@ -93,7 +93,7 @@ function BookshelfTab() {
           >
             <Box style={{ width: '100%', aspectRatio: '3/4', background: tokens.colors.bg.tertiary, position: 'relative', overflow: 'hidden' }}>
               {book.cover_image_url ? (
-                <Image src={book.cover_image_url} alt={book.title} fill style={{ objectFit: 'cover' }} unoptimized />
+                <Image src={book.cover_image_url} alt={book.title} fill sizes="(max-width: 768px) 50vw, 200px" loading="lazy" style={{ objectFit: 'cover' }} />
               ) : (
                 <Box style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: tokens.spacing[2] }}>
                   <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', lineHeight: 1.3 }}>

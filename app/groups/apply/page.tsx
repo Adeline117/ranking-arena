@@ -224,7 +224,6 @@ export default function ApplyGroupPage() {
 
     setLoading(true)
     setError(null)
-    setFieldErrors({})
 
     try {
       const res = await fetch('/api/groups/apply', {
@@ -539,7 +538,14 @@ export default function ApplyGroupPage() {
                     <input
                       type="text"
                       value={nameZh}
-                      onChange={(e) => setNameZh(e.target.value)}
+                      onChange={(e) => {
+                        setNameZh(e.target.value)
+                        if (fieldErrors.name) {
+                          const newErrors = { ...fieldErrors }
+                          delete newErrors['name']
+                          setFieldErrors(newErrors)
+                        }
+                      }}
                       onBlur={() => validateField('nameZh', nameZh)}
                       placeholder="例如：BTC 交易讨论组"
                       style={{
@@ -548,6 +554,7 @@ export default function ApplyGroupPage() {
                       }}
                       aria-invalid={!!fieldErrors.name}
                       maxLength={50}
+                      autoFocus
                     />
                     {fieldErrors.name && (
                       <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
@@ -558,9 +565,11 @@ export default function ApplyGroupPage() {
 
                   {/* 小组简介（中文） */}
                   <Box>
-                    <label style={labelStyle}>
-                      小组简介
-                    </label>
+                    <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={labelStyle}>
+                        小组简介
+                      </label>
+                    </Box>
                     <textarea
                       value={descriptionZh}
                       onChange={(e) => setDescriptionZh(e.target.value)}
@@ -568,6 +577,13 @@ export default function ApplyGroupPage() {
                       style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
                       maxLength={500}
                     />
+                    <Text size="xs" style={{
+                      textAlign: 'right',
+                      marginTop: tokens.spacing[1],
+                      color: descriptionZh.length > 450 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
+                    }}>
+                      {descriptionZh.length}/500
+                    </Text>
                   </Box>
                 </Box>
 
@@ -611,7 +627,14 @@ export default function ApplyGroupPage() {
                       <input
                         type="text"
                         value={nameEn}
-                        onChange={(e) => setNameEn(e.target.value)}
+                        onChange={(e) => {
+                          setNameEn(e.target.value)
+                          if (fieldErrors.name) {
+                            const newErrors = { ...fieldErrors }
+                            delete newErrors['name']
+                            setFieldErrors(newErrors)
+                          }
+                        }}
                         onBlur={() => validateField('nameEn', nameEn)}
                         placeholder="e.g., BTC Trading Discussion"
                         style={{
@@ -640,6 +663,13 @@ export default function ApplyGroupPage() {
                         style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
                         maxLength={500}
                       />
+                      <Text size="xs" style={{
+                        textAlign: 'right',
+                        marginTop: tokens.spacing[1],
+                        color: descriptionEn.length > 450 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
+                      }}>
+                        {descriptionEn.length}/500
+                      </Text>
                     </Box>
                   </Box>
                 )}

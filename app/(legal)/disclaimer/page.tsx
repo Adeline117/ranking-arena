@@ -10,7 +10,7 @@ export default function DisclaimerPage() {
   return (
     <div className="min-h-screen bg-[var(--color-bg-primary)] py-16 px-4">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-8">
+        <h1 className="text-2xl font-black text-[var(--color-text-primary)] mb-8" style={{ letterSpacing: '-0.3px' }}>
           {isZh ? '免责声明' : 'Disclaimer'}
         </h1>
 

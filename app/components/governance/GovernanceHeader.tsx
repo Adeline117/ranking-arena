@@ -18,7 +18,7 @@ export function GovernanceHeader() {
 
   return (
     <div className="mb-8">
-      <h1 className="text-[32px] font-extrabold text-neutral-200 mb-2">
+      <h1 className="text-2xl font-black text-neutral-200 mb-2" style={{ letterSpacing: '-0.3px' }}>
         Arena Governance
       </h1>
       <p className="text-[15px] text-neutral-500 leading-relaxed mb-6">

@@ -87,15 +87,14 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           {isZh ? '暂无讨论' : 'No discussions yet'}
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {posts.map((post, idx) => (
             <Link
               key={post.id}
               href={`/post/${post.id}`}
               style={{
-                display: 'flex',
-                gap: 8,
-                padding: '8px 4px',
+                display: 'block',
+                padding: '10px 8px',
                 borderRadius: tokens.radius.md,
                 textDecoration: 'none',
                 color: 'inherit',
@@ -105,45 +104,32 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-hover)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
             >
-              {/* Rank number */}
-              <span style={{
-                flexShrink: 0,
-                width: 20,
+              <p style={{
                 fontSize: tokens.typography.fontSize.sm,
-                fontWeight: 700,
-                color: idx < 3 ? 'var(--color-accent-error)' : 'var(--color-text-tertiary)',
-                lineHeight: '20px',
+                fontWeight: 500,
+                color: 'var(--color-text-primary)',
+                lineHeight: 1.5,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                margin: 0,
               }}>
-                {idx + 1}
-              </span>
-
-              {/* Content */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: 500,
-                  color: 'var(--color-text-primary)',
-                  lineHeight: 1.4,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {getPreview(post)}
-                </p>
-                <div style={{
-                  display: 'flex',
-                  gap: 8,
-                  fontSize: 11,
-                  color: 'var(--color-text-tertiary)',
-                  marginTop: 2,
-                }}>
-                  {post.author_handle && (
-                    <span>{post.author_handle}</span>
-                  )}
-                  <span>{post.like_count} {isZh ? '赞' : 'likes'}</span>
-                  <span>{post.comment_count} {isZh ? '评论' : 'comments'}</span>
-                  <span>{timeAgo(post.created_at)}</span>
-                </div>
+                {getPreview(post)}
+              </p>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                fontSize: 11,
+                color: 'var(--color-text-tertiary)',
+                marginTop: 4,
+              }}>
+                {post.author_handle && (
+                  <span style={{ fontWeight: 500 }}>{post.author_handle}</span>
+                )}
+                <span>{post.like_count}{isZh ? '赞' : ' likes'}</span>
+                <span>{post.comment_count}{isZh ? '评论' : ' comments'}</span>
+                <span style={{ marginLeft: 'auto' }}>{timeAgo(post.created_at)}</span>
               </div>
             </Link>
           ))}
