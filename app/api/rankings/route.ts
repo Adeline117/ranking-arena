@@ -124,8 +124,9 @@ export async function GET(request: NextRequest) {
     return res;
   } catch (error: unknown) {
     console.error('[API /rankings] Error:', error);
+    const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', detail: msg },
       { status: 500 },
     );
   }

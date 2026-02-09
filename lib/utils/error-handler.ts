@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * 集中式错误处理工具
  * 提供错误分类、日志记录、Toast 通知等功能

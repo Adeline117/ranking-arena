@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * 统一日志工具
  * 生产环境自动关闭 debug/log，保留 warn/error

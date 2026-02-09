@@ -58,13 +58,13 @@ export default function SpotMarket() {
     try {
       const saved = localStorage.getItem('market_favorites')
       if (saved) setFavorites(new Set(JSON.parse(saved)))
-    } catch {}
+    } catch { /* ignore */ }
   }, [])
 
   const toggleFav = (id: string) => {
     setFavorites((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       localStorage.setItem('market_favorites', JSON.stringify([...next]))
       return next
     })

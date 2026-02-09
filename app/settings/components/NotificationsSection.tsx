@@ -28,7 +28,7 @@ interface NotificationsSectionProps {
 
 export const NotificationsSection = React.memo(function NotificationsSection(props: NotificationsSectionProps) {
   const { t } = useLanguage()
-  const onToast = props.onToast || ((msg: string) => { console.log(msg) })
+  const onToast = props.onToast || ((msg: string) => { console.warn(msg) })
 
   const items = [
     { key: 'follow', labelKey: 'newFollowerNotify', value: props.notifyFollow, setter: props.setNotifyFollow },

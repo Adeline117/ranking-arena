@@ -24,7 +24,7 @@ const BATCH_INTERVAL = 30_000
 const MAX_BATCH_SIZE = 100
 
 const eventQueue: ActivityEvent[] = []
-let flushTimer: ReturnType<typeof setInterval> | null = null
+let _flushTimer: ReturnType<typeof setInterval> | null = null
 let initialized = false
 
 function enqueue(action: ActivityAction, metadata?: Record<string, unknown>) {
@@ -84,7 +84,7 @@ function ensureInitialized() {
   if (initialized || typeof window === 'undefined') return
   initialized = true
 
-  flushTimer = setInterval(flush, BATCH_INTERVAL)
+  _flushTimer = setInterval(flush, BATCH_INTERVAL)
 
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
