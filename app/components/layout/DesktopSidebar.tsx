@@ -103,12 +103,12 @@ export default function DesktopSidebar() {
         left: 0,
         width: 240,
         height: 'calc(100vh - 56px)',
-        borderRight: `1px solid ${tokens.colors.border.primary}`,
-        background: tokens.colors.bg.primary,
+        borderRight: `1px solid var(--color-border-primary)`,
+        background: 'var(--color-bg-primary)',
         padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`,
         display: 'flex',
         flexDirection: 'column',
-        gap: tokens.spacing[1],
+        gap: tokens.spacing[2],
         zIndex: 30,
         overflowY: 'auto',
       }}
@@ -128,22 +128,22 @@ export default function DesktopSidebar() {
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 textDecoration: 'none',
-                color: active ? tokens.colors.text.primary : tokens.colors.text.secondary,
-                background: active ? tokens.colors.bg.secondary : 'transparent',
+                color: active ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                background: active ? 'var(--color-bg-secondary)' : 'transparent',
                 fontWeight: active ? 800 : 600,
                 fontSize: tokens.typography.fontSize.base,
                 transition: `all ${tokens.transition.base}`,
               }}
               onMouseEnter={(e) => {
                 if (!active) {
-                  e.currentTarget.style.background = tokens.colors.bg.secondary
-                  e.currentTarget.style.color = tokens.colors.text.primary
+                  e.currentTarget.style.background = 'var(--color-bg-secondary)'
+                  e.currentTarget.style.color = 'var(--color-text-primary)'
                 }
               }}
               onMouseLeave={(e) => {
                 if (!active) {
                   e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = tokens.colors.text.secondary
+                  e.currentTarget.style.color = 'var(--color-text-secondary)'
                 }
               }}
             >
