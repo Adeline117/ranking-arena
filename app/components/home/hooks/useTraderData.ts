@@ -91,7 +91,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   const { broadcast, on } = useTraderDataSync()
 
   // 时间范围状态 - 固定初始值避免 hydration mismatch
-  const [activeTimeRange, setActiveTimeRange] = useState<TimeRange>('30D')
+  const [activeTimeRange, setActiveTimeRange] = useState<TimeRange>('90D')
 
   // 客户端 hydration 后从 localStorage 读取偏好
   useEffect(() => {
@@ -273,7 +273,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     if (hasInitialData && !initialDataSeeded.current) {
       initialDataSeeded.current = true
       // Seed the cache with initial data for 30D
-      tradersCache.current.set('30D', {
+      tradersCache.current.set('90D', {
         traders: initialTraders!,
         lastUpdated: initialLastUpdated || null,
         fetchedAt: Date.now(),
@@ -286,14 +286,14 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // Performance: Defer full data fetch until after LCP using requestIdleCallback
   useEffect(() => {
     // If we have initial data and we're on 90D, defer full fetch to avoid blocking LCP
-    if (hasInitialData && activeTimeRange === '30D') {
+    if (hasInitialData && activeTimeRange === '90D') {
       // Use initial data immediately - don't block for full fetch
       setLoading(false)
 
       // Defer full 500 trader fetch until browser is idle (after LCP)
       const deferredFetch = () => {
         // Only fetch full data if user hasn't switched time range
-        if (activeTimeRange === '30D') {
+        if (activeTimeRange === '90D') {
           setDeferredFetchFailed(false)
           loadTimeRange('90D', false).then(cached => {
             // Only update if we got more data than initial

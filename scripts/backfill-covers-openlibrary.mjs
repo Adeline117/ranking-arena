@@ -3,9 +3,10 @@
  * Backfill cover_url for library_items where source='openlibrary'
  * using Open Library Covers API.
  *
- * Strategy: Extract OL work ID from source_url, try covers API.
- * The API returns a 1x1 transparent gif (43 bytes) when no cover exists,
- * so we check Content-Length to filter those out.
+ * Strategy:
+ *   1. Extract OL work ID from source_url
+ *   2. Fetch /works/{ID}/editions.json to find a cover ID
+ *   3. Build cover URL: https://covers.openlibrary.org/b/id/{COVER_ID}-M.jpg
  *
  * Usage:
  *   node scripts/backfill-covers-openlibrary.mjs              # dry run
@@ -19,31 +20,31 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 const apply = process.argv.includes('--apply')
-const CONCURRENCY = 20
+const CONCURRENCY = 5  // Be polite to OL API
 const BATCH = 500
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
-function extractOlid(sourceUrl) {
-  // https://openlibrary.org/works/OL17505565W → OL17505565W
-  const m = sourceUrl?.match(/(OL\d+[WMA])/i)
+function extractWorkId(sourceUrl) {
+  const m = sourceUrl?.match(/works\/(OL\d+W)/i)
   return m ? m[1] : null
 }
 
-async function checkCover(olid) {
-  // Use HEAD request to check if cover exists (avoid downloading image)
-  // Try work OLID first; covers API also indexes by work ID
-  const url = `https://covers.openlibrary.org/b/olid/${olid}-M.jpg`
+async function getCoverUrl(workId) {
   try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(10000),
-    })
+    const res = await fetch(
+      `https://openlibrary.org/works/${workId}/editions.json?limit=10`,
+      { signal: AbortSignal.timeout(15000) }
+    )
     if (!res.ok) return null
-    const len = parseInt(res.headers.get('content-length') || '0', 10)
-    // 1x1 placeholder is 43 bytes; real covers are much larger
-    if (len > 1000) return url
+    const data = await res.json()
+    // Find first edition with a cover
+    for (const ed of data.entries || []) {
+      if (ed.covers?.length) {
+        const coverId = ed.covers.find(c => c > 0)
+        if (coverId) return `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
+      }
+    }
     return null
   } catch {
     return null
@@ -54,7 +55,7 @@ async function main() {
   console.log(`Mode: ${apply ? 'APPLY' : 'DRY RUN'}`)
 
   let offset = 0
-  let total = 0, found = 0, skipped = 0, noOlid = 0, updated = 0
+  let total = 0, found = 0, skipped = 0, noId = 0, updated = 0, errors = 0
 
   while (true) {
     const { data: rows, error } = await sb
@@ -72,16 +73,16 @@ async function main() {
     for (let i = 0; i < rows.length; i += CONCURRENCY) {
       const chunk = rows.slice(i, i + CONCURRENCY)
       const results = await Promise.all(chunk.map(async row => {
-        const olid = extractOlid(row.source_url)
-        if (!olid) return { id: row.id, url: null, noOlid: true }
-        const url = await checkCover(olid)
-        return { id: row.id, url, noOlid: false }
+        const workId = extractWorkId(row.source_url)
+        if (!workId) return { id: row.id, url: null, noId: true }
+        const url = await getCoverUrl(workId)
+        return { id: row.id, url, noId: false }
       }))
 
       const toUpdate = []
       for (const r of results) {
         total++
-        if (r.noOlid) { noOlid++; continue }
+        if (r.noId) { noId++; continue }
         if (r.url) {
           found++
           toUpdate.push(r)
@@ -91,36 +92,38 @@ async function main() {
       }
 
       if (apply && toUpdate.length > 0) {
-        // Batch update
         for (const r of toUpdate) {
           const { error: uerr } = await sb
             .from('library_items')
             .update({ cover_url: r.url })
             .eq('id', r.id)
-          if (uerr) console.error(`  ✗ ${r.id}: ${uerr.message}`)
+          if (uerr) { console.error(`  ✗ ${r.id}: ${uerr.message}`); errors++ }
           else updated++
         }
       }
 
-      // Progress
-      if (total % 200 === 0 || i + CONCURRENCY >= rows.length) {
-        const pct = found ? ((found / (total - noOlid)) * 100).toFixed(1) : '0.0'
-        console.log(`  processed=${total} found=${found} miss=${skipped} noOlid=${noOlid} hitRate=${pct}%${apply ? ` updated=${updated}` : ''}`)
+      if (total % 100 === 0 || i + CONCURRENCY >= rows.length) {
+        const valid = total - noId
+        const pct = valid > 0 ? ((found / valid) * 100).toFixed(1) : '0.0'
+        console.log(`  processed=${total} found=${found} miss=${skipped} noId=${noId} hitRate=${pct}%${apply ? ` updated=${updated}` : ''}`)
       }
+
+      // Rate limit: ~5 req/s to OL API
+      await sleep(100)
     }
 
     offset += BATCH
-    // Small delay between batches to be polite
-    await sleep(200)
   }
 
   console.log('\n=== Final Stats ===')
   console.log(`Total processed: ${total}`)
   console.log(`Covers found:    ${found}`)
   console.log(`No cover:        ${skipped}`)
-  console.log(`No OLID:         ${noOlid}`)
-  console.log(`Hit rate:        ${total - noOlid > 0 ? ((found / (total - noOlid)) * 100).toFixed(1) : 0}%`)
+  console.log(`No work ID:      ${noId}`)
+  const valid = total - noId
+  console.log(`Hit rate:        ${valid > 0 ? ((found / valid) * 100).toFixed(1) : 0}%`)
   if (apply) console.log(`Updated in DB:   ${updated}`)
+  if (errors) console.log(`Errors:          ${errors}`)
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
