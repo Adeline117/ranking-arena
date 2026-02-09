@@ -46,8 +46,8 @@ function CompareFloatingBar() {
         boxShadow: tokens.shadow.xl,
         overflow: 'hidden',
         transition: 'all 0.3s ease',
-        maxWidth: isBarExpanded ? 320 : 56,
-        width: isBarExpanded ? 320 : 56,
+        maxWidth: isBarExpanded ? 'min(320px, calc(100vw - 32px))' : 56,
+        width: isBarExpanded ? 'min(320px, calc(100vw - 32px))' : 56,
       }}
     >
       {/* Header */}

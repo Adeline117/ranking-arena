@@ -45,6 +45,27 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABAS
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 // 支持的交易所 - 需要与数据库中的 source 值保持一致
+// Legacy source name mapping: some tables (equity_curve, position_history, etc.)
+// use old source names like 'binance' instead of 'binance_futures'
+const SOURCE_ALIASES: Record<string, string[]> = {
+  binance_futures: ['binance', 'binance_futures'],
+  bitget_futures: ['bitget', 'bitget_futures'],
+  binance_spot: ['binance_spot'],
+  bitget_spot: ['bitget_spot'],
+  bybit: ['bybit'],
+  okx_web3: ['okx', 'okx_web3'],
+  mexc: ['mexc'],
+  kucoin: ['kucoin'],
+  coinex: ['coinex'],
+  hyperliquid: ['hyperliquid'],
+  gmx: ['gmx'],
+  dydx: ['dydx'],
+  gains: ['gains'],
+  kwenta: ['kwenta'],
+  mux: ['mux'],
+  binance_web3: ['binance_web3'],
+}
+
 // 支持的交易所 source 列表
 const TRADER_SOURCES = [
   // CEX 合约

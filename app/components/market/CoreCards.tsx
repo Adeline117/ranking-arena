@@ -34,7 +34,7 @@ function CardWrapper({ title, linkText, linkHref, children }: {
   return (
     <div style={{
       flex: '1 1 0',
-      minWidth: 220,
+      minWidth: 0,
       minHeight: 200,
       padding: '16px',
       background: tokens.glass.bg.secondary,

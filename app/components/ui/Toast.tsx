@@ -136,8 +136,8 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         border: `1px solid ${config.borderColor}`,
         borderRadius: tokens.radius.xl,
         overflow: 'hidden',
-        minWidth: 320,
-        maxWidth: 420,
+        minWidth: 'min(320px, calc(100vw - 40px))',
+        maxWidth: 'min(420px, calc(100vw - 40px))',
         boxShadow: `${tokens.shadow.xl}, 0 0 20px ${config.textColor}15`,
       }}
     >

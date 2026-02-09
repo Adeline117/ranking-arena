@@ -99,7 +99,7 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
       alignItems: 'flex-start',
     }}>
       {/* 左侧：条形图 */}
-      <Box style={{ flex: '1 1 200px', minWidth: 180 }}>
+      <Box style={{ flex: '1 1 200px', minWidth: 0 }}>
         <Text size="xs" weight="bold" style={{ marginBottom: 8, color: tokens.colors.text.secondary }}>
           评分构成
         </Text>
