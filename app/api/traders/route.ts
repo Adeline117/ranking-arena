@@ -155,6 +155,15 @@ async function fetchFromLeaderboard(
     avatar_url: row.avatar_url as string | null,
     arena_score: Number(row.arena_score) || 0,
     rank: Number(row.rank),
+    // Score breakdown
+    profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
+    risk_control_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
+    execution_score: row.execution_score != null ? Number(row.execution_score) : null,
+    score_completeness: (row.score_completeness as string) || null,
+    // Trading style
+    trading_style: (row.trading_style as string) || null,
+    avg_holding_hours: row.avg_holding_hours != null ? Number(row.avg_holding_hours) : null,
+    style_confidence: row.style_confidence != null ? Number(row.style_confidence) : null,
   }))
 
   // Next cursor

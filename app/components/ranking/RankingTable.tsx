@@ -28,6 +28,8 @@ import {
   TableViewIcon, CardViewIcon, SettingsIcon,
 } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
+import { classifyStyle, getStyleInfo, getFilterableStyles, type TradingStyle } from '@/lib/utils/trading-style'
+import { getScoreGradeLetter } from '@/lib/utils/score-explain'
 
 // CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)
 // Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
@@ -109,8 +111,14 @@ export interface Trader {
   calmar_ratio?: number | null
   alpha?: number | null
   arena_score_v3?: number | null
-  trading_style?: 'hft' | 'day_trader' | 'swing' | 'trend' | 'scalping' | null
+  trading_style?: string | null
   style_confidence?: number | null
+  // Score breakdown
+  profitability_score?: number | null
+  risk_control_score?: number | null
+  execution_score?: number | null
+  score_completeness?: 'full' | 'partial' | 'minimal' | null
+  avg_holding_hours?: number | null
 }
 
 // Debounce hook
@@ -285,6 +293,12 @@ function RankingTableInner(props: {
   const columnSettingsRef = useRef<HTMLDivElement>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('table')
 
+  // Trading style & score grade filters
+  const [styleFilter, setStyleFilter] = useState<TradingStyle | 'all'>('all')
+  const [gradeFilter, setGradeFilter] = useState<string>('all') // 'all' | 'S' | 'A' | 'B' | 'C' | 'D'
+  // Expanded row for score breakdown
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
+
   useEffect(() => {
     setVisibleColumns(getStoredColumns())
 
@@ -392,6 +406,24 @@ function RankingTableInner(props: {
         return handle.includes(q) || t.id.toLowerCase().includes(q)
       })
     }
+    // Apply style filter
+    if (styleFilter !== 'all') {
+      data = data.filter(t => {
+        const style = t.trading_style || classifyStyle({
+          avg_holding_hours: t.avg_holding_hours,
+          trades_count: t.trades_count,
+          win_rate: t.win_rate,
+        })
+        return style === styleFilter
+      })
+    }
+    // Apply grade filter
+    if (gradeFilter !== 'all') {
+      data = data.filter(t => {
+        if (t.arena_score == null) return false
+        return getScoreGradeLetter(t.arena_score) === gradeFilter
+      })
+    }
     return [...data].sort((a, b) => {
       let aVal = 0, bVal = 0
       switch (sortColumn) {
@@ -404,7 +436,7 @@ function RankingTableInner(props: {
       }
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
-  }, [traders, sortColumn, sortDir, debouncedSearch])
+  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter, gradeFilter])
 
 
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
@@ -577,6 +609,77 @@ function RankingTableInner(props: {
         resultCount={debouncedSearch.trim() ? sortedTraders.length : undefined}
         language={language}
       />
+
+      {/* Style & Grade Filters */}
+      <Box style={{
+        display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
+        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+        borderBottom: `1px solid var(--glass-border-light)`,
+        flexWrap: 'wrap',
+        background: tokens.glass.bg.light,
+      }}>
+        {/* Trading Style Filter */}
+        <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
+          {language === 'zh' ? '风格' : 'Style'}:
+        </Text>
+        {[{ value: 'all' as const, label: language === 'zh' ? '全部' : 'All' }, ...getFilterableStyles().map(s => ({ value: s.style, label: language === 'zh' ? s.label : s.labelEn }))].map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => { setStyleFilter(opt.value); setCurrentPage(1) }}
+            style={{
+              padding: '2px 10px',
+              borderRadius: 12,
+              border: styleFilter === opt.value
+                ? `1px solid ${tokens.colors.accent.primary}80`
+                : `1px solid ${tokens.colors.border.primary}`,
+              background: styleFilter === opt.value
+                ? `${tokens.colors.accent.primary}20`
+                : 'transparent',
+              color: styleFilter === opt.value
+                ? tokens.colors.accent.primary
+                : tokens.colors.text.secondary,
+              fontSize: 11,
+              fontWeight: styleFilter === opt.value ? 700 : 500,
+              cursor: 'pointer',
+              transition: `all ${tokens.transition.fast}`,
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+
+        <Box style={{ width: 1, height: 16, background: tokens.colors.border.primary, margin: `0 ${tokens.spacing[1]}` }} />
+
+        {/* Score Grade Filter */}
+        <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
+          {language === 'zh' ? '等级' : 'Grade'}:
+        </Text>
+        {['all', 'S', 'A', 'B', 'C', 'D'].map(g => (
+          <button
+            key={g}
+            onClick={() => { setGradeFilter(g); setCurrentPage(1) }}
+            style={{
+              padding: '2px 8px',
+              borderRadius: 12,
+              border: gradeFilter === g
+                ? `1px solid ${tokens.colors.accent.primary}80`
+                : `1px solid ${tokens.colors.border.primary}`,
+              background: gradeFilter === g
+                ? `${tokens.colors.accent.primary}20`
+                : 'transparent',
+              color: gradeFilter === g
+                ? tokens.colors.accent.primary
+                : tokens.colors.text.secondary,
+              fontSize: 11,
+              fontWeight: gradeFilter === g ? 700 : 500,
+              cursor: 'pointer',
+              transition: `all ${tokens.transition.fast}`,
+            }}
+          >
+            {g === 'all' ? (language === 'zh' ? '全部' : 'All') : g}
+          </button>
+        ))}
+      </Box>
 
       {/* Table Header (only in table view) - sticky */}
       {viewMode === 'table' && (
@@ -761,7 +864,9 @@ function RankingTableInner(props: {
                 <TraderRow key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
                   trader={trader} rank={rank} source={source} language={language}
                   searchQuery={debouncedSearch}
-                  getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip} />
+                  getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
+                  isExpanded={expandedRowId === trader.id}
+                  onToggleExpand={(id) => setExpandedRowId(prev => prev === id ? null : id)} />
               )
             })}
           </Box>
