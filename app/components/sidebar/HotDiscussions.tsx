@@ -67,34 +67,33 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
 
   useEffect(() => {
     let alive = true
-    async function fetch() {
+    async function fetchData() {
+      // Single query with embedded join — eliminates waterfall (was 2 sequential queries)
       const { data } = await supabase
         .from('posts')
-        .select('id, title, content, hot_score, like_count, comment_count, created_at, author_id')
+        .select('id, title, content, hot_score, like_count, comment_count, created_at, author_id, user_profiles!posts_author_id_fkey(handle)')
         .order('hot_score', { ascending: false })
         .limit(limit)
 
       if (!alive || !data) return
 
-      const authorIds = [...new Set(data.map(p => p.author_id).filter(Boolean))]
-      let handleMap: Record<string, string> = {}
-      if (authorIds.length) {
-        const { data: profiles } = await supabase
-          .from('user_profiles')
-          .select('id, handle')
-          .in('id', authorIds)
-        if (profiles) {
-          handleMap = Object.fromEntries(profiles.map(p => [p.id, p.handle]))
+      setPosts(data.map(p => {
+        // Supabase returns the joined relation as an object or array
+        const profile = Array.isArray(p.user_profiles) ? p.user_profiles[0] : p.user_profiles
+        return {
+          id: p.id,
+          title: p.title,
+          content: p.content,
+          hot_score: p.hot_score,
+          like_count: p.like_count,
+          comment_count: p.comment_count,
+          created_at: p.created_at,
+          author_handle: profile?.handle || null,
         }
-      }
-
-      setPosts(data.map(p => ({
-        ...p,
-        author_handle: handleMap[p.author_id] || null,
-      })))
+      }))
       setLoading(false)
     }
-    fetch()
+    fetchData()
     return () => { alive = false }
   }, [limit])
 
