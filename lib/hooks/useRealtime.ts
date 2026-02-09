@@ -490,61 +490,8 @@ export function useMessagesRealtime(
 }
 
 // ============================================
-// 在线状态 Hook
+// 在线状态 Hook — use usePresence from './usePresence' for full-featured presence
 // ============================================
-
-interface PresenceState {
-  onlineUsers: string[]
-  isOnline: boolean
-}
-
-/**
- * 订阅用户在线状态
- */
-export function usePresence(
-  roomId: string,
-  userId?: string
-): PresenceState {
-  const [onlineUsers, setOnlineUsers] = useState<string[]>([])
-  const channelRef = useRef<RealtimeChannel | null>(null)
-
-  useEffect(() => {
-    if (!userId) return
-
-    const channel = supabase.channel(`presence:${roomId}`)
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState()
-        const users = Object.keys(state)
-        setOnlineUsers(users)
-      })
-      .on('presence', { event: 'join' }, ({ key }) => {
-        setOnlineUsers((prev) => [...new Set([...prev, key])])
-      })
-      .on('presence', { event: 'leave' }, ({ key }) => {
-        setOnlineUsers((prev) => prev.filter((u) => u !== key))
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: userId, online_at: new Date().toISOString() })
-        }
-      })
-
-    channelRef.current = channel
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-      }
-    }
-  }, [roomId, userId])
-
-  return {
-    onlineUsers,
-    isOnline: userId ? onlineUsers.includes(userId) : false,
-  }
-}
 
 // ============================================
 // 导出连接池统计（用于监控）
