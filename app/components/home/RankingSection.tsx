@@ -341,7 +341,7 @@ export default function RankingSection({
   }, [syncStateToUrl])
 
   // Exchange filter change handler with localStorage persistence
-  const handleExchangeChange = useCallback((exchange: string | null) => {
+  const _handleExchangeChange = useCallback((exchange: string | null) => {
     setSelectedExchange(exchange)
     setCurrentPage(1)
     syncStateToUrl({ ex: exchange, page: 1 })
@@ -614,7 +614,7 @@ export default function RankingSection({
           <ExchangeFilter
             availableSources={dataSources}
             selectedExchange={selectedExchange}
-            onExchangeChange={handleExchangeChange}
+            onExchangeChange={_handleExchangeChange}
             isPro={isPro}
             onProRequired={handleProRequired}
           />

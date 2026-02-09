@@ -19,7 +19,7 @@ type Trader = {
 
 const RANK_COLORS = RANK_COLORS_ARRAY
 
-const PLATFORM_LABELS: Record<string, string> = {
+const _PLATFORM_LABELS: Record<string, string> = {
   binance: 'Binance',
   okx: 'OKX',
   bitget: 'Bitget',
@@ -80,7 +80,7 @@ const fetcher = async (url: string) => {
 
 export default function TopTraders() {
   const { language, t } = useLanguage()
-  const isZh = language === 'zh'
+  const _isZh = language === 'zh'
 
   const { data, error, isLoading } = useSWR<{ traders: Trader[] }>(
     '/api/sidebar/top-traders',

@@ -1,6 +1,6 @@
 'use client'
 
-import { getLevelInfo, LevelInfo } from '@/lib/utils/user-level'
+import { getLevelInfo } from '@/lib/utils/user-level'
 
 interface LevelBadgeProps {
   exp: number

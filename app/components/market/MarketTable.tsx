@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, memo, CSSProperties } from 'react'
+import { useState, useMemo, memo, CSSProperties } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 export interface Column<T> {
