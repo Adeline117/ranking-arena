@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
@@ -46,6 +46,8 @@ interface TraderHeaderProps {
   roi90d?: number
   maxDrawdown?: number
   winRate?: number
+  /** Pre-fetched current user ID to avoid duplicate auth calls */
+  currentUserId?: string | null
 }
 
 const SOURCE_CONFIG: Record<string, string> = {
@@ -341,10 +343,12 @@ export default function TraderHeader({
   roi90d,
   maxDrawdown,
   winRate,
+  currentUserId: externalUserId,
 }: TraderHeaderProps): React.ReactElement {
-  const [userId, setUserId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
   const [mounted, setMounted] = useState(false)
   const [avatarHovered, setAvatarHovered] = useState(false)
+  const [avatarError, setAvatarError] = useState(false)
   const [followerCount, setFollowerCount] = useState(followers)
   const [showAlertConfig, setShowAlertConfig] = useState(false)
   const router = useRouter()
@@ -353,11 +357,16 @@ export default function TraderHeader({
 
   useEffect(() => {
     setMounted(true)
+    // Skip auth call if userId was passed from parent
+    if (externalUserId !== undefined) {
+      setUserId(externalUserId)
+      return
+    }
     // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
     })
-  }, [])
+  }, [externalUserId])
 
   const sourceLabelKey = source ? SOURCE_CONFIG[source.toLowerCase()] : null
   const sourceLabel = sourceLabelKey ? t(sourceLabelKey) : null
@@ -457,7 +466,7 @@ export default function TraderHeader({
               cursor: 'pointer',
             }}
           >
-            {avatarUrl ? (
+            {avatarUrl && !avatarError ? (
               <Image
                 src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
                 alt={handle}
@@ -471,18 +480,7 @@ export default function TraderHeader({
                   objectFit: 'cover',
                   transition: 'all 0.4s ease',
                 }}
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement
-                  img.style.display = 'none'
-                  const container = img.parentElement
-                  if (container) {
-                    container.style.background = getAvatarGradient(traderId)
-                    const fallback = document.createElement('span')
-                    fallback.textContent = getAvatarInitial(handle)
-                    fallback.style.cssText = 'color: #fff; font-size: 32px; font-weight: 900; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,0.4);'
-                    container.appendChild(fallback)
-                  }
-                }}
+                onError={() => setAvatarError(true)}
               />
             ) : (
               <Text
