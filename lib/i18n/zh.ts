@@ -2984,6 +2984,7 @@ rejectCall: '拒绝',
     shareToTwitter: '分享到 Twitter/X',
     shareToTelegram: '分享到 Telegram',
     shareToWhatsApp: '分享到 WhatsApp',
+scrollToTop: '返回顶部',
 
 } as const
 

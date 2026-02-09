@@ -21,15 +21,31 @@ export default function KeyboardShortcuts() {
         return
       }
 
+      // Cmd+K / Ctrl+K — focus search (global search shortcut)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        const searchInput = document.querySelector('input[type="search"], input[placeholder*="搜索"], .top-nav-search-input') as HTMLInputElement
+        if (searchInput) {
+          searchInput.focus()
+          searchInput.select()
+        } else {
+          // On mobile, trigger mobile search overlay
+          const mobileSearchBtn = document.querySelector('.show-mobile-flex[aria-label]') as HTMLButtonElement
+          if (mobileSearchBtn) mobileSearchBtn.click()
+        }
+        return
+      }
+
       // Shortcuts with no modifiers
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         switch (e.key) {
           case '/':
             e.preventDefault()
             // Focus search
-            const searchInput = document.querySelector('input[type="search"], input[placeholder*="搜索"]') as HTMLInputElement
+            const searchInput = document.querySelector('input[type="search"], input[placeholder*="搜索"], .top-nav-search-input') as HTMLInputElement
             if (searchInput) {
               searchInput.focus()
+              searchInput.select()
             }
             break
           case 'g':

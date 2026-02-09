@@ -2981,6 +2981,7 @@ rejectCall: 'Reject',
     shareToTwitter: 'Share to Twitter/X',
     shareToTelegram: 'Share to Telegram',
     shareToWhatsApp: 'Share to WhatsApp',
+    scrollToTop: 'Back to top',
 
 } as const
 

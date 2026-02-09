@@ -417,7 +417,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
             <input
               type="search"
               className="top-nav-search-input"
-              placeholder={t('searchPlaceholder')}
+              placeholder={`${t('searchPlaceholder')}  ⌘K`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={t('searchTraders')}

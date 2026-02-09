@@ -75,6 +75,7 @@ export function useRankingsV2(options: UseRankingsV2Options = {}): UseRankingsV2
       revalidateOnFocus: false,
       dedupingInterval: 30000,
       errorRetryCount: 2,
+      keepPreviousData: true,
     }
   )
 
