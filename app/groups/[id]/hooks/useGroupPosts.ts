@@ -317,6 +317,7 @@ export function useGroupPosts({
       showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
+    if (likeLoading[postId]) return // prevent double-click
     setPostLoading(setLikeLoading, postId, true)
     const result = await apiCall(`/api/posts/${postId}/like`, { body: { reaction_type: 'up' } })
     if (result.ok) {
@@ -333,7 +334,7 @@ export function useGroupPosts({
       showToast(result.error || t('operationFailed'), 'error')
     }
     setPostLoading(setLikeLoading, postId, false)
-  }, [accessToken, t, showToast, apiCall, setPostLoading])
+  }, [accessToken, t, showToast, apiCall, setPostLoading, likeLoading])
 
   // Bookmark handler
   const handleBookmark = useCallback(async (postId: string) => {
@@ -341,6 +342,7 @@ export function useGroupPosts({
       showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
+    if (bookmarkLoading[postId]) return // prevent double-click
     setPostLoading(setBookmarkLoading, postId, true)
     const result = await apiCall(`/api/posts/${postId}/bookmark`)
     if (result.ok) {
@@ -352,7 +354,7 @@ export function useGroupPosts({
       showToast(result.error || t('operationFailed'), 'error')
     }
     setPostLoading(setBookmarkLoading, postId, false)
-  }, [accessToken, t, showToast, apiCall, setPostLoading])
+  }, [accessToken, t, showToast, apiCall, setPostLoading, bookmarkLoading])
 
   // Repost handler
   const handleRepost = useCallback(async (postId: string, comment?: string) => {

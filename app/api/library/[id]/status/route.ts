@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Upsert - if switching to want_to_read, clear rating
-    const upsertData: any = {
+    const upsertData: { user_id: string; library_item_id: string; status: string; updated_at: string; rating?: null } = {
       user_id: user.id,
       library_item_id: id,
       status,
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     return NextResponse.json({ success: true, status })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (e: unknown) {
+    return NextResponse.json({ error: (e instanceof Error ? e.message : String(e)) }, { status: 500 })
   }
 }

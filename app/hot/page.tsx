@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback, useRef, Suspense } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef, Suspense, lazy } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -8,9 +8,10 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
-import TopTraders from '@/app/components/sidebar/TopTraders'
-import WatchlistMarket from '@/app/components/sidebar/WatchlistMarket'
-import NewsFlash from '@/app/components/sidebar/NewsFlash'
+// Lazy-load sidebar widgets (below fold on mobile, non-critical for LCP)
+const TopTraders = lazy(() => import('@/app/components/sidebar/TopTraders'))
+const WatchlistMarket = lazy(() => import('@/app/components/sidebar/WatchlistMarket'))
+const NewsFlash = lazy(() => import('@/app/components/sidebar/NewsFlash'))
 // MarketPanel replaced by sidebar widgets
 import Card from '@/app/components/ui/Card'
 // RankingTableCompact replaced by TopTraders sidebar widget
@@ -755,14 +756,14 @@ function HotContent() {
 
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
         <ThreeColumnLayout
-          leftSidebar={<TopTraders />}
+          leftSidebar={<Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}><TopTraders /></Suspense>}
           rightSidebar={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 72px)' }}>
               <div style={{ flexShrink: 0, maxHeight: '35%', overflow: 'auto' }}>
-                <WatchlistMarket />
+                <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}><WatchlistMarket /></Suspense>
               </div>
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                <NewsFlash />
+                <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}><NewsFlash /></Suspense>
               </div>
             </div>
           }

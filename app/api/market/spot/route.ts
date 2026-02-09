@@ -48,7 +48,7 @@ export async function GET(_req: NextRequest) {
         'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
       },
     })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (e: unknown) {
+    return NextResponse.json({ error: (e instanceof Error ? e.message : String(e)) }, { status: 500 })
   }
 }

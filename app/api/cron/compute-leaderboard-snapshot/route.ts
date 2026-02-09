@@ -39,8 +39,8 @@ export async function GET(req: NextRequest) {
       insertedCount,
       duration,
     })
-  } catch (err: any) {
-    logger.error('Compute leaderboard snapshot failed', { error: err.message })
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    logger.error('Compute leaderboard snapshot failed', { error: (err instanceof Error ? err.message : String(err)) })
+    return NextResponse.json({ error: (err instanceof Error ? err.message : String(err)) }, { status: 500 })
   }
 }

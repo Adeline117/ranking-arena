@@ -138,7 +138,7 @@ export default function SentimentBar() {
     </div>
   )
 
-  const { btcPrice, btcChange, ethPrice, ethChange } = items as any
+  const { btcPrice, btcChange, ethPrice, ethChange } = items as { btcPrice: number; btcChange: number; ethPrice: number; ethChange: number }
 
   return (
     <div

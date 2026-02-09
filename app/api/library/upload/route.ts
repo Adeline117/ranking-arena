@@ -104,10 +104,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, url, key })
-  } catch (e: any) {
+  } catch (e: unknown) {
     logger.error('Upload error:', e)
     return NextResponse.json(
-      { error: e.message || 'Internal server error' },
+      { error: (e instanceof Error ? e.message : 'Internal server error') },
       { status: 500 }
     )
   }
