@@ -95,11 +95,11 @@ interface WeexSection {
 }
 
 interface WeexApiResponse {
-  code?: number
+  code?: number | string
   msg?: string
   data?:
     | WeexSection[]                                 // topTraderListView grouped format
-    | { list?: WeexTrader[]; traders?: WeexTrader[] } // standard list format
+    | { list?: WeexTrader[]; traders?: WeexTrader[]; rows?: WeexTrader[]; nextFlag?: boolean; totals?: number } // standard list format (janapw.com uses 'rows')
     | WeexTrader[]                                   // direct array
 }
 
@@ -123,9 +123,9 @@ function extractTradersFromResponse(data: WeexApiResponse): WeexTrader[] {
     return data.data as WeexTrader[]
   }
 
-  // Standard format: { data: { list: [...] } }
-  const d = data.data as { list?: WeexTrader[]; traders?: WeexTrader[] }
-  return d.list || d.traders || []
+  // Standard format: { data: { list: [...] } } or { data: { rows: [...] } } (janapw.com)
+  const d = data.data as { list?: WeexTrader[]; traders?: WeexTrader[]; rows?: WeexTrader[] }
+  return d.list || d.rows || d.traders || []
 }
 
 function parseTrader(item: WeexTrader, period: string): TraderData | null {
@@ -210,34 +210,30 @@ interface EndpointDef {
 }
 
 const API_ENDPOINTS: EndpointDef[] = [
-  // topTraderListView — primary (returns grouped sections)
+  // Discovered working endpoint (janapw.com gateway) — requires browser-like headers
+  // Note: Direct curl returns 521; needs x-sig, sidecar, x-timestamp, vs, terminalcode headers
+  // which are generated client-side. Falls back to browser scraping if direct fails.
+  {
+    url: 'https://http-gateway1.janapw.com/api/v1/public/trace/traderListView',
+    method: 'POST',
+    body: (page: number) => ({ languageType: 0, sortRule: 9, simulation: 0, pageNo: page, pageSize: PAGE_SIZE, nickName: '' }),
+  },
+  // topTraderListView — returns grouped sections (top traders by category)
+  {
+    url: 'https://http-gateway1.janapw.com/api/v1/public/trace/topTraderListView',
+    method: 'POST',
+    body: (page: number) => ({ languageType: 0, pageNo: page, pageSize: PAGE_SIZE }),
+  },
+  // Legacy endpoints (may still work with browser session)
   {
     url: 'https://www.weex.com/api/copyTrade/topTraderListView',
     method: 'POST',
     body: (page: number) => ({ pageSize: PAGE_SIZE, pageNum: page }),
   },
-  // traderList — standard list
   {
     url: 'https://www.weex.com/api/copyTrade/traderList',
     method: 'POST',
     body: (page: number) => ({ pageSize: PAGE_SIZE, pageNum: page }),
-  },
-  // copy/traders
-  {
-    url: 'https://www.weex.com/api/copy/traders',
-    method: 'POST',
-    body: (page: number) => ({ pageSize: PAGE_SIZE, pageNum: page }),
-  },
-  // Alternative domains
-  {
-    url: 'https://capi.weex.com/api/copyTrade/topTraderListView',
-    method: 'POST',
-    body: (page: number) => ({ pageSize: PAGE_SIZE, pageNum: page }),
-  },
-  // GET variant
-  {
-    url: 'https://www.weex.com/api/copyTrade/topTraderListView',
-    method: 'GET',
   },
 ]
 
