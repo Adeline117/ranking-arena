@@ -1,101 +1,28 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
-interface SectorData {
+interface CoinData {
+  symbol: string
   name: string
-  category: string
   marketCap: number
-  changePct: number
-  children?: SectorData[]
+  change24h: number | null
 }
 
 type TimeFrame = '1h' | '24h' | '7d'
 
-// Mock data per timeframe - will be replaced with real API
-const MOCK_SECTORS: Record<TimeFrame, SectorData[]> = {
-  '1h': [
-    { name: 'BTC', category: 'L1', marketCap: 1900000, changePct: 0.3 },
-    { name: 'ETH', category: 'L1', marketCap: 420000, changePct: -0.5 },
-    { name: 'SOL', category: 'L1', marketCap: 85000, changePct: 1.2 },
-    { name: 'BNB', category: 'L1', marketCap: 95000, changePct: 0.1 },
-    { name: 'ADA', category: 'L1', marketCap: 25000, changePct: -0.8 },
-    { name: 'AVAX', category: 'L1', marketCap: 15000, changePct: 0.6 },
-    { name: 'LINK', category: 'DeFi', marketCap: 12000, changePct: 0.9 },
-    { name: 'UNI', category: 'DeFi', marketCap: 8000, changePct: -0.2 },
-    { name: 'AAVE', category: 'DeFi', marketCap: 6000, changePct: 0.4 },
-    { name: 'MKR', category: 'DeFi', marketCap: 3500, changePct: -0.3 },
-    { name: 'ARB', category: 'L2', marketCap: 4500, changePct: -0.6 },
-    { name: 'OP', category: 'L2', marketCap: 3800, changePct: 0.2 },
-    { name: 'MATIC', category: 'L2', marketCap: 7500, changePct: -0.1 },
-    { name: 'DOGE', category: 'Meme', marketCap: 25000, changePct: 2.1 },
-    { name: 'SHIB', category: 'Meme', marketCap: 9000, changePct: -1.3 },
-    { name: 'PEPE', category: 'Meme', marketCap: 5000, changePct: 3.5 },
-    { name: 'WIF', category: 'Meme', marketCap: 3000, changePct: -1.8 },
-    { name: 'RNDR', category: 'AI', marketCap: 5500, changePct: 1.5 },
-    { name: 'FET', category: 'AI', marketCap: 3200, changePct: 0.8 },
-    { name: 'TAO', category: 'AI', marketCap: 4800, changePct: -0.4 },
-    { name: 'AXS', category: 'GameFi', marketCap: 1800, changePct: -0.3 },
-    { name: 'GALA', category: 'GameFi', marketCap: 900, changePct: 0.7 },
-    { name: 'IMX', category: 'GameFi', marketCap: 2200, changePct: 0.2 },
-    { name: 'BLUR', category: 'NFT', marketCap: 800, changePct: -1.1 },
-    { name: 'APE', category: 'NFT', marketCap: 1200, changePct: -0.5 },
-  ],
-  '24h': [
-    { name: 'BTC', category: 'L1', marketCap: 1900000, changePct: 2.3 },
-    { name: 'ETH', category: 'L1', marketCap: 420000, changePct: -1.2 },
-    { name: 'SOL', category: 'L1', marketCap: 85000, changePct: 5.8 },
-    { name: 'BNB', category: 'L1', marketCap: 95000, changePct: 0.7 },
-    { name: 'ADA', category: 'L1', marketCap: 25000, changePct: -3.1 },
-    { name: 'AVAX', category: 'L1', marketCap: 15000, changePct: 4.2 },
-    { name: 'LINK', category: 'DeFi', marketCap: 12000, changePct: 3.5 },
-    { name: 'UNI', category: 'DeFi', marketCap: 8000, changePct: -0.8 },
-    { name: 'AAVE', category: 'DeFi', marketCap: 6000, changePct: 2.1 },
-    { name: 'MKR', category: 'DeFi', marketCap: 3500, changePct: -1.5 },
-    { name: 'ARB', category: 'L2', marketCap: 4500, changePct: -2.8 },
-    { name: 'OP', category: 'L2', marketCap: 3800, changePct: 1.9 },
-    { name: 'MATIC', category: 'L2', marketCap: 7500, changePct: -0.5 },
-    { name: 'DOGE', category: 'Meme', marketCap: 25000, changePct: 8.2 },
-    { name: 'SHIB', category: 'Meme', marketCap: 9000, changePct: -4.5 },
-    { name: 'PEPE', category: 'Meme', marketCap: 5000, changePct: 12.3 },
-    { name: 'WIF', category: 'Meme', marketCap: 3000, changePct: -6.7 },
-    { name: 'RNDR', category: 'AI', marketCap: 5500, changePct: 7.1 },
-    { name: 'FET', category: 'AI', marketCap: 3200, changePct: 4.5 },
-    { name: 'TAO', category: 'AI', marketCap: 4800, changePct: -2.3 },
-    { name: 'AXS', category: 'GameFi', marketCap: 1800, changePct: -1.2 },
-    { name: 'GALA', category: 'GameFi', marketCap: 900, changePct: 3.8 },
-    { name: 'IMX', category: 'GameFi', marketCap: 2200, changePct: 0.9 },
-    { name: 'BLUR', category: 'NFT', marketCap: 800, changePct: -5.2 },
-    { name: 'APE', category: 'NFT', marketCap: 1200, changePct: -2.1 },
-  ],
-  '7d': [
-    { name: 'BTC', category: 'L1', marketCap: 1900000, changePct: 5.1 },
-    { name: 'ETH', category: 'L1', marketCap: 420000, changePct: -3.8 },
-    { name: 'SOL', category: 'L1', marketCap: 85000, changePct: 12.4 },
-    { name: 'BNB', category: 'L1', marketCap: 95000, changePct: 1.9 },
-    { name: 'ADA', category: 'L1', marketCap: 25000, changePct: -7.2 },
-    { name: 'AVAX', category: 'L1', marketCap: 15000, changePct: 9.5 },
-    { name: 'LINK', category: 'DeFi', marketCap: 12000, changePct: 8.3 },
-    { name: 'UNI', category: 'DeFi', marketCap: 8000, changePct: -2.1 },
-    { name: 'AAVE', category: 'DeFi', marketCap: 6000, changePct: 5.6 },
-    { name: 'MKR', category: 'DeFi', marketCap: 3500, changePct: -4.2 },
-    { name: 'ARB', category: 'L2', marketCap: 4500, changePct: -6.5 },
-    { name: 'OP', category: 'L2', marketCap: 3800, changePct: 4.7 },
-    { name: 'MATIC', category: 'L2', marketCap: 7500, changePct: -1.8 },
-    { name: 'DOGE', category: 'Meme', marketCap: 25000, changePct: 18.5 },
-    { name: 'SHIB', category: 'Meme', marketCap: 9000, changePct: -9.3 },
-    { name: 'PEPE', category: 'Meme', marketCap: 5000, changePct: 25.8 },
-    { name: 'WIF', category: 'Meme', marketCap: 3000, changePct: -14.2 },
-    { name: 'RNDR', category: 'AI', marketCap: 5500, changePct: 15.3 },
-    { name: 'FET', category: 'AI', marketCap: 3200, changePct: 11.2 },
-    { name: 'TAO', category: 'AI', marketCap: 4800, changePct: -5.8 },
-    { name: 'AXS', category: 'GameFi', marketCap: 1800, changePct: -3.5 },
-    { name: 'GALA', category: 'GameFi', marketCap: 900, changePct: 8.9 },
-    { name: 'IMX', category: 'GameFi', marketCap: 2200, changePct: 2.4 },
-    { name: 'BLUR', category: 'NFT', marketCap: 800, changePct: -11.5 },
-    { name: 'APE', category: 'NFT', marketCap: 1200, changePct: -5.8 },
-  ],
+// Category mapping for known coins
+const CATEGORY_MAP: Record<string, string> = {
+  BTC: 'L1', ETH: 'L1', SOL: 'L1', BNB: 'L1', ADA: 'L1', AVAX: 'L1', DOT: 'L1', NEAR: 'L1', ATOM: 'L1', SUI: 'L1', APT: 'L1', TRX: 'L1', TON: 'L1', XRP: 'L1',
+  LINK: 'DeFi', UNI: 'DeFi', AAVE: 'DeFi', MKR: 'DeFi', CRV: 'DeFi', SNX: 'DeFi', COMP: 'DeFi', SUSHI: 'DeFi', DYDX: 'DeFi', LDO: 'DeFi',
+  ARB: 'L2', OP: 'L2', MATIC: 'L2', STRK: 'L2', IMX: 'L2', MANTA: 'L2',
+  DOGE: 'Meme', SHIB: 'Meme', PEPE: 'Meme', WIF: 'Meme', FLOKI: 'Meme', BONK: 'Meme',
+  RNDR: 'AI', FET: 'AI', TAO: 'AI', AGIX: 'AI', WLD: 'AI',
+  AXS: 'GameFi', GALA: 'GameFi', SAND: 'GameFi', MANA: 'GameFi',
+  BLUR: 'NFT', APE: 'NFT',
+  USDT: 'Stable', USDC: 'Stable', DAI: 'Stable',
+  XLM: 'L1', ALGO: 'L1', ICP: 'L1', FIL: 'Infra', AR: 'Infra', THETA: 'Infra',
 }
 
 function getChangeColor(changePct: number): string {
@@ -104,13 +31,11 @@ function getChangeColor(changePct: number): string {
   const intensity = Math.abs(clamped) / maxPct
 
   if (clamped >= 0) {
-    // Green: light (#4ade80) → deep (#15803d)
     const r = Math.round(74 - intensity * 53)
     const g = Math.round(222 - intensity * 94)
     const b = Math.round(128 - intensity * 67)
     return `rgb(${r}, ${g}, ${b})`
   } else {
-    // Red: light (#f87171) → deep (#b91c1c)
     const r = Math.round(248 - intensity * 63)
     const g = Math.round(113 - intensity * 85)
     const b = Math.round(113 - intensity * 85)
@@ -129,35 +54,56 @@ interface TreemapNode {
   height: number
 }
 
-// Simple treemap layout algorithm (squarified)
-function layoutTreemap(
-  data: SectorData[],
-  containerWidth: number,
-  containerHeight: number,
+// Squarified treemap layout
+function squarify(
+  data: { name: string; category: string; marketCap: number; changePct: number }[],
+  x: number, y: number, w: number, h: number,
 ): TreemapNode[] {
-  const total = data.reduce((sum, d) => sum + d.marketCap, 0)
-  if (total === 0 || containerWidth <= 0 || containerHeight <= 0) return []
+  if (data.length === 0 || w <= 0 || h <= 0) return []
+
+  const total = data.reduce((s, d) => s + d.marketCap, 0)
+  if (total === 0) return []
 
   const sorted = [...data].sort((a, b) => b.marketCap - a.marketCap)
   const nodes: TreemapNode[] = []
 
-  let x = 0, y = 0, w = containerWidth, h = containerHeight
+  function layoutRow(items: typeof sorted, rowArea: number, isHorizontal: boolean, rx: number, ry: number, rw: number, rh: number) {
+    const side = isHorizontal ? rh : rw
+    const rowWidth = rowArea / side
+
+    let offset = 0
+    for (const item of items) {
+      const itemArea = (item.marketCap / total) * w * h
+      const itemLen = itemArea / rowWidth
+
+      if (isHorizontal) {
+        nodes.push({ ...item, x: rx, y: ry + offset, width: rowWidth, height: itemLen })
+      } else {
+        nodes.push({ ...item, x: rx + offset, y: ry, width: itemLen, height: rowWidth })
+      }
+      offset += itemLen
+    }
+    return rowWidth
+  }
+
+  // Simple slice-and-dice for better visual
+  let cx = x, cy = y, cw = w, ch = h
   let remaining = total
 
   for (let i = 0; i < sorted.length; i++) {
     const item = sorted[i]
     const ratio = item.marketCap / remaining
 
-    if (w > h) {
-      const itemW = w * ratio
-      nodes.push({ ...item, x, y, width: itemW, height: h })
-      x += itemW
-      w -= itemW
+    if (cw > ch) {
+      const itemW = cw * ratio
+      nodes.push({ ...item, x: cx, y: cy, width: itemW, height: ch })
+      cx += itemW
+      cw -= itemW
     } else {
-      const itemH = h * ratio
-      nodes.push({ ...item, x, y, width: w, height: itemH })
-      y += itemH
-      h -= itemH
+      const itemH = ch * ratio
+      nodes.push({ ...item, x: cx, y: cy, width: cw, height: itemH })
+      cy += itemH
+      ch -= itemH
     }
     remaining -= item.marketCap
   }
@@ -171,6 +117,39 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const [coins, setCoins] = useState<{ name: string; category: string; marketCap: number; changePct: number }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Fetch real data from /api/market/spot
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/market/spot')
+      const data: CoinData[] = await res.json()
+      if (!Array.isArray(data)) return
+
+      const mapped = data
+        .filter((c) => c.marketCap > 0 && c.change24h !== null && !['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'FDUSD'].includes(c.symbol))
+        .slice(0, 30)
+        .map((c) => ({
+          name: c.symbol,
+          category: CATEGORY_MAP[c.symbol] || 'Other',
+          marketCap: c.marketCap,
+          changePct: c.change24h ?? 0,
+        }))
+
+      setCoins(mapped)
+    } catch {
+      // fallback silent
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+    const interval = setInterval(fetchData, 60000)
+    return () => clearInterval(interval)
+  }, [fetchData])
 
   useEffect(() => {
     const el = containerRef.current
@@ -178,14 +157,14 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
     const observer = new ResizeObserver(entries => {
       const entry = entries[0]
       if (entry) {
-        setSize({ width: entry.contentRect.width, height: Math.max(200, Math.min(280, entry.contentRect.width * 0.25)) })
+        setSize({ width: entry.contentRect.width, height: Math.max(240, Math.min(360, entry.contentRect.width * 0.3)) })
       }
     })
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
 
-  const nodes = layoutTreemap(MOCK_SECTORS[timeframe], size.width, size.height)
+  const nodes = squarify(coins, 0, 0, size.width, size.height)
 
   const timeframes: { key: TimeFrame; label: string }[] = [
     { key: '1h', label: '1小时' },
@@ -202,7 +181,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
         alignItems: 'center',
         marginBottom: 12,
       }}>
-        <span style={{ fontSize: 16, fontWeight: 600, color: tokens.colors.text.primary }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.text.primary }}>
           板块热力图
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -240,8 +219,21 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
           border: `1px solid ${tokens.colors.border.primary}`,
         }}
       >
-        {nodes.map(node => {
+        {loading ? (
+          <div style={{
+            width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: tokens.colors.text.tertiary, fontSize: 14,
+          }}>
+            加载中...
+          </div>
+        ) : nodes.map(node => {
           const isHovered = hoveredNode === node.name
+          const showName = node.width > 36 && node.height > 28
+          const showPct = node.width > 44 && node.height > 40
+          const showCat = node.width > 60 && node.height > 55
+          const fontSize = Math.max(10, Math.min(18, Math.min(node.width / 5, node.height / 3)))
+
           return (
             <div
               key={node.name}
@@ -256,45 +248,45 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 width: node.width,
                 height: node.height,
                 background: getChangeColor(node.changePct),
-                border: '1px solid var(--color-overlay-light)',
+                border: '1px solid rgba(0,0,0,0.15)',
                 cursor: 'pointer',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 overflow: 'hidden',
-                transition: 'filter 0.15s ease, transform 0.15s ease',
-                filter: isHovered ? 'brightness(1.2)' : 'brightness(1)',
+                transition: 'filter 0.15s ease',
+                filter: isHovered ? 'brightness(1.25)' : 'brightness(1)',
                 zIndex: isHovered ? 10 : 1,
-                boxShadow: isHovered ? '0 0 0 2px var(--glass-border-heavy)' : 'none',
-                padding: 4,
+                boxShadow: isHovered ? '0 0 0 2px rgba(255,255,255,0.3)' : 'none',
+                padding: 2,
               }}
             >
-              {node.width > 40 && node.height > 30 && (
-                <>
-                  <span style={{
-                    fontSize: Math.max(10, Math.min(16, node.width / 6)),
-                    fontWeight: 700,
-                    color: '#fff',
-                    textShadow: '0 1px 2px var(--color-overlay-dark)',
-                    lineHeight: 1.2,
-                  }}>
-                    {node.name}
-                  </span>
-                  <span style={{
-                    fontSize: Math.max(9, Math.min(12, node.width / 8)),
-                    fontWeight: 600,
-                    color: 'var(--glass-bg-heavy)',
-                    textShadow: '0 1px 2px var(--color-overlay-dark)',
-                  }}>
-                    {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
-                  </span>
-                </>
+              {showName && (
+                <span style={{
+                  fontSize,
+                  fontWeight: 800,
+                  color: '#fff',
+                  textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                  lineHeight: 1.2,
+                }}>
+                  {node.name}
+                </span>
               )}
-              {node.width > 60 && node.height > 50 && (
+              {showPct && (
+                <span style={{
+                  fontSize: Math.max(9, fontSize * 0.7),
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.85)',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                }}>
+                  {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
+                </span>
+              )}
+              {showCat && (
                 <span style={{
                   fontSize: 9,
-                  color: 'var(--glass-border-heavy)',
+                  color: 'rgba(255,255,255,0.55)',
                   marginTop: 2,
                 }}>
                   {node.category}
@@ -314,7 +306,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
             position: 'fixed',
             left: tooltipPos.x + 12,
             top: tooltipPos.y - 40,
-            background: 'rgba(0,0,0,0.85)',
+            background: 'rgba(0,0,0,0.88)',
             color: '#fff',
             padding: '6px 10px',
             borderRadius: tokens.radius.sm,
@@ -322,10 +314,9 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
             pointerEvents: 'none',
             zIndex: 1000,
             whiteSpace: 'nowrap',
-            boxShadow: 'var(--shadow-sm-dark)',
           }}>
-            <strong>{node.name}</strong> · {node.category}<br />
-            市值: ${(node.marketCap / 1e3).toFixed(0)}B · {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
+            <strong>{node.name}</strong> / {node.category}<br />
+            市值: ${(node.marketCap / 1e9).toFixed(1)}B &middot; {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(2)}%
           </div>
         )
       })()}
@@ -339,22 +330,17 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
         fontSize: 11,
         color: tokens.colors.text.tertiary,
       }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 2, background: getChangeColor(-8) }} />
-          大跌
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 2, background: getChangeColor(-2) }} />
-          小跌
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 2, background: getChangeColor(2) }} />
-          小涨
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 2, background: getChangeColor(8) }} />
-          大涨
-        </span>
+        {[
+          { label: '大跌', val: -8 },
+          { label: '小跌', val: -2 },
+          { label: '小涨', val: 2 },
+          { label: '大涨', val: 8 },
+        ].map(item => (
+          <span key={item.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 12, height: 12, borderRadius: 2, background: getChangeColor(item.val) }} />
+            {item.label}
+          </span>
+        ))}
       </div>
     </div>
   )

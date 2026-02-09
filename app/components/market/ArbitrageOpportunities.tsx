@@ -122,20 +122,18 @@ export default function ArbitrageOpportunities() {
           color: tokens.colors.text.primary,
           letterSpacing: '0.3px',
         }}>
-          {hasOpps ? (t('arbitrageOpportunities') || '套利机会') : '交易所价差'}
+          {t('arbitrageOpportunities') || '套利机会'}
         </span>
-        {hasOpps && (
-          <span style={{
-            fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.accent.success,
-            fontWeight: 600,
-            padding: `2px ${tokens.spacing[2]}`,
-            borderRadius: tokens.radius.sm,
-            background: 'rgba(47, 229, 125, 0.1)',
-          }}>
-            {opps.length} 个机会
-          </span>
-        )}
+        <span style={{
+          fontSize: tokens.typography.fontSize.xs,
+          color: hasOpps ? tokens.colors.accent.success : tokens.colors.text.tertiary,
+          fontWeight: 600,
+          padding: `2px ${tokens.spacing[2]}`,
+          borderRadius: tokens.radius.sm,
+          background: hasOpps ? 'rgba(47, 229, 125, 0.1)' : tokens.colors.bg.tertiary,
+        }}>
+          {hasOpps ? `${opps.length}个机会` : showComparisons ? `${priceComparisons.length}个币种` : '0个机会'}
+        </span>
       </div>
 
       {loading ? (
@@ -154,17 +152,17 @@ export default function ArbitrageOpportunities() {
                   background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
                   minHeight: 36,
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ color: tokens.colors.text.primary, fontWeight: 700, fontSize: tokens.typography.fontSize.sm }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: tokens.typography.fontSize.sm }}>
+                    <span style={{ color: tokens.colors.text.primary, fontWeight: 700 }}>
                       {opp.symbol.replace('/USDT', '')}
                     </span>
-                    <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>
+                    <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, textTransform: 'lowercase' }}>
                       {opp.buyExchange}
                     </span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
-                      <path d="M5 12h14m-7-7l7 7-7 7" />
+                    <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+                      <path d="M1 5h12M9 1l4 4-4 4" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>
+                    <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, textTransform: 'lowercase' }}>
                       {opp.sellExchange}
                     </span>
                   </div>
@@ -208,66 +206,41 @@ export default function ArbitrageOpportunities() {
           })}
         </div>
       ) : showComparisons ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
           {priceComparisons.map((pc, i) => (
             <div key={pc.symbol} style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.md,
               background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
               minHeight: 36,
             }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 4,
-              }}>
-                <span style={{
-                  fontWeight: 700,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.sm,
-                }}>
-                  {pc.symbol}/USDT
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: tokens.typography.fontSize.sm }}>
+                <span style={{ color: tokens.colors.text.primary, fontWeight: 700 }}>
+                  {pc.symbol}
                 </span>
-                <span style={{
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: 700,
-                  color: pc.spreadPct > 0.05 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
-                  fontFamily: 'var(--font-mono, monospace)',
-                }}>
-                  {pc.spreadPct.toFixed(3)}%
+                <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, textTransform: 'lowercase' }}>
+                  {pc.bestBuy}
+                </span>
+                <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+                  <path d="M1 5h12M9 1l4 4-4 4" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, textTransform: 'lowercase' }}>
+                  {pc.bestSell}
                 </span>
               </div>
-              <div style={{
-                display: 'flex',
-                gap: tokens.spacing[3],
-                fontSize: tokens.typography.fontSize.xs,
+              <span style={{
+                color: pc.spreadPct > 0.05 ? tokens.colors.accent.success : tokens.colors.text.tertiary,
+                fontWeight: 800,
+                fontSize: tokens.typography.fontSize.sm,
+                fontFamily: 'var(--font-mono, monospace)',
               }}>
-                {pc.exchanges.map(ex => (
-                  <span key={ex.name} style={{
-                    color: ex.name === pc.bestBuy
-                      ? tokens.colors.accent.success
-                      : ex.name === pc.bestSell
-                        ? tokens.colors.accent.error
-                        : tokens.colors.text.tertiary,
-                    fontFamily: 'var(--font-mono, monospace)',
-                  }}>
-                    {ex.name}: ${ex.price >= 1000 ? ex.price.toFixed(2) : ex.price.toFixed(4)}
-                  </span>
-                ))}
-              </div>
+                +{pc.spreadPct.toFixed(2)}%
+              </span>
             </div>
           ))}
-          <div style={{
-            fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.text.tertiary,
-            textAlign: 'center',
-            marginTop: 'auto',
-            paddingTop: tokens.spacing[2],
-          }}>
-            <span style={{ color: tokens.colors.accent.success }}>●</span> 最低买入　
-            <span style={{ color: tokens.colors.accent.error }}>●</span> 最高卖出
-          </div>
         </div>
       ) : (
         <div style={{
