@@ -5,12 +5,23 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import { randomUUID } from 'crypto'
+import { readFileSync } from 'fs'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://iknktzifjdyujdccyhsv.supabase.co'
+// Load .env.local
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const envFile = readFileSync(resolve(__dirname, '..', '.env.local'), 'utf8')
+for (const line of envFile.split('\n')) {
+  const m = line.match(/^([A-Z_]+)="?([^"]*)"?$/)
+  if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
+}
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-const BUCKET = 'library-files'
+const BUCKET = 'library'
 const BATCH_SIZE = 50
-const CONCURRENCY = 5
+const CONCURRENCY = 3
 const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100 MB limit
 
 if (!SUPABASE_KEY) {
@@ -28,7 +39,7 @@ async function downloadOne(item) {
   const { id, pdf_url, title } = item
   try {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 30000)
+    const timeout = setTimeout(() => controller.abort(), 60000)
     const res = await fetch(pdf_url, {
       signal: controller.signal,
       headers: { 'User-Agent': 'RankingArena-LibraryBot/1.0' },
@@ -63,6 +74,7 @@ async function downloadOne(item) {
       .upload(fileKey, buffer, { contentType, upsert: false })
 
     if (uploadError) {
+      if (downloaded + failed + skipped < 3) console.error(`Upload error for ${id}:`, uploadError.message)
       failed++
       return
     }
@@ -83,15 +95,20 @@ async function downloadOne(item) {
       console.log(`Progress: ${downloaded} downloaded, ${failed} failed, ${skipped} skipped`)
     }
   } catch (err) {
+    if (downloaded + failed + skipped < 3) console.error(`Error for ${id}:`, err.message)
     failed++
   }
 }
 
 async function processInBatches() {
+  console.log('Starting PDF download...')
+  console.log('SUPABASE_URL:', SUPABASE_URL)
+  console.log('Bucket:', BUCKET)
   let offset = 0
   let hasMore = true
 
   while (hasMore) {
+    console.log(`Fetching batch at offset ${offset}...`)
     const { data, error } = await supabase
       .from('library_items')
       .select('id, pdf_url, title')

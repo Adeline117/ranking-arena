@@ -86,7 +86,7 @@ export default function InstallPrompt() {
         left: 16,
         right: 16,
         zIndex: 9999,
-        background: "linear-gradient(135deg, #1a1825 0%, #0B0A10 100%)",
+        background: "linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg-primary) 100%)",
         border: "1px solid var(--color-accent-primary-30)",
         borderRadius: tokens.radius.lg,
         padding: "14px 16px",
@@ -131,7 +131,7 @@ export default function InstallPrompt() {
         onClick={handleInstall}
         aria-label={t('pwaInstallButton')}
         style={{
-          background: "linear-gradient(135deg, #8b6fa8, #a88bc4)",
+          background: "linear-gradient(135deg, var(--color-brand), var(--color-brand-hover))",
           color: "var(--foreground)",
           border: "none",
           borderRadius: tokens.radius.md,

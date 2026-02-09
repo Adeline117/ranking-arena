@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const TIERS = [
-  { value: 'tier1', label: 'Tier 1 - 头部KOL', desc: '粉丝数>10万，享有专属主页、认证标识、推荐位曝光、收入分成' },
-  { value: 'tier2', label: 'Tier 2 - 中腰部KOL', desc: '提供实盘收益证明，享有认证标识、推荐位曝光' },
-  { value: 'tier3', label: 'Tier 3 - 社区原生', desc: '社区活跃用户，逐步升级权限，算法推荐' },
+  { value: 'tier1', labelZh: 'Tier 1 - 头部KOL', labelEn: 'Tier 1 - Top KOL', descZh: '粉丝数>10万，享有专属主页、认证标识、推荐位曝光、收入分成', descEn: 'Over 100K followers. Exclusive profile, verified badge, featured placement, revenue sharing' },
+  { value: 'tier2', labelZh: 'Tier 2 - 中腰部KOL', labelEn: 'Tier 2 - Mid-tier KOL', descZh: '提供实盘收益证明，享有认证标识、推荐位曝光', descEn: 'Provide live trading proof. Verified badge, featured placement' },
+  { value: 'tier3', labelZh: 'Tier 3 - 社区原生', labelEn: 'Tier 3 - Community Native', descZh: '社区活跃用户，逐步升级权限，算法推荐', descEn: 'Active community member. Gradual privilege upgrades, algorithmic recommendations' },
 ]
 
 const PLATFORMS = [
@@ -17,11 +18,13 @@ const PLATFORMS = [
   { value: 'youtube', label: 'YouTube' },
   { value: 'telegram', label: 'Telegram' },
   { value: 'tiktok', label: 'TikTok' },
-  { value: 'other', label: '其他' },
+  { value: 'other', labelZh: '其他', labelEn: 'Other' },
 ]
 
 export default function KolApplyPage() {
   const router = useRouter()
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
   const [form, setForm] = useState({
     tier: '',
     platform: '',
@@ -38,11 +41,11 @@ export default function KolApplyPage() {
     e.preventDefault()
 
     if (!form.platform) {
-      setError('请选择主要平台')
+      setError(isZh ? '请选择主要平台' : 'Please select a platform')
       return
     }
     if (!form.platform_handle.trim()) {
-      setError('请填写平台账号')
+      setError(isZh ? '请填写平台账号' : 'Please enter your platform handle')
       return
     }
 
@@ -67,13 +70,13 @@ export default function KolApplyPage() {
 
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || '提交失败')
+        setError(data.error || (isZh ? '提交失败' : 'Submission failed'))
         return
       }
 
       setSuccess(true)
     } catch {
-      setError('网络错误，请稍后重试')
+      setError(isZh ? '网络错误，请稍后重试' : 'Network error, please try again later')
     } finally {
       setLoading(false)
     }
