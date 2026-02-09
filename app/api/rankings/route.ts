@@ -321,14 +321,25 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     };
   });
 
-  // Collect available sources for UI filter
+  // Collect available sources for UI filter — use RPC or large enough sample
   const { data: allSourceRows } = await supabase
-    .from('trader_snapshots')
-    .select('source')
-    .eq('season_id', window.toUpperCase())
-    .not('arena_score', 'is', null)
-    .limit(2000);
-  const availableSources = [...new Set((allSourceRows || []).map((r: { source: string }) => r.source))].sort();
+    .rpc('get_distinct_sources', { p_season_id: window.toUpperCase() })
+    .limit(100);
+  
+  // Fallback: if RPC doesn't exist, query with enough limit to cover all sources
+  let availableSources: string[];
+  if (allSourceRows && allSourceRows.length > 0) {
+    availableSources = allSourceRows.map((r: { source: string }) => r.source).sort();
+  } else {
+    // Fallback: sample from each source by querying without limit on source field
+    const { data: fallbackRows } = await supabase
+      .from('trader_snapshots')
+      .select('source')
+      .eq('season_id', window.toUpperCase())
+      .not('arena_score', 'is', null)
+      .limit(15000);
+    availableSources = [...new Set((fallbackRows || []).map((r: { source: string }) => r.source))].sort();
+  }
 
   return {
     traders,
