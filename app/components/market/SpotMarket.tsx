@@ -68,7 +68,7 @@ function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo })
   )
 }
 
-export default function SpotMarket() {
+export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: SpotCoin) => void } = {}) {
   const { t } = useLanguage()
   const [data, setData] = useState<SpotCoin[]>([])
   const [loading, setLoading] = useState(true)
@@ -231,6 +231,7 @@ export default function SpotMarket() {
         defaultSortKey="rank"
         defaultSortDir="asc"
         rowKey={(r) => r.id}
+        onRowClick={onTokenClick}
       />
     </div>
   )

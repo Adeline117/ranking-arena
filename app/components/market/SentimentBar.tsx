@@ -99,7 +99,7 @@ export default function SentimentBar() {
           ethPrice: overview.ethPrice ?? 0,
           ethChange24h: overview.ethChange24h ?? 0,
           fearGreedValue: fg.current?.value ?? null,
-          fearGreedLabel: fg.current?.classification ?? '',
+          fearGreedLabel: fg.current?.value_classification ?? fg.current?.classification ?? '',
           liquidation24h: overview.liquidation24h ?? null,
           ethGasGwei: overview.ethGasGwei ?? null,
         })
