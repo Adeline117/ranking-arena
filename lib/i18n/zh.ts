@@ -3085,6 +3085,29 @@ scrollToTop: '返回顶部',
     // WebVitals
     webVitalsError: '性能监控初始化失败',
 
+    // Sidebar
+    sidebarTopTraders: 'Top 10 交易员',
+    sidebarWatchlist: '自选行情',
+    sidebarManageWatchlist: '+ 管理自选',
+    sidebarCollapse: '收起',
+    sidebarSearchCoins: '搜索币种...',
+    sidebarNewsFlash: '快讯',
+    sidebarNoNews: '暂无快讯',
+    sidebarRecommendedGroups: '推荐小组',
+    sidebarNoGroups: '暂无小组',
+    sidebarMyGroups: '我的小组',
+    sidebarNoGroupsJoined: '还没有加入小组',
+    sidebarLoginToView: '登录后查看',
+    sidebarHotDiscussions: '热门讨论',
+    sidebarNoDiscussions: '暂无讨论',
+    sidebarHot: '热门',
+    sidebarRising: '升温',
+    sidebarActive: '讨论',
+    sidebarLoadFailed: '加载失败，请刷新重试',
+    sidebarLoadFailedShort: '加载失败',
+    sidebarLongAgo: '很久以前',
+    sidebarNoBooksYet: '还没有收藏的书籍',
+
 } as const
 
 export default zh
