@@ -10,13 +10,13 @@ import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
 import type { NormalizedTrade, ExchangeId } from '@/lib/ws/exchange-feeds'
 
-const EXCHANGE_COLORS: Record<ExchangeId, string> = {
+const _EXCHANGE_COLORS: Record<ExchangeId, string> = {
   binance: '#F0B90B',
   bybit: '#F7A600',
   okx: tokens.colors.text.primary,
 }
 
-const EXCHANGE_LABELS: Record<ExchangeId, string> = {
+const _EXCHANGE_LABELS: Record<ExchangeId, string> = {
   binance: 'Binance',
   bybit: 'Bybit',
   okx: 'OKX',
@@ -28,7 +28,7 @@ function formatPrice(price: number): string {
   return price.toFixed(6)
 }
 
-function formatAmount(amount: number): string {
+function _formatAmount(amount: number): string {
   if (amount >= 1000) return `${(amount / 1000).toFixed(1)}K`
   if (amount >= 1) return amount.toFixed(4)
   return amount.toFixed(6)
@@ -40,7 +40,7 @@ function getVolumeWeight(notional: number): number {
   return Math.min(Math.max(log, 0), 1)
 }
 
-function timeAgo(ts: number): string {
+function _timeAgo(ts: number): string {
   const sec = Math.floor((Date.now() - ts) / 1000)
   if (sec < 1) return 'now'
   if (sec < 60) return `${sec}s`
@@ -121,7 +121,7 @@ function ConnectionDot({ connected }: { connected: boolean }) {
 }
 
 export default function LiveTradesFeed() {
-  const { trades, connectionStatus, connected } = useMarketFeed({ maxTrades: 150 })
+  const { trades, connectionStatus: _connectionStatus, connected } = useMarketFeed({ maxTrades: 150 })
   const containerRef = useRef<HTMLDivElement>(null)
   const [paused, setPaused] = useState(false)
 
