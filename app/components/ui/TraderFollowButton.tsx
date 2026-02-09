@@ -268,7 +268,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         disabled
         title={t('followFeatureComingSoon')}
         style={{
-          width: '100%',
+          width: 'auto',
           padding: '12px 16px',
           borderRadius: tokens.radius.lg,
           border: tokens.glass.border.light,
@@ -319,7 +319,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
       aria-pressed={following}
       aria-busy={isLoading}
       style={{
-        width: '100%',
+        width: 'auto',
         padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
         borderRadius: tokens.radius.lg,
         border: following ? tokens.glass.border.light : 'none',
