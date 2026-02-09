@@ -36,14 +36,14 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
   const isExpired = now > proposal.end
 
   return (
-    <div className="p-5 bg-white/[0.03] border border-white/[0.06] rounded-2xl transition-all duration-200 hover:border-purple-400/30">
+    <div className="p-5 rounded-2xl transition-all duration-200" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border-primary)' }}>
       {/* Header: State badge + votes count + Snapshot link */}
       <div className="flex justify-between items-center mb-3">
         <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${state.badge}`}>
           {state.label}
         </span>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
             {proposal.votes} votes
           </span>
           {spaceId && (
@@ -51,7 +51,8 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
               href={getProposalUrl(spaceId, proposal.id)}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[11px] text-neutral-600 hover:text-purple-400 transition-colors no-underline"
+              className="text-[11px] transition-colors no-underline"
+              style={{ color: 'var(--color-text-tertiary)' }}
               title="View on Snapshot"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -65,13 +66,13 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
       </div>
 
       {/* Title */}
-      <h3 className="text-base font-bold text-neutral-200 mb-2 leading-snug">
+      <h3 className="text-base font-bold mb-2 leading-snug" style={{ color: 'var(--color-text-primary)' }}>
         {proposal.title}
       </h3>
 
       {/* Body preview */}
       {proposal.body && (
-        <p className="text-[13px] text-neutral-500 mb-4 leading-relaxed line-clamp-2">
+        <p className="text-[13px] mb-4 leading-relaxed line-clamp-2" style={{ color: 'var(--color-text-secondary)' }}>
           {proposal.body.slice(0, 200)}
         </p>
       )}
@@ -86,10 +87,10 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
             return (
               <div key={i}>
                 <div className="flex justify-between mb-0.5">
-                  <span className="text-xs text-neutral-400">{choice}</span>
-                  <span className="text-xs text-neutral-500">{pct.toFixed(1)}%</span>
+                  <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{choice}</span>
+                  <span className="text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{pct.toFixed(1)}%</span>
                 </div>
-                <div className="h-1 rounded-sm bg-white/[0.06] overflow-hidden">
+                <div className="h-1 rounded-sm overflow-hidden" style={{ background: 'var(--color-bg-tertiary)' }}>
                   <div
                     className={`h-full rounded-sm transition-[width] duration-300 ${CHOICE_COLORS[i] || CHOICE_COLORS[2]}`}
                     style={{ width: `${pct}%` }}
@@ -103,7 +104,7 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
 
       {/* Voting section for active proposals */}
       {isActive && proposal.choices && (
-        <div className="mt-4 pt-4 border-t border-white/[0.06]">
+        <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--color-border-primary)' }}>
           <div className="flex flex-wrap gap-2">
             {proposal.choices.map((choice, i) => (
               <div key={i} className="flex-1 min-w-[120px]">
@@ -121,7 +122,7 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
       )}
 
       {/* Footer: end time */}
-      <div className="mt-3 text-[11px] text-neutral-600">
+      <div className="mt-3 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
         {isExpired
           ? `Ended ${endDate.toLocaleDateString()}`
           : `Ends ${endDate.toLocaleDateString()} ${endDate.toLocaleTimeString()}`

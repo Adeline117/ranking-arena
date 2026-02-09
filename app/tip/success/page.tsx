@@ -29,13 +29,14 @@ export default function TipSuccessPage() {
   }, [router])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--color-bg-primary)' }}>
       <div className="text-center max-w-md">
         {/* 成功图标 */}
         <div className="mb-6 flex justify-center">
-          <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'var(--color-accent-success-20)' }}>
             <svg 
-              className="w-10 h-10 text-green-500" 
+              className="w-10 h-10" 
+              style={{ color: 'var(--color-accent-success)' }}
               fill="none" 
               viewBox="0 0 24 24" 
               stroke="currentColor"
@@ -50,29 +51,30 @@ export default function TipSuccessPage() {
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">
+        <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
           {t('tipSuccess')}
         </h1>
 
-        <p className="text-gray-400 mb-6">
+        <p className="mb-6" style={{ color: 'var(--color-text-secondary)' }}>
           {t('tipSuccessMessage')}
         </p>
 
         <div className="space-y-3">
           <Link
             href="/"
-            className="block w-full rounded-lg bg-purple-600 py-3 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
+            className="block w-full rounded-lg py-3 text-sm font-medium transition-colors"
+            style={{ background: 'var(--color-accent-primary)', color: '#fff' }}
           >
             {t('backToHome')}
           </Link>
           
-          <p className="text-sm text-gray-500">
+          <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
             {t('redirectingCountdown').replace('{seconds}', String(countdown))}
           </p>
         </div>
 
         {sessionId && (
-          <p className="mt-6 text-xs text-gray-600">
+          <p className="mt-6 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
             {t('orderNumber')}: {sessionId.slice(0, 20)}...
           </p>
         )}

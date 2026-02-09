@@ -96,8 +96,8 @@ export default function KolApplyPage() {
             style={{
               padding: '10px 24px',
               borderRadius: 8,
-              background: 'var(--color-accent)',
-              color: 'white',
+              background: 'var(--color-accent-primary)',
+              color: tokens.colors.white,
               border: 'none',
               cursor: 'pointer',
               fontSize: tokens.typography.fontSize.sm,
@@ -137,7 +137,7 @@ export default function KolApplyPage() {
                     gap: 10,
                     padding: 12,
                     borderRadius: 8,
-                    border: `1px solid ${form.tier === t.value ? 'var(--color-accent)' : 'var(--color-border-primary)'}`,
+                    border: `1px solid ${form.tier === t.value ? 'var(--color-accent-primary)' : 'var(--color-border-primary)'}`,
                     background: form.tier === t.value ? 'var(--color-bg-tertiary)' : 'transparent',
                     cursor: 'pointer',
                   }}
@@ -233,7 +233,7 @@ export default function KolApplyPage() {
           </div>
 
           {error && (
-            <p style={{ color: '#ef4444', fontSize: tokens.typography.fontSize.sm, margin: 0 }}>{error}</p>
+            <p style={{ color: 'var(--color-accent-error)', fontSize: tokens.typography.fontSize.sm, margin: 0 }}>{error}</p>
           )}
 
           <button
@@ -242,8 +242,8 @@ export default function KolApplyPage() {
             style={{
               padding: '12px 24px',
               borderRadius: 8,
-              background: loading || !form.tier ? 'var(--color-bg-tertiary)' : 'var(--color-accent)',
-              color: 'white',
+              background: loading || !form.tier ? 'var(--color-bg-tertiary)' : 'var(--color-accent-primary)',
+              color: tokens.colors.white,
               border: 'none',
               cursor: loading || !form.tier ? 'not-allowed' : 'pointer',
               fontSize: tokens.typography.fontSize.sm,

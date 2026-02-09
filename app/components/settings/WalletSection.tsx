@@ -66,7 +66,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
   if (walletLoading) {
     return (
       <Box style={{ padding: tokens.spacing[4] }}>
-        <div className="h-20 rounded-xl bg-white/[0.03] animate-pulse" />
+        <div className="h-20 rounded-xl animate-pulse" style={{ background: 'var(--color-bg-tertiary)' }} />
       </Box>
     )
   }

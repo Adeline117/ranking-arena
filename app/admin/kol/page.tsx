@@ -101,8 +101,8 @@ export default function AdminKolPage() {
                 padding: '6px 16px',
                 borderRadius: 6,
                 border: 'none',
-                background: filter === s ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                color: filter === s ? 'white' : 'var(--color-text-secondary)',
+                background: filter === s ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary)',
+                color: filter === s ? tokens.colors.white : 'var(--color-text-secondary)',
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
               }}
@@ -161,7 +161,7 @@ export default function AdminKolPage() {
                     href={app.proof_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-accent)', textDecoration: 'underline', display: 'block', marginBottom: 12 }}
+                    style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-accent-primary)', textDecoration: 'underline', display: 'block', marginBottom: 12 }}
                   >
                     查看实盘证明
                   </a>
@@ -195,7 +195,7 @@ export default function AdminKolPage() {
                           borderRadius: 6,
                           border: 'none',
                           background: '#10b981',
-                          color: 'white',
+                          color: tokens.colors.white,
                           cursor: 'pointer',
                           fontSize: tokens.typography.fontSize.sm,
                         }}
@@ -209,7 +209,7 @@ export default function AdminKolPage() {
                           borderRadius: 6,
                           border: 'none',
                           background: '#ef4444',
-                          color: 'white',
+                          color: tokens.colors.white,
                           cursor: 'pointer',
                           fontSize: tokens.typography.fontSize.sm,
                         }}

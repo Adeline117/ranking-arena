@@ -90,8 +90,8 @@ export default function AdminReportsPage() {
                 padding: '6px 16px',
                 borderRadius: 6,
                 border: 'none',
-                background: filter === s ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                color: filter === s ? 'white' : 'var(--color-text-secondary)',
+                background: filter === s ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary)',
+                color: filter === s ? tokens.colors.white : 'var(--color-text-secondary)',
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
               }}

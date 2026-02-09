@@ -182,10 +182,10 @@ export function BadgeDisplay({
               <div className="font-semibold mb-0.5" style={{ color: badge.color }}>
                 {badge.name[language as 'en' | 'zh'] || badge.name.en}
               </div>
-              <div className="text-neutral-400">
+              <div style={{ color: "var(--color-text-secondary)" }}>
                 {badge.description[language as 'en' | 'zh'] || badge.description.en}
               </div>
-              <div className="text-[10px] text-neutral-500 mt-1 capitalize">
+              <div className="text-[10px] mt-1 capitalize" style={{ color: "var(--color-text-tertiary)" }}>
                 {badge.rarity}
               </div>
             </div>
@@ -194,7 +194,7 @@ export function BadgeDisplay({
       ))}
 
       {remaining > 0 && (
-        <span className={`${s.text} text-neutral-500`}>+{remaining}</span>
+        <span className={`${s.text}`} style={{ color: 'var(--color-text-tertiary)' }}>+{remaining}</span>
       )}
     </div>
   )
