@@ -69,7 +69,7 @@ export default function MarketTable<T>({
   }
 
   const thStyle = (col: Column<T>): CSSProperties => ({
-    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
     textAlign: col.align || 'right',
     fontSize: tokens.typography.fontSize.xs,
     fontWeight: tokens.typography.fontWeight.medium,
@@ -77,6 +77,8 @@ export default function MarketTable<T>({
     cursor: col.sortable ? 'pointer' : 'default',
     userSelect: 'none',
     whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
     width: col.width,
   })
 
@@ -91,10 +93,10 @@ export default function MarketTable<T>({
   return (
     <div
       style={{
-        overflowX: 'auto',
         borderRadius: tokens.radius.lg,
         border: `1px solid ${tokens.colors.border.primary}`,
         background: tokens.colors.bg.secondary,
+        overflow: 'hidden',
       }}
     >
       <table
@@ -102,7 +104,7 @@ export default function MarketTable<T>({
           width: '100%',
           borderCollapse: 'collapse',
           fontSize: tokens.typography.fontSize.sm,
-          minWidth: 800,
+          tableLayout: 'fixed',
         }}
       >
         <thead>
@@ -157,9 +159,11 @@ export default function MarketTable<T>({
                   <td
                     key={col.key}
                     style={{
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                       textAlign: col.align || 'right',
                       whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
                       borderBottom: `1px solid ${tokens.colors.border.primary}`,
                     }}
                   >

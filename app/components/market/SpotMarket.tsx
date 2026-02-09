@@ -81,7 +81,7 @@ export default function SpotMarket() {
       key: 'rank',
       label: '#',
       align: 'center',
-      width: '50px',
+      width: '6%',
       sortable: true,
       render: (r) => <span style={{ color: tokens.colors.text.tertiary }}>{r.rank}</span>,
     },
@@ -89,14 +89,14 @@ export default function SpotMarket() {
       key: 'symbol',
       label: t('tradingPair') || '交易对',
       align: 'left',
+      width: '22%',
       sortable: true,
       render: (r) => (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
           {r.image && (
-            <img src={r.image} alt="" width={20} height={20} style={{ borderRadius: '50%' }} loading="lazy" />
+            <img src={r.image} alt="" width={18} height={18} style={{ borderRadius: '50%', flexShrink: 0 }} loading="lazy" />
           )}
-          <span style={{ fontWeight: 600 }}>{r.symbol}</span>
-          <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>/USDT</span>
+          <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.symbol}</span>
         </span>
       ),
       getValue: (r) => r.symbol,
@@ -104,31 +104,35 @@ export default function SpotMarket() {
     {
       key: 'price',
       label: t('lastPrice') || '最新价',
+      width: '18%',
       sortable: true,
       render: (r) => <span style={{ fontFamily: tokens.typography.fontFamily.mono.join(',') }}>{formatPrice(r.price)}</span>,
     },
     {
       key: 'change24h',
       label: t('change24h') || '24h涨跌',
+      width: '14%',
       sortable: true,
       render: (r) => <ChangeCell value={r.change24h} />,
     },
     {
       key: 'volume24h',
-      label: t('volume24h') || '24h成交量',
+      label: t('volume24h') || '成交量',
+      width: '18%',
       sortable: true,
       render: (r) => <span>{formatNum(r.volume24h)}</span>,
     },
     {
       key: 'marketCap',
       label: t('marketCapShort') || '市值',
+      width: '16%',
       sortable: true,
       render: (r) => <span>{formatNum(r.marketCap)}</span>,
     },
     {
       key: 'fav',
       label: '',
-      width: '40px',
+      width: '6%',
       align: 'center',
       render: (r) => (
         <button
