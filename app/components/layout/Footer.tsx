@@ -43,6 +43,8 @@ export default function Footer() {
       links: [
         { href: '/about', label: isZh ? '关于我们' : 'About' },
         { href: '/u/adelinewen1107', label: isZh ? '联系我们' : 'Contact' },
+      { href: '/help', label: isZh ? '帮助中心' : 'Help' },
+      { href: '/status', label: isZh ? '系统状态' : 'Status' },
       ],
     },
   ]
@@ -64,7 +66,7 @@ export default function Footer() {
         className="footer-columns"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
           gap: 32,
           marginBottom: 32,
         }}

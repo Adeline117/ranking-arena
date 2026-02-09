@@ -12,7 +12,7 @@ interface IconProps {
   active: boolean
 }
 
-const ICON_SIZE = 22
+const ICON_SIZE = 24
 const ICON_PROPS = { width: ICON_SIZE, height: ICON_SIZE, viewBox: '0 0 24 24', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true as const }
 
 function NavIcon({ active, children }: IconProps & { children: React.ReactNode }): React.ReactElement {
@@ -288,13 +288,13 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         gap: 4,
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         textDecoration: 'none',
-        color: active ? 'var(--color-accent-primary)' : 'var(--color-text-tertiary)',
+        color: active ? 'var(--color-brand)' : 'var(--color-text-tertiary)',
         transition: `all ${tokens.transition.base}`,
         borderRadius: tokens.radius.lg,
         position: 'relative',
         minWidth: 60,
         minHeight: tokens.touchTarget.comfortable,
-        background: active ? `var(--color-accent-primary-08)` : 'transparent',
+        background: active ? 'var(--color-accent-primary-12)' : 'transparent',
       }}
     >
       {active && <ActiveIndicator />}
