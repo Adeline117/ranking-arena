@@ -147,8 +147,9 @@ export default function RootLayout({
           />
         ))}
 
-        {/* Prefetch rankings data for faster homepage load */}
-        <link rel="prefetch" href="/api/rankings?window=90D&limit=20" as="fetch" crossOrigin="anonymous" />
+        {/* Rankings data is pre-fetched server-side via getInitialTraders in page.tsx.
+            Removed stale prefetch link — it targeted /api/rankings which doesn't match
+            the actual client fetch (/api/traders), wasting a network request. */}
         
         {/* Font preloading is handled automatically by next/font.
             Removed hardcoded preload link — the hashed filename (e.g. be2afef9-s.woff2)
