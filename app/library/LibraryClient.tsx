@@ -305,7 +305,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
             </div>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 45%), 1fr))',
               gap: 20,
             }}>
               {featured.slice(0, 6).map(item => (
