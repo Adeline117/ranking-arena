@@ -14,7 +14,7 @@ type NewsItem = {
   title_en: string | null
   source: string
   published_at: string
-  category?: 'crypto' | 'macro' | 'defi' | 'regulation' | 'market'
+  category?: 'crypto' | 'macro' | 'defi' | 'regulation' | 'market' | 'btc_eth' | 'altcoin' | 'exchange'
   importance?: 'breaking' | 'important' | 'normal'
 }
 

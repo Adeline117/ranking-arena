@@ -164,8 +164,8 @@ export async function POST(request: NextRequest) {
       return error('标题和来源为必填字段', 400)
     }
 
-    // 验证分类
-    const validCategories = ['crypto', 'macro', 'defi', 'regulation', 'market']
+    // 验证分类 — support both legacy and new category values
+    const validCategories = ['crypto', 'macro', 'defi', 'regulation', 'market', 'btc_eth', 'altcoin', 'exchange']
     if (newsItem.category && !validCategories.includes(newsItem.category)) {
       return error('无效的分类', 400)
     }
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
       content: newsItem.content || null,
       source: source,
       source_url: newsItem.source_url || null,
-      category: newsItem.category || 'crypto',
+      category: newsItem.category || 'btc_eth',
       importance: newsItem.importance || 'normal',
       tags: newsItem.tags || [],
       published_at: newsItem.published_at || new Date().toISOString(),
@@ -263,7 +263,7 @@ export async function PUT(request: NextRequest) {
     if (newsItem.tags) updateData.tags = newsItem.tags
 
     if (newsItem.category) {
-      const validCategories = ['crypto', 'macro', 'defi', 'regulation', 'market']
+      const validCategories = ['crypto', 'macro', 'defi', 'regulation', 'market', 'btc_eth', 'altcoin', 'exchange']
       if (!validCategories.includes(newsItem.category)) {
         return error('无效的分类', 400)
       }

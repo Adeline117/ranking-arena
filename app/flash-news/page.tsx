@@ -65,6 +65,19 @@ const CATEGORY_COLORS: Record<string, string> = {
   market: 'var(--color-enterprise-gradient-start)',
 }
 
+// Map legacy DB category values to display categories
+const CATEGORY_DISPLAY_MAP: Record<string, string> = {
+  crypto: 'btc_eth',
+  market: 'altcoin',
+  regulation: 'macro',
+  // New values map to themselves
+  btc_eth: 'btc_eth',
+  altcoin: 'altcoin',
+  defi: 'defi',
+  macro: 'macro',
+  exchange: 'exchange',
+}
+
 export default function FlashNewsPage() {
   const { language } = useLanguage()
   const { showToast } = useToast()
@@ -361,7 +374,7 @@ export default function FlashNewsPage() {
                                 padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                                 borderRadius: tokens.radius.sm, fontSize: '12px', fontWeight: '600',
                               }}>
-                                {CATEGORIES.find(c => c.key === item.category)?.[language === 'zh' ? 'label' : 'label_en']}
+                                {CATEGORIES.find(c => c.key === (CATEGORY_DISPLAY_MAP[item.category] || item.category))?.[language === 'zh' ? 'label' : 'label_en']}
                               </Box>
                             </Box>
 
