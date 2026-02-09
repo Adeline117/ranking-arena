@@ -14,6 +14,9 @@ const SectorTreemap = lazy(() => import('@/app/components/market/SectorTreemap')
 const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))
 const TokenSidePanel = lazy(() => import('@/app/components/market/TokenSidePanel'))
 const MobileMarketTabs = lazy(() => import('@/app/components/market/MobileMarketTabs'))
+const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge'))
+const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
+const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
 
 function LoadingCard({ height = 64 }: { height?: number }) {
   return <div className="skeleton" style={{ height, borderRadius: 8 }} />
@@ -161,6 +164,25 @@ export default function MarketPage() {
             <SectionErrorBoundary fallbackMessage="核心指标加载失败">
               <Suspense fallback={<LoadingCard height={200} />}>
                 <CoreCards />
+              </Suspense>
+            </SectionErrorBoundary>
+          </section>
+
+          {/* Widgets row: Fear&Greed + Arbitrage + Live Trades */}
+          <section style={{ marginBottom: 24, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            <SectionErrorBoundary fallbackMessage="恐惧贪婪指数加载失败">
+              <Suspense fallback={<LoadingCard height={200} />}>
+                <FearGreedGauge />
+              </Suspense>
+            </SectionErrorBoundary>
+            <SectionErrorBoundary fallbackMessage="套利机会加载失败">
+              <Suspense fallback={<LoadingCard height={200} />}>
+                <ArbitrageOpportunities />
+              </Suspense>
+            </SectionErrorBoundary>
+            <SectionErrorBoundary fallbackMessage="实时成交加载失败">
+              <Suspense fallback={<LoadingCard height={200} />}>
+                <LiveTradesFeed />
               </Suspense>
             </SectionErrorBoundary>
           </section>
