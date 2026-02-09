@@ -7,12 +7,13 @@ import { tokens } from '@/lib/design-tokens'
 interface BookCoverProps {
   title: string
   author?: string | null
+  /** Kept for API compat; no longer used for rendering */
   category?: string
   coverUrl?: string | null
+  showCategory?: boolean
   width?: number | string
   height?: number | string
   fontSize?: 'sm' | 'md' | 'lg'
-  showCategory?: boolean
   priority?: boolean
   style?: React.CSSProperties
 }
