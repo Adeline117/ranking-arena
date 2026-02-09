@@ -7,7 +7,9 @@ const EXCHANGES = [
   'Binance', 'OKX', 'Bybit', 'Bitget', 'MEXC', 'KuCoin',
   'Gate.io', 'HTX', 'CoinEx', 'BingX', 'Phemex', 'WEEX',
   'Aevo', 'Hyperliquid', 'GMX', 'dYdX', 'Jupiter', 'Vertex',
-  'Drift', 'Toobit', 'BTSE', 'Crypto.com',
+  'Drift', 'Toobit', 'BTSE', 'Crypto.com', 'Bitfinex', 'WhiteBit',
+  'LBank', 'Pionex', 'BloFin', 'XT.com', 'Kwenta', 'Synthetix',
+  'MUX', 'Gains Network', 'Uniswap', 'PancakeSwap',
 ]
 
 export default function ExchangePartners() {
