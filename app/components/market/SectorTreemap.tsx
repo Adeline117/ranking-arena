@@ -117,7 +117,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
-  const [coins, setCoins] = useState<{ name: string; category: string; marketCap: number; changePct: number }[]>([])
+  const [coins, setCoins] = useState<{ name: string; category: string; marketCap: number; change1h: number; change24h: number; change7d: number }[]>([])
   const [loading, setLoading] = useState(true)
 
   // Fetch real data from /api/market/spot
@@ -128,13 +128,15 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
       if (!Array.isArray(data)) return
 
       const mapped = data
-        .filter((c) => c.marketCap > 0 && c.change24h !== null && !['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'FDUSD'].includes(c.symbol))
+        .filter((c: CoinData) => c.marketCap > 0 && c.change24h !== null && !['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'FDUSD'].includes(c.symbol))
         .slice(0, 30)
-        .map((c) => ({
+        .map((c: CoinData) => ({
           name: c.symbol,
           category: CATEGORY_MAP[c.symbol] || 'Other',
           marketCap: c.marketCap,
-          changePct: c.change24h ?? 0,
+          change1h: (c as unknown as { change1h?: number }).change1h ?? 0,
+          change24h: c.change24h ?? 0,
+          change7d: (c as unknown as { change7d?: number }).change7d ?? 0,
         }))
 
       setCoins(mapped)
@@ -164,7 +166,12 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
     return () => observer.disconnect()
   }, [])
 
-  const nodes = squarify(coins, 0, 0, size.width, size.height)
+  // Map selected timeframe to changePct for squarify
+  const coinsWithPct = coins.map(c => ({
+    ...c,
+    changePct: timeframe === '1h' ? c.change1h : timeframe === '7d' ? c.change7d : c.change24h,
+  }))
+  const nodes = squarify(coinsWithPct, 0, 0, size.width, size.height)
 
   const timeframes: { key: TimeFrame; label: string }[] = [
     { key: '1h', label: '1小时' },

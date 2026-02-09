@@ -160,13 +160,6 @@ export default function MarketPage() {
           margin: '0 auto',
           padding: '20px 24px 40px',
         }}>
-          {/* L0: Price Ticker */}
-          <section style={{ marginBottom: 16 }}>
-            <Suspense fallback={<LoadingCard height={40} />}>
-              <PriceTicker />
-            </Suspense>
-          </section>
-
           {/* L1: Core Cards */}
           <section style={{ marginBottom: 20 }}>
             <SectionErrorBoundary fallbackMessage="核心指标加载失败">
