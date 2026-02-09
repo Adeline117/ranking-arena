@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Reports API error', { error })
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    const _errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

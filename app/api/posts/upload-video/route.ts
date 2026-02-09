@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Error uploading video:', error)
-    const errorMessage = error instanceof Error ? error.message : '视频上传失败'
+    const _errorMessage = error instanceof Error ? error.message : '视频上传失败'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

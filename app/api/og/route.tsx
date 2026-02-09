@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
             {avatarUrl && (
               <img
                 src={avatarUrl}
+                alt=""
                 width={80}
                 height={80}
                 style={{ borderRadius: '50%', border: '3px solid rgba(139,111,168,0.5)' }}
