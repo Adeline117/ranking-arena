@@ -106,7 +106,7 @@ export default function GuestSignupPrompt() {
             fontSize: 20,
             cursor: 'pointer',
             padding: 8,
-            lineHeight: 1,
+            lineHeight: 1.2,
           }}
           aria-label="Close"
         >
@@ -142,7 +142,7 @@ export default function GuestSignupPrompt() {
               borderRadius: tokens.radius.lg,
               background: tokens.colors.accent.brand,
               color: tokens.colors.white,
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: 700,
               textDecoration: 'none',
               textAlign: 'center',

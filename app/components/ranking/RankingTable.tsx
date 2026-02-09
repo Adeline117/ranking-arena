@@ -202,7 +202,7 @@ function ExportRankingButton({ traders, source, timeRange, language }: {
         <div style={{
           position: 'absolute', top: '100%', right: 0, marginTop: 4,
           background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: 8, overflow: 'hidden', zIndex: 100, minWidth: 160,
+          borderRadius: tokens.radius.md, overflow: 'hidden', zIndex: 100, minWidth: 160,
           boxShadow: tokens.shadow.md,
         }}>
           <div style={{ padding: '6px 12px', fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600 }}>CSV</div>
@@ -629,7 +629,7 @@ function RankingTableInner(props: {
             onClick={() => { setStyleFilter(opt.value); setCurrentPage(1) }}
             style={{
               padding: '2px 10px',
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               border: styleFilter === opt.value
                 ? `1px solid ${tokens.colors.accent.primary}80`
                 : `1px solid ${tokens.colors.border.primary}`,
@@ -661,7 +661,7 @@ function RankingTableInner(props: {
             onClick={() => { setGradeFilter(g); setCurrentPage(1) }}
             style={{
               padding: '2px 8px',
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               border: gradeFilter === g
                 ? `1px solid ${tokens.colors.accent.primary}80`
                 : `1px solid ${tokens.colors.border.primary}`,

@@ -49,7 +49,7 @@ export default function FavoritesError({
             background: tokens.colors.accent.brand,
             color: tokens.colors.white,
             border: 'none',
-            borderRadius: 8,
+            borderRadius: tokens.radius.md,
             cursor: 'pointer',
             fontSize: 14,
             fontWeight: 500,
@@ -64,7 +64,7 @@ export default function FavoritesError({
             background: 'transparent',
             color: tokens.colors.text.tertiary,
             border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: 8,
+            borderRadius: tokens.radius.md,
             textDecoration: 'none',
             fontSize: 14,
           }}

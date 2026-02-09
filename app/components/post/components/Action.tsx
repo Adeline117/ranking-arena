@@ -51,7 +51,7 @@ export function Action({
         display: 'flex',
         alignItems: 'center',
         gap: 6,
-        borderRadius: 8,
+        borderRadius: tokens.radius.md,
         transition: 'all 0.2s ease',
         transform: isPressed ? 'scale(0.95)' : 'scale(1)',
         boxShadow: active ? '0 0 0 1px var(--color-accent-primary-30)' : 'none',

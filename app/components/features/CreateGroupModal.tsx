@@ -143,7 +143,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
     }} onClick={onClose}>
       <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{
         width: 420, maxWidth: '90vw', maxHeight: '80vh',
-        background: tokens.colors.bg.secondary, borderRadius: 16,
+        background: tokens.colors.bg.secondary, borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}`,
         boxShadow: tokens.shadow.xl, display: 'flex', flexDirection: 'column',
       }}>
@@ -187,7 +187,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                   {selectedMembers.map(m => (
                     <Box key={m.id} style={{
                       display: 'flex', alignItems: 'center', gap: 4,
-                      padding: '4px 10px 4px 4px', borderRadius: 20,
+                      padding: '4px 10px 4px 4px', borderRadius: tokens.radius['2xl'],
                       background: tokens.colors.bg.tertiary,
                     }}>
                       <Avatar userId={m.id} name={m.handle || m.id.slice(0, 8)} avatarUrl={m.avatar_url} size={20} />
@@ -226,7 +226,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                       {u.handle || u.id.slice(0, 8)}
                     </Text>
                     <Box style={{
-                      width: 20, height: 20, borderRadius: 4,
+                      width: 20, height: 20, borderRadius: tokens.radius.sm,
                       border: `2px solid ${isSelected ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
                       background: isSelected ? tokens.colors.accent.brand : 'transparent',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',

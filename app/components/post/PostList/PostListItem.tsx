@@ -116,7 +116,7 @@ export const PostListItem = memo(function PostListItem({
       </div>
 
       {/* Title + Tags */}
-      <div style={{ marginTop: 6, fontWeight: 950, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ marginTop: 6, fontWeight: 900, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ color: translatedListPosts[p.id]?.title ? tokens.colors.accent.translated : tokens.colors.text.primary }}>
           {translatedListPosts[p.id]?.title || p.title}
         </span>
@@ -129,7 +129,7 @@ export const PostListItem = memo(function PostListItem({
               fontWeight: 700,
               border: `1px solid ${tokens.colors.border.primary}`,
               padding: '2px 8px',
-              borderRadius: 999,
+              borderRadius: tokens.radius.full,
               background: 'var(--color-accent-primary-10)',
             }}
           >
@@ -170,7 +170,7 @@ export const PostListItem = memo(function PostListItem({
               style={{
                 width: p.images!.length === 1 ? 200 : 80,
                 height: p.images!.length === 1 ? 150 : 80,
-                borderRadius: 8,
+                borderRadius: tokens.radius.md,
                 overflow: 'hidden',
                 position: 'relative',
                 background: tokens.colors.bg.tertiary,
@@ -244,7 +244,7 @@ export const PostListItem = memo(function PostListItem({
           {p.original_post.images && p.original_post.images.length > 0 && (
             <div style={{ marginTop: 8, display: 'flex', gap: 4 }}>
               {p.original_post.images.slice(0, 3).map((imgUrl, idx) => (
-                <div key={idx} style={{ width: 48, height: 48, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+                <div key={idx} style={{ width: 48, height: 48, borderRadius: tokens.radius.sm, overflow: 'hidden', position: 'relative' }}>
                   <Image src={imgUrl} alt="Post image" fill sizes="(max-width: 768px) 100vw, 200px" loading="lazy" style={{ objectFit: 'cover' }} />
                 </div>
               ))}
@@ -297,7 +297,7 @@ export const PostListItem = memo(function PostListItem({
             fontWeight: 700,
             padding: '2px 6px',
             background: 'var(--color-accent-primary-10)',
-            borderRadius: 4,
+            borderRadius: tokens.radius.sm,
           }}>
             {t('pinned')}
           </span>
@@ -315,7 +315,7 @@ export const PostListItem = memo(function PostListItem({
                 cursor: 'pointer',
                 fontSize: 12,
                 padding: '2px 6px',
-                borderRadius: 4,
+                borderRadius: tokens.radius.sm,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = ARENA_PURPLE
@@ -337,7 +337,7 @@ export const PostListItem = memo(function PostListItem({
                 cursor: 'pointer',
                 fontSize: 12,
                 padding: '2px 6px',
-                borderRadius: 4,
+                borderRadius: tokens.radius.sm,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = `${tokens.colors.accent.brand}`
@@ -359,7 +359,7 @@ export const PostListItem = memo(function PostListItem({
                 cursor: 'pointer',
                 fontSize: 12,
                 padding: '2px 6px',
-                borderRadius: 4,
+                borderRadius: tokens.radius.sm,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = tokens.colors.accent.error

@@ -252,7 +252,7 @@ function SearchContent() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 28, height: 28, borderRadius: 8,
+              width: 28, height: 28, borderRadius: tokens.radius.md,
               background: accentBg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 12, fontWeight: 700, color: accentColor,
@@ -260,7 +260,7 @@ function SearchContent() {
               {iconLetter}
             </div>
             <span style={{
-              fontSize: 15, fontWeight: 600, color: tokens.colors.text.primary,
+              fontSize: 16, fontWeight: 600, color: tokens.colors.text.primary,
             }}>
               {title}
             </span>
@@ -317,7 +317,7 @@ function SearchContent() {
             </div>
             {result.meta && (
               <span style={{
-                fontSize: 11, padding: '2px 8px', borderRadius: 999,
+                fontSize: 11, padding: '2px 8px', borderRadius: tokens.radius.full,
                 background: accentBg, color: accentColor, fontWeight: 600,
                 flexShrink: 0, textTransform: 'uppercase',
               }}>
@@ -535,7 +535,7 @@ function SearchContent() {
                   {searchHistory.slice(0, 5).map(term => (
                     <Link key={term} href={`/search?q=${encodeURIComponent(term)}`}
                       style={{
-                        padding: '6px 14px', borderRadius: 8,
+                        padding: '6px 14px', borderRadius: tokens.radius.md,
                         background: tokens.colors.bg.secondary,
                         border: `1px solid ${tokens.colors.border.primary}`,
                         color: tokens.colors.text.secondary, fontSize: 12, textDecoration: 'none',

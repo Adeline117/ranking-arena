@@ -345,7 +345,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
             maxHeight: '90vh',
             overflowY: 'auto',
             border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: 16,
+            borderRadius: tokens.radius.xl,
             background: tokens.colors.bg.secondary,
             padding: 24,
           }}
@@ -363,7 +363,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 fontSize: 24,
                 width: 36,
                 height: 36,
-                borderRadius: 8,
+                borderRadius: tokens.radius.md,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

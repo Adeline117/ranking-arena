@@ -115,7 +115,7 @@ export default function AdminReportsPage() {
                 key={report.id}
                 style={{
                   padding: 16,
-                  borderRadius: 12,
+                  borderRadius: tokens.radius.lg,
                   border: '1px solid var(--color-border-primary)',
                   background: 'var(--color-bg-secondary)',
                 }}
@@ -124,7 +124,7 @@ export default function AdminReportsPage() {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <span style={{
                       padding: '2px 8px',
-                      borderRadius: 4,
+                      borderRadius: tokens.radius.sm,
                       fontSize: tokens.typography.fontSize.xs,
                       background: 'var(--color-bg-tertiary)',
                       color: 'var(--color-text-secondary)',
@@ -133,7 +133,7 @@ export default function AdminReportsPage() {
                     </span>
                     <span style={{
                       padding: '2px 8px',
-                      borderRadius: 4,
+                      borderRadius: tokens.radius.sm,
                       fontSize: tokens.typography.fontSize.xs,
                       background: '#ef44441a',
                       color: '#ef4444',

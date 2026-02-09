@@ -110,7 +110,7 @@ function NotificationBadge({ count, ariaLabel }: NotificationBadgeProps): React.
         minWidth: 16,
         height: 16,
         padding: '0 4px',
-        borderRadius: 8,
+        borderRadius: tokens.radius.md,
         background: 'var(--color-accent-error)',
         color: tokens.colors.white,
         fontSize: 10,

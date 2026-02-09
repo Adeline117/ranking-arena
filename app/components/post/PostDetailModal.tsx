@@ -128,7 +128,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           style={{
             padding: 32,
             background: tokens.colors.bg.secondary,
-            borderRadius: 16,
+            borderRadius: tokens.radius.xl,
             color: tokens.colors.text.secondary,
           }}
         >
@@ -162,7 +162,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           maxHeight: '90vh',
           overflowY: 'auto',
           border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: 16,
+          borderRadius: tokens.radius.xl,
           background: tokens.colors.bg.secondary,
           padding: 16,
         }}
@@ -183,7 +183,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: 8,
+              borderRadius: tokens.radius.md,
             }}
           >
             &times;
@@ -204,7 +204,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         )}
 
         {/* Title */}
-        <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25, marginTop: 8 }}>
+        <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25, marginTop: 8 }}>
           {post.title}
         </div>
 
@@ -262,7 +262,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               gap: 6,
               padding: '6px 12px',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: tokens.radius.md,
               background: post.user_reaction === 'up' ? `${tokens.colors.accent.success}20` : tokens.colors.bg.tertiary,
               color: post.user_reaction === 'up' ? tokens.colors.accent.success : tokens.colors.text.secondary,
               cursor: reacting ? 'not-allowed' : 'pointer',
@@ -282,7 +282,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               gap: 6,
               padding: '6px 12px',
               border: 'none',
-              borderRadius: 8,
+              borderRadius: tokens.radius.md,
               background: post.user_reaction === 'down' ? `${tokens.colors.accent.error}20` : tokens.colors.bg.tertiary,
               color: post.user_reaction === 'down' ? tokens.colors.accent.error : tokens.colors.text.secondary,
               cursor: reacting ? 'not-allowed' : 'pointer',
@@ -297,7 +297,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
 
         {/* Comments Section */}
         <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.colors.border.secondary}`, paddingTop: 16 }}>
-          <div style={{ fontWeight: 950, marginBottom: 12 }}>
+          <div style={{ fontWeight: 900, marginBottom: 12 }}>
             {t('comments')} ({post.comment_count})
           </div>
 
@@ -313,7 +313,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                 width: '100%',
                 minHeight: 80,
                 padding: 12,
-                borderRadius: 8,
+                borderRadius: tokens.radius.md,
                 border: `1px solid ${tokens.colors.border.primary}`,
                 background: tokens.colors.bg.primary,
                 color: tokens.colors.text.primary,
@@ -332,7 +332,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'var(--color-accent-primary-30)',
                   color: tokens.colors.white,
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   fontSize: 13,
                   fontWeight: 700,
                   cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
@@ -356,7 +356,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   style={{
                     padding: 12,
                     background: tokens.colors.bg.primary,
-                    borderRadius: 8,
+                    borderRadius: tokens.radius.md,
                     border: `1px solid ${tokens.colors.border.primary}`,
                   }}
                 >
@@ -393,7 +393,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                     padding: '10px 16px',
                     background: 'transparent',
                     border: `1px solid ${tokens.colors.border.primary}`,
-                    borderRadius: 8,
+                    borderRadius: tokens.radius.md,
                     color: tokens.colors.text.secondary,
                     fontSize: 13,
                     fontWeight: 600,

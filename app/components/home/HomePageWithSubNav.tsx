@@ -2,6 +2,7 @@
 
 import { useState, Suspense, lazy, type ReactNode } from 'react'
 import SubNav, { type SubNavTab } from './SubNav'
+import { tokens } from '@/lib/design-tokens'
 
 const FollowingFeed = lazy(() => import('./FollowingFeed'))
 const BookshelfTab = lazy(() => import('./BookshelfTab'))
@@ -19,12 +20,12 @@ export default function HomePageWithSubNav({ recommendedContent }: Props) {
       <SubNav activeTab={activeTab} onTabChange={setActiveTab} />
       {activeTab === 'recommended' && recommendedContent}
       {activeTab === 'following' && (
-        <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+        <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}>
           <FollowingFeed />
         </Suspense>
       )}
       {activeTab === 'bookshelf' && (
-        <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+        <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}>
           <BookshelfTab />
         </Suspense>
       )}

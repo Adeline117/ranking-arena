@@ -181,7 +181,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
   return (
     <Box style={{
       padding: 24, maxWidth: 560, margin: '0 auto', width: '100%',
-      background: c.bg.primary, borderRadius: 12,
+      background: c.bg.primary, borderRadius: tokens.radius.lg,
       border: `1px solid ${c.border.primary}`,
     }}>
       {/* 标题 */}
@@ -202,7 +202,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
       {/* 仅配置提示 */}
       <Box style={{
         padding: '10px 14px', marginBottom: 20,
-        background: c.bg.secondary, borderRadius: 8,
+        background: c.bg.secondary, borderRadius: tokens.radius.md,
         border: `1px solid ${c.accent.warning}`,
       }}>
         <Text style={{ fontSize: 13, color: c.text.secondary }}>
@@ -307,7 +307,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
           <button
             onClick={() => setPairMode('blocked')}
             style={{
-              padding: '4px 12px', borderRadius: 4, fontSize: 13, cursor: 'pointer',
+              padding: '4px 12px', borderRadius: tokens.radius.sm, fontSize: 13, cursor: 'pointer',
               border: `1px solid ${pairMode === 'blocked' ? c.accent.error : c.border.primary}`,
               background: pairMode === 'blocked' ? c.accent.error : 'transparent',
               color: pairMode === 'blocked' ? '#fff' : c.text.primary,
@@ -318,7 +318,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
           <button
             onClick={() => setPairMode('allowed')}
             style={{
-              padding: '4px 12px', borderRadius: 4, fontSize: 13, cursor: 'pointer',
+              padding: '4px 12px', borderRadius: tokens.radius.sm, fontSize: 13, cursor: 'pointer',
               border: `1px solid ${pairMode === 'allowed' ? c.accent.success : c.border.primary}`,
               background: pairMode === 'allowed' ? c.accent.success : 'transparent',
               color: pairMode === 'allowed' ? '#fff' : c.text.primary,
@@ -334,7 +334,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
               key={pair}
               onClick={() => addPair(pair)}
               style={{
-                padding: '2px 8px', borderRadius: 4, fontSize: 12, cursor: 'pointer',
+                padding: '2px 8px', borderRadius: tokens.radius.sm, fontSize: 12, cursor: 'pointer',
                 border: `1px solid ${c.border.primary}`,
                 background: 'transparent', color: c.text.secondary,
               }}
@@ -419,7 +419,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
           onClick={handleSave}
           disabled={saving}
           style={{
-            flex: 1, padding: '10px 0', borderRadius: 8, fontSize: 15, fontWeight: 600,
+            flex: 1, padding: '10px 0', borderRadius: tokens.radius.md, fontSize: 16, fontWeight: 600,
             background: c.accent.primary, color: '#fff', border: 'none', cursor: 'pointer',
             opacity: saving ? 0.6 : 1,
           }}
@@ -431,7 +431,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
             onClick={handleDelete}
             disabled={saving}
             style={{
-              padding: '10px 20px', borderRadius: 8, fontSize: 15, cursor: 'pointer',
+              padding: '10px 20px', borderRadius: tokens.radius.md, fontSize: 16, cursor: 'pointer',
               background: 'transparent', color: c.accent.error,
               border: `1px solid ${c.accent.error}`,
               opacity: saving ? 0.6 : 1,
@@ -525,7 +525,7 @@ function PairTag({ pair, onRemove, variant }: { pair: string; onRemove: () => vo
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '2px 8px', borderRadius: 4, fontSize: 12,
+      padding: '2px 8px', borderRadius: tokens.radius.sm, fontSize: 12,
       background: `color-mix(in srgb, ${tagColor} 15%, transparent)`,
       color: tagColor,
     }}>
@@ -534,7 +534,7 @@ function PairTag({ pair, onRemove, variant }: { pair: string; onRemove: () => vo
         onClick={onRemove}
         style={{
           background: 'none', border: 'none', cursor: 'pointer',
-          color: tagColor, fontSize: 14, padding: 0, lineHeight: 1,
+          color: tagColor, fontSize: 14, padding: 0, lineHeight: 1.2,
         }}
       >
         x

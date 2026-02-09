@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { PipelineOverview, SourceHealth } from '@/lib/utils/pipeline-monitor'
+import { tokens } from '@/lib/design-tokens'
 
 // ============================================
 // Styles
@@ -42,7 +43,7 @@ const styles = {
   card: (status: string) => ({
     backgroundColor: 'var(--color-bg-secondary)',
     border: `1px solid ${status === 'healthy' ? '#2e7d32' : status === 'degraded' ? '#f57c00' : '#c62828'}`,
-    borderRadius: '12px',
+    borderRadius: tokens.radius.lg,
     padding: '16px',
   }) as React.CSSProperties,
   cardHeader: {
@@ -86,7 +87,7 @@ const styles = {
   errorRow: {
     backgroundColor: 'var(--color-bg-secondary)',
     border: '1px solid var(--color-border-primary)',
-    borderRadius: '8px',
+    borderRadius: tokens.radius.md,
     padding: '10px 14px',
     marginBottom: '8px',
     fontSize: '13px',

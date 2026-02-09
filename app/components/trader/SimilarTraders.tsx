@@ -276,7 +276,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                   size="xs" 
                   style={{ 
                     color: hoveredIndex === index ? '#fff' : tokens.colors.text.tertiary,
-                    lineHeight: 1,
+                    lineHeight: 1.2,
                   }}
                 >
                   →

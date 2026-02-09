@@ -780,7 +780,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               textAlign: 'center',
               padding: `${tokens.spacing[10]} ${tokens.spacing[6]}`,
               background: tokens.colors.bg.secondary,
-              borderRadius: 20,
+              borderRadius: tokens.radius['2xl'],
               border: `1px solid ${tokens.colors.border.primary}`,
             }}
           >
@@ -812,7 +812,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 padding: '12px 24px',
                 background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, var(--color-brand-hover) 100%)`,
                 color: tokens.colors.white,
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 textDecoration: 'none',
                 fontWeight: 700,
                 fontSize: '14px',
@@ -885,7 +885,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           position: 'absolute', inset: 0, zIndex: 999,
           background: 'rgba(149, 117, 205, 0.15)',
           border: `3px dashed ${tokens.colors.accent.brand}`,
-          borderRadius: 12,
+          borderRadius: tokens.radius.lg,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           pointerEvents: 'none',
         }}>
@@ -1239,7 +1239,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 padding: '6px 16px',
                 background: tokens.colors.bg.secondary,
                 border: `1px solid ${tokens.colors.border.primary}`,
-                borderRadius: 16,
+                borderRadius: tokens.radius.xl,
                 color: tokens.colors.text.secondary,
                 fontSize: 13,
                 cursor: loadingMore ? 'not-allowed' : 'pointer',
@@ -1314,7 +1314,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     alignItems: isMine ? 'flex-end' : 'flex-start',
                     marginBottom: isSameSenderAsNext ? '3px' : tokens.spacing[4],
                     transition: 'background 0.3s',
-                    borderRadius: 12,
+                    borderRadius: tokens.radius.lg,
                     background: highlightedMessageId === msg.id ? 'rgba(149, 117, 205, 0.15)' : 'transparent',
                     padding: highlightedMessageId === msg.id ? '4px' : '0px',
                   }}
@@ -1466,7 +1466,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                         <Box style={{
                           width: 40,
                           height: 40,
-                          borderRadius: 8,
+                          borderRadius: tokens.radius.md,
                           background: isMine ? 'rgba(255,255,255,0.2)' : tokens.colors.bg.tertiary,
                           display: 'flex',
                           alignItems: 'center',
@@ -1732,7 +1732,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 maxWidth: '90vw',
                 maxHeight: '90vh',
                 objectFit: 'contain',
-                borderRadius: 8,
+                borderRadius: tokens.radius.md,
               }}
               unoptimized
             />
@@ -1745,7 +1745,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               style={{
                 maxWidth: '90vw',
                 maxHeight: '90vh',
-                borderRadius: 8,
+                borderRadius: tokens.radius.md,
               }}
             />
           ) : previewOpen.type === 'file' ? (
@@ -1755,7 +1755,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 style={{
                   width: '90vw',
                   height: '90vh',
-                  borderRadius: 12,
+                  borderRadius: tokens.radius.lg,
                   overflow: 'hidden',
                   background: tokens.colors.white,
                 }}
@@ -1775,7 +1775,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 onClick={(e: React.MouseEvent) => e.stopPropagation()}
                 style={{
                   background: tokens.colors.bg.secondary,
-                  borderRadius: 16,
+                  borderRadius: tokens.radius.xl,
                   padding: '40px 48px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -1787,7 +1787,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 <Box style={{
                   width: 72,
                   height: 72,
-                  borderRadius: 16,
+                  borderRadius: tokens.radius.xl,
                   background: tokens.colors.bg.tertiary,
                   display: 'flex',
                   alignItems: 'center',
@@ -1819,7 +1819,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                     padding: '12px 24px',
                     background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, var(--color-brand-hover) 100%)`,
                     color: tokens.colors.white,
-                    borderRadius: 12,
+                    borderRadius: tokens.radius.lg,
                     textDecoration: 'none',
                     fontWeight: 700,
                     fontSize: 14,
@@ -1879,7 +1879,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
             marginBottom: 8,
             padding: 8,
             background: tokens.colors.bg.tertiary,
-            borderRadius: 12,
+            borderRadius: tokens.radius.lg,
             display: 'flex',
             alignItems: 'center',
             gap: 10,
@@ -1894,7 +1894,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                   width: 60,
                   height: 60,
                   objectFit: 'cover',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   cursor: 'pointer',
                 }}
                 onClick={() => setPreviewOpen({ type: 'image', url: pendingAttachment.url })}
@@ -1906,7 +1906,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                 style={{
                   width: 60,
                   height: 60,
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   background: tokens.colors.bg.primary,
                   display: 'flex',
                   alignItems: 'center',
@@ -1922,7 +1922,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
               <Box style={{
                 width: 60,
                 height: 60,
-                borderRadius: 8,
+                borderRadius: tokens.radius.md,
                 background: tokens.colors.bg.primary,
                 display: 'flex',
                 alignItems: 'center',

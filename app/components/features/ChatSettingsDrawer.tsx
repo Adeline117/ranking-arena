@@ -312,7 +312,7 @@ export default function ChatSettingsDrawer({
                     style={{
                       flex: 1,
                       padding: '8px 12px',
-                      borderRadius: 8,
+                      borderRadius: tokens.radius.md,
                       border: `1px solid ${tokens.colors.border.primary}`,
                       background: tokens.colors.bg.secondary,
                       color: tokens.colors.text.primary,
@@ -325,7 +325,7 @@ export default function ChatSettingsDrawer({
                     disabled={saving}
                     style={{
                       padding: '8px 14px',
-                      borderRadius: 8,
+                      borderRadius: tokens.radius.md,
                       border: 'none',
                       background: 'linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)',
                       color: tokens.colors.white,
@@ -341,7 +341,7 @@ export default function ChatSettingsDrawer({
                     onClick={() => setEditingRemark(false)}
                     style={{
                       padding: '8px 12px',
-                      borderRadius: 8,
+                      borderRadius: tokens.radius.md,
                       border: `1px solid ${tokens.colors.border.primary}`,
                       background: 'transparent',
                       color: tokens.colors.text.secondary,
@@ -579,7 +579,7 @@ function SettingsToggle({
         style={{
           width: 44,
           height: 24,
-          borderRadius: 12,
+          borderRadius: tokens.radius.lg,
           background: checked ? 'linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)' : tokens.colors.bg.tertiary || 'rgba(255,255,255,0.15)',
           position: 'relative',
           transition: 'background 0.2s',

@@ -121,7 +121,7 @@ function BookshelfTab() {
               className="card-hover"
               style={{
                 background: tokens.colors.bg.secondary,
-                borderRadius: 12,
+                borderRadius: tokens.radius.lg,
                 overflow: 'hidden',
                 textDecoration: 'none',
                 color: 'inherit',
@@ -159,7 +159,7 @@ function BookshelfTab() {
                     color: '#fff',
                     fontSize: 10, fontWeight: 700,
                     padding: '2px 6px',
-                    borderRadius: 4,
+                    borderRadius: tokens.radius.sm,
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
                     backdropFilter: 'blur(4px)',
@@ -286,12 +286,12 @@ export default function GroupsFeedPage() {
 
       <ThreeColumnLayout
         leftSidebar={
-          <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+          <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}>
             <RecommendedGroups />
           </Suspense>
         }
         rightSidebar={
-          <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}>
+          <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}>
             <NewsFlash />
           </Suspense>
         }

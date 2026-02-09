@@ -273,7 +273,7 @@ export default function NotFoundPage() {
             style={{
               fontSize: 140,
               fontWeight: 900,
-              lineHeight: 1,
+              lineHeight: 1.2,
               background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, rgba(139, 111, 168, 0.3) 100%)`,
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -304,7 +304,7 @@ export default function NotFoundPage() {
           style={{ 
             opacity: 0.6, 
             marginBottom: 16,
-            fontSize: 15,
+            fontSize: 16,
             lineHeight: 1.6,
             animationDelay: '0.3s',
           }}
@@ -340,9 +340,9 @@ export default function NotFoundPage() {
               padding: '14px 28px', 
               background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, #6b4f88 100%)`,
               color: tokens.colors.white, 
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               textDecoration: 'none',
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: 600,
             }}
           >
@@ -356,10 +356,10 @@ export default function NotFoundPage() {
               padding: '14px 28px', 
               background: 'transparent',
               color: tokens.colors.text.primary, 
-              borderRadius: 12,
+              borderRadius: tokens.radius.lg,
               border: `1px solid ${tokens.colors.border.primary}`,
               textDecoration: 'none',
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: 500,
             }}
           >

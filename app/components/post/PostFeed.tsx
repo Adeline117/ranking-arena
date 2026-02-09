@@ -1402,7 +1402,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             aria-label={mobileViewMode === 'list' ? (language === 'zh' ? '切换为瀑布流' : 'Switch to grid') : (language === 'zh' ? '切换为列表' : 'Switch to list')}
             style={{
               padding: '6px 12px',
-              borderRadius: 8,
+              borderRadius: tokens.radius.md,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: 'transparent',
               color: tokens.colors.text.secondary,
@@ -1528,7 +1528,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
             <div style={{ 
               fontSize: 20, 
-              fontWeight: 950, 
+              fontWeight: 900, 
               lineHeight: 1.25,
               color: !showingOriginal && translatedListPosts[openPost.id]?.title 
                 ? tokens.colors.accent.translated 
@@ -1626,7 +1626,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       style={{
                         width: 80,
                         height: 80,
-                        borderRadius: 8,
+                        borderRadius: tokens.radius.md,
                         overflow: 'hidden',
                         flexShrink: 0,
                       }}

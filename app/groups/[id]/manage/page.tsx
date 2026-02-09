@@ -1190,7 +1190,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                     cursor: 'pointer',
                     color: tokens.colors.text.tertiary,
                     fontSize: tokens.typography.fontSize.lg,
-                    lineHeight: 1,
+                    lineHeight: 1.2,
                     padding: tokens.spacing[1],
                   }}
                 >

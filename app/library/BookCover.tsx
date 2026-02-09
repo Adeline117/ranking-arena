@@ -2,6 +2,7 @@
 
 import React, { memo, useMemo, useState } from 'react'
 import Image from 'next/image'
+import { tokens } from '@/lib/design-tokens'
 
 // Beautiful gradient palettes for different categories
 const COVER_GRADIENTS: Record<string, string[]> = {
@@ -171,7 +172,7 @@ const BookCover = memo(function BookCover({
           letterSpacing: '0.08em',
           color: subtextColor,
           background: badgeBg,
-          padding: '2px 8px', borderRadius: 4,
+          padding: '2px 8px', borderRadius: tokens.radius.sm,
           backdropFilter: 'blur(4px)',
         }}>
           {category}

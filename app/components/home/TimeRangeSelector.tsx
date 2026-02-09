@@ -83,7 +83,7 @@ export default function TimeRangeSelector({
               boxShadow: isActive
                 ? '0 1px 3px var(--color-overlay-subtle)'
                 : 'none',
-              lineHeight: 1,
+              lineHeight: 1.2,
             }}
           >
             {getLabel(range)}

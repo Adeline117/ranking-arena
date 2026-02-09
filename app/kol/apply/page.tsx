@@ -82,7 +82,7 @@ export default function KolApplyPage() {
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '10px 12px',
-    borderRadius: 8,
+    borderRadius: tokens.radius.md,
     border: '1px solid var(--color-border-primary)',
     background: 'var(--color-bg-secondary)',
     color: 'var(--color-text-primary)',
@@ -105,7 +105,7 @@ export default function KolApplyPage() {
             onClick={() => router.push('/')}
             style={{
               padding: '10px 24px',
-              borderRadius: 8,
+              borderRadius: tokens.radius.md,
               background: 'var(--color-accent-primary)',
               color: tokens.colors.white,
               border: 'none',
@@ -146,7 +146,7 @@ export default function KolApplyPage() {
                     alignItems: 'flex-start',
                     gap: 10,
                     padding: 12,
-                    borderRadius: 8,
+                    borderRadius: tokens.radius.md,
                     border: `1px solid ${form.tier === t.value ? 'var(--color-accent-primary)' : 'var(--color-border-primary)'}`,
                     background: form.tier === t.value ? 'var(--color-bg-tertiary)' : 'transparent',
                     cursor: 'pointer',
@@ -251,7 +251,7 @@ export default function KolApplyPage() {
             disabled={loading || !form.tier}
             style={{
               padding: '12px 24px',
-              borderRadius: 8,
+              borderRadius: tokens.radius.md,
               background: loading || !form.tier ? 'var(--color-bg-tertiary)' : 'var(--color-accent-primary)',
               color: tokens.colors.white,
               border: 'none',

@@ -756,14 +756,14 @@ function HotContent() {
 
       <Box as="main" className="container-padding" px={4} py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
         <ThreeColumnLayout
-          leftSidebar={<Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}><TopTraders /></Suspense>}
+          leftSidebar={<Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}><TopTraders /></Suspense>}
           rightSidebar={
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 72px)' }}>
               <div style={{ flexShrink: 0, maxHeight: '35%', overflow: 'auto' }}>
-                <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: 12 }} />}><WatchlistMarket /></Suspense>
+                <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: tokens.radius.lg }} />}><WatchlistMarket /></Suspense>
               </div>
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: 12 }} />}><NewsFlash /></Suspense>
+                <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}><NewsFlash /></Suspense>
               </div>
             </div>
           }
@@ -907,7 +907,7 @@ function HotContent() {
                                     color: tokens.colors.white,
                                     background: tag.color,
                                     padding: '2px 8px',
-                                    borderRadius: 999,
+                                    borderRadius: tokens.radius.full,
                                     lineHeight: '16px',
                                     letterSpacing: '0.5px',
                                     textTransform: 'uppercase',
@@ -926,7 +926,7 @@ function HotContent() {
                                     textDecoration: 'none',
                                     padding: '2px 10px',
                                     background: `${ARENA_PURPLE}12`,
-                                    borderRadius: 999,
+                                    borderRadius: tokens.radius.full,
                                     fontWeight: 600,
                                     transition: 'background 0.15s ease',
                                   }}
@@ -1211,7 +1211,7 @@ function HotContent() {
               maxHeight: '90vh',
               overflowY: 'auto',
               border: `1px solid var(--color-border-primary)`,
-              borderRadius: 16,
+              borderRadius: tokens.radius.xl,
               background: 'var(--color-bg-secondary)',
               padding: 16,
             }}
@@ -1231,7 +1231,7 @@ function HotContent() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                 }}
               >
                 ×
@@ -1262,7 +1262,7 @@ function HotContent() {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
-              <div style={{ fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>{openPost.title}</div>
+              <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>{openPost.title}</div>
             </div>
 
             {/* Author - clickable link */}
@@ -1340,7 +1340,7 @@ function HotContent() {
                   gap: 6,
                   padding: '6px 12px',
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   background: openPost.user_reaction === 'up' ? `var(--color-accent-success-20)` : 'var(--color-bg-tertiary)',
                   color: openPost.user_reaction === 'up' ? 'var(--color-accent-success)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
@@ -1358,7 +1358,7 @@ function HotContent() {
                   gap: 6,
                   padding: '6px 12px',
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   background: openPost.user_reaction === 'down' ? `var(--color-accent-error-20)` : 'var(--color-bg-tertiary)',
                   color: openPost.user_reaction === 'down' ? 'var(--color-accent-error)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
@@ -1372,7 +1372,7 @@ function HotContent() {
 
             {/* 评论区 */}
             <div style={{ marginTop: 16, borderTop: `1px solid var(--color-border-secondary)`, paddingTop: 16 }}>
-              <div style={{ fontWeight: 950, marginBottom: 12 }}>
+              <div style={{ fontWeight: 900, marginBottom: 12 }}>
                 {t('comments')} ({openPost.comments})
               </div>
 
@@ -1387,7 +1387,7 @@ function HotContent() {
                     width: '100%',
                     minHeight: 80,
                     padding: 12,
-                    borderRadius: 8,
+                    borderRadius: tokens.radius.md,
                     border: `1px solid var(--color-border-primary)`,
                     background: 'var(--color-bg-primary)',
                     color: 'var(--color-text-primary)',
@@ -1406,7 +1406,7 @@ function HotContent() {
                       background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'rgba(139, 111, 168, 0.3)',
                       color: tokens.colors.white,
                       border: 'none',
-                      borderRadius: 8,
+                      borderRadius: tokens.radius.md,
                       fontSize: 13,
                       fontWeight: 700,
                       cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
@@ -1430,7 +1430,7 @@ function HotContent() {
                       style={{
                         padding: 12,
                         background: 'var(--color-bg-primary)',
-                        borderRadius: 8,
+                        borderRadius: tokens.radius.md,
                         border: `1px solid var(--color-border-primary)`,
                       }}
                     >
@@ -1471,7 +1471,7 @@ function HotContent() {
                         padding: '10px 16px',
                         background: 'transparent',
                         border: `1px solid var(--color-border-primary)`,
-                        borderRadius: 8,
+                        borderRadius: tokens.radius.md,
                         color: 'var(--color-text-secondary)',
                         fontSize: 13,
                         fontWeight: 600,

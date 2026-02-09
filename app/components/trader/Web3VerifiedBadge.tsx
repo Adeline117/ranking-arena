@@ -25,7 +25,7 @@ export function Web3VerifiedBadge({ size = 'sm' }: Web3VerifiedBadgeProps) {
         background: 'var(--color-violet-subtle)',
         border: '1px solid var(--color-violet-border)',
         whiteSpace: 'nowrap',
-        lineHeight: 1,
+        lineHeight: 1.2,
       }}
       title="Verified On-Chain / 链上验证"
     >

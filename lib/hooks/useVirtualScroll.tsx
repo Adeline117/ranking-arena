@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 export interface VirtualScrollOptions {
   /** 数据总数 */
@@ -214,7 +215,7 @@ export function FastScrollPlaceholder({
         width: 32,
         height: 12,
         backgroundColor: 'var(--bg-tertiary)',
-        borderRadius: 4,
+        borderRadius: tokens.radius.sm,
         opacity: 0.5,
       }} />
       <div style={{
@@ -228,7 +229,7 @@ export function FastScrollPlaceholder({
         flex: 1,
         height: 12,
         backgroundColor: 'var(--bg-tertiary)',
-        borderRadius: 4,
+        borderRadius: tokens.radius.sm,
         opacity: 0.5,
       }} />
     </div>

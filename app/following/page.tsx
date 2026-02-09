@@ -157,6 +157,9 @@ export default function FollowingPage() {
     if (unfollowingId) return
     setUnfollowingId(item.id)
 
+    // Snapshot current items for rollback (preserves order)
+    const snapshot = items
+
     // Optimistic removal
     setItems(prev => prev.filter(i => i.id !== item.id))
 
@@ -170,15 +173,15 @@ export default function FollowingPage() {
       })
 
       if (!response.ok) {
-        // Rollback
-        setItems(prev => [...prev, item])
+        // Rollback to snapshot (preserves original order)
+        setItems(snapshot)
         showToast(t('operationFailed'), 'error')
       } else {
         showToast(language === 'zh' ? '已取消关注' : 'Unfollowed', 'success')
       }
     } catch {
-      // Rollback
-      setItems(prev => [...prev, item])
+      // Rollback to snapshot (preserves original order)
+      setItems(snapshot)
       showToast(t('operationFailed'), 'error')
     } finally {
       setUnfollowingId(null)

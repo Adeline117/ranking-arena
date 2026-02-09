@@ -158,7 +158,7 @@ export class ErrorBoundary extends Component<Props, State> {
               {t('errorTitle')}
             </h1>
 
-            <p style={{ opacity: 0.7, marginBottom: 8, fontSize: 15, lineHeight: 1.6 }}>
+            <p style={{ opacity: 0.7, marginBottom: 8, fontSize: 16, lineHeight: 1.6 }}>
               {t('errorMessage')}
             </p>
             <p style={{ opacity: 0.5, fontSize: 14, marginBottom: 24 }}>
@@ -172,7 +172,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   marginBottom: 24,
                   padding: 16,
                   background: 'var(--color-accent-error-10)',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   border: '1px solid var(--color-accent-error-20)',
                   textAlign: 'left',
                   fontSize: 12,
@@ -210,7 +210,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   padding: '12px 24px',
                   background: 'linear-gradient(135deg, var(--color-brand) 0%, #6b4f88 100%)',
                   color: tokens.colors.white,
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   border: 'none',
                   cursor: 'pointer',
                   fontSize: 14,
@@ -233,7 +233,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   padding: '12px 24px',
                   background: 'transparent',
                   color: 'var(--color-text-primary, #EDEDED)',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.md,
                   border: '1px solid var(--glass-border-medium, rgba(255,255,255,0.15))',
                   textDecoration: 'none',
                   fontSize: 14,
@@ -300,7 +300,7 @@ export function SectionErrorBoundary({
             justifyContent: 'center',
             padding: 24,
             background: 'var(--color-accent-error-08)',
-            borderRadius: 12,
+            borderRadius: tokens.radius.lg,
             border: '1px solid var(--color-accent-error-10)',
           }}
         >
@@ -362,7 +362,7 @@ export function CompactErrorBoundary({
           style={{
             padding: '12px 16px',
             background: 'var(--color-accent-error-08)',
-            borderRadius: 8,
+            borderRadius: tokens.radius.md,
             border: '1px solid var(--color-accent-error-15)',
             display: 'flex',
             alignItems: 'center',
@@ -388,7 +388,7 @@ export function CompactErrorBoundary({
               padding: '4px 10px',
               background: 'transparent',
               color: 'var(--color-brand)',
-              borderRadius: 4,
+              borderRadius: tokens.radius.sm,
               border: '1px solid var(--color-accent-primary-30)',
               cursor: 'pointer',
               fontSize: 12,

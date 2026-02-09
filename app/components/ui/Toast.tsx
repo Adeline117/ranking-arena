@@ -215,7 +215,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             cursor: 'pointer',
             padding: tokens.spacing[1],
             fontSize: 18,
-            lineHeight: 1,
+            lineHeight: 1.2,
             borderRadius: tokens.radius.full,
             width: 28,
             height: 28,

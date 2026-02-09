@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { TTSController, TTSState, splitSentences, getVoices, isChinese } from '@/lib/utils/tts-reader'
+import { tokens } from '@/lib/design-tokens'
 
 type AudioReaderProps = {
   text: string
@@ -132,7 +133,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
         padding: '12px 16px', borderBottom: `1px solid ${panelBorder}`,
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>
+        <span style={{ fontSize: 16, fontWeight: 700 }}>
           {isZh ? '朗读模式' : 'Audio Reader'}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -166,7 +167,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
       {/* Sentence list with highlighting */}
       <div ref={sentenceListRef} style={{
         flex: 1, overflow: 'auto', padding: '16px 20px',
-        lineHeight: 2, fontSize: 15,
+        lineHeight: 2, fontSize: 16,
       }}>
         {sentences.map((s, i) => (
           <span
@@ -178,7 +179,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
             style={{
               cursor: 'pointer',
               padding: '2px 4px',
-              borderRadius: 4,
+              borderRadius: tokens.radius.sm,
               background: i === currentSentence && ttsState !== 'idle' ? highlightBg : 'transparent',
               fontWeight: i === currentSentence && ttsState !== 'idle' ? 600 : 400,
               transition: 'background 0.2s, font-weight 0.2s',

@@ -950,7 +950,7 @@ function ScoreBadge({ score }: { score: number }) {
       style={{
         display: 'inline-block',
         padding: '2px 10px',
-        borderRadius: 8,
+        borderRadius: tokens.radius.md,
         fontSize: 13,
         fontWeight: 700,
         fontFamily: tokens.typography.fontFamily.mono.join(','),

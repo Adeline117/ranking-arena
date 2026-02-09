@@ -115,7 +115,7 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
         color: tokens.colors.white,
         fontSize: size * 0.4,
         fontWeight: 900,
-        lineHeight: 1,
+        lineHeight: 1.2,
         textShadow: 'var(--text-shadow-heavy)'
       }}>
         {getAvatarInitial(displayName)}
