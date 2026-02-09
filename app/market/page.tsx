@@ -197,7 +197,7 @@ export default function MarketPage() {
           {/* L3: Data Table */}
           <section>
             <Suspense fallback={<LoadingCard height={400} />}>
-              <SpotMarket />
+              <SpotMarket onTokenClick={handleTokenClick} />
             </Suspense>
           </section>
         </div>
