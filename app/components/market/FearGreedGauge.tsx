@@ -266,7 +266,7 @@ export default function FearGreedGauge() {
               fontSize: tokens.typography.fontSize.xs,
               color: tokens.colors.text.tertiary,
             }}>
-              {new Date(data.timestamp).toLocaleDateString('zh-CN')}
+              {new Date(Number(data.timestamp) * 1000).toLocaleDateString('zh-CN')}
             </span>
           )}
         </div>
