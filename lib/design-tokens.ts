@@ -127,7 +127,8 @@ export const tokens = {
     },
     lineHeight: {
       tight: 1.2,
-      normal: 1.5,
+      snug: 1.4,
+      normal: 1.6,
       relaxed: 1.75,
     },
   },

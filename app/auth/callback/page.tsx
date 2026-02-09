@@ -6,10 +6,12 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { Suspense } from 'react'
 import { logger } from '@/lib/logger'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { language } = useLanguage()
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -61,7 +63,7 @@ function AuthCallbackContent() {
           margin: '0 auto 16px',
         }} />
         <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
-          {language === 'zh' ? '登录中...' : 'Signing in...'}
+          {language === 'zh' ? '正在登录...' : 'Signing in...'}
         </p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>

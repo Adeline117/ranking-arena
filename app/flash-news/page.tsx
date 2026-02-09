@@ -261,6 +261,8 @@ export default function FlashNewsPage() {
             return (
               <button
                 key={cat.key}
+                className="filter-chip"
+                data-active={isActive ? 'true' : undefined}
                 onClick={() => handleCategoryChange(cat.key)}
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
@@ -276,20 +278,6 @@ export default function FlashNewsPage() {
                   transition: `all ${tokens.transition.base}`,
                   boxShadow: isActive ? `0 4px 12px ${tokens.colors.accent.primary}40` : 'none',
                   outline: 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = tokens.glass.bg.medium
-                    e.currentTarget.style.color = tokens.colors.text.primary
-                    e.currentTarget.style.transform = 'translateY(-1px)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = tokens.glass.bg.light
-                    e.currentTarget.style.color = tokens.colors.text.secondary
-                    e.currentTarget.style.transform = 'translateY(0)'
-                  }
                 }}
               >
                 {language === 'zh' ? cat.label : cat.label_en}

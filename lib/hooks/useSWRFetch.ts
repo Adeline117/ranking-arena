@@ -71,7 +71,7 @@ export async function apiFetcher<T>(
  * SWR 默认配置
  */
 export const swrDefaultConfig: SWRConfiguration = {
-  revalidateOnFocus: true,
+  revalidateOnFocus: false, // Align with global SWRConfig — avoid unnecessary refetches on tab focus
   revalidateOnReconnect: true,
   shouldRetryOnError: (error: Error) => {
     // Don't retry on 4xx client errors
@@ -86,9 +86,9 @@ export const swrDefaultConfig: SWRConfiguration = {
     return true
   },
   errorRetryCount: 2,
-  errorRetryInterval: 2000,
-  dedupingInterval: 2000,
-  focusThrottleInterval: 5000,
+  errorRetryInterval: 3000,
+  dedupingInterval: 5000, // Align with global SWRConfig — 5s dedup to reduce redundant requests
+  focusThrottleInterval: 10000, // Throttle focus revalidation to 10s
 }
 
 // ============================================
@@ -397,7 +397,7 @@ export function useNotifications(options?: {
     apiFetcher,
     {
       ...swrDefaultConfig,
-      refreshInterval: 30000, // 30秒自动刷新
+      refreshInterval: 60000, // 60秒自动刷新 — align with useSWR.ts notifications interval
     }
   )
 }

@@ -66,7 +66,7 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       const response = await fetch(`/api/posts/${postId}/vote`, {
         method: 'POST',
         headers: {
-          ...await getCsrfHeaders(),
+          ...getCsrfHeaders(),
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
@@ -116,7 +116,7 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       const response = await fetch(`/api/posts/${postId}/vote`, {
         method: 'POST',
         headers: {
-          ...await getCsrfHeaders(),
+          ...getCsrfHeaders(),
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
@@ -155,7 +155,7 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       const response = await fetch('/api/bookmarks/batch', {
         method: 'POST',
         headers: {
-          ...await getCsrfHeaders(),
+          ...getCsrfHeaders(),
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
@@ -205,7 +205,7 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       const response = await fetch(`/api/posts/${postId}/bookmark`, {
         method: isCurrentlyBookmarked ? 'DELETE' : 'POST',
         headers: {
-          ...await getCsrfHeaders(),
+          ...getCsrfHeaders(),
           'Authorization': `Bearer ${accessToken}`,
         },
       })
@@ -250,7 +250,7 @@ export function usePostActions(options: UsePostActionsOptions): UsePostActionsRe
       const response = await fetch(`/api/posts/${postId}/repost`, {
         method: 'POST',
         headers: {
-          ...await getCsrfHeaders(),
+          ...getCsrfHeaders(),
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },

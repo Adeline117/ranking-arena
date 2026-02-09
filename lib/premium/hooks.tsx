@@ -4,7 +4,7 @@
  * 会员系统 React Hooks
  */
 
-import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, createContext, useContext, ReactNode } from 'react'
 import {
   premiumService,
   type UserSubscription,
@@ -271,7 +271,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     await loadSubscription()
   }, [loadSubscription])
 
-  const value: PremiumContextValue = {
+  const value = useMemo<PremiumContextValue>(() => ({
     subscription,
     isLoading,
     isPremium: (subscription ? premiumService.isPremiumUser() : false) || hasNFT,
@@ -280,7 +280,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     hasNFT,
     checkFeature,
     refresh,
-  }
+  }), [subscription, isLoading, hasNFT, checkFeature, refresh])
 
   return (
     <PremiumContext.Provider value={value}>
