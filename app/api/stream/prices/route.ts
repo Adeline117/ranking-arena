@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic'
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL!
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN!
 
-async function getLatestPrices(): Promise<Record<string, any>> {
+interface PriceData { price: number; changePct24h?: number; change24h?: number; volume?: number; high24h?: number; low24h?: number }
+async function getLatestPrices(): Promise<Record<string, PriceData>> {
   const res = await fetch(`${UPSTASH_URL}`, {
     method: 'POST',
     headers: {
@@ -26,7 +27,7 @@ async function getLatestPrices(): Promise<Record<string, any>> {
   if (!result || !Array.isArray(result)) return {}
 
   // HGETALL returns flat array: [key, val, key, val, ...]
-  const prices: Record<string, any> = {}
+  const prices: Record<string, PriceData> = {}
   for (let i = 0; i < result.length; i += 2) {
     try {
       prices[result[i]] = JSON.parse(result[i + 1])

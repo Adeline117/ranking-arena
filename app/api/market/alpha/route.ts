@@ -28,10 +28,12 @@ export async function GET() {
       ),
     ])
 
-    let trending: any[] = []
+    interface TrendingToken { id: string; symbol: string; name: string; image: string; rank: number | null; price: number | null; change24h: number | null; volume24h: number | null; marketCap: number | null; score: number }
+    interface VolumeToken { id: string; symbol: string; name: string; image: string; price: number; change24h: number | null; volume24h: number; marketCap: number; rank: number }
+    let trending: TrendingToken[] = []
     if (trendingRes.ok) {
       const tData = await trendingRes.json()
-      trending = (tData.coins || []).map((c: any) => ({
+      trending = (tData.coins || []).map((c: { item: { id: string; symbol?: string; name: string; thumb: string; market_cap_rank: number | null; data?: { price?: number; price_change_percentage_24h?: { usd?: number }; total_volume?: number; market_cap?: number }; score: number } }) => ({
         id: c.item.id,
         symbol: c.item.symbol?.toUpperCase(),
         name: c.item.name,
@@ -45,9 +47,9 @@ export async function GET() {
       }))
     }
 
-    let volumeMovers: any[] = []
+    let volumeMovers: VolumeToken[] = []
     if (volumeRes.ok) {
-      const vData: any[] = await volumeRes.json()
+      const vData: Array<{ id: string; symbol: string; name: string; image: string; current_price: number; price_change_percentage_24h: number | null; total_volume: number; market_cap: number; market_cap_rank: number }> = await volumeRes.json()
       volumeMovers = vData.map((c) => ({
         id: c.id,
         symbol: (c.symbol as string).toUpperCase(),

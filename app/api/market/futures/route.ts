@@ -40,7 +40,7 @@ export async function GET() {
     const normalize = (s: string) => s.replace(/-USDT-SWAP|USDT/g, '').toUpperCase()
 
     // Group by symbol, aggregate across platforms
-    const symbolMap: Record<string, any> = {}
+    const symbolMap: Record<string, { symbol: string; contract: string; platforms: Record<string, { fundingRate?: number; fundingTime?: string; openInterest?: number }> }> = {}
 
     for (const fr of fundingRates || []) {
       const sym = normalize(fr.symbol)
@@ -65,14 +65,14 @@ export async function GET() {
 
     // Also fetch current prices from CoinGecko for the symbols we have
     const ids = Object.keys(symbolMap).map(s => s.toLowerCase()).join(',')
-    const priceMap: Record<string, any> = {}
+    const priceMap: Record<string, { price: number; change24h: number; volume24h: number; image: string }> = {}
     try {
       const cgRes = await fetch(
         `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&sparkline=false&price_change_percentage=24h`,
         { next: { revalidate: 60 } }
       )
       if (cgRes.ok) {
-        const cgData: any[] = await cgRes.json()
+        const cgData: Array<{ symbol: string; current_price: number; price_change_percentage_24h: number; total_volume: number; image: string }> = await cgRes.json()
         for (const c of cgData) {
           priceMap[c.symbol.toUpperCase()] = {
             price: c.current_price,
@@ -84,12 +84,12 @@ export async function GET() {
       }
     } catch { /* ignore */ }
 
-    const result = Object.values(symbolMap).map((item: any) => {
-      const pg = priceMap[item.symbol] || {}
+    const result = Object.values(symbolMap).map((item) => {
+      const pg = priceMap[item.symbol] || {} as Partial<typeof priceMap[string]>
       // Average funding rate across platforms
-      const platforms = Object.entries(item.platforms) as [string, any][]
-      const rates = platforms.map(([, v]) => v.fundingRate).filter(Boolean)
-      const avgRate = rates.length ? rates.reduce((a: number, b: number) => a + b, 0) / rates.length : null
+      const platforms = Object.entries(item.platforms)
+      const rates = platforms.map(([, v]) => v.fundingRate).filter((r): r is number => r != null)
+      const avgRate = rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : null
       const totalOI = platforms.reduce((sum: number, [, v]) => sum + (v.openInterest || 0), 0)
 
       return {

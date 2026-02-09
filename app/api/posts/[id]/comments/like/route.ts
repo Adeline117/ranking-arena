@@ -45,66 +45,56 @@ export async function POST(request: NextRequest, _context: RouteContext) {
 
     let liked = false
     let disliked = false
-    let likeCount = 0
-    let dislikeCount = 0
-
-    // Get current counts
-    const { data: currentComment } = await supabase
-      .from('comments')
-      .select('like_count, dislike_count')
-      .eq('id', commentId)
-      .single()
-
-    likeCount = currentComment?.like_count || 0
-    dislikeCount = currentComment?.dislike_count || 0
 
     if (existingLike) {
       const existingType = existingLike.reaction_type || 'like'
 
       if (existingType === actionType) {
-        // Toggle off: remove the reaction
-        await supabase.from('comment_likes').delete().eq('id', existingLike.id)
-        if (actionType === 'like') {
-          likeCount = Math.max(0, likeCount - 1)
-        } else {
-          dislikeCount = Math.max(0, dislikeCount - 1)
-        }
+        // Toggle off: remove the reaction - use compound match for safety
+        await supabase.from('comment_likes').delete()
+          .eq('comment_id', commentId)
+          .eq('user_id', user.id)
+          .eq('reaction_type', actionType)
       } else {
         // Switch: change reaction type
-        await supabase.from('comment_likes').update({ reaction_type: actionType }).eq('id', existingLike.id)
-        if (actionType === 'like') {
-          likeCount += 1
-          dislikeCount = Math.max(0, dislikeCount - 1)
-          liked = true
-        } else {
-          dislikeCount += 1
-          likeCount = Math.max(0, likeCount - 1)
-          disliked = true
-        }
+        await supabase.from('comment_likes').update({ reaction_type: actionType })
+          .eq('comment_id', commentId)
+          .eq('user_id', user.id)
+        if (actionType === 'like') { liked = true } else { disliked = true }
       }
     } else {
-      // New reaction
-      await supabase.from('comment_likes').insert({
+      // New reaction - use upsert to handle concurrent inserts
+      const { error: upsertError } = await supabase.from('comment_likes').upsert({
         comment_id: commentId,
         user_id: user.id,
         reaction_type: actionType,
-      })
-      if (actionType === 'like') {
-        likeCount += 1
-        liked = true
-      } else {
-        dislikeCount += 1
-        disliked = true
+      }, { onConflict: 'comment_id,user_id' })
+      if (upsertError) {
+        _logger.error('Failed to upsert comment like:', upsertError)
       }
+      if (actionType === 'like') { liked = true } else { disliked = true }
     }
 
-    // Update counts
+    // Recount from source of truth to avoid race conditions with stale counts
+    const { count: likeCount } = await supabase
+      .from('comment_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('comment_id', commentId)
+      .eq('reaction_type', 'like')
+
+    const { count: dislikeCount } = await supabase
+      .from('comment_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('comment_id', commentId)
+      .eq('reaction_type', 'dislike')
+
+    // Update counts atomically from recount
     await supabase
       .from('comments')
-      .update({ like_count: likeCount, dislike_count: dislikeCount })
+      .update({ like_count: likeCount || 0, dislike_count: dislikeCount || 0 })
       .eq('id', commentId)
 
-    return success({ liked, disliked, like_count: likeCount, dislike_count: dislikeCount })
+    return success({ liked, disliked, like_count: likeCount || 0, dislike_count: dislikeCount || 0 })
   } catch (error: unknown) {
     return handleError(error, 'posts/[id]/comments/like POST')
   }

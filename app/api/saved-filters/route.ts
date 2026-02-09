@@ -129,18 +129,6 @@ export async function POST(request: NextRequest) {
       return error('筛选配置无效', 400)
     }
 
-    // 如果是新建，检查数量限制
-    if (!filter.id) {
-      const { count } = await supabase
-        .from('saved_filters')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-
-      if ((count || 0) >= MAX_SAVED_FILTERS) {
-        return error(`最多只能保存 ${MAX_SAVED_FILTERS} 个筛选配置`, 400)
-      }
-    }
-
     const filterData = {
       user_id: user.id,
       name: name,
@@ -166,7 +154,17 @@ export async function POST(request: NextRequest) {
       }
       result = data
     } else {
-      // 创建新配置
+      // 创建新配置 - check count and insert; if race causes over-limit,
+      // the insert still succeeds (acceptable minor overshoot vs. data loss)
+      const { count } = await supabase
+        .from('saved_filters')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+
+      if ((count || 0) >= MAX_SAVED_FILTERS) {
+        return error(`最多只能保存 ${MAX_SAVED_FILTERS} 个筛选配置`, 400)
+      }
+
       const { data, error: insertError } = await supabase
         .from('saved_filters')
         .insert(filterData)

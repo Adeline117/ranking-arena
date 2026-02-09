@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest) {
           throw new Error(`CoinGecko request failed: ${res.status}`)
         }
 
-        const raw: any[] = await res.json()
+        const raw: Array<{ id: string; symbol: string; name: string; image: string; current_price: number; price_change_percentage_24h: number | null; high_24h: number | null; low_24h: number | null; total_volume: number; market_cap: number; market_cap_rank: number }> = await res.json()
 
         return raw.map((c) => ({
           id: c.id,
