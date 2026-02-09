@@ -74,7 +74,7 @@ async function processBinance() {
     try {
       const res = await fetch(
         `https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio/detail?portfolioId=${id}`,
-        { dispatcher: agent as any, signal: AbortSignal.timeout(10000), headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" } }
+        { dispatcher: agent, signal: AbortSignal.timeout(10000), headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" } } as RequestInit
       );
       const text = await res.text();
       let data: any;
