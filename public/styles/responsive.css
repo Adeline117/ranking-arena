@@ -1311,3 +1311,143 @@
     font-size: 14px !important;
   }
 }
+
+/* ============================================
+   MOBILE RESPONSIVE HARDENING (375-428px)
+   Absolutely NO horizontal scrolling
+   ============================================ */
+
+@media (max-width: 767px) {
+  /* Global overflow prevention */
+  html, body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+
+  /* All containers respect viewport */
+  .three-col-center,
+  .page-container,
+  .feed-main-content,
+  main {
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Compare table: horizontal scroll within container */
+  .compare-grid-scroll {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100% !important;
+  }
+
+  /* Market table: contained scroll */
+  .market-table-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100% !important;
+  }
+
+  /* LiveTradesFeed: ensure fits within viewport */
+  .live-trades-container {
+    overflow-x: auto !important;
+    max-width: 100% !important;
+  }
+
+  /* Any fixed-width grid that might overflow */
+  .admin-grid,
+  .pipeline-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Score breakdown layout */
+  .score-breakdown-layout {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  /* Radar chart: scale down */
+  .radar-chart-container {
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .radar-chart-container svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* All buttons: minimum 44px touch target */
+  button:not(.badge-count):not(.notification-dot):not(.rank-indicator),
+  [role="button"]:not(.badge-count):not(.notification-dot),
+  a[href]:not(.badge-count) {
+    min-height: 44px;
+  }
+
+  /* Filter chip buttons can be smaller */
+  .filter-chip,
+  .category-tab,
+  [style*="padding: 2px"] button,
+  .view-toggle-btn {
+    min-height: 36px !important;
+  }
+
+  /* Ensure all images don't overflow */
+  img, video, canvas {
+    max-width: 100% !important;
+    height: auto;
+  }
+
+  /* Font size adjustments for small screens */
+  .page-title {
+    font-size: 20px !important;
+  }
+
+  .section-header {
+    font-size: 15px !important;
+  }
+
+  /* Card grid: single column on mobile */
+  .card-grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Position history & portfolio: card layout instead of table */
+  .portfolio-table .glass-card {
+    overflow-x: hidden !important;
+  }
+}
+
+/* Extra small mobile (375px) */
+@media (max-width: 375px) {
+  .page-container {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .three-col-layout {
+    padding: 0 6px !important;
+  }
+
+  /* Even tighter font sizes */
+  .page-title {
+    font-size: 18px !important;
+  }
+
+  .hero-title {
+    font-size: 28px !important;
+  }
+
+  /* Ranking row: tighter */
+  .ranking-table-grid {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    gap: 4px !important;
+  }
+
+  /* Smaller avatars */
+  .ranking-row .trader-avatar {
+    width: 28px !important;
+    height: 28px !important;
+  }
+}

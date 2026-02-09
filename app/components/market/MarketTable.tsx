@@ -97,8 +97,10 @@ function MarketTableInner<T>({
         border: `1px solid ${tokens.colors.border.primary}`,
         background: tokens.colors.bg.secondary,
         overflow: 'hidden',
+        maxWidth: '100%',
       }}
     >
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
       <table
         style={{
           width: '100%',
@@ -175,6 +177,7 @@ function MarketTableInner<T>({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

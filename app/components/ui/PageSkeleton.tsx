@@ -253,7 +253,7 @@ export function UserProfilePageSkeleton() {
       </Box>
 
       {/* Content + sidebar */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: tokens.spacing[6] }}>
+      <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: tokens.spacing[6] }}>
         <Skeleton width="100%" height="400px" variant="rounded" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
           <Skeleton width="100%" height="150px" variant="rounded" />
