@@ -233,6 +233,7 @@ function ExchangeQuickFilter({
                 e.currentTarget.style.borderColor = ex.color + '40'
                 e.currentTarget.style.background = `${ex.color}0C`
                 e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = `0 2px 8px ${ex.color}15`
               }
             }}
             onMouseLeave={(e) => {
@@ -240,6 +241,7 @@ function ExchangeQuickFilter({
                 e.currentTarget.style.borderColor = tokens.colors.border.primary
                 e.currentTarget.style.background = tokens.glass.bg.light
                 e.currentTarget.style.transform = 'none'
+                e.currentTarget.style.boxShadow = 'none'
               }
             }}
           >
@@ -823,10 +825,22 @@ function TraderList({
     <div className="rounded-xl overflow-hidden" style={{ background: tokens.glass.bg.secondary, backdropFilter: tokens.glass.blur.md, WebkitBackdropFilter: tokens.glass.blur.md, border: tokens.glass.border.light, boxShadow: tokens.shadow.md }}>
       <div>
         <div
-          className="grid ranking-table-grid gap-2 px-4 py-3 text-xs font-medium border-b"
-          style={{ color: tokens.colors.text.secondary, borderColor: tokens.colors.border.primary }}
+          className="grid ranking-table-grid gap-2 px-4 py-3 text-xs font-semibold border-b"
+          style={{
+            color: tokens.colors.text.tertiary,
+            borderColor: tokens.colors.border.primary,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            fontSize: 11,
+            position: 'sticky',
+            top: 0,
+            zIndex: 20,
+            background: 'var(--color-bg-secondary, var(--color-bg-primary))',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+          }}
         >
-          <div style={headerStyle} onClick={() => handleSort('rank')}>
+          <div className="flex items-center justify-center" style={headerStyle} onClick={() => handleSort('rank')}>
             # <SortIndicator active={sortField === 'rank'} direction={sortDir} />
           </div>
           <div>{isZh ? '交易员' : 'Trader'}</div>

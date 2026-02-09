@@ -139,44 +139,86 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
       className="stagger-children"
       role="status"
       aria-label="Loading rankings"
-      style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 0 }}
     >
+      {/* Skeleton header */}
+      <Box
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '48px 1fr 90px 100px 70px 70px 72px',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          borderBottom: `1px solid ${tokens.colors.border.primary}30`,
+        }}
+      >
+        <Skeleton width="20px" height="12px" variant="rounded" animation="pulse" />
+        <Skeleton width="60px" height="12px" variant="rounded" animation="pulse" />
+        <Skeleton width="30px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
+        <Skeleton width="30px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
+        <Skeleton width="30px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
+        <Skeleton width="30px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
+        <Skeleton width="36px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
+      </Box>
       {Array.from({ length: rows }).map((_, i) => (
         <Box
           key={i}
-          className="glass-card-hover"
-          p={3}
-          radius="lg"
           style={{
             display: 'grid',
-            gridTemplateColumns: '40px 1fr 60px 80px 60px',
+            gridTemplateColumns: '48px 1fr 90px 100px 70px 70px 72px',
             alignItems: 'center',
-            gap: tokens.spacing[3],
+            gap: tokens.spacing[2],
+            padding: `10px ${tokens.spacing[4]}`,
+            minHeight: 56,
+            borderBottom: `1px solid ${tokens.colors.border.primary}15`,
+            animationDelay: `${i * 50}ms`,
           }}
         >
           {/* Rank */}
-          <Skeleton width="28px" height="28px" variant="circular" />
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            {i < 3 ? (
+              <Skeleton width="30px" height="30px" variant="circular" />
+            ) : (
+              <Skeleton width="24px" height="14px" variant="rounded" />
+            )}
+          </div>
           
           {/* Trader Info */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-            <SkeletonAvatar size={36} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
-              <Skeleton width="80px" height="14px" />
-              <Skeleton width="50px" height="10px" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], minWidth: 0 }}>
+            <Skeleton width="36px" height="36px" variant="circular" style={{ flexShrink: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
+              <Skeleton width={`${60 + Math.random() * 40}%`} height="14px" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Skeleton width="14px" height="14px" variant="circular" />
+                <Skeleton width="50px" height="10px" />
+              </div>
             </div>
           </div>
           
-          {/* Score */}
-          <Skeleton width="48px" height="24px" variant="rounded" />
-          
           {/* ROI */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: tokens.spacing[1] }}>
-            <Skeleton width="60px" height="16px" />
-            <Skeleton width="40px" height="10px" />
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Skeleton width="64px" height="16px" variant="rounded" />
           </div>
           
-          {/* Win Rate */}
-          <Skeleton width="40px" height="14px" />
+          {/* PnL */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="col-pnl">
+            <Skeleton width="56px" height="14px" variant="rounded" />
+          </div>
+          
+          {/* Win% */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="col-winrate">
+            <Skeleton width="40px" height="14px" variant="rounded" />
+          </div>
+          
+          {/* MDD */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="col-mdd">
+            <Skeleton width="40px" height="14px" variant="rounded" />
+          </div>
+          
+          {/* Score */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="col-score">
+            <Skeleton width="56px" height="24px" variant="rounded" />
+          </div>
         </Box>
       ))}
     </Box>

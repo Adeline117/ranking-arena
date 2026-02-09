@@ -494,134 +494,140 @@ function PostListItem(props: PostListItemProps) {
 
   return (
     <Box
+      className="post-card"
       style={{
         display: 'flex',
         borderRadius: tokens.radius.xl,
         background: tokens.colors.bg.secondary,
         border: `1px solid ${tokens.colors.border.primary}`,
-        transition: `all ${tokens.transition.base}`,
         overflow: 'hidden',
       }}
     >
       {/* Heat bar */}
       <Box
         style={{
-          width: 4,
+          width: 3,
           minHeight: '100%',
           background: getHeatColor(post.comment_count || 0),
           flexShrink: 0,
+          borderRadius: '3px 0 0 3px',
         }}
         title={`${post.comment_count || 0} ${language === 'zh' ? '条评论' : 'comments'}`}
       />
 
-      <Box style={{ flex: 1, padding: tokens.spacing[4] }}>
-        {/* Header: title + actions */}
-        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flex: 1 }}>
-            {post.is_pinned && (
-              <span title={language === 'zh' ? '置顶' : 'Pinned'} style={{ fontSize: 14, color: tokens.colors.accent?.primary || ARENA_PURPLE }}>PIN</span>
-            )}
-            {editingPost === post.id ? (
-              <input
-                type="text"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
+      <Box style={{ flex: 1, padding: `${tokens.spacing[4]} ${tokens.spacing[5]}` }}>
+        {/* Row 1: Author avatar + handle + time */}
+        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[3] }}>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+            {post.author_handle && !post.author_handle.startsWith('deleted_') ? (
+              <Link
+                href={`/u/${encodeURIComponent(post.author_handle)}`}
+                onClick={(e) => e.stopPropagation()}
                 style={{
-                  flex: 1,
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.lg,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
+                  textDecoration: 'none',
                   fontWeight: tokens.typography.fontWeight.bold,
+                  fontSize: tokens.typography.fontSize.xs,
                 }}
-              />
+              >
+                <span style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  background: post.author_avatar_url ? undefined : getAvatarGradient(post.author_id || post.author_handle),
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden', position: 'relative',
+                }}>
+                  {post.author_avatar_url ? (
+                    <Image src={post.author_avatar_url} alt="" fill sizes="22px" style={{ objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ color: tokens.colors.white, fontSize: 10, fontWeight: 700 }}>
+                      {(post.author_handle || 'U').charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </span>
+                @{post.author_handle}
+              </Link>
             ) : (
-              <Text size="lg" weight="bold">
-                {translatedPosts[post.id]?.title || post.title}
+              <Text size="xs" color="tertiary" style={{ fontStyle: 'italic' }}>
+                {t('deletedUser')}
               </Text>
             )}
-          </Box>
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
-            <Text size="xs" color="tertiary">
-              {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+            <Text size="xs" color="tertiary" style={{ marginLeft: tokens.spacing[1] }}>
+              · {new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </Text>
+          </Box>
+
+          {/* Admin actions */}
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
+            {post.is_pinned && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: tokens.colors.accent?.primary || ARENA_PURPLE, background: 'var(--color-accent-primary-10)', padding: '1px 6px', borderRadius: tokens.radius.sm }}>PIN</span>
+            )}
             {(post.author_id === userId || userRole === 'owner' || userRole === 'admin') && (
-              <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
+              <>
                 {post.author_id === userId && editingPost !== post.id && (
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingPost(post.id); setEditTitle(post.title); setEditContent(post.content || '') }}
                     title={language === 'zh' ? '编辑' : 'Edit'}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: tokens.colors.text.tertiary }}
-                  >Edit</button>
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 12, color: tokens.colors.text.tertiary, borderRadius: tokens.radius.sm, transition: 'color 0.15s' }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                  </button>
                 )}
                 {(userRole === 'owner' || userRole === 'admin') && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handlePinPost(post.id) }}
                     title={post.is_pinned ? (language === 'zh' ? '取消置顶' : 'Unpin') : (language === 'zh' ? '置顶' : 'Pin')}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: post.is_pinned ? (tokens.colors.accent?.primary || ARENA_PURPLE) : tokens.colors.text.tertiary }}
-                  >Pin</button>
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 12, color: post.is_pinned ? (tokens.colors.accent?.primary || ARENA_PURPLE) : tokens.colors.text.tertiary, borderRadius: tokens.radius.sm }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4.76z" /></svg>
+                  </button>
                 )}
                 {post.author_id === userId && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeletePost(post.id) }}
                     title={language === 'zh' ? '删除' : 'Delete'}
                     disabled={deletingPost === post.id}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, fontSize: 13, color: tokens.colors.accent.error, opacity: deletingPost === post.id ? 0.5 : 1 }}
-                  >Del</button>
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 12, color: tokens.colors.accent.error, opacity: deletingPost === post.id ? 0.5 : 1, borderRadius: tokens.radius.sm }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                  </button>
                 )}
-              </Box>
+              </>
             )}
           </Box>
         </Box>
 
-        {/* Author */}
-        <Box style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2], display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          {post.author_handle && !post.author_handle.startsWith('deleted_') ? (
-            <Link
-              href={`/u/${encodeURIComponent(post.author_handle)}`}
-              onClick={(e) => e.stopPropagation()}
+        {/* Row 2: Title */}
+        <Box style={{ marginBottom: tokens.spacing[2] }}>
+          {editingPost === post.id ? (
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="post-editor-input"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
-                textDecoration: 'none',
-                fontWeight: tokens.typography.fontWeight.bold,
-                fontSize: tokens.typography.fontSize.xs,
-                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                width: '100%',
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
-                background: 'var(--color-accent-primary-10)',
-                transition: `all ${tokens.transition.base}`,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                background: tokens.colors.bg.primary,
+                color: tokens.colors.text.primary,
+                fontSize: tokens.typography.fontSize.lg,
+                fontWeight: tokens.typography.fontWeight.bold,
+                outline: 'none',
               }}
-            >
-              <span style={{
-                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                background: post.author_avatar_url ? undefined : getAvatarGradient(post.author_id || post.author_handle),
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                overflow: 'hidden', position: 'relative',
-              }}>
-                {post.author_avatar_url ? (
-                  <Image src={post.author_avatar_url} alt="" fill sizes="20px" style={{ objectFit: 'cover' }} />
-                ) : (
-                  <span style={{ color: tokens.colors.white, fontSize: 10, fontWeight: 700 }}>
-                    {(post.author_handle || 'U').charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </span>
-              @{post.author_handle}
-            </Link>
+            />
           ) : (
-            <Text size="xs" color="tertiary" style={{ fontStyle: 'italic' }}>
-              {t('deletedUser')}
+            <Text size="lg" weight="bold" style={{ lineHeight: 1.4 }}>
+              {translatedPosts[post.id]?.title || post.title}
             </Text>
           )}
         </Box>
 
-        {/* Edit mode or content */}
         {editingPost === post.id ? (
-          <Box style={{ marginTop: tokens.spacing[2] }}>
+          <Box style={{ marginTop: tokens.spacing[1] }}>
             <textarea
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
@@ -647,8 +653,8 @@ function PostListItem(props: PostListItemProps) {
             </Box>
           </Box>
         ) : post.content ? (
-          <Box style={{ marginTop: tokens.spacing[3] }}>
-            <Text size="sm" color="secondary" style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+          <Box style={{ marginTop: tokens.spacing[1] }}>
+            <Text size="sm" color="secondary" style={{ lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
               {renderContentWithLinks(contentToShow)}
             </Text>
             {isLongContent && (

@@ -234,9 +234,10 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
       )}
       <Box style={{
         position: 'absolute', left: 0, top: 0, bottom: 0,
-        width: `${score}%`,
+        width: `${Math.min(100, score)}%`,
         background: fillColor,
-        transition: 'width 0.3s ease'
+        transition: 'width 0.4s ease',
+        borderRadius: 'inherit',
       }} />
       <Text size="sm" weight="black" style={{
         position: 'relative',
