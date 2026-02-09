@@ -126,10 +126,11 @@ function PeriodSelector({
     <Box
       style={{
         display: 'flex',
-        gap: 2,
+        gap: 4,
         background: tokens.colors.bg.tertiary,
-        padding: 2,
-        borderRadius: tokens.radius.md,
+        padding: 3,
+        borderRadius: tokens.radius.lg,
+        border: `1px solid ${tokens.colors.border.primary}`,
       }}
     >
       {(['7D', '30D', '90D'] as const).map((p) => (
@@ -137,16 +138,18 @@ function PeriodSelector({
           key={p}
           onClick={() => onChange(p)}
           style={{
-            padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-            borderRadius: tokens.radius.sm,
+            padding: `6px 14px`,
+            minHeight: 36,
+            borderRadius: tokens.radius.md,
             border: 'none',
             background: value === p ? tokens.colors.bg.primary : 'transparent',
-            color: value === p ? tokens.colors.text.primary : tokens.colors.text.tertiary,
-            fontSize: tokens.typography.fontSize.xs,
-            fontWeight: value === p ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+            color: value === p ? tokens.colors.text.primary : tokens.colors.text.secondary,
+            fontSize: 13,
+            fontWeight: value === p ? 600 : 400,
             cursor: 'pointer',
             transition: 'all 0.2s ease',
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
+            boxShadow: value === p ? '0 2px 8px var(--color-overlay-subtle)' : 'none',
           }}
         >
           {p}
