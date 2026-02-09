@@ -28,9 +28,12 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { checkRateLimit, setRateLimitHeaders, getClientIp } from '@/lib/middleware/rate-limit';
 import { tieredGetOrSet } from '@/lib/cache/redis-layer';
 
-const VALID_WINDOWS: RankingWindow[] = ['7d', '30d', '90d'];
+const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite'];
 const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
 const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers'] as const;
+
+// Composite window weights
+const COMPOSITE_WEIGHTS = { '7D': 0.20, '30D': 0.45, '90D': 0.35 } as const;
 
 // Data quality: ROI values above this threshold are considered anomalous
 const ROI_ANOMALY_THRESHOLD = 5000; // 5000% = 50x — anything above is likely data error
@@ -53,11 +56,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     // Parse & validate window (required)
-    const window = searchParams.get('window') as RankingWindow | null;
-    const normalizedWindow = window?.toLowerCase() as RankingWindow;
+    const window = searchParams.get('window') as RankingWindow | 'composite' | null;
+    const normalizedWindow = window?.toLowerCase() as RankingWindow | 'composite';
     if (!normalizedWindow || !VALID_WINDOWS.includes(normalizedWindow)) {
       return NextResponse.json(
-        { error: 'Invalid or missing window parameter. Must be one of: 7d, 30d, 90d' },
+        { error: 'Invalid or missing window parameter. Must be one of: 7d, 30d, 90d, composite' },
         { status: 400 },
       );
     }
@@ -94,27 +97,47 @@ export async function GET(request: NextRequest) {
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
 
-    const query: RankingsQuery = {
-      window: normalizedWindow,
-      category: category || undefined,
-      // Cast to Platform for type compat - database uses granular names like 'htx_futures'
-      platform: (platform || undefined) as Platform | undefined,
-      limit,
-      offset,
-      sort_by: sortBy,
-      sort_dir: sortDir,
-      min_pnl: minPnl,
-      min_trades: minTrades,
-    };
-
     // Use tiered cache (memory → Redis → DB) for rankings
     const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${offset}:${minPnl || ''}:${minTrades || ''}`
-    const result = await tieredGetOrSet(
-      cacheKey,
-      () => getRankingsFallback(query),
-      'hot',
-      ['rankings']
-    );
+
+    let result: Awaited<ReturnType<typeof getRankingsFallback>>;
+
+    if (normalizedWindow === 'composite') {
+      // Composite: fetch all three windows and merge
+      result = await tieredGetOrSet(
+        cacheKey,
+        () => getCompositeRankings({
+          category: category || undefined,
+          platform: (platform || undefined) as Platform | undefined,
+          limit,
+          offset,
+          sort_by: sortBy,
+          sort_dir: sortDir,
+          min_pnl: minPnl,
+          min_trades: minTrades,
+        }),
+        'hot',
+        ['rankings']
+      );
+    } else {
+      const query: RankingsQuery = {
+        window: normalizedWindow,
+        category: category || undefined,
+        platform: (platform || undefined) as Platform | undefined,
+        limit,
+        offset,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        min_pnl: minPnl,
+        min_trades: minTrades,
+      };
+      result = await tieredGetOrSet(
+        cacheKey,
+        () => getRankingsFallback(query),
+        'hot',
+        ['rankings']
+      );
+    }
 
     const res = NextResponse.json(result, {
       headers: {
