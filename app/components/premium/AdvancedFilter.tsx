@@ -93,7 +93,7 @@ export default function AdvancedFilter({
   isPro,
 }: AdvancedFilterProps) {
   const { t } = useLanguage()
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(true)
   // Save filter states removed - filters are session-only
 
   // 更新筛选条件
