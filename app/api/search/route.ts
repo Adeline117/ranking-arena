@@ -76,9 +76,9 @@ export const GET = withPublic(
       // 交易员
       supabase
         .from('trader_sources')
-        .select('source_trader_id, handle, source, display_name')
+        .select('source_trader_id, handle, source')
         .or(
-          `handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`
+          `handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`
         )
         .limit(limitPerCategory),
 
@@ -126,7 +126,7 @@ export const GET = withPublic(
     const traders: UnifiedSearchResult[] = (tradersRes.data ?? []).map((t) => ({
       id: `${t.source}:${t.source_trader_id}`,
       type: 'trader' as const,
-      title: t.display_name || `@${t.handle || t.source_trader_id}`,
+      title: `@${t.handle || t.source_trader_id}`,
       subtitle: sourceLabels[t.source] || t.source,
       href: `/trader/${encodeURIComponent(t.handle || t.source_trader_id)}`,
     }))
