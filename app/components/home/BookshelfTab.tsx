@@ -142,7 +142,7 @@ export default function BookshelfTab() {
             padding: '40px 24px',
             borderRadius: tokens.radius.xl,
             background: `linear-gradient(135deg, var(--color-accent-brand) 0%, var(--color-brand-deep, #6b4f88) 100%)`,
-            color: 'white',
+            color: 'var(--color-on-accent)',
             textAlign: 'center',
             cursor: 'pointer',
             transition: `all ${tokens.transition.base}`,

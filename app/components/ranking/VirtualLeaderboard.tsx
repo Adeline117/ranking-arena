@@ -185,7 +185,7 @@ const DefaultRow = memo(({ trader, style, onClick }: RowProps) => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white',
+            color: 'var(--color-on-accent)',
             fontSize: 14,
             fontWeight: 600,
           }}>

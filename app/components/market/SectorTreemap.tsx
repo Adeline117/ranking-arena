@@ -276,7 +276,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 <span style={{
                   fontSize,
                   fontWeight: 800,
-                  color: '#FFFFFF',
+                  color: 'var(--color-on-accent)',
                   textShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0px 1px rgba(0,0,0,0.5)',
                   lineHeight: 1.1,
                   maxWidth: '90%',

@@ -180,7 +180,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
                 borderRadius: tokens.radius.sm,
                 border: 'none',
                 background: !reason || loading ? 'var(--color-bg-tertiary)' : 'var(--color-accent-error)',
-                color: 'white',
+                color: 'var(--color-on-accent)',
                 cursor: !reason || loading ? 'not-allowed' : 'pointer',
                 fontSize: tokens.typography.fontSize.xs,
               }}
