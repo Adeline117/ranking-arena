@@ -867,7 +867,7 @@ function TraderList({
 
         {!isPro && sortedTraders.length > FREE_RANKING_LIMIT && (
           <PaywallGradientOverlay
-            feature={isZh ? '完整排行榜（100名以后）' : 'Full rankings (beyond top 100)'}
+            feature={isZh ? '完整排行榜 - 32,000+ 名交易员' : 'Full rankings - 32,000+ traders'}
           />
         )}
 
