@@ -185,6 +185,7 @@ export default function TopTraders() {
                       fontWeight: 700,
                       color: getScoreColor(t.arena_score!),
                       lineHeight: 1.3,
+                      ...(t.arena_score >= 90 ? { textShadow: '0 0 8px rgba(139,92,246,0.5)' } : {}),
                     }}>
                       {t.arena_score.toFixed(0)}
                     </div>
