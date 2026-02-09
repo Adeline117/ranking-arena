@@ -27,12 +27,12 @@ export type SupportedPlatform =
   | 'bingx'
   | 'gateio'
   | 'xt'
-  | 'pionex'
-  | 'kwenta'
   | 'gains'
-  | 'mux'
   | 'lbank'
   | 'blofin'
+  | 'pionex'
+  | 'kwenta'
+  | 'mux'
 
 export interface RoiDisclaimer {
   /** English explanation */
@@ -257,42 +257,12 @@ export const ROI_DISCLAIMERS: Record<SupportedPlatform, RoiDisclaimer> = {
     caveats_zh: ['公开文档有限'],
   },
 
-  pionex: {
-    en: 'ROI is provided by Pionex Copy Trading API. Includes both bot and manual trading returns.',
-    zh: 'ROI 由 Pionex 跟单 API 提供。包含量化机器人和手动交易的回报。',
-    source: 'platform',
-    caveats_en: ['Pionex ROI may include automated bot trading returns'],
-    caveats_zh: ['Pionex 的 ROI 可能包含自动量化交易收益'],
-  },
-
-  kwenta: {
-    en: 'ROI is derived from Kwenta/Synthetix on-chain data. Calculated from realized PnL on perpetual positions.',
-    zh: 'ROI 根据 Kwenta/Synthetix 链上数据推算。基于永续合约仓位的已实现盈亏计算。',
-    source: 'derived',
-    caveats_en: [
-      'On-chain DEX — data is fully verifiable',
-      'ROI computed from indexed on-chain events',
-    ],
-    caveats_zh: [
-      '链上 DEX — 数据完全可验证',
-      'ROI 根据索引的链上事件计算',
-    ],
-  },
-
   gains: {
     en: 'ROI is derived from gTrade (Gains Network) on-chain data. Based on trade-level PnL aggregation.',
     zh: 'ROI 根据 gTrade（Gains Network）链上数据推算。基于交易级别的盈亏汇总。',
     source: 'derived',
     caveats_en: ['On-chain data, computed from trade events'],
     caveats_zh: ['链上数据，根据交易事件计算'],
-  },
-
-  mux: {
-    en: 'ROI is derived from MUX Protocol on-chain data. Based on aggregated PnL from leveraged positions.',
-    zh: 'ROI 根据 MUX Protocol 链上数据推算。基于杠杆仓位的汇总盈亏。',
-    source: 'derived',
-    caveats_en: ['MUX aggregates across chains — data may lag'],
-    caveats_zh: ['MUX 跨链聚合 — 数据可能存在延迟'],
   },
 
   lbank: {
@@ -310,6 +280,31 @@ export const ROI_DISCLAIMERS: Record<SupportedPlatform, RoiDisclaimer> = {
     caveats_en: ['BloFin is a newer exchange — methodology may evolve'],
     caveats_zh: ['BloFin 为较新交易所 — 计算方法可能变化'],
   },
+
+  pionex: {
+    en: 'ROI is provided by Pionex trading bot platform. Based on bot performance metrics.',
+    zh: 'ROI 由 Pionex 量化交易平台提供。基于机器人交易表现。',
+    source: 'platform',
+    caveats_en: ['Pionex specializes in trading bots — ROI reflects automated strategy performance'],
+    caveats_zh: ['Pionex 以量化机器人为主 — ROI 反映自动策略表现'],
+  },
+
+  kwenta: {
+    en: 'ROI is derived from on-chain Kwenta/Synthetix perps trading history.',
+    zh: 'ROI 基于链上 Kwenta/Synthetix 永续合约交易历史推导。',
+    source: 'derived',
+    caveats_en: ['On-chain data — may not capture all fee rebates'],
+    caveats_zh: ['链上数据 — 可能未包含所有手续费返还'],
+  },
+
+  mux: {
+    en: 'ROI is derived from on-chain MUX Protocol trading history.',
+    zh: 'ROI 基于链上 MUX Protocol 交易历史推导。',
+    source: 'derived',
+    caveats_en: ['On-chain aggregator — ROI includes multi-venue execution'],
+    caveats_zh: ['链上聚合器 — ROI 包含多场所执行'],
+  },
+
 }
 
 /**
