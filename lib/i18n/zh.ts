@@ -243,7 +243,7 @@ const zh = {
     myApplications: '我的申请',
     noApplications: '暂无申请',
     leaveGroup: '退出小组',
-    newPost: '发新帖',
+    newPost: '发动态',
     noMembers: '暂无成员',
     members: '位成员',
     // 收藏和转发相关
@@ -1453,7 +1453,7 @@ const zh = {
     guidanceBindExchange: '绑定交易所账号展示你的交易成绩',
     guidanceGo: '去绑定',
     guidanceFirstPost: '发一条帖子开始社交',
-    guidancePost: '发新帖',
+    guidancePost: '发动态',
     guidanceFollowTraders: '关注感兴趣的交易员',
     guidanceBrowse: '去看看',
     viewFullPost: '查看完整帖子和评论',

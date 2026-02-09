@@ -243,7 +243,7 @@ const en = {
     myApplications: 'My Applications',
     noApplications: 'No applications',
     leaveGroup: 'Leave Group',
-    newPost: 'New Post',
+    newPost: 'New Update',
     noMembers: 'No members',
     members: 'members',
     // Bookmark and repost related
