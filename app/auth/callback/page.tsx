@@ -1,33 +1,36 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
+import { Suspense } from 'react'
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    // Supabase implicit flow: the hash fragment contains auth tokens
-    // supabase-js automatically detects and processes them
     const handleCallback = async () => {
       const { data: { session }, error } = await supabase.auth.getSession()
-      
+
       if (error) {
         console.error('Auth callback error:', error)
         router.replace('/login?error=auth_failed')
         return
       }
 
+      const returnUrl = searchParams.get('returnUrl')
+      const redirect = returnUrl && returnUrl.startsWith('/') ? returnUrl : '/'
+
       if (session) {
-        router.replace('/')
+        router.replace(redirect)
       } else {
-        // Wait a moment for supabase to process the hash
+        // Wait a moment for supabase to process the hash fragment
         setTimeout(async () => {
           const { data: { session: retrySession } } = await supabase.auth.getSession()
           if (retrySession) {
-            router.replace('/')
+            router.replace(redirect)
           } else {
             router.replace('/login?error=no_session')
           }
@@ -36,7 +39,7 @@ export default function AuthCallbackPage() {
     }
 
     handleCallback()
-  }, [router])
+  }, [router, searchParams])
 
   return (
     <div style={{
@@ -59,7 +62,32 @@ export default function AuthCallbackPage() {
         <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
           Logging in...
         </p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: tokens.colors.bg.primary,
+      }}>
+        <div style={{
+          width: 32, height: 32,
+          border: `3px solid ${tokens.colors.accent.primary}`,
+          borderTopColor: 'transparent',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+      </div>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
   )
 }

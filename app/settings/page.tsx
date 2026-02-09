@@ -18,6 +18,7 @@ const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').th
 import { ImageCropper } from '@/app/components/ui/ImageCropper'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { validateHandle } from './validation'
 
 import {
@@ -778,7 +779,16 @@ function SettingsContent() {
   const handleLogout = async () => {
     const confirmed = await showConfirm(t('logoutTitle'), t('logoutConfirm'))
     if (!confirmed) return
-    try { await supabase.auth.signOut(); router.push('/') } catch { showToast(t('logoutFailed'), 'error') }
+    try {
+      // Clear Pro status cache
+      const { clearProStatusCache } = await import('@/lib/hooks/useProStatus')
+      clearProStatusCache()
+      // Clear session-specific storage
+      try { sessionStorage.clear() } catch {}
+      try { localStorage.removeItem('guest-signup-dismissed') } catch {}
+      await supabase.auth.signOut()
+      router.push('/')
+    } catch { showToast(t('logoutFailed'), 'error') }
   }
 
   const handleDeleteAccount = async () => {
@@ -851,7 +861,10 @@ function SettingsContent() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100, display: 'flex', gap: tokens.spacing[8] }}>
+      <Box style={{ maxWidth: 900, margin: '0 auto', paddingLeft: tokens.spacing[6], paddingRight: tokens.spacing[6] }}>
+        <Breadcrumb items={[{ label: t('settings') }]} />
+      </Box>
+      <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingTop: 0, paddingBottom: 100, display: 'flex', gap: tokens.spacing[8] }}>
         {/* Sidebar Navigation - Desktop only */}
         <Box
           className="settings-sidebar"
