@@ -124,6 +124,7 @@ export function useRankings(options: UseRankingsOptions) {
       refreshInterval,
       revalidateOnFocus: false,
       dedupingInterval: 10_000,
+      errorRetryCount: 2,
     },
   )
 
@@ -152,6 +153,7 @@ export function useTraderDetail(traderId: string | null) {
       refreshInterval: 5 * 60_000,
       revalidateOnFocus: false,
       dedupingInterval: 30_000,
+      errorRetryCount: 2,
     },
   )
 

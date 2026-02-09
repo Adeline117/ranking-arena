@@ -345,6 +345,7 @@ export function usePostsInfinite(options: UsePostsOptions = {}) {
     revalidateOnFocus: false,
     revalidateFirstPage: false,
     initialSize: 1,
+    errorRetryCount: 2,
   }
 
   return useSWRInfinite<PostsResponse>(getKey, fetcher, config)
