@@ -104,7 +104,7 @@ async function enrichArxiv() {
     
     for (const item of items) {
       stats.checked++;
-      const match = item.source_url.match(/arxiv\.org\/abs\/([\d.]+)/);
+      const match = item.source_url.match(/arxiv\.org\/abs\/([\d.]+(?:v\d+)?)/);
       if (!match) { stats.skipped++; continue; }
       
       const arxivId = match[1];

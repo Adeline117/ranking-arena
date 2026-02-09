@@ -88,30 +88,43 @@ export async function GET(request: NextRequest) {
       return error(`最多只能对比 ${MAX_TRADERS_TO_COMPARE} 个交易员`, 400)
     }
 
-    // 查询交易员数据
-    const { data: traders, error: queryError } = await supabase
+    // 查询交易员来源信息 (handle, avatar_url)
+    const { data: sources, error: sourcesError } = await supabase
       .from('trader_sources')
-      .select(`
-        source_trader_id,
-        source,
-        roi,
-        roi_7d,
-        roi_30d,
-        pnl,
-        max_drawdown,
-        win_rate,
-        trades_count,
-        arena_score,
-        return_score,
-        drawdown_score,
-        stability_score,
-        avatar_url
-      `)
+      .select('source_trader_id, source, handle, avatar_url')
       .in('source_trader_id', traderIds)
 
-    if (queryError) {
-      logger.error('[compare] 查询失败:', queryError)
+    if (sourcesError) {
+      logger.error('[compare] 查询 trader_sources 失败:', sourcesError)
       return error('获取交易员数据失败', 500)
+    }
+
+    // 查询交易员快照数据 (performance metrics)
+    const { data: snapshots, error: snapshotsError } = await supabase
+      .from('trader_snapshots')
+      .select('source_trader_id, source, roi, pnl, win_rate, max_drawdown, trades_count, arena_score, profitability_score, risk_control_score, execution_score, arena_score_v3')
+      .in('source_trader_id', traderIds)
+      .order('captured_at', { ascending: false })
+
+    if (snapshotsError) {
+      logger.error('[compare] 查询 trader_snapshots 失败:', snapshotsError)
+      return error('获取交易员数据失败', 500)
+    }
+
+    // Deduplicate snapshots - keep latest per trader
+    const snapshotMap = new Map<string, typeof snapshots[0]>()
+    for (const snap of (snapshots || [])) {
+      if (!snapshotMap.has(snap.source_trader_id)) {
+        snapshotMap.set(snap.source_trader_id, snap)
+      }
+    }
+
+    // Build source map
+    const sourceMap = new Map<string, typeof sources[0]>()
+    for (const src of (sources || [])) {
+      if (!sourceMap.has(src.source_trader_id)) {
+        sourceMap.set(src.source_trader_id, src)
+      }
     }
 
     // 获取关注数 — per-trader count queries in parallel (max 5 traders)
@@ -130,24 +143,26 @@ export async function GET(request: NextRequest) {
     }
 
     // 格式化返回数据
-    const compareData: TraderCompareData[] = (traders || []).map(t => ({
-      id: t.source_trader_id,
-      handle: t.source_trader_id, // 使用 source_trader_id 作为 handle
-      source: t.source,
-      roi: t.roi || 0,
-      roi_7d: t.roi_7d,
-      roi_30d: t.roi_30d,
-      pnl: t.pnl,
-      max_drawdown: t.max_drawdown,
-      win_rate: t.win_rate,
-      trades_count: t.trades_count,
-      arena_score: t.arena_score,
-      return_score: t.return_score,
-      drawdown_score: t.drawdown_score,
-      stability_score: t.stability_score,
-      avatar_url: t.avatar_url,
-      followers: followerMap.get(t.source_trader_id) || 0,
-    }))
+    const compareData: TraderCompareData[] = traderIds
+      .map(id => {
+        const src = sourceMap.get(id)
+        const snap = snapshotMap.get(id)
+        if (!src && !snap) return null
+        return {
+          id,
+          handle: src?.handle || id,
+          source: src?.source || snap?.source || '',
+          roi: snap?.roi || 0,
+          pnl: snap?.pnl,
+          max_drawdown: snap?.max_drawdown,
+          win_rate: snap?.win_rate,
+          trades_count: snap?.trades_count,
+          arena_score: snap?.arena_score_v3 || snap?.arena_score,
+          avatar_url: src?.avatar_url,
+          followers: followerMap.get(id) || 0,
+        }
+      })
+      .filter(Boolean) as TraderCompareData[]
 
     // 按请求的 ID 顺序排序
     const sortedData = traderIds
