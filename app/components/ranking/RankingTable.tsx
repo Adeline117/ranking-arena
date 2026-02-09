@@ -603,13 +603,7 @@ function RankingTableInner(props: {
         </Box>
       )}
 
-      {/* Enhanced Search with history + keyboard nav */}
-      <RankingSearch
-        value={searchQuery}
-        onChange={handleSearchInput}
-        resultCount={debouncedSearch.trim() ? sortedTraders.length : undefined}
-        language={language}
-      />
+      {/* Search removed - use top nav search instead */}
 
       {/* Style & Grade Filters */}
       <Box style={{
