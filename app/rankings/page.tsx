@@ -940,6 +940,37 @@ function TraderAvatar({ trader }: { trader: RankedTraderV2 }) {
   )
 }
 
+/** Arena Score badge with proper color grading */
+function ScoreBadge({ score }: { score: number }) {
+  const hex = getScoreColorHex(score)
+  const cssColor = getScoreColor(score)
+  return (
+    <span
+      className="arena-score-badge"
+      style={{
+        display: 'inline-block',
+        padding: '2px 10px',
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: 700,
+        fontFamily: tokens.typography.fontFamily.mono.join(','),
+        background: `linear-gradient(135deg, ${hex}30, ${hex}15)`,
+        color: cssColor,
+        border: `1px solid ${hex}40`,
+        boxShadow: score >= 90
+          ? `0 0 12px ${hex}50, 0 0 4px ${hex}30`
+          : score >= 70
+            ? `0 0 8px ${hex}30`
+            : 'none',
+        textShadow: score >= 90 ? `0 0 8px ${hex}60` : 'none',
+        animation: score >= 95 ? 'score-glow 2s ease-in-out infinite' : undefined,
+      }}
+    >
+      {score.toFixed(1)}
+    </span>
+  )
+}
+
 function TraderRow({ trader }: { trader: RankedTraderV2 }) {
   const metrics = trader.metrics
   const roiColor = metrics.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
