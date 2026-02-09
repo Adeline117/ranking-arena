@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 
 interface TickerCoin {
@@ -17,7 +18,6 @@ function formatPrice(n: number): string {
 
 export default function PriceTicker() {
   const [coins, setCoins] = useState<TickerCoin[]>([])
-  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetch('/api/market/spot')
@@ -35,53 +35,38 @@ export default function PriceTicker() {
       .catch(() => {})
   }, [])
 
-  // Auto-scroll animation
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el || coins.length === 0) return
-    let animId: number
-    let pos = 0
-    const speed = 0.5 // px per frame
-
-    function tick() {
-      pos += speed
-      if (pos >= el!.scrollWidth / 2) pos = 0
-      el!.scrollLeft = pos
-      animId = requestAnimationFrame(tick)
-    }
-    animId = requestAnimationFrame(tick)
-
-    // Pause on hover
-    const pause = () => cancelAnimationFrame(animId)
-    const resume = () => { animId = requestAnimationFrame(tick) }
-    el.addEventListener('mouseenter', pause)
-    el.addEventListener('mouseleave', resume)
-
-    return () => {
-      cancelAnimationFrame(animId)
-      el.removeEventListener('mouseenter', pause)
-      el.removeEventListener('mouseleave', resume)
-    }
-  }, [coins])
-
   if (coins.length === 0) return null
 
-  // Duplicate for seamless loop
-  const items = [...coins, ...coins]
+  const doubled = [...coins, ...coins]
 
   return (
-    <div
-      ref={scrollRef}
-      style={{
-        overflow: 'hidden',
-        whiteSpace: 'nowrap',
-        background: tokens.colors.bg.secondary,
-        borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        padding: '8px 0',
-      }}
-    >
-      <div style={{ display: 'inline-flex', gap: 24 }}>
-        {items.map((coin, i) => {
+    <div style={{
+      overflow: 'hidden',
+      padding: '10px 0',
+      borderBottom: `1px solid ${tokens.colors.border.primary}`,
+      position: 'relative',
+      background: tokens.colors.bg.secondary,
+    }}>
+      {/* Fade edges */}
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
+        background: `linear-gradient(to right, ${tokens.colors.bg.secondary}, transparent)`,
+        zIndex: 1, pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
+        background: `linear-gradient(to left, ${tokens.colors.bg.secondary}, transparent)`,
+        zIndex: 1, pointerEvents: 'none',
+      }} />
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 28,
+        animation: 'price-ticker-scroll 40s linear infinite',
+        width: 'max-content',
+      }}>
+        {doubled.map((coin, i) => {
           const color = coin.change24h >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
           return (
             <span
@@ -90,22 +75,46 @@ export default function PriceTicker() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6,
-                fontSize: 12,
-                color: tokens.colors.text.secondary,
+                fontSize: 13,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
               }}
             >
               {coin.image && (
-                <img src={coin.image} alt={`${coin.symbol} icon`} width={14} height={14} loading="lazy" style={{ borderRadius: '50%' }} />
+                <Image
+                  src={coin.image}
+                  alt={coin.symbol}
+                  width={18}
+                  height={18}
+                  style={{ borderRadius: '50%', flexShrink: 0 }}
+                />
               )}
               <span style={{ fontWeight: 600, color: tokens.colors.text.primary }}>{coin.symbol}</span>
-              <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{formatPrice(coin.price)}</span>
-              <span style={{ color, fontWeight: 600 }}>
+              <span style={{
+                fontFamily: tokens.typography.fontFamily.mono.join(','),
+                color: tokens.colors.text.secondary,
+              }}>
+                {formatPrice(coin.price)}
+              </span>
+              <span style={{ color, fontWeight: 600, fontSize: 12 }}>
                 {coin.change24h >= 0 ? '+' : ''}{coin.change24h?.toFixed(2)}%
               </span>
             </span>
           )
         })}
       </div>
+
+      <style>{`
+        @keyframes price-ticker-scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        @media (hover: hover) {
+          div:has(> [style*="price-ticker-scroll"]):hover [style*="price-ticker-scroll"] {
+            animation-play-state: paused;
+          }
+        }
+      `}</style>
     </div>
   )
 }
