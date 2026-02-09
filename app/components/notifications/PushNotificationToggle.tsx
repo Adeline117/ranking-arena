@@ -28,7 +28,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
   const [status, setStatus] = useState<PushStatus>('loading')
   const [busy, setBusy] = useState(false)
 
-  const toast = onToast || ((msg: string) => console.log(msg))
+  const toast = onToast || ((msg: string) => console.warn(msg))
 
   // Check current status on mount
   useEffect(() => {

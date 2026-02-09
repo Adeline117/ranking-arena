@@ -39,7 +39,7 @@ async function querySubgraph<T>(url: string, query: string): Promise<T> {
 
 // ── Uniswap V3 queries ──
 
-interface UniswapSwapper {
+interface _UniswapSwapper {
   id: string
   totalSwappedUSD: string
   txCount: string

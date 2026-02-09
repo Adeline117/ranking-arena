@@ -108,7 +108,7 @@ export default function ConversationsList(): React.ReactElement {
           const groupData = await groupRes.json()
           setGroupChannels(groupData.channels || [])
         }
-      } catch {}
+      } catch { /* ignore */ }
     } catch (err) {
       if (abortSignal?.aborted) return
 

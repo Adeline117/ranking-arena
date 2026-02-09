@@ -1,4 +1,4 @@
-import { moneySum, round2 } from '@/lib/utils/currency'
+import { moneySum } from '@/lib/utils/currency'
 
 /**
  * Advanced Trading Metrics Calculations

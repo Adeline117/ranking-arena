@@ -1,4 +1,4 @@
-import { formatNumber, formatPercent, formatCurrency, formatCompact, truncate, capitalize } from '../format'
+import { formatPercent, formatCurrency, formatCompact, truncate, capitalize } from '../format'
 
 describe('formatPercent edge cases', () => {
   it('formats negative ROI', () => {

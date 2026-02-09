@@ -82,7 +82,7 @@ export async function GET() {
           }
         }
       }
-    } catch {}
+    } catch { /* ignore */ }
 
     const result = Object.values(symbolMap).map((item: any) => {
       const pg = priceMap[item.symbol] || {}
