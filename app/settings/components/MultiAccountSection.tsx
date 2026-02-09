@@ -101,7 +101,7 @@ export function MultiAccountSection() {
             marginLeft: 'auto',
             padding: `1px ${tokens.spacing[1]}`,
             borderRadius: tokens.radius.sm,
-            background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, #b794d4)`,
+            background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-accent))`,
             color: tokens.colors.white, fontSize: 9, fontWeight: 700,
           }}>
             Pro

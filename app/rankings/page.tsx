@@ -187,7 +187,7 @@ function ExchangeQuickFilter({
           background: !activePlatform
             ? tokens.gradient.purpleGold
             : tokens.glass.bg.light,
-          color: !activePlatform ? '#fff' : tokens.colors.text.secondary,
+          color: !activePlatform ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
           border: !activePlatform ? 'none' : `1px solid ${tokens.colors.border.primary}`,
           cursor: 'pointer',
           transition: `all ${tokens.transition.base}`,
@@ -474,7 +474,7 @@ function RankingsContent() {
                 background: activeWindow === w ? tokens.gradient.purpleGold : tokens.glass.bg.light,
                 backdropFilter: activeWindow === w ? 'none' : tokens.glass.blur.sm,
                 WebkitBackdropFilter: activeWindow === w ? 'none' : tokens.glass.blur.sm,
-                color: activeWindow === w ? '#fff' : tokens.colors.text.secondary,
+                color: activeWindow === w ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                 border: activeWindow === w ? 'none' : tokens.glass.border.light,
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.base}`,
@@ -523,7 +523,7 @@ function RankingsContent() {
                 background: activeCategory === cat ? tokens.gradient.purpleGold : tokens.glass.bg.light,
                 backdropFilter: activeCategory === cat ? 'none' : tokens.glass.blur.sm,
                 WebkitBackdropFilter: activeCategory === cat ? 'none' : tokens.glass.blur.sm,
-                color: activeCategory === cat ? '#fff' : tokens.colors.text.secondary,
+                color: activeCategory === cat ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                 border: activeCategory === cat ? 'none' : tokens.glass.border.light,
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.base}`,
@@ -791,7 +791,7 @@ function TraderList({
   
   // Regular rendering for small datasets
   return (
-    <div className="rounded-xl overflow-x-auto" style={{ background: tokens.glass.bg.secondary, backdropFilter: tokens.glass.blur.md, WebkitBackdropFilter: tokens.glass.blur.md, border: tokens.glass.border.light, boxShadow: tokens.shadow.md }}>
+    <div className="rounded-xl overflow-hidden" style={{ background: tokens.glass.bg.secondary, backdropFilter: tokens.glass.blur.md, WebkitBackdropFilter: tokens.glass.blur.md, border: tokens.glass.border.light, boxShadow: tokens.shadow.md }}>
       <div>
         <div
           className="grid ranking-table-grid gap-2 px-4 py-3 text-xs font-medium border-b"
@@ -864,10 +864,10 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
               width: 28, height: 28, borderRadius: '50%',
               fontSize: 13, fontWeight: 700,
               background: trader.rank === 1
-                ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+                ? 'linear-gradient(135deg, var(--color-medal-gold), var(--color-medal-gold-end))'
                 : trader.rank === 2
-                ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
-                : 'linear-gradient(135deg, #CD7F32, #A0522D)',
+                ? 'linear-gradient(135deg, var(--color-medal-silver), #A0A0A0)'
+                : 'linear-gradient(135deg, var(--color-medal-bronze), #A0522D)',
               color: trader.rank === 1 ? tokens.colors.bg.primary : tokens.colors.text.primary,
               boxShadow: trader.rank === 1
                 ? '0 0 8px rgba(255,215,0,0.4)'

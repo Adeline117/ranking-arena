@@ -118,7 +118,7 @@ export async function GET(request: NextRequest, { params }: Params) {
         // View count incremented
       })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         snapshot: {
@@ -160,6 +160,8 @@ export async function GET(request: NextRequest, { params }: Params) {
         })) || [],
       },
     })
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    return response
   } catch (error: unknown) {
     logger.error('Snapshot fetch failed', { error: String(error) })
     return NextResponse.json(

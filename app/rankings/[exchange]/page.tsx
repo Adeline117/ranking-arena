@@ -32,7 +32,7 @@ export async function generateMetadata({
   const typeLabel = sourceType === 'futures' ? '合约' : sourceType === 'spot' ? '现货' : '链上'
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-  const title = `${displayName} ${typeLabel}交易员排行榜 - Arena`
+  const title = `${displayName} ${typeLabel}交易员排行榜 - ArenaFi`
   const description = `查看 ${displayName} 平台最新${typeLabel}交易员排行榜，包含 ROI、胜率、最大回撤、Arena Score 等关键指标。实时更新，助你发现顶级交易员。`
 
   return {
@@ -49,14 +49,14 @@ export async function generateMetadata({
       'Arena Score',
       typeLabel,
       'crypto',
-      'Arena',
+      'ArenaFi',
     ],
     openGraph: {
       title,
       description,
       type: 'website',
       url: `${baseUrl}/rankings/${exchange}`,
-      siteName: 'Arena',
+      siteName: 'ArenaFi',
       images: [{
         url: `${baseUrl}/api/og?title=${encodeURIComponent(`${displayName} 排行榜`)}&subtitle=${encodeURIComponent(description.slice(0, 80))}`,
         width: 1200,

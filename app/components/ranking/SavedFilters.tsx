@@ -492,7 +492,7 @@ function FilterItem({
             borderRadius: tokens.radius.sm,
             border: 'none',
             background: isConfirmingDelete ? tokens.colors.accent.error : 'transparent',
-            color: isConfirmingDelete ? '#fff' : tokens.colors.text.tertiary,
+            color: isConfirmingDelete ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
             cursor: 'pointer',
             opacity: isConfirmingDelete ? 1 : 0.6,
             transition: `all ${tokens.transition.base}`,
@@ -622,7 +622,7 @@ function SaveFilterModal({
               background: filterName.trim()
                 ? `linear-gradient(135deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`
                 : tokens.colors.bg.tertiary,
-              color: filterName.trim() ? '#fff' : tokens.colors.text.tertiary,
+              color: filterName.trim() ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.bold,
               cursor: filterName.trim() ? 'pointer' : 'not-allowed',

@@ -320,9 +320,9 @@ async function createNewProOfficialGroup(): Promise<{
       .from('groups')
       .insert({
         name: `Arena Pro 会员群 #${nextNumber}`,
-        name_en: `Arena Pro Member Group #${nextNumber}`,
-        description: '欢迎加入 Arena Pro 会员专属群！在这里可以与其他 Pro 会员交流心得、获取官方支持。有问题可以直接在群里提问，我们会尽快回复。',
-        description_en: 'Welcome to the Arena Pro Member exclusive group! Chat with other Pro members, share tips, and get official support.',
+        name_en: `ArenaFi Pro Member Group #${nextNumber}`,
+        description: '欢迎加入 ArenaFi Pro 会员专属群！在这里可以与其他 Pro 会员交流心得、获取官方支持。有问题可以直接在群里提问，我们会尽快回复。',
+        description_en: 'Welcome to the ArenaFi Pro Member exclusive group! Chat with other Pro members, share tips, and get official support.',
         created_by: owner.id,
         visibility: 'private',
         is_premium_only: true
@@ -380,7 +380,7 @@ async function sendWelcomeNotification(userId: string, groupId: string) {
         user_id: userId,
         type: 'system',
         title: '欢迎加入 Pro 会员官方群',
-        content: '你已自动加入 Arena Pro 会员官方群！在这里可以与其他 Pro 会员交流，有问题可以直接在群里提问。',
+        content: '你已自动加入 ArenaFi Pro 会员官方群！在这里可以与其他 Pro 会员交流，有问题可以直接在群里提问。',
         link: `/groups/${groupId}`,
         read: false
       })

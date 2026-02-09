@@ -183,7 +183,7 @@ export function getScoreStyle(score: number): { bgGradient: string; borderColor:
 }
 
 // Arena score badge
-export function ArenaScoreBadge({ score, showConfidence, trader }: {
+export function ArenaFiScoreBadge({ score, showConfidence, trader }: {
   score: number | undefined
   showConfidence?: boolean
   trader?: Trader

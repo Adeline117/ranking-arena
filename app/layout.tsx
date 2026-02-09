@@ -50,13 +50,13 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Arena - 加密货币交易员排行榜与社区",
-    template: "%s | Arena",
+    default: "ArenaFi - 加密货币交易员排行榜与社区",
+    template: "%s | ArenaFiFi",
   },
   description:
     "聚合 Binance、Bybit、Bitget、OKX、MEXC、KuCoin 等 30+ 交易所的 90 天 ROI 排行榜。关注顶级交易员，加入交易社区。",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
-  applicationName: "Arena",
+  applicationName: "ArenaFi",
   keywords: [
     "跟单交易",
     "交易员排行榜",
@@ -81,7 +81,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Arena",
+    title: "ArenaFi",
   },
   formatDetection: {
     telephone: false,
@@ -95,24 +95,24 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    title: "Arena - 加密货币交易员排行榜与社区",
+    title: "ArenaFi - 加密货币交易员排行榜与社区",
     description:
       "聚合 30+ 交易所 90 天 ROI 排行榜，实时更新，关注顶级交易员，分享交易见解。",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
-    siteName: "Arena",
+    siteName: "ArenaFi",
     locale: "zh_CN",
     images: [
       {
         url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
         width: 1200,
         height: 630,
-        alt: "Arena - 加密货币交易员排行榜",
+        alt: "ArenaFi - 加密货币交易员排行榜",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Arena - 加密货币交易员排行榜与社区",
+    title: "ArenaFi - 加密货币交易员排行榜与社区",
     description:
       "聚合 Binance、Bybit、Bitget、OKX、MEXC 等 30+ 交易所 90 天 ROI 排行榜。",
     images: [

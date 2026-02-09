@@ -150,7 +150,7 @@ export async function GET(
     }
 
     // 5. 返回聚合数据
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         trader: {
@@ -173,6 +173,8 @@ export async function GET(
         assetBreakdown: assetBreakdownResult.data || [],
       },
     })
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    return response
   } catch (error: unknown) {
     console.error('[API] 交易员聚合数据获取失败:', error)
     return NextResponse.json(

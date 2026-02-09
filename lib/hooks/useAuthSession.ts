@@ -78,6 +78,9 @@ function initializeAuth() {
   supabase.auth.getSession().then(({ data }) => {
     updateFromSession(data.session)
     setGlobalAuthState({ loading: false, authChecked: true })
+  }).catch((err) => {
+    console.error('[useAuthSession] Failed to get initial session:', err)
+    setGlobalAuthState({ loading: false, authChecked: true })
   })
 
   // Subscribe to auth state changes

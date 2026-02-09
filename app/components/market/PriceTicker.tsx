@@ -95,7 +95,7 @@ export default function PriceTicker() {
               }}
             >
               {coin.image && (
-                <img src={coin.image} alt="" width={14} height={14} style={{ borderRadius: '50%' }} />
+                <img src={coin.image} alt="" width={14} height={14} loading="lazy" style={{ borderRadius: '50%' }} />
               )}
               <span style={{ fontWeight: 600, color: tokens.colors.text.primary }}>{coin.symbol}</span>
               <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{formatPrice(coin.price)}</span>

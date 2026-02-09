@@ -178,7 +178,9 @@ export async function GET(
     type CacheType = { equity: EquityDataPoint[]; pnl: PnLDataPoint[]; drawdown: DrawdownDataPoint[] }
     const cached = getServerCache<CacheType>(cacheKey)
     if (cached) {
-      return NextResponse.json({ ...cached, cached: true })
+      const cachedResponse = NextResponse.json({ ...cached, cached: true })
+      cachedResponse.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+      return cachedResponse
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -220,7 +222,9 @@ export async function GET(
     // 缓存结果
     setServerCache(cacheKey, result, CacheTTL.MEDIUM)
     
-    return NextResponse.json({ ...result, cached: false })
+    const response = NextResponse.json({ ...result, cached: false })
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    return response
 
   } catch (error: unknown) {
     console.error('[Equity API] Error:', error)

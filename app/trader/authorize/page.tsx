@@ -150,9 +150,9 @@ export default function TraderAuthorizePage() {
             marginBottom: tokens.spacing[6],
           }}
         >
-          <h3 style={{ marginBottom: tokens.spacing[3] }}>
+          <h2 style={{ marginBottom: tokens.spacing[3], fontSize: tokens.typography.fontSize.lg }}>
             {language === 'zh' ? '授权后可享受：' : 'Benefits:'}
-          </h3>
+          </h2>
           <ul style={{ paddingLeft: tokens.spacing[5], lineHeight: 1.8 }}>
             <li>{language === 'zh' ? '实时持仓展示' : 'Real-time position display'}</li>
             <li>{language === 'zh' ? '更高排行榜权重' : 'Higher ranking weight'}</li>
@@ -437,9 +437,9 @@ export default function TraderAuthorizePage() {
 
         {/* How to Get API Key */}
         <Box style={{ marginTop: tokens.spacing[8] }}>
-          <h3 style={{ marginBottom: tokens.spacing[3] }}>
+          <h2 style={{ marginBottom: tokens.spacing[3], fontSize: tokens.typography.fontSize.lg }}>
             {language === 'zh' ? '如何获取API Key?' : 'How to Get API Key?'}
-          </h3>
+          </h2>
           <ol style={{ paddingLeft: tokens.spacing[5], lineHeight: 1.8 }}>
             <li>
               {language === 'zh'

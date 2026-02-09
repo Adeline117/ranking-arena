@@ -74,7 +74,7 @@ export default function FilterPresets({ activePreset, onPresetChange }: FilterPr
               borderRadius: tokens.radius.full,
               fontSize: tokens.typography.fontSize.xs,
               fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
-              color: isActive ? '#fff' : tokens.colors.text.secondary,
+              color: isActive ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
               background: isActive ? tokens.colors.accent.primary : tokens.glass.bg.light,
               border: `1px solid ${isActive ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
               cursor: 'pointer',

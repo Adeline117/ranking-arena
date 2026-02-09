@@ -92,7 +92,9 @@ export async function GET(
     // 检查缓存（短TTL）
     const cached = getServerCache<{ positions: LivePosition[]; totalPnl: number; totalPnlPct: number }>(cacheKey)
     if (cached) {
-      return NextResponse.json({ ...cached, cached: true })
+      const cachedResponse = NextResponse.json({ ...cached, cached: true })
+      cachedResponse.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+      return cachedResponse
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -145,7 +147,9 @@ export async function GET(
     // 缓存结果（短TTL）
     setServerCache(cacheKey, result, CacheTTL.SHORT)
     
-    return NextResponse.json({ ...result, cached: false })
+    const response = NextResponse.json({ ...result, cached: false })
+    response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+    return response
 
   } catch (error: unknown) {
     console.error('[Positions API] Error:', error)

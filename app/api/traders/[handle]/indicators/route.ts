@@ -120,7 +120,9 @@ export async function GET(
     // 缓存 5 分钟
     setServerCache(cacheKey, results, CacheTTL.MEDIUM)
 
-    return NextResponse.json(results)
+    const response = NextResponse.json(results)
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    return response
   } catch (_err) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

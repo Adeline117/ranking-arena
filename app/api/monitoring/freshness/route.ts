@@ -65,8 +65,9 @@ interface FreshnessResult {
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const url = new URL(request.url)
-  const threshold = parseInt(url.searchParams.get('threshold') || '24')
+  const threshold = parseInt(url.searchParams.get('threshold') || '24') || 24
   const format = url.searchParams.get('format') || 'json'
 
   const supabase = createClient(
@@ -192,6 +193,10 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(results)
+  } catch (error) {
+    console.error('[monitoring/freshness] Error:', error)
+    return NextResponse.json({ error: 'Failed to check freshness' }, { status: 500 })
+  }
 }
 
 function generateHtml(results: FreshnessResult): string {

@@ -80,4 +80,8 @@ export async function GET(request: Request) {
       'Cache-Control': 'no-store',
     },
   })
+  } catch (error) {
+    console.error('[export/rankings] Error:', error)
+    return NextResponse.json({ error: 'Export failed' }, { status: 500 })
+  }
 }
