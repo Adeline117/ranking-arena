@@ -320,20 +320,18 @@ export default function FlashNewsPage() {
                       style={{
                         display: 'flex',
                         marginBottom: tokens.spacing[4],
-                        borderLeft: index === 0 ? 'none' : `2px solid ${tokens.colors.border.primary}`,
-                        paddingLeft: index === 0 ? '0' : tokens.spacing[3],
+                        borderLeft: `2px solid ${tokens.colors.border.primary}`,
+                        paddingLeft: tokens.spacing[3],
                         position: 'relative',
                       }}
                     >
-                      {index > 0 && (
-                        <Box style={{
-                          position: 'absolute', left: '-7px', top: tokens.spacing[3],
-                          width: '12px', height: '12px', borderRadius: '50%',
-                          background: impConfig.color, border: `2.5px solid ${tokens.colors.bg.primary}`,
-                          boxShadow: `0 0 8px ${impConfig.color}60`,
-                          transition: `box-shadow ${tokens.transition.base}`,
-                        }} />
-                      )}
+                      <Box style={{
+                        position: 'absolute', left: '-7px', top: tokens.spacing[3],
+                        width: '12px', height: '12px', borderRadius: '50%',
+                        background: impConfig.color, border: `2.5px solid ${tokens.colors.bg.primary}`,
+                        boxShadow: `0 0 8px ${impConfig.color}60`,
+                        transition: `box-shadow ${tokens.transition.base}`,
+                      }} />
 
                       <Box style={{ flex: 1 }}>
                         <Card variant="glass" hoverable={false} style={{
