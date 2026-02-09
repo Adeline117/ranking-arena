@@ -321,9 +321,16 @@ function RankingsContent() {
   const activePlatform = searchParams.get('platform') || undefined
   const activeCategory = (searchParams.get('category') as CategoryPreset) || 'all'
 
+  // Map UI category presets to API category values
+  const apiCategory = activeCategory === 'cex_futures' ? 'futures'
+    : activeCategory === 'cex_spot' ? 'spot'
+    : activeCategory === 'onchain_dex' ? 'onchain'
+    : undefined
+
   const { data, error, isLoading, isStale } = useRankingsV2({
     window: activeWindow,
     platform: activePlatform as Platform | undefined,
+    category: apiCategory,
   })
 
   // Save preferences to localStorage when they change

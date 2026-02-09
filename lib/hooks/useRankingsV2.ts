@@ -25,6 +25,7 @@ const fetcher = async (url: string): Promise<RankingsResponse> => {
 export interface UseRankingsV2Options {
   window?: SnapshotWindow
   platform?: Platform
+  category?: string
   sortBy?: 'arena_score' | 'roi' | 'pnl' | 'win_rate' | 'max_drawdown'
   sortDir?: 'asc' | 'desc'
   limit?: number
@@ -46,6 +47,7 @@ export function useRankingsV2(options: UseRankingsV2Options = {}): UseRankingsV2
   const {
     window = '90D',
     platform,
+    category,
     sortBy = 'arena_score',
     sortDir = 'desc',
     limit = 1000,
@@ -57,12 +59,13 @@ export function useRankingsV2(options: UseRankingsV2Options = {}): UseRankingsV2
     const params = new URLSearchParams()
     params.set('window', window)
     if (platform) params.set('platform', platform)
+    if (category) params.set('category', category)
     params.set('sort_by', sortBy)
     params.set('sort_dir', sortDir)
     params.set('limit', String(limit))
     if (offset > 0) params.set('offset', String(offset))
     return `/api/rankings?${params.toString()}`
-  }, [window, platform, sortBy, sortDir, limit, offset])
+  }, [window, platform, category, sortBy, sortDir, limit, offset])
 
   const { data, error, isLoading, isValidating, mutate } = useSWR<RankingsResponse>(
     url,

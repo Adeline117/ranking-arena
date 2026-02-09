@@ -6,22 +6,10 @@ const supabase = createClient(
 );
 
 const PROXY = "http://127.0.0.1:7890";
-const DELAY = 200;
+const DELAY = 250;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function proxyFetch(url: string): Promise<any> {
-  const { ProxyAgent } = await import("undici");
-  const agent = new ProxyAgent(PROXY);
-  const res = await fetch(url, { dispatcher: agent as any, headers: { "User-Agent": "Mozilla/5.0" } });
-  return res.json();
-}
-
-async function directFetch(url: string): Promise<any> {
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-  return res.json();
-}
-
-async function fetchAll(source: string) {
+async function fetchAllNull(source: string) {
   let all: any[] = [];
   let from = 0;
   while (true) {
@@ -40,7 +28,6 @@ async function fetchAll(source: string) {
   return all;
 }
 
-// Concurrent update helper
 async function updateBatch(rows: { source: string; id: string; avatar: string }[], concurrency = 20) {
   let i = 0;
   let done = 0;
@@ -48,94 +35,76 @@ async function updateBatch(rows: { source: string; id: string; avatar: string }[
     while (i < rows.length) {
       const idx = i++;
       const r = rows[idx];
-      await supabase
-        .from("trader_sources")
-        .update({ avatar_url: r.avatar })
-        .eq("source", r.source)
-        .eq("source_trader_id", r.id);
+      await supabase.from("trader_sources").update({ avatar_url: r.avatar })
+        .eq("source", r.source).eq("source_trader_id", r.id);
       done++;
     }
   }
   const workers = Array.from({ length: Math.min(concurrency, rows.length) }, () => worker());
-  // Progress logger
-  const interval = setInterval(() => {
-    if (done > 0) console.log(`  DB update: ${done}/${rows.length}`);
-  }, 5000);
+  const interval = setInterval(() => console.log(`  DB update: ${done}/${rows.length}`), 5000);
   await Promise.all(workers);
   clearInterval(interval);
+  console.log(`  DB update: ${done}/${rows.length} complete`);
 }
 
-async function processHyperliquid() {
-  const traders = await fetchAll("hyperliquid");
-  console.log(`[hyperliquid] ${traders.length} traders without avatar`);
-  if (!traders.length) return;
-  
-  const rows = traders.map((t: any) => ({
-    source: "hyperliquid",
-    id: t.source_trader_id,
-    avatar: `https://effigy.im/a/${t.source_trader_id.toLowerCase()}.svg`,
-  }));
-  await updateBatch(rows);
-  console.log(`[hyperliquid] Done: ${rows.length} updated`);
+// Bitget: set default avatar for those without one (all Bitget avatars are the same default anyway)
+async function processBitget() {
+  const defaultAvatar = "https://img.bgstatic.com/multiLang/web/cba5c7064793fae75b583023f22a6bca.png";
+  for (const source of ["bitget_futures", "bitget_spot"] as const) {
+    const traders = await fetchAllNull(source);
+    console.log(`[${source}] ${traders.length} traders without avatar — setting default`);
+    if (!traders.length) continue;
+    const rows = traders.map((t: any) => ({ source, id: t.source_trader_id, avatar: defaultAvatar }));
+    await updateBatch(rows);
+    console.log(`[${source}] Done`);
+  }
 }
 
+// Binance: fetch actual avatars via proxy
 async function processBinance() {
-  const traders = await fetchAll("binance_futures");
+  const { ProxyAgent } = await import("undici");
+  const agent = new ProxyAgent(PROXY);
+
+  const traders = await fetchAllNull("binance_futures");
   console.log(`[binance_futures] ${traders.length} traders without avatar`);
-  let updated = 0, failed = 0;
+  let updated = 0, failed = 0, noAvatar = 0;
 
   for (let i = 0; i < traders.length; i++) {
+    const id = traders[i].source_trader_id;
     try {
-      const data = await proxyFetch(
-        `https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio/detail?portfolioId=${traders[i].source_trader_id}`
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(
+        `https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio/detail?portfolioId=${id}`,
+        { dispatcher: agent as any, signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" } }
       );
-      const avatar = data?.data?.userPhotoUrl;
+      clearTimeout(timeout);
+      const data = await res.json() as any;
+      const avatar = data?.data?.avatarUrl;
+      const nickname = data?.data?.nickname;
       if (avatar) {
-        await supabase.from("trader_sources").update({ avatar_url: avatar })
-          .eq("source", "binance_futures").eq("source_trader_id", traders[i].source_trader_id);
+        const updateObj: any = { avatar_url: avatar };
+        if (nickname) updateObj.handle = nickname;
+        await supabase.from("trader_sources").update(updateObj)
+          .eq("source", "binance_futures").eq("source_trader_id", id);
         updated++;
+      } else {
+        noAvatar++;
+        if (noAvatar <= 3) console.log(`  [binance] No avatar for ${id}: ${JSON.stringify(data).slice(0, 200)}`);
       }
     } catch (e: any) {
       failed++;
-      if (failed <= 5) console.error(`  [binance] Error ${traders[i].source_trader_id}: ${e.message}`);
+      if (failed <= 5) console.error(`  [binance] Error ${id}: ${e.message}`);
     }
-    if ((i + 1) % 100 === 0) console.log(`  [binance] ${i + 1}/${traders.length}, ${updated} updated, ${failed} failed`);
+    if ((i + 1) % 100 === 0) console.log(`  [binance] ${i + 1}/${traders.length}, ${updated} updated, ${noAvatar} no avatar, ${failed} failed`);
     await sleep(DELAY);
   }
-  console.log(`[binance_futures] Done: ${updated} updated, ${failed} failed`);
-}
-
-async function processBitget(source: "bitget_futures" | "bitget_spot") {
-  const traders = await fetchAll(source);
-  console.log(`[${source}] ${traders.length} traders without avatar`);
-  let updated = 0, failed = 0;
-
-  for (let i = 0; i < traders.length; i++) {
-    try {
-      const data = await directFetch(
-        `https://www.bitget.com/v1/trigger/trace/public/traderDetail?traderUid=${traders[i].source_trader_id}`
-      );
-      const avatar = data?.data?.avatar || data?.data?.traderAvatar;
-      if (avatar) {
-        await supabase.from("trader_sources").update({ avatar_url: avatar })
-          .eq("source", source).eq("source_trader_id", traders[i].source_trader_id);
-        updated++;
-      }
-    } catch (e: any) {
-      failed++;
-      if (failed <= 5) console.error(`  [${source}] Error: ${e.message}`);
-    }
-    if ((i + 1) % 100 === 0) console.log(`  [${source}] ${i + 1}/${traders.length}, ${updated} updated, ${failed} failed`);
-    await sleep(DELAY);
-  }
-  console.log(`[${source}] Done: ${updated} updated, ${failed} failed`);
+  console.log(`[binance_futures] Done: ${updated} updated, ${noAvatar} no avatar, ${failed} failed`);
 }
 
 async function main() {
   console.log("=== Avatar Backfill Script ===\n");
-  await processHyperliquid();
-  await processBitget("bitget_futures");
-  await processBitget("bitget_spot");
+  await processBitget();
   await processBinance();
   console.log("\n=== Done ===");
 }
