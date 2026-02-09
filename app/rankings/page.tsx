@@ -111,15 +111,15 @@ function saveFilterPrefs(prefs: FilterPrefs): void {
 }
 
 /** Quick exchange filter chips shown above the leaderboard */
-const QUICK_FILTER_EXCHANGES: { value: string; label: string }[] = [
-  { value: 'binance_futures', label: 'Binance' },
-  { value: 'bitget_futures', label: 'Bitget' },
-  { value: 'okx_futures', label: 'OKX' },
-  { value: 'bybit', label: 'Bybit' },
-  { value: 'mexc', label: 'MEXC' },
-  { value: 'htx_futures', label: 'HTX' },
-  { value: 'hyperliquid', label: 'Hyperliquid' },
-  { value: 'gmx', label: 'GMX' },
+const QUICK_FILTER_EXCHANGES: { value: string; label: string; logo: string; color: string }[] = [
+  { value: 'binance_futures', label: 'Binance', logo: 'https://assets.coingecko.com/coins/images/825/small/binance-coin-logo.png', color: '#F3BA2F' },
+  { value: 'bitget_futures', label: 'Bitget', logo: 'https://assets.coingecko.com/coins/images/11610/small/photo_2022-01-24_14-14-56.jpg', color: '#00D7D5' },
+  { value: 'okx_futures', label: 'OKX', logo: 'https://assets.coingecko.com/coins/images/13708/small/okb_logo.png', color: '#FFFFFF' },
+  { value: 'bybit', label: 'Bybit', logo: 'https://assets.coingecko.com/coins/images/21149/small/bybit.png', color: '#F7A600' },
+  { value: 'mexc', label: 'MEXC', logo: 'https://assets.coingecko.com/coins/images/12958/small/mexc.png', color: '#00D5FF' },
+  { value: 'htx_futures', label: 'HTX', logo: 'https://assets.coingecko.com/coins/images/2822/small/huobi-token-logo.png', color: '#1B4AEF' },
+  { value: 'hyperliquid', label: 'Hyperliquid', logo: '', color: '#50E3C2' },
+  { value: 'gmx', label: 'GMX', logo: '', color: '#4F8FEA' },
 ]
 
 function ExchangeQuickFilter({
@@ -133,7 +133,6 @@ function ExchangeQuickFilter({
   isZh: boolean
   onPlatformChange: (platform: string | null) => void
 }) {
-  // Filter chips based on active category
   const visibleExchanges = useMemo(() => {
     if (activeCategory === 'all') return QUICK_FILTER_EXCHANGES
     return QUICK_FILTER_EXCHANGES.filter(ex => {
@@ -148,49 +147,122 @@ function ExchangeQuickFilter({
   if (visibleExchanges.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-2 mb-4">
+    <div
+      className="exchange-scroll-bar"
+      style={{
+        display: 'flex',
+        gap: 8,
+        marginBottom: 16,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        padding: '4px 0',
+      }}
+    >
+      {/* "全部" chip */}
+      <button
+        onClick={() => onPlatformChange(null)}
+        className="touch-target-sm"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '8px 16px',
+          borderRadius: tokens.radius.xl,
+          fontSize: tokens.typography.fontSize.sm,
+          fontWeight: !activePlatform ? 700 : 500,
+          background: !activePlatform
+            ? tokens.gradient.purpleGold
+            : tokens.glass.bg.light,
+          color: !activePlatform ? '#fff' : tokens.colors.text.secondary,
+          border: !activePlatform ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+          cursor: 'pointer',
+          transition: `all ${tokens.transition.base}`,
+          boxShadow: !activePlatform ? `0 2px 12px ${tokens.colors.accent.primary}30` : 'none',
+          outline: 'none',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {isZh ? '全部' : 'All'}
+      </button>
+
       {visibleExchanges.map(ex => {
         const isActive = activePlatform === ex.value
         return (
           <button
             key={ex.value}
             onClick={() => onPlatformChange(isActive ? null : ex.value)}
+            className="touch-target-sm"
             style={{
-              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.full,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
-              background: isActive ? `${tokens.colors.accent.primary}20` : tokens.glass.bg.light,
-              color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
-              border: `1px solid ${isActive ? tokens.colors.accent.primary + '50' : tokens.colors.border.primary}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              borderRadius: tokens.radius.xl,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: isActive ? 700 : 500,
+              background: isActive
+                ? `${ex.color}18`
+                : tokens.glass.bg.light,
+              color: isActive ? (ex.color === '#FFFFFF' ? tokens.colors.text.primary : ex.color) : tokens.colors.text.secondary,
+              border: `1px solid ${isActive ? ex.color + '60' : tokens.colors.border.primary}`,
               cursor: 'pointer',
-              transition: `all ${tokens.transition.fast}`,
+              transition: `all ${tokens.transition.base}`,
+              boxShadow: isActive ? `0 2px 12px ${ex.color}25` : 'none',
               outline: 'none',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.borderColor = ex.color + '40'
+                e.currentTarget.style.background = `${ex.color}0C`
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.borderColor = tokens.colors.border.primary
+                e.currentTarget.style.background = tokens.glass.bg.light
+                e.currentTarget.style.transform = 'none'
+              }
             }}
           >
+            {ex.logo ? (
+              <Image
+                src={ex.logo}
+                alt=""
+                width={20}
+                height={20}
+                sizes="20px"
+                unoptimized
+                style={{ borderRadius: '50%', flexShrink: 0 }}
+              />
+            ) : (
+              <span
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  background: ex.color,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: '#fff',
+                  flexShrink: 0,
+                }}
+              >
+                {ex.label[0]}
+              </span>
+            )}
             {ex.label}
           </button>
         )
       })}
-      {activePlatform && (
-        <button
-          onClick={() => onPlatformChange(null)}
-          style={{
-            padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-            borderRadius: tokens.radius.full,
-            fontSize: tokens.typography.fontSize.xs,
-            fontWeight: tokens.typography.fontWeight.medium,
-            background: 'transparent',
-            color: tokens.colors.text.tertiary,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            cursor: 'pointer',
-            transition: `all ${tokens.transition.fast}`,
-            outline: 'none',
-          }}
-        >
-          {isZh ? '清除' : 'Clear'}
-        </button>
-      )}
     </div>
   )
 }
