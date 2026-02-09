@@ -636,6 +636,7 @@ async function getTraderDetails(
       id: traderId,
       bio: userProfile?.bio || undefined,
       followers: arenaFollowers,
+      copiers: statsDetail90d?.copiers_count ?? undefined,
       avatar_url: source.avatar_url || undefined,
       cover_url: undefined,
       profile_url: source.profile_url || undefined,

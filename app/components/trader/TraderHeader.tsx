@@ -644,7 +644,6 @@ export default function TraderHeader({
             <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
           )}
 
-          <AddToCollectionButton itemType="trader" itemId={traderId} compact />
 
           <ActionButton onClick={() => router.push('/')} variant="ghost">
             ← {t('back')}
