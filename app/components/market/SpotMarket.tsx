@@ -114,18 +114,6 @@ export default function SpotMarket() {
       render: (r) => <ChangeCell value={r.change24h} />,
     },
     {
-      key: 'high24h',
-      label: t('high24h') || '24h最高',
-      sortable: true,
-      render: (r) => <span>{formatPrice(r.high24h)}</span>,
-    },
-    {
-      key: 'low24h',
-      label: t('low24h') || '24h最低',
-      sortable: true,
-      render: (r) => <span>{formatPrice(r.low24h)}</span>,
-    },
-    {
       key: 'volume24h',
       label: t('volume24h') || '24h成交量',
       sortable: true,

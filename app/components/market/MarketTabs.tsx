@@ -14,8 +14,6 @@ export default function MarketTabs({ children }: MarketTabsProps) {
 
   const tabs = [
     { key: 'spot', label: t('spot') || '现货' },
-    { key: 'futures', label: t('futures') || '合约' },
-    { key: 'alpha', label: t('alphaHot') || 'Alpha热门' },
   ]
 
   return (
