@@ -21,14 +21,27 @@ import { createClient } from '@supabase/supabase-js'
 import {
   fetchBinanceEquityCurve,
   fetchBinanceStatsDetail,
+  fetchBinancePositionHistory,
   fetchBybitEquityCurve,
   fetchBybitStatsDetail,
+  fetchBybitPositionHistory,
+  fetchOkxEquityCurve,
   fetchOkxStatsDetail,
+  fetchOkxCurrentPositions,
+  fetchOkxPositionHistory,
+  fetchBitgetEquityCurve,
+  fetchBitgetStatsDetail,
+  fetchBitgetPositionHistory,
+  fetchHyperliquidPositionHistory,
+  fetchGmxPositionHistory,
   upsertEquityCurve,
   upsertStatsDetail,
+  upsertPositionHistory,
+  upsertPortfolio,
   enhanceStatsWithDerivedMetrics,
   type StatsDetail,
   type EquityCurvePoint,
+  type PositionHistoryItem,
 } from '@/lib/cron/fetchers/enrichment'
 import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
@@ -84,6 +97,8 @@ interface EnrichmentConfig {
   platform: string
   fetchEquityCurve?: (traderId: string, days: number) => Promise<Array<{ date: string; roi: number; pnl: number | null }>>
   fetchStatsDetail?: (traderId: string) => Promise<StatsDetail | null>
+  fetchPositionHistory?: (traderId: string) => Promise<PositionHistoryItem[]>
+  fetchCurrentPositions?: (traderId: string) => Promise<PositionHistoryItem[]>
   concurrency: number
   delayMs: number
 }
@@ -100,6 +115,7 @@ const PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
       return fetchBinanceEquityCurve(traderId, timeRangeMap[days] || 'QUARTERLY')
     },
     fetchStatsDetail: fetchBinanceStatsDetail,
+    fetchPositionHistory: fetchBinancePositionHistory,
     concurrency: 5,
     delayMs: 1000,
   },
@@ -107,14 +123,38 @@ const PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bybit',
     fetchEquityCurve: fetchBybitEquityCurve,
     fetchStatsDetail: fetchBybitStatsDetail,
+    fetchPositionHistory: fetchBybitPositionHistory,
     concurrency: 5,
     delayMs: 1000,
   },
   okx_futures: {
     platform: 'okx_futures',
+    fetchEquityCurve: fetchOkxEquityCurve,
     fetchStatsDetail: fetchOkxStatsDetail,
+    fetchPositionHistory: fetchOkxPositionHistory,
+    fetchCurrentPositions: fetchOkxCurrentPositions,
+    concurrency: 3,
+    delayMs: 1500,
+  },
+  bitget_futures: {
+    platform: 'bitget_futures',
+    fetchEquityCurve: fetchBitgetEquityCurve,
+    fetchStatsDetail: fetchBitgetStatsDetail,
+    fetchPositionHistory: fetchBitgetPositionHistory,
+    concurrency: 2,
+    delayMs: 2000,
+  },
+  hyperliquid: {
+    platform: 'hyperliquid',
+    fetchPositionHistory: fetchHyperliquidPositionHistory,
     concurrency: 3,
     delayMs: 500,
+  },
+  gmx: {
+    platform: 'gmx',
+    fetchPositionHistory: fetchGmxPositionHistory,
+    concurrency: 2,
+    delayMs: 1000,
   },
 }
 
@@ -230,6 +270,42 @@ async function handleEnrichment(req: Request) {
                 await withRetry(
                   () => upsertEquityCurve(supabase, platformKey, traderId, period, curve),
                   `${platformKey}:${traderId} save equity curve`
+                )
+              }
+            }
+
+            // Fetch and save position history with retry
+            if (config.fetchPositionHistory) {
+              const positions = await withRetry(
+                () => config.fetchPositionHistory!(traderId),
+                `${platformKey}:${traderId} position history`
+              )
+              if (positions.length > 0) {
+                await withRetry(
+                  () => upsertPositionHistory(supabase, platformKey, traderId, positions),
+                  `${platformKey}:${traderId} save position history`
+                )
+              }
+            }
+
+            // Fetch and save current positions (portfolio) with retry
+            if (config.fetchCurrentPositions) {
+              const currentPos = await withRetry(
+                () => config.fetchCurrentPositions!(traderId),
+                `${platformKey}:${traderId} current positions`
+              )
+              if (currentPos.length > 0) {
+                await withRetry(
+                  () => upsertPortfolio(supabase, platformKey, traderId,
+                    currentPos.map((p) => ({
+                      symbol: p.symbol,
+                      direction: p.direction,
+                      investedPct: null,
+                      entryPrice: p.entryPrice,
+                      pnl: p.pnlUsd,
+                    }))
+                  ),
+                  `${platformKey}:${traderId} save current positions`
                 )
               }
             }

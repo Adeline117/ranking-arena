@@ -352,6 +352,280 @@ export async function fetchOkxCurrentPositions(
 }
 
 // ============================================
+// OKX Equity Curve (from weekly PnL API)
+// ============================================
+
+interface OkxWeeklyPnlResponse {
+  code: string
+  data?: Array<{
+    beginTs?: string
+    pnl?: string
+    pnlRatio?: string
+  }>
+}
+
+export async function fetchOkxEquityCurve(
+  traderId: string,
+  _days = 90
+): Promise<EquityCurvePoint[]> {
+  try {
+    const data = await fetchJson<OkxWeeklyPnlResponse>(
+      `https://www.okx.com/api/v5/copytrading/public-weekly-pnl?instType=SWAP&uniqueCode=${traderId}`,
+      { timeoutMs: 15000 }
+    )
+
+    if (data.code !== '0' || !data.data?.length) return []
+
+    // Weekly PnL data, convert to cumulative equity curve
+    // Sort by beginTs ascending
+    const sorted = [...data.data].sort((a, b) =>
+      Number(a.beginTs || 0) - Number(b.beginTs || 0)
+    )
+
+    let cumulativeRoi = 0
+    let cumulativePnl = 0
+
+    return sorted.map((d) => {
+      const weekPnlRatio = d.pnlRatio ? Number(d.pnlRatio) * 100 : 0
+      const weekPnl = d.pnl ? Number(d.pnl) : 0
+      cumulativeRoi += weekPnlRatio
+      cumulativePnl += weekPnl
+
+      const ts = d.beginTs ? Number(d.beginTs) : 0
+      const date = ts > 0 ? new Date(ts).toISOString().split('T')[0] : ''
+
+      return {
+        date,
+        roi: cumulativeRoi,
+        pnl: cumulativePnl,
+      }
+    }).filter((p) => p.date)
+  } catch (err) {
+    console.warn(`[enrichment] OKX equity curve failed: ${err}`)
+    return []
+  }
+}
+
+// ============================================
+// OKX Position History (from pnlRatios in lead trader detail)
+// ============================================
+
+/**
+ * OKX doesn't have a public history-subpositions endpoint.
+ * We use the current subpositions endpoint to get open positions,
+ * and complement with data from the priapi position-history endpoint.
+ */
+export async function fetchOkxPositionHistory(
+  traderId: string,
+  limit = 50
+): Promise<PositionHistoryItem[]> {
+  try {
+    // Try the priapi endpoint for position history
+    const data = await fetchJson<{
+      code: string
+      data?: Array<{
+        instId?: string
+        posSide?: string
+        openAvgPx?: string
+        closeAvgPx?: string
+        openTime?: string
+        closeTime?: string
+        subPos?: string
+        closeTotalPos?: string
+        mgnMode?: string
+        pnl?: string
+        pnlRatio?: string
+        lever?: string
+      }>
+    }>(
+      `https://www.okx.com/priapi/v5/ecotrade/public/position-history?uniqueName=${traderId}&limit=${limit}`,
+      { timeoutMs: 15000 }
+    )
+
+    if (data.code !== '0' || !data.data?.length) return []
+
+    return data.data.map((p) => ({
+      symbol: (p.instId || '').replace('-SWAP', '').replace('-', ''),
+      direction: (p.posSide || '').toLowerCase().includes('short') ? 'short' as const : 'long' as const,
+      positionType: 'perpetual',
+      marginMode: p.mgnMode?.toLowerCase() || 'cross',
+      openTime: p.openTime ? new Date(Number(p.openTime)).toISOString() : null,
+      closeTime: p.closeTime ? new Date(Number(p.closeTime)).toISOString() : null,
+      entryPrice: p.openAvgPx != null ? Number(p.openAvgPx) : null,
+      exitPrice: p.closeAvgPx != null ? Number(p.closeAvgPx) : null,
+      maxPositionSize: p.subPos != null ? Number(p.subPos) : null,
+      closedSize: p.closeTotalPos != null ? Number(p.closeTotalPos) : null,
+      pnlUsd: p.pnl != null ? Number(p.pnl) : null,
+      pnlPct: p.pnlRatio != null ? Number(p.pnlRatio) * 100 : null,
+      status: 'closed',
+    }))
+  } catch (err) {
+    console.warn(`[enrichment] OKX position history failed: ${err}`)
+    return []
+  }
+}
+
+// ============================================
+// Bitget Enrichment (via Cloudflare proxy)
+// ============================================
+
+const BITGET_PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+
+interface BitgetProfitLineResponse {
+  code?: string
+  data?: Array<{
+    date?: string
+    profit?: string | number
+    profitRate?: string | number
+  }>
+}
+
+export async function fetchBitgetEquityCurve(
+  traderId: string,
+  _days = 90
+): Promise<EquityCurvePoint[]> {
+  try {
+    // Bitget www endpoints are behind Cloudflare, use proxy
+    const targetUrl = `https://www.bitget.com/v1/trigger/trace/public/trader/profitList?traderId=${traderId}`
+    const data = await fetchJson<BitgetProfitLineResponse>(
+      `${BITGET_PROXY_URL}?url=${encodeURIComponent(targetUrl)}`,
+      { timeoutMs: 20000 }
+    )
+
+    if (!data?.data?.length) return []
+
+    return data.data
+      .filter((d) => d.date)
+      .map((d) => ({
+        date: d.date!,
+        roi: d.profitRate != null ? Number(d.profitRate) * 100 : 0,
+        pnl: d.profit != null ? Number(d.profit) : null,
+      }))
+  } catch (err) {
+    console.warn(`[enrichment] Bitget equity curve failed: ${err}`)
+    return []
+  }
+}
+
+interface BitgetPositionHistoryResponse {
+  code?: string
+  data?: {
+    list?: Array<{
+      symbol?: string
+      side?: string
+      openPrice?: string | number
+      closePrice?: string | number
+      openTime?: string | number
+      closeTime?: string | number
+      size?: string | number
+      closedSize?: string | number
+      pnl?: string | number
+      pnlRate?: string | number
+      leverage?: string | number
+      marginMode?: string
+    }>
+  }
+}
+
+export async function fetchBitgetPositionHistory(
+  traderId: string,
+  pageSize = 50
+): Promise<PositionHistoryItem[]> {
+  try {
+    // Use the v1/copy/mix endpoint via proxy
+    const targetUrl = `https://www.bitget.com/v1/copy/mix/trader/detail?traderId=${traderId}`
+    const data = await fetchJson<{ data?: { historyOrders?: BitgetPositionHistoryResponse['data'] } }>(
+      `${BITGET_PROXY_URL}?url=${encodeURIComponent(targetUrl)}`,
+      { timeoutMs: 20000 }
+    )
+
+    const list = data?.data?.historyOrders?.list
+    if (!list?.length) return []
+
+    return list.slice(0, pageSize).map((p) => ({
+      symbol: p.symbol || '',
+      direction: (p.side || '').toLowerCase().includes('short') ? 'short' as const : 'long' as const,
+      positionType: 'perpetual',
+      marginMode: p.marginMode?.toLowerCase() || 'cross',
+      openTime: p.openTime ? new Date(Number(p.openTime)).toISOString() : null,
+      closeTime: p.closeTime ? new Date(Number(p.closeTime)).toISOString() : null,
+      entryPrice: p.openPrice != null ? Number(p.openPrice) : null,
+      exitPrice: p.closePrice != null ? Number(p.closePrice) : null,
+      maxPositionSize: p.size != null ? Number(p.size) : null,
+      closedSize: p.closedSize != null ? Number(p.closedSize) : null,
+      pnlUsd: p.pnl != null ? Number(p.pnl) : null,
+      pnlPct: p.pnlRate != null ? Number(p.pnlRate) * 100 : null,
+      status: 'closed',
+    }))
+  } catch (err) {
+    console.warn(`[enrichment] Bitget position history failed: ${err}`)
+    return []
+  }
+}
+
+export async function fetchBitgetStatsDetail(
+  traderId: string
+): Promise<StatsDetail | null> {
+  try {
+    const targetUrl = `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderId}`
+    const data = await fetchJson<{
+      data?: {
+        winRate?: string | number
+        maxDrawdown?: string | number
+        tradeCount?: number
+        followerCount?: number
+        copierCount?: number
+        copierPnl?: string | number
+        aum?: string | number
+        avgHoldingTime?: number
+        sharpeRatio?: string | number
+      }
+    }>(
+      `${BITGET_PROXY_URL}?url=${encodeURIComponent(targetUrl)}`,
+      { timeoutMs: 20000 }
+    )
+
+    if (!data?.data) return null
+
+    const d = data.data
+    const parseNum = (v: string | number | undefined): number | null => {
+      if (v == null) return null
+      const n = typeof v === 'string' ? parseFloat(v) : Number(v)
+      return isNaN(n) ? null : n
+    }
+
+    // Also try to get position history for stats calculation
+    const positions = await fetchBitgetPositionHistory(traderId, 100)
+    let winningPositions = 0
+    for (const pos of positions) {
+      if (pos.pnlUsd != null && pos.pnlUsd > 0) winningPositions++
+    }
+
+    return {
+      totalTrades: d.tradeCount ?? positions.length,
+      profitableTradesPct: parseNum(d.winRate),
+      avgHoldingTimeHours: d.avgHoldingTime ? d.avgHoldingTime / 3600 : null,
+      avgProfit: null,
+      avgLoss: null,
+      largestWin: null,
+      largestLoss: null,
+      sharpeRatio: parseNum(d.sharpeRatio),
+      maxDrawdown: parseNum(d.maxDrawdown),
+      currentDrawdown: null,
+      volatility: null,
+      copiersCount: d.followerCount ?? d.copierCount ?? null,
+      copiersPnl: parseNum(d.copierPnl),
+      aum: parseNum(d.aum),
+      winningPositions,
+      totalPositions: positions.length,
+    }
+  } catch (err) {
+    console.warn(`[enrichment] Bitget stats detail failed: ${err}`)
+    return null
+  }
+}
+
+// ============================================
 // Hyperliquid Position History (from userFills)
 // ============================================
 

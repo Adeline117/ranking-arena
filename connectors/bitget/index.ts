@@ -141,8 +141,37 @@ export class BitgetFuturesConnector extends BaseConnector {
     }
   }
 
-  async fetchTimeseries(_trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
-    return this.success([], { reason: 'Bitget timeseries requires separate endpoint discovery' });
+  async fetchTimeseries(trader_key: string): Promise<ConnectorResult<CanonicalTimeseries[]>> {
+    try {
+      // Bitget www endpoints are behind CF; try proxy if available
+      const proxyUrl = process.env.CLOUDFLARE_PROXY_URL;
+      if (!proxyUrl) {
+        return this.success([], { reason: 'Bitget timeseries requires CLOUDFLARE_PROXY_URL' });
+      }
+
+      const targetUrl = `https://www.bitget.com/v1/trigger/trace/public/trader/profitList?traderId=${trader_key}`;
+      const response = await this.fetchJSON<{ data?: Array<{ date: string; profit?: number; profitRate?: number }> }>(
+        `${proxyUrl}?url=${encodeURIComponent(targetUrl)}`,
+      );
+
+      if (!response?.data?.length) return this.success([]);
+
+      return this.success<CanonicalTimeseries[]>([{
+        platform: 'bitget',
+        market_type: 'futures',
+        trader_key,
+        series_type: 'equity_curve',
+        as_of_ts: new Date().toISOString(),
+        data: response.data.filter(p => p.date).map(p => ({
+          ts: p.date,
+          value: p.profitRate != null ? Number(p.profitRate) * 100 : 0,
+          pnl: p.profit != null ? Number(p.profit) : 0,
+        })),
+        provenance: this.buildProvenance(targetUrl),
+      }]);
+    } catch (error) {
+      return this.success([], { reason: `Bitget timeseries failed: ${(error as Error).message}` });
+    }
   }
 
   normalize(raw: Record<string, unknown>, field_map: Record<string, string>): Partial<SnapshotMetrics> {

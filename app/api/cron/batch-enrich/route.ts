@@ -13,6 +13,10 @@ export const maxDuration = 300
 const PLATFORMS = [
   { platform: 'binance_futures', period: '90D', limit: 100 },
   { platform: 'bybit', period: '90D', limit: 100 },
+  { platform: 'okx_futures', period: '90D', limit: 80 },
+  { platform: 'bitget_futures', period: '90D', limit: 80 },
+  { platform: 'hyperliquid', period: '90D', limit: 60 },
+  { platform: 'gmx', period: '90D', limit: 40 },
 ]
 
 interface BatchResult {
