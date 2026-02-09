@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { getAuthUser } from '@/lib/supabase/server'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -28,17 +30,19 @@ export async function POST(request: NextRequest) {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
     if (rateLimitResponse) return rateLimitResponse
 
+    // Security: Verify authentication
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const userId = formData.get('userId') as string
+    const userId = authUser.id // Use authenticated user ID, ignore client-provided userId
     const conversationId = formData.get('conversationId') as string
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-    }
-
-    if (!userId) {
-      return NextResponse.json({ error: 'No userId provided' }, { status: 401 })
     }
 
     if (!conversationId) {
@@ -83,7 +87,7 @@ export async function POST(request: NextRequest) {
     // Check if chat bucket exists, create if not
     const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
     if (bucketsError) {
-      console.error('Error listing buckets:', bucketsError)
+      logger.error('Error listing buckets:', bucketsError)
       return NextResponse.json({
         error: 'Storage service unavailable',
         details: bucketsError.message,
@@ -98,7 +102,7 @@ export async function POST(request: NextRequest) {
         fileSizeLimit: MAX_VIDEO_SIZE,
       })
       if (createBucketError && !createBucketError.message?.includes('already exists')) {
-        console.error('Error creating chat bucket:', createBucketError)
+        logger.error('Error creating chat bucket:', createBucketError)
         return NextResponse.json({
           error: 'Could not create storage bucket',
         }, { status: 503 })
@@ -121,7 +125,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (error) {
-      console.error('Upload error:', error)
+      logger.error('Upload error:', error)
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
@@ -139,7 +143,7 @@ export async function POST(request: NextRequest) {
       category: fileCategory,
     })
   } catch (error: unknown) {
-    console.error('Error uploading chat file:', error)
+    logger.error('Error uploading chat file:', error)
     const errorMessage = error instanceof Error ? error.message : 'Upload failed'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
