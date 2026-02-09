@@ -82,13 +82,13 @@ export default function FearGreedGauge() {
   const label = getLabel(displayValue)
 
   // Gauge geometry - larger semi-circle
-  const cx = 100, cy = 88, r = 70, strokeW = 14
+  const cx = 100, cy = 88, r = 68, strokeW = 16
   const segments = [
-    { from: 180, to: 144, color: 'var(--color-accent-error)' },
-    { from: 144, to: 108, color: 'var(--color-score-average)' },
-    { from: 108, to: 72, color: 'var(--color-accent-warning)' },
-    { from: 72, to: 36, color: 'var(--color-accent-success)' },
-    { from: 36, to: 0, color: 'var(--color-accent-success)' },
+    { from: 180, to: 144, color: '#ef4444' },
+    { from: 144, to: 108, color: '#f97316' },
+    { from: 108, to: 72, color: '#eab308' },
+    { from: 72, to: 36, color: '#22c55e' },
+    { from: 36, to: 0, color: '#16a34a' },
   ]
 
   // Needle
@@ -221,24 +221,25 @@ export default function FearGreedGauge() {
             x2={nx}
             y2={ny}
             stroke={color}
-            strokeWidth="2.5"
+            strokeWidth="2"
             strokeLinecap="round"
             filter="url(#needleShadow)"
           />
           {/* Needle center */}
-          <circle cx={cx} cy={cy} r="5" fill={color} />
-          <circle cx={cx} cy={cy} r="2.5" fill={tokens.colors.bg.primary} />
+          <circle cx={cx} cy={cy} r="6" fill={tokens.colors.bg.primary} stroke={color} strokeWidth="2" />
+          <circle cx={cx} cy={cy} r="2" fill={color} />
 
-          {/* Value text in center */}
+          {/* Value text below needle hub */}
           <text
             x={cx}
-            y={cy + 20}
+            y={cy + 24}
             textAnchor="middle"
             dominantBaseline="middle"
             fill={color}
-            fontSize="28"
+            fontSize="24"
             fontWeight="800"
-            fontFamily="monospace"
+            fontFamily="var(--font-mono, monospace)"
+            letterSpacing="-1"
           >
             {displayValue}
           </text>

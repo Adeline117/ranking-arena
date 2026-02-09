@@ -173,10 +173,10 @@ function MiniKpi({
         size="xl"
         weight="black"
         style={{
-          color: (value === 'N/A' || value === '--')
+          color: value === '--'
             ? tokens.colors.text.tertiary
             : (highlight && isNegative ? tokens.colors.accent.error : tokens.colors.text.primary),
-          fontFamily: (value !== 'N/A' && value !== '--' && !value.includes('/')) ? tokens.typography.fontFamily.mono.join(', ') : 'inherit',
+          fontFamily: (value !== '--' && !value.includes('/')) ? tokens.typography.fontFamily.mono.join(', ') : 'inherit',
         }}
       >
         {value}

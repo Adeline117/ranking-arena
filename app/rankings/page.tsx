@@ -902,47 +902,73 @@ function RankChangeIndicator({ currentRank, metricRank }: { currentRank: number;
 function TraderAvatar({ trader }: { trader: RankedTraderV2 }) {
   const [imgError, setImgError] = useState(false)
   const showFallback = !trader.avatar_url || imgError
+  const initial = getAvatarInitial(getTraderDisplayName(trader))
 
   return (
     <div
-      className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-xs font-bold"
-      style={{ background: getAvatarGradient(trader.trader_key) }}
+      className="flex-shrink-0 flex items-center justify-center overflow-hidden"
+      style={{
+        width: 36,
+        height: 36,
+        minWidth: 36,
+        borderRadius: '50%',
+        background: getAvatarGradient(trader.trader_key),
+        border: '2px solid var(--color-border-primary)',
+        position: 'relative',
+      }}
     >
-      {!showFallback ? (
+      <span
+        style={{
+          color: 'white',
+          fontSize: 14,
+          fontWeight: 700,
+          lineHeight: 1,
+          textTransform: 'uppercase',
+        }}
+      >
+        {initial}
+      </span>
+      {!showFallback && (
         <Image
           src={trader.avatar_url!}
           alt=""
-          width={32}
-          height={32}
-          sizes="32px"
-          className="w-full h-full object-cover"
+          width={36}
+          height={36}
+          sizes="36px"
+          className="object-cover"
           loading="lazy"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', borderRadius: '50%' }}
           onError={() => setImgError(true)}
         />
-      ) : (
-        <span className="text-white">{getAvatarInitial(getTraderDisplayName(trader))}</span>
       )}
     </div>
   )
 }
 
-/** Arena Score badge with proper color grading */
+/** Arena Score badge with color gradient: red -> orange -> yellow -> green -> purple(legendary) */
 function ScoreBadge({ score }: { score: number }) {
   const hex = getScoreColorHex(score)
   const cssColor = getScoreColor(score)
+  // Progress bar width as percentage of 100
+  const pct = Math.min(100, Math.max(0, score))
   return (
     <span
       className="arena-score-badge"
       style={{
-        display: 'inline-block',
-        padding: '2px 10px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        position: 'relative',
+        padding: '3px 10px',
         borderRadius: tokens.radius.md,
         fontSize: 13,
         fontWeight: 700,
         fontFamily: tokens.typography.fontFamily.mono.join(','),
-        background: `linear-gradient(135deg, ${hex}30, ${hex}15)`,
+        background: `linear-gradient(135deg, ${hex}25, ${hex}10)`,
         color: cssColor,
-        border: `1px solid ${hex}40`,
+        border: `1px solid ${hex}45`,
+        overflow: 'hidden',
+        minWidth: 56,
+        justifyContent: 'center',
         boxShadow: score >= 90
           ? `0 0 12px ${hex}50, 0 0 4px ${hex}30`
           : score >= 80
@@ -952,28 +978,65 @@ function ScoreBadge({ score }: { score: number }) {
         animation: score >= 95 ? 'score-glow 2s ease-in-out infinite' : undefined,
       }}
     >
-      {score.toFixed(1)}
+      {/* Score progress fill bar */}
+      <span
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: `${pct}%`,
+          background: `${hex}18`,
+          transition: 'width 0.4s ease',
+          borderRadius: 'inherit',
+        }}
+      />
+      <span style={{ position: 'relative', zIndex: 1 }}>{score.toFixed(1)}</span>
     </span>
   )
+}
+
+/** Get exchange logo URL from QUICK_FILTER_EXCHANGES */
+function getExchangeLogo(platform: string): string | undefined {
+  return QUICK_FILTER_EXCHANGES.find(ex => ex.value === platform)?.logo
 }
 
 function TraderRow({ trader }: { trader: RankedTraderV2 }) {
   const metrics = trader.metrics
   const roiColor = metrics.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
   const traderUrl = `/trader/${encodeURIComponent(trader.trader_key)}?platform=${trader.platform}`
+  const exchangeLogo = getExchangeLogo(trader.platform)
+
+  // Top 3 get subtle background
+  const top3Bg = trader.rank === 1
+    ? 'linear-gradient(90deg, var(--color-gold-bg, rgba(212,175,55,0.06)) 0%, transparent 100%)'
+    : trader.rank === 2
+    ? 'linear-gradient(90deg, var(--color-silver-bg, rgba(192,192,192,0.06)) 0%, transparent 100%)'
+    : trader.rank === 3
+    ? 'linear-gradient(90deg, var(--color-bronze-bg, rgba(205,127,50,0.06)) 0%, transparent 100%)'
+    : undefined
 
   return (
     <Link
       href={traderUrl}
-      className="grid ranking-table-grid gap-2 px-4 py-3 items-center border-b last:border-b-0 ranking-row-hover"
-      style={{ borderColor: tokens.colors.border.primary + '40', textDecoration: 'none', transition: `all ${tokens.transition.base}` }}
+      className="grid ranking-table-grid gap-2 px-4 items-center border-b last:border-b-0 ranking-row-hover"
+      style={{
+        borderColor: tokens.colors.border.primary + '30',
+        textDecoration: 'none',
+        transition: `all ${tokens.transition.base}`,
+        minHeight: 56,
+        paddingTop: 10,
+        paddingBottom: 10,
+        background: top3Bg || (trader.rank > 3 && trader.rank % 2 === 0 ? 'var(--overlay-hover, rgba(255,255,255,0.02))' : undefined),
+      }}
     >
-      <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary, display: 'flex', alignItems: 'center' }}>
+      {/* Rank */}
+      <div className="text-sm font-medium" style={{ color: tokens.colors.text.secondary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {trader.rank <= 3 ? (
           <span
             className="inline-flex items-center justify-center"
             style={{
-              width: 28, height: 28, borderRadius: '50%',
+              width: 30, height: 30, borderRadius: '50%',
               fontSize: 13, fontWeight: 700,
               background: trader.rank === 1
                 ? 'linear-gradient(135deg, var(--color-medal-gold), var(--color-medal-gold-end))'
@@ -991,35 +1054,50 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
             {trader.rank}
           </span>
         ) : (
-          <span>{trader.rank}</span>
+          <span className="tabular-nums" style={{ fontSize: 13 }}>{trader.rank}</span>
         )}
         <RankChangeIndicator currentRank={trader.rank} metricRank={metrics.rank} />
       </div>
 
+      {/* Trader info */}
       <div className="flex items-center gap-3 min-w-0">
         <TraderAvatar trader={trader} />
-        <div className="min-w-0">
-          <div className="text-sm font-medium truncate" style={{ color: tokens.colors.text.primary }}>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold truncate" style={{ color: tokens.colors.text.primary, lineHeight: 1.3 }}>
             {getTraderDisplayName(trader)}
           </div>
-          <div className="text-xs flex items-center gap-1" style={{ color: tokens.colors.text.tertiary }}>
-            {trader.platform.replace('_', ' ')}
+          <div className="text-xs flex items-center gap-1.5" style={{ color: tokens.colors.text.tertiary, marginTop: 2 }}>
+            {exchangeLogo && (
+              <img
+                src={exchangeLogo}
+                alt=""
+                width={14}
+                height={14}
+                loading="lazy"
+                style={{ borderRadius: '50%', flexShrink: 0, opacity: 0.8 }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            )}
+            <span>{EXCHANGE_NAMES[trader.platform] || trader.platform.replace('_', ' ')}</span>
             {SOURCE_TYPE_MAP[trader.platform] === 'web3' && <Web3VerifiedBadge size="sm" />}
           </div>
         </div>
       </div>
 
-      <div className="text-right text-sm font-semibold" style={{ color: roiColor }}>
+      {/* ROI */}
+      <div className="text-right text-sm font-bold tabular-nums" style={{ color: roiColor }}>
         {formatROI(metrics.roi)}
       </div>
 
-      <div className="text-right text-sm col-pnl" style={{ color: tokens.colors.text.primary }}>
+      {/* PnL */}
+      <div className="text-right text-sm col-pnl tabular-nums" style={{ color: metrics.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
         {formatPnL(metrics.pnl)}
       </div>
 
+      {/* Win% */}
       <div 
-        className="text-right text-sm col-winrate" 
-        style={{ color: metrics.win_rate != null ? tokens.colors.text.secondary : tokens.colors.text.tertiary }}
+        className="text-right text-sm col-winrate tabular-nums" 
+        style={{ color: metrics.win_rate != null ? (metrics.win_rate > 50 ? tokens.colors.accent.success : tokens.colors.text.secondary) : tokens.colors.text.tertiary }}
         title={metrics.win_rate == null ? (getPlatformNote(trader.platform) || 'Win rate not provided by this platform') : undefined}
       >
         {metrics.win_rate != null ? `${metrics.win_rate.toFixed(1)}%` : (
@@ -1027,9 +1105,10 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
         )}
       </div>
 
+      {/* MDD */}
       <div 
-        className="text-right text-sm col-mdd" 
-        style={{ color: metrics.max_drawdown != null ? (tokens.colors.accent.error + 'cc') : tokens.colors.text.tertiary }}
+        className="text-right text-sm col-mdd tabular-nums" 
+        style={{ color: metrics.max_drawdown != null ? tokens.colors.accent.error : tokens.colors.text.tertiary }}
         title={metrics.max_drawdown == null ? (getPlatformNote(trader.platform) || 'Drawdown not provided by this platform') : undefined}
       >
         {metrics.max_drawdown != null ? `-${metrics.max_drawdown.toFixed(1)}%` : (
@@ -1037,6 +1116,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
         )}
       </div>
 
+      {/* Score */}
       <div className="text-right col-score">
         {metrics.arena_score != null ? (
           <ScoreBadge score={metrics.arena_score} />

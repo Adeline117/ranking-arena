@@ -75,12 +75,16 @@ export default function StarRating({
               onMouseEnter={() => interactive && setHoverRating(star)}
               onClick={() => interactive && onRate?.(star)}
               onKeyDown={(e) => { if (interactive && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onRate?.(star) } }}
-              style={{ display: 'inline-flex', transition: 'transform 0.15s' }}
+              style={{
+                display: 'inline-flex',
+                transition: 'transform 0.2s cubic-bezier(0.34,1.56,0.64,1)',
+                transform: interactive && hoverRating === star ? 'scale(1.25)' : 'scale(1)',
+              }}
               onMouseDown={e => {
-                if (interactive) (e.currentTarget as HTMLElement).style.transform = 'scale(1.2)'
+                if (interactive) (e.currentTarget as HTMLElement).style.transform = 'scale(1.35)'
               }}
               onMouseUp={e => {
-                if (interactive) (e.currentTarget as HTMLElement).style.transform = 'scale(1)'
+                if (interactive) (e.currentTarget as HTMLElement).style.transform = 'scale(1.25)'
               }}
             >
               <StarIcon fill={interactive && hoverRating ? (hoverRating >= star ? 'full' : 'empty') : fill} size={size} />

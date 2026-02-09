@@ -348,7 +348,7 @@ function SecondaryBadge({
           fontFamily: tokens.typography.fontFamily.mono.join(', '),
         }}
       >
-        {isNA ? 'N/A' : value}
+        {isNA ? '--' : value}
       </Text>
     </Box>
   )

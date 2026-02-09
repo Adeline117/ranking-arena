@@ -16,6 +16,21 @@ import ShareButton from '@/app/components/common/ShareButton'
 import AddToCollectionButton from '@/app/components/features/AddToCollectionButton'
 import { logger } from '@/lib/logger'
 
+function formatRelativeTime(dateStr: string, isZh: boolean): string {
+  const now = Date.now()
+  const diff = now - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return isZh ? '刚刚' : 'just now'
+  if (mins < 60) return isZh ? `${mins}分钟前` : `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return isZh ? `${hours}小时前` : `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return isZh ? `${days}天前` : `${days}d ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return isZh ? `${months}个月前` : `${months}mo ago`
+  return new Date(dateStr).toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
 type BookDetail = {
   id: string
   title: string
@@ -675,38 +690,40 @@ export default function BookDetailPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {reviews.map(r => (
                 <div key={r.id} style={{
-                  padding: '16px 20px', borderRadius: tokens.radius.lg,
+                  padding: '18px 20px', borderRadius: tokens.radius.lg,
                   background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                     {r.users?.avatar_url ? (
                       <img
                         src={r.users.avatar_url}
                         alt=""
-                        style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+                        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                       />
                     ) : (
                       <div style={{
-                        width: 36, height: 36, borderRadius: '50%',
+                        width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
                         background: tokens.gradient.primarySubtle,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 14, color: tokens.colors.accent.brand, fontWeight: 700,
+                        fontSize: 13, color: tokens.colors.accent.brand, fontWeight: 700,
                       }}>
                         {(r.users?.nickname || 'U')[0].toUpperCase()}
                       </div>
                     )}
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary }}>
-                        {(r.users as any)?.nickname || (isZh ? '匿名用户' : 'Anonymous')}
-                      </span>
-                      <span style={{ fontSize: 12, color: tokens.colors.text.tertiary, marginLeft: 8 }}>
-                        {new Date(r.created_at).toLocaleDateString()}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary }}>
+                          {(r.users as any)?.nickname || (isZh ? '匿名用户' : 'Anonymous')}
+                        </span>
+                        {r.rating && <StarRating rating={r.rating} size={13} readonly showCount={false} />}
+                      </div>
+                      <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2, display: 'block' }}>
+                        {formatRelativeTime(r.created_at, isZh)}
                       </span>
                     </div>
-                    {r.rating && <StarRating rating={r.rating} size={14} readonly showCount={false} />}
                   </div>
                   {r.review && (
-                    <p style={{ fontSize: 14, lineHeight: 1.65, color: tokens.colors.text.secondary, margin: 0 }}>
+                    <p style={{ fontSize: 14, lineHeight: 1.7, color: tokens.colors.text.secondary, margin: 0 }}>
                       {r.review}
                     </p>
                   )}
@@ -825,14 +842,28 @@ function StatusButton({ active, onClick, activeColor, icon, label }: {
     <button
       onClick={onClick}
       style={{
-        padding: '10px 20px', borderRadius: tokens.radius.lg,
-        fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
+        padding: '10px 18px', borderRadius: tokens.radius.lg,
+        fontSize: 14, fontWeight: 600,
         cursor: 'pointer',
-        border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+        border: active ? `2px solid ${activeColor}` : `1px solid ${tokens.colors.border.primary}`,
         background: active ? activeColor : 'transparent',
         color: active ? 'var(--color-on-accent)' : tokens.colors.text.primary,
-        transition: `all ${tokens.transition.fast}`,
+        transition: 'all 0.2s cubic-bezier(0.4,0,0.2,1)',
         display: 'inline-flex', alignItems: 'center', gap: 6,
+        minWidth: 90, justifyContent: 'center',
+        boxShadow: active ? `0 2px 8px ${activeColor}40` : 'none',
+      }}
+      onMouseEnter={e => {
+        if (!active) {
+          e.currentTarget.style.borderColor = activeColor
+          e.currentTarget.style.color = activeColor
+        }
+      }}
+      onMouseLeave={e => {
+        if (!active) {
+          e.currentTarget.style.borderColor = tokens.colors.border.primary
+          e.currentTarget.style.color = tokens.colors.text.primary
+        }
       }}
     >
       {icon}

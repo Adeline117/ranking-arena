@@ -68,18 +68,18 @@ function MobileSectorsTab() {
   ]
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, padding: '0 12px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>
       {SECTORS.map(s => (
         <div key={s.name} style={{
-          padding: 16,
+          padding: '14px 16px',
           background: tokens.glass.bg.secondary,
           borderRadius: tokens.radius.lg,
           border: tokens.glass.border.light,
         }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary, marginBottom: 6 }}>
             {s.name}
           </div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: s.color }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: s.color, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums' } as React.CSSProperties}>
             {s.change}
           </div>
         </div>
