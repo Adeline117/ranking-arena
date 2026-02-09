@@ -1,0 +1,15 @@
+{
+  "name": "arena-bullmq-worker",
+  "version": "1.0.0",
+  "description": "BullMQ worker for Arena cron jobs with health checks and alerting",
+  "scripts": {
+    "start": "node worker.js",
+    "health": "node health-check.js",
+    "alert-test": "node alert.js test"
+  },
+  "dependencies": {
+    "bullmq": "^5.0.0",
+    "ioredis": "^5.4.0",
+    "node-cron": "^3.0.3"
+  }
+}

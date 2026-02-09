@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
+import { getScoreColor } from '@/lib/utils/score-colors'
 import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -177,7 +178,7 @@ export default function TopTraders() {
                     <div style={{
                       fontSize: 11,
                       fontWeight: 700,
-                      color: tokens.colors.accent.brand,
+                      color: getScoreColor(t.arena_score!),
                       lineHeight: 1.3,
                     }}>
                       {t.arena_score.toFixed(0)}

@@ -6,6 +6,9 @@ import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TraderPerformance } from '@/lib/data/trader'
 import { Sparkline } from '@/app/components/ui/Sparkline'
+import { getScoreColor as getArenaScoreColor } from '@/lib/utils/score-colors'
+
+const arenaScoreColor = (score: number) => getArenaScoreColor(score)
 
 // 扩展 TraderPerformance 类型
 interface ExtendedPerformance extends TraderPerformance {
@@ -590,9 +593,9 @@ export default function OverviewPerformanceCard({
                         alignItems: 'center',
                         gap: tokens.spacing[2],
                         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                        background: `${getScoreColor(periodArenaScore, 100)}15`,
+                        background: `${arenaScoreColor(periodArenaScore)}15`,
                         borderRadius: tokens.radius.full,
-                        border: `1px solid ${getScoreColor(periodArenaScore, 100)}30`,
+                        border: `1px solid ${arenaScoreColor(periodArenaScore)}30`,
                       }}
                     >
                       <Text size="xs" color="secondary" weight="bold">Arena Score</Text>
@@ -600,7 +603,7 @@ export default function OverviewPerformanceCard({
                         size="sm"
                         weight="black"
                         style={{
-                          color: getScoreColor(periodArenaScore, 100),
+                          color: arenaScoreColor(periodArenaScore),
                           fontFamily: tokens.typography.fontFamily.mono.join(', '),
                         }}
                       >

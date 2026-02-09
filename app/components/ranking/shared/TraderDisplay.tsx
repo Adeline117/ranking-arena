@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { RankingBadge } from '../../ui/icons'
 import { Box, Text } from '../../base'
 import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
+import { getScoreColorInfo } from '@/lib/utils/score-colors'
 import type { Trader } from '../RankingTable'
 
 // Shared color constants for trader display components
@@ -170,50 +171,14 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
 }
 
 // Get styling for arena score based on score value (exported for TraderCard)
-// Tiers: 0-30 gray, 30-50 orange, 50-70 yellow, 70-85 green, 85+ purple
+// Uses shared score-colors utility for consistent 5-tier grading
 export function getScoreStyle(score: number): { bgGradient: string; borderColor: string; textColor: string; fillColor: string } {
-  // 85+ 紫色 — 顶尖
-  if (score >= 85) {
-    return {
-      bgGradient: 'linear-gradient(135deg, rgba(139,92,246,0.18), rgba(168,85,247,0.12))',
-      borderColor: 'rgba(139,92,246,0.6)',
-      textColor: '#a78bfa',
-      fillColor: 'rgba(139,92,246,0.18)',
-    }
-  }
-  // 70-85 绿色 — 良好
-  if (score >= 70) {
-    return {
-      bgGradient: 'linear-gradient(135deg, rgba(22,199,132,0.15), rgba(16,185,129,0.1))',
-      borderColor: 'rgba(22,199,132,0.5)',
-      textColor: '#34d399',
-      fillColor: 'rgba(22,199,132,0.15)',
-    }
-  }
-  // 50-70 黄色 — 中等
-  if (score >= 50) {
-    return {
-      bgGradient: 'linear-gradient(135deg, rgba(250,204,21,0.15), rgba(234,179,8,0.1))',
-      borderColor: 'rgba(250,204,21,0.5)',
-      textColor: '#eab308',
-      fillColor: 'rgba(250,204,21,0.15)',
-    }
-  }
-  // 30-50 橙色 — 一般
-  if (score >= 30) {
-    return {
-      bgGradient: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(234,88,12,0.1))',
-      borderColor: 'rgba(249,115,22,0.45)',
-      textColor: '#f97316',
-      fillColor: 'rgba(249,115,22,0.15)',
-    }
-  }
-  // 0-30 灰色 — 普通
+  const info = getScoreColorInfo(score)
   return {
-    bgGradient: tokens.glass.bg.light,
-    borderColor: 'var(--glass-border-medium)',
-    textColor: TRADER_TEXT_TERTIARY,
-    fillColor: `${tokens.colors.accent.primary}15`,
+    bgGradient: info.bgGradient,
+    borderColor: info.borderColor,
+    textColor: info.color,
+    fillColor: info.fillColor,
   }
 }
 

@@ -19,6 +19,7 @@ import {
   ArenaScoreBadge,
   areTraderPropsEqual,
 } from './shared/TraderDisplay'
+import { getScoreColor } from '@/lib/utils/score-colors'
 import { CopyButton } from './HeroSection'
 import { useComparisonStore } from '@/lib/stores'
 
@@ -210,7 +211,7 @@ export const TraderRow = memo(function TraderRow({
                 <span className="mobile-score-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                   <span style={{
                     width: 6, height: 6, borderRadius: '50%',
-                    background: trader.arena_score >= 85 ? '#a78bfa' : trader.arena_score >= 70 ? '#34d399' : trader.arena_score >= 50 ? '#eab308' : trader.arena_score >= 30 ? '#f97316' : TRADER_TEXT_TERTIARY,
+                    background: getScoreColor(trader.arena_score),
                   }} />
                   <span style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: TRADER_TEXT_TERTIARY }}>{trader.arena_score.toFixed(0)}</span>
                 </span>
