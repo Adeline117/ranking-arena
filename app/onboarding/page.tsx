@@ -507,7 +507,7 @@ export default function OnboardingPage() {
                         fontSize: 14, fontWeight: 600, color: textPrimary, overflow: 'hidden',
                       }}>
                         {t.avatar_url ? (
-                          <img src={t.avatar_url} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                          <img src={t.avatar_url} alt="" loading="lazy" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
                         ) : (
                           (formatTraderName(t)).charAt(0).toUpperCase()
                         )}
@@ -598,7 +598,7 @@ export default function OnboardingPage() {
                         fontSize: 16, fontWeight: 600, color: textPrimary, overflow: 'hidden',
                       }}>
                         {g.avatar_url ? (
-                          <img src={g.avatar_url} alt="" style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }} />
+                          <img src={g.avatar_url} alt="" loading="lazy" style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }} />
                         ) : (
                           displayName.charAt(0).toUpperCase()
                         )}
