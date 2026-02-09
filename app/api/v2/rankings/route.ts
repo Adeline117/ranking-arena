@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
       platform: s.source as LeaderboardPlatform,
       market_type: s.market_type,
       trader_key: s.source_trader_id,
-      display_name: profiles[s.source_trader_id]?.display_name || s.source_trader_id,
+      display_name: profiles[s.source_trader_id]?.display_name || null,
       avatar_url: profiles[s.source_trader_id]?.avatar_url || null,
       window: s.window as Window,
       metrics: s.metrics || {
