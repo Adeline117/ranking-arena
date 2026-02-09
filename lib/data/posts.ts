@@ -554,29 +554,37 @@ export async function togglePostVote(
 
   if (existing) {
     if (existing.choice === choice) {
-      // 取消投票
+      // 取消投票 - use compound match for race safety
       await supabase
         .from('post_votes')
         .delete()
-        .eq('id', existing.id)
+        .eq('post_id', postId)
+        .eq('user_id', userId)
       return { action: 'removed', vote: null }
     } else {
       // 改变投票
       await supabase
         .from('post_votes')
         .update({ choice })
-        .eq('id', existing.id)
+        .eq('post_id', postId)
+        .eq('user_id', userId)
       return { action: 'changed', vote: choice }
     }
   } else {
-    // 新增投票
-    await supabase
+    // 新增投票 - use upsert to handle concurrent inserts
+    const { error } = await supabase
       .from('post_votes')
-      .insert({
-        post_id: postId,
-        user_id: userId,
-        choice,
-      })
+      .upsert(
+        {
+          post_id: postId,
+          user_id: userId,
+          choice,
+        },
+        { onConflict: 'post_id,user_id' }
+      )
+    if (error) {
+      throw error
+    }
     return { action: 'added', vote: choice }
   }
 }
