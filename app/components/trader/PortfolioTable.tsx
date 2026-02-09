@@ -236,8 +236,8 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
           {viewMode === 'current' ? (
             // Current Holdings
             items.length > 0 ? (
-              <Box style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <Box className="portfolio-table-scroll" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 500 }}>
                   <thead>
                     <tr>
                       <th style={{ ...thStyle, textAlign: 'left' }}>{t('market')}</th>
@@ -426,8 +426,8 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                   </Box>
                 ) : (
                   <Box>
-                    <Box style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <Box className="portfolio-table-scroll" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 500 }}>
                         <thead>
                           <tr>
                             <th style={{ ...thStyle, textAlign: 'left' }}>{t('symbol')}</th>

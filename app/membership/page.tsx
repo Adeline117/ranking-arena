@@ -113,8 +113,8 @@ export default function MembershipPage() {
     }}>
       {/* Header */}
       <h1 style={{
-        fontSize: 28,
-        fontWeight: 900,
+        fontSize: tokens.typography.fontSize['2xl'],
+        fontWeight: tokens.typography.fontWeight.black,
         marginBottom: 8,
       }}>
         {t('membershipTitle')}

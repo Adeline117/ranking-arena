@@ -783,7 +783,7 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
           style={{ background: trader.avatar_url ? undefined : getAvatarGradient(trader.trader_key) }}
         >
           {trader.avatar_url ? (
-            <Image src={trader.avatar_url} alt="" width={32} height={32} className="w-full h-full object-cover" loading="lazy" placeholder="empty" unoptimized />
+            <Image src={trader.avatar_url} alt="" width={32} height={32} sizes="32px" className="w-full h-full object-cover" loading="lazy" />
           ) : (
             <span className="text-white">{getAvatarInitial(getTraderDisplayName(trader))}</span>
           )}

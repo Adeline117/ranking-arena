@@ -69,7 +69,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
           alt={handle} 
           fill
           sizes="40px"
-          unoptimized
+          loading="lazy"
           style={{ 
             objectFit: 'cover',
             opacity: imageLoaded ? 1 : 0,

@@ -212,7 +212,7 @@ html.theme-transition *::after {
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
@@ -1879,7 +1879,13 @@ td[data-numeric],
 .price-value,
 .pnl-value,
 .percentage-value,
-.rank-number {
+.rank-number,
+.roi-value,
+.col-score,
+.col-winrate,
+.col-roi,
+.col-pnl,
+.mobile-score-badge {
   font-variant-numeric: tabular-nums;
 }
 

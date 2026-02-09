@@ -270,7 +270,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             aria-modal="true"
             aria-labelledby="dialog-title"
             onClick={(e) => e.stopPropagation()}
-            className={state.isExiting ? 'modal-content-exit' : 'modal-content-enter'}
+            className={`dialog-overlay-mobile ${state.isExiting ? 'modal-content-exit' : 'modal-content-enter'}`}
             style={{
               width: '100%',
               maxWidth: 420,

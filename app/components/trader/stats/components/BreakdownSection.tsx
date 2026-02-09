@@ -125,7 +125,7 @@ export function BreakdownSection({
       </Box>
 
       {/* Asset List */}
-      <Box className="asset-grid" style={{
+      <Box className="asset-grid trading-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
         gap: tokens.spacing[3],

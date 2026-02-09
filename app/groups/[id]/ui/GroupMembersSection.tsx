@@ -122,7 +122,7 @@ function MemberAvatar({ avatarUrl, handle, size = 36 }: MemberAvatarProps): Reac
       }}
     >
       {avatarUrl ? (
-        <Image src={avatarUrl} alt={handle || 'User'} fill style={{ objectFit: 'cover' }} unoptimized />
+        <Image src={avatarUrl} alt={handle || 'User'} fill sizes="36px" style={{ objectFit: 'cover' }} />
       ) : (
         <Text size="sm" color="tertiary">
           {(handle || 'U').charAt(0).toUpperCase()}

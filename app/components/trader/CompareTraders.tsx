@@ -247,8 +247,8 @@ function CompareDetailTable({ traders, onRemove }: { traders: Trader[]; onRemove
   }
 
   return (
-    <Box style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+    <Box className="compare-table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 500 }}>
         <thead>
           <tr>
             <th style={{
