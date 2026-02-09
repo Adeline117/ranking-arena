@@ -231,7 +231,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       return
     }
 
-    const searchTimer = setTimeout(async () => {
+    const searchTimer = setTimeout(async () => { // 150ms debounce for fast response
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
@@ -263,7 +263,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           setSearching(false)
         }
       }
-    }, 300)
+    }, 150)
 
     return () => {
       clearTimeout(searchTimer)
@@ -297,14 +297,18 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setSelectedIndex((prev) =>
-          prev < flatResults.length - 1 ? prev + 1 : 0
-        )
+        setSelectedIndex((prev) => {
+          const next = prev < flatResults.length - 1 ? prev + 1 : 0
+          scrollItemIntoView(next)
+          return next
+        })
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        setSelectedIndex((prev) =>
-          prev > 0 ? prev - 1 : flatResults.length - 1
-        )
+        setSelectedIndex((prev) => {
+          const next = prev > 0 ? prev - 1 : flatResults.length - 1
+          scrollItemIntoView(next)
+          return next
+        })
       } else if (e.key === 'Enter' && selectedIndex >= 0) {
         e.preventDefault()
         const selected = flatResults[selectedIndex]
@@ -319,6 +323,16 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, flatResults, selectedIndex, query, onClose, router, saveToHistory])
+
+  // Scroll selected item into view within dropdown
+  const scrollItemIntoView = (index: number) => {
+    if (!containerRef.current) return
+    const items = containerRef.current.querySelectorAll<HTMLElement>('a[href]')
+    const item = items[index]
+    if (item) {
+      item.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }
 
   // 删除历史记录
   const handleDeleteHistory = async (term: string, e: React.MouseEvent) => {
