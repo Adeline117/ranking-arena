@@ -13,34 +13,90 @@ interface SectorData {
 
 type TimeFrame = '1h' | '24h' | '7d'
 
-// Mock data - will be replaced with real API
-const MOCK_SECTORS: SectorData[] = [
-  { name: 'BTC', category: 'L1', marketCap: 1900000, changePct: 2.3 },
-  { name: 'ETH', category: 'L1', marketCap: 420000, changePct: -1.2 },
-  { name: 'SOL', category: 'L1', marketCap: 85000, changePct: 5.8 },
-  { name: 'BNB', category: 'L1', marketCap: 95000, changePct: 0.7 },
-  { name: 'ADA', category: 'L1', marketCap: 25000, changePct: -3.1 },
-  { name: 'AVAX', category: 'L1', marketCap: 15000, changePct: 4.2 },
-  { name: 'LINK', category: 'DeFi', marketCap: 12000, changePct: 3.5 },
-  { name: 'UNI', category: 'DeFi', marketCap: 8000, changePct: -0.8 },
-  { name: 'AAVE', category: 'DeFi', marketCap: 6000, changePct: 2.1 },
-  { name: 'MKR', category: 'DeFi', marketCap: 3500, changePct: -1.5 },
-  { name: 'ARB', category: 'L2', marketCap: 4500, changePct: -2.8 },
-  { name: 'OP', category: 'L2', marketCap: 3800, changePct: 1.9 },
-  { name: 'MATIC', category: 'L2', marketCap: 7500, changePct: -0.5 },
-  { name: 'DOGE', category: 'Meme', marketCap: 25000, changePct: 8.2 },
-  { name: 'SHIB', category: 'Meme', marketCap: 9000, changePct: -4.5 },
-  { name: 'PEPE', category: 'Meme', marketCap: 5000, changePct: 12.3 },
-  { name: 'WIF', category: 'Meme', marketCap: 3000, changePct: -6.7 },
-  { name: 'RNDR', category: 'AI', marketCap: 5500, changePct: 7.1 },
-  { name: 'FET', category: 'AI', marketCap: 3200, changePct: 4.5 },
-  { name: 'TAO', category: 'AI', marketCap: 4800, changePct: -2.3 },
-  { name: 'AXS', category: 'GameFi', marketCap: 1800, changePct: -1.2 },
-  { name: 'GALA', category: 'GameFi', marketCap: 900, changePct: 3.8 },
-  { name: 'IMX', category: 'GameFi', marketCap: 2200, changePct: 0.9 },
-  { name: 'BLUR', category: 'NFT', marketCap: 800, changePct: -5.2 },
-  { name: 'APE', category: 'NFT', marketCap: 1200, changePct: -2.1 },
-]
+// Mock data per timeframe - will be replaced with real API
+const MOCK_SECTORS: Record<TimeFrame, SectorData[]> = {
+  '1h': [
+    { name: 'BTC', category: 'L1', marketCap: 1900000, changePct: 0.3 },
+    { name: 'ETH', category: 'L1', marketCap: 420000, changePct: -0.5 },
+    { name: 'SOL', category: 'L1', marketCap: 85000, changePct: 1.2 },
+    { name: 'BNB', category: 'L1', marketCap: 95000, changePct: 0.1 },
+    { name: 'ADA', category: 'L1', marketCap: 25000, changePct: -0.8 },
+    { name: 'AVAX', category: 'L1', marketCap: 15000, changePct: 0.6 },
+    { name: 'LINK', category: 'DeFi', marketCap: 12000, changePct: 0.9 },
+    { name: 'UNI', category: 'DeFi', marketCap: 8000, changePct: -0.2 },
+    { name: 'AAVE', category: 'DeFi', marketCap: 6000, changePct: 0.4 },
+    { name: 'MKR', category: 'DeFi', marketCap: 3500, changePct: -0.3 },
+    { name: 'ARB', category: 'L2', marketCap: 4500, changePct: -0.6 },
+    { name: 'OP', category: 'L2', marketCap: 3800, changePct: 0.2 },
+    { name: 'MATIC', category: 'L2', marketCap: 7500, changePct: -0.1 },
+    { name: 'DOGE', category: 'Meme', marketCap: 25000, changePct: 2.1 },
+    { name: 'SHIB', category: 'Meme', marketCap: 9000, changePct: -1.3 },
+    { name: 'PEPE', category: 'Meme', marketCap: 5000, changePct: 3.5 },
+    { name: 'WIF', category: 'Meme', marketCap: 3000, changePct: -1.8 },
+    { name: 'RNDR', category: 'AI', marketCap: 5500, changePct: 1.5 },
+    { name: 'FET', category: 'AI', marketCap: 3200, changePct: 0.8 },
+    { name: 'TAO', category: 'AI', marketCap: 4800, changePct: -0.4 },
+    { name: 'AXS', category: 'GameFi', marketCap: 1800, changePct: -0.3 },
+    { name: 'GALA', category: 'GameFi', marketCap: 900, changePct: 0.7 },
+    { name: 'IMX', category: 'GameFi', marketCap: 2200, changePct: 0.2 },
+    { name: 'BLUR', category: 'NFT', marketCap: 800, changePct: -1.1 },
+    { name: 'APE', category: 'NFT', marketCap: 1200, changePct: -0.5 },
+  ],
+  '24h': [
+    { name: 'BTC', category: 'L1', marketCap: 1900000, changePct: 2.3 },
+    { name: 'ETH', category: 'L1', marketCap: 420000, changePct: -1.2 },
+    { name: 'SOL', category: 'L1', marketCap: 85000, changePct: 5.8 },
+    { name: 'BNB', category: 'L1', marketCap: 95000, changePct: 0.7 },
+    { name: 'ADA', category: 'L1', marketCap: 25000, changePct: -3.1 },
+    { name: 'AVAX', category: 'L1', marketCap: 15000, changePct: 4.2 },
+    { name: 'LINK', category: 'DeFi', marketCap: 12000, changePct: 3.5 },
+    { name: 'UNI', category: 'DeFi', marketCap: 8000, changePct: -0.8 },
+    { name: 'AAVE', category: 'DeFi', marketCap: 6000, changePct: 2.1 },
+    { name: 'MKR', category: 'DeFi', marketCap: 3500, changePct: -1.5 },
+    { name: 'ARB', category: 'L2', marketCap: 4500, changePct: -2.8 },
+    { name: 'OP', category: 'L2', marketCap: 3800, changePct: 1.9 },
+    { name: 'MATIC', category: 'L2', marketCap: 7500, changePct: -0.5 },
+    { name: 'DOGE', category: 'Meme', marketCap: 25000, changePct: 8.2 },
+    { name: 'SHIB', category: 'Meme', marketCap: 9000, changePct: -4.5 },
+    { name: 'PEPE', category: 'Meme', marketCap: 5000, changePct: 12.3 },
+    { name: 'WIF', category: 'Meme', marketCap: 3000, changePct: -6.7 },
+    { name: 'RNDR', category: 'AI', marketCap: 5500, changePct: 7.1 },
+    { name: 'FET', category: 'AI', marketCap: 3200, changePct: 4.5 },
+    { name: 'TAO', category: 'AI', marketCap: 4800, changePct: -2.3 },
+    { name: 'AXS', category: 'GameFi', marketCap: 1800, changePct: -1.2 },
+    { name: 'GALA', category: 'GameFi', marketCap: 900, changePct: 3.8 },
+    { name: 'IMX', category: 'GameFi', marketCap: 2200, changePct: 0.9 },
+    { name: 'BLUR', category: 'NFT', marketCap: 800, changePct: -5.2 },
+    { name: 'APE', category: 'NFT', marketCap: 1200, changePct: -2.1 },
+  ],
+  '7d': [
+    { name: 'BTC', category: 'L1', marketCap: 1900000, changePct: 5.1 },
+    { name: 'ETH', category: 'L1', marketCap: 420000, changePct: -3.8 },
+    { name: 'SOL', category: 'L1', marketCap: 85000, changePct: 12.4 },
+    { name: 'BNB', category: 'L1', marketCap: 95000, changePct: 1.9 },
+    { name: 'ADA', category: 'L1', marketCap: 25000, changePct: -7.2 },
+    { name: 'AVAX', category: 'L1', marketCap: 15000, changePct: 9.5 },
+    { name: 'LINK', category: 'DeFi', marketCap: 12000, changePct: 8.3 },
+    { name: 'UNI', category: 'DeFi', marketCap: 8000, changePct: -2.1 },
+    { name: 'AAVE', category: 'DeFi', marketCap: 6000, changePct: 5.6 },
+    { name: 'MKR', category: 'DeFi', marketCap: 3500, changePct: -4.2 },
+    { name: 'ARB', category: 'L2', marketCap: 4500, changePct: -6.5 },
+    { name: 'OP', category: 'L2', marketCap: 3800, changePct: 4.7 },
+    { name: 'MATIC', category: 'L2', marketCap: 7500, changePct: -1.8 },
+    { name: 'DOGE', category: 'Meme', marketCap: 25000, changePct: 18.5 },
+    { name: 'SHIB', category: 'Meme', marketCap: 9000, changePct: -9.3 },
+    { name: 'PEPE', category: 'Meme', marketCap: 5000, changePct: 25.8 },
+    { name: 'WIF', category: 'Meme', marketCap: 3000, changePct: -14.2 },
+    { name: 'RNDR', category: 'AI', marketCap: 5500, changePct: 15.3 },
+    { name: 'FET', category: 'AI', marketCap: 3200, changePct: 11.2 },
+    { name: 'TAO', category: 'AI', marketCap: 4800, changePct: -5.8 },
+    { name: 'AXS', category: 'GameFi', marketCap: 1800, changePct: -3.5 },
+    { name: 'GALA', category: 'GameFi', marketCap: 900, changePct: 8.9 },
+    { name: 'IMX', category: 'GameFi', marketCap: 2200, changePct: 2.4 },
+    { name: 'BLUR', category: 'NFT', marketCap: 800, changePct: -11.5 },
+    { name: 'APE', category: 'NFT', marketCap: 1200, changePct: -5.8 },
+  ],
+}
 
 function getChangeColor(changePct: number): string {
   const maxPct = 10
@@ -122,14 +178,14 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
     const observer = new ResizeObserver(entries => {
       const entry = entries[0]
       if (entry) {
-        setSize({ width: entry.contentRect.width, height: Math.max(300, entry.contentRect.width * 0.45) })
+        setSize({ width: entry.contentRect.width, height: Math.max(200, Math.min(280, entry.contentRect.width * 0.25)) })
       }
     })
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
 
-  const nodes = layoutTreemap(MOCK_SECTORS, size.width, size.height)
+  const nodes = layoutTreemap(MOCK_SECTORS[timeframe], size.width, size.height)
 
   const timeframes: { key: TimeFrame; label: string }[] = [
     { key: '1h', label: '1小时' },
