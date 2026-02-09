@@ -814,10 +814,10 @@ export default function ReadPage() {
           </ToolbarBtn>
 
           <div style={{ flex: 1, overflow: 'hidden', textAlign: 'center', padding: '0 8px' }}>
-            <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {book.title}
             </p>
-            {book.author && <p style={{ fontSize: 11, margin: 0, color: 'var(--glass-bg-medium)' }}>{book.author}</p>}
+            {book.author && <p style={{ fontSize: 11, margin: 0, color: 'var(--color-text-tertiary)' }}>{book.author}</p>}
           </div>
 
           {(toc.length > 0 || epubToc.length > 0) && (
@@ -897,7 +897,7 @@ export default function ReadPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <button onClick={goPrev} disabled={currentPage <= 1} style={{
               background: 'none', border: 'none',
-              color: currentPage <= 1 ? 'var(--glass-border-medium)' : 'var(--glass-bg-light)',
+              color: currentPage <= 1 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
               cursor: currentPage <= 1 ? 'default' : 'pointer',
               padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 13, fontWeight: 500,
@@ -924,7 +924,7 @@ export default function ReadPage() {
 
             <button onClick={goNext} disabled={currentPage >= totalPages} style={{
               background: 'none', border: 'none',
-              color: currentPage >= totalPages ? 'var(--glass-border-medium)' : 'var(--glass-bg-light)',
+              color: currentPage >= totalPages ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
               cursor: currentPage >= totalPages ? 'default' : 'pointer',
               padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 13, fontWeight: 500,
@@ -1015,7 +1015,7 @@ export default function ReadPage() {
                   }} />
                   <span style={{
                     fontSize: 11,
-                    color: theme === t ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--glass-bg-medium)' : 'var(--color-backdrop-light)'),
+                    color: theme === t ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--color-text-tertiary)' : '#666'),
                     fontWeight: theme === t ? 600 : 400,
                   }}>
                     {isZh ? THEME_PRESETS[t].labelZh : THEME_PRESETS[t].label}
@@ -1026,15 +1026,15 @@ export default function ReadPage() {
 
             {/* Font Size */}
             <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
-              <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, opacity: 0.6 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: theme === 'dark' ? 'var(--color-text-secondary)' : '#555' }}>
                 {isZh ? '字号' : 'Font Size'}
               </p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                 {(Object.keys(FONT_SIZES) as FontSize[]).map(s => (
                   <button key={s} onClick={() => setFontSize(s)} style={{
                     flex: 1, padding: '8px 4px', borderRadius: 10,
-                    background: fontSize === s ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'),
-                    color: fontSize === s ? 'var(--color-on-accent)' : (theme === 'dark' ? 'var(--color-text-secondary)' : 'var(--color-backdrop)'),
+                    background: fontSize === s ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'),
+                    color: fontSize === s ? '#fff' : (theme === 'dark' ? '#e0e0e0' : '#333'),
                     border: 'none', cursor: 'pointer', fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15,
                     fontWeight: 600, transition: 'all 0.15s',
                   }}>
@@ -1047,15 +1047,15 @@ export default function ReadPage() {
             {/* Font Family (HTML/ePub mode) */}
             {(contentMode === 'html' || contentMode === 'epub') && (
               <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, opacity: 0.6 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: theme === 'dark' ? 'var(--color-text-secondary)' : '#555' }}>
                   {isZh ? '字体' : 'Font'}
                 </p>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                   {(Object.keys(FONT_FAMILIES) as FontFamily[]).map(f => (
                     <button key={f} onClick={() => setFontFamily(f)} style={{
                       flex: 1, padding: '8px 4px', borderRadius: 10,
-                      background: fontFamily === f ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'),
-                      color: fontFamily === f ? 'var(--color-on-accent)' : (theme === 'dark' ? 'var(--color-text-secondary)' : 'var(--color-backdrop)'),
+                      background: fontFamily === f ? 'var(--color-accent-primary)' : (theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'),
+                      color: fontFamily === f ? '#fff' : (theme === 'dark' ? '#e0e0e0' : '#333'),
                       border: 'none', cursor: 'pointer', fontSize: 14,
                       fontFamily: FONT_FAMILIES[f].css,
                       fontWeight: 600, transition: 'all 0.15s',
@@ -1071,7 +1071,7 @@ export default function ReadPage() {
               paddingTop: 14,
               borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
             }}>
-              <p style={{ fontSize: 11, opacity: 0.4, textAlign: 'center', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 11, color: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', textAlign: 'center', lineHeight: 1.6 }}>
                 {isZh
                   ? '快捷键: 左右方向键/空格翻页, B 书签, F 全屏'
                   : 'Keys: Arrows/Space flip, B bookmark, F fullscreen'}
@@ -1317,11 +1317,11 @@ function ToolbarBtn({ children, onClick, active, title }: {
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 36, height: 36, borderRadius: 10,
-        background: active ? 'var(--glass-bg-medium)' : 'transparent',
-        border: 'none', color: 'var(--glass-bg-light)',
+        background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
+        border: 'none', color: 'var(--color-text-primary)',
         cursor: 'pointer', transition: 'background 0.15s', flexShrink: 0,
       }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--glass-bg-light)' }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
     >
       {children}
