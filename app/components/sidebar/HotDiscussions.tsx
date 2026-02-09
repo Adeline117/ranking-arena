@@ -68,29 +68,26 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   useEffect(() => {
     let alive = true
     async function fetchData() {
-      // Single query with embedded join — eliminates waterfall (was 2 sequential queries)
       const { data } = await supabase
         .from('posts')
-        .select('id, title, content, hot_score, like_count, comment_count, created_at, author_id, user_profiles!posts_author_id_fkey(handle)')
+        .select('id, title, content, hot_score, like_count, comment_count, created_at, author_handle')
+        .gt('hot_score', 0)
+        .eq('status', 'active')
         .order('hot_score', { ascending: false })
         .limit(limit)
 
       if (!alive || !data) return
 
-      setPosts(data.map(p => {
-        // Supabase returns the joined relation as an object or array
-        const profile = Array.isArray(p.user_profiles) ? p.user_profiles[0] : p.user_profiles
-        return {
-          id: p.id,
-          title: p.title,
-          content: p.content,
-          hot_score: p.hot_score,
-          like_count: p.like_count,
-          comment_count: p.comment_count,
-          created_at: p.created_at,
-          author_handle: profile?.handle || null,
-        }
-      }))
+      setPosts(data.map(p => ({
+        id: p.id,
+        title: p.title,
+        content: p.content,
+        hot_score: p.hot_score,
+        like_count: p.like_count,
+        comment_count: p.comment_count,
+        created_at: p.created_at,
+        author_handle: p.author_handle || null,
+      })))
       setLoading(false)
     }
     fetchData()
