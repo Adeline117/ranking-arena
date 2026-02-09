@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         const title = book.author ? `${book.title} - ${book.author}` : book.title
         const description = book.description
           ? book.description.substring(0, 160)
-          : `${book.title}${book.author ? ` -- ${book.author}` : ''} | ArenaFi 交易书库`
+          : `${book.title}${book.author ? ` -- ${book.author}` : ''} | Arena 交易书库`
         const canonicalUrl = `${baseUrl}/library/${id}`
 
         return {
@@ -35,18 +35,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
             canonical: canonicalUrl,
           },
           openGraph: {
-            title: `${title} | ArenaFi`,
+            title: `${title} | Arena`,
             description,
             type: 'book',
             url: canonicalUrl,
-            siteName: 'ArenaFi',
+            siteName: 'Arena',
             images: book.cover_url
               ? [{ url: book.cover_url, alt: book.title }]
-              : [{ url: `${baseUrl}/og.png`, alt: 'ArenaFi' }],
+              : [{ url: `${baseUrl}/og.png`, alt: 'Arena' }],
           },
           twitter: {
             card: 'summary',
-            title: `${title} | ArenaFi`,
+            title: `${title} | Arena`,
             description,
             images: book.cover_url ? [book.cover_url] : undefined,
           },
@@ -59,7 +59,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   return {
     title: '书库详情',
-    description: 'ArenaFi 交易书库 -- 精选加密货币交易书籍和教育资源。',
+    description: 'Arena 交易书库 -- 精选加密货币交易书籍和教育资源。',
   }
 }
 

@@ -2628,11 +2628,11 @@ const zh = {
     backToGroups2: '返回小组列表',
 
     // About page
-    aboutTitle: '关于 ArenaFi',
+    aboutTitle: '关于 Arena',
     aboutSubtitle: '开放的加密货币交易员排名平台',
-    aboutIntroTitle: '什么是 ArenaFi？',
-    aboutIntroP1: 'ArenaFi 是一个数据驱动的加密货币交易员排名平台。我们从 30+ 家中心化和去中心化交易所聚合链上及交易所数据，构建透明、可验证的绩效排行榜。',
-    aboutIntroP2: '无论你是在寻找值得关注的优秀交易员、比较不同交易所的策略表现，还是展示自己的交易记录，ArenaFi 都能提供所需的工具和数据。',
+    aboutIntroTitle: '什么是 Arena？',
+    aboutIntroP1: 'Arena 是一个数据驱动的加密货币交易员排名平台。我们从 30+ 家中心化和去中心化交易所聚合链上及交易所数据，构建透明、可验证的绩效排行榜。',
+    aboutIntroP2: '无论你是在寻找值得关注的优秀交易员、比较不同交易所的策略表现，还是展示自己的交易记录，Arena 都能提供所需的工具和数据。',
     aboutFeaturesTitle: '核心功能',
     aboutFeature1Title: '实时排行榜',
     aboutFeature1Desc: '持续更新的排名数据，涵盖已验证的盈亏、ROI、胜率和风险指标，支持多个时间维度。',
@@ -2652,7 +2652,7 @@ const zh = {
     aboutDataDEX: 'DEX：Hyperliquid、dYdX、GMX、Jupiter、Drift 等',
     aboutDataOnChain: '链上数据通过区块链浏览器和 API 集成验证',
     aboutVisionTitle: '我们的愿景',
-    aboutVisionDesc: '我们相信透明带来信任。在一个充斥着虚假截图和伪造盈亏的行业中，ArenaFi 提供一个中立的、数据支撑的竞技场，让实力说话。我们的目标是成为全球加密交易员评估的标准。',
+    aboutVisionDesc: '我们相信透明带来信任。在一个充斥着虚假截图和伪造盈亏的行业中，Arena 提供一个中立的、数据支撑的竞技场，让实力说话。我们的目标是成为全球加密交易员评估的标准。',
     aboutLink: '关于',
 
     // FAQ search

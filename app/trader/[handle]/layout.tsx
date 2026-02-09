@@ -85,7 +85,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           description,
           type: 'profile',
           url: canonicalUrl,
-          siteName: 'ArenaFi',
+          siteName: 'Arena',
           images: [{
             url: ogImageUrl.toString(),
             width: 1200,
@@ -113,7 +113,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   // 默认metadata
   return {
     title: handle,
-    description: `查看 ${handle} 的交易员资料 -- ArenaFi 加密货币交易员排行榜与社区。`,
+    description: `查看 ${handle} 的交易员资料 -- Arena 加密货币交易员排行榜与社区。`,
     alternates: {
       canonical: canonicalUrl,
     },
