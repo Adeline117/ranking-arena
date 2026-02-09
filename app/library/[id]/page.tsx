@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import TopNav from '@/app/components/layout/TopNav'
@@ -39,6 +39,7 @@ type BookDetail = {
   rating: number | null
   rating_count: number | null
   file_key: string | null
+  epub_url: string | null
 }
 
 type RatingOverview = {
@@ -132,6 +133,9 @@ export default function BookDetailPage() {
       .catch((e) => logger.error('Unhandled error', e))
   }, [id])
 
+  const [showRatingPrompt, setShowRatingPrompt] = useState(false)
+  const ratingRef = useRef<HTMLDivElement>(null)
+
   const handleStatus = async (status: 'want_to_read' | 'read') => {
     if (!session) {
       alert(isZh ? '请先登录' : 'Please login first')
@@ -144,7 +148,15 @@ export default function BookDetailPage() {
     })
     if (res.ok) {
       setUserStatus(status)
-      if (status === 'want_to_read') setUserRating(null)
+      if (status === 'want_to_read') {
+        setUserRating(null)
+        setShowRatingPrompt(false)
+      }
+      if (status === 'read') {
+        setShowRatingPrompt(true)
+        // Scroll to rating area
+        setTimeout(() => ratingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200)
+      }
     }
   }
 
@@ -205,7 +217,7 @@ export default function BookDetailPage() {
   const count = overview?.count || 0
   const dist = overview?.distribution || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
   const maxDist = Math.max(...Object.values(dist), 1)
-  const hasReadableContent = !!book.file_key || !!book.pdf_url || !!book.content_url
+  const hasReadableContent = !!book.file_key || !!book.pdf_url || !!book.epub_url
   const descLong = (book.description?.length || 0) > 300
 
   const bookJsonLd = {
@@ -439,14 +451,21 @@ export default function BookDetailPage() {
 
             {/* User rating - show for all logged in users */}
             {session && (
-              <div style={{
-                marginTop: 16, padding: '14px 18px', borderRadius: tokens.radius.lg,
-                background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
+              <div ref={ratingRef} style={{
+                marginTop: 16, padding: '16px 20px', borderRadius: tokens.radius.lg,
+                background: showRatingPrompt ? 'var(--color-accent-brand-08, rgba(139,111,168,0.08))' : tokens.colors.bg.secondary,
+                border: showRatingPrompt ? `2px solid ${tokens.colors.accent.brand}` : `1px solid ${tokens.colors.border.primary}`,
+                transition: 'all 0.3s ease',
               }}>
-                <p style={{ fontSize: 13, color: tokens.colors.text.secondary, marginBottom: 8 }}>
-                  {isZh ? '你的评分：' : 'Your rating:'}
+                <p style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 10 }}>
+                  {userRating ? (isZh ? '你的评分' : 'Your Rating') : (isZh ? '给这本书评分' : 'Rate this book')}
                 </p>
-                <StarRating rating={0} userRating={userRating || 0} onRate={handleRate} size={28} showCount={false} />
+                <StarRating rating={0} userRating={userRating || 0} onRate={handleRate} size={32} showCount={false} />
+                {showRatingPrompt && !userRating && (
+                  <p style={{ fontSize: 12, color: tokens.colors.accent.brand, marginTop: 8 }}>
+                    {isZh ? '点击星星评分吧' : 'Tap a star to rate'}
+                  </p>
+                )}
               </div>
             )}
           </div>

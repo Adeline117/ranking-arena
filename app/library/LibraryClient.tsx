@@ -412,13 +412,17 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
             </p>
           </div>
         ) : category === 'event' ? (
-          /* Timeline layout for events */
+          /* Timeline layout for events — sorted newest first */
           <div style={{ position: 'relative', paddingLeft: 24 }}>
             <div style={{
               position: 'absolute', left: 8, top: 0, bottom: 0, width: 2,
               background: tokens.colors.border.primary,
             }} />
-            {items.map((item) => (
+            {[...items].sort((a, b) => {
+              const dateA = a.publish_date || a.created_at || ''
+              const dateB = b.publish_date || b.created_at || ''
+              return dateB.localeCompare(dateA) // descending (newest first)
+            }).map((item) => (
               <Link key={item.id} href={`/library/${item.id}`} style={{ textDecoration: 'none', display: 'block' }}>
                 <div style={{
                   position: 'relative', paddingLeft: 20, paddingBottom: 24,

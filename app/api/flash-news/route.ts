@@ -68,9 +68,24 @@ export async function GET(request: NextRequest) {
           .order('published_at', { ascending: false })
           .range(offset, offset + limit - 1)
 
-        // 添加筛选条件
-        if (category && ['crypto', 'macro', 'defi', 'regulation', 'market'].includes(category)) {
-          query = query.eq('category', category)
+        // 添加筛选条件 — support new broad categories + legacy DB values
+        const CATEGORY_MAP: Record<string, string[]> = {
+          btc_eth: ['crypto'],          // BTC/ETH maps to crypto in DB
+          altcoin: ['market'],          // 山寨币 maps to market in DB
+          defi: ['defi'],
+          macro: ['macro', 'regulation'], // 宏观/监管 combines both
+          exchange: ['market'],          // 交易所 — will refine when DB has this category
+        }
+        if (category) {
+          const mapped = CATEGORY_MAP[category]
+          if (mapped && mapped.length === 1) {
+            query = query.eq('category', mapped[0])
+          } else if (mapped && mapped.length > 1) {
+            query = query.in('category', mapped)
+          } else if (['crypto', 'macro', 'defi', 'regulation', 'market'].includes(category)) {
+            // Legacy direct match
+            query = query.eq('category', category)
+          }
         }
 
         if (importance && ['breaking', 'important', 'normal'].includes(importance)) {
