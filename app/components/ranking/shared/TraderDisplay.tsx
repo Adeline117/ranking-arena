@@ -215,7 +215,7 @@ export function ArenaScoreBadge({ score, showConfidence, trader }: {
 
   return (
     <Box style={{
-      position: 'relative', minWidth: 46, height: 24, borderRadius: tokens.radius.md,
+      position: 'relative', minWidth: 48, height: 26, borderRadius: tokens.radius.md,
       background: legendaryBg,
       border: legendaryBorder,
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
