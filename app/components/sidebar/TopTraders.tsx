@@ -58,7 +58,7 @@ function TraderAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl:
         height: size,
         minWidth: size,
         borderRadius: tokens.radius.full,
-        background: 'linear-gradient(135deg, rgba(139,111,168,0.3), rgba(212,168,67,0.3))',
+        background: 'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -79,7 +79,7 @@ const fetcher = async (url: string) => {
 }
 
 export default function TopTraders() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
 
   const { data, error, isLoading } = useSWR<{ traders: Trader[] }>(
@@ -97,7 +97,7 @@ export default function TopTraders() {
   const loading = isLoading
 
   return (
-    <SidebarCard title={`Top 10 ${isZh ? '交易员' : 'Traders'}`}>
+    <SidebarCard title={t('sidebarTopTraders')}>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[1, 2, 3, 4, 5].map(i => (
@@ -106,11 +106,11 @@ export default function TopTraders() {
         </div>
       ) : error ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {isZh ? '加载失败，请刷新重试' : 'Failed to load. Refresh to retry.'}
+          {t('sidebarLoadFailed')}
         </div>
       ) : traders.length === 0 ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {isZh ? '暂无数据' : 'No data available'}
+          {t('noData')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>

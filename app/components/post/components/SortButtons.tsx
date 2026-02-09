@@ -21,7 +21,7 @@ export function SortButtons({ sortType, setSortType, t }: SortButtonsProps): Rea
     padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
     borderRadius: tokens.radius.md,
     border: `1px solid ${isActive ? ARENA_PURPLE : tokens.colors.border.primary}`,
-    background: isActive ? 'rgba(139, 111, 168, 0.15)' : tokens.colors.bg.primary,
+    background: isActive ? 'var(--color-accent-primary-15)' : tokens.colors.bg.primary,
     color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
     fontSize: tokens.typography.fontSize.xs,
     fontWeight: isActive ? 700 : 400,

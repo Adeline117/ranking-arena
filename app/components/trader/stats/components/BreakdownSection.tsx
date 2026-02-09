@@ -79,7 +79,7 @@ export function BreakdownSection({
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}60`,
         padding: tokens.spacing[6],
-        boxShadow: `0 4px 24px rgba(0, 0, 0, 0.08)`,
+        boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(20px)',
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -101,7 +101,7 @@ export function BreakdownSection({
             borderRadius: tokens.radius.xl,
             overflow: 'hidden',
             background: tokens.colors.bg.tertiary,
-            boxShadow: `inset 0 2px 4px rgba(0, 0, 0, 0.1)`,
+            boxShadow: `inset 0 2px 4px var(--color-overlay-subtle)`,
           }}
         >
           {currentData.slice(0, 10).map((item, idx) => (

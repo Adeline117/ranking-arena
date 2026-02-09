@@ -63,13 +63,13 @@ function getChartColors(theme: 'dark' | 'light') {
       bg: '#0a0a0a',
       text: '#9E9E9E',
       grid: 'rgba(255,255,255,0.04)',
-      border: 'rgba(255,255,255,0.08)',
+      border: 'var(--glass-bg-light)',
       crosshair: '#555',
       upColor: '#4DFF9A',
       downColor: '#FF4D4D',
       lineColor: '#8b6fa8',
-      areaTop: 'rgba(139, 111, 168, 0.4)',
-      areaBottom: 'rgba(139, 111, 168, 0.0)',
+      areaTop: 'var(--color-accent-primary-40)',
+      areaBottom: 'var(--color-accent-primary-08)',
       volumeUp: 'rgba(77,255,154,0.25)',
       volumeDown: 'rgba(255,77,77,0.25)',
     }
@@ -77,14 +77,14 @@ function getChartColors(theme: 'dark' | 'light') {
   return {
     bg: '#FFFFFF',
     text: '#5A5A6A',
-    grid: 'rgba(0,0,0,0.04)',
-    border: 'rgba(0,0,0,0.08)',
+    grid: 'var(--color-overlay-subtle)',
+    border: 'var(--color-overlay-subtle)',
     crosshair: '#999',
     upColor: '#00C853',
     downColor: '#F44336',
     lineColor: '#8b6fa8',
-    areaTop: 'rgba(139, 111, 168, 0.3)',
-    areaBottom: 'rgba(139, 111, 168, 0.0)',
+    areaTop: 'var(--color-accent-primary-30)',
+    areaBottom: 'var(--color-accent-primary-08)',
     volumeUp: 'rgba(0,200,83,0.2)',
     volumeDown: 'rgba(244,67,54,0.2)',
   }
@@ -209,11 +209,11 @@ export default function TradingViewChart({
     const tooltip = document.createElement('div')
     tooltip.style.cssText = `
       position: absolute; display: none; padding: 8px 12px; z-index: 10;
-      background: ${theme === 'dark' ? 'rgba(20,20,25,0.92)' : 'rgba(255,255,255,0.95)'};
+      background: ${theme === 'dark' ? 'var(--glass-bg-primary)' : 'var(--glass-bg-heavy)'};
       border: 1px solid ${colors.border}; border-radius: 6px;
       color: ${theme === 'dark' ? '#e0e0e0' : '#333'}; font-size: 12px;
       pointer-events: none; font-family: monospace; line-height: 1.6;
-      backdrop-filter: blur(8px); box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      backdrop-filter: blur(8px); box-shadow: 0 4px 12px var(--color-overlay-medium);
     `
     containerRef.current.appendChild(tooltip)
     tooltipRef.current = tooltip

@@ -44,7 +44,7 @@ export function ReactButton({
       onMouseDown={() => setIsPressed(true)}
       onMouseUp={() => setIsPressed(false)}
       style={{
-        background: active ? 'rgba(139, 111, 168, 0.15)' : 'transparent',
+        background: active ? 'var(--color-accent-primary-15)' : 'transparent',
         border: 'none',
         color: active ? tokens.colors.accent.primary : tokens.colors.text.secondary,
         cursor: 'pointer',
@@ -56,7 +56,7 @@ export function ReactButton({
         transition: 'all 0.2s ease',
         transform: isPressed ? 'scale(0.9)' : 'scale(1)',
         fontWeight: active ? 900 : 400,
-        boxShadow: active ? '0 0 0 1px rgba(139, 111, 168, 0.2)' : 'none',
+        boxShadow: active ? '0 0 0 1px var(--color-accent-primary-20)' : 'none',
       }}
       onMouseEnter={(e) => {
         if (!active) {

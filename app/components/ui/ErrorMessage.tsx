@@ -17,6 +17,7 @@ export default function ErrorMessage({ title, message, onRetry }: ErrorMessagePr
 
   return (
     <Box
+      role="alert"
       bg="secondary"
       p={6}
       radius="lg"

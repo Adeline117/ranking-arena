@@ -91,7 +91,7 @@ export default function ExportButton({ onExport, hidePDF, size = 'sm' }: ExportB
           padding: '4px',
           zIndex: 100,
           minWidth: '140px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          boxShadow: 'var(--shadow-md-dark)',
         }}>
           {options.map(({ format, label }) => (
             <button
@@ -108,7 +108,7 @@ export default function ExportButton({ onExport, hidePDF, size = 'sm' }: ExportB
                 textAlign: 'left',
                 transition: 'background 0.15s',
               }}
-              onMouseEnter={e => { (e.target as HTMLElement).style.background = tokens.colors.bg.tertiary || 'rgba(255,255,255,0.05)' }}
+              onMouseEnter={e => { (e.target as HTMLElement).style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)' }}
               onMouseLeave={e => { (e.target as HTMLElement).style.background = 'transparent' }}
             >
               {loading === format ? (t('preparing') || '准备中...') : label}

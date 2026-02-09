@@ -77,7 +77,7 @@ export const PostListItem = memo(function PostListItem({
       onMouseEnter={(e) => {
         if (isMasonry) {
           e.currentTarget.style.transform = 'translateY(-2px)'
-          e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,111,168,0.15)'
+          e.currentTarget.style.boxShadow = '0 6px 20px var(--color-accent-primary-15)'
         } else {
           e.currentTarget.style.background = tokens.colors.bg.secondary
         }
@@ -130,7 +130,7 @@ export const PostListItem = memo(function PostListItem({
               border: `1px solid ${tokens.colors.border.primary}`,
               padding: '2px 8px',
               borderRadius: 999,
-              background: 'rgba(139,111,168,0.1)',
+              background: 'var(--color-accent-primary-10)',
             }}
           >
             {t('poll')}
@@ -187,7 +187,7 @@ export const PostListItem = memo(function PostListItem({
                 <div style={{
                   position: 'absolute',
                   inset: 0,
-                  background: 'rgba(0,0,0,0.5)',
+                  background: 'var(--color-overlay-dark)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -295,7 +295,7 @@ export const PostListItem = memo(function PostListItem({
             color: ARENA_PURPLE,
             fontWeight: 700,
             padding: '2px 6px',
-            background: 'rgba(139,111,168,0.1)',
+            background: 'var(--color-accent-primary-10)',
             borderRadius: 4,
           }}>
             {t('pinned')}
@@ -308,7 +308,7 @@ export const PostListItem = memo(function PostListItem({
             <button
               onClick={(e) => onTogglePin(p, e)}
               style={{
-                background: p.is_pinned ? 'rgba(139,111,168,0.1)' : 'transparent',
+                background: p.is_pinned ? 'var(--color-accent-primary-10)' : 'transparent',
                 border: 'none',
                 color: p.is_pinned ? ARENA_PURPLE : tokens.colors.text.tertiary,
                 cursor: 'pointer',
@@ -318,11 +318,11 @@ export const PostListItem = memo(function PostListItem({
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = ARENA_PURPLE
-                e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
+                e.currentTarget.style.background = 'var(--color-accent-primary-10)'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.color = p.is_pinned ? ARENA_PURPLE : tokens.colors.text.tertiary
-                e.currentTarget.style.background = p.is_pinned ? 'rgba(139,111,168,0.1)' : 'transparent'
+                e.currentTarget.style.background = p.is_pinned ? 'var(--color-accent-primary-10)' : 'transparent'
               }}
             >
               {p.is_pinned ? t('unpin') : t('pin')}
@@ -340,7 +340,7 @@ export const PostListItem = memo(function PostListItem({
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = `${tokens.colors.accent.brand}`
-                e.currentTarget.style.background = 'rgba(139,111,168,0.1)'
+                e.currentTarget.style.background = 'var(--color-accent-primary-10)'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.color = tokens.colors.text.tertiary
@@ -362,7 +362,7 @@ export const PostListItem = memo(function PostListItem({
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = tokens.colors.accent.error
-                e.currentTarget.style.background = 'rgba(255,77,77,0.1)'
+                e.currentTarget.style.background = 'var(--color-accent-error-10)'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.color = tokens.colors.text.tertiary

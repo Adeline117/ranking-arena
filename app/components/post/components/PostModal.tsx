@@ -70,7 +70,7 @@ export function PostModal({ children, onClose }: PostModalProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.65)',
+        background: 'var(--color-backdrop-medium)',
         display: 'grid',
         placeItems: 'center',
         padding: 16,

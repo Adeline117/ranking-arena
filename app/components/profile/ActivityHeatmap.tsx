@@ -21,10 +21,10 @@ const TOTAL = CELL_SIZE + CELL_GAP
 
 function getColorForCount(count: number): string {
   if (count === 0) return tokens.colors.border.primary
-  if (count <= 2) return 'rgba(34,197,94,0.3)'
-  if (count <= 5) return 'rgba(34,197,94,0.5)'
-  if (count <= 10) return 'rgba(34,197,94,0.7)'
-  return 'rgba(34,197,94,0.9)'
+  if (count <= 2) return 'var(--color-heatmap-1)'
+  if (count <= 5) return 'var(--color-heatmap-2)'
+  if (count <= 10) return 'var(--color-heatmap-3)'
+  return 'var(--color-heatmap-4)'
 }
 
 export default function ActivityHeatmap({ userId }: Props) {
@@ -210,7 +210,7 @@ export default function ActivityHeatmap({ userId }: Props) {
             pointerEvents: 'none',
             zIndex: 9999,
             whiteSpace: 'nowrap',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            boxShadow: 'var(--shadow-sm-dark)',
           }}
         >
           {tooltip.text}

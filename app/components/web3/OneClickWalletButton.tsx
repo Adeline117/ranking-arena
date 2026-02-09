@@ -248,8 +248,8 @@ export function OneClickWalletButton({
       case 'error':
         return {
           ...baseStyles,
-          background: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
+          background: 'var(--color-red-bg-light)',
+          border: '1px solid var(--color-red-border)',
           color: tokens.colors.accent.error,
         }
       case 'connecting':
@@ -273,8 +273,8 @@ export function OneClickWalletButton({
         // Not connected
         return {
           ...baseStyles,
-          background: 'rgba(139, 111, 168, 0.08)',
-          border: '1px solid rgba(139, 111, 168, 0.3)',
+          background: 'var(--color-accent-primary-08)',
+          border: '1px solid var(--color-accent-primary-30)',
           color: tokens.colors.accent.brandLight,
         }
     }
@@ -321,8 +321,8 @@ export function OneClickWalletButton({
               justifyContent: 'center',
               padding: sizeConfig.padding.split(' ')[0],
               borderRadius: sizeConfig.borderRadius,
-              background: 'rgba(139, 111, 168, 0.08)',
-              border: '1px solid rgba(139, 111, 168, 0.3)',
+              background: 'var(--color-accent-primary-08)',
+              border: '1px solid var(--color-accent-primary-30)',
               color: tokens.colors.accent.brandLight,
               cursor: 'pointer',
               transition: 'all 0.2s ease',
@@ -340,7 +340,7 @@ export function OneClickWalletButton({
             marginTop: 8,
             padding: '10px 12px',
             borderRadius: 8,
-            background: 'rgba(239, 68, 68, 0.1)',
+            background: 'var(--color-red-bg-light)',
             border: '1px solid rgba(239, 68, 68, 0.2)',
             fontSize: 12,
             color: tokens.colors.accent.error,

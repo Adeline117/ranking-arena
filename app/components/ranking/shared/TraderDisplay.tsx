@@ -96,7 +96,7 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
 }) {
   const proxyAvatarUrl = getTraderAvatarUrl(avatarUrl)
   const medalGlow = rank <= 3
-    ? `0 0 12px ${rank === 1 ? 'rgba(255, 215, 0, 0.4)' : rank === 2 ? 'rgba(192, 192, 192, 0.4)' : 'rgba(205, 127, 50, 0.4)'}`
+    ? `0 0 12px ${rank === 1 ? 'var(--color-gold-glow)' : rank === 2 ? 'var(--color-silver-glow)' : 'var(--color-bronze-glow)'}`
     : 'none'
 
   return (
@@ -116,7 +116,7 @@ export function TraderAvatar({ traderId, displayName, avatarUrl, rank, size = 36
         fontSize: size * 0.4,
         fontWeight: 900,
         lineHeight: 1,
-        textShadow: '0 1px 3px rgba(0,0,0,0.8)'
+        textShadow: 'var(--text-shadow-heavy)'
       }}>
         {getAvatarInitial(displayName)}
       </span>
@@ -163,7 +163,7 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
         position: 'absolute', top: -2, right: -2,
         width: 6, height: 6, borderRadius: '50%',
         background,
-        border: '1px solid rgba(0,0,0,0.3)',
+        border: '1px solid var(--color-border-primary)',
         zIndex: 2,
       }}
     />

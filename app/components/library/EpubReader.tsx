@@ -62,7 +62,7 @@ export type EpubReaderProps = {
 const THEME_STYLES: Record<ReadingTheme, { body: Record<string, string> }> = {
   white: { body: { background: '#FFFFFF', color: '#1a1a1a' } },
   sepia: { body: { background: '#F4ECD8', color: '#5b4636' } },
-  dark:  { body: { background: '#1a1a2e', color: '#d4d4d8' } },
+  dark:  { body: { background: 'var(--color-bg-secondary)', color: '#d4d4d8' } },
   green: { body: { background: '#C7EDCC', color: '#2d4a32' } },
 }
 
@@ -627,8 +627,8 @@ export default function EpubReader({
   const themeIsDark = theme === 'dark'
   const panelBg = themeIsDark ? '#1e1e36' : '#fff'
   const panelText = themeIsDark ? '#d4d4d8' : '#1a1a1a'
-  const panelBorder = themeIsDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
-  const panelSubtle = themeIsDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
+  const panelBorder = themeIsDark ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'
+  const panelSubtle = themeIsDark ? 'var(--overlay-hover)' : 'rgba(0,0,0,0.03)'
   const accent = 'var(--color-accent-primary, #6366f1)'
 
   const totalSessionTime = readingStats.totalReadingTimeSec + sessionElapsedSec
@@ -688,7 +688,7 @@ export default function EpubReader({
           background: themeIsDark ? 'rgba(15,15,26,0.85)' : 'rgba(255,255,255,0.9)',
           backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
           borderTop: `1px solid ${panelBorder}`,
-          fontSize: 11, color: themeIsDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
+          fontSize: 11, color: themeIsDark ? 'var(--glass-border-heavy)' : 'rgba(0,0,0,0.4)',
           zIndex: 50,
         }}>
           <span>{progressPercent}% -- {currentPage}/{totalPages}</span>
@@ -1031,11 +1031,12 @@ export default function EpubReader({
       {showStats && (
         <>
           <div onClick={() => setShowStats(false)}
+            role="presentation"
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
-          <div style={{
+          <div role="dialog" aria-modal="true" aria-label={isZh ? '阅读统计' : 'Reading Statistics'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: panelBg, color: panelText, borderRadius: 20, padding: '28px 32px',
-            width: 360, maxWidth: '90vw', zIndex: 301, boxShadow: '0 16px 48px rgba(0,0,0,0.35)',
+            width: 360, maxWidth: '90vw', zIndex: 301, boxShadow: 'var(--shadow-elevated)',
             border: `1px solid ${panelBorder}`,
           }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20, textAlign: 'center' }}>
@@ -1102,11 +1103,12 @@ export default function EpubReader({
       {showTypography && (
         <>
           <div onClick={() => setShowTypography(false)}
+            role="presentation"
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300 }} />
-          <div style={{
+          <div role="dialog" aria-modal="true" aria-label={isZh ? '排版设置' : 'Typography'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: panelBg, color: panelText, borderRadius: 20, padding: '28px 32px',
-            width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: '0 16px 48px rgba(0,0,0,0.35)',
+            width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: 'var(--shadow-elevated)',
             border: `1px solid ${panelBorder}`,
           }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>

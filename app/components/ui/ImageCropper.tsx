@@ -216,6 +216,7 @@ export function ImageCropper({
               max={3}
               step={0.1}
               value={zoom}
+              aria-label={t('zoom')}
               onChange={(e) => setZoom(Number(e.target.value))}
               style={{
                 flex: 1,

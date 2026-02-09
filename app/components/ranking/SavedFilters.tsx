@@ -552,7 +552,7 @@ function SaveFilterModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--color-backdrop, rgba(0, 0, 0, 0.5))',
+        background: 'var(--color-backdrop, var(--color-overlay-dark))',
         backdropFilter: 'blur(4px)',
         zIndex: 1000,
       }}
@@ -580,6 +580,7 @@ function SaveFilterModal({
           onChange={(e) => onFilterNameChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={language === 'zh' ? '输入筛选名称...' : 'Enter filter name...'}
+          aria-label={language === 'zh' ? '筛选名称' : 'Filter name'}
           style={{
             width: '100%',
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,

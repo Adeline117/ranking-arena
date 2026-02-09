@@ -31,7 +31,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: 600,
     color: 'var(--color-on-accent)',
-    backgroundColor: health >= 80 ? '#2e7d32' : health >= 50 ? '#f57c00' : '#c62828',
+    backgroundColor: health >= 80 ? 'var(--color-accent-success)' : health >= 50 ? 'var(--color-accent-warning)' : 'var(--color-accent-error)',
   }) as React.CSSProperties,
   grid: {
     display: 'grid',
@@ -60,7 +60,7 @@ const styles = {
     width: '10px',
     height: '10px',
     borderRadius: '50%',
-    backgroundColor: status === 'healthy' ? '#4caf50' : status === 'degraded' ? '#ff9800' : '#f44336',
+    backgroundColor: status === 'healthy' ? 'var(--color-accent-success)' : status === 'degraded' ? 'var(--color-accent-warning)' : 'var(--color-accent-error)',
     display: 'inline-block',
   }) as React.CSSProperties,
   statsRow: {

@@ -45,7 +45,7 @@ export function Skeleton({
     switch (animation) {
       case 'shimmer':
         return {
-          backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light, rgba(255, 255, 255, 0.08)) 50%, ${tokens.colors.bg.tertiary} 100%)`,
+          backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light, var(--glass-bg-light)) 50%, ${tokens.colors.bg.tertiary} 100%)`,
           backgroundSize: '200% 100%',
           backgroundRepeat: 'no-repeat',
           backgroundColor: tokens.colors.bg.tertiary,

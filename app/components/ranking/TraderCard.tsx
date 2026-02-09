@@ -105,6 +105,7 @@ export const TraderCard = memo(function TraderCard({
             checked={isSelected}
             disabled={!isSelected && !canAddMore()}
             readOnly
+            aria-label="Select trader for comparison"
             style={{ cursor: 'pointer', width: 16, height: 16, accentColor: tokens.colors.accent.primary }}
           />
         </Box>

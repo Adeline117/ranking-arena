@@ -140,7 +140,7 @@ export default function StatsPage({
               borderRadius: tokens.radius.xl,
               padding: tokens.spacing[6],
               border: `1px solid ${tokens.colors.accent.primary}40`,
-              boxShadow: `0 8px 32px rgba(139, 111, 168, 0.2)`,
+              boxShadow: `0 8px 32px var(--color-accent-primary-20)`,
               textAlign: 'center',
               pointerEvents: 'auto',
               maxWidth: 360,

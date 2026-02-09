@@ -223,7 +223,7 @@ function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTr
         {showCopyConfig && (
           <Box style={{
             position: 'fixed', inset: 0, zIndex: 9999,
-            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--color-overlay-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: 16,
           }} onClick={(e: React.MouseEvent) => { if (e.target === e.currentTarget) setShowCopyConfig(false) }}>
             <CopyTradeConfig traderId={traderId} traderName={handle} onClose={() => setShowCopyConfig(false)} />
@@ -302,7 +302,7 @@ interface StatItemProps {
 function StatItem({ icon, value, label, hasCover }: StatItemProps): React.ReactElement {
   const textColor = hasCover ? 'rgba(255,255,255,0.8)' : tokens.colors.text.secondary
   const valueColor = hasCover ? tokens.colors.white : tokens.colors.text.primary
-  const textShadow = hasCover ? '0 1px 4px rgba(0,0,0,0.5)' : undefined
+  const textShadow = hasCover ? '0 1px 4px var(--color-overlay-dark)' : undefined
 
   return (
     <Box
@@ -378,7 +378,7 @@ export default function TraderHeader({
   const iconStroke = hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary
 
   const containerBackground = hasCover
-    ? `linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.6) 100%), url(${coverUrl}) center/cover no-repeat`
+    ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${coverUrl}) center/cover no-repeat`
     : `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`
 
   return (
@@ -393,7 +393,7 @@ export default function TraderHeader({
         background: containerBackground,
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}50`,
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+        boxShadow: '0 8px 32px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
         position: 'relative',
         overflow: 'visible',
         opacity: mounted ? 1 : 0,
@@ -461,8 +461,8 @@ export default function TraderHeader({
               color: tokens.colors.white,
               overflow: 'hidden',
               boxShadow: avatarHovered
-                ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
-                : `0 4px 16px rgba(0, 0, 0, 0.15)`,
+                ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${tokens.colors.accent.primary}20`
+                : `0 4px 16px var(--color-overlay-light)`,
               transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               transform: avatarHovered ? 'scale(1.08)' : 'scale(1)',
               cursor: 'pointer',
@@ -490,7 +490,7 @@ export default function TraderHeader({
                 weight="black"
                 style={{
                   color: tokens.colors.white,
-                  textShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
+                  textShadow: 'var(--text-shadow-md)',
                   fontSize: '32px',
                   lineHeight: '1',
                 }}
@@ -515,7 +515,7 @@ export default function TraderHeader({
               style={{
                 color: hasCover ? tokens.colors.white : tokens.colors.text.primary,
                 lineHeight: tokens.typography.lineHeight.tight,
-                textShadow: hasCover ? '0 2px 8px rgba(0,0,0,0.5)' : undefined,
+                textShadow: hasCover ? '0 2px 8px var(--color-overlay-dark)' : undefined,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',

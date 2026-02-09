@@ -48,7 +48,7 @@ function AnimatedAvatar({
         overflow: 'hidden',
         flexShrink: 0,
         boxShadow: isHovered 
-          ? `0 8px 32px rgba(139, 111, 168, 0.4), 0 0 0 4px ${tokens.colors.accent.primary}20`
+          ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${tokens.colors.accent.primary}20`
           : tokens.shadow.lg,
         transition: `all ${tokens.transition.smooth}`,
         position: 'relative',
@@ -93,7 +93,7 @@ function AnimatedAvatar({
           weight="black" 
           style={{ 
             color: tokens.colors.white,
-            textShadow: '0 2px 8px rgba(0, 0, 0, 0.5)',
+            textShadow: '0 2px 8px var(--color-overlay-dark)',
             fontSize: `${Math.round(size * 0.42)}px`,
             lineHeight: '1',
             position: 'relative',
@@ -224,7 +224,7 @@ export default function TraderAboutCard({
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}60`,
         padding: tokens.spacing[6],
-        boxShadow: `0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06)`,
+        boxShadow: `0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 var(--glass-bg-light)`,
         transition: `all ${tokens.transition.smooth}`,
         zIndex: 10,
         opacity: mounted ? 1 : 0,
@@ -233,11 +233,11 @@ export default function TraderAboutCard({
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.boxShadow = '0 20px 48px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08)'
+        e.currentTarget.style.boxShadow = '0 20px 48px rgba(0, 0, 0, 0.18), inset 0 1px 0 var(--glass-bg-light)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06)'
+        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 var(--glass-bg-light)'
       }}
     >
       {/* 装饰背景 */}

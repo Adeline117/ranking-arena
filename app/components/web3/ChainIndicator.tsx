@@ -64,8 +64,8 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           gap: 6,
           padding: `${s.py}px ${s.px}px`,
           borderRadius: tokens.radius.md,
-          background: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
+          background: 'var(--color-red-bg-light)',
+          border: '1px solid var(--color-red-border)',
           cursor: isPending ? 'wait' : 'pointer',
           transition: 'all 0.2s ease',
         }}
@@ -116,7 +116,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
             height: s.dot,
             borderRadius: '50%',
             background: '#22C55E',
-            boxShadow: '0 0 6px rgba(34, 197, 94, 0.5)',
+            boxShadow: '0 0 6px var(--color-accent-success-20)',
           }}
         />
 

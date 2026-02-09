@@ -280,7 +280,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
               border: tokens.glass.border.medium,
               borderRadius: tokens.radius['2xl'],
               padding: 0,
-              boxShadow: `${tokens.shadow.xl}, 0 0 80px rgba(139, 111, 168, 0.1)`,
+              boxShadow: `${tokens.shadow.xl}, 0 0 80px var(--color-accent-primary-10)`,
               overflow: 'hidden',
             }}
           >

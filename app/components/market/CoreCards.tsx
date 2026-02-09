@@ -150,7 +150,7 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
           textAlign: 'right',
           padding: `2px ${tokens.spacing[2]}`,
           borderRadius: tokens.radius.sm,
-          background: isGainer ? 'rgba(47, 229, 125, 0.1)' : 'rgba(255, 124, 124, 0.1)',
+          background: isGainer ? 'rgba(47, 229, 125, 0.1)' : 'var(--color-accent-error-10)',
         }}>
           {changePct}
         </span>

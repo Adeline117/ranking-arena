@@ -53,6 +53,7 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
               height={300}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               loading="lazy"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
             />
           </Box>
         )}

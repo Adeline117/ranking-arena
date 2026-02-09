@@ -324,6 +324,7 @@ export default function ReportModal({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t('reportDetailsPlaceholder')}
+                aria-label={t('reportDetailsLabel')}
                 maxLength={1000}
                 rows={4}
                 style={{

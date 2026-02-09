@@ -38,7 +38,7 @@ const fetcher = async (url: string) => {
 }
 
 export default function NewsFlash() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
 
   const { data, error, isLoading } = useSWR(
@@ -74,7 +74,7 @@ export default function NewsFlash() {
   }
 
   return (
-    <SidebarCard title={isZh ? '快讯' : 'News Flash'}>
+    <SidebarCard title={t('sidebarNewsFlash')}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {loading ? (
           [1, 2, 3, 4, 5].map(i => (
@@ -82,11 +82,11 @@ export default function NewsFlash() {
           ))
         ) : error ? (
           <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
-            {isZh ? '加载失败，请刷新重试' : 'Failed to load. Refresh to retry.'}
+            {t('sidebarLoadFailed')}
           </p>
         ) : news.length === 0 ? (
           <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
-            {isZh ? '暂无快讯' : 'No news yet'}
+            {t('sidebarNoNews')}
           </p>
         ) : (
           news.map((item, idx) => {
@@ -155,7 +155,7 @@ export default function NewsFlash() {
           padding: `${tokens.spacing[1]} 0`,
         }}
       >
-        {isZh ? '查看全部' : 'View All'}
+        {t('viewAll')}
       </Link>
     </SidebarCard>
   )

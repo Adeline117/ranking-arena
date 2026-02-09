@@ -85,7 +85,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
           weight="black" 
           style={{ 
             color: tokens.colors.white,
-            textShadow: '0 1px 3px rgba(0, 0, 0, 0.4)',
+            textShadow: 'var(--text-shadow-md)',
             fontSize: `${Math.round(size * 0.4)}px`,
             lineHeight: '1',
             position: 'relative',
@@ -120,7 +120,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}60`,
         padding: tokens.spacing[5],
-        boxShadow: `0 4px 20px rgba(0, 0, 0, 0.1)`,
+        boxShadow: `0 4px 20px var(--color-overlay-subtle)`,
         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(20px)',

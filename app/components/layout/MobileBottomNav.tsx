@@ -118,7 +118,7 @@ function NotificationBadge({ count, ariaLabel }: NotificationBadgeProps): React.
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+        boxShadow: '0 2px 4px var(--color-overlay-medium)',
       }}
       aria-label={ariaLabel}
     >

@@ -689,7 +689,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     borderRadius: tokens.radius.xl,
                     padding: tokens.spacing[2],
                     minWidth: 'min(220px, calc(100vw - 32px))',
-                    boxShadow: `${tokens.shadow.xl}, 0 0 40px rgba(0, 0, 0, 0.2)`,
+                    boxShadow: `${tokens.shadow.xl}, 0 0 40px var(--color-overlay-medium)`,
                     zIndex: tokens.zIndex.dropdown,
                   }}
                 >

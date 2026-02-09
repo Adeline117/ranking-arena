@@ -846,7 +846,7 @@ function RankingTableInner(props: {
             {isSortPending && (
               <Box style={{
                 position: 'absolute', inset: 0, zIndex: 10,
-                background: 'var(--color-bg-overlay, rgba(0,0,0,0.15))',
+                background: 'var(--color-bg-overlay, var(--color-overlay-light))',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 backdropFilter: 'blur(1px)',
                 borderRadius: tokens.radius.md,

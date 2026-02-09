@@ -481,6 +481,7 @@ export default function AdvancedAlerts({
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <select
                 value={newCondition.operator}
+                aria-label={t('alertThresholdLabel')}
                 onChange={(e) => setNewCondition({ ...newCondition, operator: e.target.value as Operator })}
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -500,6 +501,7 @@ export default function AdvancedAlerts({
               <input
                 type="number"
                 value={newCondition.threshold ?? ''}
+                aria-label="Threshold value"
                 onChange={(e) => setNewCondition({ ...newCondition, threshold: parseFloat(e.target.value) || 0 })}
                 style={{
                   width: 80,

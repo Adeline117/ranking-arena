@@ -89,7 +89,7 @@ function saveWatchlist(ids: string[]) {
 }
 
 export default function WatchlistMarket() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
   const [watchIds, setWatchIds] = useState<string[]>(DEFAULT_COINS)
   const [showPicker, setShowPicker] = useState(false)
@@ -151,7 +151,7 @@ export default function WatchlistMarket() {
   )
 
   return (
-    <SidebarCard title={isZh ? '自选行情' : 'Watchlist'}>
+    <SidebarCard title={t('sidebarWatchlist')}>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[1, 2, 3, 4].map(i => (
@@ -220,8 +220,8 @@ export default function WatchlistMarket() {
             }}
           >
             {showPicker
-              ? (isZh ? '收起' : 'Close')
-              : (isZh ? '+ 管理自选' : '+ Manage Watchlist')
+              ? t('sidebarCollapse')
+              : t('sidebarManageWatchlist')
             }
           </button>
 
@@ -232,8 +232,8 @@ export default function WatchlistMarket() {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={isZh ? '搜索币种...' : 'Search coins...'}
-                aria-label={isZh ? '搜索币种' : 'Search coins'}
+                placeholder={t('sidebarSearchCoins')}
+                aria-label={t('searchCoin')}
                 style={{
                   width: '100%', padding: '6px 10px', marginBottom: 8,
                   borderRadius: tokens.radius.md,

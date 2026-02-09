@@ -96,7 +96,7 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
           border: tokens.glass.border.medium,
           borderRadius: tokens.radius['2xl'],
           overflow: 'hidden',
-          boxShadow: `${tokens.shadow.xl}, 0 0 80px rgba(139, 111, 168, 0.15)`,
+          boxShadow: `${tokens.shadow.xl}, 0 0 80px var(--color-accent-primary-15)`,
           animation: 'scaleIn 0.2s ease-out',
         }}
       >

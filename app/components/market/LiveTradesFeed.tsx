@@ -137,7 +137,7 @@ function ConnectionDot({ connected }: { connected: boolean }) {
       borderRadius: '50%',
       background: connected ? tokens.colors.accent.success : tokens.colors.accent.error,
       marginRight: 4,
-      boxShadow: connected ? '0 0 6px rgba(47, 229, 125, 0.4)' : '0 0 6px rgba(255, 124, 124, 0.4)',
+      boxShadow: connected ? '0 0 6px var(--color-accent-success-20)' : '0 0 6px var(--color-accent-error-20)',
     }} />
   )
 }

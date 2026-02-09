@@ -86,7 +86,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}60`,
         overflow: 'hidden',
-        boxShadow: `0 4px 24px rgba(0, 0, 0, 0.08)`,
+        boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
       }}
     >
       {/* Header */}

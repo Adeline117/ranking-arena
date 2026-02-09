@@ -60,7 +60,7 @@ function HotTag({ score, isZh }: { score: number; isZh: boolean }) {
 }
 
 export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
   const [posts, setPosts] = useState<HotPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -110,7 +110,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   }
 
   return (
-    <SidebarCard title={isZh ? '热门讨论' : 'Hot Discussions'}>
+    <SidebarCard title={t('sidebarHotDiscussions')}>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {Array.from({ length: 5 }).map((_, i) => (
@@ -124,7 +124,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           textAlign: 'center',
           padding: '16px 0',
         }}>
-          {isZh ? '暂无讨论' : 'No discussions yet'}
+          {t('sidebarNoDiscussions')}
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -205,7 +205,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   </span>
                 )}
                 <span>
-                  {post.comment_count} {isZh ? '评论' : 'comments'}
+                  {post.comment_count} {t('comments')}
                 </span>
                 <span style={{ marginLeft: 'auto', opacity: 0.7 }}>
                   {timeAgo(post.created_at)}

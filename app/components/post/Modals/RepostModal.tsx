@@ -62,7 +62,7 @@ export function RepostModal({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0, 0, 0, 0.65)',
+        background: 'var(--color-backdrop-medium)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -82,7 +82,7 @@ export function RepostModal({
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: 16,
           padding: 24,
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          boxShadow: '0 25px 50px -12px var(--color-overlay-dark)',
         }}
       >
         <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 16, color: tokens.colors.text.primary }}>
@@ -94,6 +94,7 @@ export function RepostModal({
           value={comment}
           onChange={(e) => onCommentChange(e.target.value)}
           placeholder={t('addCommentOptional')}
+          aria-label={t('addCommentOptional')}
           style={{
             width: '100%',
             minHeight: 80,
@@ -272,7 +273,7 @@ export function RepostModal({
               padding: '10px 20px',
               borderRadius: 10,
               border: 'none',
-              background: loading ? 'rgba(139,111,168,0.3)' : tokens.colors.accent.brand,
+              background: loading ? 'var(--color-accent-primary-30)' : tokens.colors.accent.brand,
               color: tokens.colors.white,
               fontWeight: 900,
               fontSize: 14,
