@@ -432,6 +432,10 @@ export default withSentryConfig(withBundleAnalyzer(nextConfig), {
   silent: true,
   sourcemaps: { disable: true },
   widenClientFileUpload: true,
-  disableLogger: true,
-  automaticVercelMonitors: true,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+    automaticVercelMonitors: true,
+  },
 });
