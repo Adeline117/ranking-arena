@@ -2,22 +2,26 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface TabConfig {
   key: string
-  label: string
+  labelZh: string
+  labelEn: string
 }
 
 const TABS: TabConfig[] = [
-  { key: 'overview', label: '概览' },
-  { key: 'movers', label: '涨跌' },
-  { key: 'sectors', label: '板块' },
-  { key: 'watchlist', label: '自选' },
+  { key: 'overview', labelZh: '概览', labelEn: 'Overview' },
+  { key: 'movers', labelZh: '涨跌', labelEn: 'Movers' },
+  { key: 'sectors', labelZh: '板块', labelEn: 'Sectors' },
+  { key: 'watchlist', labelZh: '自选', labelEn: 'Watchlist' },
 ]
 
 export default function MobileMarketTabs({ children }: {
   children: Record<string, React.ReactNode>
 }) {
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
   const [activeTab, setActiveTab] = useState('overview')
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['overview']))
   const containerRef = useRef<HTMLDivElement>(null)
@@ -101,7 +105,7 @@ export default function MobileMarketTabs({ children }: {
               transition: 'all 0.15s ease',
             }}
           >
-            {tab.label}
+            {isZh ? tab.labelZh : tab.labelEn}
           </button>
         ))}
       </div>
@@ -125,7 +129,7 @@ export default function MobileMarketTabs({ children }: {
                   color: tokens.colors.text.tertiary,
                   fontSize: 14,
                 }}>
-                  即将推出
+                  {isZh ? '即将推出' : 'Coming Soon'}
                 </div>
               )}
             </div>

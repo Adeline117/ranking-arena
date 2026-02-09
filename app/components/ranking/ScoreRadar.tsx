@@ -2,6 +2,7 @@
 
 import React, { memo } from 'react'
 import { getScoreColor } from '@/lib/utils/score-colors'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface ScoreRadarProps {
   profitability: number  // 0-35
@@ -22,6 +23,8 @@ export const ScoreRadar = memo(function ScoreRadar({
   arenaScore,
   size = 120,
 }: ScoreRadarProps) {
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
   const cx = size / 2
   const cy = size / 2
   const r = size * 0.38 // max radius
@@ -64,9 +67,9 @@ export const ScoreRadar = memo(function ScoreRadar({
   // Label positions (slightly outside the triangle)
   const labelOffset = r + 14
   const labels = [
-    { text: '收益', x: cx, y: cy - labelOffset },
-    { text: '风控', x: cx + labelOffset * Math.cos(angles[1]) - 4, y: cy + labelOffset * Math.sin(angles[1]) + 4 },
-    { text: '执行', x: cx + labelOffset * Math.cos(angles[2]) + 4, y: cy + labelOffset * Math.sin(angles[2]) + 4 },
+    { text: isZh ? '收益' : 'Profit', x: cx, y: cy - labelOffset },
+    { text: isZh ? '风控' : 'Risk', x: cx + labelOffset * Math.cos(angles[1]) - 4, y: cy + labelOffset * Math.sin(angles[1]) + 4 },
+    { text: isZh ? '执行' : 'Exec', x: cx + labelOffset * Math.cos(angles[2]) + 4, y: cy + labelOffset * Math.sin(angles[2]) + 4 },
   ]
 
   return (

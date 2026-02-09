@@ -3,6 +3,7 @@
 import React, { memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { generateExplanation, getCompletenessLabel, getCompletenessColor } from '@/lib/utils/score-explain'
 import { ScoreRadar } from './ScoreRadar'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
@@ -55,6 +56,8 @@ function ScoreBar({ label, score, maxScore, color }: BarProps) {
  * 评分详情展开组件 - 三维度条形图 + 雷达图 + 自然语言解读
  */
 export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdownProps) {
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
   const {
     profitability_score,
     risk_control_score,
@@ -71,7 +74,7 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
   if (!hasAnyScore) {
     return (
       <Box style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, textAlign: 'center' }}>
-        <Text size="sm" color="tertiary">暂无评分详情</Text>
+        <Text size="sm" color="tertiary">{isZh ? '暂无评分详情' : 'No score details available'}</Text>
       </Box>
     )
   }
@@ -102,15 +105,15 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
       {/* 左侧：条形图 */}
       <Box style={{ flex: '1 1 200px', minWidth: 0 }}>
         <Text size="xs" weight="bold" style={{ marginBottom: 8, color: tokens.colors.text.secondary }}>
-          评分构成
+          {isZh ? '评分构成' : 'Score Breakdown'}
         </Text>
-        <ScoreBar label="收益能力" score={profitability_score} maxScore={35} color="var(--color-score-profitability)" />
-        <ScoreBar label="风险控制" score={risk_control_score} maxScore={40} color="var(--color-score-risk)" />
-        <ScoreBar label="执行质量" score={execution_score} maxScore={25} color="var(--color-score-execution)" />
+        <ScoreBar label={isZh ? '收益能力' : 'Profit'} score={profitability_score} maxScore={35} color="var(--color-score-profitability)" />
+        <ScoreBar label={isZh ? '风险控制' : 'Risk'} score={risk_control_score} maxScore={40} color="var(--color-score-risk)" />
+        <ScoreBar label={isZh ? '执行质量' : 'Execution'} score={execution_score} maxScore={25} color="var(--color-score-execution)" />
 
         {/* 置信度标签 */}
         <Box style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>数据置信度:</Text>
+          <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>{isZh ? '数据置信度:' : 'Data Confidence:'}</Text>
           <span style={{
             display: 'inline-block',
             padding: '1px 8px',
