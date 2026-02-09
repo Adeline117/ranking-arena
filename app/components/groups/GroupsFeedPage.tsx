@@ -86,13 +86,26 @@ function BookshelfTab() {
   if (books.length === 0) {
     return (
       <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`, textAlign: 'center' }}>
-        <Box style={{ fontSize: 40, marginBottom: tokens.spacing[3], opacity: 0.6 }}>📚</Box>
+        <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, marginBottom: 12, color: tokens.colors.text.tertiary }}>
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
         <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-          {language === 'zh' ? '书库暂无内容' : 'No books in the library yet'}
+          {language === 'zh' ? '书架暂无内容' : 'No books yet'}
         </Text>
-        <Text size="xs" color="tertiary">
-          {language === 'zh' ? '稍后再来看看吧' : 'Check back later'}
+        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+          {language === 'zh' ? '去书城逛逛吧' : 'Browse the library'}
         </Text>
+        <a href="/library" style={{
+          padding: '8px 20px',
+          background: tokens.colors.accent.primary,
+          color: '#fff',
+          borderRadius: tokens.radius.md,
+          fontSize: 13,
+          fontWeight: 600,
+          textDecoration: 'none',
+        }}>
+          {language === 'zh' ? '进入书城' : 'Browse Library'}
+        </a>
       </Box>
     )
   }
