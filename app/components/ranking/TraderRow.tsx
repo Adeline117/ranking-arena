@@ -210,7 +210,7 @@ export const TraderRow = memo(function TraderRow({
                 <span className="mobile-score-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                   <span style={{
                     width: 6, height: 6, borderRadius: '50%',
-                    background: trader.arena_score >= 60 ? tokens.colors.accent.success : trader.arena_score >= 40 ? tokens.colors.accent.warning : TRADER_TEXT_TERTIARY,
+                    background: trader.arena_score >= 85 ? '#a78bfa' : trader.arena_score >= 70 ? '#fbbf24' : trader.arena_score >= 50 ? '#60a5fa' : trader.arena_score >= 30 ? '#34d399' : TRADER_TEXT_TERTIARY,
                   }} />
                   <span style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: TRADER_TEXT_TERTIARY }}>{trader.arena_score.toFixed(0)}</span>
                 </span>
