@@ -112,21 +112,21 @@ function saveFilterPrefs(prefs: FilterPrefs): void {
 
 /** Quick exchange filter chips shown above the leaderboard */
 const QUICK_FILTER_EXCHANGES: { value: string; label: string; logo: string; color: string }[] = [
-  { value: 'binance_futures', label: 'Binance', logo: 'https://assets.coingecko.com/coins/images/825/small/binance-coin-logo.png', color: '#F3BA2F' },
-  { value: 'bitget_futures', label: 'Bitget', logo: 'https://assets.coingecko.com/coins/images/11610/small/photo_2022-01-24_14-14-56.jpg', color: '#00D7D5' },
-  { value: 'okx_futures', label: 'OKX', logo: 'https://assets.coingecko.com/coins/images/13708/small/okb_logo.png', color: '#FFFFFF' },
-  { value: 'bybit', label: 'Bybit', logo: 'https://assets.coingecko.com/coins/images/21149/small/bybit.png', color: '#F7A600' },
-  { value: 'mexc', label: 'MEXC', logo: 'https://assets.coingecko.com/coins/images/12958/small/mexc.png', color: '#00D5FF' },
-  { value: 'htx_futures', label: 'HTX', logo: 'https://assets.coingecko.com/coins/images/2822/small/huobi-token-logo.png', color: '#1B4AEF' },
-  { value: 'gateio', label: 'Gate.io', logo: 'https://assets.coingecko.com/coins/images/8536/small/gateToken.png', color: '#2354E6' },
-  { value: 'binance_spot', label: 'Binance Spot', logo: 'https://assets.coingecko.com/coins/images/825/small/binance-coin-logo.png', color: '#F3BA2F' },
-  { value: 'bitget_spot', label: 'Bitget Spot', logo: 'https://assets.coingecko.com/coins/images/11610/small/photo_2022-01-24_14-14-56.jpg', color: '#00D7D5' },
-  { value: 'bybit_spot', label: 'Bybit Spot', logo: 'https://assets.coingecko.com/coins/images/21149/small/bybit.png', color: '#F7A600' },
-  { value: 'hyperliquid', label: 'Hyperliquid', logo: 'https://assets.coingecko.com/coins/images/34631/small/hyperliquid.png', color: '#50E3C2' },
-  { value: 'gmx', label: 'GMX', logo: 'https://assets.coingecko.com/coins/images/18323/small/arbit.png', color: '#4F8FEA' },
-  { value: 'dydx', label: 'dYdX', logo: 'https://assets.coingecko.com/coins/images/17500/small/hjnIm9bV.jpg', color: '#6966FF' },
-  { value: 'gains', label: 'gTrade', logo: 'https://assets.coingecko.com/coins/images/19737/small/logo.png', color: '#5741D9' },
-  { value: 'jupiter_perps', label: 'Jupiter', logo: 'https://assets.coingecko.com/coins/images/34188/small/jup.png', color: '#00D18C' },
+  { value: 'binance_futures', label: 'Binance', logo: 'https://bin.bnbstatic.com/static/images/common/favicon.ico', color: '#F3BA2F' },
+  { value: 'bitget_futures', label: 'Bitget', logo: 'https://img.bitgetimg.com/image/third/1723701408221.png', color: '#00D7D5' },
+  { value: 'okx_futures', label: 'OKX', logo: 'https://static.okx.com/cdn/assets/imgs/226/DF679B1DADBF90E3.png', color: '#000000' },
+  { value: 'bybit', label: 'Bybit', logo: 'https://www.bybit.com/favicon.ico', color: '#F7A600' },
+  { value: 'mexc', label: 'MEXC', logo: 'https://www.mexc.com/favicon.png', color: '#00B897' },
+  { value: 'htx_futures', label: 'HTX', logo: 'https://www.htx.com/favicon.ico', color: '#1B4AEF' },
+  { value: 'gateio', label: 'Gate.io', logo: 'https://www.gate.io/favicon.ico', color: '#2354E6' },
+  { value: 'binance_spot', label: 'Binance', logo: 'https://bin.bnbstatic.com/static/images/common/favicon.ico', color: '#F3BA2F' },
+  { value: 'bitget_spot', label: 'Bitget', logo: 'https://img.bitgetimg.com/image/third/1723701408221.png', color: '#00D7D5' },
+  { value: 'bybit_spot', label: 'Bybit', logo: 'https://www.bybit.com/favicon.ico', color: '#F7A600' },
+  { value: 'hyperliquid', label: 'Hyperliquid', logo: 'https://app.hyperliquid.xyz/favicon.ico', color: '#50E3C2' },
+  { value: 'gmx', label: 'GMX', logo: 'https://app.gmx.io/favicon.ico', color: '#4F8FEA' },
+  { value: 'dydx', label: 'dYdX', logo: 'https://dydx.exchange/favicon.ico', color: '#6966FF' },
+  { value: 'gains', label: 'gTrade', logo: 'https://gains.trade/favicon.ico', color: '#5741D9' },
+  { value: 'jupiter_perps', label: 'Jupiter', logo: 'https://jup.ag/favicon.ico', color: '#00D18C' },
 ]
 
 function ExchangeQuickFilter({
@@ -238,14 +238,13 @@ function ExchangeQuickFilter({
             }}
           >
             {ex.logo ? (
-              <Image
+              <img
                 src={ex.logo}
                 alt=""
                 width={20}
                 height={20}
-                sizes="20px"
-                unoptimized
                 style={{ borderRadius: '50%', flexShrink: 0 }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             ) : (
               <span
