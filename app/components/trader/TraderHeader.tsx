@@ -191,76 +191,12 @@ interface CopyTradeSectionProps {
 }
 
 function CopyTradeSection({ isPro, traderId, source, handle, router, t }: CopyTradeSectionProps): React.ReactElement {
-  const [showCopyConfig, setShowCopyConfig] = useState(false)
-
-  if (isPro) {
-    return (
-      <>
-        <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <Box style={{ display: 'flex', gap: 6 }}>
-            <CopyTradeButton traderId={traderId} source={source} traderHandle={handle} />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowCopyConfig(true)}
-              style={{
-                fontSize: tokens.typography.fontSize.sm,
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.lg,
-                background: tokens.colors.accent.success,
-                color: 'var(--color-on-accent)',
-                border: 'none',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {t('copyTrade_button')}
-            </Button>
-          </Box>
-          <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
-            {t('jumpToExchange')}
-          </Text>
-        </Box>
-        {showCopyConfig && (
-          <Box style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            background: 'var(--color-overlay-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 16,
-          }} onClick={(e: React.MouseEvent) => { if (e.target === e.currentTarget) setShowCopyConfig(false) }}>
-            <CopyTradeConfig traderId={traderId} traderName={handle} onClose={() => setShowCopyConfig(false)} />
-          </Box>
-        )}
-      </>
-    )
-  }
-
+  // Only show "Go to Exchange" button — no in-app copy trading
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push('/pricing')}
-        style={{
-          color: tokens.colors.white,
-          fontSize: tokens.typography.fontSize.sm,
-          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-          borderRadius: tokens.radius.lg,
-          background: tokens.gradient.primary,
-          border: 'none',
-          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[2],
-          boxShadow: tokens.shadow.glow,
-        }}
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
-        {t('copyTradePro')}
-      </Button>
+      <CopyTradeButton traderId={traderId} source={source} traderHandle={handle} />
       <Text size="xs" color="tertiary" style={{ fontSize: 11, opacity: 0.7 }}>
-        {t('unlockToJumpExchange')}
+        {t('jumpToExchange')}
       </Text>
     </Box>
   )
@@ -703,52 +639,6 @@ export default function TraderHeader({
           <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
         )}
 
-        {!isOwnProfile && isRegistered && userId && (
-          <MessageButton
-            targetUserId={traderId}
-            currentUserId={userId}
-            size="sm"
-          />
-        )}
-
-        {!isOwnProfile && (
-          <ActionButton
-            onClick={() => router.push(`/compare?ids=${traderId}`)}
-            variant="ghost"
-            icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-            }
-          >
-            {t('compare')}
-          </ActionButton>
-        )}
-
-        <ShareButton
-          data={{
-            type: 'trader',
-            url: typeof window !== 'undefined' ? `${window.location.origin}/trader/${encodeURIComponent(handle)}` : '',
-            traderName: handle,
-            period: '90D',
-            roi: roi90d,
-          }}
-        />
-
-        {!isOwnProfile && userId && (
-          <ActionButton
-            onClick={() => setShowAlertConfig(!showAlertConfig)}
-            variant="ghost"
-            icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-            }
-          >
-            {t('alertSetReminder')}
-          </ActionButton>
-        )}
-
         <ActionButton onClick={() => router.push('/')} variant="ghost">
           ← {t('back')}
         </ActionButton>
@@ -758,17 +648,6 @@ export default function TraderHeader({
         )}
       </Box>
 
-      {showAlertConfig && userId && (
-        <Box style={{ marginTop: 12 }}>
-          <AlertConfig
-            traderId={traderId}
-            traderHandle={handle}
-            source={source}
-            userId={userId}
-            onClose={() => setShowAlertConfig(false)}
-          />
-        </Box>
-      )}
     </Box>
   )
 }
