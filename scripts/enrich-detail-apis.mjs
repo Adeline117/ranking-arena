@@ -85,6 +85,8 @@ async function postJSON(url, body, extraHeaders = {}) {
 
 async function upsertSnapshot(platform, marketType, traderKey, window, metrics) {
   const now = new Date().toISOString()
+  // Use RPC or raw SQL via supabase to handle the trunc_hour function in conflict
+  // Workaround: just insert and handle duplicate via .rpc or catch
   const row = {
     platform, market_type: marketType, trader_key: traderKey, window,
     as_of_ts: now,
@@ -101,12 +103,35 @@ async function upsertSnapshot(platform, marketType, traderKey, window, metrics) 
     provenance: { source: 'enrich-detail-apis', fetched_at: now },
     updated_at: now,
   }
-  const { error } = await supabase.from('trader_snapshots_v2').upsert(row, {
-    onConflict: 'platform,market_type,trader_key,window,trunc_hour(as_of_ts)',
-    ignoreDuplicates: false
-  })
-  if (error) console.error(`  snapshot upsert error: ${error.message}`)
-  return !error
+  
+  // First try to find existing row for this hour
+  const hourStart = new Date(Math.floor(Date.now() / 3600000) * 3600000).toISOString()
+  const hourEnd = new Date(Math.floor(Date.now() / 3600000) * 3600000 + 3600000).toISOString()
+  
+  const { data: existing } = await supabase.from('trader_snapshots_v2')
+    .select('id')
+    .eq('platform', platform)
+    .eq('market_type', marketType)
+    .eq('trader_key', traderKey)
+    .eq('window', window)
+    .gte('as_of_ts', hourStart)
+    .lt('as_of_ts', hourEnd)
+    .limit(1)
+  
+  if (existing?.length) {
+    // Update existing
+    const { error } = await supabase.from('trader_snapshots_v2')
+      .update(row).eq('id', existing[0].id)
+    if (error) console.error(`  snapshot update error: ${error.message}`)
+    return !error
+  } else {
+    // Insert new
+    const { error } = await supabase.from('trader_snapshots_v2').insert(row)
+    if (error && !error.message.includes('duplicate')) {
+      console.error(`  snapshot insert error: ${error.message}`)
+    }
+    return !error
+  }
 }
 
 async function upsertProfile(platform, marketType, traderKey, profile) {
@@ -141,7 +166,7 @@ async function upsertPositions(platform, traderKey, positions) {
       platform, market_type: 'futures', trader_key: traderKey,
       symbol: pos.symbol,
       side: pos.side,
-      entry_price: pos.entry_price ?? 0,
+      entry_price: pos.entry_price || 0.01,
       current_price: pos.current_price ?? null,
       mark_price: pos.mark_price ?? null,
       quantity: pos.quantity ?? 0,
@@ -393,17 +418,19 @@ async function enrichOKX() {
       
       // Upsert current positions
       if (currentPos?.data?.length) {
-        const posData = currentPos.data.map(p => ({
-          symbol: p.instId || 'UNKNOWN',
-          side: p.posSide === 'long' ? 'long' : 'short',
-          entry_price: parseFloat(p.openAvgPx ?? 0),
-          quantity: parseFloat(p.subPos ?? 0),
-          leverage: parseFloat(p.lever ?? 1),
-          margin: parseFloat(p.margin ?? 0),
-          unrealized_pnl: parseFloat(p.upl ?? 0),
-          unrealized_pnl_pct: parseFloat(p.uplRatio ?? 0) * 100,
-        }))
-        await upsertPositions('okx', uniqueCode, posData)
+        const posData = currentPos.data
+          .filter(p => p.instId && p.instId !== '')  // skip entries without instId
+          .map(p => ({
+            symbol: p.instId || 'UNKNOWN',
+            side: p.posSide === 'long' ? 'long' : 'short',
+            entry_price: parseFloat(p.openAvgPx || 0) || 0.01,  // fallback to avoid NOT NULL
+            quantity: parseFloat(p.subPos ?? 0),
+            leverage: parseFloat(p.lever ?? 1),
+            margin: parseFloat(p.margin ?? 0),
+            unrealized_pnl: parseFloat(p.upl ?? 0),
+            unrealized_pnl_pct: parseFloat(p.uplRatio ?? 0) * 100,
+          }))
+        if (posData.length) await upsertPositions('okx', uniqueCode, posData)
       }
       
       // Upsert equity curve
