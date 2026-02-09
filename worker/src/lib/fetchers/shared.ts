@@ -122,6 +122,67 @@ export function calculateArenaScore(
 }
 
 // ============================================
+// Arena Score V3 (Percentile-based)
+// ============================================
+
+import {
+  calcScoreV3,
+  detectCompleteness,
+  type ScoreV3Input,
+  type PeerArrays,
+  type DataCompleteness,
+} from '../arena-score-v3'
+
+export { calcScoreV3, detectCompleteness }
+export type { ScoreV3Input, PeerArrays, DataCompleteness }
+
+/**
+ * Batch-compute Arena Score V3 for a set of traders using percentile ranking.
+ * Call this after fetching all traders for a period to rank them against each other.
+ */
+export function batchCalculateArenaScoreV3(
+  traders: Array<{
+    roi: number | null
+    alpha?: number | null
+    max_drawdown: number | null
+    sortino_ratio?: number | null
+    calmar_ratio?: number | null
+    win_rate: number | null
+    profit_factor?: number | null
+  }>
+): Array<{ total: number; profitability: number; risk_control: number; execution: number; completeness: DataCompleteness; penalty: number }> {
+  // Build peer arrays (sorted ascending)
+  const collect = (fn: (t: typeof traders[0]) => number | null | undefined) =>
+    traders.map(fn).filter((v): v is number => v != null).sort((a, b) => a - b)
+
+  const peers: PeerArrays = {
+    roi: collect(t => t.roi),
+    alpha: collect(t => t.alpha),
+    drawdown: collect(t => t.max_drawdown != null ? Math.abs(t.max_drawdown) : null),
+    sortino: collect(t => t.sortino_ratio),
+    calmar: collect(t => t.calmar_ratio),
+    winrate: collect(t => {
+      if (t.win_rate == null) return null
+      return t.win_rate <= 1 ? t.win_rate * 100 : t.win_rate
+    }),
+    plr: collect(t => t.profit_factor),
+  }
+
+  return traders.map(t => {
+    const input: ScoreV3Input = {
+      roi: t.roi,
+      alpha: t.alpha ?? null,
+      max_drawdown: t.max_drawdown,
+      sortino_ratio: t.sortino_ratio ?? null,
+      calmar_ratio: t.calmar_ratio ?? null,
+      win_rate: t.win_rate,
+      profit_factor: t.profit_factor ?? null,
+    }
+    return calcScoreV3(input, peers)
+  })
+}
+
+// ============================================
 // Upsert Helpers
 // ============================================
 
