@@ -72,6 +72,7 @@ export const GET = withPublic(
         .in('source_trader_id', traderKeys)
         .eq('season_id', '90D')
         .order('captured_at', { ascending: false })
+        .limit(traderKeys.length * 2)
 
       // 构建 ROI 和 Arena Score 映射
       const roiMap = new Map<string, number>()

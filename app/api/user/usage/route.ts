@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     // Get followed traders count
     const { count: followedTraders } = await supabase
       .from('trader_follows')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
 
     // Get today's API calls from Redis

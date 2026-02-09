@@ -21,7 +21,7 @@ export async function GET() {
     const [tradersResult, sourcesResult] = await Promise.all([
       supabase
         .from('trader_snapshots')
-        .select('*', { count: 'exact', head: true }),
+        .select('id', { count: 'exact', head: true }),
       supabase
         .from('trader_snapshots')
         .select('source')

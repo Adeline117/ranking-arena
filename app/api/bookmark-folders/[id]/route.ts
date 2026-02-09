@@ -53,7 +53,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     try {
       const { count } = await supabase
         .from('folder_subscriptions')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('folder_id', id)
       subscriberCount = count || 0
     } catch {

@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     for (const season of SEASONS) {
       const { count } = await supabase
         .from('leaderboard_ranks')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('season_id', season)
       previousCounts[season] = count || 0
     }

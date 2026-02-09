@@ -103,7 +103,7 @@ export async function GET(req: Request) {
             const [countResult, snapshotsResult] = await Promise.all([
               supabase
                 .from('trader_snapshots')
-                .select('*', { count: 'exact', head: true })
+                .select('id', { count: 'exact', head: true })
                 .eq('source', sourceConfig.source)
                 .eq('season_id', period)
                 .eq('captured_at', lastUpdate),

@@ -117,7 +117,7 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
       // 获取记录数量
       const { count } = await supabase
         .from('trader_snapshots')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('source', platform)
 
       const lastUpdate = data?.captured_at || null

@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     // Check if there are more results
     const { count } = await supabase
       .from('groups')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
 
     return NextResponse.json({
       success: true,

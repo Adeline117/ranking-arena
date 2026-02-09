@@ -42,7 +42,7 @@ export async function POST(
     // Check total member count
     const { count } = await supabase
       .from('channel_members')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('channel_id', channelId)
 
     if ((count || 0) + userIds.length > 50) {

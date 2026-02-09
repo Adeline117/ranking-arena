@@ -76,7 +76,7 @@ export async function GET(req: Request) {
           // Get count
           const { count } = await supabase
             .from(table)
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('source', source)
             .eq(table === 'trader_equity_curve' ? 'season_id' : 'period', period)
 

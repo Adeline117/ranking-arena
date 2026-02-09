@@ -109,7 +109,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     try {
       const { count } = await supabase
         .from('folder_subscriptions')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('folder_id', folderId)
       subscriberCount = count || 0
     } catch {
@@ -161,7 +161,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     try {
       const { count } = await supabase
         .from('folder_subscriptions')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('folder_id', folderId)
       subscriberCount = count || 0
     } catch {

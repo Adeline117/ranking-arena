@@ -331,7 +331,7 @@ async function getTraderDetails(
     // Arena 粉丝数
     supabase
       .from('trader_follows')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('trader_id', traderId),
     
     // 用户 profile
@@ -788,7 +788,7 @@ async function getTraderDetailsFromSnapshots(
     // Arena 粉丝数
     supabase
       .from('trader_follows')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('trader_id', traderId),
 
     // tracked_since
