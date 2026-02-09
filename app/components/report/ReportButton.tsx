@@ -3,22 +3,24 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface ReportButtonProps {
   contentType: 'post' | 'comment' | 'profile'
   contentId: string
 }
 
-const REASONS = [
-  { value: 'spam', label: '垃圾广告' },
-  { value: 'scam', label: '诈骗' },
-  { value: 'harassment', label: '骚扰' },
-  { value: 'misinformation', label: '虚假信息' },
-  { value: 'nsfw', label: '不当内容' },
-  { value: 'other', label: '其他' },
-]
+const REASON_KEYS = [
+  { value: 'spam', key: 'reportReasonSpam' },
+  { value: 'scam', key: 'reportReasonFraud' },
+  { value: 'harassment', key: 'reportReasonHarassment' },
+  { value: 'misinformation', key: 'reportReasonMisinformation' },
+  { value: 'nsfw', key: 'reportReasonInappropriate' },
+  { value: 'other', key: 'reportReasonOther' },
+] as const
 
 export default function ReportButton({ contentType, contentId }: ReportButtonProps) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [description, setDescription] = useState('')
@@ -34,7 +36,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        setError('请先登录')
+        setError(t('pleaseLogin'))
         setLoading(false)
         return
       }
@@ -50,12 +52,12 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
 
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || '举报失败')
+        setError(data.error || t('reportFailed'))
       } else {
         setDone(true)
       }
     } catch {
-      setError('网络错误')
+      setError(t('networkError'))
     } finally {
       setLoading(false)
     }
@@ -64,7 +66,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
   if (done) {
     return (
       <span style={{ fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)' }}>
-        已举报
+        {t('reportSubmitted')}
       </span>
     )
   }
@@ -81,7 +83,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
           fontSize: tokens.typography.fontSize.xs,
           padding: '2px 4px',
         }}
-        title="举报"
+        title={t('report')}
       >
         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
@@ -106,11 +108,11 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
           }}
         >
           <p style={{ fontWeight: 600, color: 'var(--color-text-primary)', fontSize: tokens.typography.fontSize.sm, marginBottom: 12, marginTop: 0 }}>
-            举报原因
+            {t('reportReasonLabel')}
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-            {REASONS.map(r => (
+            {REASON_KEYS.map(r => (
               <label
                 key={r.value}
                 style={{
@@ -129,13 +131,13 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
                   checked={reason === r.value}
                   onChange={e => setReason(e.target.value)}
                 />
-                {r.label}
+                {t(r.key)}
               </label>
             ))}
           </div>
 
           <textarea
-            placeholder="补充说明（可选）"
+            placeholder={t('reportDetailsPlaceholder')}
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={2}
@@ -170,7 +172,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
                 fontSize: tokens.typography.fontSize.xs,
               }}
             >
-              {loading ? '提交中...' : '提交举报'}
+              {loading ? t('reportSubmitting') : t('reportSubmit')}
             </button>
             <button
               onClick={() => setOpen(false)}
@@ -184,7 +186,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
                 fontSize: tokens.typography.fontSize.xs,
               }}
             >
-              取消
+              {t('cancel')}
             </button>
           </div>
         </div>

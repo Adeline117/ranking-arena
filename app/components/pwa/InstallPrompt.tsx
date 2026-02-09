@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useLanguage } from "@/app/components/Providers/LanguageProvider";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -68,6 +69,8 @@ export default function InstallPrompt() {
     setDeferredPrompt(null);
   }, []);
 
+  const { t } = useLanguage();
+
   if (!deferredPrompt || dismissed || isInstalled) {
     return null;
   }
@@ -75,7 +78,7 @@ export default function InstallPrompt() {
   return (
     <div
       role="banner"
-      aria-label="安装应用提示"
+      aria-label={t('pwaInstallBanner')}
       style={{
         position: "fixed",
         bottom: "env(safe-area-inset-bottom, 16px)",
@@ -110,7 +113,7 @@ export default function InstallPrompt() {
             lineHeight: 1.3,
           }}
         >
-          安装竞技场
+          {t('pwaInstallTitle')}
         </div>
         <div
           style={{
@@ -120,12 +123,12 @@ export default function InstallPrompt() {
             marginTop: 2,
           }}
         >
-          添加到主屏幕，获得更快的访问体验
+          {t('pwaInstallDesc')}
         </div>
       </div>
       <button
         onClick={handleInstall}
-        aria-label="安装应用"
+        aria-label={t('pwaInstallButton')}
         style={{
           background: "linear-gradient(135deg, #8b6fa8, #a88bc4)",
           color: "#fff",
@@ -139,11 +142,11 @@ export default function InstallPrompt() {
           flexShrink: 0,
         }}
       >
-        安装
+        {t('pwaInstallButton')}
       </button>
       <button
         onClick={handleDismiss}
-        aria-label="关闭安装提示"
+        aria-label={t('close')}
         style={{
           background: "none",
           border: "none",

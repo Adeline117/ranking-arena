@@ -2990,6 +2990,95 @@ rejectCall: 'Reject',
     connecting: 'Connecting...',
     waitingForData: 'Waiting for trade data...',
 
+    // PWA Install Prompt
+    pwaInstallBanner: 'Install app prompt',
+    pwaInstallTitle: 'Install Arena',
+    pwaInstallDesc: 'Add to home screen for faster access',
+    pwaInstallButton: 'Install',
+
+    // Admin - KOL Review
+    kolReviewTitle: 'KOL Review',
+    kolTier1: 'Tier 1 - Top KOL',
+    kolTier2: 'Tier 2 - Mid-tier',
+    kolTier3: 'Tier 3 - Community Native',
+    kolStatusPending: 'Pending',
+    kolStatusApproved: 'Approved',
+    kolStatusRejected: 'Rejected',
+    kolNoApplications: 'No {status} applications',
+    kolPlatform: 'Platform',
+    kolAccount: 'Account',
+    kolFollowerCount: 'Followers',
+    kolApplyTime: 'Applied',
+    kolViewProof: 'View Trading Proof',
+    kolReviewNote: 'Review note (optional)',
+    kolApprove: 'Approve',
+    kolReject: 'Reject',
+
+    // Admin - Data Health
+    dataHealthTitle: 'Data Health Dashboard',
+    dataHealthy: 'Healthy',
+    dataWarning: 'Warning',
+    dataCritical: 'Critical',
+    dataNoData: 'No Data',
+    dataHealthPlatform: 'Platform',
+    dataHealthCount: 'Records',
+    dataHealthLastUpdate: 'Last Update',
+    dataHealthAge: 'Data Age',
+    dataHealthStatus: 'Status',
+    dataHealthMinutes: '{n} min',
+    dataHealthHours: '{n} hrs',
+    dataHealthDays: '{n} days',
+
+    // Admin - Report types
+    adminReportSpam: 'Spam',
+    adminReportScam: 'Scam',
+    adminReportHarassment2: 'Harassment',
+    adminReportMisinformation2: 'Misinformation',
+    adminReportNsfw: 'Inappropriate',
+    adminReportOther2: 'Other',
+
+    // Trader Authorize Page
+    authorizeTitle: 'Authorize Real Trading Data',
+    authorizeDesc: 'After authorization, your real trading data will be displayed on the leaderboard in real-time, gaining higher credibility and attention.',
+    authorizeBenefits: 'Benefits:',
+    authorizeRealTimePositions: 'Real-time position display',
+    authorizeSuccess: 'Authorization successful! Redirecting to settings...',
+    authorizeSecurityNote: 'Your API credentials will be stored encrypted with AES-256, used only for reading trading data. We cannot perform any trading operations. We recommend creating a read-only API Key.',
+    authorizeSubmitSuccess: 'Authorization successful!',
+    authorizeSubmitButton: 'Authorize Data Display',
+    authorizeStep1: 'Log in to your exchange account and go to API management',
+    authorizeStep2: 'Permissions: Only check "Read" permission, do not enable trading or withdrawal',
+    authorizeStep3: 'Optional: Set IP whitelist for enhanced security',
+    authorizeStep4: 'Copy API Key and Secret, paste them on this page',
+    authorizeLoginRequired: 'Please login first',
+    authorizeLoginRequiredDesc: 'You need to log in to authorize your trading account',
+    authorizeSyncRealtime: 'Real-time',
+    authorizeSync5min: '5 minutes',
+    authorizeSync15min: '15 minutes',
+    authorizeSync1hour: '1 hour',
+
+    // Route Error
+    routeErrorTitle: 'Page Load Failed',
+    routeErrorDesc: 'Sorry, this page is temporarily unavailable',
+    routeErrorRetry: 'Reload',
+    routeErrorBack: 'Go Back',
+
+    // Loading Spinner
+    loadingSpinnerDefault: 'Loading',
+
+    // Search Dropdown
+    searchDeleteHistory: 'Delete search history',
+
+    // Welcome Guide
+    welcomeGuideTitle: 'Welcome to Arena',
+
+    // Error Boundary
+    errorBoundaryTitle: 'Component Error',
+    errorBoundaryDesc: 'Please try refreshing the page',
+
+    // WebVitals
+    webVitalsError: 'Performance monitoring initialization failed',
+
 } as const
 
 export default en

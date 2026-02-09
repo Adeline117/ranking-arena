@@ -10,6 +10,7 @@ import { tokens } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import TopNav from '@/app/components/layout/TopNav'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface PlatformHealth {
   source: string
@@ -35,6 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function DataHealthPage() {
+  const { t } = useLanguage()
   const { email, isAdmin, authChecking } = useAdminAuth()
   const [data, setData] = useState<HealthData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -68,23 +70,23 @@ export default function DataHealthPage() {
       })
   }, [isAdmin])
 
-  if (authChecking) return <div style={{ padding: 40, color: '#999' }}>验证权限中...</div>
+  if (authChecking) return <div style={{ padding: 40, color: '#999' }}>{t('verifyingPermission')}</div>
   if (!isAdmin) return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
       <div style={{ padding: 40, textAlign: 'center' }}>
-        <h2>无权限访问</h2>
-        <p style={{ color: '#999' }}>您没有管理员权限</p>
+        <h2>{t('noPermissionAccess')}</h2>
+        <p style={{ color: '#999' }}>{t('noAdminPermission')}</p>
       </div>
     </div>
   )
-  if (loading) return <div style={{ padding: 40, color: '#999' }}>加载中...</div>
-  if (error) return <div style={{ padding: 40, color: '#ef4444' }}>错误: {error}</div>
+  if (loading) return <div style={{ padding: 40, color: '#999' }}>{t('loading')}</div>
+  if (error) return <div style={{ padding: 40, color: '#ef4444' }}>{t('error')}: {error}</div>
   if (!data) return null
 
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, padding: '24px 32px' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>数据健康仪表盘</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>{t('dataHealthTitle')}</h1>
       <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 24 }}>
         最后检查: {new Date(data.timestamp).toLocaleString('zh-CN')} · 共 {data.total_platforms} 个活跃平台 · {data.total_traders} 名交易员
       </p>
@@ -93,7 +95,7 @@ export default function DataHealthPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 32 }}>
         {['healthy', 'warning', 'critical', 'no_data'].map(status => {
           const count = data.platforms.filter(p => p.status === status).length
-          const label = status === 'healthy' ? '正常' : status === 'warning' ? '警告' : status === 'critical' ? '异常' : '无数据'
+          const label = status === 'healthy' ? t('dataHealthy') : status === 'warning' ? t('dataWarning') : status === 'critical' ? t('dataCritical') : t('dataNoData')
           return (
             <div key={status} style={{
               padding: '16px 20px', borderRadius: 10,
@@ -112,11 +114,11 @@ export default function DataHealthPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-              <th style={{ textAlign: 'left', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>平台</th>
-              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>数据量</th>
-              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>最后更新</th>
-              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>数据年龄</th>
-              <th style={{ textAlign: 'center', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>状态</th>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthPlatform')}</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthCount')}</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthLastUpdate')}</th>
+              <th style={{ textAlign: 'right', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthAge')}</th>
+              <th style={{ textAlign: 'center', padding: '8px 12px', color: tokens.colors.text.tertiary, fontWeight: 500 }}>{t('dataHealthStatus')}</th>
             </tr>
           </thead>
           <tbody>
@@ -135,9 +137,9 @@ export default function DataHealthPage() {
                 </td>
                 <td style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                   {p.age_hours != null
-                    ? p.age_hours < 1 ? `${Math.round(p.age_hours * 60)}分钟`
-                    : p.age_hours < 24 ? `${Math.round(p.age_hours)}小时`
-                    : `${Math.round(p.age_hours / 24)}天`
+                    ? p.age_hours < 1 ? t('dataHealthMinutes').replace('{n}', String(Math.round(p.age_hours * 60)))
+                    : p.age_hours < 24 ? t('dataHealthHours').replace('{n}', String(Math.round(p.age_hours)))
+                    : t('dataHealthDays').replace('{n}', String(Math.round(p.age_hours / 24)))
                     : '-'}
                 </td>
                 <td style={{ padding: '10px 12px', textAlign: 'center' }}>
