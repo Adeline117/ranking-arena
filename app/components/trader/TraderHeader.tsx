@@ -29,6 +29,7 @@ const AlertConfig = dynamic(() => import('../alerts/AlertConfig'), { ssr: false 
 
 interface TraderHeaderProps {
   handle: string
+  displayName?: string
   traderId: string
   uid?: number
   avatarUrl?: string
@@ -326,6 +327,7 @@ function StatItem({ icon, value, label, hasCover }: StatItemProps): React.ReactE
 
 export default function TraderHeader({
   handle,
+  displayName: displayNameProp,
   traderId,
   uid,
   avatarUrl,
@@ -520,7 +522,7 @@ export default function TraderHeader({
                 maxWidth: '100%',
               }}
             >
-              {formatDisplayName(handle, source)}
+              {displayNameProp || formatDisplayName(handle, source)}
             </Text>
 
             {uid && (

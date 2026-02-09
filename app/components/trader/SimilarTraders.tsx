@@ -199,7 +199,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {formatDisplayName(trader.handle || '', trader.source)}
+                  {trader.display_name || formatDisplayName(trader.handle || '', trader.source)}
                 </Text>
                 <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                   {/* ROI Badge */}

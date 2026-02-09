@@ -45,7 +45,7 @@ const MEDAL_COLORS = [tokens.colors.medal.gold, tokens.colors.medal.silver, toke
 
 function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
   const handle = trader.handle || trader.id
-  const displayName = formatDisplayName(trader.handle || trader.id, trader.source)
+  const displayName = trader.display_name || formatDisplayName(trader.handle || trader.id, trader.source)
   const isAddress = handle.startsWith('0x') && handle.length > 20
   const roi = trader.roi || 0
   const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error

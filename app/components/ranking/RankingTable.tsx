@@ -89,6 +89,7 @@ function getStoredColumns(): ColumnKey[] {
 export interface Trader {
   id: string
   handle: string | null
+  display_name?: string | null
   roi: number
   pnl?: number | null
   win_rate?: number | null

@@ -40,7 +40,7 @@ export const TraderCard = memo(function TraderCard({
 }: TraderCardProps) {
   const traderHandle = trader.handle || trader.id
   const href = `/trader/${encodeURIComponent(traderHandle)}`
-  const displayName = formatDisplayName(traderHandle, trader.source || source)
+  const displayName = trader.display_name || formatDisplayName(traderHandle, trader.source || source)
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
   const isSelected = useComparisonStore(s => s.isSelected(trader.id))

@@ -106,7 +106,7 @@ export const TraderRow = memo(function TraderRow({
   const href = `/trader/${encodeURIComponent(traderHandle)}`
   // Show original platform ID as primary display name
   // Prefer handle (original exchange nickname) over id
-  const displayName = formatDisplayName(trader.handle || trader.id, trader.source || source)
+  const displayName = trader.display_name || formatDisplayName(trader.handle || trader.id, trader.source || source)
   const isAddress = traderHandle.startsWith('0x') && traderHandle.length > 20
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
