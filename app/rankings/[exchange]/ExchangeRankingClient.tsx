@@ -155,7 +155,7 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
 
         {/* Bottom stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
-          <StatBlock label="胜率" value={trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : 'N/A'} color={trader.win_rate && trader.win_rate > 50 ? tokens.colors.accent.success : undefined} />
+          <StatBlock label="Win%" value={trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : 'N/A'} color={trader.win_rate && trader.win_rate > 50 ? tokens.colors.accent.success : undefined} />
           <StatBlock label="MDD" value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : 'N/A'} color={trader.max_drawdown ? tokens.colors.accent.error + 'cc' : undefined} />
           <StatBlock label="Arena Score" value={trader.arena_score != null ? trader.arena_score.toFixed(0) : '--'} color={trader.arena_score ? tokens.colors.accent.brand : undefined} />
         </div>
@@ -273,10 +273,10 @@ export default function ExchangeRankingClient({
             }}
           >
             <div>#</div>
-            <div>交易员</div>
+            <div>Trader</div>
             <div style={{ textAlign: 'right' }}>ROI</div>
-            <div style={{ textAlign: 'center' }}>趋势</div>
-            <div style={{ textAlign: 'right' }}>胜率</div>
+            <div style={{ textAlign: 'center' }}>Trend</div>
+            <div style={{ textAlign: 'right' }}>Win%</div>
             <div style={{ textAlign: 'right' }}>MDD</div>
             <div style={{ textAlign: 'right' }}>Score</div>
           </div>
