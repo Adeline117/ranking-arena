@@ -89,7 +89,12 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
           cursor: 'pointer',
           color: 'var(--color-text-tertiary)',
           fontSize: tokens.typography.fontSize.xs,
-          padding: '2px 4px',
+          padding: '8px 10px',
+                  minHeight: 44,
+          minWidth: 44,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
         title={t('report')}
       >
@@ -152,7 +157,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
             style={{
               width: '100%',
               padding: '6px 8px',
-              borderRadius: 6,
+              borderRadius: tokens.radius.sm,
               border: '1px solid var(--color-border-primary)',
               background: 'var(--color-bg-primary)',
               color: 'var(--color-text-primary)',
@@ -172,7 +177,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
               style={{
                 flex: 1,
                 padding: '6px 12px',
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
                 border: 'none',
                 background: !reason || loading ? 'var(--color-bg-tertiary)' : '#ef4444',
                 color: 'white',
@@ -186,7 +191,7 @@ export default function ReportButton({ contentType, contentId }: ReportButtonPro
               onClick={() => setOpen(false)}
               style={{
                 padding: '6px 12px',
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
                 border: '1px solid var(--color-border-primary)',
                 background: 'transparent',
                 color: 'var(--color-text-secondary)',
