@@ -92,15 +92,46 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
  */
 export function formatDisplayName(name: string, platform?: string): string {
   if (!name) return 'Unknown'
-  if (name.length > 60) return name.slice(0, 57) + '...'
+  
+  // Wallet addresses (0x...)
   if (name.startsWith('0x') && name.length > 20) {
     return `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
   }
-  // Numeric IDs must show platform identifier
+  
+  // Filter out known placeholder / test-data patterns
+  if (/^中台未注册/.test(name)) {
+    const label = platform ? formatPlatformShort(platform) : ''
+    return label ? `${label} Trader` : 'Trader'
+  }
+  
+  // Platform-generated placeholder names → show as "Platform #ID"
+  const placeholderMatch = name.match(/^(?:XT|MEXC|CoinEx|KuCoin|BingX|Binance)\s+Trader\s+(\w+)$/i)
+  if (placeholderMatch) {
+    const label = platform ? formatPlatformShort(platform) : name.split(' ')[0]
+    return `${label} #${placeholderMatch[1].slice(-6)}`
+  }
+  
+  // "Mexctrader-XXXXX" pattern
+  if (/^Mexctrader-/i.test(name)) {
+    const label = platform ? formatPlatformShort(platform) : 'MEXC'
+    return `${label} #${name.slice(-6)}`
+  }
+  
+  // Masked emails like "ma***6@gmail.com" or "*******277"
+  if (/^\*+\d+$/.test(name) || /\*{3,}.*@/.test(name)) {
+    const label = platform ? formatPlatformShort(platform) : ''
+    return label ? `${label} Trader` : 'Trader'
+  }
+  
+  // Pure numeric IDs
   if (/^\d+$/.test(name)) {
     const platformLabel = platform ? formatPlatformShort(platform) : ''
     return platformLabel ? `${platformLabel} #${name.slice(-6)}` : `#${name.slice(-6)}`
   }
+  
+  // Truncate long names
+  if (name.length > 60) return name.slice(0, 57) + '...'
+  
   return name
 }
 
