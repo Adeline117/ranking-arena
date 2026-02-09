@@ -7,7 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 import { FIVE_MINUTES_MS } from '@/lib/constants/time'
 
-export type TimeRange = '90D' | '30D' | '7D'
+export type TimeRange = '90D' | '30D' | '7D' | 'COMPOSITE'
 export type SortBy = 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown'
 export type SortOrder = 'asc' | 'desc'
 
@@ -96,7 +96,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // 客户端 hydration 后从 localStorage 读取偏好
   useEffect(() => {
     const saved = localStorage.getItem(TIME_RANGE_STORAGE_KEY)
-    if (saved === '90D' || saved === '30D' || saved === '7D') {
+    if (saved === '90D' || saved === '30D' || saved === '7D' || saved === 'COMPOSITE') {
       setActiveTimeRange(saved)
     }
   }, [])
@@ -152,9 +152,17 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         // Feature 1: Include sort params in fetch URL
         // Load enough data for client-side search/sort. RankingTable caps at 1000 (slice(0,1000)).
         // SSR already provides 50 traders; 500 here covers filtering while being 83% smaller than 3000.
-        let url = `/api/traders?timeRange=${timeRange}&limit=1000`
-        if (sortBy && sortBy !== 'arena_score') {
-          url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
+        let url: string
+        if (timeRange === 'COMPOSITE') {
+          url = `/api/rankings?window=composite&limit=500`
+          if (sortBy && sortBy !== 'arena_score') {
+            url += `&sort_by=${sortBy}&sort_dir=${sortOrder || 'desc'}`
+          }
+        } else {
+          url = `/api/traders?timeRange=${timeRange}&limit=1000`
+          if (sortBy && sortBy !== 'arena_score') {
+            url += `&sortBy=${sortBy}&order=${sortOrder || 'desc'}`
+          }
         }
         const response = await fetch(url, { signal: controller.signal })
         if (!response.ok) {
@@ -172,9 +180,34 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           setError(errorMsg)
           return tradersCache.current.get(timeRange) || { traders: [], lastUpdated: null, fetchedAt: 0 }
         }
+        // Normalize response shape (rankings API has different structure)
+        let normalizedTraders = data.traders || []
+        if (timeRange === 'COMPOSITE' && normalizedTraders.length > 0 && normalizedTraders[0].trader_key) {
+          normalizedTraders = normalizedTraders.map((t: Record<string, unknown>) => ({
+            id: t.trader_key as string,
+            handle: (t.display_name as string) || (t.trader_key as string),
+            roi: (t.metrics as Record<string, unknown>)?.roi ?? 0,
+            pnl: (t.metrics as Record<string, unknown>)?.pnl ?? 0,
+            win_rate: (t.metrics as Record<string, unknown>)?.win_rate ?? null,
+            max_drawdown: (t.metrics as Record<string, unknown>)?.max_drawdown ?? null,
+            trades_count: (t.metrics as Record<string, unknown>)?.trades_count ?? null,
+            followers: (t.metrics as Record<string, unknown>)?.followers ?? null,
+            source: t.platform as string,
+            avatar_url: t.avatar_url as string | null,
+            arena_score: (t.metrics as Record<string, unknown>)?.arena_score ?? 0,
+            rank: t.rank as number,
+            profitability_score: t.profitability_score ?? null,
+            risk_control_score: t.risk_control_score ?? null,
+            execution_score: t.execution_score ?? null,
+            score_completeness: t.score_completeness ?? null,
+            trading_style: t.trading_style ?? null,
+            avg_holding_hours: t.avg_holding_hours ?? null,
+            style_confidence: t.style_confidence ?? null,
+          }))
+        }
         const cached: CachedData = {
-          traders: data.traders || [],
-          lastUpdated: data.lastUpdated || null,
+          traders: normalizedTraders,
+          lastUpdated: data.lastUpdated || data.as_of || null,
           fetchedAt: Date.now(),
           availableSources: data.availableSources || [],
         }

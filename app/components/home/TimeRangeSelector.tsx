@@ -11,7 +11,7 @@ interface TimeRangeSelectorProps {
   disabled?: boolean
 }
 
-const TIME_RANGES: TimeRange[] = ['90D', '30D', '7D']
+const TIME_RANGES: TimeRange[] = ['COMPOSITE', '90D', '30D', '7D']
 
 /**
  * 时间范围选择器组件
@@ -22,10 +22,12 @@ export default function TimeRangeSelector({
   onChange,
   disabled = false,
 }: TimeRangeSelectorProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   const getLabel = (range: TimeRange): string => {
     switch (range) {
+      case 'COMPOSITE':
+        return language === 'zh' ? '综合' : 'Composite'
       case '90D':
         return t('days90')
       case '30D':

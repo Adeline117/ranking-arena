@@ -22,6 +22,12 @@ import {
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { CopyButton } from './HeroSection'
 import { useComparisonStore } from '@/lib/stores'
+import { classifyStyle, getStyleInfo } from '@/lib/utils/trading-style'
+
+const ScoreBreakdownLazy = dynamic(
+  () => import('./ScoreBreakdown'),
+  { ssr: false, loading: () => <div style={{ padding: 16, textAlign: 'center', opacity: 0.5 }}>...</div> }
+)
 
 const ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
@@ -80,6 +86,8 @@ export interface TraderRowProps {
   getMedalGlowClass: (rank: number) => string
   parseSourceInfo: (src: string) => SourceInfo
   getPnLTooltipFn: (source: string, lang: string) => string
+  isExpanded?: boolean
+  onToggleExpand?: (id: string) => void
 }
 
 export const TraderRow = memo(function TraderRow({
@@ -91,6 +99,8 @@ export const TraderRow = memo(function TraderRow({
   getMedalGlowClass,
   parseSourceInfo,
   getPnLTooltipFn,
+  isExpanded,
+  onToggleExpand,
 }: TraderRowProps) {
   const traderHandle = trader.handle || trader.id
   const href = `/trader/${encodeURIComponent(traderHandle)}`
@@ -134,6 +144,7 @@ export const TraderRow = memo(function TraderRow({
   const zebraBg = rank > 3 && rank % 2 === 0 ? 'var(--overlay-hover)' : undefined
 
   return (
+    <>
     <Link
       href={href}
       className="ranking-row-link"
@@ -223,6 +234,33 @@ export const TraderRow = memo(function TraderRow({
                   {sourceInfo.type}
                 </Text>
               </Box>
+              {/* Trading Style Chip */}
+              {(() => {
+                const style = trader.trading_style
+                  ? getStyleInfo(trader.trading_style as any)
+                  : (() => {
+                      const computed = classifyStyle({
+                        avg_holding_hours: trader.avg_holding_hours,
+                        trades_count: trader.trades_count,
+                        win_rate: trader.win_rate,
+                      })
+                      return computed !== 'unknown' ? getStyleInfo(computed) : null
+                    })()
+                return style ? (
+                  <span style={{
+                    padding: '1px 6px',
+                    borderRadius: 8,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: style.color,
+                    background: style.bgColor,
+                    border: `1px solid ${style.borderColor}`,
+                    lineHeight: 1.4,
+                  }}>
+                    {language === 'zh' ? style.label : style.labelEn}
+                  </span>
+                ) : null
+              })()}
               {trader.also_on && trader.also_on.length > 0 && (
                 <Text size="xs" style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }}>
                   also on: {trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
@@ -289,6 +327,41 @@ export const TraderRow = memo(function TraderRow({
           )}
         </Box>
       </Box>
+
+      {/* Expand button overlay */}
+      {onToggleExpand && (trader.profitability_score != null || trader.risk_control_score != null || trader.execution_score != null) && (
+        <Box
+          onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); onToggleExpand(trader.id) }}
+          style={{
+            position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+            width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', opacity: 0.4, transition: 'opacity 0.15s',
+            borderRadius: 4,
+          }}
+          className="expand-btn"
+          title={language === 'zh' ? '展开评分详情' : 'Expand score details'}
+        >
+          <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </Box>
+      )}
     </Link>
+
+    {/* Expanded Score Breakdown */}
+    {isExpanded && (
+      <ScoreBreakdownLazy
+        profitability_score={trader.profitability_score}
+        risk_control_score={trader.risk_control_score}
+        execution_score={trader.execution_score}
+        score_completeness={trader.score_completeness}
+        max_drawdown={trader.max_drawdown}
+        win_rate={trader.win_rate}
+        roi={trader.roi}
+        arena_score={trader.arena_score}
+      />
+    )}
+    </>
   )
-}, (prev, next) => areTraderPropsEqual(prev, next) && prev.source === next.source)
+}, (prev, next) => areTraderPropsEqual(prev, next) && prev.source === next.source && prev.isExpanded === next.isExpanded)
