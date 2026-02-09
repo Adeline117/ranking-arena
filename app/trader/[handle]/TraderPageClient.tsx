@@ -86,7 +86,7 @@ interface TraderPageData {
   portfolio: PortfolioItem[]
   positionHistory: ExtendedPositionHistoryItem[]
   feed: TraderFeedItem[]
-  similarTraders: TraderProfile[]
+  similarTraders: (TraderProfile & { roi_90d?: number; arena_score?: number })[]
   assetBreakdown?: AssetBreakdownData
   equityCurve?: EquityCurveData
   trackedSince?: string

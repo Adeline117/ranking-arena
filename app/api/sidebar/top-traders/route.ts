@@ -21,7 +21,8 @@ export const GET = withPublic(
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
-          .lt('roi', 10000)
+          .lte('roi', 5000)
+          .gte('roi', -5000)
           .order('arena_score', { ascending: false })
           .limit(10)
 

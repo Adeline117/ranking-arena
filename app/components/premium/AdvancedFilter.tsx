@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
+import { SOURCES_WITH_DATA, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
 // 筛选配置类型
 export interface FilterConfig {
@@ -40,34 +41,14 @@ interface AdvancedFilterProps {
   isPro: boolean
 }
 
-// 交易所选项
-const EXCHANGES = [
-  // CEX
-  { value: 'binance', label: 'Binance' },
-  { value: 'bybit', label: 'Bybit' },
-  { value: 'bitget', label: 'Bitget' },
-  { value: 'okx', label: 'OKX' },
-  { value: 'mexc', label: 'MEXC' },
-  { value: 'htx', label: 'HTX' },
-  { value: 'weex', label: 'Weex' },
-  { value: 'coinex', label: 'CoinEx' },
-  { value: 'kucoin', label: 'KuCoin' },
-  { value: 'phemex', label: 'Phemex' },
-  { value: 'bitmart', label: 'BitMart' },
-  { value: 'bingx', label: 'BingX' },
-  { value: 'gateio', label: 'Gate.io' },
-  { value: 'xt', label: 'XT.com' },
-  { value: 'pionex', label: 'Pionex' },
-  { value: 'lbank', label: 'LBank' },
-  { value: 'blofin', label: 'BloFin' },
-  // DEX
-  { value: 'gmx', label: 'GMX' },
-  { value: 'dydx', label: 'dYdX' },
-  { value: 'hyperliquid', label: 'Hyperliquid' },
-  { value: 'kwenta', label: 'Kwenta' },
-  { value: 'gains', label: 'Gains' },
-  { value: 'mux', label: 'MUX' },
-]
+// 交易所选项 -- derived from SOURCES_WITH_DATA to stay in sync with DB
+const EXCHANGES: { value: string; label: string }[] = (() => {
+  const unique = [...new Set(SOURCES_WITH_DATA)];
+  return unique.map(src => ({
+    value: src,
+    label: EXCHANGE_CONFIG[src]?.name || src,
+  }));
+})()
 
 // 类型选项 - 使用 i18n key
 const CATEGORY_KEYS = [
