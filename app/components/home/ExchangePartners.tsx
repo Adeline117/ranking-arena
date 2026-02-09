@@ -1,6 +1,5 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import type { Exchange } from '@/lib/exchange'
