@@ -140,7 +140,6 @@ export default function LiveTradesFeed() {
       overflow: 'hidden',
       width: '100%',
       height: '100%',
-      minHeight: 220,
       display: 'flex',
       flexDirection: 'column',
       position: 'relative',

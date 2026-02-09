@@ -155,6 +155,7 @@ export default function SentimentBar() {
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
         fontSize: 13,
         overflowX: 'auto',
+        overflowY: 'hidden',
         whiteSpace: 'nowrap',
         scrollbarWidth: 'none',
       }}
