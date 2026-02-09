@@ -279,12 +279,8 @@ export default function LoginPage() {
     injectStyles()
     setMounted(true)
     
-    // 检查是否已完成初始设置
-    const hasOnboarded = localStorage.getItem('hasOnboarded')
-    if (hasOnboarded !== 'true') {
-      router.push('/onboarding')
-      return
-    }
+    // Login page should NOT redirect to onboarding
+    // Onboarding happens after successful registration/login
   }, [router])
 
   // Language persistence is handled by LanguageProvider
