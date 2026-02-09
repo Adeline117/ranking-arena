@@ -321,6 +321,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
               className="profile-grid"
               style={{
                 display: 'grid',
+                gridTemplateColumns: similarTraders.length > 0 ? '1fr 300px' : '1fr',
                 gap: tokens.spacing[8],
               }}
             >
