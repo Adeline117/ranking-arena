@@ -2324,7 +2324,7 @@ const zh = {
     freeVsProComparison: 'Free vs Pro 功能对比',
     feature: '功能',
     compFeatureLeaderboard: '排行榜浏览',
-    compFreeTop50: '前 50 名',
+    compFreeTop50: '前 100 名',
     compProFullLeaderboard: '完整排行榜',
     compFeatureBasicFilters: '基础筛选',
     compFeatureTraderDetails: '交易员详情',

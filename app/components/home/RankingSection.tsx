@@ -495,8 +495,8 @@ export default function RankingSection({
     ? applyAdvancedFilter(presetFiltered, filterConfig)
     : presetFiltered
 
-  // Free users: limit to top 50 traders; Pro users: full leaderboard
-  const FREE_LEADERBOARD_LIMIT = 50
+  // Free users: limit to top 100 traders; Pro users: full leaderboard
+  const FREE_LEADERBOARD_LIMIT = 100
   const filteredTraders = isPro
     ? advancedFiltered
     : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT)
