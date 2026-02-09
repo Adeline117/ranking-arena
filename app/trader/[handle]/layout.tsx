@@ -53,7 +53,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       }
       const description = descParts.length > 0
         ? descParts.join(' · ')
-        : `View ${profile.handle}'s trader profile, ROI, win rate, and portfolio on ArenaFi.`
+        : `View ${profile.handle}'s trader profile, ROI, win rate, and portfolio on Arena.`
 
       // Dynamic OG image with trader data
       const ogImageUrl = new URL(`${baseUrl}/api/og/trader`)
@@ -78,24 +78,24 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           'copy trading',
           profile.source || '',
           'leaderboard',
-          'ArenaFi',
+          'Arena',
         ].filter(Boolean),
         openGraph: {
-          title: `${profile.handle}${roiStr} · ArenaFi`,
+          title: `${profile.handle}${roiStr} · Arena`,
           description,
           type: 'profile',
           url: canonicalUrl,
-          siteName: 'ArenaFi',
+          siteName: 'Arena',
           images: [{
             url: ogImageUrl.toString(),
             width: 1200,
             height: 630,
-            alt: `${profile.handle}'s trader card on ArenaFi`,
+            alt: `${profile.handle}'s trader card on Arena`,
           }],
         },
         twitter: {
           card: 'summary_large_image',
-          title: `${profile.handle}${roiStr} · ArenaFi`,
+          title: `${profile.handle}${roiStr} · Arena`,
           description,
           images: [ogImageUrl.toString()],
           creator: '@arenafi',
@@ -113,7 +113,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   // 默认metadata
   return {
     title: handle,
-    description: `查看 ${handle} 的交易员资料 -- ArenaFiFi 加密货币交易员排行榜与社区。`,
+    description: `查看 ${handle} 的交易员资料 -- Arena 加密货币交易员排行榜与社区。`,
     alternates: {
       canonical: canonicalUrl,
     },

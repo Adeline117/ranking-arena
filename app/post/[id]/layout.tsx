@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       .maybeSingle()
     
     if (post) {
-      const title = `${post.title.slice(0, 60)} · ArenaFi`
+      const title = `${post.title.slice(0, 60)} · Arena`
       const description = post.content 
         ? post.content.slice(0, 160) + (post.content.length > 160 ? '...' : '')
         : `Post by ${post.author_handle}`
@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
           description,
           type: 'article',
           url: canonicalUrl,
-          siteName: 'ArenaFi',
+          siteName: 'Arena',
           publishedTime: post.created_at,
           authors: [`${BASE_URL}/u/${encodeURIComponent(post.author_handle)}`],
           images: ogImage ? [{
@@ -65,7 +65,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
   
   return {
-    title: 'Post | ArenaFi',
+    title: 'Post | Arena',
     description: 'View post details',
     alternates: {
       canonical: canonicalUrl,

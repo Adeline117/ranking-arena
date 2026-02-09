@@ -10,16 +10,16 @@ export const metadata: Metadata = {
     canonical: `${baseUrl}/library`,
   },
   openGraph: {
-    title: '交易书库 | ArenaFi',
+    title: '交易书库 | Arena',
     description: '精选加密货币交易书籍和教育资源。',
     url: `${baseUrl}/library`,
-    siteName: 'ArenaFi',
+    siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'ArenaFi 交易书库' }],
+    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena 交易书库' }],
   },
   twitter: {
     card: 'summary',
-    title: '交易书库 | ArenaFi',
+    title: '交易书库 | Arena',
     description: '精选加密货币交易书籍和教育资源。',
   },
 }

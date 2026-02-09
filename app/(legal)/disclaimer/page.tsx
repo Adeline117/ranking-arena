@@ -22,7 +22,7 @@ export default function DisclaimerPage() {
             <p>
               {isZh
                 ? 'Arena 平台提供的所有数据、排名、分析和信息仅供参考和教育目的，不构成任何投资建议、金融建议或交易建议。'
-                : 'All data, rankings, analyses, and information provided on the ArenaFi platform are for informational and educational purposes only and do not constitute investment advice, financial advice, or trading advice.'}
+                : 'All data, rankings, analyses, and information provided on the Arena platform are for informational and educational purposes only and do not constitute investment advice, financial advice, or trading advice.'}
             </p>
           </section>
 

@@ -1888,7 +1888,7 @@ const zh = {
     helpProGroupsQ: 'Pro 群组是什么？',
     helpProGroupsA: 'Pro 群组是仅限 Pro 会员参与的专属社群。群组创建者和成员都需要是 Pro 会员才能加入。',
     helpOfficialGroupQ: 'Pro 会员官方群是什么？',
-    helpOfficialGroupA: '成为 Pro 会员后，你会自动加入 ArenaFi 官方会员群（每群上限 500 人）。在群里可以与其他会员交流、反馈问题，官方团队会直接在群里回复。取消订阅后会自动退群。',
+    helpOfficialGroupA: '成为 Pro 会员后，你会自动加入 Arena 官方会员群（每群上限 500 人）。在群里可以与其他会员交流、反馈问题，官方团队会直接在群里回复。取消订阅后会自动退群。',
     helpAccountTitle: '账户与安全',
     helpChangePasswordQ: '如何修改密码？',
     helpChangePasswordA: '进入「设置」页面，在「安全」部分输入当前密码和新密码即可修改。',

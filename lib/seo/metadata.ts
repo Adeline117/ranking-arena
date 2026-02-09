@@ -6,7 +6,7 @@
 import type { Metadata } from 'next'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
-const SITE_NAME = 'ArenaFi'
+const SITE_NAME = 'Arena'
 const DEFAULT_OG_IMAGE = `${BASE_URL}/og.png`
 const TWITTER_HANDLE = '@arenafi'
 
@@ -210,7 +210,7 @@ export function generateGroupMetadata(group: {
 export function generateSearchMetadata(query?: string): Metadata {
   const title = query ? `搜索: ${query}` : '搜索'
   const description = query 
-    ? `在 ArenaFi 搜索 "${query}" 的结果`
+    ? `在 Arena 搜索 "${query}" 的结果`
     : '搜索交易员、帖子和小组'
   
   return generatePageMetadata({

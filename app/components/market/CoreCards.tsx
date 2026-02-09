@@ -215,8 +215,8 @@ export default function CoreCards() {
         )}
       </CardWrapper>
 
-      {/* ArenaFi Hot Traders */}
-      <CardWrapper title="ArenaFi热门交易员" linkText="查看全部" linkHref="/rankings">
+      {/* Arena Hot Traders */}
+      <CardWrapper title="Arena热门交易员" linkText="查看全部" linkHref="/rankings">
         {traders.length === 0 ? (
           <div style={{ height: 120 }} className="skeleton" />
         ) : (

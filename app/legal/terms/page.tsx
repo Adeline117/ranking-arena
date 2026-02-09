@@ -1,8 +1,8 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: '服务条款 | ArenaFi',
-  description: 'ArenaFi平台服务条款 Terms of Service',
+  title: '服务条款 | Arena',
+  description: 'Arena平台服务条款 Terms of Service',
 }
 
 export default function TermsPage() {

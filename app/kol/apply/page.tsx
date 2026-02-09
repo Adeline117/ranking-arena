@@ -118,7 +118,7 @@ export default function KolApplyPage() {
           KOL入驻申请
         </h1>
         <p style={{ color: 'var(--color-text-secondary)', marginBottom: 32, fontSize: tokens.typography.fontSize.sm }}>
-          加入ArenaFi认证KOL计划，获得认证标识和更多曝光机会。
+          加入Arena认证KOL计划，获得认证标识和更多曝光机会。
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

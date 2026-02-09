@@ -2482,7 +2482,7 @@ const en = {
     walletProNft: 'Pro Membership (NFT)',
     walletNoNft: 'No NFT Membership',
     walletProStatus: 'Your account has Pro status via NFT. Tier: {tier}',
-    walletHoldNft: 'Hold an ArenaFi Pro NFT to unlock Pro features.',
+    walletHoldNft: 'Hold an Arena Pro NFT to unlock Pro features.',
 
     // Web3 - useSiweAuth
     siweRejected: 'Signature request was rejected. Please approve the signature in your wallet to sign in.',

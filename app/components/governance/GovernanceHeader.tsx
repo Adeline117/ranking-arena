@@ -19,10 +19,10 @@ export function GovernanceHeader() {
   return (
     <div className="mb-8">
       <h1 className="text-2xl font-black text-neutral-200 mb-2" style={{ letterSpacing: '-0.3px' }}>
-        ArenaFi Governance
+        Arena Governance
       </h1>
       <p className="text-[15px] text-neutral-500 leading-relaxed mb-6">
-        Shape the future of ArenaFi. Pro NFT holders can vote on platform features,
+        Shape the future of Arena. Pro NFT holders can vote on platform features,
         trader disputes, and community proposals via Snapshot (gasless).
       </p>
 
@@ -52,7 +52,7 @@ export function GovernanceHeader() {
             ) : (
               <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06]">
                 <span className="text-xs text-neutral-500">
-                  Hold an ArenaFi Pro NFT to vote
+                  Hold an Arena Pro NFT to vote
                 </span>
               </div>
             )}
