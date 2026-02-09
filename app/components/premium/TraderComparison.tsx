@@ -8,6 +8,7 @@ import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/u
 import { useLanguage } from '../Providers/LanguageProvider'
 import RadarChart from './RadarChart'
 import EquityCurveOverlay, { CHART_COLORS } from './EquityCurveOverlay'
+import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
 
 interface TraderCompareData {
@@ -385,7 +386,9 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
 
         {activeTab === 'equity' && (
           <Box style={{ padding: tokens.spacing[4] }}>
-            <EquityCurveOverlay traders={equityTraders} height={300} />
+            <CompactErrorBoundary>
+              <EquityCurveOverlay traders={equityTraders} height={300} />
+            </CompactErrorBoundary>
           </Box>
         )}
       </Box>

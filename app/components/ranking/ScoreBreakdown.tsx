@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { generateExplanation, getCompletenessLabel, getCompletenessColor } from '@/lib/utils/score-explain'
 import { ScoreRadar } from './ScoreRadar'
+import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 
 interface ScoreBreakdownProps {
   profitability_score?: number | null
@@ -127,13 +128,15 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
 
       {/* 右侧：雷达图 */}
       <Box style={{ flex: '0 0 120px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <ScoreRadar
-          profitability={profitability_score ?? 0}
-          riskControl={risk_control_score ?? 0}
-          execution={execution_score ?? 0}
-          arenaScore={arena_score ?? 0}
-          size={120}
-        />
+        <CompactErrorBoundary>
+          <ScoreRadar
+            profitability={profitability_score ?? 0}
+            riskControl={risk_control_score ?? 0}
+            execution={execution_score ?? 0}
+            arenaScore={arena_score ?? 0}
+            size={120}
+          />
+        </CompactErrorBoundary>
       </Box>
 
       {/* 底部：自然语言解读 */}

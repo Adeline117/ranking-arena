@@ -4,6 +4,7 @@ import { lazy, Suspense, useState, useCallback, useEffect } from 'react'
 import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 
@@ -32,17 +33,21 @@ function useIsMobile() {
 // Mobile-specific components
 function MobileOverviewTab() {
   return (
-    <Suspense fallback={<LoadingCard height={200} />}>
-      <CoreCards />
-    </Suspense>
+    <SectionErrorBoundary fallbackMessage="核心指标加载失败">
+      <Suspense fallback={<LoadingCard height={200} />}>
+        <CoreCards />
+      </Suspense>
+    </SectionErrorBoundary>
   )
 }
 
 function MobileMoversTab() {
   return (
-    <Suspense fallback={<LoadingCard height={300} />}>
-      <SpotMarket />
-    </Suspense>
+    <SectionErrorBoundary fallbackMessage="行情数据加载失败">
+      <Suspense fallback={<LoadingCard height={300} />}>
+        <SpotMarket />
+      </Suspense>
+    </SectionErrorBoundary>
   )
 }
 
@@ -126,9 +131,11 @@ export default function MarketPage() {
       <TopNav email={email} />
 
       {/* L0: Sentiment Bar */}
-      <Suspense fallback={<div style={{ height: 48 }} />}>
-        <SentimentBar />
-      </Suspense>
+      <SectionErrorBoundary fallbackMessage="情绪指标加载失败">
+        <Suspense fallback={<div style={{ height: 48 }} />}>
+          <SentimentBar />
+        </Suspense>
+      </SectionErrorBoundary>
 
       {isMobile ? (
         /* Mobile: Tab Layout */
@@ -151,16 +158,20 @@ export default function MarketPage() {
         }}>
           {/* L1: Core Cards */}
           <section style={{ marginBottom: 24 }}>
-            <Suspense fallback={<LoadingCard height={200} />}>
-              <CoreCards />
-            </Suspense>
+            <SectionErrorBoundary fallbackMessage="核心指标加载失败">
+              <Suspense fallback={<LoadingCard height={200} />}>
+                <CoreCards />
+              </Suspense>
+            </SectionErrorBoundary>
           </section>
 
           {/* L2: Sector Treemap */}
           <section style={{ marginBottom: 24 }}>
-            <Suspense fallback={<LoadingCard height={300} />}>
-              <SectorTreemap onSectorClick={handleSectorClick} />
-            </Suspense>
+            <SectionErrorBoundary fallbackMessage="板块热力图加载失败">
+              <Suspense fallback={<LoadingCard height={300} />}>
+                <SectorTreemap onSectorClick={handleSectorClick} />
+              </Suspense>
+            </SectionErrorBoundary>
             {sectorFilter && (
               <div style={{
                 marginTop: 8,
@@ -196,9 +207,11 @@ export default function MarketPage() {
 
           {/* L3: Data Table */}
           <section>
-            <Suspense fallback={<LoadingCard height={400} />}>
-              <SpotMarket onTokenClick={handleTokenClick} />
-            </Suspense>
+            <SectionErrorBoundary fallbackMessage="行情数据加载失败">
+              <Suspense fallback={<LoadingCard height={400} />}>
+                <SpotMarket onTokenClick={handleTokenClick} />
+              </Suspense>
+            </SectionErrorBoundary>
           </section>
         </div>
       )}

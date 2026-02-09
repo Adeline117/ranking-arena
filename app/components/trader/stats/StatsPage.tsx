@@ -11,6 +11,7 @@ import {
   ComparePortfolioSection,
   BreakdownSection,
 } from './components'
+import { SectionErrorBoundary } from '../../utils/ErrorBoundary'
 
 // 扩展类型以支持新数据
 interface AssetBreakdownData {
@@ -203,8 +204,12 @@ export default function StatsPage({
 
         {/* Chart + Compare Two Columns */}
         <Box className="stats-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6], marginTop: tokens.spacing[6] }}>
-          <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
-          <ComparePortfolioSection traderHandle={traderHandle} equityCurve={equityCurve} delay={0.15} />
+          <SectionErrorBoundary fallbackMessage="收益曲线加载失败">
+            <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
+          </SectionErrorBoundary>
+          <SectionErrorBoundary fallbackMessage="对比分析加载失败">
+            <ComparePortfolioSection traderHandle={traderHandle} equityCurve={equityCurve} delay={0.15} />
+          </SectionErrorBoundary>
         </Box>
 
         {/* Trading Section */}

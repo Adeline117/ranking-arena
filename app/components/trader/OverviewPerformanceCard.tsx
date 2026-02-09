@@ -7,6 +7,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import type { TraderPerformance } from '@/lib/data/trader'
 import { Sparkline } from '@/app/components/ui/Sparkline'
 import { ScoreRadar } from '@/app/components/ranking/ScoreRadar'
+import { CompactErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { getScoreColor as getArenaScoreColor } from '@/lib/utils/score-colors'
 
 const arenaScoreColor = (score: number) => getArenaScoreColor(score)
@@ -652,13 +653,15 @@ export default function OverviewPerformanceCard({
                 </Box>
                 {/* 雷达图：优先使用V3三维度分数，回退到4维映射 */}
                 <Box style={{ flex: '0 0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <ScoreRadar
-                    profitability={performance.profitability_score ?? ((periodReturnScore ?? 0) / 70) * 35}
-                    riskControl={performance.risk_control_score ?? (((periodDrawdownScore ?? 0) / 8 + (periodStabilityScore ?? 0) / 7) / 2) * 40}
-                    execution={performance.execution_score ?? ((periodPnlScore ?? 0) / 15) * 25}
-                    arenaScore={performance.arena_score_v3 ?? periodArenaScore ?? 0}
-                    size={130}
-                  />
+                  <CompactErrorBoundary>
+                    <ScoreRadar
+                      profitability={performance.profitability_score ?? ((periodReturnScore ?? 0) / 70) * 35}
+                      riskControl={performance.risk_control_score ?? (((periodDrawdownScore ?? 0) / 8 + (periodStabilityScore ?? 0) / 7) / 2) * 40}
+                      execution={performance.execution_score ?? ((periodPnlScore ?? 0) / 15) * 25}
+                      arenaScore={performance.arena_score_v3 ?? periodArenaScore ?? 0}
+                      size={130}
+                    />
+                  </CompactErrorBoundary>
                 </Box>
               </Box>
 
