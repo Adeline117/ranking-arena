@@ -51,6 +51,7 @@ function SearchContent() {
   const { t: _t, language } = useLanguage()
   const isZh = language === 'zh'
   const query = searchParams.get('q') || ''
+  const activeTab = searchParams.get('tab') || 'all'
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState<string | null>(null)
   const [searchError, setSearchError] = useState(false)
@@ -357,6 +358,36 @@ function SearchContent() {
           </div>
         )}
 
+        {/* Tab filters */}
+        {query && !loading && !searchError && totalResults > 0 && (
+          <div style={{
+            display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap',
+          }}>
+            {[
+              { key: 'all', label: isZh ? '全部' : 'All', count: libTotal + groupTotal + postTotal + traderTotal },
+              { key: 'traders', label: isZh ? '交易员' : 'Traders', count: traderTotal },
+              { key: 'posts', label: isZh ? '帖子' : 'Posts', count: postTotal },
+              { key: 'library', label: isZh ? '书库' : 'Library', count: libTotal },
+              { key: 'groups', label: isZh ? '小组' : 'Groups', count: groupTotal },
+            ].filter(tab => tab.key === 'all' || tab.count > 0).map(tab => (
+              <Link
+                key={tab.key}
+                href={`/search?q=${encodeURIComponent(query)}${tab.key !== 'all' ? `&tab=${tab.key}` : ''}`}
+                style={{
+                  padding: '6px 16px', borderRadius: tokens.radius.full,
+                  background: activeTab === tab.key ? 'var(--color-accent-primary-15, rgba(139,92,246,0.15))' : tokens.colors.bg.secondary,
+                  border: `1px solid ${activeTab === tab.key ? 'var(--color-accent-primary-40, rgba(139,92,246,0.4))' : tokens.colors.border.primary}`,
+                  color: activeTab === tab.key ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+                  fontSize: 13, fontWeight: activeTab === tab.key ? 700 : 500,
+                  textDecoration: 'none', transition: 'all 0.15s',
+                }}
+              >
+                {tab.label} {tab.count > 0 && <span style={{ opacity: 0.6, fontSize: 11 }}>({tab.count})</span>}
+              </Link>
+            ))}
+          </div>
+        )}
+
         {loading ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 20, marginTop: 16 }}>
             {[1, 2, 3, 4].map(i => (
@@ -552,22 +583,22 @@ function SearchContent() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
             gap: 20, marginTop: 16,
           }}>
-            {renderSection(
+            {(activeTab === 'all' || activeTab === 'library') && renderSection(
               isZh ? '书库' : 'Library',
               libraryResults, libTotal, 'library',
               'L', tokens.colors.accent.brand, tokens.colors.accent.brandMuted || 'rgba(139, 111, 168, 0.15)',
             )}
-            {renderSection(
+            {(activeTab === 'all' || activeTab === 'groups') && renderSection(
               isZh ? '小组' : 'Groups',
               groupResults, groupTotal, 'groups',
               'G', tokens.colors.accent.warning || '#f59e0b', 'rgba(245, 158, 11, 0.12)',
             )}
-            {renderSection(
+            {(activeTab === 'all' || activeTab === 'posts') && renderSection(
               isZh ? '动态/帖子' : 'Posts',
               postResults, postTotal, 'posts',
               'P', tokens.colors.accent.primary, tokens.gradient.primarySubtle || 'rgba(99, 102, 241, 0.12)',
             )}
-            {renderSection(
+            {(activeTab === 'all' || activeTab === 'traders') && renderSection(
               isZh ? '交易员' : 'Traders',
               traderResults, traderTotal, 'traders',
               'T', tokens.colors.accent.success || '#10b981', 'rgba(16, 185, 129, 0.12)',

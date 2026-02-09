@@ -142,6 +142,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
 
       {/* Search results area - full height scroll */}
       <Box
+        className="mobile-search-results"
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -149,6 +150,8 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
           position: 'relative',
         }}
       >
+        {/* Override dropdown absolute positioning for mobile overlay context */}
+        <style>{`.mobile-search-results > div { position: relative !important; top: auto !important; max-height: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }`}</style>
         <SearchDropdown
           open={true}
           query={query}
