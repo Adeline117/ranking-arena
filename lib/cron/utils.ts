@@ -15,7 +15,7 @@ import {
   getAllCircuitBreakerStats,
 } from '@/lib/utils/circuit-breaker'
 import { createLogger } from '@/lib/utils/logger'
-import { recordScrapeMetrics, type ScrapeMetrics } from '@/lib/scraper/telemetry'
+import { recordScrapeMetrics } from '@/lib/scraper/telemetry'
 import { getPlatformConfig } from '@/lib/scraper/config'
 
 const execAsync = promisify(exec)
