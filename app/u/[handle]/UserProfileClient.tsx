@@ -824,6 +824,18 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
               >
                 {tab.label}
               </Text>
+              {!isPro && (tab.key === 'stats' || tab.key === 'portfolio') && (
+                <Box style={{
+                  padding: '1px 6px',
+                  borderRadius: tokens.radius.sm,
+                  background: `linear-gradient(135deg, ${tokens.colors.accent.primary}25, ${tokens.colors.accent.brand}15)`,
+                  border: `1px solid ${tokens.colors.accent.primary}30`,
+                }}>
+                  <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, fontSize: 9 }}>
+                    PRO
+                  </Text>
+                </Box>
+              )}
             </button>
           ))}
         </Box>
