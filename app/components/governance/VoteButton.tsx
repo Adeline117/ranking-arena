@@ -140,7 +140,8 @@ export function VoteButton({
     return (
       <button
         disabled
-        className="w-full px-3 py-2 rounded-lg border border-white/[0.06] bg-white/[0.02] text-neutral-600 text-sm font-medium cursor-not-allowed"
+        className="w-full px-3 py-2 rounded-lg text-sm font-medium cursor-not-allowed"
+        style={{ border: '1px solid var(--color-border-primary)', background: 'var(--color-bg-tertiary)', color: 'var(--color-text-tertiary)' }}
       >
         {t('voteConnectWallet')}
       </button>

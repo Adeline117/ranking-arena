@@ -87,7 +87,8 @@ export default function PostFooterActions({ post }: { post: Post }) {
         </span>
 
         <button
-          className="ml-auto rounded-md border border-white/10 bg-white/5 px-2 py-1 hover:bg-white/10 transition-colors"
+          className="ml-auto rounded-md px-2 py-1 transition-colors"
+          style={{ border: '1px solid var(--color-border-primary)', background: 'var(--color-bg-tertiary)' }}
           onClick={() => setShowTipModal(true)}
         >
           {t('tip')}
@@ -101,14 +102,15 @@ export default function PostFooterActions({ post }: { post: Post }) {
           onClick={() => setShowTipModal(false)}
         >
           <div 
-            className="w-full max-w-sm rounded-lg bg-[#1a1a2e] p-6 shadow-xl"
+            className="w-full max-w-sm rounded-lg p-6"
+            style={{ background: 'var(--color-bg-secondary)', boxShadow: 'var(--shadow-elevated)' }}
             onClick={e => e.stopPropagation()}
           >
-            <h3 className="mb-4 text-lg font-semibold text-white">
+            <h3 className="mb-4 text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
               {t('tipAuthor')} @{post.author_handle ?? "user"}
             </h3>
             
-            <p className="mb-4 text-sm text-gray-400">
+            <p className="mb-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               {t('selectTipAmount')}
             </p>
 
@@ -116,11 +118,11 @@ export default function PostFooterActions({ post }: { post: Post }) {
               {TIP_AMOUNTS.map(({ cents, label }) => (
                 <button
                   key={cents}
-                  className={`rounded-lg py-2 text-sm font-medium transition-colors ${
-                    selectedAmount === cents
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-white/10 text-gray-300 hover:bg-white/20'
-                  }`}
+                  className="rounded-lg py-2 text-sm font-medium transition-colors"
+                  style={{
+                    background: selectedAmount === cents ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary)',
+                    color: selectedAmount === cents ? '#fff' : 'var(--color-text-secondary)',
+                  }}
                   onClick={() => setSelectedAmount(cents)}
                 >
                   {label}
@@ -130,13 +132,15 @@ export default function PostFooterActions({ post }: { post: Post }) {
 
             <div className="flex gap-3">
               <button
-                className="flex-1 rounded-lg bg-white/10 py-2.5 text-sm font-medium text-gray-300 hover:bg-white/20 transition-colors"
+                className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors"
+                style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}
                 onClick={() => setShowTipModal(false)}
               >
                 {t('cancel')}
               </button>
               <button
-                className="flex-1 rounded-lg bg-purple-600 py-2.5 text-sm font-medium text-white hover:bg-purple-700 transition-colors disabled:opacity-50"
+                className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+                style={{ background: 'var(--color-accent-primary)', color: '#fff' }}
                 onClick={handleTip}
                 disabled={loading}
               >

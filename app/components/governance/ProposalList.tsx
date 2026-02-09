@@ -38,7 +38,7 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
 
   if (!spaceId) {
     return (
-      <div className="p-8 text-center text-neutral-600 text-sm">
+      <div className="p-8 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
         Governance is not configured yet. Set NEXT_PUBLIC_SNAPSHOT_SPACE_ID to enable voting.
       </div>
     )
@@ -48,7 +48,7 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
     <div>
       {showHeader && (
         <div className="flex justify-between items-center mb-5">
-          <h2 className="text-xl font-bold text-neutral-200">
+          <h2 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
             Governance
           </h2>
 
@@ -61,8 +61,9 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
                 className={`px-3.5 py-1.5 rounded-lg border-none text-[13px] cursor-pointer transition-all duration-200 ${
                   filter === tab
                     ? 'bg-purple-500/15 text-purple-300 font-semibold'
-                    : 'bg-transparent text-neutral-500 font-medium hover:text-neutral-400'
+                    : 'bg-transparent font-medium'
                 }`}
+                style={filter !== tab ? { color: 'var(--color-text-secondary)' } : undefined}
               >
                 {tab === 'all' ? 'All' : tab === 'active' ? 'Active' : 'Closed'}
               </button>
@@ -91,12 +92,13 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="p-5 bg-white/[0.03] border border-white/[0.06] rounded-2xl h-[140px] animate-pulse"
+              className="p-5 rounded-2xl h-[140px] animate-pulse"
+              style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border-primary)' }}
             />
           ))}
         </div>
       ) : !proposals?.length ? (
-        <div className="p-8 text-center text-neutral-600 text-sm">
+        <div className="p-8 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
           No proposals found.
         </div>
       ) : (

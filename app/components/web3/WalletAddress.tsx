@@ -55,7 +55,8 @@ export function WalletAddress({ address, showCopy = true, className = '' }: Wall
         href={`https://basescan.org/address/${address}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs font-mono text-neutral-400 hover:text-purple-400 transition-colors no-underline"
+        className="text-xs font-mono hover:text-purple-400 transition-colors no-underline"
+        style={{ color: 'var(--color-text-secondary)' }}
         title={address}
       >
         {shortenAddress(address)}
@@ -65,7 +66,8 @@ export function WalletAddress({ address, showCopy = true, className = '' }: Wall
       {showCopy && (
         <button
           onClick={handleCopy}
-          className="p-0 border-none bg-transparent cursor-pointer text-neutral-500 hover:text-neutral-300 transition-colors"
+          className="p-0 border-none bg-transparent cursor-pointer transition-colors"
+          style={{ color: 'var(--color-text-tertiary)' }}
           title={copied ? 'Copied!' : 'Copy address'}
         >
           {copied ? (
