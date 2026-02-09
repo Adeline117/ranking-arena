@@ -24,15 +24,15 @@ const IMPORTANCE_CONFIG: Record<string, { color: string; label: string; label_en
 }
 
 const CATEGORY_CONFIG: Record<string, { color: string; label: string; label_en: string }> = {
-  btc_eth: { color: newsCategories.crypto?.color || '#f7931a', label: 'BTC/ETH', label_en: 'BTC/ETH' },
-  altcoin: { color: newsCategories.market?.color || '#8b5cf6', label: '山寨币', label_en: 'Altcoins' },
-  defi: { color: newsCategories.defi?.color || '#10b981', label: 'DeFi', label_en: 'DeFi' },
-  macro: { color: newsCategories.macro?.color || '#3b82f6', label: '宏观/监管', label_en: 'Macro/Regulation' },
-  exchange: { color: newsCategories.regulation?.color || '#f59e0b', label: '交易所', label_en: 'Exchanges' },
+  btc_eth: { color: newsCategories.btcEth.color, label: 'BTC/ETH', label_en: 'BTC/ETH' },
+  altcoin: { color: newsCategories.market.color, label: '山寨币', label_en: 'Altcoins' },
+  defi: { color: newsCategories.defi.color, label: 'DeFi', label_en: 'DeFi' },
+  macro: { color: newsCategories.macro.color, label: '宏观/监管', label_en: 'Macro/Regulation' },
+  exchange: { color: newsCategories.exchange.color, label: '交易所', label_en: 'Exchanges' },
   // Legacy mappings for old data
-  crypto: { color: newsCategories.crypto?.color || '#f7931a', label: 'BTC/ETH', label_en: 'BTC/ETH' },
-  regulation: { color: newsCategories.regulation?.color || '#f59e0b', label: '宏观/监管', label_en: 'Macro/Regulation' },
-  market: { color: newsCategories.market?.color || '#8b5cf6', label: '山寨币', label_en: 'Altcoins' },
+  crypto: { color: newsCategories.btcEth.color, label: 'BTC/ETH', label_en: 'BTC/ETH' },
+  regulation: { color: newsCategories.regulation.color, label: '宏观/监管', label_en: 'Macro/Regulation' },
+  market: { color: newsCategories.market.color, label: '山寨币', label_en: 'Altcoins' },
 }
 
 const fetcher = async (url: string) => {
