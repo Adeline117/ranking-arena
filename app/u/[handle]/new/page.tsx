@@ -1346,6 +1346,8 @@ export default function NewPostPage() {
                   <img
                     src={image.url}
                     alt={`Upload ${index + 1}`}
+                    width={120}
+                    height={120}
                     draggable={false}
                     style={{
                       width: '100%',

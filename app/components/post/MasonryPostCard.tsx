@@ -49,6 +49,8 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
             <img
               src={post.images[0]}
               alt="Post image"
+              width={400}
+              height={300}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               loading="lazy"
             />

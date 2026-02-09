@@ -1632,6 +1632,9 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       <img
                         src={imgUrl}
                         alt="Post image"
+                        width={80}
+                        height={80}
+                        loading="lazy"
                         style={{
                           width: '100%',
                           height: '100%',

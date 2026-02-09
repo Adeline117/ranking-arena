@@ -25,6 +25,7 @@ export default function CryptoIcon({ symbol, size = 20, style, className }: Cryp
       alt={alt}
       width={size}
       height={size}
+      loading="lazy"
       className={className}
       onError={() => {
         if (!hasError) setHasError(true)

@@ -195,6 +195,9 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                           <img
                             src={img}
                             alt={`Evidence ${i + 1}`}
+                            width={120}
+                            height={90}
+                            loading="lazy"
                             style={{
                               width: 120, height: 90, objectFit: 'cover',
                               borderRadius: tokens.radius.md,

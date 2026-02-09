@@ -70,6 +70,9 @@ export default function GroupHeader({
             <img
               src={group.avatar_url}
               alt={group.name}
+              width={56}
+              height={56}
+              loading="lazy"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               referrerPolicy="no-referrer"
               onError={(e) => { e.currentTarget.style.display = 'none' }}

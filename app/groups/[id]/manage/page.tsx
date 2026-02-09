@@ -1671,6 +1671,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                       <img
                         src={editAvatarUrl}
                         alt="Preview"
+                        width={60}
+                        height={60}
                         style={{
                           width: 60,
                           height: 60,

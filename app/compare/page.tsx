@@ -363,6 +363,9 @@ function CompareContent() {
                         <img
                           src={ft.avatar_url}
                           alt=""
+                          width={32}
+                          height={32}
+                          loading="lazy"
                           style={{
                             width: 32, height: 32,
                             borderRadius: tokens.radius.full,

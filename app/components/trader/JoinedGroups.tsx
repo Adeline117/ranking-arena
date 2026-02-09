@@ -155,6 +155,9 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
                   <img
                     src={group.avatar_url}
                     alt={group.name}
+                    width={32}
+                    height={32}
+                    loading="lazy"
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
