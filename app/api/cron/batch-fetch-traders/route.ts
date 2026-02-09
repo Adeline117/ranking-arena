@@ -27,7 +27,7 @@ const GROUPS: Record<string, string[]> = {
   // Group D: Lower-priority batch 2 (every 6h) — 6 platforms
   d: ['lbank', 'dydx', 'phemex', 'gains', 'htx_futures', 'weex'],
   // Group E: Lowest-priority (every 8h) — 2 platforms
-  e: ['blofin', 'bingx'],
+  e: ['blofin', 'bingx', 'gateio'],
 }
 
 interface BatchResult {
