@@ -38,6 +38,7 @@ type BookDetail = {
   language: string | null
   rating: number | null
   rating_count: number | null
+  file_key: string | null
 }
 
 type RatingOverview = {
@@ -204,7 +205,7 @@ export default function BookDetailPage() {
   const count = overview?.count || 0
   const dist = overview?.distribution || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
   const maxDist = Math.max(...Object.values(dist), 1)
-  const hasReadableContent = !!book.pdf_url || !!book.content_url || !!book.source_url
+  const hasReadableContent = !!book.file_key || !!book.pdf_url || !!book.content_url
   const descLong = (book.description?.length || 0) > 300
 
   const bookJsonLd = {
