@@ -1,0 +1,45 @@
+/**
+ * Cron: Refresh materialized views
+ * Schedule: Every hour at :05 (5 * * * *)
+ * Refreshes mv_hourly_prices and mv_daily_rankings
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/api'
+import { createLogger } from '@/lib/utils/logger'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 120
+
+const logger = createLogger('refresh-views')
+
+export async function GET(req: NextRequest) {
+  const cronSecret = req.headers.get('x-cron-secret') || req.headers.get('authorization')?.replace('Bearer ', '')
+  if (process.env.CRON_SECRET && cronSecret !== process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const supabase = getSupabaseAdmin()
+  const start = Date.now()
+
+  try {
+    const { error } = await supabase.rpc('refresh_materialized_views')
+
+    if (error) {
+      logger.error('Failed to refresh materialized views', { error: error.message })
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const duration = Date.now() - start
+    logger.info('Materialized views refreshed', { duration })
+
+    return NextResponse.json({
+      ok: true,
+      views: ['mv_hourly_prices', 'mv_daily_rankings'],
+      duration,
+    })
+  } catch (err: any) {
+    logger.error('Refresh views failed', { error: err.message })
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
