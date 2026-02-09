@@ -1,13 +1,26 @@
 import pg from 'pg';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
 const { Client } = pg;
 
 const DB = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres';
-const PROXY = 'http://127.0.0.1:7890';
+
+async function fetchOne(id: string): Promise<{ nickname: string; avatarUrl: string | null } | null> {
+  try {
+    const { stdout } = await execAsync(
+      `curl -s --max-time 8 -x http://127.0.0.1:7890 --compressed 'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio/detail?portfolioId=${id}' -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' -H 'Origin: https://www.binance.com' -H 'Referer: https://www.binance.com/en/copy-trading'`,
+      { timeout: 12000 }
+    );
+    const json = JSON.parse(stdout);
+    if (json?.data?.nickname) {
+      return { nickname: json.data.nickname, avatarUrl: json.data.avatarUrl || null };
+    }
+  } catch {}
+  return null;
+}
 
 async function main() {
-  const { HttpsProxyAgent } = await import('https-proxy-agent');
-  const agent = new HttpsProxyAgent(PROXY);
-
   const client = new Client({ connectionString: DB });
   await client.connect();
 
@@ -16,44 +29,39 @@ async function main() {
   );
   console.log(`Found ${rows.length} Binance futures traders with NULL handle`);
 
-  let updated = 0, skipped = 0, errors = 0;
+  let updated = 0, skipped = 0;
+  const CONCURRENCY = 50;
 
-  for (let i = 0; i < rows.length; i++) {
-    const { id, source_trader_id } = rows[i];
-    try {
-      const url = `https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio/detail?portfolioId=${source_trader_id}`;
-      const resp = await fetch(url, {
-        // @ts-ignore
-        agent,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Origin': 'https://www.binance.com',
-          'Referer': 'https://www.binance.com/en/copy-trading',
-        },
-      });
+  for (let i = 0; i < rows.length; i += CONCURRENCY) {
+    const batch = rows.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (row) => {
+        const info = await fetchOne(row.source_trader_id);
+        return { row, info };
+      })
+    );
 
-      if (!resp.ok) { skipped++; continue; }
-      const json = await resp.json() as any;
-      const data = json?.data;
-      if (!data?.nickname) { skipped++; continue; }
-
-      await client.query(
-        `UPDATE trader_sources SET handle=$1, avatar_url=COALESCE($2, avatar_url) WHERE id=$3`,
-        [data.nickname, data.avatarUrl || null, id]
-      );
-      updated++;
-    } catch (e: any) {
-      errors++;
-      if (errors <= 5) console.error(`Error for ${source_trader_id}: ${e.message}`);
+    for (const { row, info } of results) {
+      if (info) {
+        await client.query(
+          `UPDATE trader_sources SET handle=$1, avatar_url=COALESCE($2, avatar_url) WHERE id=$3`,
+          [info.nickname, info.avatarUrl, row.id]
+        );
+        updated++;
+      } else {
+        skipped++;
+      }
     }
 
-    if ((i + 1) % 50 === 0) {
-      console.log(`Progress: ${i + 1}/${rows.length} | updated=${updated} skipped=${skipped} errors=${errors}`);
+    if ((i + CONCURRENCY) % 100 < CONCURRENCY) {
+      console.log(`Progress: ${Math.min(i + CONCURRENCY, rows.length)}/${rows.length} | updated=${updated} skipped=${skipped}`);
     }
-    await new Promise(r => setTimeout(r, 300));
+    
+    // Small delay between batches
+    await new Promise(r => setTimeout(r, 100));
   }
 
-  console.log(`\nDone! updated=${updated} skipped=${skipped} errors=${errors}`);
+  console.log(`\nDone! updated=${updated} skipped=${skipped}`);
   await client.end();
 }
 

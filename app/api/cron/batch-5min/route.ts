@@ -73,12 +73,19 @@ export async function GET(request: NextRequest) {
 
   const startTime = Date.now()
 
-  // Run all three in parallel — they are independent
+  // Run core jobs in parallel — they are independent
   const results = await Promise.all([
     callInternal(baseUrl, '/api/cron/run-worker'),
     callInternal(baseUrl, '/api/cron/refresh-hot-scores'),
     callInternal(baseUrl, '/api/trader/sync', 'POST', {}),
   ])
+
+  // Every 6 hours (at minute 0, 5, 10... — check if hour is 0,6,12,18 and minute < 6)
+  const now = new Date()
+  if (now.getUTCHours() % 6 === 0 && now.getUTCMinutes() < 6) {
+    const extraResult = await callInternal(baseUrl, '/api/cron/batch-fetch-extra')
+    results.push(extraResult)
+  }
 
   const totalDuration = Date.now() - startTime
   const hasErrors = results.some(r => r.status === 'error')

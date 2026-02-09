@@ -54,12 +54,8 @@
       "schedule": "*/15 * * * *"
     },
     {
-      "path": "/api/cron/discover-traders",
+      "path": "/api/cron/batch-discover",
       "schedule": "56 */4 * * *"
-    },
-    {
-      "path": "/api/cron/discover-rankings",
-      "schedule": "58 */4 * * *"
     },
     {
       "path": "/api/scrape/proxy?period=all",
@@ -152,6 +148,46 @@
     {
       "path": "/api/cron/fetch-traders/vertex",
       "schedule": "30 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bybit_spot",
+      "schedule": "33 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/binance_web3",
+      "schedule": "36 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/lbank",
+      "schedule": "39 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/dydx",
+      "schedule": "42 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/phemex",
+      "schedule": "45 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/gains",
+      "schedule": "48 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/htx_futures",
+      "schedule": "51 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/weex",
+      "schedule": "54 */6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/blofin",
+      "schedule": "57 */8 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bingx",
+      "schedule": "0 */8 * * *"
     },
     {
       "path": "/api/cron/enrich?platform=binance_futures&period=90D&limit=100",

@@ -173,14 +173,26 @@ async function fetchFromLeaderboard(
     ? (page + 1) * limit < totalCount
     : traders.length === limit
 
-  // Available sources (for UI filter)
-  // Use DISTINCT query instead of fetching all rows (N+1 fix)
-  const { data: sourceRows } = await supabase
-    .from('leaderboard_ranks')
-    .select('source')
-    .limit(1000)
+  // Available sources (for UI filter) — filter by current season_id for accuracy
+  // Also query trader_snapshots as fallback since leaderboard_ranks may not have all sources
+  const [{ data: sourceRows }, { data: snapshotSourceRows }] = await Promise.all([
+    supabase
+      .from('leaderboard_ranks')
+      .select('source')
+      .eq('season_id', timeRange)
+      .limit(2000),
+    supabase
+      .from('trader_snapshots')
+      .select('source')
+      .eq('season_id', timeRange)
+      .not('arena_score', 'is', null)
+      .limit(2000),
+  ])
 
-  const availableSources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort()
+  const allSourceSet = new Set<string>()
+  for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
+  for (const r of (snapshotSourceRows || [])) allSourceSet.add((r as { source: string }).source)
+  const availableSources = [...allSourceSet].sort()
 
   // Latest computed_at
   const computedAt = data?.[0]?.computed_at || new Date().toISOString()

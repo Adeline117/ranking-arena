@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
     // 获取7D快照数据，按收益率排序
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: snapshots } = await supabase
       .from('trader_snapshots')
       .select('trader_id, roi_7d, roi_30d, nickname, win_rate')
