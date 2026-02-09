@@ -35,38 +35,19 @@ export function BreakdownSection({
 
   const currentData = assetBreakdown?.[period] || fallbackData
 
+  // 没有数据时，检查所有周期是否都为空
+  const allPeriodsEmpty = !assetBreakdown || (
+    (!assetBreakdown['90D'] || assetBreakdown['90D'].length === 0) &&
+    (!assetBreakdown['30D'] || assetBreakdown['30D'].length === 0) &&
+    (!assetBreakdown['7D'] || assetBreakdown['7D'].length === 0)
+  )
+
+  if (allPeriodsEmpty && fallbackData.length === 0) {
+    return null
+  }
+
   if (currentData.length === 0) {
-    return (
-      <Box
-        className="stats-card glass-card"
-        style={{
-          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
-          borderRadius: tokens.radius.xl,
-          border: `1px solid ${tokens.colors.border.primary}60`,
-          padding: tokens.spacing[6],
-          opacity: mounted ? 1 : 0,
-          transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-          transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-      >
-        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-            <Text size="lg" weight="black">{t('assetBreakdown')}</Text>
-          </Box>
-          <PeriodSelector value={period} onChange={setPeriod} t={t} />
-        </Box>
-        <Box style={{
-          padding: tokens.spacing[8],
-          textAlign: 'center',
-          background: tokens.colors.bg.tertiary,
-          borderRadius: tokens.radius.lg,
-        }}>
-          <Text size="sm" color="tertiary">
-            资产分布数据暂不可用
-          </Text>
-        </Box>
-      </Box>
-    )
+    return null
   }
 
   const totalPct = currentData.reduce((sum, item) => sum + item.weightPct, 0)

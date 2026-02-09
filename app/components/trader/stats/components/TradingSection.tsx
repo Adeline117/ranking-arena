@@ -45,6 +45,20 @@ export function TradingSection({
     return () => clearTimeout(timer)
   }, [delay])
 
+  // 判断trading数据是否全部为空
+  const hasTradingData = trading && (trading.totalTrades12M > 0 || trading.profitableTradesPct > 0)
+  const hasAdditionalData = additionalStats && (
+    additionalStats.avgHoldingTime ||
+    additionalStats.maxDrawdown !== undefined ||
+    additionalStats.activeSince
+  )
+  const hasPositionData = positionHistory.length > 0
+
+  // 如果所有数据都为空，隐藏整个section
+  if (!hasTradingData && !hasAdditionalData && !hasPositionData) {
+    return null
+  }
+
   return (
     <Box
       className="stats-card glass-card"
@@ -61,11 +75,11 @@ export function TradingSection({
     >
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
         <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
-          Trading
+          交易统计
         </Text>
       </Box>
 
-      {trading && (trading.totalTrades12M > 0 || trading.profitableTradesPct > 0) ? (
+      {hasTradingData && (
         <Box
           className="trading-grid"
           style={{
@@ -75,27 +89,15 @@ export function TradingSection({
             marginBottom: tokens.spacing[6],
           }}
         >
-          <MiniKpi label={i18nT('totalTrades90d')} value={trading.totalTrades12M > 0 ? String(trading.totalTrades12M) : i18nT('notAvailable')} />
+          <MiniKpi label={i18nT('totalTrades90d')} value={trading!.totalTrades12M > 0 ? String(trading!.totalTrades12M) : '--'} />
           <MiniKpi
             label={i18nT('avgProfitLoss')}
-            value={trading.avgProfit > 0 || trading.avgLoss < 0
-              ? `${trading.avgProfit.toFixed(2)}% / ${trading.avgLoss.toFixed(2)}%`
-              : i18nT('notAvailable')
+            value={trading!.avgProfit > 0 || trading!.avgLoss < 0
+              ? `${trading!.avgProfit.toFixed(2)}% / ${trading!.avgLoss.toFixed(2)}%`
+              : '--'
             }
           />
-          <MiniKpi label={i18nT('profitableTradesLabel')} value={trading.profitableTradesPct > 0 ? `${trading.profitableTradesPct.toFixed(2)}%` : i18nT('notAvailable')} />
-        </Box>
-      ) : (
-        <Box style={{
-          padding: tokens.spacing[6],
-          textAlign: 'center',
-          marginBottom: tokens.spacing[6],
-          background: tokens.colors.bg.tertiary,
-          borderRadius: tokens.radius.lg,
-        }}>
-          <Text size="sm" color="tertiary">
-            交易统计数据暂不可用
-          </Text>
+          <MiniKpi label={i18nT('profitableTradesLabel')} value={trading!.profitableTradesPct > 0 ? `${trading!.profitableTradesPct.toFixed(2)}%` : '--'} />
         </Box>
       )}
 
@@ -104,29 +106,31 @@ export function TradingSection({
       )}
 
       {/* Additional Stats */}
-      <Box>
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
-          <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
-            {i18nT('additionalStats')}
-          </Text>
+      {hasAdditionalData && (
+        <Box>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
+            <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
+              {i18nT('additionalStats')}
+            </Text>
+          </Box>
+          <Box className="trading-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}>
+            <MiniKpi
+              label={t('avgHoldingTime')}
+              value={additionalStats?.avgHoldingTime || '--'}
+            />
+            <MiniKpi
+              label={t('maxDrawdown')}
+              value={additionalStats?.maxDrawdown !== undefined ? `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%` : '--'}
+              highlight={additionalStats?.maxDrawdown !== undefined}
+              isNegative
+            />
+            <MiniKpi
+              label={i18nT('trackedSinceLabel')}
+              value={additionalStats?.activeSince || '--'}
+            />
+          </Box>
         </Box>
-        <Box className="trading-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}>
-          <MiniKpi
-            label={t('avgHoldingTime')}
-            value={additionalStats?.avgHoldingTime || i18nT('notAvailable')}
-          />
-          <MiniKpi
-            label={t('maxDrawdown')}
-            value={additionalStats?.maxDrawdown !== undefined ? `-${Math.abs(additionalStats.maxDrawdown).toFixed(2)}%` : i18nT('notAvailable')}
-            highlight={additionalStats?.maxDrawdown !== undefined}
-            isNegative
-          />
-          <MiniKpi
-            label={i18nT('trackedSinceLabel')}
-            value={additionalStats?.activeSince || i18nT('notAvailable')}
-          />
-        </Box>
-      </Box>
+      )}
     </Box>
   )
 }
@@ -169,10 +173,10 @@ function MiniKpi({
         size="xl"
         weight="black"
         style={{
-          color: value === 'N/A'
+          color: (value === 'N/A' || value === '--')
             ? tokens.colors.text.tertiary
             : (highlight && isNegative ? tokens.colors.accent.error : tokens.colors.text.primary),
-          fontFamily: value !== 'N/A' && !value.includes('/') ? tokens.typography.fontFamily.mono.join(', ') : 'inherit',
+          fontFamily: (value !== 'N/A' && value !== '--' && !value.includes('/')) ? tokens.typography.fontFamily.mono.join(', ') : 'inherit',
         }}
       >
         {value}

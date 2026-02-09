@@ -195,24 +195,24 @@ export default function StatsPage({
 
       {/* Content with blur when not Pro */}
       <Box style={{ filter: isPro ? 'none' : 'blur(6px)', pointerEvents: isPro ? 'auto' : 'none' }}>
-        {/* Asset Breakdown */}
+        {/* Asset Breakdown - 没数据时自动隐藏 */}
         <BreakdownSection
           assetBreakdown={assetBreakdown}
           fallbackData={frequentlyTraded}
           delay={0}
         />
 
-        {/* Chart + Compare Two Columns */}
+        {/* Chart + Compare Two Columns - 没数据时各自隐藏 */}
         <Box className="stats-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[6], marginTop: tokens.spacing[6] }}>
-          <SectionErrorBoundary fallbackMessage="收益曲线加载失败">
+          <SectionErrorBoundary fallbackMessage="">
             <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
           </SectionErrorBoundary>
-          <SectionErrorBoundary fallbackMessage="对比分析加载失败">
+          <SectionErrorBoundary fallbackMessage="">
             <ComparePortfolioSection traderHandle={traderHandle} equityCurve={equityCurve} delay={0.15} />
           </SectionErrorBoundary>
         </Box>
 
-        {/* Trading Section */}
+        {/* Trading Section - 没数据时自动隐藏 */}
         <Box style={{ marginTop: tokens.spacing[6] }}>
           <TradingSection
             trading={trading}

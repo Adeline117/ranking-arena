@@ -38,6 +38,17 @@ export function ComparePortfolioSection({
   const currentData = equityCurve?.[period] || []
   const hasData = currentData.length > 0
 
+  // 所有周期都没有数据时，隐藏整个section
+  const allPeriodsEmpty = !equityCurve || (
+    (!equityCurve['90D'] || equityCurve['90D'].length === 0) &&
+    (!equityCurve['30D'] || equityCurve['30D'].length === 0) &&
+    (!equityCurve['7D'] || equityCurve['7D'].length === 0)
+  )
+
+  if (allPeriodsEmpty) {
+    return null
+  }
+
   // 计算交易员的总ROI
   const traderTotalRoi = hasData
     ? currentData[currentData.length - 1]?.roi || 0
@@ -59,7 +70,7 @@ export function ComparePortfolioSection({
     >
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="lg" weight="black">Compare</Text>
+          <Text size="lg" weight="black">对比分析</Text>
         </Box>
         <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
           <PeriodSelector value={period} onChange={setPeriod} t={t} />
@@ -99,21 +110,7 @@ export function ComparePortfolioSection({
             <CompareRow name={compareWith} pct={undefined} color={tokens.colors.accent.warning} />
           </Box>
         </>
-      ) : (
-        <Box style={{
-          padding: tokens.spacing[8],
-          textAlign: 'center',
-          background: tokens.colors.bg.tertiary,
-          borderRadius: tokens.radius.lg,
-        }}>
-          <Text size="sm" color="tertiary">
-            {t('noComparisonData')}
-          </Text>
-          <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-            {t('noComparisonDataHint')}
-          </Text>
-        </Box>
-      )}
+      ) : null}
     </Box>
   )
 }
