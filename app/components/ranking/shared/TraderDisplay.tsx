@@ -170,9 +170,19 @@ export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
 }
 
 // Get styling for arena score based on score value (exported for TraderCard)
-// Tiers: 0-40 gray, 40-60 blue, 60-80 purple, 80+ gold
+// Tiers: 0-30 gray, 30-50 green, 50-70 blue, 70-85 gold, 85+ purple (highest)
 export function getScoreStyle(score: number): { bgGradient: string; borderColor: string; textColor: string; fillColor: string } {
-  if (score >= 80) {
+  // 85+ 紫色 — 顶尖
+  if (score >= 85) {
+    return {
+      bgGradient: 'linear-gradient(135deg, rgba(139,92,246,0.18), rgba(168,85,247,0.12))',
+      borderColor: 'rgba(139,92,246,0.6)',
+      textColor: '#a78bfa',
+      fillColor: 'rgba(139,92,246,0.18)',
+    }
+  }
+  // 70-85 金色 — 优秀
+  if (score >= 70) {
     return {
       bgGradient: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.1))',
       borderColor: 'rgba(255,215,0,0.5)',
@@ -180,22 +190,25 @@ export function getScoreStyle(score: number): { bgGradient: string; borderColor:
       fillColor: 'rgba(255,215,0,0.15)',
     }
   }
-  if (score >= 60) {
-    return {
-      bgGradient: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(168,85,247,0.1))',
-      borderColor: 'rgba(139,92,246,0.5)',
-      textColor: tokens.colors.verified.web3,
-      fillColor: 'rgba(139,92,246,0.15)',
-    }
-  }
-  if (score >= 40) {
+  // 50-70 蓝色 — 良好
+  if (score >= 50) {
     return {
       bgGradient: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(96,165,250,0.1))',
-      borderColor: 'rgba(59,130,246,0.4)',
-      textColor: tokens.colors.accent.brand,
+      borderColor: 'rgba(59,130,246,0.45)',
+      textColor: '#60a5fa',
       fillColor: 'rgba(59,130,246,0.15)',
     }
   }
+  // 30-50 绿色 — 及格
+  if (score >= 30) {
+    return {
+      bgGradient: 'linear-gradient(135deg, rgba(22,199,132,0.12), rgba(16,185,129,0.08))',
+      borderColor: 'rgba(22,199,132,0.4)',
+      textColor: '#34d399',
+      fillColor: 'rgba(22,199,132,0.12)',
+    }
+  }
+  // 0-30 灰色 — 普通
   return {
     bgGradient: tokens.glass.bg.light,
     borderColor: 'var(--glass-border-medium)',
