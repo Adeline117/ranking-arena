@@ -111,6 +111,7 @@ async function main(): Promise<void> {
           platform,
           trader_key: entry.trader_key,
           handle: entry.display_name,
+          avatar_url: entry.avatar_url,
           profile_url: entry.avatar_url,
           type: 'leaderboard',
           last_seen_at: now,
