@@ -203,35 +203,41 @@ export default function TokenSidePanel({ token, onClose }: {
           />
           <motion.div
             ref={panelRef}
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
             style={{
               position: 'fixed',
-              top: 0,
-              right: 0,
-              width: 'min(100%, max(42vw, 400px))',
-              maxWidth: 620,
-              height: '100vh',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 'min(95vw, 900px)',
+              maxHeight: '90vh',
               background: tokens.colors.bg.primary,
-              borderLeft: `1px solid ${tokens.colors.border.primary}`,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.xl,
               zIndex: 201,
               overflowY: 'auto',
-              padding: 24,
+              padding: 28,
             }}
           >
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Image
-                  src={token.image || `/crypto-icons/${token.symbol.toLowerCase()}.svg`}
-                  alt={`${token.symbol} icon`}
-                  width={36}
-                  height={36}
-                  style={{ borderRadius: '50%' }}
-                  unoptimized
-                />
+                {token.image ? (
+                  <Image
+                    src={token.image}
+                    alt={`${token.symbol} icon`}
+                    width={36}
+                    height={36}
+                    style={{ borderRadius: '50%' }}
+                  />
+                ) : (
+                  <span style={{ width: 36, height: 36, borderRadius: '50%', background: tokens.colors.bg.tertiary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: tokens.colors.text.secondary }}>
+                    {token.symbol.charAt(0)}
+                  </span>
+                )}
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: tokens.colors.text.primary }}>
                     {token.symbol}
@@ -437,43 +443,11 @@ export default function TokenSidePanel({ token, onClose }: {
               </div>
             )}
 
-            {/* Links */}
-            {coinDetail?.links && (
+            {/* Links - official website only */}
+            {coinDetail?.links?.homepage?.filter(Boolean).length > 0 && (
               <div style={{ marginBottom: 20 }}>
-                <div style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: tokens.colors.text.primary,
-                  marginBottom: 8,
-                }}>
-                  链接
-                </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <a
-                    href={`https://www.coingecko.com/en/coins/${token.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '6px 12px',
-                      background: tokens.colors.bg.tertiary,
-                      borderRadius: tokens.radius.md,
-                      color: tokens.colors.accent.primary,
-                      fontSize: 12,
-                      textDecoration: 'none',
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
-                    CoinGecko
-                  </a>
-                  {coinDetail.links.homepage?.filter(Boolean).slice(0, 1).map((url, i) => (
+                  {coinDetail.links.homepage.filter(Boolean).slice(0, 1).map((url: string, i: number) => (
                     <a
                       key={i}
                       href={url}
