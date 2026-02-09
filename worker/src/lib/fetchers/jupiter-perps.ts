@@ -20,12 +20,16 @@ import {
   upsertTraders,
   fetchJson,
   sleep,
-} from './shared.js'
-import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
+} from './shared'
+import { type StatsDetail, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'jupiter_perps'
 const API_BASE = 'https://perps-api.jup.ag/v1/top-traders'
+const TRADES_API = 'https://perps-api.jup.ag/v1/trades'
 const TARGET = 500
+const ENRICH_LIMIT = 100
+const ENRICH_CONCURRENCY = 5
+const ENRICH_DELAY_MS = 200
 
 // Market mints for Jupiter Perps
 const MARKET_MINTS = {
@@ -49,6 +53,73 @@ interface JupiterTopTradersResponse {
   topTradersByPnl: JupiterTraderEntry[]
   topTradersByVolume: JupiterTraderEntry[]
   totalVolumeUsd: string
+}
+
+// ── Trade history types ──
+
+interface JupiterTrade {
+  action: string // 'Increase' | 'Decrease' | 'Liquidation' etc.
+  pnl: string | null
+  pnlPercentage: string | null
+  size: string
+  fee: string
+  createdTime: number
+}
+
+interface JupiterTradesResponse {
+  dataList: JupiterTrade[]
+  count: number
+}
+
+// ── Enrichment: fetch trade history to derive win_rate & trades_count ──
+
+interface JupiterEnrichedStats {
+  winRate: number | null
+  tradesCount: number | null
+  avgProfit: number | null
+  avgLoss: number | null
+  totalWins: number | null
+  totalLosses: number | null
+}
+
+async function fetchTraderStats(owner: string): Promise<JupiterEnrichedStats> {
+  const empty: JupiterEnrichedStats = {
+    winRate: null, tradesCount: null, avgProfit: null, avgLoss: null, totalWins: null, totalLosses: null,
+  }
+  try {
+    // Fetch up to 100 most recent trades (default page)
+    const url = `${TRADES_API}?walletAddress=${owner}&limit=100`
+    const data = await fetchJson<JupiterTradesResponse>(url, { timeoutMs: 10000 })
+
+    if (!data?.dataList || data.dataList.length === 0) return empty
+
+    // Only consider closing trades (Decrease, Liquidation) that have PnL
+    const closingTrades = data.dataList.filter(
+      (t) => t.pnl != null && t.action !== 'Increase'
+    )
+    if (closingTrades.length === 0) {
+      return { ...empty, tradesCount: data.count || data.dataList.length }
+    }
+
+    const wins = closingTrades.filter((t) => parseFloat(t.pnl || '0') > 0)
+    const losses = closingTrades.filter((t) => parseFloat(t.pnl || '0') < 0)
+
+    let totalProfit = 0
+    for (const w of wins) totalProfit += parseFloat(w.pnl || '0')
+    let totalLoss = 0
+    for (const l of losses) totalLoss += Math.abs(parseFloat(l.pnl || '0'))
+
+    return {
+      winRate: closingTrades.length > 0 ? (wins.length / closingTrades.length) * 100 : null,
+      tradesCount: data.count || data.dataList.length,
+      avgProfit: wins.length > 0 ? totalProfit / wins.length : null,
+      avgLoss: losses.length > 0 ? totalLoss / losses.length : null,
+      totalWins: wins.length,
+      totalLosses: losses.length,
+    }
+  } catch {
+    return empty
+  }
 }
 
 // ── Helpers ──
@@ -163,19 +234,20 @@ async function fetchPeriod(
 
     traders.push({
       source: SOURCE,
-      source_trader_id: owner.toLowerCase(),
+      source_trader_id: owner,
       handle: `${owner.slice(0, 4)}...${owner.slice(-4)}`,
       profile_url: `https://app.jup.ag/perps?pubkey=${owner}`,
       season_id: period,
       rank: null,
       roi: Math.max(-100, Math.min(10000, roi)),
       pnl: totalPnl || null,
-      win_rate: null, // Not provided by API
+      win_rate: null, // Enriched below via /v1/trades
       max_drawdown: null,
       trades_count: null,
       arena_score: calculateArenaScore(roi, totalPnl, null, null, period),
       captured_at: capturedAt,
-    })
+      _owner: owner, // Preserve original casing for enrichment
+    } as TraderData & { _owner: string })
   }
 
   // Sort by PnL descending and take top
@@ -187,19 +259,46 @@ async function fetchPeriod(
     t.rank = i + 1
   })
 
+  // Enrich top traders with win_rate & trades_count from /v1/trades
+  const toEnrich = top.slice(0, ENRICH_LIMIT) as (TraderData & { _owner: string })[]
+  console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders via /v1/trades...`)
+  for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
+    const batch = toEnrich.slice(i, i + ENRICH_CONCURRENCY)
+    await Promise.all(
+      batch.map(async (trader) => {
+        const stats = await fetchTraderStats(trader._owner)
+        trader.win_rate = stats.winRate
+        trader.trades_count = stats.tradesCount
+        // Recalculate arena score with win_rate
+        trader.arena_score = calculateArenaScore(
+          trader.roi ?? 0, trader.pnl ?? 0, null, stats.winRate, period
+        )
+        // Store enrichment data for stats_detail
+        ;(trader as any)._enriched = stats
+      })
+    )
+    await sleep(ENRICH_DELAY_MS)
+  }
+
+  // Clean up internal _owner field before upsert
+  for (const t of top) {
+    delete (t as any)._owner
+  }
+
   const { saved, error } = await upsertTraders(supabase, top)
 
-  // Save stats_detail for 90D period
-  if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+  // Save stats_detail for all periods
+  if (saved > 0) {
+    console.warn(`[${SOURCE}] Saving stats details for ${Math.min(top.length, ENRICH_LIMIT)} traders (${period})...`)
     let statsSaved = 0
-    for (const trader of top.slice(0, 50)) {
+    for (const trader of top.slice(0, ENRICH_LIMIT)) {
+      const enriched = (trader as any)._enriched as JupiterEnrichedStats | undefined
       const stats: StatsDetail = {
-        totalTrades: null,
-        profitableTradesPct: null,
+        totalTrades: enriched?.tradesCount ?? null,
+        profitableTradesPct: enriched?.winRate ?? null,
         avgHoldingTimeHours: null,
-        avgProfit: null,
-        avgLoss: null,
+        avgProfit: enriched?.avgProfit ?? null,
+        avgLoss: enriched?.avgLoss ?? null,
         largestWin: null,
         largestLoss: null,
         sharpeRatio: null,
@@ -209,13 +308,13 @@ async function fetchPeriod(
         copiersCount: null,
         copiersPnl: null,
         aum: null,
-        winningPositions: null,
-        totalPositions: null,
+        winningPositions: enriched?.totalWins ?? null,
+        totalPositions: enriched?.tradesCount ?? null,
       }
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
   }
 
   return { total: top.length, saved, error }

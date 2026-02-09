@@ -234,7 +234,7 @@ async function fetchPeriod(
 
     traders.push({
       source: SOURCE,
-      source_trader_id: owner.toLowerCase(),
+      source_trader_id: owner,
       handle: `${owner.slice(0, 4)}...${owner.slice(-4)}`,
       profile_url: `https://app.jup.ag/perps?pubkey=${owner}`,
       season_id: period,
