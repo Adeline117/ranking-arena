@@ -17,7 +17,6 @@ import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
-import ExchangeFilter from '../ranking/ExchangeFilter'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 
@@ -526,15 +525,6 @@ export default function RankingSection({
             onChange={onTimeRangeChange}
             disabled={loading}
           />
-          {dataSources.length > 1 && (
-            <ExchangeFilter
-              availableSources={dataSources}
-              selectedExchange={selectedExchange}
-              onExchangeChange={handleExchangeChange}
-              isPro={isPro}
-              onProRequired={handleProRequired}
-            />
-          )}
         </Box>
 
         {/* 右侧: 操作按钮 */}
