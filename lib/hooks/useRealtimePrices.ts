@@ -40,8 +40,12 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
   const esRef = useRef<EventSource | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const visibleRef = useRef(true)
+  const mountedRef = useRef(true)
+  const flashTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
 
   const handleData = useCallback((data: Record<string, PriceData>) => {
+    if (!mountedRef.current) return
+
     const newFlashes: FlashMap = {}
     const prev = prevPricesRef.current
 
@@ -60,7 +64,9 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
 
     if (Object.keys(newFlashes).length > 0) {
       setFlashes(prev => ({ ...prev, ...newFlashes }))
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        flashTimersRef.current.delete(timer)
+        if (!mountedRef.current) return
         setFlashes(prev => {
           const updated = { ...prev }
           for (const sym of Object.keys(newFlashes)) {
@@ -71,8 +77,49 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
           return updated
         })
       }, 600)
+      flashTimersRef.current.add(timer)
     }
   }, [])
+
+  const fetchPoll = useCallback(async () => {
+    if (!mountedRef.current) return
+    try {
+      const r = await fetch('/api/market/realtime')
+      if (!r.ok) return
+      const data = await r.json()
+      if (data.prices) {
+        const mapped: PriceMap = {}
+        for (const [sym, pd] of Object.entries(data.prices) as [string, any][]) {
+          mapped[sym] = {
+            symbol: sym,
+            price: pd.price,
+            change24h: pd.changePct24h ?? pd.change24h ?? 0,
+            volume: pd.volume,
+            high24h: pd.high24h,
+            low24h: pd.low24h,
+          }
+        }
+        handleData(mapped)
+      }
+      setMode('poll')
+    } catch {
+      if (mountedRef.current) setConnected(false)
+    }
+  }, [handleData])
+
+  const stopPoll = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  const startPoll = useCallback(() => {
+    if (pollRef.current) return
+    setMode('poll')
+    fetchPoll()
+    pollRef.current = setInterval(fetchPoll, pollFallbackInterval)
+  }, [fetchPoll, pollFallbackInterval])
 
   // SSE connection
   const connectSSE = useCallback(() => {
@@ -99,51 +146,15 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
     es.onopen = () => {
       setConnected(true)
       setMode('sse')
-      // Stop polling if it was running
-      if (pollRef.current) {
-        clearInterval(pollRef.current)
-        pollRef.current = null
-      }
+      stopPoll()
     }
-  }, [handleData])
-
-  const fetchPoll = useCallback(async () => {
-    try {
-      const res = await fetch('/api/stream/prices')
-      // SSE endpoint returns event-stream, so use the realtime endpoint instead
-      const r = await fetch('/api/market/realtime')
-      if (!r.ok) return
-      const data = await r.json()
-      if (data.prices) {
-        const mapped: PriceMap = {}
-        for (const [sym, pd] of Object.entries(data.prices) as any) {
-          mapped[sym] = {
-            symbol: sym,
-            price: pd.price,
-            change24h: pd.changePct24h ?? pd.change24h ?? 0,
-            volume: pd.volume,
-            high24h: pd.high24h,
-            low24h: pd.low24h,
-          }
-        }
-        handleData(mapped)
-      }
-      setMode('poll')
-    } catch {
-      setConnected(false)
-    }
-  }, [handleData])
-
-  const startPoll = useCallback(() => {
-    if (pollRef.current) return
-    setMode('poll')
-    fetchPoll()
-    pollRef.current = setInterval(fetchPoll, pollFallbackInterval)
-  }, [fetchPoll, pollFallbackInterval])
+  }, [handleData, startPoll, stopPoll])
 
   // Visibility handling
   useEffect(() => {
     if (!enabled) return
+
+    mountedRef.current = true
 
     const handleVisibility = () => {
       const visible = document.visibilityState === 'visible'
@@ -157,10 +168,7 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
           esRef.current.close()
           esRef.current = null
         }
-        if (pollRef.current) {
-          clearInterval(pollRef.current)
-          pollRef.current = null
-        }
+        stopPoll()
         setConnected(false)
         setMode('none')
       }
@@ -172,11 +180,17 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
     connectSSE()
 
     return () => {
+      mountedRef.current = false
       document.removeEventListener('visibilitychange', handleVisibility)
-      if (esRef.current) esRef.current.close()
-      if (pollRef.current) clearInterval(pollRef.current)
+      if (esRef.current) { esRef.current.close(); esRef.current = null }
+      stopPoll()
+      // Clear all pending flash timers
+      for (const timer of flashTimersRef.current) {
+        clearTimeout(timer)
+      }
+      flashTimersRef.current.clear()
     }
-  }, [enabled, connectSSE])
+  }, [enabled, connectSSE, stopPoll])
 
   return { prices, flashes, connected, mode }
 }
