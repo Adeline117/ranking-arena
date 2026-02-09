@@ -349,7 +349,7 @@ export default function TraderHeader({
   const [showAlertConfig, setShowAlertConfig] = useState(false)
   const router = useRouter()
   const { t } = useLanguage()
-  const { showToast } = useToast()
+  const { showToast: _showToast } = useToast()
 
   useEffect(() => {
     setMounted(true)

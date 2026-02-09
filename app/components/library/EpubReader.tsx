@@ -921,7 +921,7 @@ export default function EpubReader({
                   </p>
                 </div>
               )}
-              {filteredHighlights.map((h, i) => {
+              {filteredHighlights.map((h, _i) => {
                 const realIdx = highlights.indexOf(h)
                 return (
                   <div key={realIdx} style={{
