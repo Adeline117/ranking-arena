@@ -131,7 +131,10 @@ function parseTrader(item: MexcTrader, period: string): TraderData | null {
 /* ---------- fetching ---------- */
 
 const API_ENDPOINTS = [
-  // Primary — traderRank endpoint with rankType
+  // Primary — platform recommend API (used by scrape route, more reliable)
+  (page: number) =>
+    `https://www.mexc.com/api/platform/copy/v1/recommend/traders?pageNum=${page}&pageSize=${PAGE_SIZE}&sortType=ROI&days=90`,
+  // Fallback — traderRank endpoint with rankType
   (page: number) =>
     `https://contract.mexc.com/api/v1/private/copyTrade/traderRank/list?pageNo=${page}&pageSize=${PAGE_SIZE}&rankType=1`,
   // Fallback — trader list
