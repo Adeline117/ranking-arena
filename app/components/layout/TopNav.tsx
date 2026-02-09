@@ -87,11 +87,11 @@ export default function TopNav({ email = null }: { email?: string | null }) {
 
     const initAuth = async () => {
       try {
-        // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-        const { data, error } = await supabase.auth.getUser()
-        if (!alive || error || !data.user) return
+        // Use getSession() — reads from local storage, no network request
+        const { data, error } = await supabase.auth.getSession()
+        if (!alive || error || !data.session?.user) return
 
-        const userId = data.user.id
+        const userId = data.session.user.id
         setMyId(userId)
 
         // Parallel fetch: profile, notifications, messages (instead of sequential)
@@ -122,8 +122,8 @@ export default function TopNav({ email = null }: { email?: string | null }) {
         const userProfile = profileResult.data
         if (userProfile?.handle) {
           setMyHandle(userProfile.handle)
-        } else if (data.user.email) {
-          setMyHandle(data.user.email.split('@')[0])
+        } else if (data.session?.user?.email) {
+          setMyHandle(data.session.user.email.split('@')[0])
         }
         if (userProfile?.avatar_url) {
           setMyAvatarUrl(userProfile.avatar_url)

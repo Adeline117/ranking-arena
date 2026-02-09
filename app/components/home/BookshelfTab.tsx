@@ -30,10 +30,10 @@ export default function BookshelfTab() {
   const [filter, setFilter] = useState<'all' | 'want_to_read' | 'read'>('all')
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-      if (!data.user) setLoading(false)
+    // Use getSession() — reads from local storage, no network request
+    supabase.auth.getSession().then(({ data }) => {
+      setUserId(data.session?.user?.id ?? null)
+      if (!data.session?.user) setLoading(false)
     })
   }, [])
 

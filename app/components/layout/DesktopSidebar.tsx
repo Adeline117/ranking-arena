@@ -56,10 +56,10 @@ export default function DesktopSidebar() {
 
   useEffect(() => {
     let alive = true
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-    supabase.auth.getUser().then(({ data }) => {
+    // Use getSession() — reads from local storage, no network request
+    supabase.auth.getSession().then(({ data }) => {
       if (!alive) return
-      const userId = data.user?.id
+      const userId = data.session?.user?.id
       if (userId) {
         supabase
           .from('user_profiles')
@@ -70,8 +70,8 @@ export default function DesktopSidebar() {
             if (!alive) return
             if (profile?.handle) {
               setUserHandle(profile.handle)
-            } else if (data.user?.email) {
-              setUserHandle(data.user.email.split('@')[0])
+            } else if (data.session?.user?.email) {
+              setUserHandle(data.session.user.email.split('@')[0])
             }
           })
       }

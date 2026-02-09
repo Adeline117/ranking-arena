@@ -15,9 +15,9 @@ export default function FloatingActionButton() {
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-    supabase.auth.getUser().then(({ data }) => {
-      setIsAuthenticated(!!data.user)
+    // Use getSession() — reads from local storage, no network request
+    supabase.auth.getSession().then(({ data }) => {
+      setIsAuthenticated(!!data.session?.user)
     })
   }, [])
 

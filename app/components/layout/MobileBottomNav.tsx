@@ -141,14 +141,14 @@ function useUserHandle(): string | null {
   useEffect(() => {
     let alive = true
 
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
-    supabase.auth.getUser()
+    // Use getSession() — reads from local storage, no network request
+    supabase.auth.getSession()
       .then(({ data, error }) => {
         if (!alive || error) return
 
-        const userId = data.user?.id
+        const userId = data.session?.user?.id
         if (!userId) return
-        const emailHandle = data.user?.email?.split('@')[0] || null
+        const emailHandle = data.session?.user?.email?.split('@')[0] || null
 
         supabase
           .from('user_profiles')
