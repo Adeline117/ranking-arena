@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (insertError) {
-      console.error('Error creating repost:', insertError)
+      logger.error('Error creating repost:', insertError)
       return NextResponse.json({ error: '转发失败' }, { status: 500 })
     }
 
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })
 
   } catch (error: unknown) {
-    console.error('Error creating repost:', error)
+    logger.error('Error creating repost:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

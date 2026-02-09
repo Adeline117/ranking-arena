@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/supabase/server'
+import logger from '@/lib/logger'
 
 const EXCHANGE_AUTH_URLS: Record<string, string> = {
   binance: 'https://www.binance.com/en/my/settings/api-management',
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
       instructions: getInstructions(exchange),
     })
   } catch (error: unknown) {
-    console.error('[exchange/authorize] 错误:', error)
+    logger.error('[exchange/authorize] 错误:', error)
     const message = error instanceof Error ? error.message : '生成授权URL失败'
     return NextResponse.json(
       { error: message },

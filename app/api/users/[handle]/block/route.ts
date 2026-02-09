@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,13 +74,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (blockError.code === '23505') {
         return NextResponse.json({ success: true, alreadyBlocked: true })
       }
-      console.error('[Block User] Insert error:', blockError)
+      logger.error('[Block User] Insert error:', blockError)
       return NextResponse.json({ error: 'Failed to block user' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    console.error('[Block User] Unexpected error:', error)
+    logger.error('[Block User] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -111,13 +112,13 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       .eq('blocked_id', targetUserId)
 
     if (unblockError) {
-      console.error('[Unblock User] Delete error:', unblockError)
+      logger.error('[Unblock User] Delete error:', unblockError)
       return NextResponse.json({ error: 'Failed to unblock user' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    console.error('[Unblock User] Unexpected error:', error)
+    logger.error('[Unblock User] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

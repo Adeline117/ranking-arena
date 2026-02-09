@@ -7,6 +7,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5分钟
@@ -53,7 +54,7 @@ async function fetchBinanceViaProxy(period: string): Promise<TraderData[]> {
       const data = await response.json()
 
       if (data.code !== '000000') {
-        console.warn(`[Binance] Page ${page} API error: ${data.code}`)
+        logger.warn(`[Binance] Page ${page} API error: ${data.code}`)
         break
       }
 
@@ -79,7 +80,7 @@ async function fetchBinanceViaProxy(period: string): Promise<TraderData[]> {
       if (traders.length >= 100) break
       await new Promise(r => setTimeout(r, 300))
     } catch (error: unknown) {
-      console.error(`[Binance] Page ${page} error:`, error)
+      logger.error(`[Binance] Page ${page} error:`, error)
       break
     }
   }
@@ -128,7 +129,7 @@ async function fetchBybitViaProxy(period: string): Promise<TraderData[]> {
       if (traders.length >= 100) break
       await new Promise(r => setTimeout(r, 300))
     } catch (error: unknown) {
-      console.error(`[Bybit] Page ${page} error:`, error)
+      logger.error(`[Bybit] Page ${page} error:`, error)
       break
     }
   }
@@ -177,7 +178,7 @@ async function fetchBitgetViaProxy(period: string, type: 'futures' | 'spot' = 'f
       if (traders.length >= 100) break
       await new Promise(r => setTimeout(r, 300))
     } catch (error: unknown) {
-      console.error(`[Bitget] Page ${page} error:`, error)
+      logger.error(`[Bitget] Page ${page} error:`, error)
       break
     }
   }

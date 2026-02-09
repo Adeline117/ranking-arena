@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import logger from '@/lib/logger'
 
 const VALID_ACTIONS = new Set([
   'page_view', 'search', 'follow', 'unfollow',
@@ -44,13 +45,13 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.from('user_activity').insert(rows)
 
     if (error) {
-      console.error('[activity] 插入失败:', error)
+      logger.error('[activity] 插入失败:', error)
       return NextResponse.json({ error: '保存失败' }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true, count: rows.length })
   } catch (err) {
-    console.error('[activity] 请求异常:', err)
+    logger.error('[activity] 请求异常:', err)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

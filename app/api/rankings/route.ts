@@ -27,6 +27,7 @@ import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { checkRateLimit, setRateLimitHeaders, getClientIp } from '@/lib/middleware/rate-limit';
 import { tieredGetOrSet } from '@/lib/cache/redis-layer';
+import logger from '@/lib/logger'
 
 const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite'];
 const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
@@ -147,7 +148,7 @@ export async function GET(request: NextRequest) {
     setRateLimitHeaders(res.headers, rateLimit);
     return res;
   } catch (error: unknown) {
-    console.error('[API /rankings] Error:', error);
+    logger.error('[API /rankings] Error:', error);
     const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       { error: 'Internal server error', detail: msg },

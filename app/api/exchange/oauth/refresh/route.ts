@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
-      console.error('Token refresh failed:', errorText)
+      logger.error('Token refresh failed:', errorText)
       
       // 如果刷新失败，标记连接为不活跃
       await supabase
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
       .eq('id', connection.id)
 
     if (updateError) {
-      console.error('Error updating connection:', updateError)
+      logger.error('Error updating connection:', updateError)
       return NextResponse.json({ error: 'Failed to save new tokens' }, { status: 500 })
     }
 
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
       expiresAt,
     })
   } catch (error: unknown) {
-    console.error('Error refreshing token:', error)
+    logger.error('Error refreshing token:', error)
     const message = error instanceof Error ? error.message : 'Failed to refresh token'
     return NextResponse.json({ error: message }, { status: 500 })
   }

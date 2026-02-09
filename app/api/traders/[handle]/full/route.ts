@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 60 // 1分钟缓存
@@ -176,7 +177,7 @@ export async function GET(
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
     return response
   } catch (error: unknown) {
-    console.error('[API] 交易员聚合数据获取失败:', error)
+    logger.error('[API] 交易员聚合数据获取失败:', error)
     return NextResponse.json(
       { error: '服务器错误' },
       { status: 500 }

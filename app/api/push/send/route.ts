@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import type { PushNotification } from '@/lib/services/push-notification'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +63,7 @@ export const POST = withAuth(
         results,
       })
     } catch (error: unknown) {
-      console.error('[push/send] Failed to send notification:', error)
+      logger.error('[push/send] Failed to send notification:', error)
       return NextResponse.json({
         success: false,
         error: 'Failed to send notification',

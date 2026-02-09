@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq('user_id', targetUserId)
 
     if (deleteError) {
-      console.error('Kick member error:', deleteError)
+      logger.error('Kick member error:', deleteError)
       return NextResponse.json({ error: '操作失败' }, { status: 500 })
     }
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .single()
 
       if (groupError) {
-        console.error('Failed to fetch group for member_count update:', groupError)
+        logger.error('Failed to fetch group for member_count update:', groupError)
       } else if (groupData) {
         await supabase
           .from('groups')
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })
 
     if (notifyError) {
-      console.error('Failed to send kick notification:', notifyError)
+      logger.error('Failed to send kick notification:', notifyError)
     }
 
     // Audit log (fire-and-forget)
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    console.error('Kick member error:', error)
+    logger.error('Kick member error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

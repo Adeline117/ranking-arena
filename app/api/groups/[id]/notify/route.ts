@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/data/notifications'
+import logger from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -147,7 +148,7 @@ export async function POST(
 
         successCount++
       } catch (err: unknown) {
-        console.error(`Failed to notify member ${memberId}:`, err)
+        logger.error(`Failed to notify member ${memberId}:`, err)
         errors.push(memberId)
       }
     }
@@ -160,7 +161,7 @@ export async function POST(
     })
 
   } catch (error: unknown) {
-    console.error('Group notify error:', error)
+    logger.error('Group notify error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120 // 最长运行 120 秒（抓取 3 个时间段需要更多时间）
@@ -76,7 +77,7 @@ async function fetchBinanceData(period: string): Promise<BinanceTrader[]> {
       const data = await response.json()
       
       if (data.code !== '000000') {
-        console.warn(`[${period}] Page ${page} API error: ${data.code}`)
+        logger.warn(`[${period}] Page ${page} API error: ${data.code}`)
         break
       }
       
@@ -93,7 +94,7 @@ async function fetchBinanceData(period: string): Promise<BinanceTrader[]> {
       // 延迟避免限流
       await new Promise(resolve => setTimeout(resolve, 300))
     } catch (error: unknown) {
-      console.error(`[${period}] Page ${page} error:`, error)
+      logger.error(`[${period}] Page ${page} error:`, error)
       break
     }
   }
@@ -193,7 +194,7 @@ async function saveTraders(traders: BinanceTrader[], period: string) {
       .upsert(sourcesData, { onConflict: 'source,source_trader_id' })
     
     if (sourcesError) {
-      console.warn(`[${period}] trader_sources error:`, sourcesError.message)
+      logger.warn(`[${period}] trader_sources error:`, sourcesError.message)
     }
   }
   
@@ -204,7 +205,7 @@ async function saveTraders(traders: BinanceTrader[], period: string) {
       .insert(snapshotsData)
     
     if (snapshotsError) {
-      console.warn(`[${period}] trader_snapshots batch error:`, snapshotsError.message)
+      logger.warn(`[${period}] trader_snapshots batch error:`, snapshotsError.message)
       // 如果批量失败，尝试逐条插入
       for (const snapshot of snapshotsData) {
         const { error } = await supabase.from('trader_snapshots').insert(snapshot)
@@ -271,7 +272,7 @@ export async function GET(request: Request) {
       top5: topTraders,
     })
   } catch (error: unknown) {
-    console.error('[Binance Scrape] Error:', error)
+    logger.error('[Binance Scrape] Error:', error)
     return NextResponse.json({
       success: false,
       error: String(error),
@@ -333,7 +334,7 @@ async function scrapeAllPeriods() {
       // 时间段之间延迟，避免限流
       await new Promise(resolve => setTimeout(resolve, 1000))
     } catch (error: unknown) {
-      console.error(`[Binance Scrape] ${period} error:`, error)
+      logger.error(`[Binance Scrape] ${period} error:`, error)
       results.push({ period, success: false, error: String(error) })
     }
   }

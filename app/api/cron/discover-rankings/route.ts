@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -97,7 +98,7 @@ export async function GET(request: Request) {
       .insert(jobs);
 
     if (error) {
-      console.error('[cron/discover] Job insert error:', error.message);
+      logger.error('[cron/discover] Job insert error:', error.message);
     }
 
     // Also release any stale locks
@@ -109,7 +110,7 @@ export async function GET(request: Request) {
       platforms: jobs.map(j => `${j.platform}:${j.market_type}`),
     });
   } catch (error: unknown) {
-    console.error('[cron/discover] Error:', error);
+    logger.error('[cron/discover] Error:', error);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

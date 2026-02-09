@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
       message: 'Account restored successfully',
     })
   } catch (error: unknown) {
-    console.error('[account/cancel-deletion] Error:', error)
+    logger.error('[account/cancel-deletion] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { isAddress } from 'viem'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 /**
  * POST /api/auth/siwe/link
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
         })
 
       if (insertError) {
-        console.error('[SIWE link] Profile insert failed:', insertError)
+        logger.error('[SIWE link] Profile insert failed:', insertError)
         return NextResponse.json({ error: 'Failed to create profile for wallet link' }, { status: 500 })
       }
     } else {
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
         .eq('id', user.id)
 
       if (updateError) {
-        console.error('[SIWE link] Wallet update failed:', updateError)
+        logger.error('[SIWE link] Wallet update failed:', updateError)
         return NextResponse.json({ error: 'Failed to link wallet' }, { status: 500 })
       }
     }
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
       walletAddress,
     })
   } catch (err) {
-    console.error('[SIWE link] Error:', err)
+    logger.error('[SIWE link] Error:', err)
     return NextResponse.json({ error: 'Failed to link wallet' }, { status: 500 })
   }
 }

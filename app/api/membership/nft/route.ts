@@ -3,6 +3,7 @@ import { getAuthUser } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkNFTMembership, getTokenExpiry } from '@/lib/web3/nft'
 import { getUserTokenId } from '@/lib/web3/mint'
+import logger from '@/lib/logger'
 
 /**
  * GET /api/membership/nft
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
       expiresAt,
     })
   } catch (err) {
-    console.error('[NFT check] Error:', err)
+    logger.error('[NFT check] Error:', err)
     return NextResponse.json({ error: 'Failed to check NFT' }, { status: 500 })
   }
 }

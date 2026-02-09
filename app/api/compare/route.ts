@@ -14,6 +14,7 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { hasFeatureAccess, getFeatureLimits } from '@/lib/types/premium'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
       .in('source_trader_id', traderIds)
 
     if (queryError) {
-      console.error('[compare] 查询失败:', queryError)
+      logger.error('[compare] 查询失败:', queryError)
       return error('获取交易员数据失败', 500)
     }
 

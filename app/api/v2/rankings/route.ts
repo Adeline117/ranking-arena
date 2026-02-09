@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Window, LeaderboardPlatform, RankingEntry, RankingsResponse } from '@/lib/types/leaderboard'
 import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 60  // ISR: revalidate every 60 seconds
@@ -129,7 +130,7 @@ export async function GET(request: NextRequest) {
   const { data: snapshots, count, error } = await query
 
   if (error) {
-    console.error('[Rankings API] Query error:', error)
+    logger.error('[Rankings API] Query error:', error)
     return NextResponse.json(
       { error: 'Database query failed' },
       { status: 500 }

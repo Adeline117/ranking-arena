@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (profileError || !profile) {
-      console.error('[Export] Profile fetch error:', profileError)
+      logger.error('[Export] Profile fetch error:', profileError)
       return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
     }
 
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    console.error('[Export] Unexpected error:', error)
+    logger.error('[Export] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

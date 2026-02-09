@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
+import logger from '@/lib/logger'
 
 /**
  * GET /api/user/usage
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       apiCallsToday,
     })
   } catch (err) {
-    console.error('[User Usage] Error:', err)
+    logger.error('[User Usage] Error:', err)
     return NextResponse.json({ error: 'Failed to get usage stats' }, { status: 500 })
   }
 }

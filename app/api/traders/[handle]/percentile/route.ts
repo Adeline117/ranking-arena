@@ -12,6 +12,7 @@ import {
   handleError,
 } from '@/lib/api'
 import { hasFeatureAccess } from '@/lib/types/premium'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -81,7 +82,7 @@ export async function GET(
       .not('arena_score', 'is', null)
 
     if (catError) {
-      console.error('[percentile] 查询同类交易员失败:', catError)
+      logger.error('[percentile] 查询同类交易员失败:', catError)
       return error('获取分位数据失败', 500)
     }
 

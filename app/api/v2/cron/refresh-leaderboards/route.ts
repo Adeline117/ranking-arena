@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { scheduleDiscovery, schedulePreheat, scheduleLongTailRefresh, getQueueStats } from '@/lib/jobs/scheduler'
 import type { LeaderboardPlatform, MarketType } from '@/lib/types/leaderboard'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error: unknown) {
-    console.error('[Cron] Error:', error)
+    logger.error('[Cron] Error:', error)
     return NextResponse.json(
       { error: 'Cron execution failed', details: String(error) },
       { status: 500 }

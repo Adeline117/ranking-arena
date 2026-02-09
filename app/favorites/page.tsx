@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
@@ -592,6 +593,7 @@ export default function FavoritesPage() {
           )
         )}
       </Box>
+      <MobileBottomNav />
     </Box>
   )
 }

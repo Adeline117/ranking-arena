@@ -23,6 +23,7 @@ import {
   requireAuth,
   handleError,
 } from '@/lib/api'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('[notifications/send] 创建通知失败:', error)
+      logger.error('[notifications/send] 创建通知失败:', error)
       return NextResponse.json({ error: '创建通知失败' }, { status: 500 })
     }
 

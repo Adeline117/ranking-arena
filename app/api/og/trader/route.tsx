@@ -8,6 +8,7 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const runtime = 'edge'
 
@@ -174,7 +175,7 @@ export async function GET(request: NextRequest) {
       }
     )
   } catch (e) {
-    console.error('[OG Trader] Error:', e)
+    logger.error('[OG Trader] Error:', e)
     return new Response('Failed to generate image', { status: 500 })
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWalletBalance, getTokenHoldings, getRecentTransactions } from '@/lib/web3/on-chain-tracker'
+import logger from '@/lib/logger'
 
 export const revalidate = 300 // Cache 5 minutes
 
@@ -45,7 +46,7 @@ export async function GET(
       }
     )
   } catch (error) {
-    console.error('Wallet API error:', error)
+    logger.error('Wallet API error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch wallet data' },
       { status: 500 }

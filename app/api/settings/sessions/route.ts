@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
       .order('last_active_at', { ascending: false })
 
     if (queryError) {
-      console.error('[Sessions] Query error:', queryError)
+      logger.error('[Sessions] Query error:', queryError)
       return NextResponse.json({ error: 'Failed to fetch sessions' }, { status: 500 })
     }
 
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error: unknown) {
-    console.error('[Sessions] Unexpected error:', error)
+    logger.error('[Sessions] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -111,7 +112,7 @@ export async function DELETE(request: NextRequest) {
         .eq('user_id', user.id)
 
       if (revokeError) {
-        console.error('[Sessions] Revoke error:', revokeError)
+        logger.error('[Sessions] Revoke error:', revokeError)
         return NextResponse.json({ error: 'Failed to revoke session' }, { status: 500 })
       }
 
@@ -133,7 +134,7 @@ export async function DELETE(request: NextRequest) {
       const { error: revokeAllError } = await query
 
       if (revokeAllError) {
-        console.error('[Sessions] Revoke all error:', revokeAllError)
+        logger.error('[Sessions] Revoke all error:', revokeAllError)
         return NextResponse.json({ error: 'Failed to revoke sessions' }, { status: 500 })
       }
 
@@ -142,7 +143,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   } catch (error: unknown) {
-    console.error('[Sessions] Unexpected error:', error)
+    logger.error('[Sessions] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

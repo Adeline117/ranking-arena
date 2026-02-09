@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isR2Configured, uploadFile, libraryPdfKey } from '@/lib/r2'
+import logger from '@/lib/logger'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
       .eq('id', itemId)
 
     if (updateErr) {
-      console.error('Failed to update library item:', updateErr)
+      logger.error('Failed to update library item:', updateErr)
       return NextResponse.json(
         { error: 'Upload succeeded but DB update failed', url },
         { status: 500 }
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, url, key })
   } catch (e: any) {
-    console.error('Upload error:', e)
+    logger.error('Upload error:', e)
     return NextResponse.json(
       { error: e.message || 'Internal server error' },
       { status: 500 }

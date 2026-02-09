@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -49,7 +50,7 @@ export async function GET(request: Request) {
     const { data, error } = await query
 
     if (error) {
-      console.error('[export/rankings] Supabase error:', error.message)
+      logger.error('[export/rankings] Supabase error:', error.message)
       return NextResponse.json({ error: 'Failed to fetch rankings' }, { status: 500 })
     }
 
@@ -81,7 +82,7 @@ export async function GET(request: Request) {
     },
   })
   } catch (error) {
-    console.error('[export/rankings] Error:', error)
+    logger.error('[export/rankings] Error:', error)
     return NextResponse.json({ error: 'Export failed' }, { status: 500 })
   }
 }

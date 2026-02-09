@@ -15,6 +15,7 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { hasFeatureAccess } from '@/lib/types/premium'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
     const { data: alerts, error: queryError } = await query
 
     if (queryError) {
-      console.error('[trader-alerts] 查询失败:', queryError)
+      logger.error('[trader-alerts] 查询失败:', queryError)
       return error('获取提醒配置失败', 500)
     }
 
@@ -174,7 +175,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (updateError) {
-        console.error('[trader-alerts] 更新失败:', updateError)
+        logger.error('[trader-alerts] 更新失败:', updateError)
         return error('更新提醒配置失败', 500)
       }
       result = data
@@ -187,7 +188,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (insertError) {
-        console.error('[trader-alerts] 创建失败:', insertError)
+        logger.error('[trader-alerts] 创建失败:', insertError)
         return error('创建提醒配置失败', 500)
       }
       result = data
@@ -229,7 +230,7 @@ export async function DELETE(request: NextRequest) {
     const { error: deleteError } = await query
 
     if (deleteError) {
-      console.error('[trader-alerts] 删除失败:', deleteError)
+      logger.error('[trader-alerts] 删除失败:', deleteError)
       return error('删除提醒配置失败', 500)
     }
 

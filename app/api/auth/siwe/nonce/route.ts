@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { cookies } from 'next/headers'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 /**
  * GET /api/auth/siwe/nonce
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ nonce })
   } catch (error) {
-    console.error('[siwe/nonce] Error:', error)
+    logger.error('[siwe/nonce] Error:', error)
     return NextResponse.json(
       { error: 'Failed to generate nonce' },
       { status: 500 }

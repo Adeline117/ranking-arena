@@ -15,6 +15,7 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { hasFeatureAccess } from '@/lib/types/premium'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false })
 
     if (queryError) {
-      console.error('[saved-filters] 查询失败:', queryError)
+      logger.error('[saved-filters] 查询失败:', queryError)
       return error('获取筛选配置失败', 500)
     }
 
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (updateError) {
-        console.error('[saved-filters] 更新失败:', updateError)
+        logger.error('[saved-filters] 更新失败:', updateError)
         return error('更新筛选配置失败', 500)
       }
       result = data
@@ -173,7 +174,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (insertError) {
-        console.error('[saved-filters] 创建失败:', insertError)
+        logger.error('[saved-filters] 创建失败:', insertError)
         return error('创建筛选配置失败', 500)
       }
       result = data
@@ -257,7 +258,7 @@ export async function DELETE(request: NextRequest) {
       .eq('user_id', user.id)
 
     if (deleteError) {
-      console.error('[saved-filters] 删除失败:', deleteError)
+      logger.error('[saved-filters] 删除失败:', deleteError)
       return error('删除筛选配置失败', 500)
     }
 

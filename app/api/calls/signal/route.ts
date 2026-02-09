@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         // Table might not exist yet - that's OK, PeerJS cloud handles signaling
-        console.warn('call_signals upsert failed (table may not exist):', error.message)
+        logger.warn('call_signals upsert failed (table may not exist):', error.message)
       }
 
       return NextResponse.json({ ok: true })
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (err) {
-    console.error('Call signal error:', err)
+    logger.error('Call signal error:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
       peerId: signal?.peer_id || `ra-${targetUserId}`,
     })
   } catch (err) {
-    console.error('Call signal GET error:', err)
+    logger.error('Call signal GET error:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }

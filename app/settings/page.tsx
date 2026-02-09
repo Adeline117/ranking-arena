@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeConnectionManager from '@/app/components/exchange/ExchangeConnection'
 import { useToast } from '@/app/components/ui/Toast'
@@ -850,7 +851,7 @@ function SettingsContent() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
-      <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], display: 'flex', gap: tokens.spacing[8] }}>
+      <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100, display: 'flex', gap: tokens.spacing[8] }}>
         {/* Sidebar Navigation - Desktop only */}
         <Box
           className="settings-sidebar"
@@ -1079,6 +1080,7 @@ function SettingsContent() {
           .settings-mobile-nav::-webkit-scrollbar { display: none; }
         }
       `}</style>
+      <MobileBottomNav />
     </Box>
   )
 }

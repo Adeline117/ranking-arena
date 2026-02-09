@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 // 简单的 HTML 解析函数
 function extractMetaTags(html: string) {
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    console.error('Error fetching link preview:', error)
+    logger.error('Error fetching link preview:', error)
     const message = error instanceof Error ? error.message : 'Failed to fetch link preview'
     return NextResponse.json(
       { error: message },

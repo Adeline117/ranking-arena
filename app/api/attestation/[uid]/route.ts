@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyAttestation } from '@/lib/web3/eas'
 import { ARENA_SCORE_SCHEMA_UID } from '@/lib/web3/contracts'
 import type { Hex } from 'viem'
+import logger from '@/lib/logger'
 
 /**
  * GET /api/attestation/[uid]
@@ -42,7 +43,7 @@ export async function GET(
       } : null,
     })
   } catch (err) {
-    console.error('[Attestation verify] Error:', err)
+    logger.error('[Attestation verify] Error:', err)
     return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box, Text } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
@@ -430,6 +431,7 @@ export default function NotificationsPage() {
           </Box>
         )}
       </Box>
+      <MobileBottomNav />
     </Box>
   )
 }

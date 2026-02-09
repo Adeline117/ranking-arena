@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,7 +121,7 @@ export async function GET(request: Request) {
       },
     })
   } catch (error: unknown) {
-    console.error('Avatar proxy error:', error)
+    logger.error('Avatar proxy error:', error)
     return new NextResponse('Internal error', { status: 500 })
   }
 }

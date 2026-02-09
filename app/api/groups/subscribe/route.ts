@@ -14,6 +14,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (subError) {
-      console.error('[group-subscribe] Error fetching subscription:', subError)
+      logger.error('[group-subscribe] Error fetching subscription:', subError)
       return error('Failed to fetch subscription', 500)
     }
 
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (subError) {
-      console.error('[group-subscribe] Error creating subscription:', subError)
+      logger.error('[group-subscribe] Error creating subscription:', subError)
       return error('Failed to create subscription', 500)
     }
 
@@ -203,7 +204,7 @@ export async function POST(request: NextRequest) {
       )
 
     if (memberError) {
-      console.warn('[group-subscribe] Error adding member:', memberError)
+      logger.warn('[group-subscribe] Error adding member:', memberError)
       // 不阻止订阅成功
     }
 
@@ -264,7 +265,7 @@ export async function DELETE(request: NextRequest) {
       .eq('id', subscriptionId)
 
     if (updateError) {
-      console.error('[group-subscribe] Error cancelling subscription:', updateError)
+      logger.error('[group-subscribe] Error cancelling subscription:', updateError)
       return error('Failed to cancel subscription', 500)
     }
 

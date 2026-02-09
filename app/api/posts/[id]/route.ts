@@ -16,6 +16,7 @@ import {
   validateString,
 } from '@/lib/api'
 import { getPostById, updatePost, deletePost, getUserPostReaction, getUserPostVote } from '@/lib/data/posts'
+import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -41,15 +42,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
               .eq('id', id)
           ).then(({ error: fallbackError }) => {
             if (fallbackError) {
-              console.error('[posts/[id]] Failed to increment view count:', fallbackError.message)
+              logger.error('[posts/[id]] Failed to increment view count:', fallbackError.message)
             }
           }).catch((err: unknown) => {
-            console.error('[posts/[id]] Fallback view count error:', err)
+            logger.error('[posts/[id]] Fallback view count error:', err)
           })
         }
       })
       .catch((err: unknown) => {
-        console.error('[posts/[id]] RPC view count error:', err)
+        logger.error('[posts/[id]] RPC view count error:', err)
       })
 
     // 如果用户已登录，获取用户的点赞和投票状态

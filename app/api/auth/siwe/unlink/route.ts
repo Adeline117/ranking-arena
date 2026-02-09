@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 /**
  * POST /api/auth/siwe/unlink
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('[SIWE unlink] Error:', err)
+    logger.error('[SIWE unlink] Error:', err)
     return NextResponse.json({ error: 'Failed to unlink wallet' }, { status: 500 })
   }
 }

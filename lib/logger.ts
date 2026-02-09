@@ -12,6 +12,8 @@ interface LogContext {
   [key: string]: unknown
 }
 
+type LogContextArg = LogContext | unknown
+
 class Logger {
   private isDevelopment = process.env.NODE_ENV === 'development'
   private isProduction = process.env.NODE_ENV === 'production'
@@ -21,7 +23,7 @@ class Logger {
    * In production: sends to Sentry
    * In development: logs to console
    */
-  error(message: string, context?: LogContext, error?: Error): void {
+  error(message: string, context?: LogContextArg, error?: Error): void {
     if (this.isDevelopment) {
       console.error(`[ERROR] ${message}`, context || '', error || '')
     }
@@ -35,7 +37,7 @@ class Logger {
   /**
    * Log warning
    */
-  warn(message: string, context?: LogContext): void {
+  warn(message: string, context?: LogContextArg): void {
     if (this.isDevelopment) {
       console.warn(`[WARN] ${message}`, context || '')
     }
@@ -44,7 +46,7 @@ class Logger {
   /**
    * Log info (development only)
    */
-  info(message: string, context?: LogContext): void {
+  info(message: string, context?: LogContextArg): void {
     if (this.isDevelopment) {
       console.warn(`[INFO] ${message}`, context || '')
     }
@@ -53,7 +55,7 @@ class Logger {
   /**
    * Log debug (development only)
    */
-  debug(message: string, context?: LogContext): void {
+  debug(message: string, context?: LogContextArg): void {
     if (this.isDevelopment) {
       console.warn(`[DEBUG] ${message}`, context || '')
     }
@@ -62,7 +64,7 @@ class Logger {
   /**
    * Send error to Sentry (production only)
    */
-  private sendToSentry(error: Error, context?: LogContext): void {
+  private sendToSentry(error: Error, context?: LogContextArg): void {
     if (!this.isProduction) return
 
     try {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,13 +58,13 @@ export async function POST(req: Request) {
       .single()
 
     if (error) {
-      console.error('KOL application error:', error)
+      logger.error('KOL application error:', error)
       return NextResponse.json({ error: '提交失败，请稍后重试' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (err) {
-    console.error('KOL apply error:', err)
+    logger.error('KOL apply error:', err)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

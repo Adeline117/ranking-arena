@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -103,7 +104,7 @@ async function fetchBinanceList(period: string, page: number): Promise<BinanceTr
   })
 
   if (!res.ok) {
-    console.warn(`Binance API ${res.status} for page ${page}`)
+    logger.warn(`Binance API ${res.status} for page ${page}`)
     return []
   }
 
@@ -206,7 +207,7 @@ export async function POST(req: NextRequest) {
       .from('trader_sources')
       .upsert(sources, { onConflict: 'source,source_trader_id' })
 
-    if (srcErr) console.warn('trader_sources upsert error:', srcErr.message)
+    if (srcErr) logger.warn('trader_sources upsert error:', srcErr.message)
 
     // trader_snapshots
     const snapshots = batch.map(t => {
@@ -238,7 +239,7 @@ export async function POST(req: NextRequest) {
       .upsert(snapshots, { onConflict: 'source,source_trader_id,season_id' })
 
     if (snapErr) {
-      console.warn('trader_snapshots upsert error:', snapErr.message)
+      logger.warn('trader_snapshots upsert error:', snapErr.message)
       failed += batch.length
     } else {
       saved += batch.length

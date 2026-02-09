@@ -10,6 +10,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { getRiskAlertService } from '@/lib/services/risk-alert'
 import { hasFeatureAccess } from '@/lib/types/premium'
 import type { SubscriptionTier } from '@/lib/types/premium'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,7 +46,7 @@ export const GET = withAuth(
         },
       })
     } catch (error: unknown) {
-      console.error('[risk-alerts] 获取预警失败:', error)
+      logger.error('[risk-alerts] 获取预警失败:', error)
       return NextResponse.json({
         success: false,
         error: '获取预警失败',
@@ -96,7 +97,7 @@ export const POST = withAuth(
         success: true,
       })
     } catch (error: unknown) {
-      console.error('[risk-alerts] 标记预警失败:', error)
+      logger.error('[risk-alerts] 标记预警失败:', error)
       return NextResponse.json({
         success: false,
         error: '标记预警失败',

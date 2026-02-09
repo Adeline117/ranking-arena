@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRecentTransactions, getWalletBalance, getTokenHoldings } from '@/lib/web3/on-chain-tracker'
 import { analyzeTransactions, computeTokenDistribution } from '@/lib/web3/wallet-analytics'
+import logger from '@/lib/logger'
 
 export const revalidate = 300
 
@@ -43,7 +44,7 @@ export async function GET(
       }
     )
   } catch (error) {
-    console.error('PnL API error:', error)
+    logger.error('PnL API error:', error)
     return NextResponse.json(
       { error: '计算 PnL 失败' },
       { status: 500 }

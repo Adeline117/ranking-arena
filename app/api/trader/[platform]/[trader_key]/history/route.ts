@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getCachedTraderHistory, cacheTraderHistory } from '@/lib/cache/redis-layer'
+import logger from '@/lib/logger'
 
 export const runtime = 'edge'
 export const revalidate = 300 // 5 分钟 ISR
@@ -77,7 +78,7 @@ export async function GET(
       .order('captured_at', { ascending: true })
     
     if (error) {
-      console.error('Failed to fetch trader history:', error)
+      logger.error('Failed to fetch trader history:', error)
       return NextResponse.json(
         { error: 'Failed to fetch history', details: error.message },
         { status: 500 }
@@ -170,7 +171,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Trader history API error:', error)
+    logger.error('Trader history API error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

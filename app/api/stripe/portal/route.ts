@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createPortalSession } from '@/lib/stripe'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
   // 敏感操作限流
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: unknown) {
-    console.error('Portal session error:', error)
+    logger.error('Portal session error:', error)
     const message = error instanceof Error ? error.message : ''
     if (message.includes('STRIPE_SECRET_KEY') || message.includes('not configured')) {
       return NextResponse.json(

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
       url: session.url,
     })
   } catch (error: unknown) {
-    console.error('[Checkout] Error:', error)
+    logger.error('[Checkout] Error:', error)
     
     const message = error instanceof Error ? error.message : 'Internal server error'
     

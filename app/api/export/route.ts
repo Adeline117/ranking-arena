@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/api'
 import { checkRateLimit } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    console.error('[export] Error:', error)
+    logger.error('[export] Error:', error)
     const message = error instanceof Error ? error.message : 'Export failed'
     return NextResponse.json(
       { error: message },

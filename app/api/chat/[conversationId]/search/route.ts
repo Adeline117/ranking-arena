@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,7 +93,7 @@ export async function GET(
     const { data: messages, error: searchError } = await searchQuery.limit(limit + 1)
 
     if (searchError) {
-      console.error('[Chat Search] Query error:', searchError)
+      logger.error('[Chat Search] Query error:', searchError)
       return NextResponse.json({ error: '搜索失败' }, { status: 500 })
     }
 
@@ -132,7 +133,7 @@ export async function GET(
       total_in_page: matches.length,
     })
   } catch (error: unknown) {
-    console.error('[Chat Search] Error:', error)
+    logger.error('[Chat Search] Error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }
