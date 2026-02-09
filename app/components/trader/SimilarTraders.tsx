@@ -157,7 +157,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
         </Box>
       </Box>
       
-      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+      <Box className="similar-traders-grid" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
         {traders.slice(0, 6).map((trader, index) => (
           <Link key={trader.handle} href={`/trader/${trader.handle}`} style={{ textDecoration: 'none' }}>
             <Box
@@ -166,17 +166,16 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: tokens.spacing[3],
-                padding: tokens.spacing[3],
+                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 background: hoveredIndex === index 
                   ? `linear-gradient(135deg, ${tokens.colors.accent.primary}10, ${tokens.colors.bg.tertiary})`
                   : tokens.colors.bg.primary,
-                border: `1px solid ${hoveredIndex === index ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}`,
+                border: `1px solid ${hoveredIndex === index ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}30`,
                 cursor: 'pointer',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                transform: hoveredIndex === index ? 'translateX(6px)' : 'translateX(0)',
+                transform: hoveredIndex === index ? 'translateX(4px)' : 'translateX(0)',
                 opacity: mounted ? 1 : 0,
-                animationDelay: `${index * 0.05}s`,
               }}
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
@@ -185,7 +184,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                 avatarUrl={trader.avatar_url}
                 handle={trader.handle}
                 traderId={trader.id}
-                size={40}
+                size={36}
               />
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <Text
@@ -197,91 +196,50 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
+                    fontSize: 13,
                   }}
                 >
                   {trader.display_name || formatDisplayName(trader.handle || '', trader.source)}
                 </Text>
-                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
-                  {/* ROI Badge */}
+                <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {trader.roi_90d != null && (
-                    <Box
+                    <Text
+                      size="xs"
+                      weight="bold"
                       style={{
-                        background: trader.roi_90d >= 0 ? `${tokens.colors.accent.success}15` : `${tokens.colors.accent.error}15`,
-                        padding: `1px ${tokens.spacing[1]}`,
-                        borderRadius: tokens.radius.sm,
+                        color: trader.roi_90d >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                        fontSize: 11,
+                        fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >
-                      <Text
-                        size="xs"
-                        weight="bold"
-                        style={{
-                          color: trader.roi_90d >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                          fontSize: tokens.typography.fontSize.xs,
-                        }}
-                      >
-                        {trader.roi_90d >= 0 ? '+' : ''}{trader.roi_90d.toFixed(1)}%
-                      </Text>
-                    </Box>
+                      {trader.roi_90d >= 0 ? '+' : ''}{trader.roi_90d.toFixed(1)}%
+                    </Text>
                   )}
-                  {/* Arena Score Badge */}
                   {trader.arena_score != null && (
-                    <Box
+                    <Text
+                      size="xs"
+                      weight="bold"
                       style={{
-                        background: `${tokens.colors.accent.primary}15`,
-                        padding: `1px ${tokens.spacing[1]}`,
-                        borderRadius: tokens.radius.sm,
+                        color: tokens.colors.accent.primary,
+                        fontSize: 11,
                       }}
                     >
-                      <Text
-                        size="xs"
-                        weight="bold"
-                        style={{
-                          color: tokens.colors.accent.primary,
-                          fontSize: tokens.typography.fontSize.xs,
-                        }}
-                      >
-                        {trader.arena_score.toFixed(0)}
-                      </Text>
-                    </Box>
+                      Score {trader.arena_score.toFixed(0)}
+                    </Text>
                   )}
-                  {/* Followers */}
-                  <Text
-                    size="xs"
-                    color="tertiary"
-                    style={{
-                      fontWeight: tokens.typography.fontWeight.medium,
-                    }}
-                  >
-                    {trader.followers?.toLocaleString() || 0} {t('fans')}
-                  </Text>
                 </Box>
               </Box>
               
-              {/* Arrow indicator */}
-              <Box
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: tokens.radius.full,
-                  background: hoveredIndex === index ? tokens.colors.accent.primary : tokens.colors.bg.tertiary,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.3s ease',
-                  transform: hoveredIndex === index ? 'translateX(0)' : 'translateX(-4px)',
-                  opacity: hoveredIndex === index ? 1 : 0.5,
+              <Text 
+                size="xs" 
+                style={{ 
+                  color: hoveredIndex === index ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+                  transition: 'color 0.2s ease',
+                  fontSize: 14,
                 }}
               >
-                <Text 
-                  size="xs" 
-                  style={{ 
-                    color: hoveredIndex === index ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
-                    lineHeight: 1.2,
-                  }}
-                >
-                  →
-                </Text>
-              </Box>
+                →
+              </Text>
             </Box>
           </Link>
         ))}
