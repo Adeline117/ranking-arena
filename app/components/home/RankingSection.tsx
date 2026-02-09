@@ -18,7 +18,6 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import ExchangeFilter from '../ranking/ExchangeFilter'
-import HeroSection from '../ranking/HeroSection'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 

@@ -14,7 +14,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
   const [ttsState, setTtsState] = useState<TTSState>('idle')
   const [currentSentence, setCurrentSentence] = useState(0)
   const [rate, setRate] = useState(1.0)
-  const [pitch, setPitch] = useState(1.0)
+  const [pitch, _setPitch] = useState(1.0)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('')
   const sentenceListRef = useRef<HTMLDivElement>(null)
