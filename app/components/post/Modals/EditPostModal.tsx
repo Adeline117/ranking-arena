@@ -108,7 +108,7 @@ export function EditPostModal({
             disabled={saving}
             style={{
               padding: '10px 20px',
-              borderRadius: 10,
+              borderRadius: tokens.radius.md,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: 'transparent',
               color: tokens.colors.text.secondary,
@@ -124,7 +124,7 @@ export function EditPostModal({
             disabled={saving || !title.trim()}
             style={{
               padding: '10px 20px',
-              borderRadius: 10,
+              borderRadius: tokens.radius.md,
               border: 'none',
               background: saving || !title.trim() ? 'var(--color-accent-primary-30)' : tokens.colors.accent.brand,
               color: tokens.colors.white,

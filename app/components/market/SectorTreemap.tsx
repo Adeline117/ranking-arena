@@ -317,7 +317,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
             background: 'rgba(0,0,0,0.85)',
             color: '#fff',
             padding: '6px 10px',
-            borderRadius: 6,
+            borderRadius: tokens.radius.sm,
             fontSize: 12,
             pointerEvents: 'none',
             zIndex: 1000,

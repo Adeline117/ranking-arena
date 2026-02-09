@@ -351,7 +351,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
             onKeyDown={e => e.key === 'Enter' && addPair(pairInput)}
             placeholder={t('copyTrade_pairInputPlaceholder')}
             style={{
-              flex: 1, padding: '6px 10px', borderRadius: 6, fontSize: 14,
+              flex: 1, padding: '6px 10px', borderRadius: tokens.radius.sm, fontSize: 14,
               border: `1px solid ${c.border.primary}`,
               background: c.bg.secondary, color: c.text.primary, outline: 'none',
             }}
@@ -359,9 +359,9 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
           <button
             onClick={() => addPair(pairInput)}
             style={{
-              padding: '6px 14px', borderRadius: 6, fontSize: 14, cursor: 'pointer',
+              padding: '6px 14px', borderRadius: tokens.radius.sm, fontSize: 14, cursor: 'pointer',
               border: `1px solid ${c.accent.primary}`,
-              background: c.accent.primary, color: '#fff',
+              background: c.accent.primary, color: 'var(--color-on-accent)',
             }}
           >
             {t('copyTrade_add')}
@@ -420,7 +420,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
           disabled={saving}
           style={{
             flex: 1, padding: '10px 0', borderRadius: tokens.radius.md, fontSize: 16, fontWeight: 600,
-            background: c.accent.primary, color: '#fff', border: 'none', cursor: 'pointer',
+            background: c.accent.primary, color: 'var(--color-on-accent)', border: 'none', cursor: 'pointer',
             opacity: saving ? 0.6 : 1,
           }}
         >
@@ -465,7 +465,7 @@ function ChipButton({ selected, onClick, children }: { selected: boolean; onClic
     <button
       onClick={onClick}
       style={{
-        padding: '6px 16px', borderRadius: 6, fontSize: 14, cursor: 'pointer',
+        padding: '6px 16px', borderRadius: tokens.radius.sm, fontSize: 14, cursor: 'pointer',
         border: `1px solid ${selected ? c.accent.primary : c.border.primary}`,
         background: selected ? c.accent.primary : 'transparent',
         color: selected ? '#fff' : c.text.primary,
@@ -502,7 +502,7 @@ function NumberField({
           min={min}
           max={max}
           style={{
-            flex: 1, padding: '6px 10px', borderRadius: 6, fontSize: 14,
+            flex: 1, padding: '6px 10px', borderRadius: tokens.radius.sm, fontSize: 14,
             border: `1px solid ${c.border.primary}`,
             background: c.bg.secondary, color: c.text.primary,
             outline: 'none', width: '100%',

@@ -100,7 +100,7 @@ function BookshelfTab() {
           gap: 8,
           padding: '10px 24px',
           background: tokens.gradient.primary,
-          color: '#fff',
+          color: 'var(--color-on-accent)',
           borderRadius: tokens.radius.full,
           fontSize: 14,
           fontWeight: 700,
@@ -164,7 +164,7 @@ function BookshelfTab() {
                   <Box style={{
                     position: 'absolute', top: 6, right: 6,
                     background: typeColor + 'DD',
-                    color: '#fff',
+                    color: 'var(--color-on-accent)',
                     fontSize: 10, fontWeight: 700,
                     padding: '2px 6px',
                     borderRadius: tokens.radius.sm,

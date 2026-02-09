@@ -128,7 +128,7 @@ export function RepostModal({
                 border: 'none',
                 cursor: 'pointer',
                 padding: 4,
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
                 color: tokens.colors.text.tertiary,
                 display: 'flex',
                 alignItems: 'center',
@@ -162,7 +162,7 @@ export function RepostModal({
                 border: 'none',
                 cursor: 'pointer',
                 padding: 4,
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
                 color: tokens.colors.text.tertiary,
                 fontSize: 18,
                 lineHeight: 1.2,
@@ -229,7 +229,7 @@ export function RepostModal({
               border: 'none',
               cursor: 'pointer',
               padding: 4,
-              borderRadius: 6,
+              borderRadius: tokens.radius.sm,
               color: tokens.colors.text.tertiary,
               fontSize: 14,
               fontWeight: 700,
@@ -255,7 +255,7 @@ export function RepostModal({
             onClick={onCancel}
             style={{
               padding: '10px 20px',
-              borderRadius: 10,
+              borderRadius: tokens.radius.md,
               border: `1px solid ${tokens.colors.border.primary}`,
               background: 'transparent',
               color: tokens.colors.text.secondary,
@@ -271,7 +271,7 @@ export function RepostModal({
             disabled={loading}
             style={{
               padding: '10px 20px',
-              borderRadius: 10,
+              borderRadius: tokens.radius.md,
               border: 'none',
               background: loading ? 'var(--color-accent-primary-30)' : tokens.colors.accent.brand,
               color: tokens.colors.white,

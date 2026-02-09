@@ -181,7 +181,7 @@ export class ErrorBoundary extends Component<Props, State> {
               >
                 <summary
                   onClick={(e) => { e.preventDefault(); this.toggleStack(); }}
-                  style={{ cursor: 'pointer', marginBottom: 8, color: '#ff7c7c' }}
+                  style={{ cursor: 'pointer', marginBottom: 8, color: 'var(--color-accent-error)' }}
                 >
                   {t('errorDetails')} {this.state.showStack ? '▲' : '▼'}
                 </summary>
@@ -189,7 +189,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   <pre
                     style={{
                       overflow: 'auto',
-                      color: '#ff7c7c',
+                      color: 'var(--color-accent-error)',
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
                       maxHeight: 200,
@@ -317,7 +317,7 @@ export function SectionErrorBoundary({
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <p style={{ color: '#A8A8B3', fontSize: 14 }}>{fallbackMessage || t('sectionLoadFailed')}</p>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>{fallbackMessage || t('sectionLoadFailed')}</p>
           <button
             onClick={() => window.location.reload()}
             style={{
@@ -325,7 +325,7 @@ export function SectionErrorBoundary({
               padding: '8px 16px',
               background: 'var(--color-accent-primary-20)',
               color: 'var(--color-brand)',
-              borderRadius: 6,
+              borderRadius: tokens.radius.sm,
               border: '1px solid var(--color-accent-primary-30)',
               cursor: 'pointer',
               fontSize: 13,
@@ -381,7 +381,7 @@ export function CompactErrorBoundary({
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span style={{ color: '#A8A8B3', fontSize: 13, flex: 1 }}>{message || t('loadFailed')}</span>
+          <span style={{ color: 'var(--color-text-secondary)', fontSize: 13, flex: 1 }}>{message || t('loadFailed')}</span>
           <button
             onClick={onRetry || (() => window.location.reload())}
             style={{

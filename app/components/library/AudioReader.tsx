@@ -206,7 +206,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
             value={selectedVoiceURI}
             onChange={e => setSelectedVoiceURI(e.target.value)}
             style={{
-              flex: 1, padding: '6px 8px', borderRadius: 6,
+              flex: 1, padding: '6px 8px', borderRadius: tokens.radius.sm,
               border: `1px solid ${panelBorder}`, background: panelSubtle,
               color: panelText, fontSize: 12, outline: 'none',
             }}

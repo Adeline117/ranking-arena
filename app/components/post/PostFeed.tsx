@@ -1586,7 +1586,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 marginTop: 12,
                 padding: 12,
                 background: tokens.colors.bg.tertiary,
-                borderRadius: 10,
+                borderRadius: tokens.radius.md,
                 border: `1px solid ${tokens.colors.border.secondary}`,
               }}
             >
@@ -1667,7 +1667,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                   fontSize: 12,
                   fontWeight: 600,
                   border: `1px solid ${tokens.colors.border.primary}`,
-                  borderRadius: 6,
+                  borderRadius: tokens.radius.sm,
                   background: tokens.colors.bg.tertiary,
                   color: tokens.colors.text.secondary,
                   cursor: translating ? 'wait' : 'pointer',

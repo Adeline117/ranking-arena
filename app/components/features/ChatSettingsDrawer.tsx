@@ -284,7 +284,7 @@ export default function ChatSettingsDrawer({
                     }}
                     style={{
                       padding: '4px 10px',
-                      borderRadius: 6,
+                      borderRadius: tokens.radius.sm,
                       border: `1px solid ${tokens.colors.border.primary}`,
                       background: 'transparent',
                       color: tokens.colors.text.secondary,

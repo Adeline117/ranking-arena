@@ -161,7 +161,7 @@ const sizeStyles = {
     fontSize: 13,
     iconSize: 16,
     gap: 8,
-    borderRadius: 10,
+    borderRadius: tokens.radius.md,
   },
   md: {
     padding: '14px 20px',

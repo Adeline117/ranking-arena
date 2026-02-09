@@ -198,7 +198,7 @@ export default function NotificationsList() {
             <span
               style={{
                 padding: '1px 6px',
-                borderRadius: 10,
+                borderRadius: tokens.radius.md,
                 background: tokens.colors.accent.primary,
                 color: tokens.colors.white,
                 fontSize: 11,

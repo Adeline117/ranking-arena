@@ -34,12 +34,12 @@ function ScoreBar({ label, score, maxScore, color }: BarProps) {
       <Text size="xs" style={{ width: 56, flexShrink: 0, color: tokens.colors.text.secondary, fontSize: 11 }}>
         {label}
       </Text>
-      <Box style={{ flex: 1, height: 14, background: 'var(--color-bg-tertiary)', borderRadius: 7, overflow: 'hidden', position: 'relative' }}>
+      <Box style={{ flex: 1, height: 14, background: 'var(--color-bg-tertiary)', borderRadius: tokens.radius.md, overflow: 'hidden', position: 'relative' }}>
         <Box style={{
           width: `${pct}%`,
           height: '100%',
           background: color,
-          borderRadius: 7,
+          borderRadius: tokens.radius.md,
           transition: 'width 0.4s ease',
           minWidth: score != null ? 2 : 0,
         }} />
@@ -114,7 +114,7 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
           <span style={{
             display: 'inline-block',
             padding: '1px 8px',
-            borderRadius: 10,
+            borderRadius: tokens.radius.md,
             fontSize: 11,
             fontWeight: 600,
             color: completenessColor,

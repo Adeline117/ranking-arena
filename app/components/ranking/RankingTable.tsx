@@ -189,7 +189,7 @@ function ExportRankingButton({ traders, source, timeRange, language }: {
         aria-haspopup="true"
         aria-label={isZh ? '导出排名' : 'Export Ranking'}
         style={{
-          padding: '6px 12px', borderRadius: 6,
+          padding: '6px 12px', borderRadius: tokens.radius.sm,
           border: `1px solid ${tokens.colors.border.primary}`,
           background: tokens.colors.bg.secondary,
           color: tokens.colors.text.primary,
@@ -585,7 +585,7 @@ function RankingTableInner(props: {
                   onClick={() => onProRequired?.()}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 4,
-                    padding: '4px 8px', borderRadius: 6,
+                    padding: '4px 8px', borderRadius: tokens.radius.sm,
                     border: '1px solid var(--color-border-primary)',
                     background: 'transparent',
                     color: 'var(--color-text-tertiary)',

@@ -280,7 +280,7 @@ export default function ChatSearchOverlay({
               style={{
                 width: 28,
                 height: 28,
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
                 border: 'none',
                 background: 'transparent',
                 color: currentIndex === 0 ? tokens.colors.text.tertiary : tokens.colors.text.primary,
@@ -302,7 +302,7 @@ export default function ChatSearchOverlay({
               style={{
                 width: 28,
                 height: 28,
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
                 border: 'none',
                 background: 'transparent',
                 color: isAtEnd ? tokens.colors.text.tertiary : tokens.colors.text.primary,
@@ -353,7 +353,7 @@ export default function ChatSearchOverlay({
               padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
               border: 'none',
               background: index === currentIndex ? 'rgba(149, 117, 205, 0.1)' : 'transparent',
-              borderRadius: 10,
+              borderRadius: tokens.radius.md,
               cursor: 'pointer',
               textAlign: 'left',
               transition: 'background 0.15s',

@@ -203,7 +203,7 @@ export default function ActivityHeatmap({ userId }: Props) {
             transform: 'translate(-50%, -100%)',
             background: tokens.colors.bg.primary,
             border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: 6,
+            borderRadius: tokens.radius.sm,
             padding: '4px 8px',
             fontSize: 12,
             color: tokens.colors.text.primary,
