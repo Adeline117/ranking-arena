@@ -167,7 +167,7 @@ export const GET = withPublic(
 
     // 缓存 30 秒
     try {
-      await cacheSet(cacheKey, result, { ttl: 30 })
+      await cacheSet(cacheKey, result, { ttl: 120 })
     } catch {
       // 非关键
     }
