@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import MarketTable, { Column } from './MarketTable'
@@ -64,7 +65,7 @@ export default function FuturesMarket() {
       sortable: true,
       render: (r) => (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {r.image && <img src={r.image} alt={`${r.symbol || r.contract || 'Token'} icon`} width={20} height={20} style={{ borderRadius: '50%' }} loading="lazy" />}
+          {r.image && <Image src={r.image} alt={`${r.symbol || r.contract || 'Token'} icon`} width={20} height={20} style={{ borderRadius: '50%' }} unoptimized />}
           <span style={{ fontWeight: 600 }}>{r.contract}</span>
           <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>永续</span>
         </span>

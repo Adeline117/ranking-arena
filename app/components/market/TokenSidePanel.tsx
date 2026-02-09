@@ -444,10 +444,10 @@ export default function TokenSidePanel({ token, onClose }: {
             )}
 
             {/* Links - official website only */}
-            {coinDetail?.links?.homepage?.filter(Boolean).length > 0 && (
+            {(coinDetail?.links?.homepage?.filter(Boolean)?.length ?? 0) > 0 && (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {coinDetail.links.homepage.filter(Boolean).slice(0, 1).map((url: string, i: number) => (
+                  {coinDetail!.links.homepage.filter(Boolean).slice(0, 1).map((url: string, i: number) => (
                     <a
                       key={i}
                       href={url}

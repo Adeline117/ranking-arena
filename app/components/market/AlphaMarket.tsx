@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -49,7 +50,7 @@ function TokenCard({ token }: { token: AlphaToken }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: tokens.spacing[3] }}>
         {token.image && (
-          <img src={token.image} alt={`${token.symbol || token.name || 'Token'} icon`} width={28} height={28} style={{ borderRadius: '50%' }} loading="lazy" />
+          <Image src={token.image} alt={`${token.symbol || token.name || 'Token'} icon`} width={28} height={28} style={{ borderRadius: '50%' }} unoptimized />
         )}
         <div>
           <div style={{ fontWeight: 600, fontSize: tokens.typography.fontSize.base }}>{token.symbol}</div>
