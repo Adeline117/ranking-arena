@@ -1,8 +1,17 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import dynamic from 'next/dynamic'
+import type { OHLCVDataPoint } from '@/app/components/charts/TradingViewChart'
+import type { Time } from 'lightweight-charts'
+
+const TradingViewChart = dynamic(
+  () => import('@/app/components/charts/TradingViewChart'),
+  { ssr: false }
+)
 
 interface TokenInfo {
   id: string
@@ -18,12 +27,51 @@ interface TokenInfo {
   rank: number
 }
 
-function formatNum(n: number | null): string {
+interface CoinDetail {
+  market_data: {
+    circulating_supply: number | null
+    total_supply: number | null
+    max_supply: number | null
+    ath: { usd: number }
+    ath_date: { usd: string }
+    ath_change_percentage: { usd: number }
+    atl: { usd: number }
+    atl_date: { usd: string }
+    fully_diluted_valuation: { usd: number | null }
+    price_change_percentage_1h_in_currency: { usd: number | null }
+    price_change_percentage_24h: number | null
+    price_change_percentage_7d: number | null
+    price_change_percentage_30d: number | null
+  }
+  links: {
+    homepage: string[]
+    blockchain_site: string[]
+  }
+}
+
+const PERIODS = [
+  { label: '1D', days: '1' },
+  { label: '7D', days: '7' },
+  { label: '30D', days: '30' },
+  { label: '90D', days: '90' },
+  { label: '1Y', days: '365' },
+] as const
+
+function formatNum(n: number | null | undefined): string {
   if (n == null) return '--'
+  if (Math.abs(n) >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
   if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
   if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
   if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(2)}K`
   return `$${n.toFixed(2)}`
+}
+
+function formatSupply(n: number | null | undefined): string {
+  if (n == null) return '--'
+  if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(2)}B`
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`
+  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(2)}K`
+  return n.toLocaleString()
 }
 
 function formatPrice(n: number): string {
@@ -31,12 +79,16 @@ function formatPrice(n: number): string {
   return `$${n.toPrecision(4)}`
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{
       display: 'flex',
       justifyContent: 'space-between',
-      padding: '8px 0',
+      padding: '7px 0',
       borderBottom: `1px solid ${tokens.colors.border.primary}`,
       fontSize: 13,
     }}>
@@ -46,13 +98,45 @@ function StatRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function PriceChangeBar({ label, value }: { label: string; value: number | null | undefined }) {
+  if (value == null) return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
+      <span style={{ color: tokens.colors.text.tertiary, width: 32, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: tokens.colors.text.tertiary }}>--</span>
+    </div>
+  )
+  const isPositive = value >= 0
+  const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
+  const barWidth = Math.min(Math.abs(value), 100)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
+      <span style={{ color: tokens.colors.text.tertiary, width: 32, flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1, height: 6, background: tokens.colors.bg.tertiary, borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{
+          width: `${barWidth}%`,
+          height: '100%',
+          background: color,
+          borderRadius: 3,
+          transition: 'width 0.3s ease',
+        }} />
+      </div>
+      <span style={{ color, fontWeight: 500, minWidth: 52, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>
+        {isPositive ? '+' : ''}{value.toFixed(2)}%
+      </span>
+    </div>
+  )
+}
+
 export default function TokenSidePanel({ token, onClose }: {
   token: TokenInfo | null
   onClose: () => void
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const [coinDetail, setCoinDetail] = useState<CoinDetail | null>(null)
+  const [ohlcData, setOhlcData] = useState<OHLCVDataPoint[]>([])
+  const [selectedPeriod, setSelectedPeriod] = useState('30')
+  const [chartLoading, setChartLoading] = useState(false)
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -61,11 +145,49 @@ export default function TokenSidePanel({ token, onClose }: {
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
+  // Fetch coin detail
+  useEffect(() => {
+    if (!token) return
+    setCoinDetail(null)
+    fetch(`/api/market/coin/${token.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setCoinDetail(d))
+      .catch(() => {})
+  }, [token?.id])
+
+  // Fetch OHLC data
+  const fetchOhlc = useCallback(async (id: string, days: string) => {
+    setChartLoading(true)
+    try {
+      const r = await fetch(`/api/market/ohlc/${id}?days=${days}`)
+      if (!r.ok) return
+      const raw: number[][] = await r.json()
+      const data: OHLCVDataPoint[] = raw.map(([ts, o, h, l, c]) => ({
+        time: (ts / 1000) as Time,
+        open: o,
+        high: h,
+        low: l,
+        close: c,
+      }))
+      setOhlcData(data)
+    } catch {
+      // ignore
+    } finally {
+      setChartLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!token) return
+    fetchOhlc(token.id, selectedPeriod)
+  }, [token?.id, selectedPeriod, fetchOhlc])
+
+  const md = coinDetail?.market_data
+
   return (
     <AnimatePresence>
       {token && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -79,7 +201,6 @@ export default function TokenSidePanel({ token, onClose }: {
               zIndex: 200,
             }}
           />
-          {/* Panel */}
           <motion.div
             ref={panelRef}
             initial={{ x: '100%' }}
@@ -90,8 +211,8 @@ export default function TokenSidePanel({ token, onClose }: {
               position: 'fixed',
               top: 0,
               right: 0,
-              width: 'min(100%, max(40vw, 380px))',
-              maxWidth: 600,
+              width: 'min(100%, max(42vw, 400px))',
+              maxWidth: 620,
               height: '100vh',
               background: tokens.colors.bg.primary,
               borderLeft: `1px solid ${tokens.colors.border.primary}`,
@@ -101,16 +222,15 @@ export default function TokenSidePanel({ token, onClose }: {
             }}
           >
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <img
+                <Image
                   src={token.image || `/crypto-icons/${token.symbol.toLowerCase()}.svg`}
                   alt={`${token.symbol} icon`}
-                  width={32}
-                  height={32}
-                  loading="lazy"
+                  width={36}
+                  height={36}
                   style={{ borderRadius: '50%' }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  unoptimized
                 />
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: tokens.colors.text.primary }}>
@@ -118,6 +238,16 @@ export default function TokenSidePanel({ token, onClose }: {
                   </div>
                   <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{token.name}</div>
                 </div>
+                <span style={{
+                  fontSize: 11,
+                  color: tokens.colors.text.tertiary,
+                  background: tokens.colors.bg.tertiary,
+                  padding: '2px 8px',
+                  borderRadius: tokens.radius.sm,
+                  marginLeft: 4,
+                }}>
+                  #{token.rank}
+                </span>
               </div>
               <button
                 onClick={onClose}
@@ -136,7 +266,7 @@ export default function TokenSidePanel({ token, onClose }: {
             </div>
 
             {/* Price */}
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 16 }}>
               <div style={{
                 fontSize: 28,
                 fontWeight: 700,
@@ -150,36 +280,91 @@ export default function TokenSidePanel({ token, onClose }: {
                 fontWeight: 600,
                 color: token.change24h >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
               }}>
-                {token.change24h >= 0 ? '+' : ''}{token.change24h.toFixed(2)}%
+                {token.change24h >= 0 ? '+' : ''}{token.change24h.toFixed(2)}% (24h)
               </span>
             </div>
 
-            {/* TradingView Chart Placeholder */}
+            {/* Chart */}
             <div style={{
-              width: '100%',
-              height: 300,
-              background: tokens.colors.bg.tertiary,
-              borderRadius: tokens.radius.lg,
+              marginBottom: 20,
               border: `1px solid ${tokens.colors.border.primary}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: 24,
-              color: tokens.colors.text.tertiary,
-              fontSize: 13,
+              borderRadius: tokens.radius.lg,
+              overflow: 'hidden',
             }}>
-              <div style={{ textAlign: 'center' }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: 8, opacity: 0.5 }}>
-                  <polyline points="22,6 13.5,14.5 8.5,9.5 2,16" />
-                  <polyline points="16,6 22,6 22,12" />
-                </svg>
-                <div>TradingView K线图</div>
-                <div style={{ fontSize: 11, marginTop: 4 }}>即将接入</div>
+              {/* Period selector */}
+              <div style={{
+                display: 'flex',
+                gap: 4,
+                padding: '8px 12px',
+                borderBottom: `1px solid ${tokens.colors.border.primary}`,
+              }}>
+                {PERIODS.map(p => (
+                  <button
+                    key={p.days}
+                    onClick={() => setSelectedPeriod(p.days)}
+                    style={{
+                      background: selectedPeriod === p.days ? tokens.colors.accent.primary : 'transparent',
+                      color: selectedPeriod === p.days ? tokens.colors.white : tokens.colors.text.tertiary,
+                      border: 'none',
+                      borderRadius: tokens.radius.sm,
+                      padding: '4px 10px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: tokens.transition.fast,
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ position: 'relative', minHeight: 280 }}>
+                {chartLoading && (
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2,
+                    color: tokens.colors.text.tertiary,
+                    fontSize: 13,
+                  }}>
+                    Loading...
+                  </div>
+                )}
+                {ohlcData.length > 0 && (
+                  <TradingViewChart
+                    data={ohlcData}
+                    type="candlestick"
+                    height={280}
+                    theme="dark"
+                    locale="zh"
+                  />
+                )}
               </div>
             </div>
 
-            {/* Fundamentals */}
-            <div style={{ marginBottom: 24 }}>
+            {/* Price change bars */}
+            {md && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: tokens.colors.text.primary,
+                  marginBottom: 8,
+                }}>
+                  价格变化
+                </div>
+                <PriceChangeBar label="1h" value={md.price_change_percentage_1h_in_currency?.usd} />
+                <PriceChangeBar label="24h" value={md.price_change_percentage_24h} />
+                <PriceChangeBar label="7d" value={md.price_change_percentage_7d} />
+                <PriceChangeBar label="30d" value={md.price_change_percentage_30d} />
+              </div>
+            )}
+
+            {/* Market data */}
+            <div style={{ marginBottom: 20 }}>
               <div style={{
                 fontSize: 14,
                 fontWeight: 600,
@@ -193,7 +378,131 @@ export default function TokenSidePanel({ token, onClose }: {
               <StatRow label="24h 成交量" value={formatNum(token.volume24h)} />
               <StatRow label="24h 最高" value={formatPrice(token.high24h)} />
               <StatRow label="24h 最低" value={formatPrice(token.low24h)} />
+              {md && (
+                <>
+                  <StatRow label="完全稀释估值" value={formatNum(md.fully_diluted_valuation?.usd)} />
+                  <StatRow label="流通量" value={formatSupply(md.circulating_supply)} />
+                  <StatRow label="总供应量" value={formatSupply(md.total_supply)} />
+                  <StatRow label="最大供应量" value={formatSupply(md.max_supply)} />
+                </>
+              )}
             </div>
+
+            {/* ATH / ATL */}
+            {md && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: tokens.colors.text.primary,
+                  marginBottom: 8,
+                }}>
+                  历史极值
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 12,
+                }}>
+                  <div style={{
+                    padding: 12,
+                    background: tokens.colors.bg.tertiary,
+                    borderRadius: tokens.radius.md,
+                  }}>
+                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>历史最高</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: tokens.colors.accent.success, fontFamily: 'var(--font-mono, monospace)' }}>
+                      {formatPrice(md.ath.usd)}
+                    </div>
+                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}>
+                      {formatDate(md.ath_date.usd)}
+                    </div>
+                    <div style={{ fontSize: 11, color: tokens.colors.accent.error, marginTop: 2 }}>
+                      {md.ath_change_percentage.usd.toFixed(1)}%
+                    </div>
+                  </div>
+                  <div style={{
+                    padding: 12,
+                    background: tokens.colors.bg.tertiary,
+                    borderRadius: tokens.radius.md,
+                  }}>
+                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>历史最低</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: tokens.colors.accent.error, fontFamily: 'var(--font-mono, monospace)' }}>
+                      {formatPrice(md.atl.usd)}
+                    </div>
+                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}>
+                      {formatDate(md.atl_date.usd)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Links */}
+            {coinDetail?.links && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: tokens.colors.text.primary,
+                  marginBottom: 8,
+                }}>
+                  链接
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <a
+                    href={`https://www.coingecko.com/en/coins/${token.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 12px',
+                      background: tokens.colors.bg.tertiary,
+                      borderRadius: tokens.radius.md,
+                      color: tokens.colors.accent.primary,
+                      fontSize: 12,
+                      textDecoration: 'none',
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                    CoinGecko
+                  </a>
+                  {coinDetail.links.homepage?.filter(Boolean).slice(0, 1).map((url, i) => (
+                    <a
+                      key={i}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 12px',
+                        background: tokens.colors.bg.tertiary,
+                        borderRadius: tokens.radius.md,
+                        color: tokens.colors.accent.primary,
+                        fontSize: 12,
+                        textDecoration: 'none',
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="2" y1="12" x2="22" y2="12" />
+                        <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+                      </svg>
+                      官网
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Related Traders */}
             <div>

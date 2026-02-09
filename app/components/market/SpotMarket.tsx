@@ -247,7 +247,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
             transition: tokens.transition.fast,
           }}
         >
-          {'\u2605'} {t('favorites') || '收藏'}
+          {'\u2605'} {'收藏'}
           {favorites.size > 0 && ` (${favorites.size})`}
         </button>
       </div>
