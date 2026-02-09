@@ -4,7 +4,7 @@
 
 'use client'
 
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useCallback, memo } from 'react'
 import { useMarketFeed } from '@/lib/hooks/useMarketFeed'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
@@ -47,7 +47,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(sec / 60)}m`
 }
 
-function TradeRow({ trade }: { trade: NormalizedTrade }) {
+const TradeRow = memo(function TradeRow({ trade }: { trade: NormalizedTrade }) {
   const isBuy = trade.side === 'buy'
   const textColor = isBuy ? tokens.colors.accent.success : tokens.colors.accent.error
   const weight = getVolumeWeight(trade.notional)
@@ -98,7 +98,7 @@ function TradeRow({ trade }: { trade: NormalizedTrade }) {
       </div>
     </div>
   )
-}
+})
 
 function ConnectionDot({ connected }: { connected: boolean }) {
   return (

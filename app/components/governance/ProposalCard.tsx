@@ -7,7 +7,7 @@
  * and inline vote buttons for active proposals.
  */
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import type { SnapshotProposal } from '@/lib/web3/snapshot'
 import { getProposalUrl, getArenaSpaceId } from '@/lib/web3/snapshot'
 import { VoteButton } from './VoteButton'
@@ -24,7 +24,7 @@ const STATE_STYLES: Record<string, { badge: string; label: string }> = {
 
 const CHOICE_COLORS = ['bg-green-400', 'bg-red-400', 'bg-purple-400']
 
-export function ProposalCard({ proposal }: ProposalCardProps) {
+export const ProposalCard = memo(function ProposalCard({ proposal }: ProposalCardProps) {
   const state = STATE_STYLES[proposal.state] || STATE_STYLES.pending
   const spaceId = getArenaSpaceId()
   const totalVotes = proposal.scores_total || 0
@@ -130,4 +130,4 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
       </div>
     </div>
   )
-}
+})
