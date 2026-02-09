@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
@@ -16,7 +16,6 @@ interface TraderTabsProps {
 
 export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired: _onProRequired }: TraderTabsProps) {
   const { t } = useLanguage()
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
 
   const tabs: Array<{ key: TabKey; label: string }> = [
@@ -24,21 +23,6 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
     { key: 'stats', label: t('stats') },
     { key: 'portfolio', label: t('portfolio') },
   ]
-
-  // 更新指示器位置
-  useEffect(() => {
-    const activeRef = tabRefs.current.get(activeTab)
-    if (activeRef) {
-      const rect = activeRef.getBoundingClientRect()
-      const containerRect = activeRef.parentElement?.getBoundingClientRect()
-      if (containerRect) {
-        setIndicatorStyle({
-          left: rect.left - containerRect.left,
-          width: rect.width,
-        })
-      }
-    }
-  }, [activeTab])
 
   return (
     <Box
@@ -137,20 +121,6 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
           </button>
         )
       })}
-      
-      {/* 滑动指示器 */}
-      <Box
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: indicatorStyle.left,
-          width: indicatorStyle.width,
-          height: 2,
-          background: tokens.colors.accent.primary,
-          borderRadius: '2px 2px 0 0',
-          transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-      />
     </Box>
   )
 }
