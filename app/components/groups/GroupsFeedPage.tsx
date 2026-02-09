@@ -14,6 +14,7 @@ import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text } from '@/app/components/base'
 import Image from 'next/image'
+import BookCover from '@/app/library/BookCover'
 
 type Group = {
   id: string
@@ -81,6 +82,20 @@ function BookshelfTab() {
     article: tokens.colors.accent.error,
   }
 
+  if (books.length === 0) {
+    return (
+      <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`, textAlign: 'center' }}>
+        <Box style={{ fontSize: 40, marginBottom: tokens.spacing[3], opacity: 0.6 }}>📚</Box>
+        <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
+          {language === 'zh' ? '书库暂无内容' : 'No books in the library yet'}
+        </Text>
+        <Text size="xs" color="tertiary">
+          {language === 'zh' ? '稍后再来看看吧' : 'Check back later'}
+        </Text>
+      </Box>
+    )
+  }
+
   return (
     <Box>
       <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 16 }}>
@@ -115,21 +130,14 @@ function BookshelfTab() {
               }}
             >
               {/* Cover */}
-              <Box style={{ width: '100%', aspectRatio: '3/4', background: tokens.colors.bg.tertiary, position: 'relative', overflow: 'hidden' }}>
-                {book.cover_image_url ? (
-                  <Image src={book.cover_image_url} alt={book.title} fill sizes="(max-width: 768px) 50vw, 200px" loading="lazy" style={{ objectFit: 'cover' }} />
-                ) : (
-                  <Box style={{
-                    width: '100%', height: '100%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: 12,
-                    background: `linear-gradient(135deg, ${typeColor}15, ${typeColor}08)`,
-                  }}>
-                    <Text size="xs" weight="bold" color="secondary" style={{ textAlign: 'center', lineHeight: 1.4 }}>
-                      {book.title.slice(0, 40)}
-                    </Text>
-                  </Box>
-                )}
+              <Box style={{ width: '100%', aspectRatio: '3/4', overflow: 'hidden', position: 'relative' }}>
+                <BookCover
+                  title={book.title}
+                  author={book.author}
+                  category={book.category}
+                  coverUrl={book.cover_image_url}
+                  fontSize="sm"
+                />
                 {/* Type badge */}
                 {book.type && (
                   <Box style={{
@@ -312,8 +320,14 @@ export default function GroupsFeedPage() {
           myGroups.length > 0 ? (
             <PostFeed layout="masonry" groupIds={myGroupIds} />
           ) : (
-            <Box style={{ padding: tokens.spacing[6], textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
-              <Text size="sm" color="tertiary">{t('joinGroupsToSeePosts')}</Text>
+            <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`, textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
+              <Box style={{ fontSize: 40, marginBottom: tokens.spacing[3], opacity: 0.6 }}>👥</Box>
+              <Text size="sm" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
+                {_language === 'zh' ? '还没有关注的小组' : 'No groups followed yet'}
+              </Text>
+              <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
+                {t('joinGroupsToSeePosts')}
+              </Text>
             </Box>
           )
         )}

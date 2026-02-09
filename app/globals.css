@@ -1311,7 +1311,7 @@ select:focus-visible {
 
 /* Post feed masonry layout (Xiaohongshu/Pinterest style) */
 .post-feed-masonry {
-  columns: 2;
+  columns: 1;
   column-gap: 12px;
 }
 .post-feed-masonry > * {
@@ -1319,6 +1319,15 @@ select:focus-visible {
   margin-bottom: 12px;
   display: inline-block;
   width: 100%;
+}
+@media (min-width: 640px) {
+  .post-feed-masonry {
+    columns: 2;
+    column-gap: 14px;
+  }
+  .post-feed-masonry > * {
+    margin-bottom: 14px;
+  }
 }
 @media (min-width: 768px) {
   .post-feed-masonry {
@@ -1376,7 +1385,7 @@ select:focus-visible {
   .mobile-sidebar-widgets {
     display: block;
     margin-top: 24px;
-    padding: 0 16px;
+    padding: 0;
   }
 }
 
