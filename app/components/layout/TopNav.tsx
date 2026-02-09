@@ -319,26 +319,24 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 transition: `all ${tokens.transition.base}`,
               }}
             >
-              {/* 无限符号 ∞ - 两个水滴尖端相连 */}
+              {/* 无限符号 ∞ */}
               <svg
-                width="24"
-                height="12"
-                viewBox="0 0 56 28"
+                width="28"
+                height="14"
+                viewBox="0 0 100 50"
                 fill="none"
                 style={{ flexShrink: 0 }}
               >
                 <defs>
-                  <linearGradient id="infGrad" x1="0%" y1="50%" x2="100%" y2="50%">
-                    <stop offset="0%" stopColor="#b794d4" />
-                    <stop offset="50%" stopColor="#8b6fa8" />
-                    <stop offset="100%" stopColor="#6b4f88" />
+                  <linearGradient id="infGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#8b5cf6" />
+                    <stop offset="100%" stopColor="#d4a574" />
                   </linearGradient>
                 </defs>
-                {/* 完整的 ∞：两个水滴，尖端在中心交叉 */}
                 <path
-                  d="M28 14 C22 6, 12 4, 8 8 C4 12, 4 16, 8 20 C12 24, 22 22, 28 14 C34 6, 44 4, 48 8 C52 12, 52 16, 48 20 C44 24, 34 22, 28 14"
+                  d="M50 25 C50 25, 38 8, 25 8 C12 8, 4 17, 4 25 C4 33, 12 42, 25 42 C38 42, 50 25, 50 25 C50 25, 62 8, 75 8 C88 8, 96 17, 96 25 C96 33, 88 42, 75 42 C62 42, 50 25, 50 25Z"
                   stroke="url(#infGrad)"
-                  strokeWidth="5"
+                  strokeWidth="5.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   fill="none"
