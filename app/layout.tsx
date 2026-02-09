@@ -50,7 +50,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Arena - 加密货币交易员排行榜与社区",
+    default: "Arena",
     template: "%s | Arena",
   },
   description:
