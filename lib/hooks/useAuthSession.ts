@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { User, Session } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 export type AuthState = {
   user: User | null
@@ -79,7 +80,7 @@ function initializeAuth() {
     updateFromSession(data.session)
     setGlobalAuthState({ loading: false, authChecked: true })
   }).catch((err) => {
-    console.error('[useAuthSession] Failed to get initial session:', err)
+    logger.error('[useAuthSession] Failed to get initial session:', err)
     setGlobalAuthState({ loading: false, authChecked: true })
   })
 

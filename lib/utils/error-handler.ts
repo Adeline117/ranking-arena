@@ -5,6 +5,7 @@
  */
 
 import { parseError, type ParsedError, type ErrorType } from './error-messages'
+import { logger } from '@/lib/logger'
 
 // ── 错误日志 ──────────────────────────────────────────────
 
@@ -30,14 +31,14 @@ export function logError(error: unknown, context?: ErrorContext): ParsedError {
 
   if (isDev) {
     console.group(`${label}${actionInfo} ${parsed.type}`)
-    console.error('原始错误:', error)
-    console.log('解析结果:', parsed)
+    logger.error('原始错误:', error)
+
     if (context?.meta) {
-      console.log('上下文:', context.meta)
+
     }
     console.groupEnd()
   } else {
-    console.error(`${label}${actionInfo}`, parsed.type, parsed.message)
+    logger.error(`${label}${actionInfo}`, { type: parsed.type, message: parsed.message })
   }
 
   return parsed

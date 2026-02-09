@@ -14,6 +14,7 @@
 import { supabase } from '@/lib/supabase/client'
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { REALTIME_POSTGRES_CHANGES_LISTEN_EVENT } from '@supabase/realtime-js'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Types
@@ -193,7 +194,7 @@ class RealtimeChannelPool {
             break
         }
       } catch (error) {
-        console.error('[ChannelPool] Error in subscription callback:', error)
+        logger.error('[ChannelPool] Error in subscription callback:', error)
       }
     }
   }
@@ -237,7 +238,7 @@ class RealtimeChannelPool {
     try {
       supabase.removeChannel(pooledChannel.channel)
     } catch (error) {
-      console.error('[ChannelPool] Error removing channel:', error)
+      logger.error('[ChannelPool] Error removing channel:', error)
     }
 
     this.channels.delete(key)

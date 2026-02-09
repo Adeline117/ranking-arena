@@ -128,7 +128,7 @@ function getSupabaseClient() {
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) {
-    console.error('[enrich] CRON_SECRET not configured')
+    logger.error('[enrich] CRON_SECRET not configured')
     return process.env.NODE_ENV === 'development' // Only allow in dev mode
   }
 
@@ -208,7 +208,7 @@ async function handleEnrichment(req: Request) {
       continue
     }
 
-    console.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period}`)
+    logger.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period}`)
 
     // Process in batches
     for (let i = 0; i < traders.length; i += config.concurrency) {
@@ -274,7 +274,7 @@ async function handleEnrichment(req: Request) {
   const totalEnriched = Object.values(results).reduce((sum, r) => sum + r.enriched, 0)
   const totalFailed = Object.values(results).reduce((sum, r) => sum + r.failed, 0)
 
-  console.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed`)
+  logger.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed`)
 
   // Alert if failure rate is too high (>30%)
   const total = totalEnriched + totalFailed

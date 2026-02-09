@@ -12,6 +12,7 @@ import {
   type ScoreConfidence,
 } from '@/lib/utils/arena-score'
 import { SOURCE_TYPE_MAP, PRIORITY_SOURCES } from '@/lib/constants/exchanges'
+import { logger } from '@/lib/logger'
 
 // Minimal trader type for initial render
 export interface InitialTrader {
@@ -37,7 +38,7 @@ export async function getInitialTraders(
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY // Fixed: was SUPABASE_SERVICE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    console.error('[getInitialTraders] Missing Supabase config:', { url: !!supabaseUrl, key: !!supabaseKey })
+    logger.error('[getInitialTraders] Missing Supabase config:', { url: !!supabaseUrl, key: !!supabaseKey })
     return { traders: [], lastUpdated: null }
   }
 
@@ -84,7 +85,7 @@ export async function getInitialTraders(
     const latestSnapshot = timestampResult.data
 
     if (error || !snapshots?.length) {
-      console.error('[getInitialTraders] Query error:', error?.message)
+      logger.error('[getInitialTraders] Query error:', error?.message)
       return { traders: [], lastUpdated: latestSnapshot?.captured_at || null }
     }
 
@@ -177,7 +178,7 @@ export async function getInitialTraders(
       lastUpdated: latestSnapshot?.captured_at || null,
     }
   } catch (err) {
-    console.error('[getInitialTraders] Exception:', err)
+    logger.error('[getInitialTraders] Exception:', err)
     return { traders: [], lastUpdated: null }
   }
 }

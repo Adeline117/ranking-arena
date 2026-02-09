@@ -10,6 +10,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRealtime } from './useRealtime'
 import type { TraderPositionLive } from '@/lib/types/trader'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Types
@@ -242,7 +243,7 @@ export function useTraderPositionsRealtime(
         const { data, error: fetchError } = await query
 
         if (fetchError) {
-          console.error('Error fetching initial positions:', fetchError)
+          logger.error('Error fetching initial positions:', fetchError)
         } else if (data) {
           positionsRef.current.clear()
           for (const row of data) {
@@ -253,7 +254,7 @@ export function useTraderPositionsRealtime(
           setPositions(Array.from(positionsRef.current.values()))
         }
       } catch (err) {
-        console.error('Error in fetchInitialPositions:', err)
+        logger.error('Error in fetchInitialPositions:', err)
       } finally {
         setIsLoading(false)
       }

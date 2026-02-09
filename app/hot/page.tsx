@@ -38,6 +38,7 @@ type Trader = {
   source?: string
 }
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type Post = {
   id: string
@@ -152,7 +153,7 @@ function HotContent() {
         }
 
         if (supabaseError) {
-          console.error('Trader load error:', supabaseError)
+          logger.error('Trader load error:', supabaseError)
           setTraders([])
           return
         }
@@ -194,7 +195,7 @@ function HotContent() {
           source: item.source || 'binance',
         })))
       } catch (error) {
-        console.error('Trader load error:', error)
+        logger.error('Trader load error:', error)
         setTraders([])
       } finally {
         setLoadingTraders(false)
@@ -261,7 +262,7 @@ function HotContent() {
         setPosts([])
       }
     } catch (e) {
-      console.error('Failed to load posts:', e)
+      logger.error('Failed to load posts:', e)
       setPosts([])
       showToast(t('loadHotPostsFailed'), 'error')
     } finally {
@@ -291,7 +292,7 @@ function HotContent() {
           member_count: (g.member_count as number) || 0,
         })))
       } catch (error) {
-        console.error('Groups load error:', error)
+        logger.error('Groups load error:', error)
         setGroups([])
       } finally {
         setLoadingGroups(false)
@@ -370,7 +371,7 @@ function HotContent() {
         setHasMoreComments(false)
       }
     } catch (err) {
-      console.error('[HotPage] 加载评论失败:', err)
+      logger.error('[HotPage] 加载评论失败:', err)
       setComments([])
       setHasMoreComments(false)
       showToast(t('loadCommentsFailed'), 'error')
@@ -397,7 +398,7 @@ function HotContent() {
         setHasMoreComments(false)
       }
     } catch (err) {
-      console.error('[HotPage] 加载更多评论失败:', err)
+      logger.error('[HotPage] 加载更多评论失败:', err)
     } finally {
       setLoadingMoreComments(false)
     }
@@ -694,7 +695,7 @@ function HotContent() {
         showToast(json.error?.message || t('postCommentFailed'), 'error')
       }
     } catch (err) {
-      console.error('[HotPage] 提交评论失败:', err)
+      logger.error('[HotPage] 提交评论失败:', err)
       showToast(t('networkErrorRetry'), 'error')
     } finally {
       setSubmittingComment(false)
@@ -743,7 +744,7 @@ function HotContent() {
         }
       }
     } catch (err) {
-      console.error('[HotPage] 点赞失败:', err)
+      logger.error('[HotPage] 点赞失败:', err)
       showToast(t('actionFailedRetry'), 'error')
     }
   }, [accessToken, openPost?.id, showToast, t])

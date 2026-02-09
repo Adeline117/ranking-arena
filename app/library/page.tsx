@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { LibraryItem } from '@/lib/types/library'
 import LibraryClient from './LibraryClient'
+import { logger } from '@/lib/logger'
 
 // ISR: revalidate every 5 minutes for fresh library content
 export const revalidate = 300
@@ -17,7 +18,7 @@ async function fetchLibraryItems(): Promise<{ items: LibraryItem[]; total: numbe
 
     return { items: data || [], total: count || 0 }
   } catch (e) {
-    console.error('[Library] Failed to prefetch:', e)
+    logger.error('[Library] Failed to prefetch:', e)
     return { items: [], total: 0 }
   }
 }

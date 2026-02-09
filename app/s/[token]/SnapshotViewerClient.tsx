@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { logger } from '@/lib/logger'
 
 // Icons
 const ShareIcon = ({ size = 16 }: { size?: number }) => (
@@ -106,7 +107,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (error) {
-      console.error('Failed to copy link:', error)
+      logger.error('Failed to copy link:', error)
     }
   }
 

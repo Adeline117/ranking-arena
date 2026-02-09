@@ -6,6 +6,7 @@ import { useToast } from '@/app/components/ui/Toast';
 import { useLanguage } from '@/app/components/Providers/LanguageProvider';
 import { getCsrfHeaders } from '@/lib/api/client';
 import { supabase } from '@/lib/supabase/client';
+import { logger } from '@/lib/logger'
 
 type Post = {
   id: string
@@ -68,7 +69,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
         window.location.href = json.url
       }
     } catch (error) {
-      console.error('Tip error:', error)
+      logger.error('Tip error:', error)
       showToast(t('tipFailed'), 'error')
     } finally {
       setLoading(false)

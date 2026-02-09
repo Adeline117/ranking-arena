@@ -15,6 +15,7 @@ import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text } from '@/app/components/base'
 import Image from 'next/image'
 import BookCover from '@/app/library/BookCover'
+import { logger } from '@/lib/logger'
 
 type Group = {
   id: string
@@ -256,7 +257,7 @@ export default function GroupsFeedPage() {
 
         setMyGroups(groupsData || [])
       } catch (err) {
-        console.error('Failed to load groups:', err)
+        logger.error('Failed to load groups:', err)
       } finally {
         setLoadingGroups(false)
       }

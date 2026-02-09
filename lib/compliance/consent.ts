@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger'
 /**
  * 用户同意状态管理
  * 管理 Cookie 和数据处理同意
@@ -121,7 +122,7 @@ class ConsentManager {
     try {
       localStorage.setItem(this.config.storageKey, JSON.stringify(this.state))
     } catch (error) {
-      console.error('[Consent] Failed to save state:', error)
+      logger.error('[Consent] Failed to save state:', error)
     }
   }
 

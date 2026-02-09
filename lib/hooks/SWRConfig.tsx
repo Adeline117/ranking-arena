@@ -3,6 +3,7 @@
 import { SWRConfig } from 'swr'
 import { ReactNode } from 'react'
 import { fetcher } from './useSWR'
+import { logger } from '@/lib/logger'
 
 /**
  * 全局 SWR 配置 Provider
@@ -40,7 +41,7 @@ export function SWRConfigProvider({ children }: { children: ReactNode }) {
         onError: (error, key) => {
           // 在生产环境中，可以将错误发送到错误监控服务
           if (process.env.NODE_ENV === 'production') {
-            console.error('SWR Error:', { key, error })
+            logger.error('SWR Error:', { key, error })
             // 这里可以集成 Sentry 或其他错误监控服务
             // Sentry.captureException(error, { tags: { swr_key: key } })
           }

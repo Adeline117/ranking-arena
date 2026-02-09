@@ -13,6 +13,7 @@ import { usePremium } from '@/lib/premium/hooks'
 import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '../BookCover'
 import ShareButton from '@/app/components/common/ShareButton'
+import { logger } from '@/lib/logger'
 
 type BookDetail = {
   id: string
@@ -103,7 +104,7 @@ export default function BookDetailPage() {
         setUserStatus(data.userStatus)
         setUserRating(data.userRating)
       })
-      .catch(console.error)
+      .catch((e) => logger.error('Unhandled error', e))
       .finally(() => setLoading(false))
   }, [id, getAuthHeaders])
 
@@ -126,7 +127,7 @@ export default function BookDetailPage() {
     fetch(`/api/library/${id}/similar`)
       .then(r => r.json())
       .then(data => setSimilar(data.items || []))
-      .catch(console.error)
+      .catch((e) => logger.error('Unhandled error', e))
   }, [id])
 
   const handleStatus = async (status: 'want_to_read' | 'read') => {

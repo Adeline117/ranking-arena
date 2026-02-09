@@ -18,6 +18,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { usePremium, FEATURE_LIMITS } from '@/lib/premium/hooks'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 import { useToast } from '@/app/components/ui/Toast'
+import { logger } from '@/lib/logger'
 
 interface MembershipInfo {
   subscription: {
@@ -83,7 +84,7 @@ export default function MembershipPage() {
         usage: usageData,
       })
     } catch (err) {
-      console.error('Failed to fetch membership info:', err)
+      logger.error('Failed to fetch membership info:', err)
     } finally {
       setLoading(false)
     }

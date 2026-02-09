@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger'
 /**
  * 内存缓存回退机制
  * 当 Redis 不可用时提供本地内存缓存
@@ -179,7 +180,7 @@ export class MemoryCache {
     // Check if single entry exceeds max bytes (reject if too large)
     if (byteSize > this.maxBytes * 0.1) {
       // Single entry > 10% of max bytes
-      console.warn(
+      logger.warn(
         `[MemoryCache:${this.partition}] Entry too large: ${key} (${formatBytes(byteSize)})`
       )
       return false

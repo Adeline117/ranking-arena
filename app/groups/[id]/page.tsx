@@ -21,6 +21,7 @@ import { GroupInfoModal, MembersListModal } from './ui/GroupMembersSection'
 import { useGroupPosts, Post } from './hooks/useGroupPosts'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { logger } from '@/lib/logger'
 
 interface Group {
   id: string
@@ -163,7 +164,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       })
 
       if (!response.ok) {
-        console.warn('Translation API failed:', response.status)
+        logger.warn('Translation API failed:', response.status)
         setTranslatingPosts(false)
         return
       }
@@ -183,7 +184,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         })
       }
     } catch (error) {
-      console.warn('Translation failed:', error)
+      logger.warn('Translation failed:', error)
     } finally {
       setTranslatingPosts(false)
     }
@@ -260,7 +261,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         })
         setRelatedGroups(sortedGroups)
       } catch (err) {
-        console.error('Error fetching related groups:', err)
+        logger.error('Error fetching related groups:', err)
         setRelatedGroups([])
       } finally {
         setLoadingRelatedGroups(false)
@@ -407,7 +408,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         })
       }
     } catch (err) {
-      console.error('Join error:', err)
+      logger.error('Join error:', err)
       showToast(err instanceof Error ? err.message : t('joinFailed'), 'error')
     } finally {
       setJoining(false)
@@ -429,7 +430,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setUserRole(null)
       showToast(t('leftGroup'), 'success')
     } catch (err) {
-      console.error('Leave error:', err)
+      logger.error('Leave error:', err)
       showToast(err instanceof Error ? err.message : t('leaveFailed'), 'error')
     } finally {
       setJoining(false)
@@ -475,7 +476,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         setMembers(sortedMembers)
       }
     } catch (err) {
-      console.error('Load members error:', err)
+      logger.error('Load members error:', err)
       showToast(t('loadMembersFailed'), 'error')
     } finally {
       setLoadingMembers(false)

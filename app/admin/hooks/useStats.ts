@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { logger } from '@/lib/logger'
 
 export interface AdminStats {
   users: {
@@ -65,7 +66,7 @@ export function useStats(accessToken: string | null) {
         setError(data.error || 'Failed to load stats')
       }
     } catch (err) {
-      console.error('Error loading stats:', err)
+      logger.error('Error loading stats:', err)
       setError('Network error')
     } finally {
       setLoading(false)

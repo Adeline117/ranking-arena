@@ -4,6 +4,7 @@
  */
 
 import crypto from 'crypto'
+import { logger } from '@/lib/logger'
 
 const ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 16 // AES block size
@@ -61,7 +62,7 @@ export function encrypt(plaintext: string): string {
     // Return as base64
     return combined.toString('base64')
   } catch (error) {
-    console.error('[Encryption] Failed to encrypt:', error)
+    logger.error('[Encryption] Failed to encrypt:', error)
     throw new Error('Encryption failed')
   }
 }
@@ -92,7 +93,7 @@ export function decrypt(encryptedData: string): string {
 
     return decrypted
   } catch (error) {
-    console.error('[Encryption] Failed to decrypt:', error)
+    logger.error('[Encryption] Failed to decrypt:', error)
     throw new Error('Decryption failed')
   }
 }
@@ -176,7 +177,7 @@ export function decryptFields<T extends Record<string, any>>(
       try {
         decrypted[field] = decrypt(decrypted[field] as string) as any
       } catch (error) {
-        console.error(`[Encryption] Failed to decrypt field ${String(field)}:`, error)
+        logger.error(`[Encryption] Failed to decrypt field ${String(field)}:`, error)
         // Keep encrypted value if decryption fails
       }
     }

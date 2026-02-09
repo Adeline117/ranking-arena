@@ -14,6 +14,7 @@ import {
   type SeverityLevel,
 } from './anomaly-detection'
 import type { TraderRankingData } from '../utils/ranking'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Types
@@ -216,7 +217,7 @@ export async function saveAnomalies(anomalies: Anomaly[]): Promise<void> {
     .insert(anomalies)
 
   if (error) {
-    console.error('Failed to save anomalies:', error)
+    logger.error('Failed to save anomalies:', error)
     throw new Error(`Failed to save anomalies: ${error.message}`)
   }
 }
@@ -257,7 +258,7 @@ export async function getTraderAnomalies(
   const { data, error } = await query
 
   if (error) {
-    console.error('Failed to fetch trader anomalies:', error)
+    logger.error('Failed to fetch trader anomalies:', error)
     throw new Error(`Failed to fetch trader anomalies: ${error.message}`)
   }
 
@@ -300,7 +301,7 @@ export async function getAllAnomalies(
   const { data, error } = await query
 
   if (error) {
-    console.error('Failed to fetch anomalies:', error)
+    logger.error('Failed to fetch anomalies:', error)
     throw new Error(`Failed to fetch anomalies: ${error.message}`)
   }
 
@@ -341,7 +342,7 @@ export async function updateAnomalyStatus(
     .eq('id', anomalyId)
 
   if (error) {
-    console.error('Failed to update anomaly status:', error)
+    logger.error('Failed to update anomaly status:', error)
     throw new Error(`Failed to update anomaly status: ${error.message}`)
   }
 }
@@ -358,7 +359,7 @@ export async function getAnomalyStats(): Promise<AnomalyStats> {
     .select('severity, status, platform, detected_at, trader_id')
 
   if (error) {
-    console.error('Failed to fetch anomaly stats:', error)
+    logger.error('Failed to fetch anomaly stats:', error)
     throw new Error(`Failed to fetch anomaly stats: ${error.message}`)
   }
 
@@ -438,7 +439,7 @@ export async function checkTraderSuspicion(
     })
 
   if (error) {
-    console.error('Failed to check trader suspicion:', error)
+    logger.error('Failed to check trader suspicion:', error)
     return false
   }
 
@@ -455,7 +456,7 @@ export async function getPendingCriticalCount(): Promise<number> {
     .rpc('get_pending_critical_anomalies_count')
 
   if (error) {
-    console.error('Failed to get pending critical count:', error)
+    logger.error('Failed to get pending critical count:', error)
     return 0
   }
 
@@ -479,7 +480,7 @@ export async function cleanupOldAnomalies(daysOld: number = 90): Promise<number>
     .select('id')
 
   if (error) {
-    console.error('Failed to cleanup old anomalies:', error)
+    logger.error('Failed to cleanup old anomalies:', error)
     throw new Error(`Failed to cleanup old anomalies: ${error.message}`)
   }
 

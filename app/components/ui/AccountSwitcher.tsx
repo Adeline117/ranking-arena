@@ -7,6 +7,7 @@ import Avatar from '@/app/components/ui/Avatar'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
 import { useRouter } from 'next/navigation'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface AccountSwitcherProps {
   onClose?: () => void
@@ -135,7 +136,7 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps): Reac
       onClose?.()
       router.push('/')
     } catch (err) {
-      console.error('Sign out failed:', err)
+      logger.error('Sign out failed:', err)
     } finally {
       setSigningOut(false)
     }

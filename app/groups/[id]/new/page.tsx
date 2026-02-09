@@ -12,6 +12,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
 import type { Sticker } from '@/lib/stickers'
+import { logger } from '@/lib/logger'
 
 interface UploadedImage {
   url: string
@@ -204,7 +205,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         .maybeSingle()
 
       if (membershipError) {
-        console.error('Membership check error:', membershipError)
+        logger.error('Membership check error:', membershipError)
         showToast(t('checkMembershipFailed'), 'error')
         return
       }
@@ -262,7 +263,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         setUserHandle(user.user.email.split('@')[0])
       }
     } catch (error) {
-      console.error('Error loading user handle:', error)
+      logger.error('Error loading user handle:', error)
     }
   }
 
@@ -281,7 +282,7 @@ export default function NewGroupPostPage(): React.ReactElement {
             showToast(t('draftRestored'), 'info')
           }
         } catch (e) {
-          console.error('Failed to parse draft:', e)
+          logger.error('Failed to parse draft:', e)
         }
       }
     }
@@ -475,7 +476,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       setContent(prev => prev + `\n[video](${data.url})\n`)
       showToast(t('videoUploadSuccess'), 'success')
     } catch (error) {
-      console.error('Video upload error:', error)
+      logger.error('Video upload error:', error)
       showToast(error instanceof Error ? error.message : t('videoUploadFailed'), 'error')
     } finally {
       setVideoUploading(false)
@@ -570,7 +571,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       }).select('id').single()
 
       if (error) {
-        console.error('Post creation error:', error)
+        logger.error('Post creation error:', error)
         const errorMsg = error.code === '42501'
           ? t('permissionDeniedJoinGroup')
           : (error.message || t('createPostFailed'))
@@ -580,7 +581,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
 
-      console.warn('Post created successfully:', postData?.id)
+      logger.warn('Post created successfully:', postData?.id)
 
       clearDraft()
       // Remember last-used group for CreatePostFAB quick access
@@ -749,7 +750,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                   )}
                   <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>{new URL(linkPreview.url).hostname}</Text>
                 </Box>
-                <button onClick={() => { setLinkPreview(null); linkPreviewUrlRef.current = 'dismissed' }}
+                <button aria-label="Close" onClick={() => { setLinkPreview(null); linkPreviewUrlRef.current = 'dismissed' }}
                   style={{ background: 'none', border: 'none', color: tokens.colors.text.tertiary, cursor: 'pointer', fontSize: 16, padding: 2 }}>×</button>
               </Box>
             )}
@@ -829,7 +830,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                       }}
                     />
                     {pollOptions.length > 2 && (
-                      <button
+                      <button aria-label="Close"
                         onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
                         style={{
                           width: 28,
@@ -1007,7 +1008,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     >
                       ↵
                     </button>
-                    <button
+                    <button aria-label="Close"
                       onClick={() => removeImage(index)}
                       title={language === 'zh' ? '删除' : 'Delete'}
                       style={{
@@ -1146,7 +1147,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     {video.fileSize ? (video.fileSize / 1024 / 1024).toFixed(1) : '?'}MB
                   </Box>
                   {/* 删除按钮 */}
-                  <button
+                  <button aria-label="Close"
                     onClick={removeVideo}
                     title={t('deleteVideo')}
                     style={{

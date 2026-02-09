@@ -10,6 +10,7 @@ import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import { logger } from '@/lib/logger'
 
 type BookmarkFolder = {
   id: string
@@ -136,7 +137,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
         // 显示错误提示
       }
     } catch (err) {
-      console.error('Error toggling subscription:', err)
+      logger.error('Error toggling subscription:', err)
       showToast(t('operationFailedRetry'), 'error')
     } finally {
       setSubscribing(prev => ({ ...prev, [folderId]: false }))

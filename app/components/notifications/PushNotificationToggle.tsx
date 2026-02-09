@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ToggleSwitch } from '@/app/settings/components/shared'
+import { logger } from '@/lib/logger'
 
 type PushStatus = 'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'
 
@@ -28,7 +29,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
   const [status, setStatus] = useState<PushStatus>('loading')
   const [busy, setBusy] = useState(false)
 
-  const toast = onToast || ((msg: string) => console.warn(msg))
+  const toast = onToast || ((msg: string) => logger.warn(msg))
 
   // Check current status on mount
   useEffect(() => {
@@ -85,7 +86,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       setStatus('subscribed')
       toast(t('pushNotificationsEnabled'), 'success')
     } catch (err) {
-      console.error('[PushToggle] subscribe error:', err)
+      logger.error('[PushToggle] subscribe error:', err)
       toast(t('pushNotificationError'), 'error')
     } finally {
       setBusy(false)
@@ -105,7 +106,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       }
       setStatus('unsubscribed')
     } catch (err) {
-      console.error('[PushToggle] unsubscribe error:', err)
+      logger.error('[PushToggle] unsubscribe error:', err)
       toast(t('pushNotificationError'), 'error')
     } finally {
       setBusy(false)

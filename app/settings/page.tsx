@@ -35,6 +35,7 @@ import {
   DeleteAccountModal,
   TraderLinksSection,
 } from './components'
+import { logger } from '@/lib/logger'
 
 function ExchangeBindingBanner({ userId }: { userId: string | null }) {
   const { t } = useLanguage()
@@ -410,7 +411,7 @@ function SettingsContent() {
       setCropImageSrc(null)
       showToast(t('cropSuccess') || 'Crop successful! Click Save to upload.', 'success')
     } catch (error) {
-      console.error('Error in handleAvatarCropComplete:', error)
+      logger.error('Error in handleAvatarCropComplete:', error)
       showToast(t('cropFailed') || 'Failed to process cropped image', 'error')
     }
   }
@@ -434,7 +435,7 @@ function SettingsContent() {
       setCropImageSrc(null)
       showToast(t('cropSuccess') || 'Crop successful! Click Save to upload.', 'success')
     } catch (error) {
-      console.error('Error in handleCoverCropComplete:', error)
+      logger.error('Error in handleCoverCropComplete:', error)
       showToast(t('cropFailed') || 'Failed to process cropped image', 'error')
     }
   }
@@ -542,7 +543,7 @@ function SettingsContent() {
           await fetch('/api/revalidate/profile', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
         }
       } catch (revalidateError) {
-        console.warn('[Settings] Failed to revalidate profile cache:', revalidateError)
+        logger.warn('[Settings] Failed to revalidate profile cache:', revalidateError)
       }
 
       showToast(uploadFailed ? t('settingsPartialSaved') : t('settingsSaved'), uploadFailed ? 'warning' : 'success')

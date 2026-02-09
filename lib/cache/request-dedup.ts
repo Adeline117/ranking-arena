@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger'
 /**
  * Request Deduplication
  *
@@ -110,7 +111,7 @@ class RequestDeduplicator {
 
       // If still at capacity, just execute without dedup
       if (this.pending.size >= CONFIG.MAX_PENDING_REQUESTS) {
-        console.warn('[RequestDedup] At capacity, executing without dedup')
+        logger.warn('[RequestDedup] At capacity, executing without dedup')
         return await fetcher()
       }
     }

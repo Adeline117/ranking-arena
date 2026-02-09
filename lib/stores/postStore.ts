@@ -13,6 +13,7 @@
 
 import { create } from 'zustand'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { logger } from '@/lib/logger'
 
 export type PostData = {
   id: string
@@ -194,7 +195,7 @@ export async function loadPostComments(postId: string): Promise<void> {
       store.setCommentsPagination(postId, { loading: false, hasMore: false })
     }
   } catch (err) {
-    console.error('[postStore] loadPostComments failed:', err)
+    logger.error('[postStore] loadPostComments failed:', err)
     store.setComments(postId, [])
     store.setCommentsPagination(postId, { loading: false, hasMore: false })
   }
@@ -228,7 +229,7 @@ export async function loadMorePostComments(postId: string): Promise<void> {
       store.setCommentsPagination(postId, { loadingMore: false, hasMore: false })
     }
   } catch (err) {
-    console.error('[postStore] loadMorePostComments failed:', err)
+    logger.error('[postStore] loadMorePostComments failed:', err)
     store.setCommentsPagination(postId, { loadingMore: false })
   }
 }
@@ -264,7 +265,7 @@ export async function submitPostComment(
       return { error: json.error || '发表评论失败' }
     }
   } catch (err) {
-    console.error('[postStore] submitPostComment failed:', err)
+    logger.error('[postStore] submitPostComment failed:', err)
     return { error: '发表评论失败' }
   }
 }
@@ -303,7 +304,7 @@ export async function togglePostReaction(
       return { success: false, error: json.error || '操作失败' }
     }
   } catch (err) {
-    console.error('[postStore] togglePostReaction failed:', err)
+    logger.error('[postStore] togglePostReaction failed:', err)
     return { success: false, error: '操作失败' }
   }
 }

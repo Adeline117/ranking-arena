@@ -14,6 +14,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import ExportButton from '@/app/components/common/ExportButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+import { logger } from '@/lib/logger'
 
 interface TraderCompareData {
   id: string
@@ -85,7 +86,7 @@ function CompareContent() {
           await loadTraders(ids.split(','))
         }
       } catch (err) {
-        console.error('Init failed:', err)
+        logger.error('Init failed:', err)
       } finally {
         setLoading(false)
       }
@@ -114,7 +115,7 @@ function CompareContent() {
           setFollowedTraders(traders)
         }
       } catch (err) {
-        console.error('Fetch followed traders failed:', err)
+        logger.error('Fetch followed traders failed:', err)
       } finally {
         setFollowedLoading(false)
       }
@@ -146,7 +147,7 @@ function CompareContent() {
       setTraders(data.traders || [])
       setError(null)
     } catch (err) {
-      console.error('Load traders failed:', err)
+      logger.error('Load traders failed:', err)
       setError(t('errorOccurred'))
     }
   }

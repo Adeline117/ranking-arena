@@ -9,6 +9,7 @@ import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcas
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -215,7 +216,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         }
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-          console.error('Check following error:', error)
+          logger.error('Check following error:', error)
         }
       }
     })()

@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
 
@@ -74,7 +75,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
         setApplications(data.applications)
       }
     } catch (err) {
-      console.error('Error loading applications:', err)
+      logger.error('Error loading applications:', err)
     } finally {
       setApplicationsLoading(false)
     }
@@ -95,7 +96,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
         setEditApplications(data.applications)
       }
     } catch (err) {
-      console.error('Error loading edit applications:', err)
+      logger.error('Error loading edit applications:', err)
     } finally {
       setEditApplicationsLoading(false)
     }

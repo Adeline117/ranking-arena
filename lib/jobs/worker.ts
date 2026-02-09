@@ -17,6 +17,7 @@
 
 import { JobProcessor } from './processor'
 import type { LeaderboardPlatform } from '../types/leaderboard'
+import { logger } from '@/lib/logger'
 
 // Parse configuration from environment
 const batchSize = parseInt(process.env.WORKER_BATCH_SIZE || '5', 10)
@@ -48,10 +49,10 @@ process.on('SIGTERM', () => handleShutdown('SIGTERM'))
 process.on('SIGINT', () => handleShutdown('SIGINT'))
 
 // Start processing
-console.warn('[Worker] Starting job processor...')
-console.warn(`[Worker] Config: batch=${batchSize}, poll=${pollInterval}ms, platforms=${platforms || 'all'}`)
+logger.warn('[Worker] Starting job processor...')
+logger.warn(`[Worker] Config: batch=${batchSize}, poll=${pollInterval}ms, platforms=${platforms || 'all'}`)
 
 processor.start().catch(error => {
-  console.error('[Worker] Fatal error:', error)
+  logger.error('[Worker] Fatal error:', error)
   process.exit(1)
 })

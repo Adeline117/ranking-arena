@@ -25,6 +25,7 @@ import type {
   RefreshJob,
   SnapshotMetricsLegacy,
 } from '@/lib/types/leaderboard';
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Types
@@ -67,7 +68,7 @@ export class JobRunner {
           result.processed++;
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
-          console.error(`[JobRunner] Job ${job.id} failed: ${errorMsg}`);
+          logger.error(`[JobRunner] Job ${job.id} failed: ${errorMsg}`);
           await this.completeJob(job.id, 'failed', errorMsg);
           result.failed++;
         }

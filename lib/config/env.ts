@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 环境变量 Schema 定义
@@ -49,9 +50,9 @@ function parseEnv() {
     const result = envSchema.safeParse(process.env)
     
     if (!result.success) {
-      console.error('[ERROR] Environment variable configuration error:')
+      logger.error('[ERROR] Environment variable configuration error:')
       result.error.issues.forEach(issue => {
-        console.error(`  - ${issue.path.join('.')}: ${issue.message}`)
+        logger.error(`  - ${issue.path.join('.')}: ${issue.message}`)
       })
       
       // 开发环境提供详细错误，生产环境抛出通用错误

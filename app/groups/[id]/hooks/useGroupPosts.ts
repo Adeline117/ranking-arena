@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { logger } from '@/lib/logger'
 
 export interface Post {
   id: string
@@ -222,7 +223,7 @@ export function useGroupPosts({
         setHasMorePosts(false)
       }
     } catch (err) {
-      console.error('Load more posts error:', err)
+      logger.error('Load more posts error:', err)
     } finally {
       setLoadingMore(false)
     }

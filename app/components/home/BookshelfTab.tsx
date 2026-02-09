@@ -7,6 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '@/app/library/BookCover'
 import { supabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 
 type ShelfBook = {
   id: string
@@ -66,7 +67,7 @@ export default function BookshelfTab() {
 
       setBooks(mapped)
     } catch (e) {
-      console.error('Failed to fetch bookshelf:', e)
+      logger.error('Failed to fetch bookshelf:', e)
       setBooks([])
     } finally {
       setLoading(false)

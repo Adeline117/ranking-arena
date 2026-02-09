@@ -229,7 +229,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
               }}
             >
               {showRemoveButton && onRemove && (
-                <button
+                <button aria-label="Close"
                   onClick={() => onRemove(trader.id)}
                   style={{
                     position: 'absolute',

@@ -8,6 +8,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { logger } from '@/lib/logger'
 
 interface TraderLink {
   id: string
@@ -40,7 +41,7 @@ export function TraderLinksSection({ userId: _userId }: { userId: string }) {
         setLinks(data.links || [])
       }
     } catch (error) {
-      console.error('[TraderLinks] Load error:', error)
+      logger.error('[TraderLinks] Load error:', error)
     } finally {
       setLoadingLinks(false)
     }

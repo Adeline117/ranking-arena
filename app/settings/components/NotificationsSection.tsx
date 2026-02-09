@@ -7,6 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { SectionCard, ToggleSwitch, RadioOption } from './shared'
 import { isHapticSupported, haptic } from '@/lib/utils/haptics'
 import { PushNotificationToggle } from '@/app/components/notifications/PushNotificationToggle'
+import { logger } from '@/lib/logger'
 
 interface NotificationsSectionProps {
   notifyFollow: boolean
@@ -28,7 +29,7 @@ interface NotificationsSectionProps {
 
 export const NotificationsSection = React.memo(function NotificationsSection(props: NotificationsSectionProps) {
   const { t } = useLanguage()
-  const onToast = props.onToast || ((msg: string) => { console.warn(msg) })
+  const onToast = props.onToast || ((msg: string) => { logger.warn(msg) })
 
   const items = [
     { key: 'follow', labelKey: 'newFollowerNotify', value: props.notifyFollow, setter: props.setNotifyFollow },

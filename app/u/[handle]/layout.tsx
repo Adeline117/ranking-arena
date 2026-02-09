@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''
 // 使用 anon key 而非 service role key，确保 RLS 策略被遵守
@@ -54,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       }
     }
   } catch (error) {
-    console.error('[Metadata] 生成user metadata失败:', error)
+    logger.error('[Metadata] 生成user metadata失败:', error)
   }
   
   // 默认metadata

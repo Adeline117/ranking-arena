@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { Suspense } from 'react'
+import { logger } from '@/lib/logger'
 
 function AuthCallbackContent() {
   const router = useRouter()
@@ -15,7 +16,7 @@ function AuthCallbackContent() {
       const { data: { session }, error } = await supabase.auth.getSession()
 
       if (error) {
-        console.error('Auth callback error:', error)
+        logger.error('Auth callback error:', error)
         router.replace('/login?error=auth_failed')
         return
       }

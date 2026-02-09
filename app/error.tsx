@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
+import { logger } from '@/lib/logger'
 
 const ARENA_PURPLE = 'var(--color-brand, #8b6fa8)'
 
@@ -173,7 +174,7 @@ export default function Error({
   useEffect(() => {
     injectStyles()
     setMounted(true)
-    console.error("[Error]", error)
+    logger.error("[Error]", error)
   }, [error])
 
   const handleRetry = async () => {

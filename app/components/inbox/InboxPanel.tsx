@@ -76,7 +76,7 @@ export default function InboxPanel(): React.ReactElement | null {
         <span style={{ fontWeight: 800, fontSize: tokens.typography.fontSize.lg, color: tokens.colors.text.primary }}>
           {t('inbox')}
         </span>
-        <button
+        <button aria-label="Close"
           onClick={closePanel}
           style={{
             width: 32,

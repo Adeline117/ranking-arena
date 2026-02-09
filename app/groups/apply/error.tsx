@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 export default function GroupApplyError({
   error,
@@ -15,7 +16,7 @@ export default function GroupApplyError({
   const { t } = useLanguage()
 
   useEffect(() => {
-    console.error('[GroupApplyPage Error]', error)
+    logger.error('[GroupApplyPage Error]', error)
   }, [error])
 
   return (

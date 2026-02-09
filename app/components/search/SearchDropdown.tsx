@@ -17,6 +17,7 @@ import {
 } from '@/lib/services/search-history'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
+import { logger } from '@/lib/logger'
 
 interface SearchDropdownProps {
   open: boolean
@@ -116,7 +117,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         )
       }
     } catch (e) {
-      console.error('Failed to load hot posts:', e)
+      logger.error('Failed to load hot posts:', e)
     } finally {
       setLoading(false)
     }
@@ -189,7 +190,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           setTranslatedTitles(newTranslations)
         }
       } catch (e) {
-        console.error('Failed to translate hot posts:', e)
+        logger.error('Failed to translate hot posts:', e)
       } finally {
         setTranslating(false)
       }
@@ -231,7 +232,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
         }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return
-        console.error('Search error:', error)
+        logger.error('Search error:', error)
       } finally {
         if (!controller.signal.aborted) {
           setSearching(false)

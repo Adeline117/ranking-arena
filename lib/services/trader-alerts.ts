@@ -10,6 +10,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 类型定义
@@ -264,12 +265,12 @@ export async function saveAlertsAsNotifications(
 
     if (error) {
       // 如果 upsert 因缺少 unique constraint 而失败，退回到普通 insert
-      console.warn('[TraderAlerts] upsert 失败，退回 insert:', error.message)
+      logger.warn('[TraderAlerts] upsert 失败，退回 insert:', error.message)
       const { error: insertError } = await supabase
         .from('notifications')
         .insert(batch)
       if (insertError) {
-        console.error('[TraderAlerts] 批量插入失败:', insertError)
+        logger.error('[TraderAlerts] 批量插入失败:', insertError)
         errors += batch.length
       } else {
         inserted += batch.length
@@ -295,7 +296,7 @@ export async function getFollowerUserIds(
     .eq('trader_id', traderId)
 
   if (error) {
-    console.error('[TraderAlerts] 查询关注者失败:', error)
+    logger.error('[TraderAlerts] 查询关注者失败:', error)
     return []
   }
 
@@ -336,7 +337,7 @@ export async function runTraderAlertDetection(
     .limit(5000)
 
   if (followsError) {
-    console.error('[TraderAlerts] 获取关注列表失败:', followsError)
+    logger.error('[TraderAlerts] 获取关注列表失败:', followsError)
     return { tradersChecked: 0, alertsDetected: 0, notificationsSaved: 0, errors: 1 }
   }
 
@@ -368,7 +369,7 @@ export async function runTraderAlertDetection(
     .limit(10000)
 
   if (snapshotError) {
-    console.error('[TraderAlerts] 获取快照失败:', snapshotError)
+    logger.error('[TraderAlerts] 获取快照失败:', snapshotError)
     return { tradersChecked: 0, alertsDetected: 0, notificationsSaved: 0, errors: 1 }
   }
 

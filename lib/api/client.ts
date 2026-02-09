@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger'
 /**
  * 客户端 API 请求工具
  * 自动处理 CSRF Token 和通用配置
@@ -212,7 +213,7 @@ export async function apiRequest<T = unknown>(
 
       if (attempt < retries) continue
 
-      console.error('API 请求错误:', error)
+      logger.error('API 请求错误:', error)
       return lastResult
     }
   }

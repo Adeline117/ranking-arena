@@ -13,6 +13,7 @@ import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { logger } from '@/lib/logger'
 
 type RoleNames = {
   admin: { zh: string; en: string }
@@ -99,7 +100,7 @@ export default function ApplyGroupPage() {
       })
       
       if (!res.ok) {
-        console.warn('Failed to fetch applications:', res.status)
+        logger.warn('Failed to fetch applications:', res.status)
         return
       }
       
@@ -108,7 +109,7 @@ export default function ApplyGroupPage() {
         setExistingApplications(data.applications)
       }
     } catch (err) {
-      console.error('Error fetching applications:', err)
+      logger.error('Error fetching applications:', err)
       // 静默失败，不影响用户操作
     }
   }
@@ -187,7 +188,7 @@ export default function ApplyGroupPage() {
       setAvatarUrl(data.url)
       showToast(language === 'zh' ? '图片上传成功' : 'Image uploaded successfully', 'success')
     } catch (error: unknown) {
-      console.error('Upload error:', error)
+      logger.error('Upload error:', error)
       const errorMsg = error instanceof Error ? error.message : (language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later')
       showToast(errorMsg, 'error')
     } finally {
@@ -285,7 +286,7 @@ export default function ApplyGroupPage() {
       }
     } catch (err) {
       // 处理网络错误和其他异常
-      console.error('Submit error:', err)
+      logger.error('Submit error:', err)
       let errorMessage = language === 'zh' ? '网络错误，请检查网络连接' : 'Network error, please check your connection'
       
       if (err instanceof TypeError && err.message.includes('fetch')) {
@@ -835,7 +836,7 @@ export default function ApplyGroupPage() {
                         }}
                         unoptimized
                       />
-                      <Button
+                      <Button aria-label="Close"
                         type="button"
                         variant="text"
                         size="sm"

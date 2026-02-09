@@ -270,13 +270,13 @@ export async function GET(req: Request) {
             }
           )
           if (!tgRes.ok) {
-            console.error(`[DataFreshness] Telegram send failed: ${tgRes.status} ${await tgRes.text()}`)
+            logger.error(`[DataFreshness] Telegram send failed: ${tgRes.status} ${await tgRes.text()}`)
           }
         } catch (tgErr) {
-          console.error('[DataFreshness] Telegram send error:', tgErr)
+          logger.error('[DataFreshness] Telegram send error:', tgErr)
         }
       } else {
-        console.error('[DataFreshness] TELEGRAM_BOT_TOKEN or TELEGRAM_ALERT_CHAT_ID not set. Alert details:', JSON.stringify({
+        logger.error('[DataFreshness] TELEGRAM_BOT_TOKEN or TELEGRAM_ALERT_CHAT_ID not set. Alert details:', JSON.stringify({
           critical: criticalPlatforms.map(p => ({ platform: p.platform, ageHours: p.ageHours })),
           stale: stalePlatforms.map(p => ({ platform: p.platform, ageHours: p.ageHours })),
         }))

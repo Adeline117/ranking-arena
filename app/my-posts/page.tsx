@@ -13,6 +13,7 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface Post {
   id: string
@@ -64,7 +65,7 @@ export default function MyPostsPage() {
         setUserHandle(profile.handle)
       }
     } catch (error) {
-      console.error('Error loading user handle:', error)
+      logger.error('Error loading user handle:', error)
     }
   }
 
@@ -96,7 +97,7 @@ export default function MyPostsPage() {
           .order('created_at', { ascending: false })
 
         if (postsError) {
-          console.error('Error fetching posts:', postsError)
+          logger.error('Error fetching posts:', postsError)
           setPosts([])
           setLoading(false)
           showToast(t('loadPostsFailed'), 'error')
@@ -105,7 +106,7 @@ export default function MyPostsPage() {
 
         setPosts((postsData || []) as unknown as Post[])
       } catch (error) {
-        console.error('Error loading posts:', error)
+        logger.error('Error loading posts:', error)
         setPosts([])
         showToast(t('loadPostsFailed'), 'error')
       } finally {
@@ -140,7 +141,7 @@ export default function MyPostsPage() {
       setPosts(prev => prev.filter(p => p.id !== postId))
       showToast(t('postDeleted'), 'success')
     } catch (error) {
-      console.error('Error deleting post:', error)
+      logger.error('Error deleting post:', error)
       showToast(t('deleteFailedRetry'), 'error')
     } finally {
       setDeleting(null)

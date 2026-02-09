@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 type ToastFn = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void
 
@@ -38,7 +39,7 @@ export function useAlertConfig(accessToken: string | null, showToast?: ToastFn) 
         setConfig(data.config)
       }
     } catch (_err) {
-      console.error('Error loading alert config:', _err)
+      logger.error('Error loading alert config:', _err)
     } finally {
       setLoading(false)
     }

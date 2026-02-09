@@ -6,6 +6,7 @@ import type { Area, Point } from 'react-easy-crop'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text, Button } from '@/app/components/base'
+import { logger } from '@/lib/logger'
 
 interface ImageCropperProps {
   imageSrc: string
@@ -119,7 +120,7 @@ export function ImageCropper({
       const croppedBlob = await getCroppedImg(imageSrc, croppedAreaPixels, aspectRatio)
       onCropComplete(croppedBlob)
     } catch (error) {
-      console.error('Error cropping image:', error)
+      logger.error('Error cropping image:', error)
       const errorMessage = error instanceof Error ? error.message : t('cropFailed') || 'Failed to crop image'
       onError?.(errorMessage)
     } finally {

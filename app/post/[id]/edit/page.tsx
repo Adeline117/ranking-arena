@@ -11,6 +11,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface UploadedImage {
   url: string
@@ -184,7 +185,7 @@ function renderContentWithControls(
             >
               ↓
             </button>
-            <button
+            <button aria-label="Close"
               onClick={(e) => { e.stopPropagation(); onRemoveImage(part.url!) }}
               title={t('remove')}
               style={{
@@ -274,7 +275,7 @@ export default function EditPostPage() {
           .single()
 
         if (error) {
-          console.error('Error loading post:', error)
+          logger.error('Error loading post:', error)
           showToast(t('loadPostFailed'), 'error')
           router.push('/my-posts')
           return
@@ -294,7 +295,7 @@ export default function EditPostPage() {
         const imageUrls = post.images || post.image_urls || []
         setImages(imageUrls.map((url: string) => ({ url, fileName: url.split('/').pop() || '' })))
       } catch (error) {
-        console.error('Error loading post:', error)
+        logger.error('Error loading post:', error)
         showToast(t('loadPostFailed'), 'error')
       } finally {
         setLoading(false)
@@ -360,7 +361,7 @@ export default function EditPostPage() {
           fileName: data.fileName,
         })
       } catch (error) {
-        console.error('Upload error:', error)
+        logger.error('Upload error:', error)
         showToast(t('uploadFailed'), 'error')
       }
     }
@@ -864,7 +865,7 @@ export default function EditPostPage() {
                     >
                       ↵
                     </button>
-                    <button
+                    <button aria-label="Close"
                       type="button"
                       onClick={() => removeImage(index)}
                       style={{

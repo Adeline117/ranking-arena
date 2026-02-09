@@ -10,6 +10,7 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { supabase } from '@/lib/supabase/client'
 import dynamic from 'next/dynamic'
 import { getEpubControls } from '@/app/components/library/EpubReader'
+import { logger } from '@/lib/logger'
 
 const EpubReader = dynamic(() => import('@/app/components/library/EpubReader'), { ssr: false })
 
@@ -544,7 +545,7 @@ export default function ReadPage() {
         syncProgressToServer(id, currentPage, totalPages)
       }
     } catch (err: any) {
-      if (err?.name !== 'RenderingCancelledException') console.error('Render error', err)
+      if (err?.name !== 'RenderingCancelledException') logger.error('Render error', err)
     } finally {
       setPageRendering(false)
     }

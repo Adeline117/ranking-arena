@@ -6,6 +6,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box } from '@/app/components/base'
 import ExchangeRankingClient from './ExchangeRankingClient'
+import { logger } from '@/lib/logger'
 
 export const revalidate = 3600 // ISR: 1 hour
 
@@ -101,12 +102,12 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
       .limit(100)
 
     if (error) {
-      console.error(`[ExchangeRanking] Error fetching ${exchange}:`, error)
+      logger.error(`[ExchangeRanking] Error fetching ${exchange}:`, error)
       return []
     }
     return data || []
   } catch (e) {
-    console.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
+    logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
     return []
   }
 }

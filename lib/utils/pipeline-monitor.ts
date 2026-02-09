@@ -5,6 +5,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Types
@@ -54,7 +55,7 @@ async function recordMetric(
     metadata: metric.metadata || {},
   })
   if (error) {
-    console.warn(`[pipeline-monitor] Failed to record metric: ${error.message}`)
+    logger.warn(`[pipeline-monitor] Failed to record metric: ${error.message}`)
   }
 }
 

@@ -12,6 +12,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
 import type { Sticker } from '@/lib/stickers'
+import { logger } from '@/lib/logger'
 
 interface UploadedImage {
   url: string
@@ -264,7 +265,7 @@ function renderContentWithControls(
             >
               ↓
             </button>
-            <button
+            <button aria-label="Close"
               onClick={(e) => { e.stopPropagation(); onRemoveImage(part.url!) }}
               title={t('remove')}
               style={{
@@ -375,7 +376,7 @@ export default function NewPostPage() {
             showToast(t('draftRestored'), 'info')
           }
         } catch (e) {
-          console.error('Failed to parse draft:', e)
+          logger.error('Failed to parse draft:', e)
         }
       }
     }
@@ -462,7 +463,7 @@ export default function NewPostPage() {
           fileName: data.fileName,
         })
       } catch (error) {
-        console.error('Upload error:', error)
+        logger.error('Upload error:', error)
         showToast(t('uploadFailed'), 'error')
       }
     }
@@ -577,7 +578,7 @@ export default function NewPostPage() {
 
       showToast(t('videoUploadSuccess'), 'success')
     } catch (error) {
-      console.error('Video upload error:', error)
+      logger.error('Video upload error:', error)
       showToast(error instanceof Error ? error.message : t('videoUploadFailed'), 'error')
     } finally {
       setVideoUploading(false)
@@ -785,7 +786,7 @@ export default function NewPostPage() {
         .single()
 
       if (postError || !newPost) {
-        console.error('创建帖子失败:', JSON.stringify(postError, null, 2))
+        logger.error('创建帖子失败:', JSON.stringify(postError, null, 2))
         showToast(postError?.message || t('createPostFailed'), 'error')
         return
       }
@@ -815,8 +816,8 @@ export default function NewPostPage() {
           .single()
 
         if (pollError) {
-          console.error('创建投票失败:', JSON.stringify(pollError, null, 2))
-          console.error('投票数据:', { post_id: newPost.id, question: title, type: pollType })
+          logger.error('创建投票失败:', JSON.stringify(pollError, null, 2))
+          logger.error('投票数据:', { post_id: newPost.id, question: title, type: pollType })
           // Poll creation failed - delete the post to maintain consistency
           await supabase.from('posts').delete().eq('id', newPost.id)
           showToast(`${t('pollCreateFailed')}: ${pollError.message || pollError.code || t('unknownError')}`, 'error')
@@ -1158,7 +1159,7 @@ export default function NewPostPage() {
                         }}
                       />
                       {pollOptions.length > 2 && (
-                        <button
+                        <button aria-label="Close"
                           onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
                           style={{
                             width: 28,
@@ -1398,7 +1399,7 @@ export default function NewPostPage() {
                     >
                       ↵
                     </button>
-                    <button
+                    <button aria-label="Close"
                       onClick={() => removeImage(index)}
                       title={t('delete')}
                       style={{
@@ -1538,7 +1539,7 @@ export default function NewPostPage() {
                     {(video.fileSize / 1024 / 1024).toFixed(1)}MB
                   </Box>
                   {/* 删除按钮 */}
-                  <button
+                  <button aria-label="Close"
                     onClick={removeVideo}
                     title={t('deleteVideo')}
                     style={{

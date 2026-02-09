@@ -227,7 +227,7 @@ export default function AdvancedFilter({
                     >
                       {filter.name}
                     </button>
-                    <button
+                    <button aria-label="Close"
                       onClick={() => onDeleteFilter(filter.id)}
                       style={{
                         background: 'transparent',

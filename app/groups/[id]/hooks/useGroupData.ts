@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 
 export type Group = {
   id: string
@@ -142,7 +143,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
         showToast(language === 'zh' ? '已加入小组' : 'Joined group', 'success')
       }
     } catch (err) {
-      console.error('Join error:', err)
+      logger.error('Join error:', err)
       showToast(language === 'zh' ? '加入失败' : 'Failed to join', 'error')
     } finally {
       setJoining(false)
@@ -169,7 +170,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
         showToast(language === 'zh' ? '已退出小组' : 'Left group', 'success')
       }
     } catch (err) {
-      console.error('Leave error:', err)
+      logger.error('Leave error:', err)
       showToast(language === 'zh' ? '退出失败' : 'Failed to leave', 'error')
     }
   }, [userId, groupId, showToast, language])
@@ -204,7 +205,7 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
         setMembers(membersList)
       }
     } catch (err) {
-      console.error('Load members error:', err)
+      logger.error('Load members error:', err)
     } finally {
       setLoadingMembers(false)
     }

@@ -8,6 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 function ExchangeAuthorizePageContent() {
   const searchParams = useSearchParams()
@@ -59,7 +60,7 @@ function ExchangeAuthorizePageContent() {
       setAuthUrl(result.authUrl)
       setInstructions(result.instructions || [])
     } catch (error: unknown) {
-      console.error('[ExchangeAuthorize] Load failed:', error)
+      logger.error('[ExchangeAuthorize] Load failed:', error)
       showToast(t('loadFailedRetryShort'), 'error')
       router.push('/settings')
     } finally {

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 import { clearProStatusCache } from '@/lib/hooks/useProStatus'
+import { logger } from '@/lib/logger'
 
 export default function LogoutPage() {
   const router = useRouter()
@@ -32,7 +33,7 @@ export default function LogoutPage() {
 
         await supabase.auth.signOut()
       } catch (err) {
-        console.error('Logout error:', err)
+        logger.error('Logout error:', err)
       } finally {
         if (mountedRef.current) {
           router.push('/login')

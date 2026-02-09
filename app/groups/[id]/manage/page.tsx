@@ -14,6 +14,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { logger } from '@/lib/logger'
 
 type GroupMember = {
   user_id: string
@@ -270,7 +271,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           .order('role', { ascending: true })
 
         if (membersError) {
-          console.error('Error loading members:', membersError)
+          logger.error('Error loading members:', membersError)
         }
 
         if (membersData && membersData.length > 0) {
@@ -326,7 +327,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           .limit(POSTS_PER_PAGE)
 
         if (postsError) {
-          console.error('Error loading posts:', postsError)
+          logger.error('Error loading posts:', postsError)
         }
 
         const loadedPosts = (postsData || []).map(p => ({ ...p, deleted_at: null })) as Post[]
@@ -346,7 +347,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           setComments((commentsData || []).map(c => ({ ...c, deleted_at: null })) as Comment[])
         }
       } catch (err) {
-        console.error('Error loading data:', err)
+        logger.error('Error loading data:', err)
       } finally {
         setLoading(false)
       }
@@ -408,7 +409,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(data?.error || (t('operationFailed')), 'error')
       }
     } catch (err) {
-      console.error('Mute error:', err)
+      logger.error('Mute error:', err)
       showToast(t('networkErrorRetry'), 'error')
     }
   }
@@ -438,7 +439,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(data?.error || (t('operationFailed')), 'error')
       }
     } catch (err) {
-      console.error('Unmute error:', err)
+      logger.error('Unmute error:', err)
       showToast(t('networkErrorRetry'), 'error')
     }
   }
@@ -476,7 +477,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(data?.error || t('sendFailed'), 'error')
       }
     } catch (err) {
-      console.error('Notify error:', err)
+      logger.error('Notify error:', err)
       showToast(t('networkErrorRetry'), 'error')
     } finally {
       setNotifySending(false)
@@ -508,7 +509,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(data.error || (t('operationFailed')), 'error')
       }
     } catch (err) {
-      console.error('Set role error:', err)
+      logger.error('Set role error:', err)
       showToast(t('networkErrorRetry'), 'error')
     }
   }
@@ -541,7 +542,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(data.error || (t('deleteFailed')), 'error')
       }
     } catch (err) {
-      console.error('Delete post error:', err)
+      logger.error('Delete post error:', err)
       showToast(t('networkErrorRetry'), 'error')
     }
   }
@@ -574,7 +575,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(data.error || (t('deleteFailed')), 'error')
       }
     } catch (err) {
-      console.error('Delete comment error:', err)
+      logger.error('Delete comment error:', err)
       showToast(t('networkErrorRetry'), 'error')
     }
   }
@@ -608,7 +609,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(data?.error || t('operationFailed'), 'error')
       }
     } catch (err) {
-      console.error('Pin post error:', err)
+      logger.error('Pin post error:', err)
       showToast(t('networkErrorRetry'), 'error')
     } finally {
       setPinningPost(null)
@@ -637,7 +638,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         setHasMorePosts(false)
       }
     } catch (err) {
-      console.error('Load more posts error:', err)
+      logger.error('Load more posts error:', err)
     } finally {
       setLoadingMorePosts(false)
     }
@@ -702,7 +703,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(data.error || t('submissionFailed'), 'error')
       }
     } catch (err) {
-      console.error('Submit edit error:', err)
+      logger.error('Submit edit error:', err)
       showToast(t('networkErrorRetry'), 'error')
     } finally {
       setSubmitting(false)
@@ -1172,7 +1173,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                 <path d="M21 21l-4.35-4.35" />
               </svg>
               {contentSearch && (
-                <button
+                <button aria-label="Close"
                   onClick={() => setContentSearch('')}
                   style={{
                     position: 'absolute',
