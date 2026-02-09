@@ -70,46 +70,73 @@ function buildAuthHeaders(
   }
 }
 
+/** Gate.io period → cycle mapping for web API */
+const CYCLE_MAP: Record<string, string> = {
+  '7d': 'week',
+  '30d': 'month',
+  '90d': 'quarter',
+}
+
 /** Multiple API endpoints to try */
 const API_ENDPOINTS = [
-  // Gate.io API v4 authenticated endpoint (preferred)
+  // Discovered working endpoint (gate.com/apiw/v2/copy) — no auth needed
+  (page: number, period: string) =>
+    `https://www.gate.com/apiw/v2/copy/leader/list?page=${page}&page_size=${PAGE_SIZE}&order_by=profit_rate&sort_by=desc&cycle=${CYCLE_MAP[period] || 'month'}&status=running`,
+  // Alternative sort orders on same endpoint
+  (page: number, period: string) =>
+    `https://www.gate.com/apiw/v2/copy/leader/list?page=${page}&page_size=${PAGE_SIZE}&order_by=profit&sort_by=desc&cycle=${CYCLE_MAP[period] || 'month'}&status=running`,
+  // Recommend list endpoint
+  (page: number, period: string) =>
+    `https://www.gate.com/apiw/v2/copy/leader/recommend_list?params[page]=${page}&params[page_size]=${PAGE_SIZE}&params[cycle]=${CYCLE_MAP[period] || 'month'}`,
+  // Gate.io API v4 authenticated endpoint (fallback)
   (page: number, period: string) =>
     `https://api.gateio.ws/api/v4/copy_trading/leader_board?sort_by=roi&period=${period}&page=${page}&limit=${PAGE_SIZE}`,
-  // Internal web API patterns for Gate.io
-  (page: number, period: string) =>
-    `https://www.gate.io/apiw/v1/copytrade/leader/list?sort=roi&period=${period}&page=${page}&limit=${PAGE_SIZE}`,
-  (page: number, period: string) =>
-    `https://www.gate.io/api/copytrade/leader/list?sort=roi&period=${period}&page=${page}&limit=${PAGE_SIZE}`,
-  (page: number, period: string) =>
-    `https://www.gate.io/apiw/v2/copy_trading/leaders?sort_by=roi&period=${period}&page=${page}&page_size=${PAGE_SIZE}`,
-  (page: number, period: string) =>
-    `https://www.gate.io/api/v1/copy-trade/top_leaders?sort=roi&period=${period}&offset=${(page - 1) * PAGE_SIZE}&limit=${PAGE_SIZE}`,
 ]
 
 interface GateTrader {
+  // IDs
+  leader_id?: number | string
   user_id?: string
   uid?: string
   trader_id?: string
   id?: string | number
   userId?: string
+  // Names (from user_info nested object or top-level)
   nickname?: string
   name?: string
   nickName?: string
   displayName?: string
+  user_info?: {
+    nick?: string
+    nickname?: string
+    avatar?: string
+    tier?: number
+  }
+  // Images
   avatar?: string
   avatarUrl?: string
   head_url?: string
+  // ROI / Profit
   roi?: string | number
   profit_rate?: string | number
   pnl_ratio?: string | number
   returnRate?: string | number
+  pl_ratio?: string | number
+  // PnL
   pnl?: string | number
   profit?: string | number
   totalPnl?: string | number
+  follow_profit?: string | number
+  // Stats
   win_rate?: string | number
   winRate?: string | number
   max_drawdown?: string | number
   maxDrawdown?: string | number
+  sharp_ratio?: string | number
+  aum?: string | number
+  leading_days?: number
+  // Followers
+  curr_follow_num?: number | string
   follower_num?: number | string
   followers?: number | string
   followerCount?: number | string
@@ -129,14 +156,16 @@ interface GateResponse {
 }
 
 function parseTrader(item: GateTrader, period: string, rank: number): TraderData | null {
-  const id = String(item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
+  const id = String(item.leader_id || item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
   if (!id || id === 'undefined') return null
 
+  // profit_rate from gate.com API is decimal (e.g. 9.5402 = 954.02%)
   let roi = parseNum(item.roi ?? item.profit_rate ?? item.pnl_ratio ?? item.returnRate)
   if (roi === null) return null
-  if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+  // Gate.com profit_rate is a ratio (1.0 = 100%), convert to percentage
+  if (Math.abs(roi) > 0 && Math.abs(roi) < 100) roi *= 100
 
-  const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl)
+  const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl ?? item.follow_profit)
 
   let winRate = parseNum(item.win_rate ?? item.winRate)
   if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
@@ -147,14 +176,15 @@ function parseTrader(item: GateTrader, period: string, rank: number): TraderData
     maxDrawdown *= 100
   }
 
-  const followers = parseNum(item.follower_num ?? item.followers ?? item.followerCount ?? item.copier_num)
-  const handle = item.nickname || item.name || item.nickName || item.displayName || `Trader_${id.slice(0, 8)}`
+  const followers = parseNum(item.curr_follow_num ?? item.follower_num ?? item.followers ?? item.followerCount ?? item.copier_num)
+  const handle = item.user_info?.nickname || item.user_info?.nick || item.nickname || item.name || item.nickName || item.displayName || `Trader_${id.slice(0, 8)}`
+  const avatar = item.user_info?.avatar || item.avatar || item.avatarUrl || item.head_url || null
 
   return {
     source: SOURCE,
     source_trader_id: id,
     handle,
-    profile_url: `https://www.gate.io/copy_trading/share?trader_id=${id}`,
+    profile_url: `https://www.gate.com/copytrading/trader/${id}`,
     season_id: period,
     rank,
     roi,
@@ -164,6 +194,7 @@ function parseTrader(item: GateTrader, period: string, rank: number): TraderData
     followers: followers ? Math.round(followers) : null,
     arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
     captured_at: new Date().toISOString(),
+    avatar_url: avatar,
   }
 }
 
