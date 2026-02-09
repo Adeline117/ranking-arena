@@ -16,13 +16,13 @@ interface ProposalCardProps {
   proposal: SnapshotProposal
 }
 
-const STATE_STYLES: Record<string, { badge: string; label: string }> = {
-  active: { badge: 'bg-green-500/10 text-green-400', label: 'Active' },
-  closed: { badge: 'bg-purple-500/10 text-purple-400', label: 'Closed' },
-  pending: { badge: 'bg-yellow-500/10 text-yellow-400', label: 'Pending' },
+const STATE_STYLES: Record<string, { bg: string; color: string; label: string }> = {
+  active: { bg: 'var(--color-accent-success)', color: 'var(--color-accent-success)', label: 'Active' },
+  closed: { bg: 'var(--color-brand)', color: 'var(--color-brand)', label: 'Closed' },
+  pending: { bg: 'var(--color-accent-warning)', color: 'var(--color-accent-warning)', label: 'Pending' },
 }
 
-const CHOICE_COLORS = ['bg-green-400', 'bg-red-400', 'bg-purple-400']
+const CHOICE_COLORS = ['var(--color-accent-success)', 'var(--color-accent-error)', 'var(--color-brand)']
 
 export const ProposalCard = memo(function ProposalCard({ proposal }: ProposalCardProps) {
   const state = STATE_STYLES[proposal.state] || STATE_STYLES.pending
@@ -39,7 +39,10 @@ export const ProposalCard = memo(function ProposalCard({ proposal }: ProposalCar
     <div className="p-5 rounded-2xl transition-all duration-200" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border-primary)' }}>
       {/* Header: State badge + votes count + Snapshot link */}
       <div className="flex justify-between items-center mb-3">
-        <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${state.badge}`}>
+        <span
+          className="px-2.5 py-1 rounded-lg text-xs font-semibold"
+          style={{ backgroundColor: `color-mix(in srgb, ${state.bg} 10%, transparent)`, color: state.color }}
+        >
           {state.label}
         </span>
         <div className="flex items-center gap-3">
@@ -92,8 +95,8 @@ export const ProposalCard = memo(function ProposalCard({ proposal }: ProposalCar
                 </div>
                 <div className="h-1 rounded-sm overflow-hidden" style={{ background: 'var(--color-bg-tertiary)' }}>
                   <div
-                    className={`h-full rounded-sm transition-[width] duration-300 ${CHOICE_COLORS[i] || CHOICE_COLORS[2]}`}
-                    style={{ width: `${pct}%` }}
+                    className="h-full rounded-sm transition-[width] duration-300"
+                    style={{ width: `${pct}%`, backgroundColor: CHOICE_COLORS[i] || CHOICE_COLORS[2] }}
                   />
                 </div>
               </div>

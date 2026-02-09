@@ -85,15 +85,27 @@ export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
       </span>
 
       {showTooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3.5 py-2.5 bg-[rgba(15,15,20,0.95)] border border-[rgba(47,229,125,0.2)] rounded-[10px] text-xs text-neutral-300 whitespace-nowrap z-50 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
-          <div className="font-semibold text-[var(--color-verified-onchain)] mb-1">
+        <div
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3.5 py-2.5 whitespace-nowrap z-50"
+          style={{
+            background: tokens.glass.bg.heavy,
+            backdropFilter: tokens.glass.blur.lg,
+            WebkitBackdropFilter: tokens.glass.blur.lg,
+            border: `1px solid var(--color-verified-onchain, rgba(47,229,125,0.2))`,
+            borderRadius: tokens.radius.lg,
+            boxShadow: tokens.shadow.lg,
+            color: tokens.colors.text.secondary,
+            fontSize: tokens.typography.fontSize.xs,
+          }}
+        >
+          <div className="font-semibold mb-1" style={{ color: tokens.colors.verified.onchain }}>
             {t('onChainAttestedOnBase')}
           </div>
           {attestation.arena_score != null && (
             <div>{t('onChainScore')}: {attestation.arena_score}</div>
           )}
           <div>{t('onChainPublished')}: {publishedDate}</div>
-          <div className="mt-1 text-[11px] text-neutral-500">
+          <div className="mt-1" style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
             {t('onChainUid')}: {attestation.attestation_uid.slice(0, 10)}...
           </div>
         </div>

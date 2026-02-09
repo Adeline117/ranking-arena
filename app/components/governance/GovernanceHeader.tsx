@@ -31,21 +31,27 @@ export function GovernanceHeader() {
         {isConnected && address ? (
           <>
             {/* Connected indicator */}
-            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/5 border border-green-500/20">
-              <div className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-xs font-medium text-green-400">
+            <div
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg"
+              style={{ background: `color-mix(in srgb, var(--color-accent-success) 5%, transparent)`, border: `1px solid color-mix(in srgb, var(--color-accent-success) 20%, transparent)` }}
+            >
+              <div className="w-2 h-2 rounded-full" style={{ background: tokens.colors.accent.success }} />
+              <span className="text-xs font-medium" style={{ color: tokens.colors.accent.success }}>
                 {address.slice(0, 6)}...{address.slice(-4)}
               </span>
             </div>
 
             {/* Voting eligibility */}
             {isPremium || hasNFT ? (
-              <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/5 border border-purple-500/20">
+              <div
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg"
+                style={{ background: `color-mix(in srgb, var(--color-brand) 5%, transparent)`, border: `1px solid color-mix(in srgb, var(--color-brand) 20%, transparent)` }}
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.verified.web3} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   <path d="M9 12l2 2 4-4" />
                 </svg>
-                <span className="text-xs font-semibold text-purple-400">
+                <span className="text-xs font-semibold" style={{ color: tokens.colors.accent.brand }}>
                   Eligible to Vote
                 </span>
               </div>
@@ -62,7 +68,8 @@ export function GovernanceHeader() {
             {({ openConnectModal }) => (
               <button
                 onClick={openConnectModal}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-semibold cursor-pointer hover:bg-purple-500/15 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold cursor-pointer transition-colors"
+                style={{ border: `1px solid color-mix(in srgb, var(--color-brand) 30%, transparent)`, background: `color-mix(in srgb, var(--color-brand) 10%, transparent)`, color: tokens.colors.accent.brandLight }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="6" width="20" height="12" rx="2" />
