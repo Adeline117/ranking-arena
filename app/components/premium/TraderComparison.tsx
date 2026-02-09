@@ -179,7 +179,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                   ? tokens.colors.accent.primary
                   : tokens.colors.bg.secondary,
                 color: activeTab === tab.key
-                  ? '#fff'
+                  ? 'var(--color-on-accent)'
                   : tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: activeTab === tab.key ? 700 : 500,
@@ -199,6 +199,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
       </Box>
 
       <Box
+        className="compare-grid-scroll"
         style={{
           background: tokens.colors.bg.secondary,
           borderRadius: tokens.radius.xl,
@@ -210,11 +211,12 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
         <Box
           style={{
             display: 'grid',
-            gridTemplateColumns: `140px repeat(${traders.length}, 1fr)`,
+            gridTemplateColumns: `minmax(80px, 140px) repeat(${traders.length}, minmax(80px, 1fr))`,
             gap: tokens.spacing[2],
             padding: tokens.spacing[4],
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
             background: tokens.colors.bg.tertiary,
+            minWidth: traders.length > 2 ? `${140 + traders.length * 120}px` : undefined,
           }}
         >
           <Box />
@@ -332,9 +334,10 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                   key={metric.key}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: `140px repeat(${traders.length}, 1fr)`,
+                    gridTemplateColumns: `minmax(80px, 140px) repeat(${traders.length}, minmax(80px, 1fr))`,
                     gap: tokens.spacing[2],
                     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    minWidth: traders.length > 2 ? `${140 + traders.length * 120}px` : undefined,
                     borderBottom: metricIdx < metrics.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                     background: metricIdx % 2 === 0 ? 'transparent' : `${tokens.colors.bg.tertiary}50`,
                   }}

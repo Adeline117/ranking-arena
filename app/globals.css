@@ -47,8 +47,8 @@ html.theme-transition *::after {
   /* Brand colors - Arena Purple */
   --color-brand: #8b6fa8;
   --color-brand-hover: #9d84b5;
-  --color-brand-muted: rgba(139, 111, 168, 0.15);
-  --color-brand-light: rgba(139, 111, 168, 0.3);
+  --color-brand-muted: var(--color-accent-primary-15);
+  --color-brand-light: var(--color-accent-primary-30);
   --color-brand-accent: #c9b8db;
   --color-verified-onchain: #2fe57d;
   --color-verified-web3: #8B5CF6;
@@ -86,28 +86,28 @@ html.theme-transition *::after {
   
   /* Accent colors */
   --color-accent-primary: #8b6fa8;
-  --color-accent-primary-08: rgba(139, 111, 168, 0.08);
-  --color-accent-primary-12: rgba(139, 111, 168, 0.12);
-  --color-accent-primary-30: rgba(139, 111, 168, 0.3);
-  --color-accent-primary-40: rgba(139, 111, 168, 0.4);
-  --color-accent-primary-60: rgba(139, 111, 168, 0.6);
+  --color-accent-primary-08: var(--color-accent-primary-08);
+  --color-accent-primary-12: var(--color-accent-primary-12);
+  --color-accent-primary-30: var(--color-accent-primary-30);
+  --color-accent-primary-40: var(--color-accent-primary-40);
+  --color-accent-primary-60: var(--color-accent-primary-60);
   --color-accent-success: #2fe57d;
-  --color-accent-success-20: rgba(47, 229, 125, 0.2);
+  --color-accent-success-20: var(--color-accent-success-20);
   --color-accent-error: #ff7c7c;
   --color-accent-error-20: rgba(255, 124, 124, 0.2);
   --color-accent-warning: #ffc107;
-  --color-accent-primary-15: rgba(139, 111, 168, 0.15);
-  --color-accent-primary-10: rgba(139, 111, 168, 0.1);
-  --color-accent-primary-20: rgba(139, 111, 168, 0.2);
+  --color-accent-primary-15: var(--color-accent-primary-15);
+  --color-accent-primary-10: var(--color-accent-primary-10);
+  --color-accent-primary-20: var(--color-accent-primary-20);
   --color-accent-success-04: rgba(47, 229, 125, 0.04);
   --color-accent-success-05: rgba(47, 229, 125, 0.05);
-  --color-accent-success-10: rgba(47, 229, 125, 0.1);
+  --color-accent-success-10: var(--color-accent-success-10);
   --color-accent-success-12: rgba(47, 229, 125, 0.12);
   --color-accent-error-04: rgba(255, 124, 124, 0.04);
   --color-accent-error-08: rgba(255, 124, 124, 0.08);
-  --color-accent-error-10: rgba(255, 124, 124, 0.1);
+  --color-accent-error-10: var(--color-accent-error-10);
   --color-accent-error-12: rgba(255, 124, 124, 0.12);
-  --color-accent-error-15: rgba(255, 124, 124, 0.15);
+  --color-accent-error-15: var(--color-accent-error-15);
   
   /* Overlay/backdrop */
   --color-backdrop: rgba(0, 0, 0, 0.6);
@@ -121,15 +121,15 @@ html.theme-transition *::after {
   
   /* Text shadow */
   --text-shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
-  --text-shadow-md: 0 2px 8px rgba(0,0,0,0.4);
-  --text-shadow-lg: 0 2px 8px rgba(0,0,0,0.5);
+  --text-shadow-md: 0 2px 8px var(--color-backdrop-light);
+  --text-shadow-lg: 0 2px 8px var(--color-overlay-dark);
   --text-shadow-heavy: 0 1px 3px rgba(0,0,0,0.8);
   
   /* Box shadows */
-  --shadow-sm-dark: 0 2px 8px rgba(0,0,0,0.3);
-  --shadow-md-dark: 0 4px 12px rgba(0,0,0,0.3);
-  --shadow-lg-dark: 0 8px 32px rgba(0,0,0,0.3);
-  --shadow-glow-brand: 0 0 80px rgba(139, 111, 168, 0.15);
+  --shadow-sm-dark: 0 2px 8px var(--color-overlay-medium);
+  --shadow-md-dark: 0 4px 12px var(--color-overlay-medium);
+  --shadow-lg-dark: 0 8px 32px var(--color-overlay-medium);
+  --shadow-glow-brand: 0 0 80px var(--color-accent-primary-15);
   --shadow-glow-brand-sm: 0 0 40px rgba(0, 0, 0, 0.2);
   --shadow-glow-purple: 0 8px 24px rgba(124, 58, 237, 0.25);
   
@@ -160,7 +160,7 @@ html.theme-transition *::after {
   --color-pro-gold-border: rgba(212, 168, 71, 0.3);
   
   /* Copy trade */
-  --color-copytrade-success-shadow: 0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px rgba(0, 230, 118, 0.3);
+  --color-copytrade-success-shadow: 0 4px 20px rgba(0, 200, 83, 0.5), 0 0 40px var(--color-accent-success-20);
   
   /* Activity heatmap */
   --color-heatmap-1: rgba(34,197,94,0.3);
@@ -178,7 +178,7 @@ html.theme-transition *::after {
   --color-highlight-bg: rgba(149, 117, 205, 0.4);
   --color-highlight-row: rgba(149, 117, 205, 0.1);
   --color-unread-bg: rgba(149, 117, 205, 0.06);
-  --color-notification-unread: rgba(139,111,168,0.06);
+  --color-notification-unread: var(--color-notification-unread);
   
   /* Sidebar bg */
   --color-sidebar-bg: rgba(20, 18, 28, 0.9);
@@ -194,6 +194,19 @@ html.theme-transition *::after {
   --color-score-profitability: #60a5fa;
   --color-score-risk: #34d399;
   --color-score-execution: #fbbf24;
+  
+  /* Chart/decorative palette */
+  --color-chart-green: #7CFFB2;
+  --color-chart-teal: #4ECDC4;
+  --color-chart-blue: #45B7D1;
+  --color-chart-pink: #DDA0DD;
+  --color-chart-sage: #96CEB4;
+  --color-chart-yellow: #FFEAA7;
+  --color-chart-mint: #98D8C8;
+  --color-chart-orange: #F7A600;
+  --color-chart-amber: #F0B90B;
+  --color-chart-violet: #A855F7;
+  --color-chart-indigo: #6366F1;
   
   /* Medal/rank colors */
   --color-medal-gold: #FFD700;
@@ -211,7 +224,7 @@ html.theme-transition *::after {
   --glass-bg-primary: rgba(20, 18, 28, 0.85);
   --glass-bg-secondary: rgba(28, 25, 38, 0.9);
   --glass-bg-tertiary: rgba(37, 34, 50, 0.95);
-  --glass-border-light: rgba(255, 255, 255, 0.1);
+  --glass-border-light: var(--glass-border-light);
   --glass-border-medium: rgba(255, 255, 255, 0.15);
   --glass-border-heavy: rgba(255, 255, 255, 0.2);
   
@@ -220,11 +233,11 @@ html.theme-transition *::after {
   --overlay-hover: rgba(255, 255, 255, 0.05);
   
   /* Layered card shadows - Dark */
-  --shadow-card: 0 2px 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
-  --shadow-elevated: 0 12px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
-  --shadow-inset-subtle: inset 0 1px 0 rgba(255,255,255,0.06);
-  --shadow-border-glow: 0 0 0 1px rgba(255,255,255,0.06);
+  --shadow-card: 0 2px 8px var(--color-overlay-medium), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-card-hover: 0 8px 24px var(--color-backdrop-light), 0 2px 4px var(--color-overlay-medium);
+  --shadow-elevated: 0 12px 40px var(--color-overlay-dark), 0 4px 12px var(--color-overlay-medium);
+  --shadow-inset-subtle: inset 0 1px 0 var(--glass-border-light);
+  --shadow-border-glow: 0 0 0 1px var(--glass-border-light);
   
   /* Input focus glow - Dark */
   --shadow-input-focus: 0 0 0 3px rgba(139,111,168,0.2), 0 0 12px rgba(139,111,168,0.1);
@@ -234,7 +247,7 @@ html.theme-transition *::after {
   --color-pro-gradient-end: #6B5B95;
   --color-pro-badge-bg: linear-gradient(135deg, #9b6dd7 0%, #7c4dbd 40%, #d4a847 100%);
   --color-pro-badge-shadow: rgba(180, 140, 60, 0.5);
-  --color-pro-glow: rgba(139, 111, 168, 0.3);
+  --color-pro-glow: var(--color-accent-primary-30);
   --color-elite-gradient-start: #FFD700;
   --color-elite-gradient-end: #FFA500;
   --color-enterprise-gradient-start: #00CED1;
@@ -302,12 +315,12 @@ html.theme-transition *::after {
   /* Text shadow */
   --text-shadow-sm: 0 1px 2px rgba(0,0,0,0.1);
   --text-shadow-md: 0 2px 8px rgba(0,0,0,0.2);
-  --text-shadow-lg: 0 2px 8px rgba(0,0,0,0.3);
-  --text-shadow-heavy: 0 1px 3px rgba(0,0,0,0.5);
+  --text-shadow-lg: 0 2px 8px var(--color-overlay-medium);
+  --text-shadow-heavy: 0 1px 3px var(--color-overlay-dark);
   
   /* Box shadows */
   --shadow-sm-dark: 0 2px 8px rgba(0,0,0,0.1);
-  --shadow-md-dark: 0 4px 12px rgba(0,0,0,0.15);
+  --shadow-md-dark: 0 4px 12px var(--color-overlay-light);
   --shadow-lg-dark: 0 8px 32px rgba(0,0,0,0.12);
   --shadow-glow-brand: 0 0 80px rgba(123, 95, 152, 0.1);
   --shadow-glow-brand-sm: 0 0 40px rgba(0, 0, 0, 0.1);
@@ -375,6 +388,19 @@ html.theme-transition *::after {
   --color-score-risk: #10b981;
   --color-score-execution: #f59e0b;
   
+  /* Chart/decorative palette (darker for light bg) */
+  --color-chart-green: #059669;
+  --color-chart-teal: #0d9488;
+  --color-chart-blue: #0284c7;
+  --color-chart-pink: #c026d3;
+  --color-chart-sage: #4d7c62;
+  --color-chart-yellow: #ca8a04;
+  --color-chart-mint: #0d9488;
+  --color-chart-orange: #ea580c;
+  --color-chart-amber: #b45309;
+  --color-chart-violet: #7c3aed;
+  --color-chart-indigo: #4f46e5;
+  
   /* Medal/rank colors */
   --color-medal-gold: #B8860B;
   --color-medal-gold-end: #CD950C;
@@ -402,7 +428,7 @@ html.theme-transition *::after {
   /* Layered card shadows - Light */
   --shadow-card: 0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06);
-  --shadow-elevated: 0 12px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-elevated: 0 12px 40px var(--color-overlay-light), 0 4px 12px rgba(0,0,0,0.08);
   --shadow-inset-subtle: inset 0 1px 0 rgba(255,255,255,0.8);
   --shadow-border-glow: 0 0 0 1px rgba(0,0,0,0.06);
   
@@ -1033,7 +1059,7 @@ select:focus-visible {
 }
 
 .btn-base.btn-primary:not(:disabled):hover {
-  box-shadow: 0 0 20px rgba(139, 111, 168, 0.3), var(--shadow-card-hover), var(--shadow-inset-subtle);
+  box-shadow: 0 0 20px var(--color-accent-primary-30), var(--shadow-card-hover), var(--shadow-inset-subtle);
   background: linear-gradient(135deg, #a891be 0%, #9d84b5 100%);
 }
 
@@ -1181,7 +1207,7 @@ select:focus-visible {
 
 .top-nav-login-link:hover {
   transform: translateY(-2px);
-  box-shadow: 0 0 20px rgba(139, 111, 168, 0.3);
+  box-shadow: 0 0 20px var(--color-accent-primary-30);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1348,8 +1374,8 @@ select:focus-visible {
 /* Book cover 3D shadow */
 .book-shadow {
   box-shadow:
-    4px 4px 12px rgba(0,0,0,0.3),
-    8px 8px 24px rgba(0,0,0,0.15),
+    4px 4px 12px var(--color-overlay-medium),
+    8px 8px 24px var(--color-overlay-light),
     -1px 0 2px rgba(0,0,0,0.1);
   transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -2148,6 +2174,89 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 
   .view-toggle-btn {
     padding: 4px 6px !important;
+  }
+}
+
+/* ============================================
+   ABSOLUTE NO HORIZONTAL SCROLL - Nuclear option
+   ============================================ */
+
+/* Every element must respect viewport width */
+*, *::before, *::after {
+  max-width: 100vw;
+}
+
+/* Except elements that are explicitly scrollable containers */
+.swipe-container *,
+.tabs-scroll *,
+.scroll-ticker *,
+[data-allow-overflow] *,
+table *,
+thead *,
+tbody *,
+tr *,
+td *,
+th * {
+  max-width: none;
+}
+
+@media (max-width: 767px) {
+  /* Hard block horizontal overflow on html/body */
+  html, body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+    width: 100% !important;
+  }
+
+  /* All major layout containers must not overflow */
+  main, section, article, aside, header, footer, nav,
+  .three-col-layout, .three-col-center,
+  .page-container, .feed-main-content,
+  .glass-card, .card-hover, .sidebar-card {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Tables: wrap in scrollable container, NEVER cause page scroll */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  thead, tbody {
+    display: table;
+    width: 100%;
+    min-width: max-content;
+  }
+
+  /* Comparison grid: scroll horizontally within its container */
+  .compare-grid-scroll {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100% !important;
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+
+  /* Any grid with fixed px columns must not overflow the page */
+  [style*="grid-template-columns"][style*="px"] {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  /* Inline styles with fixed widths: cap at 100% */
+  img, video, canvas, svg, iframe {
+    max-width: 100% !important;
+    height: auto;
+  }
+
+  /* Pre/code blocks */
+  pre, code {
+    overflow-x: auto !important;
+    max-width: 100% !important;
+    word-break: break-all;
   }
 }
 
