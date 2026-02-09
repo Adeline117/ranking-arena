@@ -153,6 +153,9 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('postDetail') || 'Post detail'}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(760px, 100%)',

@@ -71,6 +71,9 @@ export function RepostModal({
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('repost') || 'Repost'}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
