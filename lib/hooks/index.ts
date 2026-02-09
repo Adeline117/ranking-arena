@@ -31,8 +31,10 @@ export {
   useTraderSnapshotsRealtime,
   useNotificationsRealtime,
   useMessagesRealtime,
-  usePresence,
 } from './useRealtime'
+
+// Presence (standalone, with heartbeat + DB sync)
+export { usePresence, formatLastSeen } from './usePresence'
 
 // 交易员实时持仓
 export {
