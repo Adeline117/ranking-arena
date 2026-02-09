@@ -32,6 +32,26 @@ export async function GET(
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+  // Auth check - require admin role
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const { data: { user: getUser }, error: getAuthError } = await supabase.auth.getUser(
+    authHeader.replace('Bearer ', '')
+  )
+  if (getAuthError || !getUser) {
+    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+  }
+  const { data: getProfile } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('user_id', getUser.id)
+    .single()
+  if (getProfile?.role !== 'admin') {
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+  }
+
   const { alertId } = params
 
   try {
@@ -105,6 +125,16 @@ export async function PATCH(
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    }
+
+    // Verify admin role
+    const { data: patchProfile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
+    if (patchProfile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 
     // Get current alert
