@@ -319,24 +319,25 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 transition: `all ${tokens.transition.base}`,
               }}
             >
-              {/* 无限符号 ∞ */}
+              {/* 无限符号 ∞ — lemniscate of Bernoulli */}
               <svg
-                width="28"
+                width="26"
                 height="14"
-                viewBox="0 0 100 50"
+                viewBox="0 0 52 28"
                 fill="none"
                 style={{ flexShrink: 0 }}
               >
                 <defs>
                   <linearGradient id="infGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stopColor="#8b5cf6" />
+                    <stop offset="50%" stopColor="#a78bfa" />
                     <stop offset="100%" stopColor="#d4a574" />
                   </linearGradient>
                 </defs>
                 <path
-                  d="M50 25 C50 25, 38 8, 25 8 C12 8, 4 17, 4 25 C4 33, 12 42, 25 42 C38 42, 50 25, 50 25 C50 25, 62 8, 75 8 C88 8, 96 17, 96 25 C96 33, 88 42, 75 42 C62 42, 50 25, 50 25Z"
+                  d="M26 14C26 14 20.5 3 13.5 3C7.5 3 3 7.5 3 14C3 20.5 7.5 25 13.5 25C20.5 25 26 14 26 14C26 14 31.5 3 38.5 3C44.5 3 49 7.5 49 14C49 20.5 44.5 25 38.5 25C31.5 25 26 14 26 14Z"
                   stroke="url(#infGrad)"
-                  strokeWidth="5.5"
+                  strokeWidth="3"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   fill="none"
