@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useRef } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRealtimePrices, type PriceFlashInfo } from '@/lib/hooks/useRealtimePrices'
@@ -136,15 +137,18 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
       sortable: true,
       render: (r) => (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-          <img
-            src={r.image || `/crypto-icons/${r.symbol.toLowerCase()}.svg`}
-            alt={`${r.symbol} icon`}
-            width={20}
-            height={20}
-            style={{ borderRadius: '50%', flexShrink: 0 }}
-            loading="lazy"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-          />
+          {r.image ? (
+            <Image
+              src={r.image}
+              alt={`${r.symbol} icon`}
+              width={20}
+              height={20}
+              style={{ borderRadius: '50%', flexShrink: 0 }}
+              unoptimized={false}
+            />
+          ) : (
+            <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.colors.bg.tertiary, flexShrink: 0, display: 'inline-block' }} />
+          )}
           <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.symbol}</span>
           <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
         </span>
