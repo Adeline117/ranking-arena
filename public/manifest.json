@@ -1,6 +1,6 @@
 {
-  "name": "Arena - 竞技场",
-  "short_name": "竞技场",
+  "name": "Arena",
+  "short_name": "Arena",
   "description": "加密货币交易员排行榜与社区平台 - 聚合多交易所90日ROI排名",
   "start_url": "/",
   "display": "standalone",
