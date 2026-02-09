@@ -285,7 +285,8 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
           </Box>
         </Box>
         <TraderHeader
-          handle={profile.handle}
+          handle={profile.handle || profile.trader_key || ''}
+          displayName={profile.display_name || undefined}
           traderId={profile.id}
           avatarUrl={profile.avatar_url}
           coverUrl={profile.cover_url}

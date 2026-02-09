@@ -53,6 +53,7 @@ export interface TraderSourceRecord {
 /** 交易员基本资料 */
 export interface TraderProfile {
   handle: string
+  display_name?: string | null
   id: string
   bio?: string
   followers?: number
@@ -238,6 +239,7 @@ export interface TraderFeedItem {
 export interface Trader {
   id: string
   handle: string | null
+  display_name?: string | null
   roi: number
   pnl?: number | null
   win_rate?: number | null

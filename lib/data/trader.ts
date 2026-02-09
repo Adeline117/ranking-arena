@@ -34,6 +34,8 @@ export interface TraderSourceRecord {
 
 export interface TraderProfile {
   handle: string
+  display_name?: string | null
+  trader_key?: string
   id: string
   uid?: number // 数字用户编号，用于展示和搜索
   bio?: string
