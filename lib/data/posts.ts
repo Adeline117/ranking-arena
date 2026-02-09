@@ -476,29 +476,42 @@ export async function togglePostReaction(
 
   if (existing) {
     if (existing.reaction_type === reactionType) {
-      // 取消点赞/踩
-      await supabase
+      // 取消点赞/踩 - use compound match to avoid deleting wrong row in race
+      const { count } = await supabase
         .from('post_likes')
-        .delete()
-        .eq('id', existing.id)
+        .delete({ count: 'exact' })
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+        .eq('reaction_type', reactionType)
+      if (count === 0) {
+        // Row already changed by concurrent request, re-check
+        return { action: 'removed', reaction: null }
+      }
       return { action: 'removed', reaction: null }
     } else {
       // 切换点赞/踩
       await supabase
         .from('post_likes')
         .update({ reaction_type: reactionType })
-        .eq('id', existing.id)
+        .eq('post_id', postId)
+        .eq('user_id', userId)
       return { action: 'changed', reaction: reactionType }
     }
   } else {
-    // 新增点赞/踩
-    await supabase
+    // 新增点赞/踩 - use upsert to handle race where two requests both see no existing row
+    const { error } = await supabase
       .from('post_likes')
-      .insert({
-        post_id: postId,
-        user_id: userId,
-        reaction_type: reactionType,
-      })
+      .upsert(
+        {
+          post_id: postId,
+          user_id: userId,
+          reaction_type: reactionType,
+        },
+        { onConflict: 'post_id,user_id' }
+      )
+    if (error) {
+      throw error
+    }
     return { action: 'added', reaction: reactionType }
   }
 }

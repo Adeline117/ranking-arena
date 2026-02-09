@@ -89,7 +89,7 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
       const data = await r.json()
       if (data.prices) {
         const mapped: PriceMap = {}
-        for (const [sym, pd] of Object.entries(data.prices) as [string, any][]) {
+        for (const [sym, pd] of Object.entries(data.prices) as [string, { price: number; changePct24h?: number; change24h?: number; volume?: number; high24h?: number; low24h?: number }][]) {
           mapped[sym] = {
             symbol: sym,
             price: pd.price,

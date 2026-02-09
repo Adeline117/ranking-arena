@@ -151,7 +151,7 @@ export default function CoreCards() {
       .then(r => r.json())
       .then(json => {
         if (Array.isArray(json?.rankings)) {
-          setTraders(json.rankings.slice(0, 3).map((t: any) => ({
+          setTraders(json.rankings.slice(0, 3).map((t: { handle?: string; username?: string; display_name?: string; avatar_url?: string | null; pnl_pct?: number; roi?: number }) => ({
             handle: t.handle || t.username || '',
             display_name: t.display_name || t.handle || '',
             avatar_url: t.avatar_url || null,

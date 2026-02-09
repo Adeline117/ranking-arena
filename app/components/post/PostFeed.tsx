@@ -119,8 +119,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const [votingCustomPoll, setVotingCustomPoll] = useState(false)
   const [selectedPollOptions, setSelectedPollOptions] = useState<number[]>([])
   // 收藏和转发状态
-  // Note: bookmarkLoading state tracks loading but value is not currently displayed in UI
-  const [, setBookmarkLoading] = useState<Record<string, boolean>>({})
+  const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
   const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
   const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
   const [repostComment, setRepostComment] = useState('')
@@ -694,6 +693,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       showToast(t('pleaseLogin'), 'warning')
       return
     }
+    if (bookmarkLoading[postId]) return // prevent double-click
 
     setBookmarkLoading(prev => ({ ...prev, [postId]: true }))
     
@@ -721,7 +721,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } finally {
       setBookmarkLoading(prev => ({ ...prev, [postId]: false }))
     }
-  }, [accessToken, showToast, t])
+  }, [accessToken, showToast, t, bookmarkLoading])
 
   // 打开收藏夹选择弹窗
   const openBookmarkFolderModal = useCallback((postId: string) => {

@@ -15,7 +15,7 @@ interface FuturesRow {
   fundingRate: number | null
   openInterest: number | null
   predictedFunding: number | null
-  platforms: Record<string, any>
+  platforms: Record<string, { fundingRate?: number; fundingTime?: string; openInterest?: number }>
 }
 
 function formatNum(n: number | null): string {

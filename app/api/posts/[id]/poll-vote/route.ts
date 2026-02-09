@@ -134,23 +134,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new Error('单选投票只能选择一个选项')
     }
 
-    // 获取用户现有投票
-    const { data: existingVotes } = await supabase
+    // 删除现有投票
+    await supabase
       .from('poll_votes')
-      .select('id, option_index')
+      .delete()
       .eq('poll_id', poll.id)
       .eq('user_id', user.id)
-
-    // 删除现有投票并手动更新计数（不依赖触发器）
-    const existingIndexes = existingVotes?.map(v => v.option_index) || []
-    
-    if (existingVotes && existingVotes.length > 0) {
-      await supabase
-        .from('poll_votes')
-        .delete()
-        .eq('poll_id', poll.id)
-        .eq('user_id', user.id)
-    }
 
     // 插入新投票
     const newVotes = optionIndexes.map(optionIndex => ({
@@ -167,54 +156,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new Error('投票失败: ' + insertError.message)
     }
 
-    // 手动更新投票计数（因为触发器可能不工作）
-    // NOTE: This uses optimistic counting. For accurate counts under high concurrency,
-    // consider using a database function or recounting from poll_votes table.
+    // Recount votes from poll_votes table (source of truth) to avoid race conditions.
+    // The old approach of read-modify-write on the JSON options field was prone to lost updates.
+    const { data: voteCounts } = await supabase
+      .from('poll_votes')
+      .select('option_index')
+      .eq('poll_id', poll.id)
 
-    // Re-fetch the poll to get the latest state (reduce race condition window)
-    const { data: latestPoll, error: refetchError } = await supabase
-      .from('polls')
-      .select('*')
-      .eq('id', poll.id)
-      .single()
-
-    if (refetchError || !latestPoll) {
-      logger.error('Failed to refetch poll:', refetchError)
-      // Return the user's vote anyway - the counts may be stale but vote is recorded
-      return success({
-        poll: {
-          id: poll.id,
-          options: poll.options,
-          totalVotes: poll.options.reduce((sum: number, opt: { votes: number }) => sum + (opt.votes || 0), 0),
-        },
-        userVotes: optionIndexes,
-        warning: 'Vote recorded but counts may be delayed'
-      })
+    // Build accurate counts from source of truth
+    const countMap: Record<number, number> = {}
+    for (const v of voteCounts || []) {
+      countMap[v.option_index] = (countMap[v.option_index] || 0) + 1
     }
 
-    const updatedOptions = [...latestPoll.options]
+    const updatedOptions = poll.options.map((opt: { text: string; votes: number }, idx: number) => ({
+      ...opt,
+      votes: countMap[idx] || 0,
+    }))
 
-    // 减少旧投票的计数
-    for (const oldIdx of existingIndexes) {
-      if (updatedOptions[oldIdx]) {
-        updatedOptions[oldIdx] = {
-          ...updatedOptions[oldIdx],
-          votes: Math.max(0, (updatedOptions[oldIdx].votes || 0) - 1)
-        }
-      }
-    }
-
-    // 增加新投票的计数
-    for (const newIdx of optionIndexes) {
-      if (updatedOptions[newIdx]) {
-        updatedOptions[newIdx] = {
-          ...updatedOptions[newIdx],
-          votes: (updatedOptions[newIdx].votes || 0) + 1
-        }
-      }
-    }
-
-    // 更新 polls 表
+    // Update polls table with recounted values
     const { data: updatedPoll, error: updateError } = await supabase
       .from('polls')
       .update({ options: updatedOptions, updated_at: new Date().toISOString() })
@@ -224,16 +184,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (updateError) {
       logger.error('更新投票计数失败:', updateError)
-      // CRITICAL FIX: Return success with vote recorded but indicate counts may be stale
-      // This is better than failing completely since the vote was already inserted
       return success({
         poll: {
           id: poll.id,
-          options: updatedOptions, // Use our calculated options
+          options: updatedOptions,
           totalVotes: updatedOptions.reduce((sum: number, opt: { votes: number }) => sum + (opt.votes || 0), 0),
         },
         userVotes: optionIndexes,
-        warning: 'Vote recorded but count update failed - counts may be inaccurate'
+        warning: 'Vote recorded but count update failed'
       })
     }
 
