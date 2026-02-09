@@ -30,11 +30,12 @@ const DRY_RUN = !args.includes('--apply')
 const ISBN_ONLY = args.includes('--isbn-only')
 const LIMIT_IDX = args.indexOf('--limit')
 const MAX_ITEMS = LIMIT_IDX !== -1 ? parseInt(args[LIMIT_IDX + 1]) : (DRY_RUN ? 100 : 999999)
+const NO_GOOGLE = args.includes('--no-google')
 const CAT_IDX = args.indexOf('--category')
 const CATEGORY_FILTER = CAT_IDX !== -1 ? args[CAT_IDX + 1] : null
 const BATCH_SIZE = 200
-const GOOGLE_DELAY = 600  // ms between Google API calls
-const OL_DELAY = 300
+const GOOGLE_DELAY = 3000  // ms between Google API calls  
+const OL_DELAY = 1000
 
 const stats = { processed: 0, google: 0, openlib: 0, isbn: 0, crossref: 0, skipped: 0, errors: 0 }
 
@@ -45,7 +46,7 @@ async function fetchWithRetry(url, opts = {}, retries = 2) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(15000), ...opts })
       if (res.status === 429) {
-        const wait = Math.min(60000, (i + 1) * 15000)
+        const wait = Math.min(120000, (i + 1) * 30000)
         console.warn(`  ⚠ 429 rate limited, waiting ${wait/1000}s...`)
         await sleep(wait)
         continue
@@ -157,16 +158,18 @@ async function processItem(item) {
   
   const isBook = !category || category === 'book'
   
-  if (isBook) {
-    // 2. Google Books
-    const gCover = await searchGoogleBooks(title, author)
-    if (gCover) { stats.google++; return gCover }
-    await sleep(GOOGLE_DELAY)
-    
-    // 3. Open Library
+  if (isBook || category === 'finance') {
+    // 2. Open Library first (more generous rate limits)
+    await sleep(OL_DELAY)
     const olCover = await searchOpenLibrary(title, author)
     if (olCover) { stats.openlib++; return olCover }
-    await sleep(OL_DELAY)
+    
+    // 3. Google Books as fallback
+    if (!NO_GOOGLE) {
+      await sleep(GOOGLE_DELAY)
+      const gCover = await searchGoogleBooks(title, author)
+      if (gCover) { stats.google++; return gCover }
+    }
   }
   
   // Papers/whitepapers: skip API search, rely on frontend fallback
