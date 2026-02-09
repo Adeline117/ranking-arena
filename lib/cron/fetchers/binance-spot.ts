@@ -26,8 +26,13 @@ import { type StatsDetail, upsertStatsDetail } from './enrichment'
 const SOURCE = 'binance_spot'
 const API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/home-page-list'
+const DETAIL_API_URL =
+  'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/portfolio-detail'
 const TARGET = 500
 const PAGE_SIZE = 100
+const ENRICH_LIMIT = 300
+const ENRICH_CONCURRENCY = 5
+const ENRICH_DELAY_MS = 500
 
 const HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
@@ -68,6 +73,61 @@ interface ApiResponse {
   data?: {
     list?: BinanceSpotTrader[]
     data?: BinanceSpotTrader[]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Detail API enrichment (fetches winRate for traders missing it)
+// ---------------------------------------------------------------------------
+
+const PERIOD_TO_TIMERANGE: Record<string, string> = {
+  '7D': 'WEEKLY',
+  '30D': 'MONTHLY',
+  '90D': 'QUARTERLY',
+}
+
+interface DetailResponse {
+  data?: {
+    winRate?: number | string
+    maxDrawdown?: number | string
+    mdd?: number | string
+    copierCount?: number | string
+    followerCount?: number | string
+    currentCopyCount?: number | string
+  }
+}
+
+async function enrichTraderDetail(
+  traderId: string,
+  period: string
+): Promise<{ winRate: number | null; maxDrawdown: number | null; followers: number | null }> {
+  try {
+    const timeRange = PERIOD_TO_TIMERANGE[period] || 'QUARTERLY'
+    const data = await fetchJson<DetailResponse>(DETAIL_API_URL, {
+      method: 'POST',
+      headers: HEADERS,
+      body: { portfolioId: traderId, timeRange },
+      timeoutMs: 8000,
+    })
+
+    const d = data?.data
+    if (!d) return { winRate: null, maxDrawdown: null, followers: null }
+
+    let winRate = parseNum(d.winRate)
+    // Detail API returns winRate as decimal 0-1
+    if (winRate != null && winRate > 0 && winRate <= 1) winRate *= 100
+    winRate = normalizeWinRate(winRate)
+
+    let maxDrawdown = parseNum(d.maxDrawdown ?? d.mdd)
+    if (maxDrawdown != null) maxDrawdown = Math.abs(maxDrawdown)
+    // Detail API returns as decimal
+    if (maxDrawdown != null && maxDrawdown > 0 && maxDrawdown <= 1) maxDrawdown *= 100
+
+    const followers = parseNum(d.copierCount ?? d.followerCount ?? d.currentCopyCount)
+
+    return { winRate, maxDrawdown, followers: followers != null ? Math.round(followers) : null }
+  } catch {
+    return { winRate: null, maxDrawdown: null, followers: null }
   }
 }
 
@@ -170,6 +230,29 @@ async function fetchPeriod(
 
   traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
   const top = traders.slice(0, TARGET)
+
+  // Enrich traders missing win_rate via detail API
+  const toEnrich = top.filter(t => t.win_rate == null).slice(0, ENRICH_LIMIT)
+  if (toEnrich.length > 0) {
+    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders with detail API for win_rate...`)
+    let enriched = 0
+    for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
+      const batch = toEnrich.slice(i, i + ENRICH_CONCURRENCY)
+      await Promise.all(
+        batch.map(async (trader) => {
+          const detail = await enrichTraderDetail(trader.source_trader_id, period)
+          if (detail.winRate != null) { trader.win_rate = detail.winRate; enriched++ }
+          if (detail.maxDrawdown != null && trader.max_drawdown == null) trader.max_drawdown = detail.maxDrawdown
+          if (detail.followers != null && trader.followers == null) trader.followers = detail.followers
+          // Recalculate arena score with enriched data
+          trader.arena_score = calculateArenaScore(trader.roi!, trader.pnl, trader.max_drawdown, trader.win_rate, period)
+        })
+      )
+      if (i + ENRICH_CONCURRENCY < toEnrich.length) await sleep(ENRICH_DELAY_MS)
+    }
+    console.warn(`[${SOURCE}] Enriched ${enriched} traders with win_rate`)
+  }
+
   const { saved, error } = await upsertTraders(supabase, top)
 
   // Save stats_detail for 90D period

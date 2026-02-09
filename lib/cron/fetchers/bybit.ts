@@ -194,6 +194,8 @@ async function fetchPeriod(
     // mv[4] = PLRatio (盈亏比)
     const sharpeRatio = parsePercent(mv[5]) // Phase 1: 提取 Sharpe Ratio
 
+    const followers = parseNum(item.currentFollowerCount)
+
     traders.push({
       source: SOURCE,
       source_trader_id: id,
@@ -204,9 +206,11 @@ async function fetchPeriod(
       pnl,
       win_rate: winRate,
       max_drawdown: maxDrawdown != null ? Math.abs(maxDrawdown) : null,
+      followers: followers != null ? Math.round(followers) : null,
       sharpe_ratio: sharpeRatio, // Phase 1: 保存 Sharpe Ratio
       arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
       captured_at: capturedAt,
+      avatar_url: item.profilePhoto || null,
     })
   }
 
