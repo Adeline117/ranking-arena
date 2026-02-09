@@ -203,7 +203,7 @@ function ExportRankingButton({ traders, source, timeRange, language }: {
           position: 'absolute', top: '100%', right: 0, marginTop: 4,
           background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: 8, overflow: 'hidden', zIndex: 100, minWidth: 160,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          boxShadow: tokens.shadow.md,
         }}>
           <div style={{ padding: '6px 12px', fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600 }}>CSV</div>
           {counts.map(n => (
