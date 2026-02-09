@@ -579,21 +579,7 @@ function RankingsContent() {
           ))}
         </div>
 
-        {/* Exchange quick filter chips */}
-        <ExchangeQuickFilter
-          activeCategory={activeCategory}
-          activePlatform={activePlatform}
-          isZh={isZh}
-          onPlatformChange={(platform) => {
-            const params = new URLSearchParams(searchParams.toString())
-            if (platform) {
-              params.set('platform', platform)
-            } else {
-              params.delete('platform')
-            }
-            router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-          }}
-        />
+        {/* Exchange filter moved into AdvancedFilter */}
 
         {/* Search box */}
         <div style={{ position: 'relative', marginBottom: tokens.spacing[4] }}>
