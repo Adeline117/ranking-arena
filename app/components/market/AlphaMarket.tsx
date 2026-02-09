@@ -49,7 +49,7 @@ function TokenCard({ token }: { token: AlphaToken }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: tokens.spacing[3] }}>
         {token.image && (
-          <img src={token.image} alt="" width={28} height={28} style={{ borderRadius: '50%' }} loading="lazy" />
+          <img src={token.image} alt={`${token.symbol || token.name || 'Token'} icon`} width={28} height={28} style={{ borderRadius: '50%' }} loading="lazy" />
         )}
         <div>
           <div style={{ fontWeight: 600, fontSize: tokens.typography.fontSize.base }}>{token.symbol}</div>

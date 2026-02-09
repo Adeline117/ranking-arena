@@ -255,7 +255,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
         }}>
           {/* Skip back */}
-          <button onClick={() => controllerRef.current?.skipBackward()} style={{
+          <button aria-label="Skip backward" onClick={() => controllerRef.current?.skipBackward()} style={{
             width: 36, height: 36, borderRadius: '50%', border: `1px solid ${panelBorder}`,
             background: 'transparent', color: panelText, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -266,7 +266,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
           </button>
 
           {/* Play/Pause */}
-          <button onClick={handlePlayPause} style={{
+          <button aria-label={ttsState === 'playing' ? 'Pause' : 'Play'} onClick={handlePlayPause} style={{
             width: 48, height: 48, borderRadius: '50%', border: 'none',
             background: accent, color: '#fff', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -284,7 +284,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
           </button>
 
           {/* Stop */}
-          <button onClick={handleStop} style={{
+          <button aria-label="Stop" onClick={handleStop} style={{
             width: 36, height: 36, borderRadius: '50%', border: `1px solid ${panelBorder}`,
             background: 'transparent', color: panelText, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -295,7 +295,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
           </button>
 
           {/* Skip forward */}
-          <button onClick={() => controllerRef.current?.skipForward()} style={{
+          <button aria-label="Skip forward" onClick={() => controllerRef.current?.skipForward()} style={{
             width: 36, height: 36, borderRadius: '50%', border: `1px solid ${panelBorder}`,
             background: 'transparent', color: panelText, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',

@@ -138,7 +138,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
           <img
             src={r.image || `/crypto-icons/${r.symbol.toLowerCase()}.svg`}
-            alt=""
+            alt={`${r.symbol} icon`}
             width={20}
             height={20}
             style={{ borderRadius: '50%', flexShrink: 0 }}

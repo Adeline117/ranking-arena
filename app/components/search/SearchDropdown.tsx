@@ -420,7 +420,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                 {result.avatar ? (
                   <Image
                     src={result.avatar}
-                    alt=""
+                    alt={result.title || 'Avatar'}
                     width={28}
                     height={28}
                     style={{

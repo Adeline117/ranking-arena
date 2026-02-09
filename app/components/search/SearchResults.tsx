@@ -89,7 +89,7 @@ export default function SearchResults({
           {result.avatar ? (
             <Image
               src={result.avatar}
-              alt=""
+              alt={result.title || 'Avatar'}
               width={36}
               height={36}
               style={{

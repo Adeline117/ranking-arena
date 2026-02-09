@@ -64,7 +64,7 @@ export default function FuturesMarket() {
       sortable: true,
       render: (r) => (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {r.image && <img src={r.image} alt="" width={20} height={20} style={{ borderRadius: '50%' }} loading="lazy" />}
+          {r.image && <img src={r.image} alt={`${r.symbol || r.contract || 'Token'} icon`} width={20} height={20} style={{ borderRadius: '50%' }} loading="lazy" />}
           <span style={{ fontWeight: 600 }}>{r.contract}</span>
           <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>永续</span>
         </span>

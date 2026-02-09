@@ -72,7 +72,11 @@ function TraderAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl:
   )
 }
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = async (url: string) => {
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
 
 export default function TopTraders() {
   const { language } = useLanguage()
@@ -85,6 +89,7 @@ export default function TopTraders() {
       revalidateOnFocus: false,
       dedupingInterval: 60000, // 1 minute dedup
       refreshInterval: 60000, // Refresh every 1 minute
+      errorRetryCount: 2,
     }
   )
 
