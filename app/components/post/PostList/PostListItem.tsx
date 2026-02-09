@@ -182,6 +182,7 @@ export const PostListItem = memo(function PostListItem({
                 alt={`Image ${idx + 1}`}
                 loading="lazy"
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
               {idx === 3 && p.images!.length > 4 && (
                 <div style={{

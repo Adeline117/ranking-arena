@@ -3082,6 +3082,29 @@ rejectCall: 'Reject',
     // WebVitals
     webVitalsError: 'Performance monitoring initialization failed',
 
+    // Sidebar
+    sidebarTopTraders: 'Top 10 Traders',
+    sidebarWatchlist: 'Watchlist',
+    sidebarManageWatchlist: '+ Manage Watchlist',
+    sidebarCollapse: 'Close',
+    sidebarSearchCoins: 'Search coins...',
+    sidebarNewsFlash: 'News Flash',
+    sidebarNoNews: 'No news yet',
+    sidebarRecommendedGroups: 'Recommended Groups',
+    sidebarNoGroups: 'No groups available',
+    sidebarMyGroups: 'My Groups',
+    sidebarNoGroupsJoined: 'No groups joined yet',
+    sidebarLoginToView: 'Login to view',
+    sidebarHotDiscussions: 'Hot Discussions',
+    sidebarNoDiscussions: 'No discussions yet',
+    sidebarHot: 'Hot',
+    sidebarRising: 'Rising',
+    sidebarActive: 'Active',
+    sidebarLoadFailed: 'Failed to load. Refresh to retry.',
+    sidebarLoadFailedShort: 'Failed to load',
+    sidebarLongAgo: 'long ago',
+    sidebarNoBooksYet: 'No books in your shelf yet',
+
 } as const
 
 export default en

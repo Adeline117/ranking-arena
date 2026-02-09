@@ -434,6 +434,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         fetch(`/api/posts/${postToOpen.id}/comments`)
           .then(res => res.json())
           .then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) })
+          .catch(() => {})
       } else {
         // 帖子不在当前列表中，单独加载
         const loadSinglePost = async () => {
