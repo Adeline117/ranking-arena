@@ -9,8 +9,8 @@ export async function generateMetadata({
   const query = resolved.q?.trim()
 
   const title = query
-    ? `"${query}" - 搜索结果 | ArenaFi`
-    : '搜索交易员 | ArenaFi'
+    ? `"${query}" - 搜索结果 | Arena`
+    : '搜索交易员 | Arena'
 
   const description = query
     ? `搜索 "${query}" 的交易员、帖子和小组结果`
@@ -28,7 +28,7 @@ export async function generateMetadata({
       title,
       description,
       url: `${baseUrl}/search`,
-      siteName: 'ArenaFi',
+      siteName: 'Arena',
       type: 'website',
     },
     robots: {

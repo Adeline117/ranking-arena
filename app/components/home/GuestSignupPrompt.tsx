@@ -119,7 +119,7 @@ export default function GuestSignupPrompt() {
           color: tokens.colors.text.primary,
           margin: '0 0 8px',
         }}>
-          {isZh ? '加入 ArenaFi' : 'Join ArenaFi'}
+          {isZh ? '加入 Arena' : 'Join Arena'}
         </h2>
 
         <p style={{

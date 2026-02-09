@@ -181,7 +181,7 @@ async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
         ${detailsHtml}
         <hr style="margin-top: 24px; border: none; border-top: 1px solid #e5e7eb;">
         <p style="color: #6b7280; font-size: 12px;">
-          此邮件由 ArenaFi 报警系统自动发送
+          此邮件由 Arena 报警系统自动发送
         </p>
       </div>
     `,

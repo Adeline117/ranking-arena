@@ -35,7 +35,7 @@ export const supportedChains = isProduction
  * work without a real ID, but injected wallets (MetaMask etc.) are fine.
  */
 export const wagmiConfig = getDefaultConfig({
-  appName: 'ArenaFi',
+  appName: 'Arena',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'placeholder',
   chains: supportedChains,
   transports: {

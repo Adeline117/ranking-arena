@@ -141,7 +141,7 @@ export default function Footer() {
             margin: 0,
           }}
         >
-          &copy; {new Date().getFullYear()} ArenaFi.{' '}
+          &copy; {new Date().getFullYear()} Arena.{' '}
           {isZh ? '保留所有权利。' : 'All rights reserved.'}
         </p>
 
