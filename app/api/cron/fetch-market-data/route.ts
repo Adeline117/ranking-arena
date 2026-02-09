@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const type = searchParams.get('type') || 'all'
+  const startTime = Date.now()
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -141,10 +142,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Record pipeline metrics
-    const fetchEnd = Date.now()
     await recordFetchResult(supabase, 'market_data', {
       success: true,
-      durationMs: fetchEnd - Date.now() + 100, // approximate
+      durationMs: Date.now() - startTime,
       recordCount: Object.keys(results.prices || {}).length,
       metadata: { type, results },
     }).catch(() => {})

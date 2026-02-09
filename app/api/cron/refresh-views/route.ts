@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
       views: ['mv_hourly_prices', 'mv_daily_rankings'],
       duration,
     })
-  } catch (err: any) {
-    logger.error('Refresh views failed', { error: err.message })
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    logger.error('Refresh views failed', { error: (err instanceof Error ? err.message : String(err)) })
+    return NextResponse.json({ error: (err instanceof Error ? err.message : String(err)) }, { status: 500 })
   }
 }

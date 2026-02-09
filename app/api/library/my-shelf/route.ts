@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       .filter(Boolean)
 
     return NextResponse.json({ items: result })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message, items: [] }, { status: 500 })
+  } catch (e: unknown) {
+    return NextResponse.json({ error: (e instanceof Error ? e.message : String(e)), items: [] }, { status: 500 })
   }
 }

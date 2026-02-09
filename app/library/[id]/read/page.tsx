@@ -544,8 +544,8 @@ export default function ReadPage() {
         lsSet(`progress_${id}`, { page: currentPage, total: totalPages, lastRead: Date.now() })
         syncProgressToServer(id, currentPage, totalPages)
       }
-    } catch (err: any) {
-      if (err?.name !== 'RenderingCancelledException') logger.error('Render error', err)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'RenderingCancelledException') logger.error('Render error', err)
     } finally {
       setPageRendering(false)
     }

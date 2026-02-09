@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
       JSON.stringify({ message: `创建了 ${created} 个市场讨论帖`, created }),
       { headers: { 'Content-Type': 'application/json' } }
     )
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 })
+  } catch (error: unknown) {
+    return new Response(JSON.stringify({ error: (error instanceof Error ? error.message : String(error)) }), { status: 500 })
   }
 }

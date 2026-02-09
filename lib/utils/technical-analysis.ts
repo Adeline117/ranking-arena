@@ -40,7 +40,7 @@ export interface IndicatorResults {
 /**
  * 将 ta-math 输出数组中的 NaN/undefined 替换为 null
  */
-function sanitize(arr: any[]): (number | null)[] {
+function sanitize(arr: unknown[]): (number | null)[] {
   return arr.map(v => (typeof v === 'number' && !isNaN(v) && isFinite(v)) ? v : null)
 }
 
