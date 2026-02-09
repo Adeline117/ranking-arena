@@ -150,7 +150,8 @@ export default function OnboardingPage() {
     try {
       const res = await fetch('/api/groups?limit=8&sort_by=member_count')
       const data = await res.json()
-      setGroups(data.data || data.groups || [])
+      const raw = data.data?.groups || data.data || data.groups || []
+      setGroups(Array.isArray(raw) ? raw : [])
     } catch {
       logger.error('Failed to fetch groups')
     } finally {
@@ -182,7 +183,12 @@ export default function OnboardingPage() {
   }
 
   const handleFollowTrader = async (traderId: string) => {
-    if (!userId) return
+    // Re-check auth if userId not yet set
+    if (!userId) {
+      const { data } = await supabase.auth.getUser()
+      if (data?.user?.id) setUserId(data.user.id)
+      else return
+    }
     const isFollowed = followedTraders.has(traderId)
     const next = new Set(followedTraders)
     if (isFollowed) {
