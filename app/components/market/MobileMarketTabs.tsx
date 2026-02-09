@@ -89,7 +89,8 @@ export default function MobileMarketTabs({ children }: {
             onClick={() => setActiveTab(tab.key)}
             style={{
               flex: 1,
-              padding: '10px 0',
+              padding: '12px 0',
+              minHeight: 44,
               fontSize: 13,
               fontWeight: activeTab === tab.key ? 600 : 400,
               color: activeTab === tab.key ? tokens.colors.accent.primary : tokens.colors.text.tertiary,

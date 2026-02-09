@@ -287,7 +287,7 @@ export const TraderRow = memo(function TraderRow({
             ? (pnl >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR)
             : TRADER_TEXT_TERTIARY
           const pnlText = hasPnl
-            ? `${pnl >= 0 ? '+' : ''}${formatPnL(pnl)}`
+            ? formatPnL(pnl)
             : '—'
 
           return (

@@ -148,7 +148,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 20,
+        padding: 'clamp(0px, 2vw, 20px)',
         zIndex: tokens.zIndex.modal,
       }}
     >
@@ -162,7 +162,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           maxHeight: '90vh',
           overflowY: 'auto',
           border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.xl,
+          borderRadius: 'clamp(0px, 2vw, 16px)',
           background: tokens.colors.bg.secondary,
           padding: 16,
         }}

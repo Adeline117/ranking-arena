@@ -55,9 +55,9 @@ export const PostListItem = memo(function PostListItem({
       }}
       style={isMasonry ? {
         breakInside: 'avoid',
-        marginBottom: 10,
-        padding: tokens.spacing[2],
-        borderRadius: tokens.radius.lg,
+        marginBottom: 12,
+        padding: tokens.spacing[3],
+        borderRadius: tokens.radius.xl,
         background: tokens.colors.bg.secondary,
         border: `1px solid ${tokens.colors.border.primary}`,
         cursor: 'pointer',
