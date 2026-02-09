@@ -54,8 +54,8 @@ const THEME_PRESETS: Record<ReadingTheme, {
   settingsControlBg: string; settingsHint: string;
 }> = {
   white:  { bg: 'var(--color-bg-tertiary)', pageBg: 'var(--color-on-accent)', text: 'var(--color-text-primary)', label: 'White',  labelZh: '白色',   dot: 'var(--color-on-accent)',
-    settingsLabel: 'var(--color-text-tertiary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
-    settingsControlBg: 'var(--color-overlay-subtle)', settingsHint: 'var(--color-overlay-light)' },
+    settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-secondary)', settingsOptionInactive: 'var(--color-text-primary)',
+    settingsControlBg: 'var(--color-overlay-subtle)', settingsHint: 'var(--color-text-tertiary)' },
   sepia:  { bg: 'var(--color-border-primary)', pageBg: 'var(--color-bg-secondary)', text: 'var(--color-bg-tertiary)', label: 'Sepia',  labelZh: '暖黄',   dot: 'var(--color-bg-secondary)',
     settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
     settingsControlBg: 'var(--glass-bg-light)', settingsHint: 'var(--color-overlay-light)' },
@@ -567,11 +567,13 @@ export default function ReadPage() {
 
   useEffect(() => {
     if (contentMode === 'pdf' && pdfDoc && totalPages > 0) {
-      // Initial render may fail if container not sized yet, retry after a short delay
+      // Initial render may fail if container not sized yet, retry with increasing delays
       renderCurrentPage()
       if (currentPage === 1) {
-        const timer = setTimeout(() => renderCurrentPage(), 300)
-        return () => clearTimeout(timer)
+        const t1 = setTimeout(() => renderCurrentPage(), 200)
+        const t2 = setTimeout(() => renderCurrentPage(), 600)
+        const t3 = setTimeout(() => renderCurrentPage(), 1200)
+        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
       }
     }
   }, [pdfDoc, currentPage, totalPages, renderCurrentPage, contentMode])
@@ -1238,16 +1240,14 @@ export default function ReadPage() {
         @keyframes spin { to { transform: rotate(360deg) } }
         @keyframes slideUp { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
         @keyframes page-flip-left {
-          0% { opacity: 1; transform: translateX(0); }
-          30% { opacity: 0.3; transform: translateX(-30px); }
-          60% { opacity: 0.3; transform: translateX(15px); }
-          100% { opacity: 1; transform: translateX(0); }
+          0% { opacity: 1; transform: translateX(0) scale(1); }
+          40% { opacity: 0.4; transform: translateX(-20px) scale(0.98); }
+          100% { opacity: 1; transform: translateX(0) scale(1); }
         }
         @keyframes page-flip-right {
-          0% { opacity: 1; transform: translateX(0); }
-          30% { opacity: 0.3; transform: translateX(30px); }
-          60% { opacity: 0.3; transform: translateX(-15px); }
-          100% { opacity: 1; transform: translateX(0); }
+          0% { opacity: 1; transform: translateX(0) scale(1); }
+          40% { opacity: 0.4; transform: translateX(20px) scale(0.98); }
+          100% { opacity: 1; transform: translateX(0) scale(1); }
         }
         * { -webkit-tap-highlight-color: transparent; }
         .reader-nav-hint { pointer-events: none; }

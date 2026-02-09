@@ -289,7 +289,7 @@ export default function BookDetailPage() {
         <div className="book-detail-top" style={{ display: 'flex', gap: 28, marginBottom: 36, flexWrap: 'wrap' }}>
           {/* Cover with shadow */}
           <div className="book-detail-cover" style={{
-            width: 180, flexShrink: 0,
+            width: 220, flexShrink: 0,
           }}>
             <div style={{
               width: '100%', aspectRatio: '2/3',
@@ -328,19 +328,25 @@ export default function BookDetailPage() {
               </p>
             )}
 
-            {/* Rating */}
+            {/* Rating - Douban style */}
             {count > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16,
+                padding: '12px 16px', borderRadius: tokens.radius.lg,
+                background: tokens.colors.bg.secondary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+              }}>
                 <span style={{
-                  fontSize: tokens.typography.fontSize['2xl'],
-                  fontWeight: tokens.typography.fontWeight.bold,
+                  fontSize: tokens.typography.fontSize['4xl'],
+                  fontWeight: tokens.typography.fontWeight.extrabold,
                   color: tokens.colors.rating.filled,
+                  lineHeight: 1,
                 }}>
                   {avg.toFixed(1)}
                 </span>
                 <div>
-                  <StarRating rating={avg} ratingCount={count} size={18} readonly />
-                  <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
+                  <StarRating rating={avg} ratingCount={count} size={22} readonly showCount={false} />
+                  <span style={{ fontSize: 13, color: tokens.colors.text.tertiary, display: 'block', marginTop: 2 }}>
                     {count} {isZh ? '人评价' : 'ratings'}
                   </span>
                 </div>
@@ -488,7 +494,7 @@ export default function BookDetailPage() {
                 <p style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 10 }}>
                   {userRating ? (isZh ? '你的评分' : 'Your Rating') : (isZh ? '给这本书评分' : 'Rate this book')}
                 </p>
-                <StarRating rating={0} userRating={userRating || 0} onRate={handleRate} size={32} showCount={false} />
+                <StarRating rating={0} userRating={userRating || 0} onRate={handleRate} size={36} showCount={false} />
                 {showRatingPrompt && !userRating && (
                   <p style={{ fontSize: 12, color: tokens.colors.accent.brand, marginTop: 8 }}>
                     {isZh ? '点击星星评分吧' : 'Tap a star to rate'}
@@ -617,11 +623,11 @@ export default function BookDetailPage() {
               display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'center',
             }}>
               {/* Left: big number */}
-              <div style={{ textAlign: 'center', minWidth: 80 }}>
-                <div style={{ fontSize: 48, fontWeight: 800, color: tokens.colors.rating.filled, lineHeight: 1 }}>
+              <div style={{ textAlign: 'center', minWidth: 100 }}>
+                <div style={{ fontSize: 56, fontWeight: 800, color: tokens.colors.rating.filled, lineHeight: 1 }}>
                   {avg.toFixed(1)}
                 </div>
-                <StarRating rating={avg} size={16} readonly showCount={false} />
+                <StarRating rating={avg} size={20} readonly showCount={false} />
                 <div style={{ fontSize: 12, color: tokens.colors.text.tertiary, marginTop: 4 }}>
                   {count} {isZh ? '人评价' : 'ratings'}
                 </div>
@@ -632,7 +638,7 @@ export default function BookDetailPage() {
                 {[5, 4, 3, 2, 1].map(star => (
                   <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 13, color: tokens.colors.text.secondary, width: 16, textAlign: 'right' }}>{star}</span>
-                    <span style={{ fontSize: 13, color: tokens.colors.rating.filled }}>*</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill={tokens.colors.rating.filled} stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                     <div style={{ flex: 1, height: 10, borderRadius: tokens.radius.sm, background: tokens.colors.bg.primary, overflow: 'hidden' }}>
                       <div style={{
                         width: `${(dist[star as keyof typeof dist] / maxDist) * 100}%`,

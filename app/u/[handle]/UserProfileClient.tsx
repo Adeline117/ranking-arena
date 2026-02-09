@@ -18,6 +18,7 @@ const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTrad
 const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const JoinedGroups = dynamic(() => import('@/app/components/trader/JoinedGroups'), { ssr: false })
 const UserBookmarkFolders = dynamic(() => import('@/app/components/trader/UserBookmarkFolders'), { ssr: false })
+const UserCollections = dynamic(() => import('@/app/components/features/UserCollections'), { ssr: false })
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -127,7 +128,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as TraderTabKey : 'overview'
   )
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'activity', 'followers', 'groups', 'bookmarks'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
+    urlTab && ['overview', 'activity', 'followers', 'groups', 'bookmarks', 'bookshelf', 'stats', 'portfolio'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
   )
 
   const updateUrl = useCallback((tab: string) => {
@@ -283,160 +284,19 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
   const isOwnProfile = currentUserId === profile.id
 
   // ============================================================
-  // TRADER MODE: user has bound exchange -> identical to /trader/[handle]
+  // UNIFIED PROFILE — trading data + social data in one layout
   // ============================================================
-  if (isTrader && traderProfile) {
-    const canViewFull = isPro || isOwnProfile
-    return (
-      <Box
-        className="trader-page-container"
-        style={{
-          minHeight: '100vh',
-          background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
-          color: tokens.colors.text.primary,
-        }}
-      >
-        <TopNav email={email} />
-
-        <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-          <Breadcrumb items={[
-            { label: isZh ? '排行榜' : 'Leaderboard', href: '/rankings' },
-            { label: profile.handle },
-          ]} />
-
-          {/* TraderHeader - identical to /trader/[handle] */}
-          <TraderHeader
-            handle={traderProfile.handle || traderProfile.trader_key || ''}
-            displayName={traderProfile.display_name || undefined}
-            traderId={traderProfile.id}
-            avatarUrl={traderProfile.avatar_url || profile.avatar_url}
-            coverUrl={traderProfile.cover_url || profile.cover_url}
-            isRegistered={traderProfile.isRegistered}
-            followers={traderProfile.followers}
-            copiers={traderProfile.copiers}
-            source={traderProfile.source}
-            isPro={isPro}
-            roi90d={traderPerformance?.roi_90d}
-            maxDrawdown={traderPerformance?.max_drawdown}
-            winRate={traderPerformance?.win_rate}
-            currentUserId={currentUserId}
-          />
-
-          {/* TraderTabs - identical to /trader/[handle] */}
-          <TraderTabs
-            activeTab={activeTraderTab}
-            onTabChange={handleTraderTabChange}
-            isPro={isPro}
-            onProRequired={() => router.push('/pricing')}
-          />
-
-          {/* Tab Content */}
-          <Box
-            key={activeTraderTab}
-            style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
-          >
-            {activeTraderTab === 'overview' && (
-              <Box
-                className="profile-grid"
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: traderSimilar.length > 0 ? '1fr 300px' : '1fr',
-                  gap: tokens.spacing[8],
-                }}
-              >
-                <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                  {traderPerformance ? (
-                    <OverviewPerformanceCard
-                      performance={traderPerformance}
-                      equityCurve={traderEquityCurve?.['90D']}
-                      source={traderProfile?.source}
-                    />
-                  ) : (
-                    <Box style={{
-                      padding: tokens.spacing[6],
-                      background: tokens.colors.bg.secondary,
-                      borderRadius: tokens.radius.xl,
-                      border: `1px solid ${tokens.colors.border.primary}`,
-                      textAlign: 'center',
-                    }}>
-                      <Text size="sm" color="tertiary">
-                        {t('noPerformanceData')}
-                      </Text>
-                    </Box>
-                  )}
-                  <TraderFeed
-                    items={traderFeed.filter((f: any) => f.type !== 'group_post')}
-                    title={t('activities')}
-                    isRegistered={traderProfile.isRegistered}
-                    traderId={traderProfile.id}
-                    traderHandle={traderProfile.handle}
-                    source={traderProfile.source}
-                  />
-                </Box>
-
-                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                  {traderSimilar.length > 0 && <SimilarTraders traders={traderSimilar} />}
-                </Box>
-              </Box>
-            )}
-
-            {activeTraderTab === 'stats' && (
-              traderStats ? (
-                <StatsPage
-                  stats={traderStats}
-                  traderHandle={serverProfile?.traderHandle || ''}
-                  assetBreakdown={traderAssetBreakdown}
-                  equityCurve={traderEquityCurve}
-                  positionHistory={traderPositionHistory}
-                  isPro={canViewFull}
-                  onUnlock={() => router.push('/pricing')}
-                />
-              ) : (
-                <Box style={{
-                  padding: tokens.spacing[6],
-                  background: tokens.colors.bg.secondary,
-                  borderRadius: tokens.radius.xl,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  textAlign: 'center',
-                }}>
-                  <Text size="sm" color="tertiary">
-                    {t('noStatsData') || (isZh ? '暂无统计数据' : 'No stats data')}
-                  </Text>
-                </Box>
-              )
-            )}
-
-            {activeTraderTab === 'portfolio' && (
-              <PortfolioTable
-                items={traderPortfolio}
-                history={traderPositionHistory}
-                isPro={canViewFull}
-                onUnlock={() => router.push('/pricing')}
-              />
-            )}
-          </Box>
-        </Box>
-
-        {/* Responsive */}
-        <style>{`
-          @media (max-width: 768px) {
-            .profile-grid {
-              grid-template-columns: 1fr !important;
-            }
-          }
-        `}</style>
-      </Box>
-    )
-  }
-
-  // ============================================================
-  // NON-TRADER MODE: basic profile + posts/activity
-  // ============================================================
+  const canViewFull = isPro || isOwnProfile
   const followingCount = (profile.following || 0) + (profile.followingTraders || 0)
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') || (isZh ? '概览' : 'Overview') },
+    ...(isTrader ? [
+      { key: 'stats' as ProfileTabKey, label: isZh ? '统计' : 'Stats' },
+      { key: 'portfolio' as ProfileTabKey, label: isZh ? '持仓' : 'Portfolio' },
+    ] : []),
     { key: 'activity', label: isZh ? '动态' : 'Activity' },
+    { key: 'bookshelf', label: isZh ? '书架' : 'Bookshelf' },
     { key: 'followers', label: `${t('followers') || (isZh ? '粉丝' : 'Followers')} (${followersCount})` },
     { key: 'groups', label: t('groups') || (isZh ? '群组' : 'Groups') },
     { key: 'bookmarks', label: t('bookmarks') || (isZh ? '收藏' : 'Bookmarks') },
@@ -540,6 +400,23 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   </Box>
+                )}
+
+                {isTrader && traderProfile?.source && (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px',
+                    background: `linear-gradient(135deg, ${tokens.colors.accent.primary}20, ${tokens.colors.accent.brand}20)`,
+                    borderRadius: tokens.radius.full, fontSize: 11, fontWeight: 700,
+                    color: tokens.colors.accent.primary, letterSpacing: '0.02em',
+                    border: `1px solid ${tokens.colors.accent.primary}30`,
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                      <line x1="8" y1="21" x2="16" y2="21" />
+                      <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                    {traderProfile.source.toUpperCase()}
+                  </span>
                 )}
 
                 {profile.proBadgeTier === 'pro' && <ProBadge size="sm" showLabel={true} />}
@@ -792,6 +669,9 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 </Box>
                 <JoinedGroups userId={profile.id} />
                 <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
+                <Box style={{ marginTop: tokens.spacing[4] }}>
+                  <UserCollections userHandle={profile.handle} isOwnProfile={isOwnProfile} />
+                </Box>
               </Box>
             </Box>
           )}

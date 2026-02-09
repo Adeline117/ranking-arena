@@ -161,6 +161,13 @@ async function computeSeason(
     arena_score: number | null
     captured_at: string
     full_confidence_at: string | null
+    profitability_score: number | null
+    risk_control_score: number | null
+    execution_score: number | null
+    score_completeness: string | null
+    trading_style: string | null
+    avg_holding_hours: number | null
+    style_confidence: number | null
   }
 
   const allSnapshots: TraderRow[] = []
@@ -178,7 +185,7 @@ async function computeSeason(
         while (true) {
           const { data, error } = await supabase
             .from('trader_snapshots')
-            .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at')
+            .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence')
             .eq('source', source)
             .eq('season_id', season)
             .gte('captured_at', freshnessISOBySource(source))
@@ -299,6 +306,13 @@ async function computeSeason(
       trades_count: t.trades_count,
       handle: displayHandle,
       avatar_url: info.avatar_url,
+      profitability_score: t.profitability_score,
+      risk_control_score: t.risk_control_score,
+      execution_score: t.execution_score,
+      score_completeness: t.score_completeness,
+      trading_style: t.trading_style,
+      avg_holding_hours: t.avg_holding_hours,
+      style_confidence: t.style_confidence,
     }
   })
 
@@ -331,6 +345,13 @@ async function computeSeason(
       handle: t.handle,
       avatar_url: t.avatar_url,
       computed_at: new Date().toISOString(),
+      profitability_score: t.profitability_score,
+      risk_control_score: t.risk_control_score,
+      execution_score: t.execution_score,
+      score_completeness: t.score_completeness,
+      trading_style: t.trading_style,
+      avg_holding_hours: t.avg_holding_hours,
+      style_confidence: t.style_confidence,
     }))
 
     const { error } = await supabase

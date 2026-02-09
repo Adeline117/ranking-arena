@@ -8,8 +8,11 @@ type Group = {
   id: string
   name: string
   name_en?: string | null
+  description?: string | null
+  description_en?: string | null
   avatar_url?: string | null
   member_count?: number | null
+  created_at?: string | null
   owner_handle?: string | null
 }
 
@@ -138,6 +141,17 @@ export default function GroupHeader({
                   </Link>
                 </Text>
               )}
+
+              {/* Created time */}
+              {group.created_at && (
+                <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1], display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  {language === 'zh' ? '创建于 ' : 'Created '}
+                  {new Date(group.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                </Text>
+              )}
             </Box>
             <Link
               href="/groups"
@@ -151,6 +165,16 @@ export default function GroupHeader({
               ← {language === 'zh' ? '返回' : 'Back'}
             </Link>
           </Box>
+
+          {/* Description */}
+          {(() => {
+            const desc = (language === 'en' && group.description_en) ? group.description_en : group.description
+            return desc ? (
+              <Text size="sm" color="secondary" style={{ marginTop: tokens.spacing[3], lineHeight: 1.6 }}>
+                {desc}
+              </Text>
+            ) : null
+          })()}
 
           {/* Join/Leave Button */}
           <Box style={{ marginTop: tokens.spacing[4] }}>
