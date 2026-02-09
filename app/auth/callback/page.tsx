@@ -57,7 +57,7 @@ export default function AuthCallbackPage() {
           margin: '0 auto 16px',
         }} />
         <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
-          正在登录...
+          Logging in...
         </p>
       </div>
     </div>

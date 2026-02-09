@@ -126,11 +126,10 @@ export async function GET(request: NextRequest) {
           .in('source_trader_id', traderIds),
         supabase
           .from('trader_snapshots')
-          .select('source_trader_id, source, rank, roi, roi_7d, roi_30d, followers, pnl, win_rate, arena_score, captured_at')
+          .select('source_trader_id, source, rank, roi, pnl_7d, pnl_30d, followers, pnl, win_rate, arena_score, captured_at')
           .in('source_trader_id', traderIds)
-          .in('source', ALL_SOURCES)
-          .order('captured_at', { ascending: false })
-          .limit(5000)
+          .eq('season_id', '90D')
+          .not('arena_score', 'is', null)
       ])
 
       const sources = sourcesResult.data || []
@@ -147,17 +146,12 @@ export async function GET(request: NextRequest) {
         })
       })
 
-      // 为每个交易员获取最新的快照
+      // Build map: one snapshot per trader (unique by source+trader+season_id)
       const latestSnapshotsMap = new Map<string, typeof allSnapshots[0]>()
       for (const snapshot of allSnapshots) {
         const key = snapshot.source_trader_id
-        if (!latestSnapshotsMap.has(key)) {
+        if (!latestSnapshotsMap.has(key) || (snapshot.arena_score || 0) > (latestSnapshotsMap.get(key)!.arena_score || 0)) {
           latestSnapshotsMap.set(key, snapshot)
-        } else {
-          const existing = latestSnapshotsMap.get(key)!
-          if ((snapshot.roi || 0) > (existing.roi || 0)) {
-            latestSnapshotsMap.set(key, snapshot)
-          }
         }
       }
 
@@ -179,8 +173,8 @@ export async function GET(request: NextRequest) {
           type: 'trader',
           avatar_url: sourceInfo?.avatar_url,
           roi: snapshot?.roi || 0,
-          roi_7d: snapshot?.roi_7d ?? undefined,
-          roi_30d: snapshot?.roi_30d ?? undefined,
+          roi_7d: snapshot?.pnl_7d ?? undefined,
+          roi_30d: snapshot?.pnl_30d ?? undefined,
           pnl: snapshot?.pnl !== null && snapshot?.pnl !== undefined ? snapshot.pnl : undefined,
           win_rate: snapshot?.win_rate !== null && snapshot?.win_rate !== undefined ? snapshot.win_rate : 0,
           followers: snapshot?.followers || 0,

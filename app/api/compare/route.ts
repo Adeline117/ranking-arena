@@ -113,17 +113,19 @@ export async function GET(request: NextRequest) {
       return error('获取交易员数据失败', 500)
     }
 
-    // 获取关注数
-    const { data: followCounts } = await supabase
-      .from('trader_follows')
-      .select('trader_id')
-      .in('trader_id', traderIds)
-
+    // 获取关注数 — per-trader count queries in parallel (max 5 traders)
     const followerMap = new Map<string, number>()
-    if (followCounts) {
-      for (const f of followCounts) {
-        followerMap.set(f.trader_id, (followerMap.get(f.trader_id) || 0) + 1)
-      }
+    const countResults = await Promise.all(
+      traderIds.map(async (id) => {
+        const { count } = await supabase
+          .from('trader_follows')
+          .select('id', { count: 'exact', head: true })
+          .eq('trader_id', id)
+        return { id, count: count || 0 }
+      })
+    )
+    for (const { id, count } of countResults) {
+      followerMap.set(id, count)
     }
 
     // 格式化返回数据

@@ -17,10 +17,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       .maybeSingle()
     
     if (post) {
-      const title = `${post.title.slice(0, 60)} · Arena`
+      const title = `${post.title.slice(0, 60)} · ArenaFi`
       const description = post.content 
         ? post.content.slice(0, 160) + (post.content.length > 160 ? '...' : '')
-        : `${post.author_handle} 发布的帖子`
+        : `Post by ${post.author_handle}`
       
       // 获取第一张图片作为 OG 图片
       const images = post.images as string[] | null
@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
           description,
           type: 'article',
           url: canonicalUrl,
-          siteName: 'Arena',
+          siteName: 'ArenaFi',
           publishedTime: post.created_at,
           authors: [`${BASE_URL}/u/${encodeURIComponent(post.author_handle)}`],
           images: ogImage ? [{
@@ -61,13 +61,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       }
     }
   } catch (error) {
-    console.error('[Metadata] 生成post metadata失败:', error)
+    console.error('[Metadata] Failed to generate post metadata:', error)
   }
   
-  // 默认metadata
   return {
-    title: '帖子 | Arena',
-    description: '查看帖子详情',
+    title: 'Post | ArenaFi',
+    description: 'View post details',
     alternates: {
       canonical: canonicalUrl,
     },

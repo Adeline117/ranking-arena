@@ -260,7 +260,7 @@ const en = {
     repostedFrom: 'Reposted from',
     dataUpdated: 'Data updated',
     // Post update page
-    postUpdate: 'New Post',
+    postUpdate: 'New Update',
     shareIdeas: 'Share your trading ideas and insights',
     titleLabel: 'Title',
     contentLabel: 'Content',
@@ -1454,8 +1454,8 @@ const en = {
     bookmarksCount: '{n} bookmarks',
     guidanceBindExchange: 'Link your exchange account to showcase your trading performance',
     guidanceGo: 'Link Now',
-    guidanceFirstPost: 'Create your first post to start socializing',
-    guidancePost: 'New Post',
+    guidanceFirstPost: 'Create your first update to start socializing',
+    guidancePost: 'New Update',
     guidanceFollowTraders: 'Follow traders you are interested in',
     guidanceBrowse: 'Browse',
     viewFullPost: 'View full post and comments',
@@ -1562,10 +1562,10 @@ const en = {
     // My Posts (additional)
     myPosts: 'My Posts',
     loginToManagePosts: 'Log in to view and manage your posts',
-    publishNewPost: 'New Post',
+    publishNewPost: 'New Update',
     noPosts: 'No Posts',
     noPostsDescription: 'Post your first one and share your trading insights',
-    publishPost: 'Create Post',
+    publishPost: 'Publish Update',
     likes: 'likes',
     deleting: 'Deleting...',
     deleteFailedRetry: 'Delete failed, please try again',
@@ -2248,7 +2248,7 @@ const en = {
 
     // UserBookmarkFolders
     bookmarkFoldersTitle: 'Bookmark Folders',
-    saveBookmark: 'Save',
+    saveBookmark: 'Bookmark',
     manageFolders: 'Manage Folders',
 
     // TraderReviews
@@ -2482,7 +2482,7 @@ const en = {
     walletProNft: 'Pro Membership (NFT)',
     walletNoNft: 'No NFT Membership',
     walletProStatus: 'Your account has Pro status via NFT. Tier: {tier}',
-    walletHoldNft: 'Hold an Arena Pro NFT to unlock Pro features.',
+    walletHoldNft: 'Hold an ArenaFi Pro NFT to unlock Pro features.',
 
     // Web3 - useSiweAuth
     siweRejected: 'Signature request was rejected. Please approve the signature in your wallet to sign in.',
@@ -2678,7 +2678,7 @@ const en = {
     goToRankings: 'Browse Rankings',
     goToLibrary: 'Browse Library',
     goToGroups: 'Browse Community',
-    writeFirstPost: 'Write Your First Post',
+    writeFirstPost: 'Write Your First Update',
     noFollowingCta: 'No traders followed yet. Check the rankings!',
     noFoldersCta: 'No folders yet. Create one above!',
     browsePublicFolders: 'Browse Public Folders',
