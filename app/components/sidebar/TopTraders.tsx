@@ -84,7 +84,7 @@ export default function TopTraders() {
     {
       revalidateOnFocus: false,
       dedupingInterval: 60000, // 1 minute dedup
-      refreshInterval: 60000, // Refresh every 5 minutes
+      refreshInterval: 60000, // Refresh every 1 minute
     }
   )
 
