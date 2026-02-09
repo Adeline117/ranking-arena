@@ -181,6 +181,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'phemex',
   'lbank',
   'blofin',
+  'gateio',
   // CEX spot
   'binance_spot',
   'bitget_spot',
