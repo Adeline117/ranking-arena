@@ -193,7 +193,11 @@ export default function ExchangeRankingClient({
   if (traders.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: tokens.spacing[8], color: tokens.colors.text.tertiary }}>
-        <div style={{ fontSize: 40, marginBottom: tokens.spacing[3] }}>📊</div>
+        <div style={{ marginBottom: tokens.spacing[3] }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, color: tokens.colors.text.tertiary, margin: '0 auto' }}>
+            <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 4-6" />
+          </svg>
+        </div>
         <div style={{ fontSize: tokens.typography.fontSize.base, fontWeight: 600, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2] }}>
           暂无排行数据
         </div>

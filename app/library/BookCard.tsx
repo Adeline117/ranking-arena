@@ -124,7 +124,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           {(item.rating != null && item.rating > 0) && (
             <StarRating rating={item.rating} ratingCount={item.rating_count || 0} size={13} readonly />
           )}
-          {item.pdf_url && (
+          {(item.pdf_url || item.file_key) && (
             <span style={{
               fontSize: 10, color: tokens.colors.accent.brand,
               marginLeft: 'auto', fontWeight: 600,

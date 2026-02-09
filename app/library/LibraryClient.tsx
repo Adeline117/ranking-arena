@@ -17,6 +17,7 @@ const CATEGORIES = [
   { key: 'all', en: 'All', zh: '全部' },
   { key: 'book', en: 'Books', zh: '书籍' },
   { key: 'paper', en: 'Papers', zh: '论文' },
+  { key: 'finance', en: 'Finance', zh: '金融' },
   { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书' },
   { key: 'event', en: 'Events', zh: '事件' },
 ]
@@ -46,9 +47,12 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
   const [loading, setLoading] = useState(false)
   const [category, setCategory] = useState(searchParams.get('category') || 'all')
   const [sort, setSort] = useState('recent')
+  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1'))
   const categoryScrollRef = useRef<HTMLDivElement>(null)
   const isInitialRender = useRef(true)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const isZh = language === 'zh'
 
@@ -67,6 +71,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
       const params = new URLSearchParams()
       if (category !== 'all') params.set('category', category)
       if (sort !== 'recent') params.set('sort', sort)
+      if (search) params.set('search', search)
       params.set('page', String(page))
       params.set('limit', String(PAGE_SIZE))
       params.set('language', language)
@@ -80,7 +85,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
     } finally {
       setLoading(false)
     }
-  }, [category, sort, page, language])
+  }, [category, sort, search, page, language])
 
   // Fetch when filters change, but skip initial render (we have server data)
   useEffect(() => {
@@ -90,6 +95,16 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
     }
     fetchItems()
   }, [fetchItems])
+
+  // Debounced search
+  const handleSearchInput = useCallback((value: string) => {
+    setSearchInput(value)
+    clearTimeout(searchTimeoutRef.current)
+    searchTimeoutRef.current = setTimeout(() => {
+      setSearch(value.trim())
+      setPage(1)
+    }, 400)
+  }, [])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
@@ -130,7 +145,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
               lineHeight: 1.2,
               letterSpacing: '-0.02em',
             }}>
-              {isZh ? '加密书库' : 'Crypto Library'}
+              {isZh ? 'Crypto Library' : 'Crypto Library'}
             </h1>
             <p style={{
               color: tokens.colors.text.secondary,
@@ -145,44 +160,81 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
           </div>
         </div>
 
-        {/* ===== Featured Carousel ===== */}
-        {featured.length > 0 && (
+        {/* ===== Search Bar ===== */}
+        <div style={{ marginBottom: 24, position: 'relative' }}>
+          <svg
+            width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round"
+            style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+          >
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            value={searchInput}
+            onChange={e => handleSearchInput(e.target.value)}
+            placeholder={isZh ? '搜索书名、作者或关键词...' : 'Search by title, author, or keyword...'}
+            style={{
+              width: '100%',
+              padding: '12px 16px 12px 42px',
+              borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.secondary,
+              color: tokens.colors.text.primary,
+              fontSize: 14,
+              outline: 'none',
+              transition: 'border-color 0.15s ease',
+              boxSizing: 'border-box',
+            }}
+            onFocus={e => { e.currentTarget.style.borderColor = tokens.colors.accent.brand }}
+            onBlur={e => { e.currentTarget.style.borderColor = tokens.colors.border.primary }}
+          />
+          {searchInput && (
+            <button
+              onClick={() => { setSearchInput(''); setSearch(''); setPage(1) }}
+              style={{
+                position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: tokens.colors.text.tertiary, padding: 4,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* ===== Featured Section (vertical grid, not horizontal scroll) ===== */}
+        {featured.length > 0 && !search && category === 'all' && (
           <section style={{ marginBottom: 40 }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              justifyContent: 'space-between',
+            <h2 style={{
+              fontSize: 18,
+              fontWeight: 600,
+              color: tokens.colors.text.primary,
+              letterSpacing: '-0.01em',
               marginBottom: 16,
             }}>
-              <h2 style={{
-                fontSize: 18,
-                fontWeight: 600,
-                color: tokens.colors.text.primary,
-                letterSpacing: '-0.01em',
-              }}>
-                {isZh ? '精选推荐' : 'Featured'}
-              </h2>
-            </div>
+              {isZh ? '精选推荐' : 'Featured'}
+            </h2>
             <div style={{
-              display: 'flex', gap: 20, overflowX: 'auto',
-              paddingBottom: 12,
-              scrollbarWidth: 'thin',
-              scrollSnapType: 'x mandatory',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+              gap: 20,
             }}>
               {featured.slice(0, 6).map(item => (
                 <a
                   key={item.id}
                   href={`/library/${item.id}`}
                   style={{
-                    flexShrink: 0, width: 160, textDecoration: 'none',
-                    scrollSnapAlign: 'start',
+                    textDecoration: 'none',
                     transition: 'transform 0.2s ease',
                   }}
                   onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-4px)')}
                   onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
                 >
                   <div style={{
-                    width: 160, height: 240, borderRadius: tokens.radius.lg,
+                    width: '100%', aspectRatio: '2/3', borderRadius: tokens.radius.lg,
                     overflow: 'hidden',
                     boxShadow: '0 8px 24px var(--color-overlay-medium), 0 2px 8px var(--color-overlay-light)',
                     marginBottom: 10,
@@ -229,7 +281,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
             aria-label={isZh ? '书城分类' : 'Library categories'}
             style={{
               display: 'flex', gap: 6, flex: 1,
-              overflowX: 'auto', scrollbarWidth: 'none',
+              flexWrap: 'wrap',
               paddingBottom: 2,
             }}
           >
@@ -257,7 +309,6 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                       if (container) {
                         const buttons = container.querySelectorAll<HTMLButtonElement>('[role="tab"]')
                         buttons[nextIdx]?.focus()
-                        buttons[nextIdx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
                       }
                     }
                   }}
@@ -305,6 +356,15 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
           </select>
         </div>
 
+        {/* ===== Results count ===== */}
+        {search && (
+          <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 16 }}>
+            {isZh
+              ? `找到 ${total.toLocaleString()} 个结果`
+              : `${total.toLocaleString()} results found`}
+          </p>
+        )}
+
         {/* ===== Grid ===== */}
         {loading ? (
           <div style={{
@@ -339,12 +399,16 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
               fontSize: 16, fontWeight: 600,
               color: tokens.colors.text.primary, marginBottom: 6,
             }}>
-              {isZh ? '该分类暂无内容' : 'No items in this category yet'}
+              {search
+                ? (isZh ? '未找到匹配结果' : 'No matching results')
+                : (isZh ? '该分类暂无内容' : 'No items in this category yet')}
             </p>
             <p style={{
               fontSize: 13, color: tokens.colors.text.tertiary,
             }}>
-              {isZh ? '试试其他分类' : 'Try a different category'}
+              {search
+                ? (isZh ? '换个关键词试试' : 'Try different keywords')
+                : (isZh ? '试试其他分类' : 'Try a different category')}
             </p>
           </div>
         ) : category === 'event' ? (
@@ -408,7 +472,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
         {totalPages > 1 && (
           <div style={{
             display: 'flex', justifyContent: 'center', alignItems: 'center',
-            gap: 6, marginTop: 48,
+            gap: 6, marginTop: 48, flexWrap: 'wrap',
           }}>
             <PaginationButton
               disabled={page <= 1}

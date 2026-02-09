@@ -591,18 +591,19 @@ export default function BookDetailPage() {
         {similar.length > 0 && (
           <Section title={isZh ? '相似推荐' : 'You might also like'}>
             <div style={{
-              display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 8,
-              scrollbarWidth: 'thin', scrollSnapType: 'x mandatory',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+              gap: 16,
             }}>
               {similar.map(item => (
-                <Link key={item.id} href={`/library/${item.id}`} style={{ textDecoration: 'none', flexShrink: 0, scrollSnapAlign: 'start' }}>
+                <Link key={item.id} href={`/library/${item.id}`} style={{ textDecoration: 'none' }}>
                   <div
-                    style={{ width: 140, transition: `transform ${tokens.transition.base}` }}
+                    style={{ transition: `transform ${tokens.transition.base}` }}
                     onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-4px)')}
                     onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
                   >
                     <div style={{
-                      width: 140, height: 210, borderRadius: tokens.radius.lg,
+                      width: '100%', aspectRatio: '2/3', borderRadius: tokens.radius.lg,
                       overflow: 'hidden', boxShadow: tokens.shadow.md, marginBottom: 8,
                     }}>
                       <BookCover

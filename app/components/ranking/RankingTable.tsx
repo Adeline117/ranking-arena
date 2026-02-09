@@ -399,7 +399,7 @@ function RankingTableInner(props: {
   }
 
   const sortedTraders = React.useMemo(() => {
-    let data = traders.slice(0, 1000)
+    let data = [...traders]
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.trim().toLowerCase()
       data = data.filter(t => {

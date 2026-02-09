@@ -11,6 +11,7 @@ export type LibraryItem = {
   source_url: string | null
   pdf_url: string | null
   cover_url: string | null
+  file_key: string | null
   tags: string[] | null
   crypto_symbols: string[] | null
   publish_date: string | null

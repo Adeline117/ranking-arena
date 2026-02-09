@@ -959,7 +959,7 @@ function ScoreBadge({ score }: { score: number }) {
         border: `1px solid ${hex}40`,
         boxShadow: score >= 90
           ? `0 0 12px ${hex}50, 0 0 4px ${hex}30`
-          : score >= 70
+          : score >= 80
             ? `0 0 8px ${hex}30`
             : 'none',
         textShadow: score >= 90 ? `0 0 8px ${hex}60` : 'none',
