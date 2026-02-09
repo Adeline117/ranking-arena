@@ -35,19 +35,28 @@ function ScoreBar({ label, score, maxScore, color }: BarProps) {
       <Text size="xs" style={{ width: 56, flexShrink: 0, color: tokens.colors.text.secondary, fontSize: 11 }}>
         {label}
       </Text>
-      <Box style={{ flex: 1, height: 14, background: 'var(--color-bg-tertiary)', borderRadius: tokens.radius.md, overflow: 'hidden', position: 'relative' }}>
+      <Box style={{ flex: 1, height: 20, background: 'var(--color-bg-tertiary)', borderRadius: tokens.radius.md, overflow: 'hidden', position: 'relative', border: '1px solid var(--color-border-primary)' }}>
         <Box style={{
           width: `${pct}%`,
           height: '100%',
-          background: color,
+          background: `linear-gradient(90deg, ${color}, ${color}dd)`,
           borderRadius: tokens.radius.md,
-          transition: 'width 0.4s ease',
-          minWidth: score != null ? 2 : 0,
+          transition: 'width 0.6s ease',
+          minWidth: score != null ? 4 : 0,
+          boxShadow: `0 0 6px ${color}40`,
         }} />
+        <Text size="xs" weight="bold" style={{
+          position: 'absolute',
+          right: 6,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          fontSize: 11,
+          color: pct > 60 ? 'white' : (score != null ? color : tokens.colors.text.tertiary),
+          textShadow: pct > 60 ? '0 1px 2px rgba(0,0,0,0.3)' : 'none',
+        }}>
+          {score != null ? `${score.toFixed(1)}` : '--'} / {maxScore}
+        </Text>
       </Box>
-      <Text size="xs" weight="bold" style={{ width: 40, textAlign: 'right', color: score != null ? color : tokens.colors.text.tertiary, fontSize: 11 }}>
-        {score != null ? `${score.toFixed(0)}` : '--'}/{maxScore}
-      </Text>
     </Box>
   )
 }
