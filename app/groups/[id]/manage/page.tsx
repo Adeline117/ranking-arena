@@ -672,6 +672,11 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const handleSubmitEdit = async () => {
     if (!accessToken || !isOwner) return
 
+    if (!editName.trim() && !editNameEn.trim()) {
+      showToast(t('pleaseEnterGroupName') || '请至少填写一个小组名称', 'warning')
+      return
+    }
+
     setSubmitting(true)
     try {
       const res = await fetch(`/api/groups/${groupId}/edit-apply`, {
