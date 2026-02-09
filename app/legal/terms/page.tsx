@@ -14,7 +14,7 @@ export default function TermsPage() {
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 20, marginBottom: 12 }}>1. 服务说明</h2>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: 15 }}>
-          Arena（以下简称"本平台"）是一个交易员排名和社区平台 (Trader Ranking and Community Platform)。
+          Arena（以下简称&ldquo;本平台&rdquo;）是一个交易员排名和社区平台 (Trader Ranking and Community Platform)。
           本平台提供交易员绩效数据展示、排名、社区讨论等功能。使用本平台即表示你同意以下条款。
         </p>
       </section>
@@ -74,7 +74,7 @@ export default function TermsPage() {
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 20, marginBottom: 12 }}>8. 免责声明 (Disclaimer)</h2>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: 15 }}>
-          本平台按"现状"(as is) 和"可用"(as available) 基础提供服务，不做任何明示或暗示的保证。
+          本平台按&ldquo;现状&rdquo;(as is) 和&ldquo;可用&rdquo;(as available) 基础提供服务，不做任何明示或暗示的保证。
           在适用法律允许的最大范围内，本平台不对因使用或无法使用本服务而导致的任何直接、
           间接、附带、特殊或后果性损害承担责任。
         </p>
