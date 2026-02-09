@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -38,14 +38,26 @@ function formatPrice(n: number | null): string {
 function ChangeCell({ value }: { value: number | null }) {
   if (value == null) return <span>--</span>
   const color = value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
-  return <span style={{ color, fontWeight: 500 }}>{value >= 0 ? '+' : ''}{value.toFixed(2)}%</span>
+  const bg = value >= 0 ? 'rgba(47, 229, 125, 0.1)' : 'rgba(255, 124, 124, 0.1)'
+  return (
+    <span style={{
+      color,
+      fontWeight: 700,
+      padding: '2px 8px',
+      borderRadius: tokens.radius.sm,
+      background: bg,
+      fontSize: tokens.typography.fontSize.sm,
+    }}>
+      {value >= 0 ? '+' : ''}{value.toFixed(2)}%
+    </span>
+  )
 }
 
 function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo }) {
   const bg = flash?.direction === 'up'
-    ? 'rgba(22, 199, 132, 0.25)'
+    ? 'rgba(47, 229, 125, 0.2)'
     : flash?.direction === 'down'
-      ? 'rgba(234, 57, 67, 0.25)'
+      ? 'rgba(255, 124, 124, 0.2)'
       : 'transparent'
   const color = flash?.direction === 'up'
     ? tokens.colors.accent.success
@@ -60,8 +72,9 @@ function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo })
         transition: 'background-color 0.3s ease, color 0.3s ease',
         backgroundColor: bg,
         color,
-        borderRadius: 3,
-        padding: '0 2px',
+        borderRadius: tokens.radius.sm,
+        padding: '1px 4px',
+        fontWeight: 600,
       }}
     >
       {value}
@@ -102,7 +115,6 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
     })
   }
 
-  // Merge realtime prices into data
   const merged = useMemo(() => {
     return data.map((coin) => {
       const rt = realtimePrices[coin.symbol.toUpperCase()]
@@ -132,7 +144,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
       align: 'center',
       width: '6%',
       sortable: true,
-      render: (r) => <span style={{ color: tokens.colors.text.tertiary }}>{r.rank}</span>,
+      render: (r) => <span style={{ color: tokens.colors.text.tertiary, fontWeight: 600 }}>{r.rank}</span>,
     },
     {
       key: 'symbol',
@@ -141,21 +153,38 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
       width: '22%',
       sortable: true,
       render: (r) => (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
           {r.image ? (
             <Image
               src={r.image}
               alt={`${r.symbol} icon`}
-              width={20}
-              height={20}
+              width={22}
+              height={22}
               style={{ borderRadius: '50%', flexShrink: 0 }}
               unoptimized={false}
             />
           ) : (
-            <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.colors.bg.tertiary, flexShrink: 0, display: 'inline-block' }} />
+            <span style={{
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: tokens.colors.bg.tertiary,
+              flexShrink: 0,
+              display: 'inline-block',
+            }} />
           )}
-          <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.symbol}</span>
-          <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+          <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {r.symbol}
+          </span>
+          <span style={{
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.tertiary,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {r.name}
+          </span>
         </span>
       ),
       getValue: (r) => r.symbol,
@@ -179,78 +208,150 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
       label: t('volume24h') || '成交量',
       width: '18%',
       sortable: true,
-      render: (r) => <span>{formatNum(r.volume24h)}</span>,
+      render: (r) => (
+        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: tokens.typography.fontSize.sm }}>
+          {formatNum(r.volume24h)}
+        </span>
+      ),
     },
     {
       key: 'marketCap',
       label: t('marketCapShort') || '市值',
       width: '16%',
       sortable: true,
-      render: (r) => <span>{formatNum(r.marketCap)}</span>,
+      render: (r) => (
+        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: tokens.typography.fontSize.sm }}>
+          {formatNum(r.marketCap)}
+        </span>
+      ),
     },
     {
       key: 'fav',
       label: '',
       width: '6%',
       align: 'center',
-      render: (r) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); toggleFav(r.id) }}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: favorites.has(r.id) ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
-            fontSize: 16,
-            padding: 0,
-          }}
-          title={t('favorite') || '收藏'}
-        >
-          {favorites.has(r.id) ? '\u2605' : '\u2606'}
-        </button>
-      ),
+      render: (r) => {
+        const isFav = favorites.has(r.id)
+        return (
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleFav(r.id) }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: isFav ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
+              fontSize: 18,
+              padding: 4,
+              minWidth: 44,
+              minHeight: 44,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: tokens.radius.md,
+              transition: `all ${tokens.transition.fast}`,
+            }}
+            title={t('favorite') || '收藏'}
+          >
+            {isFav ? '\u2605' : '\u2606'}
+          </button>
+        )
+      },
     },
   ]
 
   return (
     <div>
-      <div style={{ marginBottom: tokens.spacing[3], display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('searchCoin') || '搜索币种'}
-          style={{
-            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-            background: tokens.colors.bg.tertiary,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: tokens.radius.md,
-            color: tokens.colors.text.primary,
-            fontSize: tokens.typography.fontSize.sm,
-            width: '100%',
-            maxWidth: 320,
-            outline: 'none',
-          }}
-        />
+      {/* Search & Filter Bar */}
+      <div style={{
+        marginBottom: tokens.spacing[4],
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[3],
+      }}>
+        {/* Search input with icon */}
+        <div style={{
+          position: 'relative',
+          flex: 1,
+          maxWidth: 360,
+        }}>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.text.tertiary}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              position: 'absolute',
+              left: 14,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              pointerEvents: 'none',
+            }}
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('searchCoin') || '搜索币种...'}
+            style={{
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]} ${tokens.spacing[3]} 40px`,
+              background: tokens.glass.bg.medium,
+              border: tokens.glass.border.light,
+              borderRadius: tokens.radius.lg,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+              width: '100%',
+              outline: 'none',
+              transition: `all ${tokens.transition.fast}`,
+              minHeight: 44,
+              backdropFilter: tokens.glass.blur.sm,
+            }}
+          />
+        </div>
+
+        {/* Favorites button */}
         <button
           onClick={() => setShowFavOnly((v) => !v)}
           style={{
-            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-            background: showFavOnly ? tokens.colors.accent.warning : tokens.colors.bg.tertiary,
+            padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+            background: showFavOnly ? tokens.colors.accent.warning : tokens.glass.bg.medium,
             color: showFavOnly ? '#000' : tokens.colors.text.secondary,
-            border: `1px solid ${showFavOnly ? tokens.colors.accent.warning : tokens.colors.border.primary}`,
-            borderRadius: tokens.radius.md,
+            border: showFavOnly ? 'none' : tokens.glass.border.light,
+            borderRadius: tokens.radius.lg,
             cursor: 'pointer',
             fontSize: tokens.typography.fontSize.sm,
-            fontWeight: 500,
+            fontWeight: 600,
             whiteSpace: 'nowrap',
-            transition: tokens.transition.fast,
+            transition: `all ${tokens.transition.fast}`,
+            minHeight: 44,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            backdropFilter: tokens.glass.blur.sm,
           }}
         >
-          {'\u2605'} {'收藏'}
-          {favorites.size > 0 && ` (${favorites.size})`}
+          <span style={{ fontSize: 16 }}>{showFavOnly ? '\u2605' : '\u2606'}</span>
+          {'收藏'}
+          {favorites.size > 0 && (
+            <span style={{
+              padding: '1px 6px',
+              borderRadius: tokens.radius.full,
+              background: showFavOnly ? 'rgba(0,0,0,0.15)' : tokens.colors.bg.tertiary,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: 700,
+            }}>
+              {favorites.size}
+            </span>
+          )}
         </button>
       </div>
+
       <MarketTable
         columns={columns}
         data={filtered}
