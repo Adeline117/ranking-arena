@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
 
   query = query.range(offset, offset + limit - 1)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: snapshots, count, error } = await query as { data: any[] | null; count: number | null; error: any }
 
   if (error) {
@@ -239,8 +239,11 @@ export async function GET(request: NextRequest) {
     }
   })
 
+  // Filter out traders with no display name (NULL handles)
+  const filteredTraders = traders.filter((t: any) => t.display_name != null);
+
   const response: RankingsResponse = {
-    traders,
+    traders: filteredTraders,
     meta: {
       platform,
       market_type: marketType as 'futures',

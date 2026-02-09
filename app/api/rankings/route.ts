@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     // Use tiered cache (memory → Redis → DB) for rankings
     const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${offset}:${minPnl || ''}:${minTrades || ''}`
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let result: any;
 
     if (normalizedWindow === 'composite') {
@@ -514,8 +514,10 @@ async function getCompositeRankings(params: {
     };
   });
 
+  const filteredTraders = traders.filter((t: any) => t.display_name != null);
+
   return {
-    traders,
+    traders: filteredTraders,
     window: 'COMPOSITE' as const,
     totalcount: total,
     total_count: total,

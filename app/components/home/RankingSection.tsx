@@ -9,7 +9,7 @@ import { useToast } from '../ui/Toast'
 import { RankingTable, type Trader } from '../ranking/RankingTable'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
-
+import ExchangeFilter from '../ranking/ExchangeFilter'
 import TimeRangeSelector from './TimeRangeSelector'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
@@ -607,6 +607,19 @@ export default function RankingSection({
           )}
         </Box>
       </Box>
+
+      {/* Exchange filter chips */}
+      {!loading && dataSources.length > 1 && (
+        <Box style={{ marginBottom: tokens.spacing[2] }}>
+          <ExchangeFilter
+            availableSources={dataSources}
+            selectedExchange={selectedExchange}
+            onExchangeChange={handleExchangeChange}
+            isPro={isPro}
+            onProRequired={handleProRequired}
+          />
+        </Box>
+      )}
 
       {/* 高级筛选面板 */}
       {showAdvancedFilter && isPro && (
