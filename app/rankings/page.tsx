@@ -934,7 +934,7 @@ function TraderAvatar({ trader }: { trader: RankedTraderV2 }) {
     >
       <span
         style={{
-          color: 'white',
+          color: 'var(--color-on-accent)',
           fontSize: 14,
           fontWeight: 700,
           lineHeight: 1,

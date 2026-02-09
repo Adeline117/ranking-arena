@@ -352,7 +352,7 @@ export default function FlashNewsPage() {
                           {item.importance !== 'normal' && (
                             <Box style={{
                               position: 'absolute', top: 0, left: 0,
-                              background: impConfig.color, color: 'white',
+                              background: impConfig.color, color: 'var(--color-on-accent)',
                               padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                               fontSize: '12px', fontWeight: '600',
                               borderRadius: `0 0 ${tokens.radius.sm} 0`,
@@ -370,7 +370,7 @@ export default function FlashNewsPage() {
                                 {formatPublishedTime(item.published_at)}
                               </Text>
                               <Box style={{
-                                background: catColor, color: 'white',
+                                background: catColor, color: 'var(--color-on-accent)',
                                 padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                                 borderRadius: tokens.radius.sm, fontSize: '12px', fontWeight: '600',
                               }}>

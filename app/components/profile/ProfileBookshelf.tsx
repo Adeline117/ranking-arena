@@ -160,7 +160,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
                   backdropFilter: 'blur(4px)',
                   boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                 }}>
-                  <Text style={{ fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: '0.02em' }}>
+                  <Text style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-on-accent)', letterSpacing: '0.02em' }}>
                     {(STATUS_LABELS[isZh ? 'zh' : 'en'] as Record<string, string>)[book.status]}
                   </Text>
                 </Box>
