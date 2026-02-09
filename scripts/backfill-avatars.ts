@@ -72,14 +72,13 @@ async function processBinance() {
   for (let i = 0; i < traders.length; i++) {
     const id = traders[i].source_trader_id;
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
       const res = await fetch(
         `https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio/detail?portfolioId=${id}`,
-        { dispatcher: agent as any, signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" } }
+        { dispatcher: agent as any, signal: AbortSignal.timeout(10000), headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" } }
       );
-      clearTimeout(timeout);
-      const data = await res.json() as any;
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { noAvatar++; continue; }
       const avatar = data?.data?.avatarUrl;
       const nickname = data?.data?.nickname;
       if (avatar) {

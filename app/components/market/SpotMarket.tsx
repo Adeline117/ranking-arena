@@ -93,10 +93,17 @@ export default function SpotMarket() {
       sortable: true,
       render: (r) => (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-          {r.image && (
-            <img src={r.image} alt="" width={18} height={18} style={{ borderRadius: '50%', flexShrink: 0 }} loading="lazy" />
-          )}
+          <img
+            src={r.image || `/crypto-icons/${r.symbol.toLowerCase()}.svg`}
+            alt=""
+            width={20}
+            height={20}
+            style={{ borderRadius: '50%', flexShrink: 0 }}
+            loading="lazy"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
           <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.symbol}</span>
+          <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
         </span>
       ),
       getValue: (r) => r.symbol,
