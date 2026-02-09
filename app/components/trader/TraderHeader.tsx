@@ -617,35 +617,40 @@ export default function TraderHeader({
           </ActionButton>
         )}
 
-        {!isOwnProfile && userId && (
-          isRegistered ? (
-            <UserFollowButton
-              targetUserId={traderId}
-              currentUserId={userId}
-              size="sm"
-            />
-          ) : (
-            <TraderFollowButton
-              traderId={traderId}
-              userId={userId}
-              onFollowChange={(isFollowing) => {
-                setFollowerCount(prev => isFollowing ? prev + 1 : Math.max(0, prev - 1))
-              }}
-            />
-          )
-        )}
+        {/* Action buttons - single row */}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {!isOwnProfile && userId && (
+            isRegistered ? (
+              <UserFollowButton
+                targetUserId={traderId}
+                currentUserId={userId}
+                size="sm"
+              />
+            ) : (
+              <Box style={{ width: 'auto' }}>
+                <TraderFollowButton
+                  traderId={traderId}
+                  userId={userId}
+                  onFollowChange={(isFollowing) => {
+                    setFollowerCount(prev => isFollowing ? prev + 1 : Math.max(0, prev - 1))
+                  }}
+                />
+              </Box>
+            )
+          )}
 
-        {!isOwnProfile && (
-          <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
-        )}
+          {!isOwnProfile && (
+            <CopyTradeSection isPro={isPro} traderId={traderId} source={source} handle={handle} router={router} t={t} />
+          )}
 
-        <ActionButton onClick={() => router.push('/')} variant="ghost">
-          ← {t('back')}
-        </ActionButton>
+          <ActionButton onClick={() => router.push('/')} variant="ghost">
+            ← {t('back')}
+          </ActionButton>
 
-        {!isOwnProfile && !isRegistered && userId && (
-          <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
-        )}
+          {!isOwnProfile && !isRegistered && userId && (
+            <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
+          )}
+        </Box>
       </Box>
 
     </Box>
