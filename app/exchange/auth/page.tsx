@@ -32,7 +32,7 @@ function ExchangeAuthContent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) {
         router.push('/login?redirect=/exchange/auth')

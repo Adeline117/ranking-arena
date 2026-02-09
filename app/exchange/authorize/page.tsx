@@ -22,7 +22,7 @@ function ExchangeAuthorizePageContent() {
   const [email, setEmail] = useState<string | null>(null)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
     })
@@ -41,7 +41,7 @@ function ExchangeAuthorizePageContent() {
   const loadAuthUrl = async (ex: string) => {
     try {
       setLoading(true)
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         router.push('/login?redirect=/exchange')

@@ -176,7 +176,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
   }, [searchParams])
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setCurrentUserId(data.user?.id ?? null)

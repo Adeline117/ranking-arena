@@ -123,7 +123,7 @@ export function useSubscription() {
     checkSubscription()
 
     // 监听登录状态变化
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((event) => {
       // 登录或登出时强制刷新
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {

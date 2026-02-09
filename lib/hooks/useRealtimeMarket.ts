@@ -232,15 +232,16 @@ export function useRealtimeMarket(options: UseRealtimeMarketOptions = {}) {
       startPoll()
     }
 
+    const timers = flashTimersRef.current
     return () => {
       mountedRef.current = false
       stopSSE()
       stopPoll()
       // Clear all pending flash timers
-      for (const timer of flashTimersRef.current) {
+      for (const timer of timers) {
         clearTimeout(timer)
       }
-      flashTimersRef.current.clear()
+      timers.clear()
     }
   }, [enabled, preferredMode, startSSE, startPoll, stopSSE, stopPoll])
 

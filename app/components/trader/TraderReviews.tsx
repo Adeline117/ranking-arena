@@ -389,7 +389,7 @@ function ReviewForm({
   const [accessToken, setAccessToken] = useState<string | null>(null)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getSession().then(({ data }) => {
       setAccessToken(data.session?.access_token ?? null)
     })
@@ -518,11 +518,11 @@ export default function TraderReviews({ traderHandle }: TraderReviewsProps) {
 
   // Auth
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getSession().then(({ data }) => {
       setAccessToken(data.session?.access_token ?? null)
     })
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setCurrentUserId(data.user?.id ?? null)
     })

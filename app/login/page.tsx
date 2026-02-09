@@ -296,11 +296,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     let redirected = false
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified && !redirected) {
         redirected = true
-        // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+         
         supabase.auth.getUser().then(({ data: { user } }) => {
           if (user) {
             supabase
@@ -604,7 +604,7 @@ export default function LoginPage() {
           return
         }
 
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: userProfile } = await supabase

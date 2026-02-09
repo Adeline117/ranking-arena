@@ -23,7 +23,7 @@ function ExchangeCallbackPageContent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       if (!data.user) {
@@ -55,7 +55,7 @@ function ExchangeCallbackPageContent() {
     setConnecting(true)
 
     try {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         setError(t('pleaseLogin'))

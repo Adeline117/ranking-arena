@@ -225,7 +225,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
         setUserId(auth.userId)
         setAccessToken(auth.accessToken)
         // 获取 email 用于 TopNav 显示
-        // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+         
         supabase.auth.getSession().then(({ data }) => {
           setEmail(data.session?.user?.email ?? null)
         })
@@ -241,7 +241,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
     })
 
     // 监听 auth 状态变化（logout、token刷新等）
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         setUserId(session.user.id)

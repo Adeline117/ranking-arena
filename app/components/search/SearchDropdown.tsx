@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -146,6 +146,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     } finally {
       setLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable
   }, [open])
 
   useEffect(() => {
@@ -322,6 +323,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
+   
   }, [open, flatResults, selectedIndex, query, onClose, router, saveToHistory])
 
   // Scroll selected item into view within dropdown

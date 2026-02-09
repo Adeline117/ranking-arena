@@ -275,6 +275,7 @@ export default function TradingViewChart({
       seriesRef.current = null
       volumeRef.current = null
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using only primary deps
   }, [data, type, height, theme, color, topColor, bottomColor, showVolume, locale])
 
   return (

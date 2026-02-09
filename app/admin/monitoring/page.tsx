@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
@@ -112,7 +112,7 @@ export default function MonitoringPage() {
   const [autoRefresh, setAutoRefresh] = useState(true)
 
   // Load monitoring data
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!accessToken) return
 
     try {
@@ -135,7 +135,7 @@ export default function MonitoringPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accessToken, showToast])
 
   // Initial load
   useEffect(() => {

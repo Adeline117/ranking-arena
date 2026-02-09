@@ -103,7 +103,7 @@ export default function BookDetailPage() {
   const { isPremium } = usePremium()
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
   }, [])
 

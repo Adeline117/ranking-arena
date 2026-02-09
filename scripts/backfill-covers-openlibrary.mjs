@@ -8,6 +8,8 @@
  *   2. Fetch /works/{ID}.json → covers array
  *   3. Build cover URL: https://covers.openlibrary.org/b/id/{COVER_ID}-M.jpg
  *
+ * Respects OL rate limits with retry on 429.
+ *
  * Usage:
  *   node scripts/backfill-covers-openlibrary.mjs              # dry run
  *   node scripts/backfill-covers-openlibrary.mjs --apply       # apply updates
@@ -20,8 +22,9 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 const apply = process.argv.includes('--apply')
-const CONCURRENCY = 15
+const CONCURRENCY = 1
 const BATCH = 1000
+const DELAY_MS = 1100  // ~0.9 req/s — OL rate limit is ~100/5min
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -30,12 +33,24 @@ function extractWorkId(sourceUrl) {
   return m ? m[1] : null
 }
 
-async function getCoverUrl(workId) {
+async function getCoverUrl(workId, retries = 3) {
   try {
     const res = await fetch(
       `https://openlibrary.org/works/${workId}.json`,
-      { signal: AbortSignal.timeout(15000) }
+      {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'User-Agent': 'RankingArena/1.0 (cover-backfill; mailto:dev@example.com)' }
+      }
     )
+    if (res.status === 429) {
+      if (retries > 0) {
+        const wait = (4 - retries) * 30000  // 30s, 60s, 90s backoff
+        console.log(`    429 rate limited, waiting ${wait/1000}s...`)
+        await sleep(wait)
+        return getCoverUrl(workId, retries - 1)
+      }
+      return null
+    }
     if (!res.ok) return null
     const data = await res.json()
     const coverId = data.covers?.find(c => c > 0)
@@ -51,7 +66,7 @@ async function main() {
   const t0 = Date.now()
 
   let offset = 0
-  let total = 0, found = 0, skipped = 0, noId = 0, updated = 0, errors = 0
+  let total = 0, found = 0, skipped = 0, noId = 0, updated = 0, errors = 0, retries429 = 0
 
   while (true) {
     const { data: rows, error } = await sb
@@ -64,7 +79,8 @@ async function main() {
     if (error) { console.error('DB error:', error.message); break }
     if (!rows?.length) break
 
-    console.log(`\nBatch ${Math.floor(offset / BATCH) + 1}: ${rows.length} items (offset ${offset})`)
+    const batchNum = Math.floor(offset / BATCH) + 1
+    console.log(`\nBatch ${batchNum}: ${rows.length} items (offset ${offset})`)
 
     for (let i = 0; i < rows.length; i += CONCURRENCY) {
       const chunk = rows.slice(i, i + CONCURRENCY)
@@ -98,16 +114,17 @@ async function main() {
         }
       }
 
-      if (total % 50 === 0) {
+      if (total % 30 === 0) {
         const valid = total - noId
         const pct = valid > 0 ? ((found / valid) * 100).toFixed(1) : '0.0'
         const elapsed = ((Date.now() - t0) / 1000).toFixed(0)
-        console.log(`  [${elapsed}s] processed=${total} found=${found} miss=${skipped} noId=${noId} hitRate=${pct}%${apply ? ` updated=${updated}` : ''}`)
+        const rate = (total / ((Date.now() - t0) / 1000)).toFixed(1)
+        console.log(`  [${elapsed}s] ${total}/${16265} found=${found} miss=${skipped} hitRate=${pct}% rate=${rate}/s${apply ? ` updated=${updated}` : ''}`)
       }
+
+      await sleep(DELAY_MS)
     }
 
-    // Print newline after batch
-    console.log()
     offset += BATCH
   }
 
@@ -120,7 +137,7 @@ async function main() {
   console.log(`Hit rate:        ${valid > 0 ? ((found / valid) * 100).toFixed(1) : 0}%`)
   if (apply) console.log(`Updated in DB:   ${updated}`)
   if (errors) console.log(`Errors:          ${errors}`)
-  console.log(`Time:            ${((Date.now() - t0) / 1000).toFixed(0)}s`)
+  console.log(`Time:            ${((Date.now() - t0) / 1000 / 60).toFixed(1)} min`)
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

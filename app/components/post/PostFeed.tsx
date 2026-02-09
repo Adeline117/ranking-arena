@@ -249,6 +249,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         setLoading(false)
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable from useLanguage
   }, [props.groupId, props.authorHandle, accessToken, sortType, pageSize, props.groupIds, props.sortBy, storeSetPosts])
 
   // 加载更多帖子（无限滚动）
@@ -482,6 +483,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         loadSinglePost()
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable
   }, [props.initialPostId, posts, openPost, setComments])
 
   // 点赞/踩 - per-postId lock (waits for API response before allowing next action)
@@ -1047,6 +1049,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     } finally {
       setTranslating(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable
   }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken])
 
   // 批量翻译帖子标题和内容预览（使用批量API，减少请求次数）

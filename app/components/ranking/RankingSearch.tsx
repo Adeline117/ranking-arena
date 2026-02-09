@@ -269,6 +269,7 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
           aria-autocomplete="list"
           aria-activedescendant={activeIndex >= 0 ? `search-history-item-${activeIndex}` : undefined}
           role="combobox"
+          aria-controls="search-results-listbox"
           autoComplete="off"
           style={{
             flex: 1,

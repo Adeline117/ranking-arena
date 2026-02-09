@@ -139,7 +139,7 @@ function ApiKeyAuthContent() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+     
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) {
         router.push('/login?redirect=/exchange/auth/api-key')
@@ -183,7 +183,7 @@ function ApiKeyAuthContent() {
     setError(null)
 
     try {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLogin'), 'warning')

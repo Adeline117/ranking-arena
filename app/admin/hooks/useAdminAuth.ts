@@ -26,7 +26,7 @@ export function useAdminAuth() {
 
   async function checkAuth() {
     try {
-      // eslint-disable-next-line no-restricted-syntax -- TODO: migrate to useAuthSession()
+       
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session?.user) {
