@@ -39,6 +39,13 @@ export async function GET() {
   const encoder = new TextEncoder()
   let closed = false
   let intervalId: ReturnType<typeof setInterval> | null = null
+  let heartbeatId: ReturnType<typeof setInterval> | null = null
+
+  const cleanup = () => {
+    closed = true
+    if (intervalId) { clearInterval(intervalId); intervalId = null }
+    if (heartbeatId) { clearInterval(heartbeatId); heartbeatId = null }
+  }
 
   const stream = new ReadableStream({
     start(controller) {
@@ -59,10 +66,19 @@ export async function GET() {
       push()
       // Poll Upstash every 2s
       intervalId = setInterval(push, 2000)
+
+      // Keepalive comment every 15s to prevent proxy/CDN timeout
+      heartbeatId = setInterval(() => {
+        if (closed) return
+        try {
+          controller.enqueue(encoder.encode(': keepalive\n\n'))
+        } catch {
+          cleanup()
+        }
+      }, 15000)
     },
     cancel() {
-      closed = true
-      if (intervalId) clearInterval(intervalId)
+      cleanup()
     },
   })
 
