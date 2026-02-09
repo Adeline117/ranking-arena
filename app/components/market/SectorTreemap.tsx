@@ -31,14 +31,16 @@ function getChangeColor(changePct: number): string {
   const intensity = Math.abs(clamped) / maxPct
 
   if (clamped >= 0) {
-    const r = Math.round(74 - intensity * 53)
-    const g = Math.round(222 - intensity * 94)
-    const b = Math.round(128 - intensity * 67)
+    // Richer green: from muted #2a6b4a → vivid #16a34a
+    const r = Math.round(42 - intensity * 20)
+    const g = Math.round(107 + intensity * 56)
+    const b = Math.round(74 - intensity * 0)
     return `rgb(${r}, ${g}, ${b})`
   } else {
-    const r = Math.round(248 - intensity * 63)
-    const g = Math.round(113 - intensity * 85)
-    const b = Math.round(113 - intensity * 85)
+    // Richer red: from muted #8b3a3a → vivid #dc2626
+    const r = Math.round(139 + intensity * 81)
+    const g = Math.round(58 - intensity * 20)
+    const b = Math.round(58 - intensity * 20)
     return `rgb(${r}, ${g}, ${b})`
   }
 }
@@ -273,8 +275,8 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 <span style={{
                   fontSize,
                   fontWeight: 800,
-                  color: 'var(--foreground)',
-                  textShadow: '0 1px 3px var(--color-overlay-dark)',
+                  color: '#FFFFFF',
+                  textShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0px 1px rgba(0,0,0,0.5)',
                   lineHeight: 1.1,
                   maxWidth: '90%',
                   overflow: 'hidden',
@@ -286,10 +288,10 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
               )}
               {showPct && (
                 <span style={{
-                  fontSize: Math.max(8, fontSize * 0.65),
-                  fontWeight: 600,
-                  color: 'var(--glass-bg-heavy)',
-                  textShadow: '0 1px 2px var(--color-overlay-dark)',
+                  fontSize: Math.max(9, fontSize * 0.7),
+                  fontWeight: 700,
+                  color: 'rgba(255,255,255,0.9)',
+                  textShadow: '0 1px 3px rgba(0,0,0,0.6)',
                   lineHeight: 1.1,
                 }}>
                   {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
@@ -297,9 +299,11 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
               )}
               {showCat && (
                 <span style={{
-                  fontSize: 8,
-                  color: 'var(--glass-bg-medium)',
-                  marginTop: 1,
+                  fontSize: 9,
+                  fontWeight: 500,
+                  color: 'rgba(255,255,255,0.65)',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                  marginTop: 2,
                   maxWidth: '90%',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',

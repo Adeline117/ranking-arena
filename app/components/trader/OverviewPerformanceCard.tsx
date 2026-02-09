@@ -820,7 +820,7 @@ function MetricBadge({
         {label}
       </Text>
       <Text style={{ fontSize: 13, color, fontWeight: 700, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-        {isNA ? 'N/A' : value}
+        {isNA ? '--' : value}
       </Text>
     </Box>
   )

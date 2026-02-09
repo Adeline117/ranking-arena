@@ -238,7 +238,7 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                     padding: '10px 20px',
                     borderRadius: tokens.radius.lg,
                     fontSize: 14,
-                    fontWeight: active ? 600 : 500,
+                    fontWeight: active ? 700 : 500,
                     border: active ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                     background: active ? tokens.gradient.purpleGold : tokens.colors.bg.secondary,
                     color: active ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
@@ -246,13 +246,16 @@ export default function LibraryClient({ initialItems, initialFeatured, initialTo
                     transition: 'all 0.2s ease',
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 8,
+                    gap: 6,
+                    boxShadow: active ? tokens.shadow.glow : 'none',
+                    lineHeight: 1,
                   }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ flexShrink: 0, verticalAlign: 'middle' }}>
                     <path d={cat.icon} />
                   </svg>
                   {isZh ? cat.zh : cat.en}

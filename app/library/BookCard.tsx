@@ -27,9 +27,9 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
   return (
     <a
       href={`/library/${item.id}`}
-      className="card-hover"
+      className="card-hover book-card-hover"
       style={{
-        borderRadius: tokens.radius.lg,
+        borderRadius: tokens.radius.xl,
         overflow: 'hidden',
         textDecoration: 'none',
         background: tokens.colors.bg.secondary,
@@ -37,6 +37,15 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
+        transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1), box-shadow 0.25s ease',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)'
+        e.currentTarget.style.boxShadow = '0 12px 28px var(--color-overlay-medium), 0 4px 12px var(--color-overlay-light)'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.transform = 'translateY(0) scale(1)'
+        e.currentTarget.style.boxShadow = 'none'
       }}
     >
       {/* Cover - 2:3 aspect ratio */}
@@ -45,7 +54,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
         width: '100%',
         position: 'relative',
         overflow: 'hidden',
-        borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
+        borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
       }}>
         <BookCover
           title={item.title}
