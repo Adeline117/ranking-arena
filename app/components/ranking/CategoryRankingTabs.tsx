@@ -100,7 +100,7 @@ export default function CategoryRankingTabs({
               justifyContent: 'center',
               gap: 6,
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-              minHeight: 36,
+              minHeight: 44,
               minWidth: 'fit-content',
               whiteSpace: 'nowrap',
               borderRadius: tokens.radius.lg,

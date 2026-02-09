@@ -16,7 +16,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       {/* TopNav placeholder */}
-      <div style={{ height: 56, background: 'rgba(11,10,16,0.85)', borderBottom: `1px solid ${tokens.colors.border.primary}` }} />
+      <div style={{ height: 56, background: 'var(--glass-bg-primary)', borderBottom: `1px solid ${tokens.colors.border.primary}` }} />
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: `${tokens.spacing[6]} ${tokens.spacing[4]}` }}>
         {children}
       </main>

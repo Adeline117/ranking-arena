@@ -48,17 +48,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
     }
 
-    // TODO: Check if user has admin role
-    // For now, allow all authenticated users
-    // const { data: profile } = await supabase
-    //   .from('user_profiles')
-    //   .select('role')
-    //   .eq('user_id', user.id)
-    //   .single()
-    //
-    // if (profile?.role !== 'admin') {
-    //   return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-    // }
+    // Check if user has admin role
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
+
+    if (profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
 
     // Parse query params
     const { searchParams } = new URL(request.url)
@@ -128,7 +127,25 @@ export async function POST(request: NextRequest) {
   }
 
   // Check if it's cron secret
-  const isCronJob = authHeader === `Bearer ${process.env.CRON_SECRET}`
+  const isCronJob = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`
+
+  // If not cron, verify admin role
+  if (!isCronJob) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    )
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    }
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single()
+    if (profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+  }
 
   try {
     // Parse request body

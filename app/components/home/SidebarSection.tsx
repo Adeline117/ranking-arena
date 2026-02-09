@@ -56,7 +56,7 @@ export default function SidebarSection({ position }: SidebarSectionProps) {
             justifyContent: 'center',
             gap: tokens.spacing[2],
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            background: 'rgba(20, 18, 28, 0.9)',
+            background: 'var(--color-sidebar-bg)',
             color: tokens.colors.text.primary,
             borderRadius: tokens.radius.lg,
             border: tokens.glass.border.light,

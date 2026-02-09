@@ -77,7 +77,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
       </button>
 
       {/* Page number buttons */}
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexWrap: 'wrap', justifyContent: 'center', minWidth: 200 }}>
+      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexWrap: 'wrap', justifyContent: 'center', minWidth: 0 }}>
         {pages.map((page, idx) => {
           if (page === '...') {
             return (
