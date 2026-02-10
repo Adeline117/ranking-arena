@@ -25,6 +25,7 @@ export const dynamic = 'force-dynamic'
 const VALID_PLATFORMS: string[] = [
   'binance_futures', 'binance_spot', 'bybit', 'bitget_futures',
   'bitget_spot', 'mexc', 'okx_web3', 'kucoin', 'coinex', 'gmx',
+  'htx_futures',
 ]
 
 export async function GET(
@@ -55,7 +56,7 @@ export async function GET(
   const [profileResult, snapshotsResult, timeseriesResult, jobResult] = await Promise.all([
     // 1. Profile
     supabase
-      .from('trader_profiles')
+      .from('trader_profiles_v2')
       .select('*')
       .eq('platform', platform)
       .eq('trader_key', trader_key)

@@ -15,7 +15,7 @@ export const runtime = 'nodejs'
 
 // DEX 平台集合
 const DEX_PLATFORMS = new Set([
-  'gmx', 'kwenta', 'gains', 'mux', 'okx_web3', 'binance_web3',
+  'gmx', 'gains', 'okx_web3', 'binance_web3',
 ])
 
 // 阈值（小时）

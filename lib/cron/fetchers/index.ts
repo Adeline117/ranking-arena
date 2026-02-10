@@ -18,7 +18,6 @@ import { fetchOkxWeb3 } from './okx-web3'
 import { fetchBitgetFutures } from './bitget-futures'
 import { fetchBitgetSpot } from './bitget-spot'
 import { fetchXt } from './xt'
-import { fetchPionex } from './pionex'
 import { fetchBingx } from './bingx'
 import { fetchGateio } from './gateio'
 import { fetchMexc } from './mexc'
@@ -37,14 +36,9 @@ import { fetchToobit } from './toobit'
 // DEX - On-chain / Subgraph
 import { fetchHyperliquid } from './hyperliquid'
 import { fetchGmx } from './gmx'
-import { fetchKwenta } from './kwenta'
-import { fetchMux } from './mux'
 import { fetchGains } from './gains'
-import { fetchVertex } from './vertex'
-import { fetchDrift } from './drift'
 import { fetchJupiterPerps } from './jupiter-perps'
 import { fetchAevo } from './aevo'
-import { fetchSynthetix } from './synthetix'
 import { fetchDydx } from './dydx'
 import { fetchUniswap } from './uniswap'
 import { fetchPancakeSwap } from './pancakeswap'
@@ -63,7 +57,6 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   bitget_futures: fetchBitgetFutures,
   bitget_spot: fetchBitgetSpot,
   xt: fetchXt,
-  pionex: fetchPionex,
   bingx: fetchBingx,
   gateio: fetchGateio,
   mexc: fetchMexc,
@@ -82,14 +75,9 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // DEX
   hyperliquid: fetchHyperliquid,
   gmx: fetchGmx,
-  kwenta: fetchKwenta,
-  mux: fetchMux,
   gains: fetchGains,
-  vertex: fetchVertex,
-  drift: fetchDrift,
   jupiter_perps: fetchJupiterPerps,
   aevo: fetchAevo,
-  synthetix: fetchSynthetix,
   dydx: fetchDydx,
   uniswap: fetchUniswap,
   pancakeswap: fetchPancakeSwap,

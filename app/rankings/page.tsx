@@ -16,6 +16,7 @@ import { useRankingsV2 } from '@/lib/hooks/useRankingsV2'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
+import ErrorBoundary from '@/app/components/error/ErrorBoundary'
 import DataFreshnessIndicator from '@/app/components/ranking/DataFreshnessIndicator'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { Box } from '@/app/components/base'
@@ -1145,15 +1146,23 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
 
 export default function RankingsPage() {
   return (
-    <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={null} />
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          <RankingSkeleton />
-        </div>
-      </Box>
-    }>
-      <RankingsContent />
-    </Suspense>
+    <ErrorBoundary 
+      pageType="rankings" 
+      onError={(error, errorInfo) => {
+        // 可以在这里添加额外的错误处理逻辑，比如发送到分析服务
+        console.error('Rankings page error:', error, errorInfo)
+      }}
+    >
+      <Suspense fallback={
+        <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+          <TopNav email={null} />
+          <div className="max-w-5xl mx-auto px-4 py-6">
+            <RankingSkeleton />
+          </div>
+        </Box>
+      }>
+        <RankingsContent />
+      </Suspense>
+    </ErrorBoundary>
   )
 }

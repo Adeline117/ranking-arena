@@ -10,8 +10,9 @@
 export type Platform =
   | 'binance' | 'bybit' | 'bitget' | 'mexc' | 'coinex'
   | 'okx' | 'okx_wallet' | 'kucoin' | 'bitmart' | 'phemex'
-  | 'htx' | 'weex'
+  | 'htx' | 'weex' | 'gateio' | 'blofin'
   | 'gmx' | 'dydx' | 'hyperliquid'
+  | 'pionex' | 'kwenta' | 'mux'
   | 'nansen' | 'dune'
   // Dune on-chain leaderboards
   | 'dune_gmx' | 'dune_hyperliquid' | 'dune_uniswap' | 'dune_defi';

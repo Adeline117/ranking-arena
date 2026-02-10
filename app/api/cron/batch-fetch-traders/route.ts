@@ -7,7 +7,7 @@
  * Query params:
  *   group=a  → binance_futures, binance_spot, bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → mexc, kucoin, okx_web3, hyperliquid, gmx, jupiter_perps, aevo (every 4h)
- *   group=c  → coinex, bitget_spot, xt, vertex (every 6h)
+ *   group=c  → coinex, bitget_spot, xt (every 6h)
  * 
  * Each platform is called sequentially with a small delay to avoid rate limits.
  */
@@ -23,7 +23,7 @@ const GROUPS: Record<string, string[]> = {
   // Group B: Mid-priority (every 4h) — 7 platforms
   b: ['mexc', 'kucoin', 'okx_web3', 'hyperliquid', 'gmx', 'jupiter_perps', 'aevo'],
   // Group C: Lower-priority batch 1 (every 6h) — 6 platforms
-  c: ['coinex', 'bitget_spot', 'xt', 'vertex', 'bybit_spot', 'binance_web3'],
+  c: ['coinex', 'bitget_spot', 'xt', 'bybit_spot', 'binance_web3'],
   // Group D: Lower-priority batch 2 (every 6h) — 6 platforms
   d: ['lbank', 'dydx', 'phemex', 'gains', 'htx_futures', 'weex'],
   // Group E: Lowest-priority (every 8h) — 2 platforms

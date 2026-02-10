@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { LibraryItem } from '@/lib/types/library'
 import LibraryClient from './LibraryClient'
 import { logger } from '@/lib/logger'
+import ErrorBoundary from '@/app/components/error/ErrorBoundary'
 
 // ISR: revalidate every 5 minutes for fresh library content
 export const revalidate = 300
@@ -45,12 +46,19 @@ export default async function LibraryPage() {
   ])
 
   return (
-    <Suspense>
-      <LibraryClient
-        initialItems={items}
-        initialFeatured={featured}
-        initialTotal={total}
-      />
-    </Suspense>
+    <ErrorBoundary 
+      pageType="library" 
+      onError={(error, errorInfo) => {
+        console.error('Library page error:', error, errorInfo)
+      }}
+    >
+      <Suspense>
+        <LibraryClient
+          initialItems={items}
+          initialFeatured={featured}
+          initialTotal={total}
+        />
+      </Suspense>
+    </ErrorBoundary>
   )
 }

@@ -44,10 +44,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   bingx: 'BingX',
   gateio: 'Gate.io',
   xt: 'XT',
-  pionex: 'Pionex',
-  kwenta: 'Kwenta',
   gains: 'Gains Network',
-  mux: 'MUX',
   lbank: 'LBank',
   blofin: 'BloFin',
 }

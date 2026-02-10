@@ -18,10 +18,10 @@
 export const PLATFORMS = [
   // CEX
   'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
-  'bitmart', 'phemex', 'htx', 'weex', 'bingx', 'gateio', 'xt', 'pionex',
+  'bitmart', 'phemex', 'htx', 'weex', 'bingx', 'gateio', 'xt',
   'lbank', 'blofin',
   // DEX / On-chain / Perp
-  'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
+  'gmx', 'dydx', 'hyperliquid', 'gains',
   // Data/Intelligence (enrichment only)
   'nansen', 'dune',
   // Dune on-chain leaderboards
@@ -35,9 +35,10 @@ export type Platform = typeof PLATFORMS[number]
 /** Platforms that provide leaderboard data */
 export const LEADERBOARD_PLATFORMS = [
   'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
-  'bitmart', 'phemex', 'htx', 'weex', 'bingx', 'gateio', 'xt', 'pionex',
+  'bitmart', 'phemex', 'htx', 'weex', 'bingx', 'gateio', 'xt',
+  'pionex', 'kwenta', 'mux',
   'lbank', 'blofin',
-  'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
+  'gmx', 'dydx', 'hyperliquid', 'gains',
   // Dune on-chain leaderboards
   'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
 ] as const
@@ -104,17 +105,13 @@ export const GRANULAR_PLATFORMS = [
   'xt',
   'pionex',
   'kwenta',
-  'gains',
   'mux',
+  'gains',
   'lbank',
   'blofin',
   'bybit_spot',
   'jupiter_perps',
   'aevo',
-  'dune_gmx',
-  'dune_hyperliquid',
-  'dune_uniswap',
-  'dune_defi',
   // Dune on-chain leaderboards
   'dune_gmx',
   'dune_hyperliquid',

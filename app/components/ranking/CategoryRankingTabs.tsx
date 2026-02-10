@@ -136,8 +136,8 @@ export default function CategoryRankingTabs({
 
 // Onchain 平台列表（与 PLATFORM_CATEGORY 保持同步）
 const ONCHAIN_PLATFORMS = [
-  'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
-  'aevo', 'vertex', 'jupiter_perps',
+  'gmx', 'dydx', 'hyperliquid', 'gains',
+  'aevo', 'jupiter_perps',
   'binance_web3', 'okx_web3', 'okx_wallet',
   'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
 ]
@@ -159,7 +159,6 @@ export function filterByCategory(source: string, category: CategoryType): boolea
              sourceLower === 'bingx' ||
              sourceLower === 'gateio' ||
              sourceLower === 'xt' ||
-             sourceLower === 'pionex' ||
              sourceLower === 'lbank' ||
              sourceLower === 'blofin' ||
              sourceLower === 'bitmart' ||
@@ -184,7 +183,7 @@ export function getSourcesForCategory(category: CategoryType): string[] {
       return [
         'binance_futures', 'bybit', 'bitget_futures', 'mexc', 'htx_futures',
         'coinex', 'kucoin', 'weex', 'okx_futures', 'phemex', 'bitmart',
-        'bingx', 'gateio', 'xt', 'pionex', 'lbank', 'blofin'
+        'bingx', 'gateio', 'xt', 'lbank', 'blofin'
       ]
     case 'spot':
       return ['binance_spot', 'bitget_spot', 'dune_uniswap']
@@ -193,7 +192,7 @@ export function getSourcesForCategory(category: CategoryType): string[] {
         // CEX Web3 钱包
         'binance_web3', 'okx_web3', 'okx_wallet',
         // DEX/链上永续合约
-        'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
+        'gmx', 'dydx', 'hyperliquid', 'gains',
         // Dune 链上数据
         'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi'
       ]

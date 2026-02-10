@@ -34,7 +34,6 @@ export type TraderSource =
   | 'bingx'
   | 'gateio'
   | 'xt'
-  | 'pionex'
   | 'lbank'
   | 'blofin'
   | 'bitmart'
@@ -51,14 +50,9 @@ export type TraderSource =
   | 'gmx'
   | 'dydx'
   | 'hyperliquid'
-  | 'kwenta'
   | 'gains'
-  | 'mux'
-  | 'vertex'
-  | 'drift'
   | 'jupiter_perps'
   | 'aevo'
-  | 'synthetix'
   // Dune on-chain data
   | 'dune_gmx'
   | 'dune_hyperliquid'
@@ -85,7 +79,6 @@ export const ALL_SOURCES: TraderSource[] = [
   'bingx',
   'gateio',
   'xt',
-  'pionex',
   'lbank',
   'blofin',
   // CEX spot
@@ -101,14 +94,9 @@ export const ALL_SOURCES: TraderSource[] = [
   'gmx',
   'dydx',
   'hyperliquid',
-  'kwenta',
   'gains',
-  'mux',
-  'vertex',
-  'drift',
   'jupiter_perps',
   'aevo',
-  'synthetix',
   // Dune on-chain data
   'dune_gmx',
   'dune_hyperliquid',
@@ -150,7 +138,6 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   // Web3 / DEX
   'gmx',
   'hyperliquid',
-  'kwenta',
   'gains',
   'okx_web3',
   'dydx',
@@ -227,7 +214,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   bingx: { name: 'BingX', sourceType: 'futures', reliability: 40, trustWeight: 0.65, roiType: 'mixed' },
   gateio: { name: 'Gate.io', sourceType: 'futures', reliability: 68, trustWeight: 0.80, roiType: 'mixed' },
   xt: { name: 'XT.COM', sourceType: 'futures', reliability: 55, trustWeight: 0.65, roiType: 'mixed' },
-  pionex: { name: 'Pionex', sourceType: 'futures', reliability: 60, trustWeight: 0.65, roiType: 'mixed' },
+  // pionex: removed — no public leaderboard API
   lbank: { name: 'LBank', sourceType: 'futures', reliability: 35, trustWeight: 0.60, roiType: 'mixed' },
   blofin: { name: 'BloFin', sourceType: 'futures', reliability: 40, trustWeight: 0.65, roiType: 'mixed' },
   bitmart: { name: 'BitMart', sourceType: 'futures', reliability: 65, trustWeight: 0.65, roiType: 'mixed' },
@@ -244,14 +231,10 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   gmx: { name: 'GMX', sourceType: 'web3', reliability: 95, trustWeight: 1.0, roiType: 'realized' },
   dydx: { name: 'dYdX', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'realized' },
   hyperliquid: { name: 'Hyperliquid', sourceType: 'web3', reliability: 95, trustWeight: 1.0, roiType: 'mixed' },
-  kwenta: { name: 'Kwenta', sourceType: 'web3', reliability: 88, trustWeight: 0.90, roiType: 'realized' },
+  // kwenta, mux, vertex, drift, synthetix: removed — no accessible public leaderboard APIs
   gains: { name: 'Gains Network', sourceType: 'web3', reliability: 95, trustWeight: 0.95, roiType: 'realized' },
-  mux: { name: 'MUX', sourceType: 'web3', reliability: 88, trustWeight: 0.85, roiType: 'realized' },
-  vertex: { name: 'Vertex', sourceType: 'web3', reliability: 85, trustWeight: 0.85, roiType: 'mixed' },
-  drift: { name: 'Drift', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'mixed' },
   jupiter_perps: { name: 'Jupiter Perps', sourceType: 'web3', reliability: 85, trustWeight: 0.95, roiType: 'mixed' },
   aevo: { name: 'Aevo', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'mixed' },
-  synthetix: { name: 'Synthetix', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'realized' },
   // Dune on-chain data
   dune_gmx: { name: 'GMX (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'realized' },
   dune_hyperliquid: { name: 'Hyperliquid (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'mixed' },

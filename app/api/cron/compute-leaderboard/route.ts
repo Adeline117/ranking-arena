@@ -45,7 +45,7 @@ const DEGRADATION_THRESHOLD = 0.30 // 30% drop triggers protection
 const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
   '7D': 2000,
   '30D': 5000,
-  '90D': 10000,
+  '90D': 50000,
 }
 
 export async function GET(request: NextRequest) {

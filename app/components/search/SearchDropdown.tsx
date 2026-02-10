@@ -19,6 +19,19 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
 import { logger } from '@/lib/logger'
 
+interface TrendingSearchItem {
+  query: string
+  searchCount: number
+  rank: number
+  category?: 'trader' | 'token' | 'general'
+}
+
+interface TrendingSearchResponse {
+  trending: TrendingSearchItem[]
+  fallback: string[]
+  lastUpdated: string
+}
+
 /** 高亮搜索关键词 */
 function highlightMatch(text: string, q: string): React.ReactNode {
   if (!text || !q.trim()) return text
@@ -82,6 +95,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const { userId, isLoggedIn, authChecked } = useAuthSession()
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
+  const [trendingSearches, setTrendingSearches] = useState<TrendingSearchItem[]>([])
   const [loading, setLoading] = useState(false)
   const [searchData, setSearchData] = useState<UnifiedSearchResponse | null>(null)
   const [searching, setSearching] = useState(false)
@@ -110,6 +124,48 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     }
     loadHistory()
   }, [authChecked, userId, isLoggedIn])
+
+  // 加载热门搜索
+  const loadTrendingSearches = useCallback(async () => {
+    if (!open) return
+    try {
+      const response = await fetch('/api/search/trending')
+      if (response.ok) {
+        const result = await response.json()
+        const data = result.data || result
+        
+        // 使用真实热门搜索或退回到fallback
+        const trending = data.trending || []
+        const fallback = data.fallback || ['BTC', 'ETH', 'SOL', 'DOGE', 'PEPE']
+        
+        if (trending.length >= 3) {
+          setTrendingSearches(trending.slice(0, 8))
+        } else {
+          // 如果热门搜索数据不足，使用fallback并转换格式
+          setTrendingSearches(
+            fallback.slice(0, 8).map((query: string, index: number) => ({
+              query,
+              searchCount: 100 - index * 10, // 模拟搜索次数
+              rank: index + 1,
+              category: /^[A-Z]{2,6}$/.test(query) ? 'token' as const : 'general' as const,
+            }))
+          )
+        }
+      }
+    } catch (e) {
+      logger.error('Failed to load trending searches:', e)
+      // 使用默认的备用搜索
+      const fallback = ['BTC', 'ETH', 'SOL', 'DOGE', 'PEPE']
+      setTrendingSearches(
+        fallback.map((query, index) => ({
+          query,
+          searchCount: 100 - index * 10,
+          rank: index + 1,
+          category: 'token' as const,
+        }))
+      )
+    }
+  }, [open])
 
   // 加载热榜帖子
   const loadHotPosts = useCallback(async () => {
@@ -150,8 +206,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   }, [open])
 
   useEffect(() => {
+    loadTrendingSearches()
     loadHotPosts()
-  }, [loadHotPosts])
+  }, [loadTrendingSearches, loadHotPosts])
 
   // 热榜标题翻译
   useEffect(() => {
@@ -742,6 +799,90 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
                 </button>
               </Box>
             ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* 热门搜索 */}
+      {query.trim().length < 2 && trendingSearches.length > 0 && (
+        <Box>
+          <Box
+            style={{
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              borderBottom:
+                searchHistory.length > 0
+                  ? `1px solid ${tokens.colors.border.primary}`
+                  : 'none',
+            }}
+          >
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              style={{ textTransform: 'uppercase' }}
+            >
+              {language === 'zh' ? '热门搜索' : 'Popular searches'}
+            </Text>
+          </Box>
+          <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}` }}>
+            <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
+              {trendingSearches.slice(0, 6).map((searchItem) => {
+                const query = typeof searchItem === 'string' ? searchItem : searchItem.query
+                const category = typeof searchItem === 'string' ? 'general' : searchItem.category
+                
+                return (
+                  <Link
+                    key={query}
+                    href={`/search?q=${encodeURIComponent(query)}`}
+                    style={{ textDecoration: 'none' }}
+                    onClick={onClose}
+                  >
+                    <Box
+                      style={{
+                        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                        borderRadius: tokens.radius.md,
+                        background: tokens.colors.bg.tertiary,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        cursor: 'pointer',
+                        transition: 'all 0.1s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[1],
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                        e.currentTarget.style.background = `var(--color-accent-primary-12)`
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = tokens.colors.border.primary
+                        e.currentTarget.style.background = tokens.colors.bg.tertiary
+                      }}
+                    >
+                      <Text
+                        size="xs"
+                        style={{
+                          color: tokens.colors.text.secondary,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {query}
+                      </Text>
+                      {category === 'token' && (
+                        <Box
+                          style={{
+                            width: 4,
+                            height: 4,
+                            borderRadius: '50%',
+                            background: 'var(--color-accent-primary)',
+                            opacity: 0.6,
+                          }}
+                        />
+                      )}
+                    </Box>
+                  </Link>
+                )
+              })}
+            </Box>
           </Box>
         </Box>
       )}

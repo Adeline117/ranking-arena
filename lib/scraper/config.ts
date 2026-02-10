@@ -307,15 +307,7 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     priority: 5,
     ...DEFAULT_CEX_CONFIG,
   },
-  pionex: {
-    id: 'pionex',
-    name: 'Pionex',
-    type: 'cex',
-    enabled: true,
-    timeWindows: ['7D', '30D', '90D'],
-    priority: 5,
-    ...DEFAULT_CEX_CONFIG,
-  },
+  // pionex: removed — no public leaderboard API (bot-only platform)
   weex: {
     id: 'weex',
     name: 'Weex',
@@ -354,15 +346,7 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     priority: 2,
     ...DEFAULT_DEX_CONFIG,
   },
-  kwenta: {
-    id: 'kwenta',
-    name: 'Kwenta',
-    type: 'dex',
-    enabled: true,
-    timeWindows: ['7D', '30D', '90D'],
-    priority: 3,
-    ...DEFAULT_DEX_CONFIG,
-  },
+  // kwenta: removed — The Graph subgraph deprecated, no public leaderboard API
   gains: {
     id: 'gains',
     name: 'Gains Network',
@@ -372,15 +356,7 @@ export const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     priority: 3,
     ...DEFAULT_DEX_CONFIG,
   },
-  mux: {
-    id: 'mux',
-    name: 'MUX Protocol',
-    type: 'dex',
-    enabled: true,
-    timeWindows: ['7D', '30D', '90D'],
-    priority: 4,
-    ...DEFAULT_DEX_CONFIG,
-  },
+  // mux: removed — The Graph subgraph deprecated, protocol inactive
 }
 
 // ============================================

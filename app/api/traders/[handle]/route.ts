@@ -61,8 +61,6 @@ const SOURCE_ALIASES: Record<string, string[]> = {
   gmx: ['gmx'],
   dydx: ['dydx'],
   gains: ['gains'],
-  kwenta: ['kwenta'],
-  mux: ['mux'],
   binance_web3: ['binance_web3'],
 }
 
@@ -85,8 +83,6 @@ const TRADER_SOURCES = [
   'hyperliquid',
   'dydx',
   'gains',
-  'kwenta',
-  'mux',
 ] as const
 type SourceType = typeof TRADER_SOURCES[number]
 

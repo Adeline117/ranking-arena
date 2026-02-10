@@ -139,51 +139,67 @@ export async function upsertTraders(
   for (let i = 0; i < traders.length; i += BATCH) {
     const batch = traders.slice(i, i + BATCH)
 
-    // Upsert trader_sources
-    const sources = batch.map((t) => {
-      const row: Record<string, unknown> = {
-        source: t.source,
-        source_trader_id: t.source_trader_id,
-        handle: t.handle,
-        profile_url: t.profile_url || null,
-        is_active: true,
-      }
-      // Only include avatar_url if provided (don't overwrite existing with null)
-      if (t.avatar_url) row.avatar_url = t.avatar_url
-      return row
-    })
-
-    const { error: srcErr } = await supabase
-      .from('trader_sources')
-      .upsert(sources, { onConflict: 'source,source_trader_id' })
-
-    if (srcErr) console.warn(`[upsert] trader_sources error: ${srcErr.message}`)
-
-    // Upsert trader_snapshots
-    const snapshots = batch.map((t) => ({
-      source: t.source,
-      source_trader_id: t.source_trader_id,
-      season_id: t.season_id,
-      rank: t.rank || null,
-      roi: t.roi,
-      pnl: t.pnl,
-      win_rate: t.win_rate,
-      max_drawdown: t.max_drawdown,
-      followers: t.followers || null,
-      trades_count: t.trades_count || null,
-      arena_score: t.arena_score,
-      captured_at: t.captured_at,
-      // Phase 1 扩展字段
-      sharpe_ratio: t.sharpe_ratio ?? null,
-      aum: t.aum ?? null,
+    // Upsert trader_profiles_v2
+    const profiles = batch.map((t) => ({
+      platform: t.source,
+      market_type: 'futures',
+      trader_key: t.source_trader_id,
+      display_name: t.handle || null,
+      avatar_url: t.avatar_url || null,
+      bio: null,
+      tags: [],
+      profile_url: t.profile_url || null,
+      followers: t.followers || 0,
+      copiers: 0,
+      aum: t.aum || null,
+      provenance: {
+        source_url: t.profile_url || null,
+        created_by: 'fetcher',
+        created_at: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+      last_enriched_at: null,
     }))
 
-    const { error: snapErr } = await supabase
-      .from('trader_snapshots')
-      .upsert(snapshots, { onConflict: 'source,source_trader_id,season_id' })
+    const { error: profileErr } = await supabase
+      .from('trader_profiles_v2')
+      .upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
 
-    if (snapErr) {
-      console.warn(`[upsert] trader_snapshots error: ${snapErr.message}`)
+    if (profileErr) console.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
+
+    // Upsert trader_snapshots_v2
+    const snapshots = batch.map((t) => ({
+      platform: t.source,
+      trader_key: t.source_trader_id,
+      window: t.season_id,
+      as_of_ts: t.captured_at,
+      metrics: {
+        roi: t.roi || 0,
+        pnl: t.pnl || 0,
+        win_rate: t.win_rate || null,
+        max_drawdown: t.max_drawdown || null,
+        trades_count: t.trades_count || null,
+        followers: t.followers || null,
+        copiers: null,
+        sharpe_ratio: t.sharpe_ratio || null,
+        arena_score: t.arena_score || null,
+        aum: t.aum || null,
+      },
+      quality_flags: {
+        is_suspicious: false,
+        suspicion_reasons: [],
+        data_completeness: 0.9,
+      },
+      updated_at: new Date().toISOString(),
+    }))
+
+    // Insert snapshots (allow duplicates to fail silently)
+    const { error: snapErr } = await supabase
+      .from('trader_snapshots_v2')
+      .insert(snapshots)
+
+    if (snapErr && !snapErr.message.includes('duplicate key') && !snapErr.message.includes('violates unique constraint')) {
+      console.warn(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
       return { saved, error: snapErr.message }
     }
 
@@ -259,7 +275,7 @@ export function normalizeWinRate(wr: number | null): number | null {
  */
 const DECIMAL_ROI_PLATFORMS = new Set([
   'hyperliquid', 'dydx', 'drift', 'gmx', 'gains', 'vertex',
-  'kwenta', 'synthetix', 'mux', 'jupiter-perps', 'aevo',
+  'jupiter-perps', 'aevo',
 ])
 
 export function normalizeROI(rawRoi: number | null, platform: string): number | null {
