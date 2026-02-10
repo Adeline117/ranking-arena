@@ -18,95 +18,76 @@ const supabase = getSupabaseClient()
 
 const SOURCE = 'gains'
 const TARGET_COUNT = 500
+// Fetch from all 3 chains for maximum coverage
+const CHAIN_BACKENDS = [
+  { name: 'arbitrum', base: 'https://backend-arbitrum.gains.trade' },
+  { name: 'polygon', base: 'https://backend-polygon.gains.trade' },
+  { name: 'base', base: 'https://backend-base.gains.trade' },
+]
 const API_BASE = 'https://backend-arbitrum.gains.trade'
 
 /**
- * 从 /leaderboard 获取TOP交易员完整数据
- * Returns: [{address, count, count_win, count_loss, avg_win, avg_loss, total_pnl, total_pnl_usd}]
+ * 从所有链的 /leaderboard 获取TOP交易员完整数据
  */
-async function fetchLeaderboard() {
-  console.log('  📊 获取 /leaderboard 数据...')
-  try {
-    const response = await fetch(`${API_BASE}/leaderboard`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json',
-      }
-    })
-    if (!response.ok) {
-      console.log(`  ⚠ /leaderboard 响应: ${response.status}`)
-      return []
-    }
-    const data = await response.json()
-    console.log(`  ✓ 排行榜获取到 ${data.length} 个交易员`)
-    return data
-  } catch (e) {
-    console.log(`  ✗ 排行榜获取失败: ${e.message}`)
-    return []
+async function fetchAllLeaderboards() {
+  console.log('  📊 获取所有链的 /leaderboard 数据...')
+  const all = []
+  for (const chain of CHAIN_BACKENDS) {
+    try {
+      const response = await fetch(`${chain.base}/leaderboard`, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+      })
+      if (!response.ok) { console.log(`  ⚠ ${chain.name} /leaderboard: ${response.status}`); continue }
+      const data = await response.json()
+      console.log(`  ✓ ${chain.name} 排行榜: ${data.length} 个`)
+      for (const t of data) all.push({ ...t, chain: chain.name })
+    } catch (e) { console.log(`  ✗ ${chain.name}: ${e.message}`) }
   }
+  console.log(`  ✓ 排行榜合计: ${all.length} 个`)
+  return all
 }
 
 /**
- * 从 /open-trades 获取所有活跃交易员和仓位信息
+ * 从所有链的 /open-trades 获取活跃交易员
  */
-async function fetchOpenTrades() {
-  console.log('  📊 获取 /open-trades 数据...')
-  try {
-    const response = await fetch(`${API_BASE}/open-trades`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json',
+async function fetchAllOpenTrades() {
+  console.log('  📊 获取所有链的 /open-trades 数据...')
+  const traderMap = new Map()
+  for (const chain of CHAIN_BACKENDS) {
+    try {
+      const response = await fetch(`${chain.base}/open-trades`, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
+      })
+      if (!response.ok) { console.log(`  ⚠ ${chain.name} /open-trades: ${response.status}`); continue }
+      const trades = await response.json()
+      console.log(`  ✓ ${chain.name} 活跃交易: ${trades.length} 个`)
+      for (const t of trades) {
+        const addr = (t.trade?.user || '').toLowerCase()
+        if (!addr) continue
+        if (!traderMap.has(addr)) {
+          traderMap.set(addr, { address: addr, openPositions: 0, totalCollateral: 0, totalLeverage: 0, chain: chain.name })
+        }
+        const trader = traderMap.get(addr)
+        trader.openPositions++
+        const collateral = parseInt(t.trade?.collateralAmount || '0')
+        const collateralIndex = parseInt(t.trade?.collateralIndex || '0')
+        const decimals = [18, 18, 6, 6][collateralIndex] || 6
+        trader.totalCollateral += collateral / Math.pow(10, decimals)
+        trader.totalLeverage += parseInt(t.trade?.leverage || '0') / 1000
       }
-    })
-    if (!response.ok) {
-      console.log(`  ⚠ /open-trades 响应: ${response.status}`)
-      return []
-    }
-    const trades = await response.json()
-    console.log(`  ✓ 获取到 ${trades.length} 个活跃交易`)
-
-    // 按交易员分组
-    const traderMap = new Map()
-    for (const t of trades) {
-      const addr = (t.trade?.user || '').toLowerCase()
-      if (!addr) continue
-
-      if (!traderMap.has(addr)) {
-        traderMap.set(addr, {
-          address: addr,
-          openPositions: 0,
-          totalCollateral: 0,
-          totalLeverage: 0,
-        })
-      }
-      const trader = traderMap.get(addr)
-      trader.openPositions++
-
-      // Parse collateral value
-      const collateral = parseInt(t.trade?.collateralAmount || '0')
-      const collateralIndex = parseInt(t.trade?.collateralIndex || '0')
-      // collateralIndex 0=DAI(18dec), 1=ETH(18dec), 2=USDC(6dec), 3=USDT(6dec)
-      const decimals = [18, 18, 6, 6][collateralIndex] || 6
-      trader.totalCollateral += collateral / Math.pow(10, decimals)
-
-      trader.totalLeverage += parseInt(t.trade?.leverage || '0') / 1000 // leverage is in 1000x
-    }
-
-    console.log(`  ✓ 活跃交易员: ${traderMap.size} 个`)
-    return Array.from(traderMap.values())
-  } catch (e) {
-    console.log(`  ✗ 活跃交易获取失败: ${e.message}`)
-    return []
+    } catch (e) { console.log(`  ✗ ${chain.name}: ${e.message}`) }
   }
+  console.log(`  ✓ 活跃交易员合计: ${traderMap.size} 个`)
+  return Array.from(traderMap.values())
 }
 
 async function fetchLeaderboardData(period) {
   console.log(`\n=== 抓取 Gains Network ${period} ===`)
 
-  // 获取两个数据源
+  // 获取两个数据源（所有链）
   const [leaderboardData, openTraders] = await Promise.all([
-    fetchLeaderboard(),
-    fetchOpenTrades(),
+    fetchAllLeaderboards(),
+    fetchAllOpenTrades(),
   ])
 
   const tradersMap = new Map()

@@ -35,13 +35,13 @@ const DELAY_MS = 150
 /**
  * 获取所有子账户 (不限制必须有 open positions)
  */
-async function fetchActiveSubaccounts(limit = 500) {
+async function fetchActiveSubaccounts(limit = 1500) {
   console.log('\n📊 获取子账户...')
 
   const allAccounts = new Map()
   let nextKey = null
   let page = 0
-  const maxPages = 50  // 最多扫描50页
+  const maxPages = 200  // 增加到200页以获取更多账户
 
   while (allAccounts.size < limit && page < maxPages) {
     page++
@@ -407,8 +407,8 @@ async function main() {
     console.log('⚠ 所有 Indexer 端点不可用，将仅使用 Chain API（无胜率/回撤数据）')
   }
 
-  // 获取活跃账户
-  const accounts = await fetchActiveSubaccounts(300)
+  // 获取活跃账户 - 增加扫描量以获取更多交易员
+  const accounts = await fetchActiveSubaccounts(1500)
 
   if (accounts.length === 0) {
     console.log('\n❌ 未获取到活跃账户')

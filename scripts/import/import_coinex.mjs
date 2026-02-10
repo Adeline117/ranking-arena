@@ -23,7 +23,7 @@ const supabase = getSupabaseClient()
 const SOURCE = 'coinex'
 const BASE_URL = 'https://www.coinex.com/en/copy-trading/futures'
 const TARGET_COUNT = 500
-const MAX_PAGES = 17
+const MAX_PAGES = 30
 
 async function fetchLeaderboardData(period) {
   console.log(`\n=== 抓取 CoinEx ${period} 排行榜 ===`)

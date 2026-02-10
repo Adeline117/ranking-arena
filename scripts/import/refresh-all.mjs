@@ -244,17 +244,38 @@ function extractTraders(obj, depth = 0) {
 }
 
 const BROWSER_PLATFORMS = [
-  { name: 'xt', url: 'https://www.xt.com/en/copy-trading/futures', source: 'xt' },
-  { name: 'mexc', url: 'https://www.mexc.com/copy-trading', source: 'mexc' },
-  { name: 'coinex', url: 'https://www.coinex.com/copy-trading', source: 'coinex' },
-  { name: 'kucoin', url: 'https://www.kucoin.com/copy-trading/leaderboard', source: 'kucoin' },
-  { name: 'bybit', url: 'https://www.bybit.com/copyTrade/', source: 'bybit' },
-  { name: 'bingx', url: 'https://bingx.com/en/copy-trading/', source: 'bingx' },
-  { name: 'bitget', url: 'https://www.bitget.com/copy-trading/futures/all?rule=2&sort=0', source: 'bitget_futures' },
-  { name: 'phemex', url: 'https://phemex.com/copy-trading', source: 'phemex' },
-  { name: 'weex', url: 'https://www.weex.com/zh-CN/copy-trading', source: 'weex' },
-  { name: 'lbank', url: 'https://www.lbank.com/copy-trading', source: 'lbank' },
-  { name: 'blofin', url: 'https://blofin.com/en/copy-trade', source: 'blofin' },
+  { name: 'xt', source: 'xt', urls: [
+    'https://www.xt.com/en/copy-trading/futures',
+    'https://www.xt.com/en/copy-trading/futures?sort=profit',
+  ]},
+  { name: 'mexc', source: 'mexc', urls: ['https://www.mexc.com/copy-trading'] },
+  { name: 'coinex', source: 'coinex', urls: [
+    'https://www.coinex.com/copy-trading',
+    'https://www.coinex.com/copy-trading?sort=profit',
+  ]},
+  { name: 'kucoin', source: 'kucoin', urls: [
+    'https://www.kucoin.com/copy-trading/leaderboard',
+    'https://www.kucoin.com/copy-trading/leaderboard?sort=pnl',
+  ]},
+  { name: 'bybit', source: 'bybit', urls: ['https://www.bybit.com/copyTrade/'] },
+  { name: 'bingx', source: 'bingx', urls: [
+    'https://bingx.com/en/copy-trading/',
+    'https://bingx.com/en/CopyTrading/leaderBoard',
+  ]},
+  { name: 'bitget', source: 'bitget_futures', urls: ['https://www.bitget.com/copy-trading/futures/all?rule=2&sort=0'] },
+  { name: 'phemex', source: 'phemex', urls: [
+    'https://phemex.com/copy-trading',
+    'https://phemex.com/copy-trading/leaderboard',
+  ]},
+  { name: 'weex', source: 'weex', urls: [
+    'https://www.weex.com/zh-CN/copy-trading',
+    'https://www.weex.com/en-US/copy-trading',
+  ]},
+  { name: 'lbank', source: 'lbank', urls: [
+    'https://www.lbank.com/copy-trading',
+    'https://www.lbank.com/en-US/copy-trading',
+  ]},
+  { name: 'blofin', source: 'blofin', urls: ['https://blofin.com/en/copy-trade'] },
 ]
 
 async function refreshBrowserPlatforms(filter) {
@@ -288,7 +309,9 @@ async function refreshBrowserPlatforms(filter) {
     console.log(`  ${plat.name}...`)
     const traders = new Map()
     let savedCount = 0
+    const urls = plat.urls || [plat.url]
 
+    for (const visitUrl of urls) {
     try {
       const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } })
       const page = await ctx.newPage()
@@ -312,7 +335,7 @@ async function refreshBrowserPlatforms(filter) {
         } catch {}
       })
 
-      await page.goto(plat.url, { timeout: 40000, waitUntil: 'load' }).catch(() => {})
+      await page.goto(visitUrl, { timeout: 40000, waitUntil: 'load' }).catch(() => {})
 
       // CF wait
       let cfOk = false
@@ -324,10 +347,46 @@ async function refreshBrowserPlatforms(filter) {
 
       if (cfOk) {
         await sleep(8000)
-        // Scroll for more data
-        for (let i = 0; i < 6; i++) {
+        
+        // Aggressive pagination: scroll + click next buttons
+        const prevCount = () => traders.size
+        for (let i = 0; i < 30; i++) {
+          const before = prevCount()
           await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {})
           await sleep(2000)
+          
+          // Try clicking pagination / "load more" / "next" buttons
+          if (i % 3 === 2) {
+            await page.evaluate(() => {
+              // Click "next page" or pagination buttons
+              const btns = [...document.querySelectorAll('button, a, [role="button"], li')]
+              for (const btn of btns) {
+                const text = (btn.textContent || '').trim().toLowerCase()
+                const cls = (btn.className || '').toLowerCase()
+                const aria = (btn.getAttribute('aria-label') || '').toLowerCase()
+                if (text === '>' || text === '›' || text === 'next' || text === '下一页' ||
+                    cls.includes('next') || aria.includes('next') ||
+                    (btn.tagName === 'LI' && cls.includes('next'))) {
+                  try { btn.click(); return true } catch {}
+                }
+              }
+              // Click "load more" buttons
+              for (const btn of btns) {
+                const text = (btn.textContent || '').trim().toLowerCase()
+                if (text.includes('load more') || text.includes('more') || text.includes('查看更多') || text.includes('加载更多')) {
+                  try { btn.click(); return true } catch {}
+                }
+              }
+              return false
+            }).catch(() => {})
+            await sleep(3000)
+          }
+          
+          // Stop if no new traders after 3 iterations
+          if (i > 5 && prevCount() === before && i % 3 === 0) {
+            const still = prevCount()
+            if (still === before) break
+          }
         }
       }
 
@@ -336,16 +395,22 @@ async function refreshBrowserPlatforms(filter) {
         await saveBatch(plat.source, [...traders.values()])
       }
 
-      results[plat.name] = traders.size > 0 ? `✅ ${traders.size}` : (cfOk ? '⚠ CF通过 0数据' : '❌ CF失败')
-      console.log(`    ${results[plat.name]}`)
+      console.log(`    URL ${visitUrl}: ${traders.size} traders so far`)
 
       await ctx.close()
-      // Brief pause between platforms
       await sleep(1000)
     } catch (e) {
-      results[plat.name] = `❌ ${e.message?.substring(0, 30)}`
-      console.log(`    ${results[plat.name]}`)
+      console.log(`    URL error: ${e.message?.substring(0, 30)}`)
     }
+    } // end urls loop
+
+    // Final save all remaining
+    if (traders.size > savedCount) {
+      await saveBatch(plat.source, [...traders.values()])
+    }
+
+    results[plat.name] = traders.size > 0 ? `✅ ${traders.size}` : '❌ 0'
+    console.log(`    ${results[plat.name]}`)
   }
 
   try { await browser.close() } catch {}
