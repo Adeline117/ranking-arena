@@ -48,9 +48,6 @@ export default async function LibraryPage() {
   return (
     <ErrorBoundary 
       pageType="library" 
-      onError={(error, errorInfo) => {
-        console.error('Library page error:', error, errorInfo)
-      }}
     >
       <Suspense>
         <LibraryClient
