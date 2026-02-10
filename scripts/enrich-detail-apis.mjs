@@ -453,64 +453,62 @@ async function enrichBybit() {
   console.log('\n🔵 Bybit - Detail API enrichment')
   const traders = await getTradersToEnrich('bybit', LIMIT)
   console.log(`  Found ${traders.length} traders to enrich`)
-  
+
+  // Bybit's API is WAF-blocked from US/residential IPs.
+  // Strategy: POST to /x-api/.../leader-detail (same as enrichment.ts).
+  // Try direct first, then CF proxy. If both blocked, skip gracefully.
+  const BYBIT_DETAIL_URL = 'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/leader-detail'
+  const BYBIT_HEADERS = {
+    'Content-Type': 'application/json',
+    'Origin': 'https://www.bybit.com',
+    'Referer': 'https://www.bybit.com/copyTrade',
+  }
+
+  // Quick connectivity test
+  const testResp = await postJSON(BYBIT_DETAIL_URL, { leaderId: traders[0]?.source_trader_id || 'test' }, BYBIT_HEADERS)
+  if (!testResp) {
+    console.log('  ⚠ Bybit API WAF-blocked from this location. Skipping detail enrichment.')
+    console.log('  ℹ Bybit enrichment works from Vercel SG/JP regions via cron fetchers.')
+    return
+  }
+
   let enriched = 0
   for (const t of traders) {
     try {
       const leaderId = t.source_trader_id
-      
-      // Bybit detail API
-      const detail = await fetchJSON(`https://api2.bybit.com/fapi/beehive/public/v1/common/leader-detail?leaderMark=${encodeURIComponent(leaderId)}`)
-      
-      if (!detail?.result) {
-        // Try alternative endpoint
-        const alt = await fetchJSON(`https://api2.bybit.com/fapi/beehive/public/v1/common/leader/detail?leaderMark=${encodeURIComponent(leaderId)}`)
-        if (!alt?.result) { await sleep(200); continue }
-        detail.result = alt.result
-      }
-      
+
+      // Bybit detail API - POST with leaderId
+      const detail = await postJSON(BYBIT_DETAIL_URL, { leaderId }, BYBIT_HEADERS)
+
+      if (!detail?.result) { await sleep(200); continue }
+
       const r = detail.result
       const metrics = {
         roi_pct: parseFloat(r.roi ?? t.roi ?? 0) * (Math.abs(parseFloat(r.roi ?? 0)) <= 5 ? 100 : 1),
         pnl_usd: parseFloat(r.pnl ?? t.pnl ?? 0),
         win_rate: parseFloat(r.winRate ?? t.win_rate ?? 0) * (parseFloat(r.winRate ?? 0) <= 1 ? 100 : 1),
         max_drawdown: parseFloat(r.maxDrawdown ?? r.mdd ?? t.max_drawdown ?? 0) * (Math.abs(parseFloat(r.maxDrawdown ?? 0)) <= 1 ? 100 : 1),
-        trades_count: parseInt(r.totalTradeCount ?? r.tradeCount ?? t.trades_count ?? 0) || null,
+        trades_count: parseInt(r.tradeCount ?? r.totalTradeCount ?? t.trades_count ?? 0) || null,
         sharpe_ratio: parseFloat(r.sharpeRatio ?? 0) || null,
         followers: parseInt(r.followerCount ?? 0) || null,
-        copiers: parseInt(r.copierCount ?? 0) || null,
+        copiers: parseInt(r.currentFollowerCount ?? r.copierCount ?? 0) || null,
         aum: parseFloat(r.aum ?? 0) || null,
       }
-      
+
       if (metrics.roi_pct) {
         await upsertSnapshot('bybit', 'futures', leaderId, '30d', metrics)
       }
-      
+
       await upsertProfile('bybit', 'futures', leaderId, {
         display_name: r.nickName || r.nickname || t.nickname,
-        avatar_url: r.avatar || t.avatar_url,
+        avatar_url: r.avatar || r.profilePhoto || t.avatar_url,
         bio: r.introduction || null,
-        profile_url: `https://www.bybit.com/copyTrading/trade-center?leaderMark=${encodeURIComponent(leaderId)}`,
+        profile_url: `https://www.bybit.com/copyTrade/trade-center/detail?leaderMark=${encodeURIComponent(leaderId)}`,
         followers: metrics.followers,
         copiers: metrics.copiers,
         aum: metrics.aum,
       })
-      
-      // Bybit positions
-      const posResp = await fetchJSON(`https://api2.bybit.com/fapi/beehive/public/v1/common/leader/open-order?leaderMark=${encodeURIComponent(leaderId)}&pageNo=1&pageSize=20`)
-      if (posResp?.result?.data?.length) {
-        const posData = posResp.result.data.map(p => ({
-          symbol: p.symbol || 'UNKNOWN',
-          side: p.side?.toLowerCase() === 'buy' ? 'long' : 'short',
-          entry_price: parseFloat(p.entryPrice ?? 0),
-          mark_price: parseFloat(p.markPrice ?? 0),
-          quantity: parseFloat(p.qty ?? p.size ?? 0),
-          leverage: parseFloat(p.leverage ?? 1),
-          unrealized_pnl: parseFloat(p.unrealisedPnl ?? 0),
-        }))
-        await upsertPositions('bybit', leaderId, posData)
-      }
-      
+
       enriched++
       if (enriched % 10 === 0) console.log(`  ✅ ${enriched}/${traders.length}`)
       await sleep(300)
@@ -524,79 +522,75 @@ async function enrichBybit() {
 // ============================================
 async function enrichBitget() {
   console.log('\n🟣 Bitget - Detail API enrichment (via CF proxy)')
-  if (!CF_PROXY) {
-    console.log('  ⚠ No CF proxy configured, skipping')
-    return
-  }
-  
+
+  // Bitget's copy trading public APIs were removed/return 404 as of 2025.
+  // The broker API requires BITGET_API_KEY/SECRET/PASSPHRASE.
+  // Try the CF proxy shortcut endpoint and authenticated API.
   const traders = await getTradersToEnrich('bitget_futures', LIMIT)
   console.log(`  Found ${traders.length} traders to enrich`)
-  
+
+  // Bitget detail endpoint (via CF proxy)
+  const BITGET_DETAIL_VIA_PROXY = CF_PROXY
+    ? `${CF_PROXY}/proxy?url=${encodeURIComponent('https://www.bitget.com/v1/trigger/trace/public/trader/detail')}`
+    : null
+  // Also try authenticated Bitget API v2
+  const BITGET_API_V2_DETAIL = 'https://api.bitget.com/api/v2/copy/mix-trader/query-trader-detail'
+
+  // Quick test: try the CF proxy shortcut for list first
+  if (CF_PROXY) {
+    const testResp = await fetchJSON(`${CF_PROXY}/bitget/copy-trading?period=THIRTY_DAYS&pageNo=1&pageSize=1&type=futures`)
+    if (testResp?.error || testResp?.cloudflare) {
+      console.log('  ⚠ Bitget API blocked via CF proxy. Public endpoints return 404.')
+      console.log('  ℹ Set BITGET_API_KEY/SECRET/PASSPHRASE for broker API access.')
+    }
+  }
+
   let enriched = 0
   for (const t of traders) {
     try {
       const traderId = t.source_trader_id
-      if (!traderId || !/^\d+$/.test(traderId)) continue  // Skip non-numeric IDs
-      
-      // Bitget detail API (via CF proxy to bypass Cloudflare)
-      const detail = await fetchJSON(`${CF_PROXY}/proxy?url=${encodeURIComponent(`https://www.bitget.com/v1/copy/mix/trader/detail?traderId=${traderId}`)}`)
-      
+      if (!traderId) continue
+
+      // Strategy 1: Try detail via CF proxy with correct endpoint
+      let detail = null
+      if (BITGET_DETAIL_VIA_PROXY) {
+        detail = await fetchJSON(`${CF_PROXY}/proxy?url=${encodeURIComponent(`https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderId}`)}`)
+      }
+
+      // Strategy 2: Try authenticated v2 API
+      if (!detail?.data) {
+        detail = await fetchJSON(`${BITGET_API_V2_DETAIL}?traderId=${traderId}`)
+      }
+
       if (!detail?.data) { await sleep(300); continue }
-      
+
       const r = detail.data
       const metrics = {
-        roi_pct: parseFloat(r.roi ?? r.yieldRate ?? t.roi ?? 0) * (Math.abs(parseFloat(r.roi ?? 0)) <= 5 ? 100 : 1),
+        roi_pct: parseFloat(r.roi ?? r.yieldRate ?? r.profitRate ?? t.roi ?? 0) * (Math.abs(parseFloat(r.roi ?? r.profitRate ?? 0)) <= 5 ? 100 : 1),
         pnl_usd: parseFloat(r.totalProfit ?? r.totalProfitUsdt ?? t.pnl ?? 0),
         win_rate: parseFloat(r.winRate ?? t.win_rate ?? 0) * (parseFloat(r.winRate ?? 0) <= 1 ? 100 : 1),
-        max_drawdown: parseFloat(r.maxDrawDown ?? r.maxDrawdown ?? t.max_drawdown ?? 0) * (Math.abs(parseFloat(r.maxDrawDown ?? 0)) <= 1 ? 100 : 1),
+        max_drawdown: parseFloat(r.maxDrawDown ?? r.maxDrawdown ?? t.max_drawdown ?? 0) * (Math.abs(parseFloat(r.maxDrawDown ?? r.maxDrawdown ?? 0)) <= 1 ? 100 : 1),
         trades_count: parseInt(r.totalTrades ?? r.tradeCount ?? t.trades_count ?? 0) || null,
         sharpe_ratio: parseFloat(r.sharpeRatio ?? 0) || null,
         followers: parseInt(r.followerNum ?? r.followerCount ?? 0) || null,
-        copiers: parseInt(r.copierNum ?? r.currentCopyNum ?? 0) || null,
-        aum: parseFloat(r.aum ?? r.totalMarginBalance ?? 0) || null,
+        copiers: parseInt(r.copierNum ?? r.currentCopyNum ?? r.copyTraderNum ?? 0) || null,
+        aum: parseFloat(r.aum ?? r.totalFollowAssets ?? r.totalMarginBalance ?? 0) || null,
       }
-      
+
       if (metrics.roi_pct) {
         await upsertSnapshot('bitget', 'futures', traderId, '30d', metrics)
       }
-      
+
       await upsertProfile('bitget', 'futures', traderId, {
-        display_name: r.nickname || r.nickName || t.nickname,
-        avatar_url: r.avatar || r.headPic || t.avatar_url,
+        display_name: r.traderName || r.nickname || r.nickName || t.nickname,
+        avatar_url: r.headUrl || r.avatar || r.headPic || t.avatar_url,
         bio: r.introduction || null,
-        profile_url: `https://www.bitget.com/copy-trading/trader/${traderId}`,
+        profile_url: `https://www.bitget.com/copy-trading/trader/${traderId}/futures`,
         followers: metrics.followers,
         copiers: metrics.copiers,
         aum: metrics.aum,
       })
-      
-      // Bitget positions
-      const posResp = await fetchJSON(`${CF_PROXY}/proxy?url=${encodeURIComponent(`https://www.bitget.com/v1/copy/mix/trader/current-track?traderId=${traderId}&pageNo=1&pageSize=20`)}`)
-      if (posResp?.data?.length) {
-        const posData = posResp.data.map(p => ({
-          symbol: p.symbol || 'UNKNOWN',
-          side: p.holdSide?.toLowerCase() === 'long' ? 'long' : 'short',
-          entry_price: parseFloat(p.openPrice ?? p.averageOpenPrice ?? 0),
-          mark_price: parseFloat(p.markPrice ?? 0),
-          quantity: parseFloat(p.holdAmount ?? p.total ?? 0),
-          leverage: parseFloat(p.leverage ?? 1),
-          unrealized_pnl: parseFloat(p.unrealizedPL ?? 0),
-          unrealized_pnl_pct: parseFloat(p.profitRate ?? 0) * 100,
-        }))
-        await upsertPositions('bitget', traderId, posData)
-      }
-      
-      // Bitget profit curve
-      const curve = await fetchJSON(`${CF_PROXY}/proxy?url=${encodeURIComponent(`https://www.bitget.com/v1/copy/mix/trader/profit-date-detail?traderId=${traderId}&pageSize=90`)}`)
-      if (curve?.data?.length) {
-        const curves = curve.data.map(p => ({
-          date: new Date(parseInt(p.date || p.cTime)).toISOString().split('T')[0],
-          pnl_usd: parseFloat(p.profit ?? 0),
-          roi_pct: parseFloat(p.profitRate ?? 0) * 100,
-        }))
-        await upsertEquityCurve('bitget_futures', traderId, '90D', curves)
-      }
-      
+
       enriched++
       if (enriched % 10 === 0) console.log(`  ✅ ${enriched}/${traders.length}`)
       await sleep(500)
@@ -612,50 +606,108 @@ async function enrichHTX() {
   console.log('\n🔴 HTX - Detail API enrichment')
   const traders = await getTradersToEnrich('htx_futures', LIMIT)
   console.log(`  Found ${traders.length} traders to enrich`)
-  
+
+  // HTX has no separate detail API. All data comes from the list/rank endpoint.
+  // Strategy: fetch all traders from the list API and match by uid/userSign.
+  // API: https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank
+  const HTX_RANK_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank'
+
+  // Build a lookup map from the list API
+  const htxTraderMap = new Map()
+  const PAGE_SIZE = 50
+  const maxPages = 20  // Fetch up to 1000 traders to maximize matching
+
+  console.log('  Fetching HTX trader list from rank API...')
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const data = await fetchJSON(`${HTX_RANK_URL}?rankType=1&pageNo=${page}&pageSize=${PAGE_SIZE}`)
+      if (data?.code !== 200 || !data?.data?.itemList) break
+      const list = data.data.itemList
+      if (list.length === 0) break
+
+      for (const item of list) {
+        const userSign = item.userSign || ''
+        const uid = String(item.uid || '')
+        if (userSign) htxTraderMap.set(userSign, item)
+        if (uid) htxTraderMap.set(uid, item)
+      }
+
+      if (list.length < PAGE_SIZE) break
+      await sleep(300)
+    } catch { break }
+  }
+  console.log(`  Fetched ${htxTraderMap.size / 2} unique HTX traders from rank API`)
+
   let enriched = 0
   for (const t of traders) {
     try {
-      const uid = t.source_trader_id
-      
-      // HTX copy trader detail
-      const detail = await fetchJSON(`https://www.htx.com/v3/strategy/follow/get_copy_trader_detail?uid=${uid}`)
-      
-      if (!detail?.data) {
-        // Try alternative endpoint
-        const alt = await fetchJSON(`https://www.htx.com/-/x/hbg/v1/copytrading/public/trader/detail?uid=${uid}`)
-        if (!alt?.data) { await sleep(200); continue }
-        detail.data = alt.data
+      const traderId = t.source_trader_id
+
+      // Match trader by uid or userSign
+      const item = htxTraderMap.get(traderId)
+      if (!item) { continue }
+
+      // HTX profitList is cumulative daily ROI array; profitRate90 is 90d ROI
+      const profitList = item.profitList || []
+      const roi90 = parseFloat(item.profitRate90 ?? 0)
+
+      // Calculate MDD from profitList
+      let maxDD = 0
+      if (profitList.length >= 2) {
+        const equity = profitList.map(r => 1 + parseFloat(r))
+        let peak = equity[0]
+        for (const e of equity) {
+          if (e > peak) peak = e
+          if (peak > 0) {
+            const dd = ((peak - e) / peak) * 100
+            if (dd > maxDD) maxDD = dd
+          }
+        }
       }
-      
-      const r = detail.data
+
       const metrics = {
-        roi_pct: parseFloat(r.yieldRate ?? r.roi ?? t.roi ?? 0) * (Math.abs(parseFloat(r.yieldRate ?? 0)) <= 5 ? 100 : 1),
-        pnl_usd: parseFloat(r.totalProfit ?? r.pnl ?? t.pnl ?? 0),
-        win_rate: parseFloat(r.winRate ?? t.win_rate ?? 0) * (parseFloat(r.winRate ?? 0) <= 1 ? 100 : 1),
-        max_drawdown: parseFloat(r.maxDrawdown ?? r.mdd ?? t.max_drawdown ?? 0) * (Math.abs(parseFloat(r.maxDrawdown ?? 0)) <= 1 ? 100 : 1),
-        trades_count: parseInt(r.totalTransNum ?? r.tradeCount ?? t.trades_count ?? 0) || null,
-        sharpe_ratio: parseFloat(r.sharpeRatio ?? 0) || null,
-        followers: parseInt(r.followCount ?? r.followerCount ?? 0) || null,
-        copiers: parseInt(r.copyCount ?? r.copyTraderCount ?? 0) || null,
+        roi_pct: roi90 || (t.roi ?? null),
+        pnl_usd: parseFloat(item.profit90 ?? t.pnl ?? 0) || null,
+        win_rate: parseFloat(item.winRate ?? t.win_rate ?? 0) * (parseFloat(item.winRate ?? 0) <= 1 ? 100 : 1),
+        max_drawdown: maxDD > 0 ? maxDD : (parseFloat(item.mdd ?? t.max_drawdown ?? 0) * (Math.abs(parseFloat(item.mdd ?? 0)) <= 1 ? 100 : 1)),
+        trades_count: t.trades_count || null,
+        sharpe_ratio: null,
+        followers: parseInt(item.copyUserNum ?? 0) || null,
+        copiers: parseInt(item.copyUserNum ?? 0) || null,
+        aum: parseFloat(item.aum ?? 0) || null,
       }
-      
+
+      const traderKey = item.userSign || traderId
       if (metrics.roi_pct) {
-        await upsertSnapshot('htx', 'futures', uid, '30d', metrics)
+        await upsertSnapshot('htx', 'futures', traderId, '90d', metrics)
       }
-      
-      await upsertProfile('htx', 'futures', uid, {
-        display_name: r.nickName || r.nickname || t.nickname,
-        avatar_url: r.avatar || r.headUrl || t.avatar_url,
-        bio: r.introduction || null,
-        profile_url: `https://www.htx.com/copy-trading/trader/${uid}`,
+
+      await upsertProfile('htx', 'futures', traderId, {
+        display_name: item.nickName || t.nickname,
+        avatar_url: item.imgUrl || t.avatar_url,
+        bio: null,
+        profile_url: `https://futures.htx.com/en-us/copytrading/futures/detail/${item.userSign || traderId}`,
         followers: metrics.followers,
         copiers: metrics.copiers,
+        aum: metrics.aum,
       })
-      
+
+      // Equity curve from profitList
+      if (profitList.length > 0) {
+        const today = new Date()
+        const curves = profitList.map((val, idx) => {
+          const d = new Date(today)
+          d.setDate(d.getDate() - (profitList.length - 1 - idx))
+          return {
+            date: d.toISOString().split('T')[0],
+            roi_pct: parseFloat(val) * 100,
+          }
+        })
+        await upsertEquityCurve('htx_futures', traderId, '90D', curves)
+      }
+
       enriched++
       if (enriched % 10 === 0) console.log(`  ✅ ${enriched}/${traders.length}`)
-      await sleep(300)
     } catch (e) {}
   }
   console.log(`  ✅ Enriched ${enriched}/${traders.length}`)

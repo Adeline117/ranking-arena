@@ -18,6 +18,8 @@ import { WeexConnector } from './weex';
 import { GmxConnector } from './gmx';
 import { DydxConnector } from './dydx';
 import { HyperliquidConnector } from './hyperliquid';
+import { GateioConnector } from './gateio';
+import { BlofinConnector } from './blofin';
 import { NansenConnector } from './nansen';
 import { DuneConnector, DuneGmxConnector, DuneHyperliquidConnector, DuneUniswapConnector, DuneDefiConnector } from './dune';
 
@@ -39,6 +41,8 @@ const CONNECTOR_MAP: Record<string, () => IConnector> = {
   'phemex:futures': () => new PhemexConnector(),
   'htx:futures': () => new HtxConnector(),
   'weex:futures': () => new WeexConnector(),
+  'gateio:futures': () => new GateioConnector(),
+  'blofin:futures': () => new BlofinConnector(),
   'gmx:perp': () => new GmxConnector(),
   'dydx:perp': () => new DydxConnector(),
   'hyperliquid:perp': () => new HyperliquidConnector(),

@@ -36,7 +36,7 @@ const PLATFORM_THRESHOLDS: Record<string, number> = {
   lbank: 72,
   weex: 72,
   phemex: 72,
-  pionex: 72,
+  gateio: 72,
 }
 
 interface PlatformStatus {

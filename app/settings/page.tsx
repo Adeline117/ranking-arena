@@ -18,6 +18,7 @@ const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').th
 const ImageCropper = dynamic(() => import('@/app/components/ui/ImageCropper').then(m => ({ default: m.ImageCropper })), { ssr: false })
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import ErrorBoundary from '@/app/components/error/ErrorBoundary'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { validateHandle } from './validation'
 
@@ -1101,19 +1102,26 @@ function SettingsContent() {
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={null} />
-        <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-            {[1, 2, 3].map(i => (
-              <Box key={i} style={{ height: 120, borderRadius: tokens.radius.xl, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
-            ))}
+    <ErrorBoundary 
+      pageType="profile" 
+      onError={(error, errorInfo) => {
+        console.error('Settings page error:', error, errorInfo)
+      }}
+    >
+      <Suspense fallback={
+        <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+          <TopNav email={null} />
+          <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+              {[1, 2, 3].map(i => (
+                <Box key={i} style={{ height: 120, borderRadius: tokens.radius.xl, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              ))}
+            </Box>
           </Box>
         </Box>
-      </Box>
-    }>
-      <SettingsContent />
-    </Suspense>
+      }>
+        <SettingsContent />
+      </Suspense>
+    </ErrorBoundary>
   )
 }

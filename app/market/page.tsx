@@ -5,6 +5,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
+import ErrorBoundary from '@/app/components/error/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 
@@ -109,7 +110,7 @@ function WatchlistPlaceholder() {
   )
 }
 
-export default function MarketPage() {
+function MarketPageContent() {
   const [email, setEmail] = useState<string | null>(null)
   const [selectedToken, setSelectedToken] = useState<{ id: string; symbol: string; name: string; image: string; price: number; change24h: number; marketCap: number; volume24h: number; high24h: number; low24h: number; rank: number } | null>(null)
   const [sectorFilter, setSectorFilter] = useState<string | null>(null)
@@ -248,5 +249,18 @@ export default function MarketPage() {
       <FloatingActionButton />
       <MobileBottomNav />
     </div>
+  )
+}
+
+export default function MarketPage() {
+  return (
+    <ErrorBoundary 
+      pageType="market" 
+      onError={(error, errorInfo) => {
+        console.error('Market page error:', error, errorInfo)
+      }}
+    >
+      <MarketPageContent />
+    </ErrorBoundary>
   )
 }

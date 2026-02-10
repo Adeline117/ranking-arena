@@ -56,6 +56,7 @@ function SearchContent() {
   const [email, setEmail] = useState<string | null>(null)
   const [searchError, setSearchError] = useState(false)
   const [searchHistory, setSearchHistory] = useState<string[]>([])
+  const [trendingSearches, setTrendingSearches] = useState<string[]>(['BTC', 'ETH', 'Binance', 'Bitget', 'SOL'])
   const { showToast } = useToast()
 
   const [libraryResults, setLibraryResults] = useState<SearchResult[]>([])
@@ -73,6 +74,32 @@ function SearchContent() {
       setEmail(data.user?.email ?? null)
     })
     setSearchHistory(getSearchHistory())
+    
+    // 加载热门搜索数据
+    const loadTrendingSearches = async () => {
+      try {
+        const response = await fetch('/api/search/trending')
+        if (response.ok) {
+          const result = await response.json()
+          const data = result.data || result
+          
+          // 使用真实热门搜索或退回到fallback
+          const trending = data.trending || []
+          const fallback = data.fallback || ['BTC', 'ETH', 'Binance', 'Bitget', 'SOL']
+          
+          if (trending.length >= 3) {
+            setTrendingSearches(trending.slice(0, 6).map((item: any) => item.query))
+          } else {
+            setTrendingSearches(fallback.slice(0, 6))
+          }
+        }
+      } catch (error) {
+        // 使用默认数据，不显示错误
+        console.log('Failed to load trending searches, using fallback')
+      }
+    }
+    
+    loadTrendingSearches()
   }, [])
 
   // Save successful searches to history
@@ -502,7 +529,7 @@ function SearchContent() {
                 {isZh ? '热门搜索' : 'Popular searches'}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {['BTC', 'ETH', 'Binance', 'Bitget', 'SOL'].map(term => (
+                {trendingSearches.map(term => (
                   <Link
                     key={term}
                     href={`/search?q=${encodeURIComponent(term)}`}

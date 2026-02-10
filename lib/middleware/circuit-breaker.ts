@@ -419,7 +419,7 @@ export function configureExchangeBreaker(exchangeId: string): void {
     openDuration: 60000,
   }
 
-  const dexPlatforms = ['hyperliquid', 'gmx', 'gains', 'kwenta', 'mux', 'jupiter_perps', 'aevo', 'synthetix', 'drift', 'vertex']
+  const dexPlatforms = ['hyperliquid', 'gmx', 'gains', 'jupiter_perps', 'aevo']
 
   const config = dexPlatforms.includes(exchangeId) ? dexConfig : cexConfig
   circuitBreaker.configure(exchangeId, config)

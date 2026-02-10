@@ -3108,6 +3108,33 @@ scrollToTop: '返回顶部',
     sidebarLongAgo: '很久以前',
     sidebarNoBooksYet: '还没有收藏的书籍',
 
+    // ErrorBoundary 专用错误消息
+    errorRanking: '排行榜加载失败，请稍后重试',
+    errorRankingTitle: '排行榜加载失败',
+    errorTraderPageTitle: '交易员页面出错',
+    errorLibraryPage: '书库页面加载失败',
+    errorLibraryPageTitle: '书库页面出错', 
+    errorMarketPage: '市场页面加载失败',
+    errorMarketPageTitle: '市场页面出错',
+    errorProfilePageTitle: '个人资料页出错',
+    
+    // 网络错误友好提示
+    networkConnectionLost: '网络连接已断开',
+    networkTimeoutFriendly: '请求超时，请检查网络连接',
+    networkErrorFriendly: '网络连接异常，请稍后重试',
+    serverErrorFriendly: '服务器繁忙，请稍后再试',
+    unknownErrorFriendly: '出现了未知错误，我们正在处理中',
+    
+    // Loading skeleton 相关
+    loadingSkeleton: '正在加载内容...',
+    loadingSkeletonFailed: '内容加载失败',
+    
+    // 通用错误操作
+    errorRefreshPage: '刷新页面',
+    errorTryAgain: '重试',
+    errorContactSupport: '联系客服',
+    errorBackToPrevious: '返回上一页',
+
 } as const
 
 export default zh

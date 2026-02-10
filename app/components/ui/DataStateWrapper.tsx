@@ -1,7 +1,10 @@
 'use client'
 
+import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getErrorMessage, isRetryableError } from '@/lib/utils/error-handling'
+import LoadingSkeleton from '@/app/components/error/LoadingSkeleton'
 
 interface EmptyAction {
   label: string
@@ -10,14 +13,26 @@ interface EmptyAction {
 }
 
 interface DataStateWrapperProps {
-  isLoading: boolean
-  error: Error | string | null | undefined
-  isEmpty: boolean
+  // 兼容旧 API
+  isLoading?: boolean
+  error?: Error | string | null | undefined
+  isEmpty?: boolean
   children: React.ReactNode
   loadingComponent?: React.ReactNode
   emptyMessage?: string
   emptyActions?: EmptyAction[]
   onRetry?: () => void
+  
+  // 新增的增强属性
+  loading?: boolean  // 备用的加载状态名
+  data?: any
+  customIsEmpty?: (data: any) => boolean
+  loadingType?: 'card' | 'list' | 'table' | 'trader' | 'ranking' | 'text'
+  loadingCount?: number
+  showRetry?: boolean
+  minHeight?: string | number
+  errorComponent?: React.ReactNode
+  emptyComponent?: React.ReactNode
 }
 
 /**
@@ -25,38 +40,71 @@ interface DataStateWrapperProps {
  * Ensures no "click with no response" or infinite loading.
  */
 export default function DataStateWrapper({
-  isLoading,
-  error,
-  isEmpty,
+  // 兼容旧 API
+  isLoading: legacyIsLoading,
+  error: legacyError,
+  isEmpty: legacyIsEmpty,
   children,
   loadingComponent,
   emptyMessage,
   emptyActions,
   onRetry,
+  
+  // 新增属性
+  loading,
+  data,
+  customIsEmpty,
+  loadingType = 'card',
+  loadingCount = 3,
+  showRetry = true,
+  minHeight,
+  errorComponent,
+  emptyComponent,
 }: DataStateWrapperProps) {
   const { t } = useLanguage()
+  
+  // 兼容旧 API：合并新旧加载状态
+  const isLoading = legacyIsLoading ?? loading ?? false
+  const error = legacyError
+  
+  // 计算是否为空状态
+  const isEmpty = React.useMemo(() => {
+    if (legacyIsEmpty !== undefined) return legacyIsEmpty
+    if (customIsEmpty && data !== undefined) return customIsEmpty(data)
+    
+    // 默认空判断逻辑
+    if (data === null || data === undefined) return true
+    if (Array.isArray(data)) return data.length === 0
+    if (typeof data === 'object') return Object.keys(data).length === 0
+    if (typeof data === 'string') return data.trim().length === 0
+    
+    return false
+  }, [legacyIsEmpty, data, customIsEmpty])
+
+  // 容器样式
+  const containerStyle: React.CSSProperties = {
+    minHeight: typeof minHeight === 'number' ? `${minHeight}px` : minHeight,
+  }
 
   if (isLoading) {
-    if (loadingComponent) return <>{loadingComponent}</>
+    if (loadingComponent) return <div style={containerStyle}>{loadingComponent}</div>
+    
+    // 使用新的 LoadingSkeleton 组件
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="flex flex-col items-center gap-3">
-          <svg className="animate-spin h-8 w-8" style={{ color: tokens.colors.text.tertiary }} viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span className="text-sm" style={{ color: tokens.colors.text.tertiary }}>
-            {t('loading')}
-          </span>
-        </div>
+      <div style={containerStyle}>
+        <LoadingSkeleton type={loadingType} count={loadingCount} />
       </div>
     )
   }
 
   if (error) {
-    const errorMsg = typeof error === 'string' ? error : error.message
+    if (errorComponent) return <div style={containerStyle}>{errorComponent}</div>
+    
+    const errorMsg = getErrorMessage(error)
+    const canRetry = onRetry && showRetry && isRetryableError(error)
+    
     return (
-      <div className="flex items-center justify-center py-12">
+      <div style={containerStyle} className="flex items-center justify-center py-12">
         <div className="flex flex-col items-center gap-3 text-center max-w-sm">
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center"
@@ -69,9 +117,9 @@ export default function DataStateWrapper({
             </svg>
           </div>
           <p className="text-sm" style={{ color: tokens.colors.text.secondary }}>
-            {errorMsg || t('failedToLoad')}
+            {errorMsg}
           </p>
-          {onRetry && (
+          {canRetry && (
             <button
               onClick={onRetry}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -89,8 +137,10 @@ export default function DataStateWrapper({
   }
 
   if (isEmpty) {
+    if (emptyComponent) return <div style={containerStyle}>{emptyComponent}</div>
+    
     return (
-      <div className="flex items-center justify-center py-12">
+      <div style={containerStyle} className="flex items-center justify-center py-12">
         <div className="flex flex-col items-center gap-3 text-center max-w-sm">
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center"
@@ -129,5 +179,5 @@ export default function DataStateWrapper({
     )
   }
 
-  return <>{children}</>
+  return <div style={containerStyle}>{children}</div>
 }
