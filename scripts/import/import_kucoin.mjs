@@ -25,7 +25,7 @@ const supabase = getSupabaseClient()
 const SOURCE = 'kucoin'
 const BASE_URL = 'https://www.kucoin.com/copytrading'
 const TARGET_COUNT = 500
-const MAX_PAGES = 25
+const MAX_PAGES = 50
 
 const PERIOD_CONFIG = {
   '7D': { minDays: 7 },
