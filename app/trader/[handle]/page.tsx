@@ -66,9 +66,6 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   return (
     <ErrorBoundary 
       pageType="trader" 
-      onError={(error, errorInfo) => {
-        console.error('Trader page error:', error, errorInfo)
-      }}
     >
       <Suspense fallback={
         <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
