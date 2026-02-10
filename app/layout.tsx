@@ -14,11 +14,11 @@ import { PageErrorBoundary } from "./components/utils/ErrorBoundary";
 const KeyboardShortcuts = dynamic(() => import("./components/Providers/KeyboardShortcuts"));
 const GlobalProgress = dynamic(() => import("./components/ui/GlobalProgress").then(m => ({ default: m.GlobalProgress })));
 const ServiceWorkerRegistration = dynamic(() => import("./components/Providers/ServiceWorkerRegistration").then(m => ({ default: m.ServiceWorkerRegistration })));
-const CookieConsent = dynamic(() => import("./components/ui/CookieConsent"));
-const WelcomeGuide = dynamic(() => import("./components/ui/WelcomeGuide"));
+// Removed: CookieConsent, WelcomeGuide, InstallPrompt — 用户进来直接用
+// WelcomeGuide removed
 const CompareFloatingBar = dynamic(() => import("./components/trader/CompareFloatingBar"));
 const ScrollToTop = dynamic(() => import("./components/ui/ScrollToTop"));
-const InstallPrompt = dynamic(() => import("./components/pwa/InstallPrompt"));
+// InstallPrompt removed
 const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
 const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })));
@@ -187,11 +187,8 @@ export default function RootLayout({
                 {children}
               </main>
             </PageErrorBoundary>
-            <CookieConsent />
-            <WelcomeGuide />
             <CompareFloatingBar />
             <ScrollToTop />
-            <InstallPrompt />
           </CapacitorProvider>
         </Providers>
       </body>
