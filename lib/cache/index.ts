@@ -417,36 +417,46 @@ export async function getOrSetWithLock<T>(
   while (Date.now() - startTime < maxWaitMs) {
     attempt++
 
-    // 尝试获取锁（使用 NX 选项）
-    const lockAcquired = await redis.set(lockKey, '1', {
-      ex: lockTtl,
-      nx: true,
-    })
+    try {
+      // 尝试获取锁（使用 NX 选项）
+      const lockAcquired = await redis.set(lockKey, '1', {
+        ex: lockTtl,
+        nx: true,
+      })
 
-    if (lockAcquired) {
-      try {
-        // 双重检查：获得锁后再次检查缓存
-        const doubleCheck = await get<T>(key)
-        if (doubleCheck !== null) {
-          return doubleCheck
+      if (lockAcquired) {
+        try {
+          // 双重检查：获得锁后再次检查缓存
+          const doubleCheck = await get<T>(key)
+          if (doubleCheck !== null) {
+            return doubleCheck
+          }
+
+          // 获得锁，获取数据
+          const data = await fetcher()
+          await set(key, data, { ...options, ttl: actualTtl })
+          return data
+        } finally {
+          // 释放锁
+          await redis.del(lockKey).catch(() => {
+            // 忽略锁释放失败
+          })
         }
-
-        // 获得锁，获取数据
-        const data = await fetcher()
-        await set(key, data, { ...options, ttl: actualTtl })
-        return data
-      } finally {
-        // 释放锁
-        await redis.del(lockKey).catch(() => {
-          // 忽略锁释放失败
-        })
       }
-    }
 
-    // 未获得锁，检查缓存是否已被其他进程填充
-    const retryCache = await get<T>(key)
-    if (retryCache !== null) {
-      return retryCache
+      // 未获得锁，检查缓存是否已被其他进程填充
+      const retryCache = await get<T>(key)
+      if (retryCache !== null) {
+        return retryCache
+      }
+    } catch (lockError) {
+      // Redis error (e.g. rate limit exceeded) — fall back to direct fetch
+      dataLogger.warn(`[Cache] Redis lock error for ${key}, falling back to direct fetch:`, lockError)
+      const data = await fetcher()
+      // Try memory cache only
+      const memCache = getMemoryCache()
+      memCache.set(key, data, actualTtl)
+      return data
     }
 
     // 指数退避等待
