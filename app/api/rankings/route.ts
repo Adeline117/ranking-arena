@@ -290,10 +290,25 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     } as unknown as RankedTraderRow;
   }).filter(row => row.display_name != null);
 
-  // Calculate staleness - data older than 1 hour is considered stale
-  const latestCapturedAt = paginatedRows.length > 0
-    ? Math.max(...paginatedRows.map(r => new Date(r.captured_at).getTime()))
-    : Date.now();
+  // Calculate staleness based on the latest captured_at across the ENTIRE season,
+  // not just the paginated rows (which may contain traders not recently re-scraped)
+  let latestCapturedAt: number;
+  const { data: freshnessRow } = await supabase
+    .from('trader_snapshots')
+    .select('captured_at')
+    .eq('season_id', seasonId)
+    .not('arena_score', 'is', null)
+    .order('captured_at', { ascending: false })
+    .limit(1)
+    .single();
+  
+  if (freshnessRow) {
+    latestCapturedAt = new Date(freshnessRow.captured_at).getTime();
+  } else if (paginatedRows.length > 0) {
+    latestCapturedAt = Math.max(...paginatedRows.map(r => new Date(r.captured_at).getTime()));
+  } else {
+    latestCapturedAt = Date.now();
+  }
   const stalenessMs = Date.now() - latestCapturedAt;
   const isStale = stalenessMs > 3600 * 1000; // > 1 hour
 
