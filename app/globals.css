@@ -792,6 +792,7 @@ select:focus-visible {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 16px;
+  min-height: calc(100vh - 120px);
 }
 
 /* Between 1024-1280: hide right sidebar, give more space to center */
@@ -2526,3 +2527,142 @@ td[data-numeric],
 .activity-dot--high { background: var(--color-accent-success); }
 .activity-dot--medium { background: var(--color-accent-warning); }
 .activity-dot--low { background: var(--color-border-secondary); }
+
+/* ============================================
+   Global UI Component Optimizations
+   ============================================ */
+
+/* Ensure consistent spacing across all pages */
+.page-container,
+.container-padding {
+  --page-padding-x: 16px;
+  --page-padding-y: 16px;
+  padding-left: var(--page-padding-x);
+  padding-right: var(--page-padding-x);
+  padding-top: var(--page-padding-y);
+}
+
+@media (max-width: 767px) {
+  .page-container,
+  .container-padding {
+    --page-padding-x: 12px;
+    --page-padding-y: 16px;
+  }
+}
+
+@media (max-width: 400px) {
+  .page-container,
+  .container-padding {
+    --page-padding-x: 8px;
+  }
+}
+
+/* Enhanced TopNav glass effect on scroll */
+.top-nav {
+  transition: all 0.2s ease;
+}
+
+.top-nav.scrolled {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 1px 20px rgba(0, 0, 0, 0.1), 0 0 0 1px var(--color-border-primary);
+}
+
+/* Improved mobile sidebar transitions */
+.mobile-sidebar-widgets {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mobile-sidebar-widgets > div:last-child {
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+/* Enhanced touch feedback for interactive elements */
+@media (hover: none) and (pointer: coarse) {
+  .glass-card:active,
+  .sidebar-card:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+  
+  .top-nav-link:active,
+  .mobile-nav-item:active {
+    transform: scale(0.96);
+    opacity: 0.8;
+    transition: all 0.1s ease;
+  }
+}
+
+/* Consistent border radius across components */
+.card,
+.glass-card,
+.sidebar-card,
+.modal-content {
+  border-radius: 14px;
+}
+
+@media (max-width: 767px) {
+  .card,
+  .glass-card,
+  .sidebar-card {
+    border-radius: 12px;
+  }
+}
+
+/* Enhanced footer visual hierarchy */
+.footer-columns {
+  transition: all 0.2s ease;
+}
+
+/* Improved desktop sidebar positioning */
+@media (min-width: 1024px) {
+  .desktop-sidebar {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .desktop-sidebar:hover {
+    transform: translateX(2px);
+  }
+
+  /* Adjust main content when desktop sidebar is visible */
+  .three-col-center {
+    margin-left: 0;
+    transition: margin-left 0.3s ease;
+  }
+
+  .has-desktop-sidebar .three-col-center {
+    margin-left: 0;
+  }
+}
+
+/* Enhanced theme transition performance */
+html.theme-transition * {
+  transition-property: background-color, color, border-color, box-shadow, fill, stroke !important;
+  transition-duration: 0.3s !important;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Improved loading states consistency */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-secondary) 0%,
+    var(--color-bg-tertiary) 50%,
+    var(--color-bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Enhanced focus indicators for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

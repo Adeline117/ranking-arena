@@ -97,6 +97,8 @@ export default function DesktopSidebar() {
   return (
     <aside
       className="desktop-sidebar"
+      role="navigation"
+      aria-label="Main navigation"
       style={{
         position: 'fixed',
         top: 56,
@@ -111,6 +113,8 @@ export default function DesktopSidebar() {
         gap: tokens.spacing[2],
         zIndex: 30,
         overflowY: 'auto',
+        scrollbarWidth: 'thin',
+        transition: `all ${tokens.transition.base}`,
       }}
     >
       <nav style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
@@ -121,6 +125,7 @@ export default function DesktopSidebar() {
             <Link
               key={item.labelKey}
               href={href}
+              aria-current={active ? 'page' : undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -133,20 +138,39 @@ export default function DesktopSidebar() {
                 fontWeight: active ? 800 : 600,
                 fontSize: tokens.typography.fontSize.base,
                 transition: `all ${tokens.transition.base}`,
+                position: 'relative',
+                minHeight: 44,
               }}
               onMouseEnter={(e) => {
                 if (!active) {
                   e.currentTarget.style.background = 'var(--color-bg-secondary)'
                   e.currentTarget.style.color = 'var(--color-text-primary)'
+                  e.currentTarget.style.transform = 'translateX(4px)'
                 }
               }}
               onMouseLeave={(e) => {
                 if (!active) {
                   e.currentTarget.style.background = 'transparent'
                   e.currentTarget.style.color = 'var(--color-text-secondary)'
+                  e.currentTarget.style.transform = 'translateX(0px)'
                 }
               }}
             >
+              {active && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 3,
+                    height: 24,
+                    background: 'var(--color-accent-primary)',
+                    borderRadius: '0 2px 2px 0',
+                  }}
+                  aria-hidden="true"
+                />
+              )}
               <item.icon active={active} />
               <span>{t(item.labelKey)}</span>
             </Link>

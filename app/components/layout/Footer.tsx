@@ -134,6 +134,7 @@ export default function Footer() {
           gap: 16,
           paddingTop: 20,
           borderTop: `1px solid var(--color-border-primary)`,
+          transition: `border-color ${tokens.transition.base}`,
         }}
       >
         <p

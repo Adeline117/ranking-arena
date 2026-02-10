@@ -42,6 +42,7 @@ export default function ThemeToggle() {
       })
 
       transition.ready.then(() => {
+        // Enhance circular reveal animation with better easing
         document.documentElement.animate(
           {
             clipPath: [
@@ -50,13 +51,14 @@ export default function ThemeToggle() {
             ],
           },
           {
-            duration: 500,
-            easing: 'ease-in-out',
+            duration: 600,
+            easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', // More polished easing
             pseudoElement: '::view-transition-new(root)',
           }
         )
       }).catch(() => {
         // Animation failed, theme still applied
+        console.debug('View transition animation failed, falling back to instant switch')
       })
 
       transition.finished.then(() => {
@@ -68,10 +70,23 @@ export default function ThemeToggle() {
       return
     }
 
-    // Fallback: instant switch, no animation
-    document.documentElement.setAttribute('data-theme', newTheme)
-    localStorage.setItem('theme', newTheme)
-    setTheme(newTheme)
+    // Fallback: CSS transition for browsers without View Transitions API
+    setAnimating(true)
+    
+    // Add transition class for smooth color changes
+    document.documentElement.classList.add('theme-transition')
+    
+    setTimeout(() => {
+      document.documentElement.setAttribute('data-theme', newTheme)
+      localStorage.setItem('theme', newTheme)
+      setTheme(newTheme)
+      
+      // Remove transition class after animation
+      setTimeout(() => {
+        document.documentElement.classList.remove('theme-transition')
+        setAnimating(false)
+      }, 400)
+    }, 50)
   }
 
   return (
@@ -80,6 +95,7 @@ export default function ThemeToggle() {
       onClick={toggleTheme}
       aria-label={theme === 'dark' ? t('lightMode') : t('darkMode')}
       title={theme === 'dark' ? t('lightMode') : t('darkMode')}
+      disabled={animating}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -88,12 +104,27 @@ export default function ThemeToggle() {
         height: 44,
         padding: 0,
         background: 'transparent',
-        border: `1px solid ${tokens.colors.border.primary}`,
+        border: `1px solid var(--color-border-primary)`,
         borderRadius: tokens.radius.md,
-        color: tokens.colors.text.secondary,
+        color: 'var(--color-text-secondary)',
         cursor: animating ? 'wait' : 'pointer',
         transition: `all ${tokens.transition.fast}`,
         opacity: animating ? 0.7 : 1,
+        transform: animating ? 'scale(0.95)' : 'scale(1)',
+      }}
+      onMouseEnter={(e) => {
+        if (!animating) {
+          e.currentTarget.style.background = 'var(--color-bg-secondary)'
+          e.currentTarget.style.color = 'var(--color-text-primary)'
+          e.currentTarget.style.borderColor = 'var(--color-accent-primary)'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!animating) {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = 'var(--color-text-secondary)'
+          e.currentTarget.style.borderColor = 'var(--color-border-primary)'
+        }
       }}
     >
       {theme === 'dark' ? (

@@ -439,8 +439,14 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 transition: `all ${tokens.transition.base}`,
                 boxShadow: tokens.shadow.inner,
               }}
-              onFocus={() => {
+              onFocus={(e) => {
                 setShowSearchDropdown(true)
+                e.currentTarget.style.border = '1px solid var(--color-accent-primary)'
+                e.currentTarget.style.boxShadow = '0 0 0 2px var(--color-accent-primary-20)'
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.border = tokens.glass.border.light
+                e.currentTarget.style.boxShadow = tokens.shadow.inner
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -496,6 +502,16 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               transition: `all ${tokens.transition.base}`,
               border: `1px solid var(--color-accent-primary-30)`,
               cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--color-accent-primary-20)'
+              e.currentTarget.style.color = 'var(--color-text-primary)'
+              e.currentTarget.style.transform = 'scale(1.05)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'var(--color-accent-primary-12)'
+              e.currentTarget.style.color = 'var(--color-text-secondary)'
+              e.currentTarget.style.transform = 'scale(1)'
             }}
           >
             <SearchIcon size={20} />
@@ -689,6 +705,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     borderRadius: tokens.radius.xl,
                     padding: tokens.spacing[2],
                     minWidth: 'min(220px, calc(100vw - 32px))',
+                    maxWidth: 'calc(100vw - 16px)',
                     boxShadow: `${tokens.shadow.xl}, 0 0 40px var(--color-overlay-medium)`,
                     zIndex: tokens.zIndex.dropdown,
                   }}
