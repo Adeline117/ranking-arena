@@ -212,7 +212,7 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  const periods = getTargetPeriods(['30D'])
+  const periods = getTargetPeriods(['7D', '30D', '90D'])
 
   console.log(`\n${'='.repeat(60)}`)
   console.log(`OKX Futures 数据抓取`)

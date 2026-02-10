@@ -270,7 +270,7 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  const periods = getTargetPeriods(['30D'])
+  const periods = getTargetPeriods(['7D', '30D', '90D'])
   console.log('BingX 数据抓取开始 (Playwright 浏览器模式)...')
   console.log(`周期: ${periods.join(', ')}`)
 

@@ -99,3 +99,4 @@ lib/cron/fetchers/*.d.ts.map
 /cache/
 /contracts/out/
 foundry.lock
+backups/

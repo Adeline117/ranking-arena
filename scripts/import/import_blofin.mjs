@@ -267,7 +267,7 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  const periods = getTargetPeriods(['30D'])
+  const periods = getTargetPeriods(['7D', '30D', '90D'])
   console.log(`\n${'='.repeat(50)}`)
   console.log(`BloFin Copy Trading 数据抓取 (Playwright)`)
   console.log(`${'='.repeat(50)}`)

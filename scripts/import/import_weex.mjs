@@ -1012,7 +1012,7 @@ async function saveTradersBatch(traders, period) {
 }
 
 async function main() {
-  const periods = getTargetPeriods(['30D', '90D'])
+  const periods = getTargetPeriods(['7D', '30D', '90D'])
   const totalStartTime = Date.now()
 
   console.log(`\n${'='.repeat(50)}`)
