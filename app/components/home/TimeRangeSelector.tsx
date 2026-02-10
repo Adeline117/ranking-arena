@@ -11,7 +11,7 @@ interface TimeRangeSelectorProps {
   disabled?: boolean
 }
 
-const TIME_RANGES: TimeRange[] = ['COMPOSITE', '90D', '30D', '7D']
+const TIME_RANGES: TimeRange[] = ['90D', '30D', '7D']
 
 /**
  * 时间范围选择器组件
