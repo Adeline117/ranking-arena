@@ -96,7 +96,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // 客户端 hydration 后从 localStorage 读取偏好
   useEffect(() => {
     const saved = localStorage.getItem(TIME_RANGE_STORAGE_KEY)
-    if (saved === '90D' || saved === '30D' || saved === '7D' || saved === 'COMPOSITE') {
+    if (saved === '90D' || saved === '30D' || saved === '7D') {
       setActiveTimeRange(saved)
     }
   }, [])
