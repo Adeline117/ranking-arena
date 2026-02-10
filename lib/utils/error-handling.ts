@@ -301,7 +301,7 @@ export function createErrorHandler(onError?: (errorInfo: ErrorInfo) => void) {
   }
 }
 
-export default {
+const errorHandling = {
   parseError,
   getErrorMessage,
   isRetryableError,
@@ -310,3 +310,4 @@ export default {
   safeFetch,
   createErrorHandler,
 }
+export default errorHandling

@@ -3,7 +3,6 @@
  * 拦截并处理应用中的各种错误，提供统一的错误处理逻辑
  */
 
-import { t } from '@/lib/i18n'
 import { getErrorMessage, reportError } from '@/lib/utils/error-handling'
 
 // 全局 Toast 函数引用
@@ -179,7 +178,7 @@ export function initializeErrorInterceptors(toastFn?: typeof globalToast) {
     interceptGlobalErrors()
     interceptAxios()
     
-    console.log('Error interceptors initialized')
+    // Error interceptors initialized
   }
 }
 
@@ -192,7 +191,7 @@ export function cleanupErrorInterceptors() {
   globalToast = null
 }
 
-export default {
+const errorInterceptor = {
   setGlobalErrorHandler,
   interceptFetch,
   interceptUnhandledPromises, 
@@ -201,3 +200,4 @@ export default {
   initializeErrorInterceptors,
   cleanupErrorInterceptors
 }
+export default errorInterceptor

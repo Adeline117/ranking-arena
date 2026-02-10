@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -26,7 +26,7 @@ interface TrendingSearchItem {
   category?: 'trader' | 'token' | 'general'
 }
 
-interface TrendingSearchResponse {
+interface _TrendingSearchResponse {
   trending: TrendingSearchItem[]
   fallback: string[]
   lastUpdated: string
