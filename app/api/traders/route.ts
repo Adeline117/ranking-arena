@@ -101,6 +101,9 @@ async function fetchFromLeaderboard(
     query = query.eq('source', exchangeFilter)
   }
 
+  // Filter out outlier data (ROI > 5000% etc.)
+  query = query.or('is_outlier.is.null,is_outlier.eq.false')
+
   // Cursor-based: filter by rank
   if (cursor != null) {
     if (sortBy === 'arena_score' && order === 'desc') {
