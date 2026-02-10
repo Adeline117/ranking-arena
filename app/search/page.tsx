@@ -93,9 +93,9 @@ function SearchContent() {
             setTrendingSearches(fallback.slice(0, 6))
           }
         }
-      } catch (error) {
+      } catch (_error) {
         // 使用默认数据，不显示错误
-        console.log('Failed to load trending searches, using fallback')
+        void _error
       }
     }
     
