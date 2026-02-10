@@ -101,15 +101,15 @@ async function main() {
   
   await sleep(5000)
   
-  const traders = new Map()
+  const tradersByPeriod = { '7D': new Map(), '30D': new Map(), '90D': new Map() }
+  const allTraders = new Map() // for trader_sources
   
-  // Fetch all sort types with pagination
-  // sortTypes discovered: INCOME_RATE, FOLLOWER_COUNT, etc.
-  // Use different sort params to get different traders
   const sortTypes = ['INCOME_RATE', 'FOLLOWER_COUNT', 'INCOME', 'FOLLOWER_PROFIT']
-  const periods = [7, 30, 90] // days
+  const periods = [7, 30, 90]
   
   for (const days of periods) {
+    const periodKey = days === 7 ? '7D' : days === 30 ? '30D' : '90D'
+    const traders = tradersByPeriod[periodKey]
     for (const sortType of sortTypes) {
       let page_num = 1
       let hasMore = true
@@ -136,7 +136,7 @@ async function main() {
                   let newCount = 0
                   for (const it of group.items) {
                     const t = parseTrader(it)
-                    if (t && !traders.has(t.id)) { traders.set(t.id, t); newCount++ }
+                    if (t && !traders.has(t.id)) { traders.set(t.id, t); allTraders.set(t.id, t); newCount++ }
                   }
                   hasMore = group.hasMore === true
                   if (newCount === 0) emptyStreak++
@@ -170,7 +170,7 @@ async function main() {
         let newCount = 0
         for (const it of items) {
           const t = parseTrader(it)
-          if (t && !traders.has(t.id)) { traders.set(t.id, t); newCount++ }
+          if (t && !traders.has(t.id)) { traders.set(t.id, t); allTraders.set(t.id, t); newCount++ }
         }
         
         if (newCount === 0) emptyStreak++
@@ -215,20 +215,26 @@ async function main() {
     let newCount = 0
     for (const it of items) {
       const t = parseTrader(it)
-      if (t && !traders.has(t.id)) { traders.set(t.id, t); newCount++ }
+      if (t) {
+        allTraders.set(t.id, t)
+        for (const pm of Object.values(tradersByPeriod)) {
+          if (!pm.has(t.id)) { pm.set(t.id, t); newCount++ }
+        }
+      }
     }
-    process.stdout.write(`\r  all p${pg}: +${newCount} → ${traders.size}`)
+    process.stdout.write(`\r  all p${pg}: +${newCount} → ${allTraders.size}`)
     if (newCount === 0) break
     await new Promise(r => setTimeout(r, 300))
   }
   console.log()
   
   // Save
-  if (traders.size > 0) {
-    const all = [...traders.values()]
+  if (allTraders.size > 0) {
+    const all = [...allTraders.values()]
     const now = new Date().toISOString()
     let saved = 0
     
+    // Save trader_sources
     for (let i=0;i<all.length;i+=50)
       try{await sb.from('trader_sources').upsert(all.slice(i,i+50).map(t=>({
         source:'xt', source_trader_id:t.id, handle:t.name||t.id,
@@ -236,16 +242,22 @@ async function main() {
         profile_url: `https://www.xt.com/en/copy-trading/futures/detail/${t.id}`,
       })),{onConflict:'source,source_trader_id'})}catch(e){console.log('src err:',e.message)}
     
-    for (let i=0;i<all.length;i+=30){
-      const{error}=await sb.from('trader_snapshots').upsert(all.slice(i,i+30).map((t,j)=>({
-        source:'xt', source_trader_id:t.id, season_id:'30D',
-        rank:i+j+1, roi:t.roi, pnl:t.pnl, win_rate:t.wr,
-        max_drawdown:t.dd, trades_count:t.trades,
-        arena_score:cs(t.roi,t.pnl,t.dd,t.wr), captured_at:now
-      })),{onConflict:'source,source_trader_id,season_id'})
-      if(!error)saved+=Math.min(30,all.length-i)}
+    // Save snapshots per period
+    for (const [periodKey, periodTraders] of Object.entries(tradersByPeriod)) {
+      const pt = [...periodTraders.values()]
+      if (!pt.length) continue
+      for (let i=0;i<pt.length;i+=30){
+        const{error}=await sb.from('trader_snapshots').upsert(pt.slice(i,i+30).map((t,j)=>({
+          source:'xt', source_trader_id:t.id, season_id:periodKey,
+          rank:i+j+1, roi:t.roi, pnl:t.pnl, win_rate:t.wr,
+          max_drawdown:t.dd, trades_count:t.trades,
+          arena_score:cs(t.roi,t.pnl,t.dd,t.wr), captured_at:now
+        })),{onConflict:'source,source_trader_id,season_id'})
+        if(!error)saved+=Math.min(30,pt.length-i)}
+      console.log(`  ${periodKey}: ${pt.length} traders`)
+    }
     
-    console.log(`✅ ${saved} saved (${traders.size} unique)`)
+    console.log(`✅ ${saved} saved (${allTraders.size} unique)`)
   } else {
     console.log('❌ 0')
   }

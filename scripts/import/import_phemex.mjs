@@ -68,7 +68,7 @@ async function fetchLeaderboard(browser, period) {
           const traderId = String(t.uid || t.traderId || t.id || t.userId || t.user_id || '')
           if (!traderId || traderId === 'undefined' || traders.has(traderId)) continue
 
-          let roi = parseFloat(String(t.roi || t.roiRate || t.profitRate || t.returnRate || t.pnlRatio || 0))
+          let roi = parseFloat(String(t.roi || t.roiRate || t.profitRate || t.returnRate || t.pnlRatio || t.totalPnlRate || 0))
           if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
 
           // Phemex may use E8 scaling for PnL
@@ -292,7 +292,7 @@ async function saveTraders(traders, period) {
 }
 
 async function main() {
-  const periods = getTargetPeriods(['30D'])
+  const periods = getTargetPeriods(['7D', '30D', '90D'])
   console.log('Phemex 数据抓取开始 (Playwright 浏览器模式)...')
   console.log(`周期: ${periods.join(', ')}`)
 

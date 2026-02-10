@@ -216,6 +216,41 @@ async function main() {
     console.log(`  Upserted ${upserted} ranks`)
   }
 
+  // Backfill missing avatars from trader_sources
+  console.log('\n=== Backfilling avatars ===')
+  const { count } = await supabase.rpc('exec_sql', { 
+    query: `UPDATE leaderboard_ranks lr SET avatar_url = ts.avatar_url, handle = COALESCE(NULLIF(ts.handle, ''), lr.handle) FROM trader_sources ts WHERE lr.source = ts.source AND lr.source_trader_id = ts.source_trader_id AND ts.avatar_url IS NOT NULL AND lr.avatar_url IS NULL`
+  }).catch(() => ({ count: null }))
+  // Fallback: do it via supabase client if RPC doesn't exist
+  if (count === null) {
+    // Get sources with missing avatars
+    const { data: missing } = await supabase
+      .from('leaderboard_ranks')
+      .select('source, source_trader_id')
+      .is('avatar_url', null)
+      .limit(5000)
+    if (missing?.length) {
+      let fixed = 0
+      for (const m of missing) {
+        const { data: src } = await supabase
+          .from('trader_sources')
+          .select('avatar_url, handle')
+          .eq('source', m.source)
+          .eq('source_trader_id', m.source_trader_id)
+          .not('avatar_url', 'is', null)
+          .single()
+        if (src?.avatar_url) {
+          await supabase.from('leaderboard_ranks')
+            .update({ avatar_url: src.avatar_url, handle: src.handle || undefined })
+            .eq('source', m.source)
+            .eq('source_trader_id', m.source_trader_id)
+          fixed++
+        }
+      }
+      console.log(`  Fixed ${fixed} missing avatars via client`)
+    }
+  }
+
   console.log('\nDone!')
 }
 
