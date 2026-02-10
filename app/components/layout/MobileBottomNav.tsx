@@ -174,23 +174,41 @@ function useUserHandle(): string | null {
 function useScrollVisibility(): boolean {
   const [isVisible, setIsVisible] = useState(true)
   const lastScrollYRef = useRef(0)
+  const hideTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
   useEffect(() => {
     function handleScroll(): void {
       const currentScrollY = window.scrollY
       const scrollDelta = currentScrollY - lastScrollYRef.current
 
-      if (scrollDelta > 50 && currentScrollY > 100) {
-        setIsVisible(false)
-      } else if (scrollDelta < -10) {
+      // Clear existing timeout
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current)
+        hideTimeoutRef.current = undefined
+      }
+
+      // Show immediately on scroll up
+      if (scrollDelta < -10) {
         setIsVisible(true)
+      } 
+      // Hide after scrolling down with debounce
+      else if (scrollDelta > 50 && currentScrollY > 100) {
+        hideTimeoutRef.current = setTimeout(() => {
+          setIsVisible(false)
+        }, 150)
       }
 
       lastScrollYRef.current = currentScrollY
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current)
+        hideTimeoutRef.current = undefined
+      }
+    }
   }, [])
 
   return isVisible
