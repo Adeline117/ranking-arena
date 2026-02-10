@@ -43,8 +43,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: 'var(--color-bg-primary)' },
-    { media: '(prefers-color-scheme: light)', color: 'var(--color-on-accent)' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B0A10' },
+    { media: '(prefers-color-scheme: light)', color: '#FFFFFF' },
   ],
 };
 
@@ -118,7 +118,7 @@ export const metadata: Metadata = {
     images: [
       `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
     ],
-    creator: "@arena_fi",
+    creator: "@Arena_com",
   },
   robots: {
     index: true,
