@@ -16,8 +16,15 @@ import {
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'gains'
-const API_BASE = 'https://backend-arbitrum.gains.trade'
 const TARGET = 500
+
+// Fetch from all 3 chains for maximum coverage
+const CHAIN_BACKENDS = [
+  { name: 'arbitrum', base: 'https://backend-arbitrum.gains.trade' },
+  { name: 'polygon', base: 'https://backend-polygon.gains.trade' },
+  { name: 'base', base: 'https://backend-base.gains.trade' },
+]
+const API_BASE = 'https://backend-arbitrum.gains.trade'
 
 // ── API response types ──
 
@@ -50,39 +57,50 @@ interface ActiveTrader {
 // ── Data fetching ──
 
 async function fetchLeaderboardApi(): Promise<GainsLeaderboardEntry[]> {
-  try {
-    return await fetchJson<GainsLeaderboardEntry[]>(`${API_BASE}/leaderboard`)
-  } catch {
-    return []
+  // Fetch from ALL chains for maximum coverage
+  const all: GainsLeaderboardEntry[] = []
+  for (const chain of CHAIN_BACKENDS) {
+    try {
+      const data = await fetchJson<GainsLeaderboardEntry[]>(`${chain.base}/leaderboard`)
+      console.warn(`[${SOURCE}] ${chain.name} leaderboard: ${data.length}`)
+      all.push(...data)
+    } catch {
+      console.warn(`[${SOURCE}] ${chain.name} leaderboard failed`)
+    }
   }
+  return all
 }
 
 async function fetchOpenTradesApi(): Promise<ActiveTrader[]> {
-  try {
-    const trades = await fetchJson<GainsOpenTrade[]>(`${API_BASE}/open-trades`)
+  // Fetch from ALL chains
+  const traderMap = new Map<string, ActiveTrader>()
+  for (const chain of CHAIN_BACKENDS) {
+    try {
+      const trades = await fetchJson<GainsOpenTrade[]>(`${chain.base}/open-trades`)
+      console.warn(`[${SOURCE}] ${chain.name} open-trades: ${trades.length}`)
 
-    const traderMap = new Map<string, ActiveTrader>()
-    for (const t of trades) {
-      const addr = (t.trade?.user || '').toLowerCase()
-      if (!addr) continue
+      for (const t of trades) {
+        const addr = (t.trade?.user || '').toLowerCase()
+        if (!addr) continue
 
-      if (!traderMap.has(addr)) {
-        traderMap.set(addr, { address: addr, openPositions: 0, totalCollateral: 0 })
+        if (!traderMap.has(addr)) {
+          traderMap.set(addr, { address: addr, openPositions: 0, totalCollateral: 0 })
+        }
+        const trader = traderMap.get(addr)!
+        trader.openPositions++
+
+        // Parse collateral: index 0=DAI(18dec), 1=ETH(18dec), 2=USDC(6dec), 3=USDT(6dec)
+        const collateral = parseInt(t.trade?.collateralAmount || '0')
+        const collateralIndex = parseInt(t.trade?.collateralIndex || '0')
+        const decimals = [18, 18, 6, 6][collateralIndex] || 6
+        trader.totalCollateral += collateral / Math.pow(10, decimals)
       }
-      const trader = traderMap.get(addr)!
-      trader.openPositions++
-
-      // Parse collateral: index 0=DAI(18dec), 1=ETH(18dec), 2=USDC(6dec), 3=USDT(6dec)
-      const collateral = parseInt(t.trade?.collateralAmount || '0')
-      const collateralIndex = parseInt(t.trade?.collateralIndex || '0')
-      const decimals = [18, 18, 6, 6][collateralIndex] || 6
-      trader.totalCollateral += collateral / Math.pow(10, decimals)
+    } catch {
+      console.warn(`[${SOURCE}] ${chain.name} open-trades failed`)
     }
-
-    return Array.from(traderMap.values())
-  } catch {
-    return []
   }
+
+  return Array.from(traderMap.values())
 }
 
 // ── Per-period fetch ──
