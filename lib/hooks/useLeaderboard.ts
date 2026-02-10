@@ -96,7 +96,7 @@ export function useRankings(options: UseRankingsOptions) {
     window,
     category,
     platform,
-    limit = 100,
+    limit = 10000,
     offset = 0,
     sortBy = 'arena_score',
     sortDir = 'desc',

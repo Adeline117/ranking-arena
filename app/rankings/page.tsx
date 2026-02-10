@@ -35,8 +35,8 @@ import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
 // Threshold for using virtual scrolling (for large datasets)
 const VIRTUAL_SCROLL_THRESHOLD = 2000
 
-// 免费用户排行榜可见数量限制
-const FREE_RANKING_LIMIT = 100
+// 不限制显示数量 — 所有用户看到全部交易员
+const FREE_RANKING_LIMIT = Infinity
 
 // Convert RankedTraderV2 to VirtualLeaderboard's TraderRow format
 /** Get a readable trader name — skip pure-numeric IDs */
