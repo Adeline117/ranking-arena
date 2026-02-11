@@ -33,21 +33,24 @@ async function enrichPhemex() {
 
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
   const ctx = await browser.newContext({
-    proxy: { server: PROXY },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   })
   const page = await ctx.newPage()
 
   try {
-    await page.goto('https://phemex.com/copy-trading/list', { waitUntil: 'domcontentloaded', timeout: 45000 })
-    await sleep(8000)
+    console.log('  Loading Phemex page (no proxy)...')
+    await page.goto('https://phemex.com/copy-trading/list', { waitUntil: 'domcontentloaded', timeout: 60000 })
+    await sleep(10000)
 
     // Dismiss popups
-    for (const text of ['OK', 'Got it', 'Accept', 'Close']) {
+    for (const text of ['OK', 'Got it', 'Accept', 'Close', 'I Agree', 'Confirm']) {
       const btn = page.getByRole('button', { name: text })
       if (await btn.count() > 0) await btn.first().click().catch(() => {})
     }
     await sleep(2000)
+
+    const title = await page.title()
+    console.log(`  Title: ${title}`)
 
     // Fetch all traders from recommend API with pagination
     const allTraders = new Map()
@@ -251,7 +254,6 @@ async function enrichBlofin() {
 
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
   const ctx = await browser.newContext({
-    proxy: { server: PROXY },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   })
   const page = await ctx.newPage()
@@ -259,6 +261,7 @@ async function enrichBlofin() {
   const traderData = new Map()
 
   try {
+    console.log('  Loading BloFin page...')
     await page.goto('https://blofin.com/copy-trade?tab=leaderboard&module=futures', {
       timeout: 45000, waitUntil: 'domcontentloaded'
     })
