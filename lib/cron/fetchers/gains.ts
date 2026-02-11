@@ -24,7 +24,8 @@ const CHAIN_BACKENDS = [
   { name: 'polygon', base: 'https://backend-polygon.gains.trade' },
   { name: 'base', base: 'https://backend-base.gains.trade' },
 ]
-const API_BASE = 'https://backend-arbitrum.gains.trade'
+// Default API base (used via CHAIN_BACKENDS above)
+// const API_BASE = 'https://backend-arbitrum.gains.trade'
 
 // ── API response types ──
 

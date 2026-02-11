@@ -58,7 +58,7 @@ export default function ThemeToggle() {
         )
       }).catch(() => {
         // Animation failed, theme still applied
-        console.debug('View transition animation failed, falling back to instant switch')
+        // View transition animation failed, falling back to instant switch
       })
 
       transition.finished.then(() => {

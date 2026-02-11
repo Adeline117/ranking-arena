@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -106,14 +106,14 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const containerRef = useRef<HTMLDivElement>(null)
 
   // 展平所有结果用于键盘导航
-  const flatResults: UnifiedSearchResult[] = searchData
+  const flatResults: UnifiedSearchResult[] = useMemo(() => searchData
     ? [
         ...searchData.results.traders,
         ...searchData.results.posts,
         ...searchData.results.library,
         ...searchData.results.users,
       ]
-    : []
+    : [], [searchData])
 
   // 加载搜索历史
   useEffect(() => {
