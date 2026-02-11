@@ -58,6 +58,8 @@ export type TraderSource =
   | 'dune_hyperliquid'
   | 'dune_uniswap'
   | 'dune_defi'
+  // Web3 bots / AI agents
+  | 'web3_bot'
 
 // ---------------------------------------------------------------------------
 // ALL_SOURCES – exhaustive list of every source the system can query
@@ -102,6 +104,7 @@ export const ALL_SOURCES: TraderSource[] = [
   'dune_hyperliquid',
   'dune_uniswap',
   'dune_defi',
+  'web3_bot',
 ]
 
 // ---------------------------------------------------------------------------
@@ -240,6 +243,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   dune_hyperliquid: { name: 'Hyperliquid (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'mixed' },
   dune_uniswap: { name: 'Uniswap (Dune)', sourceType: 'spot', reliability: 85, trustWeight: 0.85, roiType: 'realized' },
   dune_defi: { name: 'DeFi (Dune)', sourceType: 'web3', reliability: 80, trustWeight: 0.80, roiType: 'mixed' },
+  web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
 }
 
 // ---------------------------------------------------------------------------
