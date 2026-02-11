@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import StarRating from '@/app/components/ui/StarRating'
+import TopLeaderboards, { type LeaderboardEntry } from '@/app/components/ui/TopLeaderboards'
 import dynamic from 'next/dynamic'
 
 const MobileBottomNav = dynamic(() => import('@/app/components/layout/MobileBottomNav'), { ssr: false })
@@ -46,6 +47,34 @@ const PRICING_LABELS: Record<string, { zh: string; en: string }> = {
   open_source: { zh: '开源', en: 'Open Source' },
 }
 
+const TradingIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  </svg>
+)
+
+const QuantIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="2" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="12" y1="4" x2="12" y2="20" />
+  </svg>
+)
+
+const CodeIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+  </svg>
+)
+
+function toolToEntry(tool: Tool, isZh: boolean): LeaderboardEntry {
+  return {
+    id: tool.id,
+    name: isZh ? (tool.name_zh || tool.name) : tool.name,
+    rating: tool.avg_rating,
+    logoUrl: tool.logo_url,
+    href: tool.website || tool.github_url,
+  }
+}
+
 export default function ToolsPage() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
@@ -54,6 +83,51 @@ export default function ToolsPage() {
   const [category, setCategory] = useState('all')
   const [sort, setSort] = useState('rating')
   const [search, setSearch] = useState('')
+
+  // Leaderboard data
+  const [topTrading, setTopTrading] = useState<Tool[]>([])
+  const [topQuant, setTopQuant] = useState<Tool[]>([])
+  const [topScripts, setTopScripts] = useState<Tool[]>([])
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchLeaderboards() {
+      setLeaderboardLoading(true)
+      try {
+        const fetchTop = async (cat: string) => {
+          const { data } = await supabase
+            .from('tools')
+            .select('id, name, name_zh, category, logo_url, website, github_url, description, description_zh, pricing, avg_rating, rating_count, tags')
+            .eq('is_active', true)
+            .eq('category', cat)
+            .order('avg_rating', { ascending: false, nullsFirst: false })
+            .limit(10)
+          return data || []
+        }
+        const fetchScripts = async () => {
+          const { data } = await supabase
+            .from('tools')
+            .select('id, name, name_zh, category, logo_url, website, github_url, description, description_zh, pricing, avg_rating, rating_count, tags')
+            .eq('is_active', true)
+            .or('category.eq.script,category.eq.strategy')
+            .order('avg_rating', { ascending: false, nullsFirst: false })
+            .limit(10)
+          return data || []
+        }
+        const [trading, quant, scripts] = await Promise.all([
+          fetchTop('trading_tool'), fetchTop('quant_platform'), fetchScripts(),
+        ])
+        setTopTrading(trading)
+        setTopQuant(quant)
+        setTopScripts(scripts)
+      } catch {
+        // ignore
+      } finally {
+        setLeaderboardLoading(false)
+      }
+    }
+    fetchLeaderboards()
+  }, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -97,6 +171,32 @@ export default function ToolsPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 100px' }}>
+
+        {/* Top Leaderboards */}
+        <TopLeaderboards columns={[
+          {
+            title: isZh ? '交易工具 Top 10' : 'Top 10 Trading Tools',
+            icon: <TradingIcon />,
+            entries: topTrading.map(t => toolToEntry(t, isZh)),
+            loading: leaderboardLoading,
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+          {
+            title: isZh ? '量化平台 Top 10' : 'Top 10 Quant Platforms',
+            icon: <QuantIcon />,
+            entries: topQuant.map(t => toolToEntry(t, isZh)),
+            loading: leaderboardLoading,
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+          {
+            title: isZh ? '开源脚本 Top 10' : 'Top 10 Scripts',
+            icon: <CodeIcon />,
+            entries: topScripts.map(t => toolToEntry(t, isZh)),
+            loading: leaderboardLoading,
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+        ]} />
+
         <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 20 }}>
           {isZh ? '工具' : 'Tools'}
         </h1>

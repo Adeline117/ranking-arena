@@ -41,10 +41,57 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
   }
 }
 
+async function fetchTopBooks(): Promise<LibraryItem[]> {
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data } = await supabase
+      .from('library_items')
+      .select('*')
+      .eq('category', 'book')
+      .order('rating', { ascending: false, nullsFirst: false })
+      .limit(10)
+    return data || []
+  } catch {
+    return []
+  }
+}
+
+async function fetchTopPapers(): Promise<LibraryItem[]> {
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data } = await supabase
+      .from('library_items')
+      .select('*')
+      .eq('category', 'paper')
+      .order('rating', { ascending: false, nullsFirst: false })
+      .limit(10)
+    return data || []
+  } catch {
+    return []
+  }
+}
+
+async function fetchRecentItems(): Promise<LibraryItem[]> {
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data } = await supabase
+      .from('library_items')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10)
+    return data || []
+  } catch {
+    return []
+  }
+}
+
 export default async function ResourcesPage() {
-  const [{ items, total }, featured] = await Promise.all([
+  const [{ items, total }, featured, topBooks, topPapers, recentItems] = await Promise.all([
     fetchLibraryItems(),
     fetchFeatured(),
+    fetchTopBooks(),
+    fetchTopPapers(),
+    fetchRecentItems(),
   ])
 
   return (
@@ -54,6 +101,9 @@ export default async function ResourcesPage() {
           initialItems={items}
           initialFeatured={featured}
           initialTotal={total}
+          topBooks={topBooks}
+          topPapers={topPapers}
+          recentItems={recentItems}
         />
       </Suspense>
     </ErrorBoundary>
