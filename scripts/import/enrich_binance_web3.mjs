@@ -67,37 +67,47 @@ async function enrichPeriod(period) {
   const periodApi = PERIOD_MAP[period]
   console.log(`\n=== Enriching ${SOURCE} ${period} ===`)
 
-  // Fetch current data from API
   const apiData = await fetchAllTraders(periodApi)
   console.log(`  Fetched ${apiData.size} traders from API`)
 
-  // Get existing snapshots that need enrichment
-  const { data: existing, error } = await supabase
-    .from('trader_snapshots')
-    .select('id, source_trader_id, win_rate, trades_count')
-    .eq('source', SOURCE)
-    .eq('season_id', period)
+  // Get existing snapshots needing enrichment (paginate past 1000 limit)
+  let existing = []
+  let from = 0
+  const PAGE = 1000
+  while (true) {
+    const { data, error: fetchErr } = await supabase
+      .from('trader_snapshots')
+      .select('id, source_trader_id, win_rate, trades_count')
+      .eq('source', SOURCE)
+      .eq('season_id', period)
+      .range(from, from + PAGE - 1)
+    if (fetchErr) { console.error(`  Error: ${fetchErr.message}`); return 0 }
+    existing = existing.concat(data || [])
+    if (!data || data.length < PAGE) break
+    from += PAGE
+  }
+  const error = null
 
   if (error) {
-    console.error(`  Error fetching snapshots: ${error.message}`)
+    console.error(`  Error: ${error.message}`)
     return 0
   }
 
   console.log(`  Found ${existing.length} existing snapshots`)
 
+  // Build batch updates
   let updated = 0
-  const batchSize = 50
+  const BATCH = 100
 
-  for (let i = 0; i < existing.length; i += batchSize) {
-    const batch = existing.slice(i, i + batchSize)
-    
+  for (let i = 0; i < existing.length; i += BATCH) {
+    const batch = existing.slice(i, i + BATCH)
+    const promises = []
+
     for (const snap of batch) {
       const api = apiData.get(snap.source_trader_id)
       if (!api) continue
 
       const updates = {}
-      
-      // Only update NULL fields
       if (snap.trades_count == null && api.totalTxCnt != null) {
         updates.trades_count = parseInt(api.totalTxCnt)
       }
@@ -105,19 +115,18 @@ async function enrichPeriod(period) {
         const wr = parseFloat(api.winRate)
         updates.win_rate = wr <= 1 ? wr * 100 : wr
       }
-
       if (Object.keys(updates).length === 0) continue
 
-      const { error: updateErr } = await supabase
-        .from('trader_snapshots')
-        .update(updates)
-        .eq('id', snap.id)
-
-      if (!updateErr) updated++
+      promises.push(
+        supabase.from('trader_snapshots').update(updates).eq('id', snap.id)
+          .then(({ error }) => { if (!error) updated++ })
+      )
     }
 
-    if ((i + batchSize) % 200 === 0 || i + batchSize >= existing.length) {
-      console.log(`  Progress: ${Math.min(i + batchSize, existing.length)}/${existing.length}, updated: ${updated}`)
+    if (promises.length) await Promise.all(promises)
+
+    if ((i + BATCH) % 500 === 0 || i + BATCH >= existing.length) {
+      console.log(`  Progress: ${Math.min(i + BATCH, existing.length)}/${existing.length}, updated: ${updated}`)
     }
   }
 

@@ -163,47 +163,50 @@ export async function GET(request: NextRequest) {
 // 为特定pairs获取数据（如果有自定义pairs则用ids过滤，否则拉top 100）
 async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
   const isDefault = pairs === PAIRS
-  const url = isDefault
-    ? 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h'
-    : 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=' +
-      encodeURIComponent(pairs.map(p => p.cgId).join(',')) +
-      '&price_change_percentage=24h'
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10秒超时
+  interface CoinGeckoMarketData {
+    id: string
+    symbol?: string
+    current_price?: number | null
+    price_change_percentage_24h?: number | null
+    price_change_percentage_24h_in_currency?: number | null
+  }
+
+  const fetchHeaders = {
+    accept: 'application/json',
+    'User-Agent': 'Mozilla/5.0 (compatible; RankingArena/1.0)',
+  }
+
+  async function fetchPage(url: string): Promise<CoinGeckoMarketData[]> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    try {
+      const res = await fetch(url, { cache: 'default', headers: fetchHeaders, signal: controller.signal })
+      clearTimeout(timeoutId)
+      if (!res.ok) {
+        if (res.status === 429) throw new Error(`CoinGecko HTTP 429: Rate limit exceeded.`)
+        throw new Error(`CoinGecko HTTP ${res.status}`)
+      }
+      return (await res.json()) as CoinGeckoMarketData[]
+    } catch (e) {
+      clearTimeout(timeoutId)
+      throw e
+    }
+  }
 
   try {
-    const res = await fetch(url, {
-      cache: 'default', // 使用默认缓存以减少API调用
-      headers: { 
-        accept: 'application/json',
-        // 添加 User-Agent 以减少被限流的风险
-        'User-Agent': 'Mozilla/5.0 (compatible; RankingArena/1.0)',
-      },
-      signal: controller.signal,
-    })
-    
-    clearTimeout(timeoutId)
-
-    if (!res.ok) {
-      // 429 速率限制错误：直接抛出，让上层处理回退到 Coinbase
-      if (res.status === 429) {
-        const txt = await res.text().catch(() => '')
-        throw new Error(`CoinGecko HTTP 429: Rate limit exceeded. ${txt.slice(0, 100)}`)
-      }
-      const txt = await res.text().catch(() => '')
-      throw new Error(`CoinGecko HTTP ${res.status}: ${txt.slice(0, 160)}`)
+    let data: CoinGeckoMarketData[]
+    if (isDefault) {
+      // Fetch top 500 coins (2 pages of 250)
+      const [page1, page2] = await Promise.all([
+        fetchPage('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&price_change_percentage=24h'),
+        fetchPage('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&price_change_percentage=24h'),
+      ])
+      data = [...page1, ...page2]
+    } else {
+      const ids = pairs.map(p => p.cgId).join(',')
+      data = await fetchPage(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(ids)}&price_change_percentage=24h`)
     }
-
-    interface CoinGeckoMarketData {
-      id: string
-      symbol?: string
-      current_price?: number | null
-      price_change_percentage_24h?: number | null
-      price_change_percentage_24h_in_currency?: number | null
-    }
-    
-    const data = (await res.json()) as CoinGeckoMarketData[]
     const rows: MarketRow[] = []
     for (const c of data) {
       const price = Number(c.current_price ?? NaN)
@@ -217,7 +220,6 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
 
     return rows
   } catch (error: unknown) {
-    clearTimeout(timeoutId)
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('CoinGecko request timeout')
     }
