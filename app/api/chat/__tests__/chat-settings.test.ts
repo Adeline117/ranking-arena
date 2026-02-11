@@ -87,7 +87,7 @@ describe('Chat Settings API', () => {
     })
 
     it('returns 403 for non-member access', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-999' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-999' } as unknown as import('@supabase/supabase-js').User)
 
       // Mock conversation exists but user is not a member
       mockMaybeSingle.mockResolvedValueOnce({
@@ -103,7 +103,7 @@ describe('Chat Settings API', () => {
     })
 
     it('returns default settings when no member record exists', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as unknown as import('@supabase/supabase-js').User)
 
       // Mock conversation exists and user is a member
       mockMaybeSingle
@@ -149,7 +149,7 @@ describe('Chat Settings API', () => {
     })
 
     it('returns 400 for empty body', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as unknown as import('@supabase/supabase-js').User)
 
       mockMaybeSingle.mockResolvedValueOnce({
         data: { id: 'conv-123', user1_id: 'user-1', user2_id: 'user-2' },
@@ -168,7 +168,7 @@ describe('Chat Settings API', () => {
     })
 
     it('returns 400 for remark exceeding 50 characters', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as unknown as import('@supabase/supabase-js').User)
 
       mockMaybeSingle.mockResolvedValueOnce({
         data: { id: 'conv-123', user1_id: 'user-1', user2_id: 'user-2' },
@@ -189,7 +189,7 @@ describe('Chat Settings API', () => {
     })
 
     it('creates settings record when none exists', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as unknown as import('@supabase/supabase-js').User)
 
       // conversation check
       mockMaybeSingle.mockResolvedValueOnce({
@@ -247,7 +247,7 @@ describe('Chat Search API', () => {
     })
 
     it('returns 400 for empty query', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as unknown as import('@supabase/supabase-js').User)
 
       const { GET } = await import('../[conversationId]/search/route')
       const request = createRequest('/api/chat/conv-123/search?q=')
@@ -257,7 +257,7 @@ describe('Chat Search API', () => {
     })
 
     it('returns 403 for non-member search', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-999' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-999' } as unknown as import('@supabase/supabase-js').User)
 
       mockMaybeSingle.mockResolvedValueOnce({
         data: { id: 'conv-123', user1_id: 'user-1', user2_id: 'user-2' },
@@ -272,7 +272,7 @@ describe('Chat Search API', () => {
     })
 
     it('returns search results with snippets for members', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as unknown as import('@supabase/supabase-js').User)
 
       // conversation check
       mockMaybeSingle
@@ -309,7 +309,7 @@ describe('Chat Search API', () => {
     })
 
     it('respects cleared_before filter', async () => {
-      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as any)
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1' } as unknown as import('@supabase/supabase-js').User)
 
       mockMaybeSingle
         .mockResolvedValueOnce({

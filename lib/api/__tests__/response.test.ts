@@ -110,7 +110,7 @@ describe('API Response Helpers', () => {
   describe('handleError', () => {
     it('should handle Error objects with statusCode', async () => {
       const err = new Error('Custom error')
-      ;(err as any).statusCode = 403
+      ;(err as Error & { statusCode?: number }).statusCode = 403
       
       const response = handleError(err, 'test')
       const body = await response.json()

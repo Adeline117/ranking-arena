@@ -103,7 +103,7 @@ describe('sanitize utilities', () => {
 
     it('应该返回空字符串当输入为空', () => {
       expect(sanitizeHtml('')).toBe('')
-      expect(sanitizeHtml(null as any)).toBe('')
+      expect(sanitizeHtml(null as unknown as string)).toBe('')
     })
   })
 
@@ -274,7 +274,7 @@ describe('sanitize utilities', () => {
         },
       }
       const result = sanitizeObject(input)
-      expect((result.user as any).name).not.toContain('<script>')
+      expect((result.user as Record<string, unknown>).name).not.toContain('<script>')
     })
 
     it('应该根据字段选项使用不同的消毒方法', () => {
@@ -312,7 +312,7 @@ describe('sanitize utilities', () => {
 
     it('应该返回 false 对于空输入', () => {
       expect(containsDangerousContent('')).toBe(false)
-      expect(containsDangerousContent(null as any)).toBe(false)
+      expect(containsDangerousContent(null as unknown as string)).toBe(false)
     })
   })
 })

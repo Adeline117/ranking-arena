@@ -55,7 +55,7 @@ describe('formatTimeAgo', () => {
 
   it('should handle invalid input gracefully', () => {
     expect(formatTimeAgo('')).toBe('未知时间')
-    expect(formatTimeAgo(null as any)).toBe('未知时间')
-    expect(formatTimeAgo(undefined as any)).toBe('未知时间')
+    expect(formatTimeAgo(null as unknown as string)).toBe('未知时间')
+    expect(formatTimeAgo(undefined as unknown as string)).toBe('未知时间')
   })
 })
