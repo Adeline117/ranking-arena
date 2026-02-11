@@ -11,13 +11,8 @@
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 
-import { createClient } from '@supabase/supabase-js'
 import { execSync } from 'child_process'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -225,7 +220,7 @@ async function saveEquityCurve(source, traderId, equityCurve, period) {
   const now = new Date().toISOString()
 
   // Delete old data for this period first, then insert new
-  await supabase
+  await sb
     .from('trader_equity_curve')
     .delete()
     .eq('source', source)
@@ -242,7 +237,7 @@ async function saveEquityCurve(source, traderId, equityCurve, period) {
     captured_at: now,
   }))
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_equity_curve')
     .insert(records)
 
@@ -261,7 +256,7 @@ async function savePositionHistory(source, traderId, positions) {
 
   // Delete recent position history first (keep last 7 days for comparison)
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  await supabase
+  await sb
     .from('trader_position_history')
     .delete()
     .eq('source', source)
@@ -287,7 +282,7 @@ async function savePositionHistory(source, traderId, positions) {
     captured_at: now,
   }))
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_position_history')
     .insert(records)
 
@@ -305,7 +300,7 @@ async function saveAssetBreakdown(source, traderId, assets, period) {
   const now = new Date().toISOString()
 
   // Delete old data for this period first
-  await supabase
+  await sb
     .from('trader_asset_breakdown')
     .delete()
     .eq('source', source)
@@ -321,7 +316,7 @@ async function saveAssetBreakdown(source, traderId, assets, period) {
     captured_at: now,
   }))
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_asset_breakdown')
     .insert(records)
 
@@ -340,7 +335,7 @@ async function saveStatsDetail(source, traderId, stats, period) {
 
   // Delete today's stats for this period first
   const today = new Date().toISOString().split('T')[0]
-  await supabase
+  await sb
     .from('trader_stats_detail')
     .delete()
     .eq('source', source)
@@ -363,7 +358,7 @@ async function saveStatsDetail(source, traderId, stats, period) {
     captured_at: now,
   }
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_stats_detail')
     .insert(record)
 
@@ -379,7 +374,7 @@ async function updateTraderProfile(source, traderId, profile) {
   if (!profile) return 0
 
   // Update trader_sources with additional data
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_sources')
     .upsert({
       source,
@@ -807,7 +802,7 @@ async function main() {
     console.log(`\n🔍 Processing ${source}...`)
 
     // Get top traders without detailed data
-    const { data: traders, error } = await supabase
+    const { data: traders, error } = await sb
       .from('trader_snapshots')
       .select('source_trader_id, roi, arena_score')
       .eq('source', source)

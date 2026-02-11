@@ -16,14 +16,12 @@
  */
 
 import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import { sb, sleep } from './lib/index.mjs'
 
 puppeteer.use(StealthPlugin())
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 const SOURCE = 'kucoin'
 
 const limitArg = process.argv.find(a => a.startsWith('--limit='))
@@ -140,7 +138,7 @@ async function upsertEquityCurve(traderId, pnlDateArray) {
       }
     })
     
-    const { error } = await supabase.from('trader_equity_curve')
+    const { error } = await sb.from('trader_equity_curve')
       .upsert(rows, { onConflict: 'source,source_trader_id,period,data_date' })
     if (!error) count += rows.length
   }
@@ -184,9 +182,9 @@ async function upsertStats(traderId, item) {
       captured_at: now,
     }
     
-    await supabase.from('trader_stats_detail')
+    await sb.from('trader_stats_detail')
       .delete().eq('source', SOURCE).eq('source_trader_id', traderId).eq('period', period)
-    const { error } = await supabase.from('trader_stats_detail').insert(row)
+    const { error } = await sb.from('trader_stats_detail').insert(row)
     if (!error) count++
   }
   return count
@@ -207,12 +205,12 @@ async function main() {
 
   // Check which traders exist in DB
   const apiIds = Array.from(apiTraders.keys())
-  const { data: dbTraders } = await supabase.from('trader_sources')
+  const { data: dbTraders } = await sb.from('trader_sources')
     .select('source_trader_id').eq('source', SOURCE).in('source_trader_id', apiIds.slice(0, 500))
   const dbSet = new Set(dbTraders?.map(t => t.source_trader_id) || [])
   
   // Check existing stats
-  const { data: existingStats } = await supabase.from('trader_stats_detail')
+  const { data: existingStats } = await sb.from('trader_stats_detail')
     .select('source_trader_id').eq('source', SOURCE).in('source_trader_id', apiIds.slice(0, 500))
   const hasStats = new Set(existingStats?.map(e => e.source_trader_id) || [])
 

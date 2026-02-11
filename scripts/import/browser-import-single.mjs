@@ -5,23 +5,8 @@
  * 
  * 设计: 每平台独立 node 进程，避免内存累积
  */
-import { readFileSync } from 'fs'
-import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'
-
-try {
-  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-    const m = line.match(/^([^#=]+)=["']?(.+?)["']?$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
-  }
-} catch {}
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
-const clip = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+import { clip, sb, sleep } from './lib/index.mjs'
 
 function calcScore(roi, pnl, dd, wr) {
   if (roi == null) return null
@@ -39,7 +24,7 @@ async function save(source, traders, seasonId, marketType = 'futures') {
     avatar_url: t.avatar || null, profile_url: t.profileUrl || null,
     market_type: marketType, is_active: true,
   }))
-  await supabase.from('trader_sources').upsert(srcData, { onConflict: 'source,source_trader_id' })
+  await sb.from('trader_sources').upsert(srcData, { onConflict: 'source,source_trader_id' })
   
   // Split into chunks of 50 to avoid timeouts
   const snapData = traders.map((t, i) => ({
@@ -53,10 +38,10 @@ async function save(source, traders, seasonId, marketType = 'futures') {
   let saved = 0
   for (let i = 0; i < snapData.length; i += 50) {
     const chunk = snapData.slice(i, i + 50)
-    const { error } = await supabase.from('trader_snapshots').upsert(chunk, { onConflict: 'source,source_trader_id,season_id' })
+    const { error } = await sb.from('trader_snapshots').upsert(chunk, { onConflict: 'source,source_trader_id,season_id' })
     if (error) {
       for (const s of chunk) {
-        const { error: e } = await supabase.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
+        const { error: e } = await sb.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
         if (!e) saved++
       }
     } else {

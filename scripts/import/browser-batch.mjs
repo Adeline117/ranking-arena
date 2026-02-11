@@ -3,76 +3,8 @@
  * 批量浏览器拦截 — 逐个平台，拦截 ALL JSON responses
  * 解决之前拦截规则太窄的问题
  */
-import { readFileSync } from 'fs'
-import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'
-
-try { for (const l of readFileSync('.env.local','utf8').split('\n')) { const m=l.match(/^([^#=]+)=["']?(.+?)["']?$/); if(m&&!process.env[m[1]]) process.env[m[1]]=m[2]; }} catch{}
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
-const clip = (v,lo,hi) => Math.max(lo,Math.min(hi,v))
-function cs(roi,p,d,w){if(roi==null)return null;return clip(Math.round((Math.min(70,roi>0?Math.log(1+roi/100)*25:Math.max(-70,roi/100*50))+(d!=null?Math.max(0,15*(1-d/100)):7.5)+(w!=null?Math.min(15,w/100*15):7.5))*10)/10,0,100)}
-
-async function save(source, traders) {
-  if (!traders.length) return 0
-  const now = new Date().toISOString()
-  for (let i=0;i<traders.length;i+=50) try{await sb.from('trader_sources').upsert(traders.slice(i,i+50).map(t=>({source,source_trader_id:t.id,handle:t.name||t.id,avatar_url:t.avatar||null,market_type:'futures',is_active:true})),{onConflict:'source,source_trader_id'})}catch{}
-  let saved=0
-  for(let i=0;i<traders.length;i+=30){const{error}=await sb.from('trader_snapshots').upsert(traders.slice(i,i+30).map((t,j)=>({source,source_trader_id:t.id,season_id:'30D',rank:i+j+1,roi:t.roi,pnl:t.pnl,win_rate:t.wr,max_drawdown:t.dd,trades_count:t.trades,arena_score:cs(t.roi,t.pnl,t.dd,t.wr),captured_at:now})),{onConflict:'source,source_trader_id,season_id'});if(!error)saved+=Math.min(30,traders.length-i)}
-  return saved
-}
-
-function extractTraders(obj, depth=0) {
-  const results = []
-  if (depth > 5 || !obj) return results
-  if (Array.isArray(obj) && obj.length >= 2) {
-    for (const it of obj) {
-      if (!it || typeof it !== 'object') continue
-      // Detect trader-like objects
-      const keys = Object.keys(it)
-      const hasId = keys.some(k => /trader|uid|leader|address|portfolio|userId|copyTrade/i.test(k)) || it.id
-      const hasMetric = keys.some(k => /roi|pnl|yield|profit|winRate|return/i.test(k))
-      const hasName = keys.some(k => /nick|name|displayName/i.test(k))
-      if (!hasId || (!hasMetric && !hasName)) continue
-      
-      // Extract ID
-      let id = ''
-      for (const k of ['traderId','traderUid','uid','leaderId','encryptedUid','leadPortfolioId','copyTradeId','leaderMark','userId','trader_id','address','id']) {
-        if (it[k] != null && String(it[k]).length > 1) { id = String(it[k]); break }
-      }
-      if (!id) continue
-      
-      // Extract metrics
-      let roi = null
-      for (const k of ['yieldRate','roi','roiRate','totalRoi','pnlRate','returnRate','periodRoi','copyTradeRoi','incomeRate']) {
-        if (it[k] != null) { roi = parseFloat(it[k]); if (Math.abs(roi) < 20 && roi !== 0 && k !== 'roi') roi *= 100; break }
-      }
-      let pnl = null
-      for (const k of ['totalProfit','profit','pnl','totalPnl','total_profit','realizedPnl','income']) {
-        if (it[k] != null) { pnl = parseFloat(it[k]); break }
-      }
-      let wr = null
-      for (const k of ['winRate','win_rate','winRatio','winCount']) {
-        if (it[k] != null) { wr = parseFloat(it[k]); if (wr > 0 && wr <= 1) wr *= 100; break }
-      }
-      let dd = null
-      for (const k of ['maxDrawDown','maxDrawdown','mdd','max_drawdown','drawDown']) {
-        if (it[k] != null) { dd = Math.abs(parseFloat(it[k])); if (dd > 0 && dd < 1) dd *= 100; break }
-      }
-      
-      results.push({
-        id, name: it.nickName || it.nickname || it.leaderName || it.name || it.displayName || '',
-        avatar: it.headUrl || it.avatarUrl || it.avatar || it.userPhoto || it.portraitUrl || null,
-        roi, pnl, wr, dd,
-        trades: parseInt(it.totalOrderNum || it.closedCount || it.tradeCount || it.orderCount || 0) || null,
-      })
-    }
-  }
-  if (typeof obj === 'object' && !Array.isArray(obj)) {
-    for (const v of Object.values(obj)) results.push(...extractTraders(v, depth+1))
-  }
-  return results
-}
+import { sleep, extractTraders, save } from './lib/index.mjs'
 
 const PLATFORMS = {
   bybit:    { url: 'https://www.bybit.com/copyTrade/', source: 'bybit' },

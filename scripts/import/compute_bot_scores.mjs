@@ -2,12 +2,7 @@
 /**
  * Compute and update arena_score for all bot_snapshots
  */
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 function percentileRank(value, arr) {
   const below = arr.filter(v => v < value).length
@@ -17,14 +12,14 @@ function clamp(v) { return Math.max(0, Math.min(100, v)) }
 
 async function main() {
   for (const season of ['7D', '30D', '90D']) {
-    const { data: snapshots } = await supabase
+    const { data: snapshots } = await sb
       .from('bot_snapshots')
       .select('id, bot_id, total_volume, unique_users, tvl, apy, roi, max_drawdown, sharpe_ratio')
       .eq('season_id', season)
 
     // Get launch dates
     const botIds = [...new Set(snapshots.map(s => s.bot_id))]
-    const { data: sources } = await supabase.from('bot_sources').select('id, launch_date').in('id', botIds)
+    const { data: sources } = await sb.from('bot_sources').select('id, launch_date').in('id', botIds)
     const launchMap = Object.fromEntries((sources || []).map(s => [s.id, s.launch_date]))
 
     const volumes = snapshots.map(s => s.total_volume ?? 0).sort((a, b) => a - b)
@@ -53,7 +48,7 @@ async function main() {
       }
       const score = Math.round((0.25 * volumeScore + 0.30 * performanceScore + 0.20 * riskScore + 0.15 * adoptionScore + 0.10 * longevityScore) * 10) / 10
 
-      await supabase.from('bot_snapshots').update({ arena_score: clamp(score) }).eq('id', snap.id)
+      await sb.from('bot_snapshots').update({ arena_score: clamp(score) }).eq('id', snap.id)
     }
     console.log(`${season}: scored ${snapshots.length} bots`)
   }

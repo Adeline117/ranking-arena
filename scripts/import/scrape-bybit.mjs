@@ -11,13 +11,8 @@ import { fileURLToPath } from 'url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '../../.env.local') })
 
-import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 const BYBIT_URL = 'https://www.bybit.com/copyTrade/trade-center/find'
 const TARGET_COUNT = 100
@@ -143,7 +138,7 @@ async function scrape() {
     captured_at: now,
   }))
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_snapshots')
     .upsert(snapshots, { onConflict: 'source,source_trader_id,season_id' })
 

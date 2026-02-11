@@ -12,3 +12,4 @@ export { usePostTranslation, type UsePostTranslationOptions, type UsePostTransla
 
 // Re-export existing hooks
 export { usePostComments, type Comment } from './usePostComments'
+export { useBookmarkRepost } from './useBookmarkRepost'

@@ -1,12 +1,6 @@
-import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
+import { sb } from './lib/index.mjs'
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
-const { data, error } = await supabase.from('trader_snapshots')
+const { data, error } = await sb.from('trader_snapshots')
   .select('season_id, source')
 
 if (error) {

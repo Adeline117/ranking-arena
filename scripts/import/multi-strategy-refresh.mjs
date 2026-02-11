@@ -8,13 +8,8 @@
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 
-import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 const PROXY_URL = 'http://127.0.0.1:7890'
 const STRATEGIES = {
@@ -179,7 +174,7 @@ async function saveTraders(traders, seasonId = '30D') {
     arena_score: calculateArenaScore(t),
   }))
   
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_snapshots')
     .upsert(snapshots, { 
       onConflict: 'source,source_trader_id,season_id',

@@ -12,10 +12,8 @@
  */
 
 import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
+import { sb, sleep } from './lib/index.mjs'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 const SOURCE = 'bybit'
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
@@ -82,7 +80,7 @@ async function upsertEquityCurve(traderId, period, points) {
     captured_at: now,
   }))
   for (let i = 0; i < rows.length; i += 100) {
-    const { error } = await supabase.from('trader_equity_curve')
+    const { error } = await sb.from('trader_equity_curve')
       .upsert(rows.slice(i, i + 100), { onConflict: 'source,source_trader_id,period,data_date' })
     if (error) { console.log(`  ⚠ equity: ${error.message}`); return 0 }
   }
@@ -123,9 +121,9 @@ async function upsertStatsDetail(traderId, stats) {
       captured_at: now,
     }
     
-    await supabase.from('trader_stats_detail')
+    await sb.from('trader_stats_detail')
       .delete().eq('source', SOURCE).eq('source_trader_id', traderId).eq('period', period)
-    const { error } = await supabase.from('trader_stats_detail').insert(row)
+    const { error } = await sb.from('trader_stats_detail').insert(row)
     if (error) console.log(`  ⚠ stats ${period}: ${error.message}`)
     else count++
   }
@@ -141,7 +139,7 @@ async function main() {
   console.log(`${'='.repeat(60)}`)
 
   // Get traders from DB
-  const { data: traders } = await supabase.from('trader_sources')
+  const { data: traders } = await sb.from('trader_sources')
     .select('source_trader_id, handle')
     .eq('source', SOURCE)
     .eq('is_active', true)
@@ -151,11 +149,11 @@ async function main() {
   
   // Check which already have stats
   const ids = traders.map(t => t.source_trader_id)
-  const { data: existingStats } = await supabase.from('trader_stats_detail')
+  const { data: existingStats } = await sb.from('trader_stats_detail')
     .select('source_trader_id').eq('source', SOURCE).in('source_trader_id', ids.slice(0, 500))
   const hasStats = new Set(existingStats?.map(e => e.source_trader_id) || [])
   
-  const { data: existingEquity } = await supabase.from('trader_equity_curve')
+  const { data: existingEquity } = await sb.from('trader_equity_curve')
     .select('source_trader_id').eq('source', SOURCE).in('source_trader_id', ids.slice(0, 500))
   const hasEquity = new Set(existingEquity?.map(e => e.source_trader_id) || [])
   

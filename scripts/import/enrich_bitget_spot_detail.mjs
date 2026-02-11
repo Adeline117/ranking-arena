@@ -10,14 +10,12 @@
  */
 
 import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import { sb, sleep } from './lib/index.mjs'
 
 puppeteer.use(StealthPlugin())
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 const SOURCE = 'bitget_spot'
 
 const args = process.argv.slice(2)
@@ -41,7 +39,7 @@ async function upsertEquityCurve(traderId, period, rows) {
     pnl_usd: null,
     captured_at: now,
   }))
-  const { error } = await supabase.from('trader_equity_curve')
+  const { error } = await sb.from('trader_equity_curve')
     .upsert(data, { onConflict: 'source,source_trader_id,period,data_date' })
   if (error) return 0
   return data.length
@@ -70,9 +68,9 @@ async function upsertStats(traderId, period, stats) {
     captured_at: now,
   }
   
-  await supabase.from('trader_stats_detail')
+  await sb.from('trader_stats_detail')
     .delete().eq('source', SOURCE).eq('source_trader_id', traderId).eq('period', period)
-  const { error } = await supabase.from('trader_stats_detail').insert(row)
+  const { error } = await sb.from('trader_stats_detail').insert(row)
   if (error) return 0
   return 1
 }
@@ -87,7 +85,7 @@ async function upsertAssetBreakdown(traderId, period, symbols) {
     weight_pct: (parseInt(s.amount || '1') / total) * 100,
     captured_at: now,
   }))
-  const { error } = await supabase.from('trader_asset_breakdown')
+  const { error } = await sb.from('trader_asset_breakdown')
     .upsert(rows, { onConflict: 'source,source_trader_id,period,symbol,captured_at' })
   if (error) return 0
   return rows.length
@@ -102,7 +100,7 @@ async function main() {
   console.log(`Limit: ${LIMIT}, Offset: ${OFFSET}`)
   console.log(`${'='.repeat(60)}`)
 
-  const { data: traders } = await supabase.from('trader_sources')
+  const { data: traders } = await sb.from('trader_sources')
     .select('source_trader_id, handle')
     .eq('source', SOURCE).eq('is_active', true)
     .limit(LIMIT + OFFSET)
@@ -110,7 +108,7 @@ async function main() {
   if (!traders?.length) { console.log('No traders found'); return }
 
   const ids = traders.map(t => t.source_trader_id)
-  const { data: existingStats } = await supabase.from('trader_stats_detail')
+  const { data: existingStats } = await sb.from('trader_stats_detail')
     .select('source_trader_id').eq('source', SOURCE).in('source_trader_id', ids.slice(0, 500))
   const hasStats = new Set(existingStats?.map(e => e.source_trader_id) || [])
 

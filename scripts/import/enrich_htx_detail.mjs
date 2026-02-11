@@ -14,10 +14,8 @@
  */
 
 import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
+import { sb, sleep } from './lib/index.mjs'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 const SOURCE = 'htx_futures'
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
 const API_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank'
@@ -111,7 +109,7 @@ async function upsertEquityCurve(traderId, profitList) {
       captured_at: now,
     }))
     
-    const { error } = await supabase.from('trader_equity_curve')
+    const { error } = await sb.from('trader_equity_curve')
       .upsert(rows, { onConflict: 'source,source_trader_id,period,data_date' })
     if (!error) count += rows.length
   }
@@ -169,9 +167,9 @@ async function upsertStats(traderId, item) {
       captured_at: now,
     }
     
-    await supabase.from('trader_stats_detail')
+    await sb.from('trader_stats_detail')
       .delete().eq('source', SOURCE).eq('source_trader_id', traderId).eq('period', period)
-    const { error } = await supabase.from('trader_stats_detail').insert(row)
+    const { error } = await sb.from('trader_stats_detail').insert(row)
     if (!error) count++
   }
   return count
@@ -190,7 +188,7 @@ async function main() {
   
   // Check existing in DB
   const ids = Array.from(allTraders.keys()).slice(0, 500)
-  const { data: existingStats } = await supabase.from('trader_stats_detail')
+  const { data: existingStats } = await sb.from('trader_stats_detail')
     .select('source_trader_id').eq('source', SOURCE).in('source_trader_id', ids)
   const hasStats = new Set(existingStats?.map(e => e.source_trader_id) || [])
   

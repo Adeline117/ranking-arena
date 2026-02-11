@@ -4,22 +4,9 @@
  * 同时拦截 API + 监听 WebSocket
  */
 import { readFileSync } from 'fs'
-import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'
+import { clip, sb, sleep } from './lib/index.mjs'
 
-try {
-  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-    const m = line.match(/^([^#=]+)=["']?(.+?)["']?$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
-  }
-} catch {}
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
-const clip = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 function cs(roi, pnl, dd, wr) {
   if (roi == null) return null
   let r = Math.min(70, roi > 0 ? Math.log(1 + roi / 100) * 25 : Math.max(-70, roi / 100 * 50))
@@ -32,7 +19,7 @@ async function saveTraders(source, traders) {
   if (!traders.length) return 0
   const now = new Date().toISOString()
   for (let i = 0; i < traders.length; i += 50) {
-    try { await supabase.from('trader_sources').upsert(
+    try { await sb.from('trader_sources').upsert(
       traders.slice(i, i + 50).map(t => ({
         source, source_trader_id: t.id, handle: t.name || t.id,
         avatar_url: t.avatar || null, profile_url: t.profileUrl || null,
@@ -42,7 +29,7 @@ async function saveTraders(source, traders) {
   }
   let saved = 0
   for (let i = 0; i < traders.length; i += 30) {
-    const { error } = await supabase.from('trader_snapshots').upsert(
+    const { error } = await sb.from('trader_snapshots').upsert(
       traders.slice(i, i + 30).map((t, j) => ({
         source, source_trader_id: t.id, season_id: '30D', rank: i + j + 1,
         roi: t.roi, pnl: t.pnl, win_rate: t.wr, max_drawdown: t.dd,
