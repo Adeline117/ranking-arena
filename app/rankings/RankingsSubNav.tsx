@@ -7,7 +7,6 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const TABS = [
   { href: '/rankings/traders', labelZh: '交易员', labelEn: 'Traders' },
-  { href: '/rankings/bots', labelZh: 'Web3 机器人', labelEn: 'Web3 Bots' },
   { href: '/rankings/resources', labelZh: '资料', labelEn: 'Resources' },
   { href: '/rankings/institutions', labelZh: '机构', labelEn: 'Institutions' },
   { href: '/rankings/tools', labelZh: '工具', labelEn: 'Tools' },
