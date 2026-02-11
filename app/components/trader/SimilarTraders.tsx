@@ -212,7 +212,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >
-                      {trader.roi_90d >= 0 ? '+' : ''}{trader.roi_90d.toFixed(1)}%
+                      {trader.roi_90d >= 0 ? '+' : ''}{trader.roi_90d.toFixed(2)}%
                     </Text>
                   )}
                   {trader.arena_score != null && (
