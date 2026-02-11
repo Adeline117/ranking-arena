@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -470,6 +471,7 @@ export default function FlashNewsPage() {
           )}
         </div>
       </Box>
+      <MobileBottomNav />
     </Box>
   )
 }
