@@ -71,13 +71,14 @@ async function fetchTopPapers(): Promise<LibraryItem[]> {
   }
 }
 
-async function fetchRecentItems(): Promise<LibraryItem[]> {
+async function fetchTopWhitepapers(): Promise<LibraryItem[]> {
   try {
     const supabase = getSupabaseAdmin()
     const { data } = await supabase
       .from('library_items')
       .select('*')
-      .order('created_at', { ascending: false })
+      .eq('category', 'whitepaper')
+      .order('rating', { ascending: false, nullsFirst: false })
       .limit(10)
     return data || []
   } catch {
@@ -86,12 +87,12 @@ async function fetchRecentItems(): Promise<LibraryItem[]> {
 }
 
 export default async function ResourcesPage() {
-  const [{ items, total }, featured, topBooks, topPapers, recentItems] = await Promise.all([
+  const [{ items, total }, featured, topBooks, topPapers, topWhitepapers] = await Promise.all([
     fetchLibraryItems(),
     fetchFeatured(),
     fetchTopBooks(),
     fetchTopPapers(),
-    fetchRecentItems(),
+    fetchTopWhitepapers(),
   ])
 
   return (
@@ -103,7 +104,7 @@ export default async function ResourcesPage() {
           initialTotal={total}
           topBooks={topBooks}
           topPapers={topPapers}
-          recentItems={recentItems}
+          recentItems={topWhitepapers}
         />
       </Suspense>
     </ErrorBoundary>

@@ -252,6 +252,7 @@ async function saveTradersBatch(traders, period) {
       pnl: t.pnl || 0,
       win_rate: normalizedWinRate,
       max_drawdown: t.maxDrawdown || 0,
+      trades_count: t.totalTrades || null,
       followers: t.followers || 0,
       arena_score: arenaScore,
       captured_at: capturedAt,
