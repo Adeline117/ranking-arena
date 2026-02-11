@@ -16,7 +16,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   global.URL.createObjectURL = jest.fn(() => 'blob:mock')
   global.URL.revokeObjectURL = jest.fn()
-  document.createElement = mockCreateElement as any
+  document.createElement = mockCreateElement as unknown as typeof document.createElement
   document.body.appendChild = jest.fn()
   document.body.removeChild = jest.fn()
 })

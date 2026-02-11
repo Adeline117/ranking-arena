@@ -38,7 +38,7 @@ describe('GET /api/market/futures', () => {
       json: async () => [
         { symbol: 'btc', current_price: 50000, price_change_percentage_24h: 2.5, total_volume: 1e9 },
       ],
-    }) as any
+    }) as unknown as typeof fetch
   })
 
   afterEach(() => { global.fetch = originalFetch })

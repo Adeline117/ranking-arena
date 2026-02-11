@@ -50,7 +50,7 @@ describe('CSRF utilities', () => {
 
     it('应该拒绝空 token', () => {
       expect(validateTimedCsrfToken('')).toBe(false)
-      expect(validateTimedCsrfToken(null as any)).toBe(false)
+      expect(validateTimedCsrfToken(null as unknown as string)).toBe(false)
     })
 
     it('应该拒绝格式错误的 token', () => {
@@ -88,7 +88,7 @@ describe('CSRF utilities', () => {
       expect(safeCompare('', 'hello')).toBe(false)
       expect(safeCompare('hello', '')).toBe(false)
       expect(safeCompare('', '')).toBe(false)
-      expect(safeCompare(null as any, 'hello')).toBe(false)
+      expect(safeCompare(null as unknown as string, 'hello')).toBe(false)
     })
   })
 

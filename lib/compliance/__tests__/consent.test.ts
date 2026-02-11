@@ -23,7 +23,7 @@ describe('Consent Management', () => {
   beforeEach(() => {
     localStorage.clear()
     // 重置 ConsentManager 单例（通过清除缓存）
-    ;(global as any).consentManagerInstance = null
+    ;(global as unknown as Record<string, unknown>).consentManagerInstance = null
   })
   
   describe('ConsentManager', () => {

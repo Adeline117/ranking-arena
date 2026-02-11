@@ -135,8 +135,8 @@ describe('format utilities', () => {
     })
 
     it('应该处理 null 和 undefined', () => {
-      expect(truncate(null as any, 10)).toBe('')
-      expect(truncate(undefined as any, 10)).toBe('')
+      expect(truncate(null as unknown as string, 10)).toBe('')
+      expect(truncate(undefined as unknown as string, 10)).toBe('')
     })
   })
 

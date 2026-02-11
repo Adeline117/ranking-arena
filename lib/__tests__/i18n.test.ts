@@ -1,4 +1,4 @@
-import { t, getLanguage, setLanguage, translations } from '../i18n'
+import { t, getLanguage, setLanguage, translations, type TranslationKey } from '../i18n'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -55,14 +55,14 @@ describe('i18n', () => {
       // t should return something for any key in the zh dict
       const keys = Object.keys(translations.zh)
       if (keys.length > 0) {
-        const result = t(keys[0] as any)
+        const result = t(keys[0] as TranslationKey)
         expect(typeof result).toBe('string')
         expect(result.length).toBeGreaterThan(0)
       }
     })
 
     it('returns key itself for unknown key', () => {
-      const result = t('nonexistent_key_xyz' as any)
+      const result = t('nonexistent_key_xyz' as TranslationKey)
       expect(result).toBe('nonexistent_key_xyz')
     })
   })

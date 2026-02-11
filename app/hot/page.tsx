@@ -103,7 +103,7 @@ function HotContent() {
   const [loadingGroups, setLoadingGroups] = useState(false)
 
   // New content polling state
-  const [newPostCount, setNewPostCount] = useState(0)
+  // newPostCount removed per Adeline's request
   const latestPostTime = useRef<string>('')
 
   // 帖子详情弹窗状态
@@ -258,7 +258,7 @@ function HotContent() {
         if (postsData.length > 0 && postsData[0].created_at) {
           latestPostTime.current = postsData[0].created_at
         }
-        setNewPostCount(0)
+        // newPostCount removed
       } else {
         setPosts([])
       }
@@ -302,24 +302,7 @@ function HotContent() {
     loadGroups()
   }, [activeHotTab])
 
-  // New content polling (every 60s)
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      if (!latestPostTime.current) return
-      if (document.visibilityState !== 'visible') return
-      try {
-        const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=1&after=${latestPostTime.current}`)
-        const json = await res.json()
-        const data = json.posts || json.data?.posts || []
-        if (data.length > 0) {
-          setNewPostCount(prev => prev + data.length)
-        }
-      } catch {
-        // Silent fail for polling
-      }
-    }, 60000)
-    return () => clearInterval(interval)
-  }, [])
+  // New content polling removed
 
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
@@ -836,29 +819,6 @@ function HotContent() {
                   ) : (
                     <Box className="stagger-fade" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], position: 'relative' }}>
                       {/* New posts polling banner */}
-                      {newPostCount > 0 && (
-                        <Box
-                          onClick={() => {
-                            loadPosts()
-                          }}
-                          style={{
-                            position: 'sticky',
-                            top: 0,
-                            zIndex: 10,
-                            background: ARENA_PURPLE,
-                            borderRadius: tokens.radius.md,
-                            padding: '10px 16px',
-                            textAlign: 'center',
-                            cursor: 'pointer',
-                            color: tokens.colors.white,
-                            fontWeight: 700,
-                            fontSize: '13px',
-                          }}
-                        >
-                          {t('newPostsCount').replace('{count}', String(newPostCount))}
-                        </Box>
-                      )}
-
                       {visibleHot.map((p, idx) => {
                         const rank = idx + 1
                         return (

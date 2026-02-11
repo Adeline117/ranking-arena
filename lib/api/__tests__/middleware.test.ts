@@ -144,7 +144,7 @@ describe('API 中间件', () => {
 
     it('应该处理带状态码的错误', async () => {
       const error = new Error('Not found')
-      ;(error as any).statusCode = 404
+      ;(error as Error & { statusCode?: number }).statusCode = 404
       const handler = jest.fn().mockRejectedValue(error)
       const wrapped = withApiMiddleware(handler)
       
