@@ -1,14 +1,12 @@
 /**
- * BingX Copy Trading - Mac Mini版 (Playwright)
+ * BingX Copy Trading - Mac Mini版 (Playwright + API Pagination)
  *
- * BingX uses Cloudflare + timestamp-signed API requests.
- * Strategy: Use Playwright to click through all sort/filter combinations
- * and intercept API responses to collect unique traders.
- * Also extract from __NUXT__ SSR state.
+ * Strategy: Use Playwright to load the page (bypasses CF), intercept the
+ * signed API request headers, then paginate through ALL traders via the
+ * recommend endpoint.
  *
- * API endpoints discovered:
- *   - POST api-app.qq-os.com/api/copy-trade-facade/v2/trader/new/recommend (initial load, 12 traders)
- *   - POST api-app.we-api.com/api/copy-trade-facade/v1/trader/search (sort/filter, 12 per page)
+ * API: POST api-app.qq-os.com/api/copy-trade-facade/v2/trader/new/recommend?pageId={n}&pageSize=50
+ * Returns: { data: { total, result: [{ trader, rankStat }] } }
  *
  * Usage: node scripts/import/import_bingx_mac.mjs [7D|30D|90D|ALL]
  */
@@ -22,33 +20,67 @@ import {
 
 const supabase = getSupabaseClient()
 const SOURCE = 'bingx'
+const PAGE_SIZE = 50
+const API_BASE = 'https://api-app.qq-os.com'
+const RECOMMEND_PATH = '/api/copy-trade-facade/v2/trader/new/recommend'
+const PROXY = 'http://127.0.0.1:7890'
 
-function parseTrader(item) {
-  const t = item.trader || item
-  const stats = item.rankStat || item.traderStatistics || item.statistics || item
-  const uid = String(t.uid || t.id || item.uid || item.id || '')
+// Period mapping for BingX fields
+const PERIOD_MAP = {
+  '7D':  { roiField: 'strRecent7DaysRate',  pnlField: 'cumulativeProfitLoss7d',  winRateField: 'winRate7d',  mddField: 'maxDrawDown7dV2' },
+  '30D': { roiField: 'strRecent30DaysRate', pnlField: 'cumulativeProfitLoss30d', winRateField: 'winRate30d', mddField: 'maxDrawDown30dV2' },
+  '90D': { roiField: 'strRecent90DaysRate', pnlField: 'cumulativeProfitLoss90d', winRateField: 'winRate90d', mddField: 'maxDrawDown90dV2' },
+}
+
+function parsePercent(s) {
+  if (s === null || s === undefined) return 0
+  if (typeof s === 'number') return s
+  return parseFloat(String(s).replace(/[+%,]/g, '')) || 0
+}
+
+function parseNumber(s) {
+  if (s === null || s === undefined) return 0
+  if (typeof s === 'number') return s
+  return parseFloat(String(s).replace(/[+,]/g, '')) || 0
+}
+
+function extractTrader(item, period) {
+  const t = item.trader || {}
+  const rs = item.rankStat || {}
+  const uid = String(t.uid || '')
   if (!uid || uid === 'undefined') return null
-  const name = t.nickName || t.realNickName || t.nickname || item.nickName || ''
+  const name = t.nickName || t.realNickName || ''
   if (!name) return null
 
-  let roi = parseFloat(stats.roi || stats.roiRate || stats.weeklyRoi || t.roi || 0)
-  if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+  const pm = PERIOD_MAP[period]
+  const roi = parsePercent(rs[pm.roiField])
+  const pnl = parseNumber(rs[pm.pnlField])
+  const winRate = typeof rs[pm.winRateField] === 'number' ? rs[pm.winRateField] * 100 : parsePercent(rs.winRate)
+  const mdd = parsePercent(rs[pm.mddField]) || parsePercent(rs.maxDrawDown)
+  const copiers = parseInt(rs.strFollowerNum) || 0
 
   return {
     uid,
     name,
-    avatar: t.avatar || t.headUrl || item.avatar || null,
-    shortUid: t.shortUid || item.shortUid || null,
+    avatar: t.avatar || null,
+    shortUid: t.shortUid || null,
     roi,
-    pnl: parseFloat(stats.pnl || stats.totalPnl || stats.accEarning || t.totalPnl || 0),
-    winRate: parseFloat(stats.winRate || stats.profitRate || t.winRate || 0) * (parseFloat(stats.winRate || t.winRate || 0) <= 1 ? 100 : 1),
-    copiers: parseInt(stats.copierNum || stats.followers || t.copierNum || 0),
+    pnl,
+    winRate,
+    mdd,
+    copiers,
   }
 }
 
-async function scrapeTraders() {
-  console.log('BingX: 启动浏览器...')
-  const browser = await chromium.launch({ headless: true })
+/**
+ * Use Playwright to get a browser context that passes CF, then paginate the API
+ */
+async function scrapeAllTraders() {
+  console.log('🚀 BingX: 启动浏览器获取API签名...')
+  const browser = await chromium.launch({
+    headless: true,
+    proxy: { server: PROXY },
+  })
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     viewport: { width: 1920, height: 1080 },
@@ -60,161 +92,135 @@ async function scrapeTraders() {
   })
 
   const page = await context.newPage()
-  const allTraders = new Map()
+  let capturedHeaders = null
 
-  // Intercept ALL JSON responses for trader data
-  page.on('response', async (resp) => {
-    try {
-      const ct = resp.headers()['content-type'] || ''
-      if (!ct.includes('json')) return
-      const j = await resp.json().catch(() => null)
-      if (!j) return
-
-      for (const path of [j?.data?.result, j?.data?.list, j?.data?.traders, j?.data]) {
-        if (!Array.isArray(path) || path.length === 0) continue
-        for (const item of path) {
-          const trader = parseTrader(item)
-          if (trader && !allTraders.has(trader.uid)) {
-            allTraders.set(trader.uid, trader)
-          }
-        }
+  // Capture signed headers from the first recommend request
+  page.on('request', req => {
+    if (req.url().includes('recommend') && req.method() === 'POST' && !capturedHeaders) {
+      const h = req.headers()
+      capturedHeaders = {
+        'platformid': h['platformid'],
+        'appid': h['appid'],
+        'mainappid': h['mainappid'],
+        'lang': h['lang'] || 'en',
+        'appsiteid': h['appsiteid'] || '0',
+        'timezone': h['timezone'] || '-8',
+        'x-requested-with': 'XMLHttpRequest',
+        'accept': 'application/json, text/plain, */*',
+        'channel': h['channel'] || 'official',
+        'device_id': h['device_id'],
+        'reg_channel': h['reg_channel'] || 'official',
+        'sign': h['sign'],
+        'antideviceid': h['antideviceid'] || '',
+        'accept-language': 'en-US',
+        'app_version': h['app_version'] || '5.3.28',
+        'device_brand': h['device_brand'],
+        'traceid': h['traceid'],
+        'timestamp': h['timestamp'],
+        'user-agent': h['user-agent'],
+        'referer': 'https://bingx.com/',
+        'origin': 'https://bingx.com',
       }
-    } catch {}
+      console.log('  ✅ Captured API headers')
+    }
   })
 
-  try {
-    // ===== Page 1: CopyTrading main page =====
-    console.log('  导航到 CopyTrading...')
-    await page.goto('https://bingx.com/en/CopyTrading', { timeout: 60000, waitUntil: 'domcontentloaded' }).catch(() => {})
-    await sleep(12000)
+  console.log('  导航到 CopyTrading...')
+  await page.goto('https://bingx.com/en/copytrading/', { timeout: 60000, waitUntil: 'domcontentloaded' })
+  await sleep(15000)
 
-    // Close popups
-    for (const text of ['OK', 'Got it', 'Accept', 'Close']) {
-      const btn = page.getByRole('button', { name: text })
-      if (await btn.count() > 0) await btn.first().click().catch(() => {})
+  if (!capturedHeaders) {
+    console.log('  ⚠️ No headers captured from initial load, trying scroll...')
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(() => window.scrollBy(0, 500))
+      await sleep(2000)
     }
-    await sleep(2000)
-    console.log(`  Initial: ${allTraders.size} traders`)
-
-    // Click through all sort options to get different traders
-    async function clickSort(text) {
-      const el = page.getByText(text, { exact: true })
-      if (await el.count() > 0) {
-        await el.first().click().catch(() => {})
-        await sleep(4000)
-        // Scroll to load any lazy content
-        for (let i = 0; i < 5; i++) {
-          await page.evaluate(() => window.scrollBy(0, 600))
-          await sleep(800)
-        }
-        await page.evaluate(() => window.scrollTo(0, 0))
-        await sleep(1000)
-        return true
-      }
-      return false
-    }
-
-    // Click all sort options
-    for (const sort of ['ROI', 'PnL', 'Copiers', 'AUM', 'Win Rate']) {
-      if (await clickSort(sort)) {
-        console.log(`  After "${sort}": ${allTraders.size}`)
-      }
-    }
-
-    // Try View All / See All links
-    for (const txt of ['View All', 'See All', 'See More', 'View More', 'More', 'All Traders']) {
-      const el = page.getByText(txt, { exact: false })
-      if (await el.count() > 0) {
-        await el.first().click().catch(() => {})
-        await sleep(5000)
-        for (let i = 0; i < 10; i++) {
-          await page.evaluate(() => window.scrollBy(0, 600))
-          await sleep(800)
-        }
-        console.log(`  After "${txt}": ${allTraders.size}`)
-      }
-    }
-
-    // ===== Page 2: LeaderBoard =====
-    console.log('\n  导航到 leaderBoard...')
-    await page.goto('https://bingx.com/en/CopyTrading/leaderBoard', { timeout: 30000, waitUntil: 'domcontentloaded' }).catch(() => {})
-    await sleep(10000)
-
-    for (let i = 0; i < 15; i++) {
-      await page.evaluate(() => window.scrollBy(0, 600))
-      await sleep(1000)
-    }
-    console.log(`  leaderBoard: ${allTraders.size} traders`)
-
-    // ===== __NUXT__ extraction =====
-    const nuxtTraders = await page.evaluate(() => {
-      const n = window.__NUXT__
-      if (!n) return []
-      const r = [], seen = new Set()
-      function find(obj, d) {
-        if (d > 12 || !obj || typeof obj !== 'object') return
-        if (obj.uid && (obj.nickName || obj.realNickName) && !seen.has(String(obj.uid))) {
-          seen.add(String(obj.uid))
-          r.push({
-            uid: String(obj.uid),
-            name: obj.nickName || obj.realNickName || '',
-            avatar: obj.avatar || null,
-            shortUid: obj.shortUid || null,
-          })
-        }
-        if (Array.isArray(obj)) for (const i of obj) find(i, d + 1)
-        else for (const k of Object.keys(obj)) find(obj[k], d + 1)
-      }
-      find(n, 0)
-      return r
-    }).catch(() => [])
-
-    for (const t of nuxtTraders) {
-      if (!allTraders.has(t.uid)) {
-        allTraders.set(t.uid, { ...t, roi: 0, pnl: 0, winRate: 0, copiers: 0 })
-      }
-    }
-    console.log(`  + NUXT: ${allTraders.size} traders total`)
-
-    // ===== Go back to main page and try different tabs =====
-    console.log('\n  返回主页尝试更多排序...')
-    await page.goto('https://bingx.com/en/CopyTrading', { timeout: 60000, waitUntil: 'domcontentloaded' }).catch(() => {})
-    await sleep(12000)
-
-    // Try clicking Spot tab
-    if (await clickSort('Spot')) {
-      console.log(`  After Spot: ${allTraders.size}`)
-      for (const sort of ['ROI', 'PnL', 'Copiers']) {
-        if (await clickSort(sort)) {
-          console.log(`    After Spot "${sort}": ${allTraders.size}`)
-        }
-      }
-    }
-
-    // Try Futures tab and click through more sorts
-    if (await clickSort('Futures')) {
-      console.log(`  After Futures: ${allTraders.size}`)
-    }
-
-    console.log(`\n📊 Total unique traders: ${allTraders.size}`)
-
-  } catch (e) {
-    console.error(`Error: ${e.message}`)
-  } finally {
-    await browser.close()
   }
 
-  return [...allTraders.values()]
+  if (!capturedHeaders) {
+    console.error('  ❌ Failed to capture API headers')
+    await browser.close()
+    return []
+  }
+
+  // Now use the browser context to make paginated requests
+  console.log('\n📡 开始分页抓取所有traders...')
+  const allResults = []
+  let total = 0
+  let pageId = 0
+
+  while (true) {
+    const url = `${API_BASE}${RECOMMEND_PATH}?pageId=${pageId}&pageSize=${PAGE_SIZE}`
+    
+    try {
+      const response = await page.evaluate(async ({ url, headers }) => {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+        })
+        return resp.json()
+      }, { url, headers: capturedHeaders })
+
+      if (response.code !== 0) {
+        console.log(`  ⚠️ Page ${pageId}: code=${response.code}, msg=${response.msg}`)
+        // Try with updated timestamp
+        capturedHeaders.timestamp = String(Date.now())
+        const retry = await page.evaluate(async ({ url, headers }) => {
+          const resp = await fetch(url, { method: 'POST', headers, credentials: 'include' })
+          return resp.json()
+        }, { url, headers: capturedHeaders })
+        if (retry.code !== 0) {
+          console.log(`  ❌ Retry failed, stopping.`)
+          break
+        }
+      }
+
+      const results = response.data?.result || []
+      total = response.data?.total || total
+
+      if (results.length === 0) {
+        console.log(`  Page ${pageId}: empty, done.`)
+        break
+      }
+
+      allResults.push(...results)
+      console.log(`  Page ${pageId}: +${results.length} traders (${allResults.length}/${total})`)
+
+      if (allResults.length >= total) break
+
+      pageId++
+      await sleep(800 + Math.random() * 500)
+    } catch (e) {
+      console.error(`  ❌ Page ${pageId} error: ${e.message}`)
+      break
+    }
+  }
+
+  await browser.close()
+  console.log(`\n📊 抓取完成: ${allResults.length} raw results (total reported: ${total})`)
+  return allResults
 }
 
-async function saveTraders(traders, period) {
-  if (traders.length === 0) return 0
+async function saveTraders(rawResults, period) {
+  // Extract and deduplicate
+  const traders = new Map()
+  for (const item of rawResults) {
+    const t = extractTrader(item, period)
+    if (t && !traders.has(t.uid)) {
+      traders.set(t.uid, t)
+    }
+  }
 
-  traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+  const traderList = [...traders.values()]
+  if (traderList.length === 0) return 0
+
+  // Sort by ROI descending for ranking
+  traderList.sort((a, b) => b.roi - a.roi)
   const capturedAt = new Date().toISOString()
 
   // Save sources
-  const sources = traders.map(t => ({
+  const sources = traderList.map(t => ({
     source: SOURCE,
     source_trader_id: t.uid,
     handle: t.name,
@@ -222,33 +228,36 @@ async function saveTraders(traders, period) {
     profile_url: `https://bingx.com/en/CopyTrading/trader-detail/${t.shortUid || t.uid}`,
     is_active: true,
   }))
-  for (let i = 0; i < sources.length; i += 30) {
-    await supabase.from('trader_sources').upsert(sources.slice(i, i + 30), { onConflict: 'source,source_trader_id' })
+
+  for (let i = 0; i < sources.length; i += 50) {
+    const { error } = await supabase.from('trader_sources').upsert(sources.slice(i, i + 50), { onConflict: 'source,source_trader_id' })
+    if (error) console.log(`  ⚠️ source upsert error: ${error.message}`)
   }
 
   // Save snapshots
   let saved = 0
-  const snapshots = traders.map((t, idx) => {
-    const scores = calculateArenaScore(t.roi || 0, t.pnl || 0, null, t.winRate || 0, period)
+  const snapshots = traderList.map((t, idx) => {
+    const scores = calculateArenaScore(t.roi, t.pnl, t.mdd, t.winRate, period)
     return {
       source: SOURCE,
       source_trader_id: t.uid,
       season_id: period,
       rank: idx + 1,
-      roi: t.roi || 0,
-      pnl: t.pnl || 0,
-      win_rate: t.winRate || 0,
-      followers: t.copiers || 0,
+      roi: t.roi,
+      pnl: t.pnl,
+      win_rate: t.winRate,
+      max_drawdown: t.mdd,
+      followers: t.copiers,
       arena_score: scores.totalScore,
       captured_at: capturedAt,
     }
   })
 
-  for (let i = 0; i < snapshots.length; i += 30) {
-    const batch = snapshots.slice(i, i + 30)
+  for (let i = 0; i < snapshots.length; i += 50) {
+    const batch = snapshots.slice(i, i + 50)
     const { error } = await supabase.from('trader_snapshots').upsert(batch, { onConflict: 'source,source_trader_id,season_id' })
     if (!error) saved += batch.length
-    else console.log(`  ⚠ upsert error: ${error.message}`)
+    else console.log(`  ⚠️ snapshot upsert error: ${error.message}`)
   }
 
   return saved
@@ -259,21 +268,21 @@ async function main() {
   console.log('BingX 数据抓取开始...')
   console.log(`周期: ${periods.join(', ')}`)
 
-  const traders = await scrapeTraders()
+  const rawResults = await scrapeAllTraders()
 
-  if (traders.length === 0) {
+  if (rawResults.length === 0) {
     console.log('❌ 未获取到数据')
-    return
+    process.exit(1)
   }
 
-  let total = 0
+  let totalSaved = 0
   for (const period of periods) {
-    const saved = await saveTraders(traders, period)
-    total += saved
-    console.log(`  ${period}: saved ${saved}/${traders.length}`)
+    const saved = await saveTraders(rawResults, period)
+    totalSaved += saved
+    console.log(`  ${period}: saved ${saved} traders`)
   }
 
-  console.log(`\n✅ BingX 完成，共保存 ${total} 条记录`)
+  console.log(`\n✅ BingX 完成，共保存 ${totalSaved} 条记录`)
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
