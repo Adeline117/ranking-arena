@@ -1154,7 +1154,6 @@ export default function RankingsPage() {
     >
       <Suspense fallback={
         <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-          <TopNav email={null} />
           <div className="max-w-5xl mx-auto px-4 py-6">
             <RankingSkeleton />
           </div>
