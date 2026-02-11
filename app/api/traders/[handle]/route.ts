@@ -1015,7 +1015,14 @@ export async function GET(
     
     if (found) {
       // 从 trader_sources 找到了，获取详细数据
-      const data = await getTraderDetails(supabase, found.source, found.sourceType)
+      let data: Record<string, unknown>
+      try {
+        data = await getTraderDetails(supabase, found.source, found.sourceType) as unknown as Record<string, unknown>
+      } catch (detailError) {
+        logger.error('getTraderDetails failed, falling back to snapshots', { error: detailError instanceof Error ? detailError.message : String(detailError) })
+        // Fallback to basic snapshot data if full detail fetch fails
+        data = await getTraderDetailsFromSnapshots(supabase, found.source.source_trader_id, found.sourceType) as unknown as Record<string, unknown>
+      }
       
       // 缓存结果
       setServerCache(cacheKey, data, CacheTTL.MEDIUM)

@@ -60,91 +60,107 @@ async function searchTraders(
   limit: number
 ) {
   try {
-    let queryBuilder = supabase
+    // Step 1: Search trader_sources for matching traders (this table has handle, source, avatar_url etc.)
+    const q = query ? escapeLikePattern(query) : ''
+
+    let sourceQuery = supabase
       .from('trader_sources')
-      .select(`
-        trader_id,
-        platform,
-        nickname,
-        roi,
-        pnl,
-        win_rate,
-        follower_count,
-        aum,
-        max_drawdown,
-        updated_at,
-        is_verified
-      `)
-      .eq('is_active', true)
+      .select('source_trader_id, handle, source, avatar_url')
 
-    // Full-text search on nickname and trader_id
-    if (query) {
-      const q = escapeLikePattern(query)
-      queryBuilder = queryBuilder.or(`nickname.ilike.%${q}%,trader_id.ilike.%${q}%`)
+    if (q) {
+      sourceQuery = sourceQuery.or(`handle.ilike.%${q}%,source_trader_id.ilike.%${q}%`)
     }
 
-    // Apply filters
     if (filters.exchange) {
-      queryBuilder = queryBuilder.eq('platform', filters.exchange)
+      sourceQuery = sourceQuery.eq('source', filters.exchange)
     }
 
-    if (filters.minRoi !== undefined) {
-      queryBuilder = queryBuilder.gte('roi', filters.minRoi)
-    }
+    sourceQuery = sourceQuery.limit(limit * 2) // fetch extra to allow filtering
 
-    if (filters.maxRoi !== undefined) {
-      queryBuilder = queryBuilder.lte('roi', filters.maxRoi)
-    }
+    const { data: sourceData, error: sourceError } = await sourceQuery
 
-    if (filters.minFollowers !== undefined) {
-      queryBuilder = queryBuilder.gte('follower_count', filters.minFollowers)
-    }
-
-    // Sorting
-    switch (filters.sortBy) {
-      case 'roi':
-        queryBuilder = queryBuilder.order('roi', { ascending: false, nullsFirst: false })
-        break
-      case 'pnl':
-        queryBuilder = queryBuilder.order('pnl', { ascending: false, nullsFirst: false })
-        break
-      case 'followers':
-        queryBuilder = queryBuilder.order('follower_count', { ascending: false, nullsFirst: false })
-        break
-      case 'date':
-        queryBuilder = queryBuilder.order('updated_at', { ascending: false })
-        break
-      default:
-        // Default: relevance (verified first, then by ROI)
-        queryBuilder = queryBuilder.order('is_verified', { ascending: false })
-        queryBuilder = queryBuilder.order('roi', { ascending: false, nullsFirst: false })
-    }
-
-    queryBuilder = queryBuilder.limit(limit)
-
-    const { data, error } = await queryBuilder
-
-    if (error) {
-      logger.error('Trader search error', { error })
+    if (sourceError) {
+      logger.error('Trader search error', { error: sourceError })
       return []
     }
 
-    return (data || []).map(trader => ({
-      type: 'trader',
-      id: trader.trader_id,
-      platform: trader.platform,
-      title: trader.nickname || trader.trader_id,
-      subtitle: `${trader.platform} • ROI: ${trader.roi?.toFixed(2)}%`,
-      roi: trader.roi,
-      pnl: trader.pnl,
-      winRate: trader.win_rate,
-      followers: trader.follower_count,
-      aum: trader.aum,
-      maxDrawdown: trader.max_drawdown,
-      isVerified: trader.is_verified,
-      updatedAt: trader.updated_at,
-      url: `/trader/${trader.trader_id}`,
-    }))
+    if (!sourceData || sourceData.length === 0) return []
+
+    // Step 2: Get performance metrics from trader_snapshots for these traders
+    const traderIds = [...new Set(sourceData.map(s => s.source_trader_id))]
+    const sources = [...new Set(sourceData.map(s => s.source))]
+
+    let snapshotQuery = supabase
+      .from('trader_snapshots')
+      .select('source, source_trader_id, roi, pnl, win_rate, followers, max_drawdown, captured_at, arena_score')
+      .in('source', sources)
+      .in('source_trader_id', traderIds)
+      .eq('season_id', '90D')
+      .not('arena_score', 'is', null)
+
+    if (filters.minRoi !== undefined) {
+      snapshotQuery = snapshotQuery.gte('roi', filters.minRoi / 100) // DB stores as decimal
+    }
+    if (filters.maxRoi !== undefined) {
+      snapshotQuery = snapshotQuery.lte('roi', filters.maxRoi / 100)
+    }
+
+    const { data: snapshotData } = await snapshotQuery
+
+    // Build snapshot lookup map
+    const snapshotMap = new Map<string, (typeof snapshotData extends (infer T)[] | null ? T : never)>()
+    if (snapshotData) {
+      for (const snap of snapshotData) {
+        const key = `${snap.source}:${snap.source_trader_id}`
+        if (!snapshotMap.has(key)) snapshotMap.set(key, snap)
+      }
+    }
+
+    // Step 3: Merge and return
+    const results = sourceData
+      .map(trader => {
+        const key = `${trader.source}:${trader.source_trader_id}`
+        const snap = snapshotMap.get(key)
+        const roi = snap?.roi != null ? parseFloat(String(snap.roi)) * 100 : null
+        const pnl = snap?.pnl != null ? parseFloat(String(snap.pnl)) : null
+
+        return {
+          type: 'trader' as const,
+          id: trader.source_trader_id,
+          platform: trader.source,
+          title: trader.handle || trader.source_trader_id,
+          subtitle: `${trader.source} • ROI: ${roi != null ? roi.toFixed(2) : 'N/A'}%`,
+          roi,
+          pnl,
+          winRate: snap?.win_rate != null ? parseFloat(String(snap.win_rate)) : null,
+          followers: snap?.followers ?? null,
+          aum: null,
+          maxDrawdown: snap?.max_drawdown != null ? parseFloat(String(snap.max_drawdown)) : null,
+          isVerified: false,
+          updatedAt: snap?.captured_at ?? null,
+          url: `/trader/${trader.handle || trader.source_trader_id}`,
+          avatarUrl: trader.avatar_url,
+          arenaScore: snap?.arena_score != null ? parseFloat(String(snap.arena_score)) : null,
+        }
+      })
+
+    // Sort results
+    switch (filters.sortBy) {
+      case 'roi':
+        results.sort((a, b) => (b.roi ?? -Infinity) - (a.roi ?? -Infinity))
+        break
+      case 'pnl':
+        results.sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity))
+        break
+      case 'followers':
+        results.sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0))
+        break
+      default:
+        // Relevance: sort by arena score
+        results.sort((a, b) => (b.arenaScore ?? -Infinity) - (a.arenaScore ?? -Infinity))
+    }
+
+    return results.slice(0, limit)
   } catch (error: unknown) {
     logger.error('searchTraders exception', { error })
     return []

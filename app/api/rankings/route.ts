@@ -228,7 +228,14 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     throw new Error(`Supabase fallback failed: ${error.message}`);
   }
 
-  const paginatedRows = rows || [];
+  // Deduplicate by source:source_trader_id (keep first = highest ranked)
+  const seenKeys = new Set<string>();
+  const paginatedRows = (rows || []).filter(r => {
+    const key = `${r.source}:${r.source_trader_id}`;
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
+    return true;
+  });
 
   // Batch fetch display names from trader_sources (single query)
   const traderKeys = [...new Set(paginatedRows.map(r => r.source_trader_id))];
@@ -339,23 +346,20 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   });
 
   // Collect available sources for UI filter — use RPC or large enough sample
-  const { data: allSourceRows } = await supabase
-    .rpc('get_distinct_sources', { p_season_id: window.toUpperCase() })
-    .limit(100);
-  
-  // Fallback: if RPC doesn't exist, query with enough limit to cover all sources
   let availableSources: string[];
-  if (allSourceRows && allSourceRows.length > 0) {
-    availableSources = allSourceRows.map((r: { source: string }) => r.source).sort();
-  } else {
-    // Fallback: sample from each source by querying without limit on source field
-    const { data: fallbackRows } = await supabase
-      .from('trader_snapshots')
-      .select('source')
-      .eq('season_id', window.toUpperCase())
-      .not('arena_score', 'is', null)
-      .limit(15000);
-    availableSources = [...new Set((fallbackRows || []).map((r: { source: string }) => r.source))].sort();
+  try {
+    const { data: allSourceRows } = await supabase
+      .rpc('get_distinct_sources', { p_season_id: window.toUpperCase() })
+      .limit(100);
+    
+    if (allSourceRows && allSourceRows.length > 0) {
+      availableSources = allSourceRows.map((r: { source: string }) => r.source).sort();
+    } else {
+      throw new Error('RPC returned empty');
+    }
+  } catch {
+    // Fallback: extract distinct sources from already-fetched rows
+    availableSources = [...new Set((paginatedRows || []).map((r: { source: string }) => r.source))].sort();
   }
 
   return {
