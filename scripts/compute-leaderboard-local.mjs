@@ -31,6 +31,7 @@ async function main() {
     'gmx', 'dydx', 'hyperliquid', 'kwenta', 'gains', 'mux',
     'vertex', 'drift', 'jupiter_perps', 'aevo', 'synthetix',
     'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
+    'btcc', 'toobit', 'bitfinex',
   ]
 
   const SOURCE_TYPE_MAP = {
