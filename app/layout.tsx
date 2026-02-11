@@ -133,7 +133,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" dir="ltr" data-theme="dark" translate="no" className={inter.variable}>
+    <html lang="zh-CN" dir="ltr" data-theme="dark" translate="no" className={inter.variable} suppressHydrationWarning>
       <head>
         {/* Inline critical CSS for faster initial render */}
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
@@ -167,6 +167,7 @@ export default function RootLayout({
       <body
         className="font-sans antialiased"
         style={{ fontFamily: 'var(--font-inter), "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif' }}
+        suppressHydrationWarning
       >
         <Providers>
           <CapacitorProvider>
