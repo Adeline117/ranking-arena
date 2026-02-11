@@ -90,10 +90,6 @@ export async function GET(
   const badges: EarnedBadge[] = calculateBadges({
     handle: snapshot.source_trader_id,
     rank,
-    roi: snapshot.roi,
-    roi90d: snapshot.roi,
-    winRate: snapshot.win_rate,
-    maxDrawdown: snapshot.max_drawdown,
   })
 
   const response = { badges }
