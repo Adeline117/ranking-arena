@@ -71,42 +71,49 @@ export const GET = withPublic(
       } satisfies UnifiedSearchResponse)
     }
 
-    // 并行查询所有表
-    const [tradersRes, postsRes, libraryRes, usersRes] = await Promise.all([
-      // 交易员
-      supabase
+    // 并行查询所有表 — 每个独立容错，不因一个失败影响整体
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const safeQuery = async (promise: PromiseLike<{ data: any; error: any }>): Promise<any[]> => {
+      try {
+        const { data, error } = await promise
+        if (error) return []
+        return data ?? []
+      } catch {
+        return []
+      }
+    }
+
+    const [tradersData, postsData, libraryData, usersData] = await Promise.all([
+      safeQuery(supabase
         .from('trader_sources')
         .select('source_trader_id, handle, source')
         .or(
           `handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`
         )
-        .limit(limitPerCategory),
+        .limit(limitPerCategory)),
 
-      // 帖子
-      supabase
+      safeQuery(supabase
         .from('posts')
         .select('id, title, author_handle, created_at, view_count')
         .or(`title.ilike.%${sanitizedQuery}%`)
         .order('view_count', { ascending: false, nullsFirst: false })
-        .limit(limitPerCategory),
+        .limit(limitPerCategory)),
 
-      // 资料库
-      supabase
+      safeQuery(supabase
         .from('library_items')
         .select('id, title, author, slug, category')
         .or(
           `title.ilike.%${sanitizedQuery}%,author.ilike.%${sanitizedQuery}%`
         )
-        .limit(limitPerCategory),
+        .limit(limitPerCategory)),
 
-      // 用户
-      supabase
+      safeQuery(supabase
         .from('user_profiles')
         .select('id, handle, display_name, avatar_url, bio')
         .or(
           `handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%,bio.ilike.%${sanitizedQuery}%`
         )
-        .limit(limitPerCategory),
+        .limit(limitPerCategory)),
     ])
 
     const sourceLabels: Record<string, string> = {
@@ -123,7 +130,8 @@ export const GET = withPublic(
       gmx: 'GMX',
     }
 
-    const traders: UnifiedSearchResult[] = (tradersRes.data ?? []).map((t) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const traders: UnifiedSearchResult[] = tradersData.map((t: any) => ({
       id: `${t.source}:${t.source_trader_id}`,
       type: 'trader' as const,
       title: `@${t.handle || t.source_trader_id}`,
@@ -131,7 +139,8 @@ export const GET = withPublic(
       href: `/trader/${encodeURIComponent(t.handle || t.source_trader_id)}`,
     }))
 
-    const posts: UnifiedSearchResult[] = (postsRes.data ?? []).map((p) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const posts: UnifiedSearchResult[] = postsData.map((p: any) => ({
       id: p.id,
       type: 'post' as const,
       title: p.title || '无标题',
@@ -140,8 +149,9 @@ export const GET = withPublic(
       meta: { view_count: p.view_count },
     }))
 
-    const library: UnifiedSearchResult[] = (libraryRes.data ?? []).map(
-      (l) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const library: UnifiedSearchResult[] = libraryData.map(
+      (l: any) => ({
         id: l.id,
         type: 'library' as const,
         title: l.title,
@@ -150,7 +160,8 @@ export const GET = withPublic(
       })
     )
 
-    const users: UnifiedSearchResult[] = (usersRes.data ?? []).map((u) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const users: UnifiedSearchResult[] = usersData.map((u: any) => ({
       id: u.id,
       type: 'user' as const,
       title: u.display_name || `@${u.handle}`,
