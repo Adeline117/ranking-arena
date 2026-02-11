@@ -72,13 +72,24 @@ async function fetchTraderDetail(traderId, period) {
 async function enrichPeriod(period, concurrency) {
   console.log(`\n=== Enriching ${SOURCE} ${period} ===`)
 
-  // Get snapshots missing trades_count
-  const { data: missing, error } = await supabase
-    .from('trader_snapshots')
-    .select('id, source_trader_id')
-    .eq('source', SOURCE)
-    .eq('season_id', period)
-    .is('trades_count', null)
+  // Get snapshots missing trades_count (paginate past 1000 limit)
+  let missing = []
+  let from = 0
+  const PAGE = 1000
+  while (true) {
+    const { data, error: fetchErr } = await supabase
+      .from('trader_snapshots')
+      .select('id, source_trader_id')
+      .eq('source', SOURCE)
+      .eq('season_id', period)
+      .is('trades_count', null)
+      .range(from, from + PAGE - 1)
+    if (fetchErr) { console.error(`  Error: ${fetchErr.message}`); return 0 }
+    missing = missing.concat(data || [])
+    if (!data || data.length < PAGE) break
+    from += PAGE
+  }
+  const error = null
 
   if (error) {
     console.error(`  Error: ${error.message}`)
