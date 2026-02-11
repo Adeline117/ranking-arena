@@ -17,12 +17,13 @@ export const GET = withPublic(
         // Step 1: Get top traders from snapshots
         const { data: snapData, error: snapErr } = await supabase
           .from('trader_snapshots')
-          .select('source, source_trader_id, roi, arena_score')
+          .select('source, source_trader_id, roi, pnl, arena_score')
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
           .lte('roi', 5000)
           .gte('roi', -5000)
+          .or('roi.neq.0,pnl.neq.0')
           .order('arena_score', { ascending: false })
           .limit(10)
 
