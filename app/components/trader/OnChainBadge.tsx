@@ -30,7 +30,7 @@ const SIZE_CONFIG = {
 
 export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
   const { t } = useLanguage()
-  const [attestation, setAttestation] = useState<AttestationInfo | null>(null)
+  const [attestation, _setAttestation] = useState<AttestationInfo | null>(null)
   const [showTooltip, setShowTooltip] = useState(false)
 
   useEffect(() => {

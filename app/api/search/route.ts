@@ -72,7 +72,7 @@ export const GET = withPublic(
     }
 
     // 并行查询所有表 — 每个独立容错，不因一个失败影响整体
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const safeQuery = async (promise: PromiseLike<{ data: any; error: any }>): Promise<any[]> => {
       try {
         const { data, error } = await promise
@@ -130,7 +130,7 @@ export const GET = withPublic(
       gmx: 'GMX',
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const traders: UnifiedSearchResult[] = tradersData.map((t: any) => ({
       id: `${t.source}:${t.source_trader_id}`,
       type: 'trader' as const,
@@ -139,7 +139,7 @@ export const GET = withPublic(
       href: `/trader/${encodeURIComponent(t.handle || t.source_trader_id)}`,
     }))
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const posts: UnifiedSearchResult[] = postsData.map((p: any) => ({
       id: p.id,
       type: 'post' as const,
@@ -149,7 +149,7 @@ export const GET = withPublic(
       meta: { view_count: p.view_count },
     }))
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const library: UnifiedSearchResult[] = libraryData.map(
       (l: any) => ({
         id: l.id,
@@ -160,7 +160,7 @@ export const GET = withPublic(
       })
     )
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const users: UnifiedSearchResult[] = usersData.map((u: any) => ({
       id: u.id,
       type: 'user' as const,

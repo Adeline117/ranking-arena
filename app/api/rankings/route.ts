@@ -29,6 +29,20 @@ import { checkRateLimit, setRateLimitHeaders, getClientIp } from '@/lib/middlewa
 import { tieredGetOrSet } from '@/lib/cache/redis-layer';
 import logger from '@/lib/logger'
 
+// In-memory cache for availableSources (TTL 5 minutes)
+const sourcesCache = new Map<string, { sources: string[]; ts: number }>();
+const SOURCES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedSources(seasonId: string): string[] | null {
+  const entry = sourcesCache.get(seasonId);
+  if (entry && Date.now() - entry.ts < SOURCES_CACHE_TTL) return entry.sources;
+  return null;
+}
+
+function setCachedSources(seasonId: string, sources: string[]) {
+  sourcesCache.set(seasonId, { sources, ts: Date.now() });
+}
+
 const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite'];
 const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
 const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers'] as const;
@@ -345,27 +359,30 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     };
   });
 
-  // Collect available sources for UI filter — use RPC or large enough sample
-  // Get all distinct sources for this season — paginate to overcome Supabase 1000-row default
-  let availableSources: string[];
-  try {
-    const allSources = new Set<string>();
-    let from = 0;
-    const batchSize = 1000;
-    while (true) {
-      const { data: batch } = await supabase
-        .from('leaderboard_ranks')
-        .select('source')
-        .eq('season_id', window.toUpperCase())
-        .range(from, from + batchSize - 1);
-      if (!batch || batch.length === 0) break;
-      batch.forEach((r: { source: string }) => allSources.add(r.source));
-      if (batch.length < batchSize) break;
-      from += batchSize;
+  // Collect available sources for UI filter — cached with 5-min TTL
+  const seasonIdUpper = window.toUpperCase();
+  let availableSources = getCachedSources(seasonIdUpper);
+  if (!availableSources) {
+    try {
+      const allSources = new Set<string>();
+      let from = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data: batch } = await supabase
+          .from('leaderboard_ranks')
+          .select('source')
+          .eq('season_id', seasonIdUpper)
+          .range(from, from + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        batch.forEach((r: { source: string }) => allSources.add(r.source));
+        if (batch.length < batchSize) break;
+        from += batchSize;
+      }
+      availableSources = [...allSources].sort();
+      setCachedSources(seasonIdUpper, availableSources);
+    } catch {
+      availableSources = [...new Set((paginatedRows || []).map((r: { source: string }) => r.source))].sort();
     }
-    availableSources = [...allSources].sort();
-  } catch {
-    availableSources = [...new Set((paginatedRows || []).map((r: { source: string }) => r.source))].sort();
   }
 
   return {

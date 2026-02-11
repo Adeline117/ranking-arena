@@ -159,7 +159,7 @@ export function useBookmarkRepost({
       const data = await res.json()
       const bookmarks = data.bookmarks || {}
       setUserBookmarks(prev => ({ ...prev, ...bookmarks }))
-    } catch {}
+    } catch { /* ignore fetch errors */ }
   }, [accessToken])
 
   // Initialize counts from post data
