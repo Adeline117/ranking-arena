@@ -35,6 +35,19 @@ const PAIRS: Pair[] = [
   { symbol: 'LINK-USD', cgId: 'chainlink', cbProduct: 'LINK-USD' },
   { symbol: 'MATIC-USD', cgId: 'matic-network', cbProduct: 'MATIC-USD' },
   { symbol: 'DOT-USD', cgId: 'polkadot', cbProduct: 'DOT-USD' },
+  { symbol: 'UNI-USD', cgId: 'uniswap', cbProduct: 'UNI-USD' },
+  { symbol: 'ATOM-USD', cgId: 'cosmos', cbProduct: 'ATOM-USD' },
+  { symbol: 'FIL-USD', cgId: 'filecoin', cbProduct: 'FIL-USD' },
+  { symbol: 'APT-USD', cgId: 'aptos', cbProduct: 'APT-USD' },
+  { symbol: 'OP-USD', cgId: 'optimism', cbProduct: 'OP-USD' },
+  { symbol: 'SUI-USD', cgId: 'sui', cbProduct: 'SUI-USD' },
+  { symbol: 'NEAR-USD', cgId: 'near', cbProduct: 'NEAR-USD' },
+  { symbol: 'PEPE-USD', cgId: 'pepe', cbProduct: 'PEPE-USD' },
+  { symbol: 'WIF-USD', cgId: 'dogwifcoin', cbProduct: 'WIF-USD' },
+  { symbol: 'SHIB-USD', cgId: 'shiba-inu', cbProduct: 'SHIB-USD' },
+  { symbol: 'TRX-USD', cgId: 'tron', cbProduct: 'TRX-USD' },
+  { symbol: 'RENDER-USD', cgId: 'render-token', cbProduct: 'RENDER-USD' },
+  { symbol: 'INJ-USD', cgId: 'injective-protocol', cbProduct: 'INJ-USD' },
 ]
 
 // ---- 内存缓存（按 pairs key 缓存）----
