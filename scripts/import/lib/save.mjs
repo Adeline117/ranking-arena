@@ -45,7 +45,7 @@ export async function save(source, traders, opts = {}) {
         source_trader_id: t.id,
         season_id: seasonId,
         rank: i + j + 1,
-        roi: t.roi,
+        roi: Math.abs(t.roi) > 5000 ? null : t.roi,
         pnl: t.pnl,
         win_rate: t.wr,
         max_drawdown: t.dd,
