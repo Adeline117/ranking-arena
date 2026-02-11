@@ -2664,3 +2664,26 @@ html.theme-transition * {
   outline-offset: 2px;
   border-radius: 2px;
 }
+
+/* Rankings page right sidebar layout */
+.rankings-with-sidebar {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 20px;
+  align-items: start;
+}
+.rankings-right-sidebar {
+  position: sticky;
+  top: 60px;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.rankings-right-sidebar::-webkit-scrollbar { width: 4px; }
+.rankings-right-sidebar::-webkit-scrollbar-thumb { background: var(--color-border-primary); border-radius: 4px; }
+@media (max-width: 1279px) {
+  .rankings-with-sidebar { grid-template-columns: 1fr; }
+  .rankings-right-sidebar { display: none; }
+}
+

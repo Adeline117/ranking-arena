@@ -6,7 +6,7 @@
  * Pure DB read, fast rendering, stale indicators.
  */
 
-import { Suspense, useState, useEffect, useCallback, useMemo, useDeferredValue, useRef } from 'react'
+import { Suspense, lazy, useState, useEffect, useCallback, useMemo, useDeferredValue, useRef } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -28,6 +28,10 @@ import type { SnapshotWindow, RankedTraderV2, Platform } from '@/lib/types/tradi
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP, SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { Web3VerifiedBadge } from '@/app/components/trader/Web3VerifiedBadge'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
+import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
+
+const WatchlistMarket = lazy(() => import('@/app/components/sidebar/WatchlistMarket'))
+const NewsFlash = lazy(() => import('@/app/components/sidebar/NewsFlash'))
 import { useProStatus } from '@/lib/hooks/useProStatus'
 import { PaywallGradientOverlay } from '@/app/components/pro/PaywallOverlay'
 import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
@@ -1159,22 +1163,44 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
 
 export default function RankingsPage() {
   return (
-    <ErrorBoundary 
-      pageType="rankings" 
-      onError={(error, errorInfo) => {
-        // 可以在这里添加额外的错误处理逻辑，比如发送到分析服务
-        console.error('Rankings page error:', error, errorInfo)
-      }}
-    >
-      <Suspense fallback={
-        <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-          <div className="max-w-5xl mx-auto px-4 py-6">
-            <RankingSkeleton />
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 16px' }}>
+      <div className="rankings-with-sidebar">
+        {/* Main ranking content */}
+        <div style={{ minWidth: 0 }}>
+          <ErrorBoundary 
+            pageType="rankings" 
+            onError={(error, errorInfo) => {
+              console.error('Rankings page error:', error, errorInfo)
+            }}
+          >
+            <Suspense fallback={
+              <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+                <div className="max-w-5xl mx-auto px-4 py-6">
+                  <RankingSkeleton />
+                </div>
+              </Box>
+            }>
+              <RankingsContent />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+
+        {/* Right sidebar — market watchlist + flash news */}
+        <aside className="rankings-right-sidebar">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <SectionErrorBoundary>
+              <Suspense fallback={<div className="skeleton" style={{ height: 200, borderRadius: tokens.radius.lg }} />}>
+                <WatchlistMarket />
+              </Suspense>
+            </SectionErrorBoundary>
+            <SectionErrorBoundary>
+              <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}>
+                <NewsFlash />
+              </Suspense>
+            </SectionErrorBoundary>
           </div>
-        </Box>
-      }>
-        <RankingsContent />
-      </Suspense>
-    </ErrorBoundary>
+        </aside>
+      </div>
+    </div>
   )
 }
