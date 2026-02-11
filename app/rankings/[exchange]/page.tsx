@@ -2,7 +2,6 @@ import { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { EXCHANGE_NAMES, SOURCES_WITH_DATA, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box } from '@/app/components/base'
 import ExchangeRankingClient from './ExchangeRankingClient'
@@ -93,11 +92,14 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
   if (!supabase) return []
 
   try {
+    // Use leaderboard_ranks (the primary ranking table) instead of trader_snapshots_v2
     const { data, error } = await supabase
-      .from('trader_snapshots_v2')
-      .select('trader_key, display_name, avatar_url, platform, roi, pnl, win_rate, max_drawdown, arena_score, followers')
-      .eq('platform', exchange)
-      .eq('window', '90d')
+      .from('leaderboard_ranks')
+      .select('source_trader_id, handle, avatar_url, source, roi, pnl, win_rate, max_drawdown, arena_score, followers')
+      .eq('source', exchange)
+      .eq('season_id', '90D')
+      .not('arena_score', 'is', null)
+      .gt('arena_score', 0)
       .order('arena_score', { ascending: false, nullsFirst: false })
       .limit(5000)
 
@@ -105,7 +107,20 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
       logger.error(`[ExchangeRanking] Error fetching ${exchange}:`, error)
       return []
     }
-    return data || []
+
+    // Map to TraderData shape
+    return (data || []).map(row => ({
+      trader_key: `${row.source}:${row.source_trader_id}`,
+      display_name: row.handle || row.source_trader_id,
+      avatar_url: row.avatar_url,
+      platform: row.source,
+      roi: row.roi ?? 0,
+      pnl: row.pnl ?? 0,
+      win_rate: row.win_rate,
+      max_drawdown: row.max_drawdown,
+      arena_score: row.arena_score,
+      followers: row.followers,
+    }))
   } catch (e) {
     logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)
     return []
@@ -125,7 +140,6 @@ export default async function ExchangeRankingPage({
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={null} />
       <div className="max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 80 }}>
         <h1
           style={{
