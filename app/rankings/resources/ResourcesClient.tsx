@@ -144,8 +144,8 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
             emptyText: isZh ? '即将上线' : 'Coming soon',
           },
           {
-            title: isZh ? '最新添加 Top 10' : 'Recently Added',
-            icon: <ClockIcon />,
+            title: isZh ? '热门白皮书 Top 10' : 'Top 10 Whitepapers',
+            icon: <PaperIcon />,
             entries: recentItems.map(libItemToEntry),
             emptyText: isZh ? '即将上线' : 'Coming soon',
           },
