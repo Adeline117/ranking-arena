@@ -17,7 +17,7 @@ import {
 const supabase = getSupabaseClient()
 
 const SOURCE = 'gateio'
-const BASE_URL = 'https://www.gate.io/copy_trading'
+const BASE_URL = 'https://www.gate.io/copytrading'
 const TARGET_COUNT = 500
 
 const PERIOD_CONFIG = {
@@ -92,12 +92,12 @@ async function fetchLeaderboard(browser, period) {
 
   try {
     console.log(`  导航到 ${BASE_URL}...`)
-    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 90000 }).catch(() => {
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {
       console.log('  ⚠ 页面加载超时，继续...')
     })
     await sleep(5000)
 
-    const title = await page.title()
+    const title = await page.title().catch(() => 'unknown')
     console.log(`  页面标题: ${title}`)
 
     // 关闭弹窗
@@ -239,7 +239,7 @@ async function saveTraders(traders, period) {
       source_trader_id: t.traderId,
       handle: t.nickname,
       avatar_url: t.avatarUrl || null,
-      profile_url: `https://www.gate.io/copy_trading/share?trader_id=${t.traderId}`,
+      profile_url: `https://www.gate.io/copytrading/share?trader_id=${t.traderId}`,
       is_active: true,
     })),
     { onConflict: 'source,source_trader_id' }

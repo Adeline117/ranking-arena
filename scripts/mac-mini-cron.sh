@@ -83,6 +83,8 @@ run_script "import_weex.mjs" "" 300
 run_script "import_dydx_enhanced.mjs" "ALL" 600
 run_script "import_gains.mjs" "" 300
 run_script "import_btcc.mjs" "" 300
+run_script "import_bitfinex_v2.mjs" "" 120
+run_script "import_toobit.mjs" "" 120
 
 # DEX platforms (pure API, no Chrome needed)
 # Enrich scripts need to run per period
