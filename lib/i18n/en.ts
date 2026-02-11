@@ -1755,7 +1755,7 @@ const en = {
     loginWelcomeBack: 'Welcome Back',
     loginCreateAccount: 'Create Account',
     loginSubtitle: 'Explore the world of top traders',
-    loginValueProp1: 'Track 32,000+ traders in real-time',
+    loginValueProp1: 'Track 15,000+ traders in real-time',
     loginValueProp2: 'Compare ROI across 27 exchanges',
     loginValueProp3: 'Join trading communities',
     loginConnectWallet: 'Connect Wallet',

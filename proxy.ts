@@ -162,6 +162,12 @@ function generateCsp(): string {
       'https://*.ingest.sentry.io',
       'https://*.ingest.us.sentry.io',
       'https://*.sentry.io',
+      // Web3Modal / WalletConnect
+      'https://api.web3modal.org',
+      'https://*.walletconnect.com',
+      'wss://*.walletconnect.com',
+      'https://*.walletconnect.org',
+      'wss://*.walletconnect.org',
     ],
     'frame-src': [
       "'self'",
