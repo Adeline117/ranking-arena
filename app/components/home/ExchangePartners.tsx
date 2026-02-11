@@ -23,15 +23,12 @@ const EXCHANGES: { name: string; key: Exchange }[] = [
   { name: 'dYdX', key: 'dydx' as Exchange },
   { name: 'Jupiter', key: 'jupiter' as Exchange },
   { name: 'Toobit', key: 'toobit' as Exchange },
-  { name: 'BTSE', key: 'btse' as Exchange },
-  { name: 'Crypto.com', key: 'cryptocom' as Exchange },
+  { name: 'BTCC', key: 'btcc' as Exchange },
   { name: 'Bitfinex', key: 'bitfinex' as Exchange },
-  { name: 'WhiteBit', key: 'whitebit' as Exchange },
   { name: 'LBank', key: 'lbank' as Exchange },
   { name: 'BloFin', key: 'blofin' as Exchange },
   { name: 'XT.com', key: 'xt' as Exchange },
-  { name: 'Uniswap', key: 'uniswap' as Exchange },
-  { name: 'PancakeSwap', key: 'pancakeswap' as Exchange },
+  { name: 'Gains', key: 'gains' as Exchange },
 ]
 
 export default function ExchangePartners() {

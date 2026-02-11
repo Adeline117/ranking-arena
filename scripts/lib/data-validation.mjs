@@ -191,6 +191,48 @@ export function validateTraderData(traders, config = {}, platform) {
 }
 
 /**
+ * 智能ROI异常检测 — 基于同平台同期统计分布
+ * 不硬删数据，只标记可疑
+ * @param {Array} traders - 交易员数据 [{roi, ...}]
+ * @param {string} platform - 平台名
+ * @param {string} season - 时间段
+ * @returns {Array} 标记后的数据，每项增加 _roiFlagged: boolean, _flagReason: string
+ */
+export function detectRoiAnomalies(traders, platform, season) {
+  const rois = traders.map(t => t.roi).filter(r => typeof r === 'number' && !isNaN(r))
+  if (rois.length < 10) return traders // 样本太小不做检测
+
+  // 计算中位数和MAD (Median Absolute Deviation) — 比标准差更抗极端值
+  const sorted = [...rois].sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)]
+  const mad = [...rois].map(r => Math.abs(r - median)).sort((a, b) => a - b)[Math.floor(rois.length / 2)]
+  const threshold = mad > 0 ? 20 : 0 // 20倍MAD
+
+  return traders.map(t => {
+    if (typeof t.roi !== 'number' || isNaN(t.roi)) return t
+
+    const reasons = []
+
+    // 检测1: 统计偏离 (MAD-based)
+    if (mad > 0 && Math.abs(t.roi - median) > threshold * mad) {
+      reasons.push(`偏离中位数${median.toFixed(1)}%超过${threshold}倍MAD`)
+    }
+
+    // 检测2: 7D ROI > 90D ROI 的逻辑矛盾（需要外部传入对比数据）
+    // 这个在compute-leaderboard层做更合适
+
+    // 检测3: 同一批次中重复的精确ROI值（可能是API返回错误）
+    // 由deduplicateTraders处理
+
+    return {
+      ...t,
+      _roiFlagged: reasons.length > 0,
+      _flagReason: reasons.join('; ') || null
+    }
+  })
+}
+
+/**
  * 去重交易员数据
  */
 export function deduplicateTraders(traders) {
