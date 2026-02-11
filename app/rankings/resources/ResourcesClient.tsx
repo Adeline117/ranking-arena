@@ -9,6 +9,7 @@ import type { LibraryItem } from '@/lib/types/library'
 import BookCard from '@/app/library/BookCard'
 import BookCover from '@/app/library/BookCover'
 import StarRating from '@/app/components/ui/StarRating'
+import TopLeaderboards, { type LeaderboardColumn } from '@/app/components/ui/TopLeaderboards'
 import dynamic from 'next/dynamic'
 import { logger } from '@/lib/logger'
 
@@ -33,9 +34,40 @@ interface ResourcesClientProps {
   initialItems: LibraryItem[]
   initialFeatured: LibraryItem[]
   initialTotal: number
+  topBooks: LibraryItem[]
+  topPapers: LibraryItem[]
+  recentItems: LibraryItem[]
 }
 
-export default function ResourcesClient({ initialItems, initialFeatured, initialTotal }: ResourcesClientProps) {
+const BookIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+  </svg>
+)
+
+const PaperIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+  </svg>
+)
+
+const ClockIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+  </svg>
+)
+
+function libItemToEntry(item: LibraryItem) {
+  return {
+    id: item.id,
+    name: item.title,
+    rating: item.rating ?? null,
+    logoUrl: item.cover_url,
+    href: `/library/${item.id}`,
+  }
+}
+
+export default function ResourcesClient({ initialItems, initialFeatured, initialTotal, topBooks, topPapers, recentItems }: ResourcesClientProps) {
   const { language } = useLanguage()
   const searchParams = useSearchParams()
 
@@ -96,6 +128,28 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 100px' }}>
+
+        {/* Top Leaderboards */}
+        <TopLeaderboards columns={[
+          {
+            title: isZh ? '热门书籍 Top 10' : 'Top 10 Books',
+            icon: <BookIcon />,
+            entries: topBooks.map(libItemToEntry),
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+          {
+            title: isZh ? '热门论文 Top 10' : 'Top 10 Papers',
+            icon: <PaperIcon />,
+            entries: topPapers.map(libItemToEntry),
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+          {
+            title: isZh ? '最新添加 Top 10' : 'Recently Added',
+            icon: <ClockIcon />,
+            entries: recentItems.map(libItemToEntry),
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+        ]} />
 
         {/* Search */}
         <div style={{ position: 'relative', maxWidth: 560, marginBottom: 24 }}>

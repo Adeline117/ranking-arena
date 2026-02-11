@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import StarRating from '@/app/components/ui/StarRating'
+import TopLeaderboards, { type LeaderboardEntry } from '@/app/components/ui/TopLeaderboards'
 import dynamic from 'next/dynamic'
 
 const MobileBottomNav = dynamic(() => import('@/app/components/layout/MobileBottomNav'), { ssr: false })
@@ -36,6 +37,34 @@ const SORT_OPTIONS = [
   { key: 'reviews', zh: '评价最多', en: 'Most Reviews' },
 ]
 
+const FundIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+  </svg>
+)
+
+const ProjectIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+  </svg>
+)
+
+const ExchangeIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
+  </svg>
+)
+
+function instToEntry(inst: Institution, isZh: boolean): LeaderboardEntry {
+  return {
+    id: inst.id,
+    name: isZh ? (inst.name_zh || inst.name) : inst.name,
+    rating: inst.avg_rating,
+    logoUrl: inst.logo_url,
+    href: inst.website,
+  }
+}
+
 export default function InstitutionsPage() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
@@ -44,6 +73,42 @@ export default function InstitutionsPage() {
   const [category, setCategory] = useState('all')
   const [sort, setSort] = useState('rating')
   const [search, setSearch] = useState('')
+
+  // Leaderboard data
+  const [topFunds, setTopFunds] = useState<Institution[]>([])
+  const [topProjects, setTopProjects] = useState<Institution[]>([])
+  const [topExchanges, setTopExchanges] = useState<Institution[]>([])
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true)
+
+  // Fetch leaderboard data once
+  useEffect(() => {
+    async function fetchLeaderboards() {
+      setLeaderboardLoading(true)
+      try {
+        const fetchTop = async (cat: string) => {
+          const { data } = await supabase
+            .from('institutions')
+            .select('id, name, name_zh, category, logo_url, website, description, description_zh, avg_rating, rating_count, tags')
+            .eq('is_active', true)
+            .eq('category', cat)
+            .order('avg_rating', { ascending: false, nullsFirst: false })
+            .limit(10)
+          return data || []
+        }
+        const [funds, projects, exchanges] = await Promise.all([
+          fetchTop('fund'), fetchTop('project'), fetchTop('exchange'),
+        ])
+        setTopFunds(funds)
+        setTopProjects(projects)
+        setTopExchanges(exchanges)
+      } catch {
+        // ignore
+      } finally {
+        setLeaderboardLoading(false)
+      }
+    }
+    fetchLeaderboards()
+  }, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -87,6 +152,32 @@ export default function InstitutionsPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 100px' }}>
+
+        {/* Top Leaderboards */}
+        <TopLeaderboards columns={[
+          {
+            title: isZh ? '顶级基金 Top 10' : 'Top 10 Funds',
+            icon: <FundIcon />,
+            entries: topFunds.map(i => instToEntry(i, isZh)),
+            loading: leaderboardLoading,
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+          {
+            title: isZh ? '顶级项目方 Top 10' : 'Top 10 Projects',
+            icon: <ProjectIcon />,
+            entries: topProjects.map(i => instToEntry(i, isZh)),
+            loading: leaderboardLoading,
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+          {
+            title: isZh ? '顶级交易所 Top 10' : 'Top 10 Exchanges',
+            icon: <ExchangeIcon />,
+            entries: topExchanges.map(i => instToEntry(i, isZh)),
+            loading: leaderboardLoading,
+            emptyText: isZh ? '即将上线' : 'Coming soon',
+          },
+        ]} />
+
         <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 20 }}>
           {isZh ? '机构' : 'Institutions'}
         </h1>
