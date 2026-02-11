@@ -288,7 +288,9 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
       quality: { is_complete: true, missing_fields: [], confidence: 1.0, is_interpolated: false },
       as_of_ts: row.captured_at,
     } as unknown as RankedTraderRow;
-  }).filter(row => row.display_name != null);
+  });
+  // Note: no longer filtering out traders without display_name.
+  // The frontend getTraderDisplayName() handles fallback to trader_key.
 
   // Calculate staleness based on the latest captured_at across the ENTIRE season,
   // not just the paginated rows (which may contain traders not recently re-scraped)
@@ -550,7 +552,8 @@ async function getCompositeRankings(params: {
     };
   });
 
-  const filteredTraders = traders.filter((t: any) => t.display_name != null);
+  // Note: no longer filtering out traders without display_name.
+  // The frontend getTraderDisplayName() handles fallback to trader_key.
 
   // Collect all unique sources across all windows for UI filter
   const allSources = new Set<string>();
@@ -558,7 +561,7 @@ async function getCompositeRankings(params: {
   const availableSources = [...allSources].sort();
 
   return {
-    traders: filteredTraders,
+    traders,
     window: 'COMPOSITE' as const,
     totalcount: total,
     total_count: total,
