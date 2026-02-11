@@ -215,6 +215,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     .not('arena_score', 'is', null)
     .lte('roi', ROI_ANOMALY_THRESHOLD)
     .gte('roi', -ROI_ANOMALY_THRESHOLD)
+    .or('roi.neq.0,pnl.neq.0')
     .order(sortColumn, { ascending: sort_dir === 'asc', nullsFirst: false })
     .range(offset, offset + safeLimit - 1);
 
@@ -422,6 +423,7 @@ async function getCompositeRankings(params: {
       .not('arena_score', 'is', null)
       .lte('roi', ROI_ANOMALY_THRESHOLD)
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
+      .or('roi.neq.0,pnl.neq.0')
       .order('arena_score', { ascending: false, nullsFirst: false })
       .limit(2000);
 
