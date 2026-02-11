@@ -4,22 +4,8 @@
  * 通过 API 拦截 + DOM 提取双管齐下
  */
 import { readFileSync } from 'fs'
-import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'
-
-try {
-  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-    const m = line.match(/^([^#=]+)=["']?(.+?)["']?$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
-  }
-} catch {}
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
-const clip = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+import { clip, sb, sleep } from './lib/index.mjs'
 
 function calcScore(roi, pnl, dd, wr) {
   if (roi == null) return null
@@ -37,7 +23,7 @@ async function save(source, traders, seasonId, marketType = 'futures') {
     avatar_url: t.avatar || null, profile_url: t.profileUrl || null,
     market_type: marketType, is_active: true,
   }))
-  await supabase.from('trader_sources').upsert(srcData, { onConflict: 'source,source_trader_id' })
+  await sb.from('trader_sources').upsert(srcData, { onConflict: 'source,source_trader_id' })
   
   const snapData = traders.map((t, i) => ({
     source, source_trader_id: t.id, season_id: seasonId, rank: i + 1,
@@ -50,10 +36,10 @@ async function save(source, traders, seasonId, marketType = 'futures') {
   let saved = 0
   for (let i = 0; i < snapData.length; i += 50) {
     const chunk = snapData.slice(i, i + 50)
-    const { error } = await supabase.from('trader_snapshots').upsert(chunk, { onConflict: 'source,source_trader_id,season_id' })
+    const { error } = await sb.from('trader_snapshots').upsert(chunk, { onConflict: 'source,source_trader_id,season_id' })
     if (error) {
       for (const s of chunk) {
-        const { error: e } = await supabase.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
+        const { error: e } = await sb.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
         if (!e) saved++
       }
     } else saved += chunk.length

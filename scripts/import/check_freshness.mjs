@@ -1,10 +1,4 @@
-import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 // All configured sources
 const ALL_SOURCES = [
@@ -25,14 +19,14 @@ console.log('='.repeat(80))
 
 const results = []
 for (const source of ALL_SOURCES) {
-  const { data: fresh } = await supabase.from('trader_snapshots')
+  const { data: fresh } = await sb.from('trader_snapshots')
     .select('captured_at')
     .eq('source', source)
     .eq('season_id', '90D')
     .gte('captured_at', freshnessISO)
     .limit(1)
   
-  const { data: any } = await supabase.from('trader_snapshots')
+  const { data: any } = await sb.from('trader_snapshots')
     .select('captured_at')
     .eq('source', source)
     .eq('season_id', '90D')

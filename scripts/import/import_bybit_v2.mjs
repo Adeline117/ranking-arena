@@ -19,14 +19,9 @@ config({ path: join(__dirname, '../../.env.local') })
 
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-import { createClient } from '@supabase/supabase-js'
+import { sb } from './lib/index.mjs'
 
 puppeteer.use(StealthPlugin())
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
 
 const SOURCE = 'bybit'
 // Bybit Copy Trading 页面 - 使用 find 子页面可以看到全部交易员
@@ -473,7 +468,7 @@ async function saveTraders(traders, period) {
     is_active: true,
   }))
 
-  await supabase
+  await sb
     .from('trader_sources')
     .upsert(sourcesData, { onConflict: 'source,source_trader_id' })
 
@@ -492,7 +487,7 @@ async function saveTraders(traders, period) {
     captured_at: capturedAt,
   }))
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_snapshots')
     .upsert(snapshotsData, { onConflict: 'source,source_trader_id,season_id' })
 
@@ -500,7 +495,7 @@ async function saveTraders(traders, period) {
     console.log(`  ⚠️ 批量保存失败: ${error.message}`)
     let saved = 0
     for (const s of snapshotsData) {
-      const { error: e } = await supabase
+      const { error: e } = await sb
         .from('trader_snapshots')
         .upsert(s, { onConflict: 'source,source_trader_id,season_id' })
       if (!e) saved++

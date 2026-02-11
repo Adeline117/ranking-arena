@@ -19,13 +19,13 @@
 
 import 'dotenv/config'
 import { createClient } from '@supabase/supabase-js'
+import { sleep } from './lib/index.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('❌ Missing SUPABASE env vars'); process.exit(1) }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 const parseNum = v => { if (v == null) return null; const n = parseFloat(v); return isNaN(n) ? null : n }
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 

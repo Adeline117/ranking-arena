@@ -4,11 +4,11 @@
  * 自动尝试多个 API 端点，处理封锁和格式变化
  */
 
-import { createClient } from '@supabase/supabase-js'
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { sb } from './lib/index.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../..')
@@ -20,11 +20,6 @@ try {
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
   }
 } catch {}
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
 
 const PROXY = 'http://127.0.0.1:7890'
 
@@ -69,7 +64,7 @@ async function saveBatch(source, traders) {
       season_id: '30D',
       captured_at: now
     }
-    const { error } = await supabase.from('trader_snapshots').upsert(rec, { 
+    const { error } = await sb.from('trader_snapshots').upsert(rec, { 
       onConflict: 'source,source_trader_id,season_id' 
     })
     if (!error) saved++
@@ -222,7 +217,7 @@ async function main() {
   console.log(`\n总计新增/更新: ${total}`)
 
   // Get current stats
-  const { data } = await supabase.from('trader_snapshots').select('source, arena_score').eq('season_id', '30D')
+  const { data } = await sb.from('trader_snapshots').select('source, arena_score').eq('season_id', '30D')
   const counts = {}
   data.forEach(r => counts[r.source] = (counts[r.source] || 0) + 1)
   

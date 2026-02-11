@@ -1,10 +1,4 @@
-import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 console.log('\n📊 Comprehensive Data Check')
 console.log('='.repeat(80))
@@ -12,7 +6,7 @@ console.log('='.repeat(80))
 // Check each season_id
 for (const seasonId of ['7D', '30D', '90D']) {
   console.log(`\n${seasonId}:`)
-  const { data, error } = await supabase.from('trader_snapshots')
+  const { data, error } = await sb.from('trader_snapshots')
     .select('source, captured_at')
     .eq('season_id', seasonId)
 
@@ -42,7 +36,7 @@ for (const seasonId of ['7D', '30D', '90D']) {
 // Overall summary
 console.log('\n' + '='.repeat(80))
 console.log('OVERALL SUMMARY:')
-const { data: all } = await supabase.from('trader_snapshots').select('source, season_id')
+const { data: all } = await sb.from('trader_snapshots').select('source, season_id')
 const allSources = [...new Set(all.map(r => r.source))].sort()
 console.log('All sources with any data:', allSources.length)
 console.log(allSources.join(', '))

@@ -10,12 +10,7 @@
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 const LIMIT = parseInt(process.argv[2]) || 50
 
@@ -43,7 +38,7 @@ async function main() {
 async function supplementHyperliquid() {
   console.log('\n📊 补充 Hyperliquid 数据...')
 
-  const { data: traders } = await supabase
+  const { data: traders } = await sb
     .from('trader_snapshots')
     .select('source_trader_id, roi, win_rate, max_drawdown')
     .eq('source', 'hyperliquid')
@@ -87,7 +82,7 @@ async function supplementHyperliquid() {
 
         // 更新数据
         if (winRate || accountValue > 0) {
-          await supabase
+          await sb
             .from('trader_snapshots')
             .update({
               win_rate: winRate,
@@ -113,7 +108,7 @@ async function supplementHyperliquid() {
 async function supplementGMX() {
   console.log('\n📊 补充 GMX 数据...')
 
-  const { data: traders } = await supabase
+  const { data: traders } = await sb
     .from('trader_snapshots')
     .select('source_trader_id, roi, win_rate, max_drawdown')
     .eq('source', 'gmx')
@@ -167,7 +162,7 @@ async function supplementGMX() {
           }
 
           if (winRate !== null) {
-            await supabase
+            await sb
               .from('trader_snapshots')
               .update({ win_rate: winRate })
               .eq('source', 'gmx')
@@ -191,7 +186,7 @@ async function supplementGMX() {
 async function supplementOKX() {
   console.log('\n📊 补充 OKX 数据...')
 
-  const { data: traders } = await supabase
+  const { data: traders } = await sb
     .from('trader_snapshots')
     .select('source_trader_id, roi, win_rate, max_drawdown')
     .eq('source', 'okx_futures')
@@ -231,7 +226,7 @@ async function supplementOKX() {
           maxDrawdown = Math.abs(maxDrawdown)
 
           if (winRate > 0 || maxDrawdown > 0) {
-            await supabase
+            await sb
               .from('trader_snapshots')
               .update({
                 win_rate: winRate || trader.win_rate,
@@ -258,7 +253,7 @@ async function supplementOKX() {
 async function supplementBinance() {
   console.log('\n📊 补充 Binance 数据...')
 
-  const { data: traders } = await supabase
+  const { data: traders } = await sb
     .from('trader_snapshots')
     .select('source_trader_id, roi, win_rate, max_drawdown')
     .eq('source', 'binance_futures')
@@ -304,7 +299,7 @@ async function supplementBinance() {
           maxDrawdown = Math.abs(maxDrawdown)
 
           if (winRate > 0 || maxDrawdown > 0) {
-            await supabase
+            await sb
               .from('trader_snapshots')
               .update({
                 win_rate: winRate || trader.win_rate,

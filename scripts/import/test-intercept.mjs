@@ -4,9 +4,9 @@
  */
 import { execSync, spawn } from 'child_process'
 import { chromium } from 'playwright'
+import { sleep } from './lib/index.mjs'
 
 const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/snap/bin/chromium')
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 const PORT = 9338
 const url = process.argv[2] || 'https://www.bitget.com/copy-trading/futures/all?rule=2&sort=0'

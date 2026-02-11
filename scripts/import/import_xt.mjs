@@ -5,12 +5,12 @@
  * 字段映射: accountId→id, incomeRate→roi, income→pnl, winRate→wr, maxRetraction→dd
  */
 import { readFileSync } from 'fs'
-import { createClient } from '@supabase/supabase-js'
 import { execSync, spawn } from 'child_process'
 import { chromium } from 'playwright'
 
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { clip, cs, sb, sleep } from './lib/index.mjs'
 
 const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/snap/bin/chromium')
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -18,10 +18,6 @@ const envPath = join(__dirname, '../../.env.local')
 try { for (const l of readFileSync(envPath,'utf8').split('\n')) {
   const m=l.match(/^([^#=]+)=["']?(.+?)["']?$/); if(m&&!process.env[m[1]]) process.env[m[1]]=m[2]
 }} catch{}
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
-const clip = (v,lo,hi) => Math.max(lo,Math.min(hi,v))
-function cs(roi,p,d,w){if(roi==null)return null;return clip(Math.round((Math.min(70,roi>0?Math.log(1+roi/100)*25:Math.max(-70,roi/100*50))+(d!=null?Math.max(0,15*(1-d/100)):7.5)+(w!=null?Math.min(15,w/100*15):7.5))*10)/10,0,100)}
 
 const PORT = 9337
 

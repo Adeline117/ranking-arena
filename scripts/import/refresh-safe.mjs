@@ -14,6 +14,7 @@ import { spawn, execSync } from 'child_process'
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { clip, sb } from './lib/index.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../..')
@@ -61,10 +62,8 @@ async function runInlineRefresh(name) {
   } catch {}
 
   const { createClient } = await import('@supabase/supabase-js')
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-
-  const clip = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
-  function arenaScore(roi, pnl, dd, wr) {
+  
+    function arenaScore(roi, pnl, dd, wr) {
     if (roi == null) return null
     const r = Math.min(70, roi > 0 ? Math.log(1 + roi / 100) * 25 : Math.max(-70, roi / 100 * 50))
     const d = dd != null ? Math.max(0, 15 * (1 - dd / 100)) : 7.5

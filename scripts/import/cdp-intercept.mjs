@@ -8,12 +8,7 @@ import { config } from 'dotenv'
 config({ path: '.env.local' })
 
 import puppeteer from 'puppeteer-core'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 const CDP_URL = 'http://127.0.0.1:9338'
 
@@ -185,7 +180,7 @@ async function saveTraders(traders, source) {
     market_type: 'futures',
   }))
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_snapshots')
     .upsert(snapshots, {
       onConflict: 'source,source_trader_id,season_id',

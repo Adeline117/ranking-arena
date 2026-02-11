@@ -6,12 +6,7 @@
  */
 
 import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 // Sample posts with different engagement levels
 const samplePosts = [
@@ -141,7 +136,7 @@ async function seedPosts() {
   console.log('🌱 Seeding sample posts for recommendation testing...\n')
 
   // Check if we already have posts
-  const { count } = await supabase
+  const { count } = await sb
     .from('posts')
     .select('*', { count: 'exact', head: true })
 
@@ -175,7 +170,7 @@ async function seedPosts() {
       post.view_count * 0.1 -
       Math.log(ageHours + 2) * 2
 
-    const { error } = await supabase
+    const { error } = await sb
       .from('posts')
       .insert({
         content: post.content,
@@ -201,7 +196,7 @@ async function seedPosts() {
   // Verify recommendations work
   console.log('\n🔍 Testing recommendations API...')
 
-  const { data: trending } = await supabase
+  const { data: trending } = await sb
     .from('posts')
     .select('id, author_handle, hot_score, like_count')
     .order('hot_score', { ascending: false })

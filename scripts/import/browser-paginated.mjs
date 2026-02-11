@@ -10,55 +10,14 @@
  * 用法: node browser-paginated.mjs <platform> [--debug]
  */
 import { readFileSync } from 'fs'
-import { createClient } from '@supabase/supabase-js'
 import { execSync, spawn } from 'child_process'
 import { chromium } from 'playwright'
+import { clip, cs, extractTraders, sb, sleep } from './lib/index.mjs'
 
 const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/snap/bin/chromium')
 
-try { for (const l of readFileSync('.env.local','utf8').split('\n')) {
-  const m=l.match(/^([^#=]+)=["']?(.+?)["']?$/); if(m&&!process.env[m[1]]) process.env[m[1]]=m[2]
-}} catch{}
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
-const clip = (v,lo,hi) => Math.max(lo,Math.min(hi,v))
-function cs(roi,p,d,w){if(roi==null)return null;return clip(Math.round((Math.min(70,roi>0?Math.log(1+roi/100)*25:Math.max(-70,roi/100*50))+(d!=null?Math.max(0,15*(1-d/100)):7.5)+(w!=null?Math.min(15,w/100*15):7.5))*10)/10,0,100)}
-
 const DEBUG = process.argv.includes('--debug')
 const log = (...a) => DEBUG && console.log('[DBG]', ...a)
-
-function extractTraders(obj, depth=0) {
-  const results = []
-  if (depth > 5 || !obj) return results
-  if (Array.isArray(obj) && obj.length >= 2) {
-    for (const it of obj) {
-      if (!it || typeof it !== 'object') continue
-      const keys = Object.keys(it)
-      const hasId = keys.some(k => /trader|uid|leader|address|portfolio|userId|copyTrade|leaderMark/i.test(k)) || it.id
-      const hasMetric = keys.some(k => /roi|pnl|yield|profit|winRate|return|income/i.test(k))
-      const hasName = keys.some(k => /nick|name|displayName/i.test(k))
-      if (!hasId || (!hasMetric && !hasName)) continue
-      let id = ''
-      for (const k of ['traderId','traderUid','uid','leaderId','encryptedUid','leadPortfolioId','copyTradeId','leaderMark','userId','trader_id','address','id']) {
-        if (it[k] != null && String(it[k]).length > 1) { id = String(it[k]); break }
-      }
-      if (!id) continue
-      let roi = null
-      for (const k of ['yieldRate','roi','roiRate','totalRoi','pnlRate','returnRate','periodRoi','copyTradeRoi','incomeRate']) {
-        if (it[k] != null) { roi = parseFloat(it[k]); if (Math.abs(roi) < 20 && roi !== 0 && k !== 'roi') roi *= 100; break }
-      }
-      let pnl = null; for (const k of ['totalProfit','profit','pnl','totalPnl','income']) { if (it[k] != null) { pnl = parseFloat(it[k]); break } }
-      let wr = null; for (const k of ['winRate','win_rate','winRatio']) { if (it[k] != null) { wr = parseFloat(it[k]); if (wr > 0 && wr <= 1) wr *= 100; break } }
-      let dd = null; for (const k of ['maxDrawDown','maxDrawdown','mdd','drawDown']) { if (it[k] != null) { dd = Math.abs(parseFloat(it[k])); if (dd > 0 && dd < 1) dd *= 100; break } }
-      results.push({ id, name: it.nickName||it.nickname||it.leaderName||it.name||it.displayName||'',
-        avatar: it.headUrl||it.avatarUrl||it.avatar||it.userPhoto||it.portraitUrl||null,
-        roi, pnl, wr, dd, trades: parseInt(it.totalOrderNum||it.closedCount||it.tradeCount||0)||null,
-        followers: parseInt(it.followerCount||it.followers||it.copierCount||0)||null })
-    }
-  }
-  if (typeof obj === 'object' && !Array.isArray(obj)) for (const v of Object.values(obj)) results.push(...extractTraders(v, depth+1))
-  return results
-}
 
 // Platform config with pagination strategies
 const PLATFORMS = {

@@ -8,13 +8,8 @@
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 
-import { createClient } from '@supabase/supabase-js'
 import { chromium } from 'playwright'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+import { sb } from './lib/index.mjs'
 
 const BITGET_URLS = [
   'https://www.bitget.com/copy-trading/futures',
@@ -56,7 +51,6 @@ async function scrape() {
   page.on('response', async (response) => {
     const url = response.url()
     const contentType = response.headers()['content-type'] || ''
-
 
     // 更广泛的匹配模式 - 聚焦于可能有交易员数据的端点
     const patterns = ['trace', 'trader', 'rank', 'leader', 'elite', 'top']
@@ -147,7 +141,7 @@ async function scrape() {
     captured_at: now,
   }))
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('trader_snapshots')
     .upsert(snapshots, { onConflict: 'source,source_trader_id,season_id' })
 

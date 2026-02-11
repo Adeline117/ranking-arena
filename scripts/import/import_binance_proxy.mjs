@@ -1,17 +1,8 @@
 /**
  * Binance Futures - 使用 curl + ClashX 代理
  */
-import { createClient } from '@supabase/supabase-js'
-import { readFileSync } from 'fs'
 import { execSync } from 'child_process'
-
-try { for (const l of readFileSync('.env.local','utf8').split('\n')) {
-  const m=l.match(/^([^#=]+)=["']?(.+?)["']?$/); if(m&&!process.env[m[1]]) process.env[m[1]]=m[2]
-}} catch{}
-const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
-const clip = (v,lo,hi) => Math.max(lo,Math.min(hi,v))
-function cs(roi,p,d,w){if(roi==null)return null;return clip(Math.round((Math.min(70,roi>0?Math.log(1+roi/100)*25:Math.max(-70,roi/100*50))+(d!=null?Math.max(0,15*(1-d/100)):7.5)+(w!=null?Math.min(15,w/100*15):7.5))*10)/10,0,100)}
+import { clip, cs, sb, sleep } from './lib/index.mjs'
 
 function curlFetch(url, body) {
   const cmd = `curl -s --proxy http://127.0.0.1:7890 --max-time 30 "${url}" -X POST -H "Content-Type: application/json" -H "User-Agent: Mozilla/5.0" -H "Origin: https://www.binance.com" -d '${JSON.stringify(body)}'`

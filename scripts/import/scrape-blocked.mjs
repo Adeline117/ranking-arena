@@ -4,21 +4,9 @@
  * 通过拦截 API 响应获取数据
  */
 import { readFileSync } from 'fs'
-import { createClient } from '@supabase/supabase-js'
+import { sb, sleep } from './lib/index.mjs'
 
 // Load env
-try {
-  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-    const m = line.match(/^([^#=]+)=["']?(.+?)["']?$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
-  }
-} catch {}
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 const clip = (v, min, max) => Math.max(min, Math.min(max, v))
 function calcScore(roi, pnl, dd, wr) {
@@ -38,7 +26,7 @@ async function save(source, traders, seasonId, marketType = 'futures') {
     avatar_url: t.avatar || null, profile_url: t.profileUrl || null,
     market_type: marketType, is_active: true,
   }))
-  await supabase.from('trader_sources').upsert(srcData, { onConflict: 'source,source_trader_id' })
+  await sb.from('trader_sources').upsert(srcData, { onConflict: 'source,source_trader_id' })
 
   const snapData = traders.map((t, i) => ({
     source, source_trader_id: t.id, season_id: seasonId, rank: i + 1,
@@ -47,11 +35,11 @@ async function save(source, traders, seasonId, marketType = 'futures') {
     arena_score: calcScore(t.roi, t.pnl, t.dd, t.wr),
     captured_at: now,
   }))
-  const { error } = await supabase.from('trader_snapshots').upsert(snapData, { onConflict: 'source,source_trader_id,season_id' })
+  const { error } = await sb.from('trader_snapshots').upsert(snapData, { onConflict: 'source,source_trader_id,season_id' })
   if (error) {
     let ok = 0
     for (const s of snapData) {
-      const { error: e } = await supabase.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
+      const { error: e } = await sb.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
       if (!e) ok++
     }
     return ok
