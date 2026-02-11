@@ -6,17 +6,10 @@
 
 export type BadgeId =
   | 'top10'
-  | 'top50'
   | 'top100'
-  | 'verified_onchain'
   | 'high_winrate'
-  | 'consistent_performer'
   | 'low_drawdown'
   | 'high_roi'
-  | 'whale'
-  | 'veteran'
-  | 'rising_star'
-  | 'nft_holder'
 
 export interface Badge {
   id: BadgeId
@@ -46,18 +39,6 @@ export const BADGE_DEFINITIONS: Record<BadgeId, Badge> = {
     rarity: 'legendary',
     category: 'rank',
   },
-  top50: {
-    id: 'top50',
-    name: { en: 'Top 50', zh: '前50名' },
-    description: {
-      en: 'Ranked in the top 50 traders globally',
-      zh: '全球交易员排名前50',
-    },
-    icon: 'medal',
-    color: 'var(--color-medal-silver)',
-    rarity: 'epic',
-    category: 'rank',
-  },
   top100: {
     id: 'top100',
     name: { en: 'Top 100', zh: '前100名' },
@@ -70,18 +51,6 @@ export const BADGE_DEFINITIONS: Record<BadgeId, Badge> = {
     rarity: 'rare',
     category: 'rank',
   },
-  verified_onchain: {
-    id: 'verified_onchain',
-    name: { en: 'On-Chain Verified', zh: '链上验证' },
-    description: {
-      en: 'Arena Score verified on-chain via EAS',
-      zh: '通过 EAS 进行链上 Arena Score 验证',
-    },
-    icon: 'shield-check',
-    color: 'var(--color-accent-success)',
-    rarity: 'rare',
-    category: 'web3',
-  },
   high_winrate: {
     id: 'high_winrate',
     name: { en: 'Sharp Shooter', zh: '神枪手' },
@@ -92,18 +61,6 @@ export const BADGE_DEFINITIONS: Record<BadgeId, Badge> = {
     icon: 'target',
     color: 'var(--color-accent-error)',
     rarity: 'rare',
-    category: 'performance',
-  },
-  consistent_performer: {
-    id: 'consistent_performer',
-    name: { en: 'Consistent', zh: '稳定盈利' },
-    description: {
-      en: 'Profitable for 3+ consecutive months',
-      zh: '连续3个月以上盈利',
-    },
-    icon: 'trending-up',
-    color: 'var(--color-chart-teal)',
-    rarity: 'epic',
     category: 'performance',
   },
   low_drawdown: {
@@ -129,54 +86,6 @@ export const BADGE_DEFINITIONS: Record<BadgeId, Badge> = {
     color: 'var(--color-accent-warning)',
     rarity: 'epic',
     category: 'performance',
-  },
-  whale: {
-    id: 'whale',
-    name: { en: 'Whale', zh: '巨鲸' },
-    description: {
-      en: 'Manages over $1M in AUM',
-      zh: '管理资产超过100万美元',
-    },
-    icon: 'anchor',
-    color: 'var(--color-chart-blue)',
-    rarity: 'legendary',
-    category: 'special',
-  },
-  veteran: {
-    id: 'veteran',
-    name: { en: 'Veteran', zh: '老将' },
-    description: {
-      en: 'Trading for over 2 years',
-      zh: '交易超过2年',
-    },
-    icon: 'clock',
-    color: 'var(--color-brand)',
-    rarity: 'rare',
-    category: 'special',
-  },
-  rising_star: {
-    id: 'rising_star',
-    name: { en: 'Rising Star', zh: '新星' },
-    description: {
-      en: 'Top performer among new traders',
-      zh: '新交易员中的佼佼者',
-    },
-    icon: 'star',
-    color: 'var(--color-accent-error)',
-    rarity: 'rare',
-    category: 'special',
-  },
-  nft_holder: {
-    id: 'nft_holder',
-    name: { en: 'Pro NFT', zh: 'Pro NFT' },
-    description: {
-      en: 'Holds Arena Pro membership NFT',
-      zh: '持有 Arena Pro 会员 NFT',
-    },
-    icon: 'hexagon',
-    color: 'var(--color-chart-violet)',
-    rarity: 'rare',
-    category: 'web3',
   },
 }
 
