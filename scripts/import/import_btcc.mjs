@@ -19,8 +19,9 @@ const supabase = getSupabaseClient()
 const SOURCE = 'btcc'
 const API_URL = 'https://www.btcc.com/documentary/trader/page'
 const PROFILE_BASE = 'https://www.btcc.com/en-US/copy-trading'
-const TARGET_COUNT = 200 // API returns max ~20 per sort, we collect across multiple sorts
-const REQUEST_DELAY = 800
+const TARGET_COUNT = 200
+const REQUEST_DELAY = 500
+const PAGE_SIZE = 20 // BTCC API always returns 20 per page regardless of pageSize param
 
 const HEADERS = {
   'Accept': 'application/json',
@@ -29,26 +30,21 @@ const HEADERS = {
   'Referer': 'https://www.btcc.com/en-US/copy-trading',
 }
 
-// sortField 选项: overall, totalNetProfit, rateProfit, winRate, followNum
-const SORT_OPTIONS = ['overall', 'rateProfit', 'totalNetProfit', 'winRate']
-
 async function fetchLeaderboardData(period) {
   console.log(`\n=== 抓取 BTCC ${period} 排行榜 ===`)
   console.log('时间:', new Date().toISOString())
   
   const traders = new Map()
+  const sortField = 'overall'
+  const maxPages = Math.ceil(TARGET_COUNT / PAGE_SIZE)
   
-  for (const sortField of SORT_OPTIONS) {
-    console.log(`\n  🔍 按 ${sortField} 排序获取...`)
-    
-    // BTCC API doesn't support real pagination - returns same top 20 regardless of pageNo
-    // We just fetch once per sort field to collect as many unique traders as possible
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
     try {
       const body = {
-        pageNo: 1,
-        pageSize: 50,
+        pageNum,          // 注意: BTCC API 用 pageNum 不是 pageNo
+        pageSize: PAGE_SIZE,
         sortField,
-        sortType: 1, // 1 = desc
+        sortType: 1,
       }
       
       const resp = await fetch(API_URL, {
@@ -58,14 +54,19 @@ async function fetchLeaderboardData(period) {
       })
       
       if (!resp.ok) {
-        console.log(`    ⚠ HTTP ${resp.status}`)
-        continue
+        console.log(`  ⚠ HTTP ${resp.status} at page ${pageNum}`)
+        break
       }
       
       const data = await resp.json()
       const rows = data?.rows || []
-      const before = traders.size
       
+      if (rows.length === 0) {
+        console.log(`  页 ${pageNum}: 无数据，停止`)
+        break
+      }
+      
+      const before = traders.size
       for (const item of rows) {
         const id = String(item.traderId)
         if (traders.has(id)) continue
@@ -82,10 +83,19 @@ async function fetchLeaderboardData(period) {
         })
       }
       
-      console.log(`    获取 ${rows.length} 个, 新增 ${traders.size - before}, 累计 ${traders.size}`)
+      const newCount = traders.size - before
+      process.stdout.write(`\r  页 ${pageNum}: +${newCount} → ${traders.size}`)
+      
+      if (newCount === 0) {
+        console.log(`\n  连续无新数据，停止`)
+        break
+      }
+      
+      if (traders.size >= TARGET_COUNT) break
       await sleep(REQUEST_DELAY)
     } catch (e) {
-      console.log(`    ⚠ 错误: ${e.message}`)
+      console.log(`\n  ⚠ 页 ${pageNum} 错误: ${e.message}`)
+      break
     }
   }
   
