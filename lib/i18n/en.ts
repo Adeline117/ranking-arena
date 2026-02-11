@@ -2615,8 +2615,8 @@ const en = {
     upgradeProViewAll: 'Upgrade Pro to view all {count} traders',
     currentlyShowingTop: 'Currently showing top {count}',
     sidebarWidgets: 'More',
-    expandWidgets: 'Show more',
-    collapseWidgets: 'Collapse',
+    expandWidgets: 'Discussions · Watchlist · News',
+    collapseWidgets: 'Hide widgets',
     proFeatureOnly: 'Pro Feature - Upgrade to unlock trader comparison',
 
     // Sub not-found pages

@@ -232,7 +232,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
         </Box>
 
         {/* Content */}
-        <Box style={{ padding: tokens.spacing[5], filter: isPro ? 'none' : 'blur(6px)', pointerEvents: isPro ? 'auto' : 'none' }}>
+        <Box style={{ padding: tokens.spacing[5], filter: isPro ? 'none' : 'blur(3px)', pointerEvents: isPro ? 'auto' : 'none' }}>
           {viewMode === 'current' ? (
             // Current Holdings
             items.length > 0 ? (

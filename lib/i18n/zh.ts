@@ -2616,8 +2616,8 @@ const zh = {
     upgradeProViewAll: '升级 Pro 查看全部 {count} 名交易员',
     currentlyShowingTop: '当前仅显示前 {count} 名',
     sidebarWidgets: '更多内容',
-    expandWidgets: '展开更多',
-    collapseWidgets: '收起',
+    expandWidgets: '热门讨论 · 自选行情 · 快讯',
+    collapseWidgets: '收起组件',
 
     // 子 not-found 页面
     traderNotFoundTitle: '交易员不存在',

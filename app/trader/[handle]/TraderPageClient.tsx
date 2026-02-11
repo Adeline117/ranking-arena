@@ -29,6 +29,9 @@ const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
 })
+const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), {
+  ssr: false,
+})
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
 })
@@ -319,10 +322,10 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                         bottom: 0,
                         left: 0,
                         right: 0,
-                        height: '60%',
-                        background: 'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 50%, var(--color-lock-bg) 100%)',
-                        backdropFilter: 'blur(4px)',
-                        WebkitBackdropFilter: 'blur(4px)',
+                        height: '40%',
+                        background: 'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 60%, var(--color-lock-bg) 100%)',
+                        backdropFilter: 'blur(2px)',
+                        WebkitBackdropFilter: 'blur(2px)',
                         borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
                         display: 'flex',
                         alignItems: 'center',
@@ -358,6 +361,14 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                       {t('noPerformanceData')}
                     </Text>
                   </Box>
+                )}
+                {/* Equity Curve Chart - visible on overview for all users */}
+                {equityCurve && (
+                  <EquityCurveSection
+                    equityCurve={equityCurve}
+                    traderHandle={profile.handle}
+                    delay={0}
+                  />
                 )}
                 <TraderFeed
                   items={feed.filter((f) => f.type !== 'group_post')}
