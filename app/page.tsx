@@ -5,6 +5,8 @@ import RankingTableSkeleton from './components/home/RankingTableSkeleton'
 
 // ISR: Revalidate every 60 seconds — data updates via cron every 4h, 60s is plenty fresh
 export const revalidate = 60
+// Enable Partial Prerendering — static shell renders instantly, data streams in
+export const experimental_ppr = true
 
 /**
  * 首页入口 - Server Component with Streaming
