@@ -21,11 +21,6 @@ Sentry.init({
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 0.1,
 
-  // Defer loading non-essential integrations until after page load
-  // This reduces the initial JS bundle by ~30-50KB
-  // @ts-expect-error - lazyLoadIntegrations is available in Sentry 10+
-  lazyLoadIntegrations: true,
-
   ignoreErrors: [
     'ResizeObserver loop',
     'ChunkLoadError',
