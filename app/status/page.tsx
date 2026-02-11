@@ -8,10 +8,7 @@ interface HealthData {
   timestamp: string
   version: string
   uptime: number
-  checks: {
-    database: { status: 'pass' | 'fail' | 'skip'; message?: string; latency?: number }
-    memory: { status: 'pass' | 'fail' | 'skip'; message?: string; latency?: number }
-  }
+  checks: Record<string, { status: 'pass' | 'fail' | 'skip'; message?: string; latency?: number }>
 }
 
 interface PlatformHealthData {
@@ -213,7 +210,7 @@ export default function StatusPage() {
               }}
             >
               <span>Uptime: {formatUptime(health.uptime)}</span>
-              <span>Memory: {health.checks.memory.message || '—'}</span>
+              <span>{health.checks.memory?.message || health.checks.redis?.message || '—'}</span>
             </div>
           </div>
         )}
