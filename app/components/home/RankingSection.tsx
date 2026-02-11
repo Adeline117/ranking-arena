@@ -731,7 +731,7 @@ export default function RankingSection({
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
             <span>{t('sourcesLabel')}</span>
-            {dataSources.slice(0, 5).map((src) => (
+            {dataSources.map((src) => (
               <span
                 key={src}
                 style={{
@@ -744,9 +744,6 @@ export default function RankingSection({
                 {EXCHANGE_NAMES[src] || src.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
               </span>
             ))}
-            {dataSources.length > 5 && (
-              <span>+{dataSources.length - 5}</span>
-            )}
           </Box>
           {lastUpdated && (
             <Box suppressHydrationWarning style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
