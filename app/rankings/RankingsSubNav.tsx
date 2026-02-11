@@ -21,10 +21,6 @@ export default function RankingsSubNav() {
     <nav
       aria-label={isZh ? '排名分类导航' : 'Rankings category navigation'}
       style={{
-        position: 'sticky',
-        top: 56,
-        zIndex: 40,
-        background: 'var(--color-bg-primary)',
         borderBottom: '1px solid var(--color-border-primary)',
       }}
     >

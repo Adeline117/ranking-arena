@@ -14,7 +14,7 @@
 import pg from 'pg'
 const { Client } = pg
 
-const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:5432/postgres'
 
 const client = new Client({ connectionString: DB_URL })
 
