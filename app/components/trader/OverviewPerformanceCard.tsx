@@ -783,11 +783,11 @@ function ScoreBar({
       <Box
         style={{
           height: 8,
-          background: tokens.colors.bg.tertiary,
+          background: 'var(--color-bg-hover, #E8E8EC)',
           borderRadius: tokens.radius.full,
           overflow: 'hidden',
           position: 'relative',
-          boxShadow: 'inset 0 1px 2px var(--color-overlay-light)',
+          border: '1px solid var(--color-border-primary)',
         }}
       >
         <Box
