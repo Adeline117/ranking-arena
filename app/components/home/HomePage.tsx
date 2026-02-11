@@ -10,9 +10,9 @@ import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
 import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
-import ExchangePartners from './ExchangePartners'
 import HomeSubNav from './HomeSubNav'
-import GuestSignupPrompt from './GuestSignupPrompt'
+const ExchangePartners = lazy(() => import('./ExchangePartners'))
+const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 // HomePageWithSubNav removed from homepage - only used in groups page

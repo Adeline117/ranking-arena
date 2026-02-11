@@ -148,9 +148,9 @@ export default function RootLayout({
           />
         ))}
 
-        {/* Rankings data is pre-fetched server-side via getInitialTraders in page.tsx.
-            Removed stale prefetch link — it targeted /api/rankings which doesn't match
-            the actual client fetch (/api/traders), wasting a network request. */}
+        {/* Preload critical above-fold resources for LCP */}
+        <link rel="preload" href="/logo-symbol.svg" as="image" type="image/svg+xml" />
+        <link rel="preconnect" href="https://assets.coingecko.com" />
         
         {/* Font preloading is handled automatically by next/font.
             Removed hardcoded preload link — the hashed filename (e.g. be2afef9-s.woff2)
