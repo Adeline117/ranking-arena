@@ -90,7 +90,7 @@ run_script "import_toobit.mjs" "ALL" 120
 # DEX platforms (pure API, no Chrome needed)
 # Enrich scripts need to run per period
 for PERIOD in 7D 30D 90D; do
-  run_script "enrich_hyperliquid.mjs" "$PERIOD" 300
+  run_script "enrich_hyperliquid.mjs" "$PERIOD" 1800
   run_script "enrich_gmx.mjs" "$PERIOD" 180
 done
 
