@@ -562,7 +562,6 @@ export default function OverviewPerformanceCard({
                         border: `1px solid ${tokens.colors.accent.success}30`,
                       }}
                     >
-                      <Text size="xs" style={{ color: tokens.colors.accent.success, fontWeight: 600 }}>V3</Text>
                       <Text
                         size="sm"
                         weight="black"

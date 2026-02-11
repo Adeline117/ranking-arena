@@ -484,13 +484,10 @@ export default function TraderHeader({
               </Badge>
             )}
 
-            {source && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG]?.roiType && (
+            {source && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG]?.roiType && EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType !== 'mixed' && (
               <Badge color={tokens.colors.text.tertiary}>
                 <Text size="xs" weight="bold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.3px', textTransform: 'uppercase', fontSize: tokens.typography.fontSize.xs }}>
-                  {(() => {
-                    const roiType: RoiType = EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType
-                    return roiType === 'realized' ? 'ROI: Realized' : roiType === 'unrealized' ? 'ROI: Unrealized' : 'ROI: Mixed'
-                  })()}
+                  {EXCHANGE_CONFIG[source.toLowerCase() as keyof typeof EXCHANGE_CONFIG].roiType === 'realized' ? 'ROI: Realized' : 'ROI: Unrealized'}
                 </Text>
               </Badge>
             )}
