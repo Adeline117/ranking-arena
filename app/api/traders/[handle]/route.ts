@@ -306,7 +306,7 @@ async function getTraderDetails(
     // 7天快照
     supabase
       .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown')
+      .select('roi, pnl, win_rate, max_drawdown, trades_count')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
       .eq('season_id', '7D')
@@ -317,7 +317,7 @@ async function getTraderDetails(
     // 30天快照
     supabase
       .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown')
+      .select('roi, pnl, win_rate, max_drawdown, trades_count')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
       .eq('season_id', '30D')
@@ -653,6 +653,18 @@ async function getTraderDetails(
       win_rate_30d: normalizeWinRate(snapshot30d?.win_rate ?? null) ?? undefined,
       max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
       max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
+      // Trades count per period
+      trades_count: snapshot?.trades_count ?? undefined,
+      trades_count_7d: snapshot7d?.trades_count ?? undefined,
+      trades_count_30d: snapshot30d?.trades_count ?? undefined,
+      // Copiers PnL per period
+      copiers_pnl: statsDetail90d?.copiers_pnl ?? undefined,
+      copiers_pnl_7d: statsDetail7d?.copiers_pnl ?? undefined,
+      copiers_pnl_30d: statsDetail30d?.copiers_pnl ?? undefined,
+      // Avg holding time per period (hours)
+      avg_holding_time_hours: statsDetail90d?.avg_holding_time_hours ?? undefined,
+      avg_holding_time_hours_7d: statsDetail7d?.avg_holding_time_hours ?? undefined,
+      avg_holding_time_hours_30d: statsDetail30d?.avg_holding_time_hours ?? undefined,
       // Arena Score
       arena_score: score90d?.totalScore ?? undefined,
       arena_score_90d: score90d?.totalScore ?? undefined,
@@ -816,7 +828,7 @@ async function getTraderDetailsFromSnapshots(
     // 7天快照
     supabase
       .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown')
+      .select('roi, pnl, win_rate, max_drawdown, trades_count')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
       .eq('season_id', '7D')
@@ -827,7 +839,7 @@ async function getTraderDetailsFromSnapshots(
     // 30天快照
     supabase
       .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown')
+      .select('roi, pnl, win_rate, max_drawdown, trades_count')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
       .eq('season_id', '30D')
@@ -933,6 +945,10 @@ async function getTraderDetailsFromSnapshots(
       win_rate_30d: normalizeWinRate(snapshot30d?.win_rate ?? null) ?? undefined,
       max_drawdown_7d: snapshot7d?.max_drawdown ?? undefined,
       max_drawdown_30d: snapshot30d?.max_drawdown ?? undefined,
+      // Trades count per period
+      trades_count: snapshot?.trades_count ?? undefined,
+      trades_count_7d: snapshot7d?.trades_count ?? undefined,
+      trades_count_30d: snapshot30d?.trades_count ?? undefined,
       // Arena Score
       arena_score: score90d?.totalScore ?? undefined,
       arena_score_90d: score90d?.totalScore ?? undefined,
