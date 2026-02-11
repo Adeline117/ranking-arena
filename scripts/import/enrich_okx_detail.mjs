@@ -55,6 +55,24 @@ async function fetchPositions(uniqueCode) {
 }
 
 // ============================================
+// Fetch closed position history
+// ============================================
+async function fetchPositionHistory(uniqueCode) {
+  const all = []
+  let after = ''
+  for (let page = 0; page < 5; page++) { // max 5 pages = ~250 positions
+    const url = `${BASE}/public-subpositions-history?instType=SWAP&uniqueCode=${uniqueCode}&limit=50${after ? '&after=' + after : ''}`
+    const json = await fetchJSON(url)
+    if (!json || json.code !== '0' || !json.data?.length) break
+    all.push(...json.data)
+    after = json.data[json.data.length - 1].subPosId
+    if (json.data.length < 50) break
+    await sleep(300)
+  }
+  return all
+}
+
+// ============================================
 // Fetch weekly PnL
 // ============================================
 async function fetchWeeklyPnl(uniqueCode) {
@@ -196,6 +214,47 @@ async function upsertAssetBreakdown(traderId, traderInsts) {
 }
 
 // ============================================
+// Upsert position history
+// ============================================
+async function upsertPositionHistory(traderId, positions) {
+  if (!positions?.length) return 0
+  const now = new Date().toISOString()
+
+  const records = positions.map(p => ({
+    source: SOURCE,
+    source_trader_id: traderId,
+    symbol: (p.instId || '').replace('-USDT-SWAP', '').replace('-SWAP', '') || 'UNKNOWN',
+    direction: p.posSide === 'short' ? 'short' : 'long',
+    position_type: 'perpetual',
+    margin_mode: p.mgnMode || 'cross',
+    open_time: p.openTime ? new Date(parseInt(p.openTime)).toISOString() : null,
+    close_time: p.closeTime ? new Date(parseInt(p.closeTime)).toISOString() : null,
+    entry_price: parseFloat(p.openAvgPx || '0') || null,
+    exit_price: parseFloat(p.closeAvgPx || '0') || null,
+    max_position_size: parseFloat(p.subPos || '0') || null,
+    closed_size: parseFloat(p.subPos || '0') || null,
+    pnl_usd: parseFloat(p.pnl || '0') || null,
+    pnl_pct: parseFloat(p.pnlRatio || '0') ? parseFloat(p.pnlRatio) * 100 : null,
+    status: 'closed',
+    captured_at: now,
+  })).filter(r => r.symbol !== 'UNKNOWN')
+
+  if (records.length === 0) return 0
+
+  // Delete old position history for this trader, then insert fresh
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  await sb.from('trader_position_history')
+    .delete()
+    .eq('source', SOURCE)
+    .eq('source_trader_id', traderId)
+    .gt('captured_at', sevenDaysAgo)
+
+  const { error } = await sb.from('trader_position_history').insert(records)
+  if (error) { console.log(`  ⚠ position history: ${error.message}`); return 0 }
+  return records.length
+}
+
+// ============================================
 // Main
 // ============================================
 async function main() {
@@ -221,7 +280,7 @@ async function main() {
 
   console.log(`Total: ${traders.length}, has stats: ${hasStats.size}, to process: ${toProcess.length}`)
 
-  let statsN = 0, equityN = 0, portfolioN = 0, assetsN = 0, errors = 0
+  let statsN = 0, equityN = 0, portfolioN = 0, assetsN = 0, posHistN = 0, errors = 0
   const startTime = Date.now()
 
   for (let i = 0; i < toProcess.length; i++) {
@@ -252,17 +311,25 @@ async function main() {
         if (pn > 0) portfolioN++
       }
       await sleep(500)
+
+      // Position history (closed positions)
+      const posHistory = await fetchPositionHistory(tid)
+      if (posHistory.length > 0) {
+        const ph = await upsertPositionHistory(tid, posHistory)
+        if (ph > 0) posHistN++
+      }
+      await sleep(500)
     } catch (e) { errors++ }
 
     if ((i + 1) % 20 === 0 || i === toProcess.length - 1) {
       const elapsed = ((Date.now() - startTime) / 1000 / 60).toFixed(1)
-      console.log(`  [${i + 1}/${toProcess.length}] stats=${statsN} eq=${equityN} port=${portfolioN} assets=${assetsN} err=${errors} | ${elapsed}m`)
+      console.log(`  [${i + 1}/${toProcess.length}] stats=${statsN} eq=${equityN} port=${portfolioN} posHist=${posHistN} assets=${assetsN} err=${errors} | ${elapsed}m`)
     }
   }
 
   console.log(`\n${'='.repeat(60)}`)
   console.log(`✅ OKX Futures enrichment done`)
-  console.log(`   Stats: ${statsN}, Equity: ${equityN}, Portfolio: ${portfolioN}, Assets: ${assetsN}`)
+  console.log(`   Stats: ${statsN}, Equity: ${equityN}, Portfolio: ${portfolioN}, PosHistory: ${posHistN}, Assets: ${assetsN}`)
   console.log(`   Errors: ${errors}`)
   console.log(`${'='.repeat(60)}`)
 }
