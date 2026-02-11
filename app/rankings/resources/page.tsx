@@ -30,7 +30,7 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
       .from('library_items')
       .select('*')
       .not('cover_url', 'is', null)
-      .eq('type', 'book')
+      .eq('category', 'book')
       .order('rating', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(6)
