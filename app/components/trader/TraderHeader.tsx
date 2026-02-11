@@ -11,7 +11,7 @@ import CopyTradeButton from './CopyTradeButton'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
 const CopyTradeConfig = dynamic(() => import('../trading/CopyTradeConfig'), { ssr: false })
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
-import { EXCHANGE_NAMES, EXCHANGE_CONFIG, type RoiType } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
