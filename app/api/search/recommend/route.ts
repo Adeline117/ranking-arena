@@ -43,6 +43,15 @@ function getSupabaseClient() {
  * Get trending traders (based on recent activity and growth)
  */
 async function getTrendingTraders(
+  _supabase: ReturnType<typeof getSupabaseClient>,
+  _limit: number
+) {
+  // TODO: trader_sources doesn't have roi/pnl columns — needs rewrite to use trader_snapshots
+  return [] as { type: string; id: string; title: string; subtitle?: string; score?: number }[]
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _getTrendingTraders_disabled(
   supabase: ReturnType<typeof getSupabaseClient>,
   limit: number
 ) {
@@ -96,12 +105,22 @@ async function getTrendingTraders(
  * Get similar traders based on performance metrics
  */
 async function getSimilarTraders(
+  _supabase: ReturnType<typeof getSupabaseClient>,
+  _baseTrader: { roi: number; platform: string },
+  _limit: number
+) {
+  // TODO: trader_sources doesn't have roi column — needs rewrite
+  return [] as { type: string; id: string; title: string; subtitle?: string; score?: number }[]
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _getSimilarTraders_disabled(
   supabase: ReturnType<typeof getSupabaseClient>,
   baseTrader: { roi: number; platform: string },
   limit: number
 ) {
   try {
-    const roiMin = baseTrader.roi * 0.8 // ±20% ROI range
+    const roiMin = baseTrader.roi * 0.8
     const roiMax = baseTrader.roi * 1.2
 
     const { data, error } = await supabase

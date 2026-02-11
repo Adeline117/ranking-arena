@@ -37,13 +37,14 @@ export function OnChainBadge({ traderHandle, size = 'md' }: OnChainBadgeProps) {
     async function checkAttestation() {
       try {
         const { supabase } = await import('@/lib/supabase/client')
-        const { data } = await supabase
-          .from('trader_attestations')
-          .select('attestation_uid, arena_score, published_at')
-          .eq('trader_handle', traderHandle)
-          .maybeSingle()
-
-        if (data) setAttestation(data)
+        // trader_attestations table not yet created — skip query
+        // const { data } = await supabase
+        //   .from('trader_attestations')
+        //   .select('attestation_uid, arena_score, published_at')
+        //   .eq('trader_handle', traderHandle)
+        //   .maybeSingle()
+        // if (data) setAttestation(data)
+        void supabase // suppress unused
       } catch {
         // Non-critical — fail silently
       }
