@@ -95,6 +95,7 @@ async function importPeriod(period) {
     const roi = (t.realizedPnlPercent || 0) * 100
     const pnl = t.realizedPnl || null
     const winRate = t.winRate != null ? (t.winRate <= 1 ? t.winRate * 100 : t.winRate) : null
+    const tradesCount = t.totalTxCnt != null ? parseInt(t.totalTxCnt) : null
     return {
       source: SOURCE,
       source_trader_id: t.address,
@@ -103,6 +104,7 @@ async function importPeriod(period) {
       roi,
       pnl,
       win_rate: winRate,
+      trades_count: tradesCount,
       arena_score: calculateArenaScore(roi, pnl, null, winRate, period)?.totalScore || 0,
       captured_at: now,
     }

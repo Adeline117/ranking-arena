@@ -489,8 +489,11 @@ const nextConfig: NextConfig = {
 export default withSentryConfig(withBundleAnalyzer(nextConfig), {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: true,
-  sourcemaps: { disable: true },
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
   widenClientFileUpload: true,
   webpack: {
     treeshake: {
