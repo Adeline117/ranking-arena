@@ -2,9 +2,10 @@
  * WEEX Copy Trading scraper (Playwright)
  *
  * URL: weex.com/copy-trading
- * Strategy: Load page, intercept API responses, scroll/paginate to trigger more loads.
- *   The API gateway (janapw.com) is cross-origin from weex.com, so we intercept
- *   browser responses rather than using page.evaluate fetch.
+ * Strategy: 
+ *   1. Load page, intercept API responses to discover gateway + collect traders
+ *   2. Use page.evaluate to make same-origin requests via the discovered gateway
+ *   3. The page's own JS already has the gateway configured, so XMLHttpRequest works
  *
  * Usage: node scripts/import/import_weex.mjs [7D|30D|90D|ALL]
  */
@@ -48,14 +49,10 @@ function parseTrader(item) {
     id,
     name: item.traderNickName || item.nickName || `Trader_${id.slice(0, 8)}`,
     avatar: item.headPic || null,
-    roi,
-    roi7d: ratesByDays[7] || null,
-    roi21d: ratesByDays[21] || roi,
-    roi90d: ratesByDays[90] || null,
+    roi, roi7d: ratesByDays[7] || null, roi21d: ratesByDays[21] || roi, roi90d: ratesByDays[90] || null,
     pnl: parseFloat(String(item.threeWeeksPNL || item.profit || 0)),
     followers: parseInt(String(item.followCount || 0)),
-    winRate: wr,
-    maxDrawdown: dd,
+    winRate: wr, maxDrawdown: dd,
   }
 }
 
@@ -71,16 +68,15 @@ async function scrapeTraders() {
   const traders = new Map()
   let discoveredApiBase = null
 
-  // Intercept all trader API responses
   page.on('response', async (r) => {
     const url = r.url()
-    if (url.includes('traderListView') || url.includes('topTraderListView') || url.includes('traderList')) {
+    if (url.includes('traderListView') || url.includes('topTraderListView')) {
       const match = url.match(/^(https?:\/\/[^/]+)/)
       if (match) discoveredApiBase = match[1]
       try {
         const json = await r.json()
         if (json.code !== 'SUCCESS') return
-        const rows = json.data?.rows || json.data?.list || (Array.isArray(json.data) ? json.data : [])
+        const rows = json.data?.rows || []
         for (const item of rows) {
           const t = parseTrader(item)
           if (t && !traders.has(t.id)) traders.set(t.id, t)
@@ -94,78 +90,45 @@ async function scrapeTraders() {
   console.log(`  Title: ${await page.title()}, intercepted: ${traders.size}`)
   if (discoveredApiBase) console.log(`  API gateway: ${discoveredApiBase}`)
 
-  // Scroll to load more
-  console.log('  Scrolling for more traders...')
-  for (let i = 0; i < 30; i++) {
-    const before = traders.size
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-    await sleep(2000)
-    // Click pagination/load more buttons
-    const nextBtn = page.locator('[class*="next"], [class*="more"], [class*="load"]').first()
-    if (await nextBtn.count() > 0) await nextBtn.click().catch(() => {})
-    await sleep(1000)
-    if (traders.size > before) {
-      console.log(`  Scroll ${i + 1}: ${traders.size} traders`)
-    } else if (i > 5 && traders.size === before) {
-      break
-    }
-  }
+  // Use the gateway base discovered from interception for in-page fetches
+  const apiBase = discoveredApiBase || 'https://http-gateway1.janapw.com'
+  const traderListUrl = `${apiBase}/api/v1/public/trace/traderListView`
 
-  // Try clicking different sort tabs to get more traders
-  const sortTabs = await page.locator('[class*="sort"], [class*="filter"], [class*="tab"]').all()
-  console.log(`  Found ${sortTabs.length} sort/filter elements`)
-  for (const tab of sortTabs.slice(0, 10)) {
-    try {
-      const text = await tab.textContent()
-      if (text && (text.includes('ROI') || text.includes('PNL') || text.includes('Follow') || text.includes('Win'))) {
-        await tab.click()
-        await sleep(3000)
-        console.log(`  Clicked "${text.trim().slice(0,20)}": ${traders.size} traders`)
-        // Scroll after switching sort
-        for (let i = 0; i < 10; i++) {
-          const before = traders.size
-          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-          await sleep(2000)
-          if (traders.size === before && i > 2) break
-        }
-      }
-    } catch {}
-  }
-
-  // If gateway found, try direct requests with node-fetch through proxy
-  if (discoveredApiBase && traders.size < 200) {
-    console.log('  Trying direct API requests...')
-    const { HttpsProxyAgent } = await import('https-proxy-agent')
-    const agent = new HttpsProxyAgent(PROXY)
-    const apiUrl = `${discoveredApiBase}/api/v1/public/trace/traderListView`
-
-    for (const sortRule of [9, 5, 2, 6, 7, 8, 1]) {
-      let pageNo = 1
-      while (pageNo <= 50) {
+  // Paginate via in-page fetch (the page already has CORS access to this gateway)
+  for (const sortRule of [9, 5, 2, 6, 7, 8, 1]) {
+    let pageNo = 1
+    while (pageNo <= 50) {
+      const result = await page.evaluate(async ({ url, sortRule, pageNo }) => {
         try {
-          const r = await fetch(apiUrl, {
+          const r = await fetch(url, {
             method: 'POST',
-            agent,
-            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ languageType: 0, sortRule, simulation: 0, pageNo, pageSize: 20, nickName: '' }),
           })
-          const json = await r.json()
-          if (json.code !== 'SUCCESS' || !json.data?.rows?.length) break
-          let added = 0
-          for (const item of json.data.rows) {
-            const t = parseTrader(item)
-            if (t && !traders.has(t.id)) { traders.set(t.id, t); added++ }
-          }
-          if (pageNo % 5 === 0) console.log(`  sort=${sortRule} p${pageNo}: ${traders.size} total`)
-          if (added === 0 && pageNo > 2) break
-          if (!json.data.nextFlag) break
-          pageNo++
-          await sleep(200)
-        } catch (e) {
-          if (pageNo === 1) console.log(`  sort=${sortRule}: ${e.message}`)
-          break
-        }
+          const text = await r.text()
+          try { return JSON.parse(text) } catch { return { error: 'not json', len: text.length } }
+        } catch (e) { return { error: e.message } }
+      }, { url: traderListUrl, sortRule, pageNo })
+
+      if (result?.error) {
+        if (pageNo === 1) console.log(`  sort=${sortRule}: ${result.error}`)
+        break
       }
+      if (result?.code !== 'SUCCESS' || !result.data?.rows?.length) {
+        if (pageNo === 1) console.log(`  sort=${sortRule}: code=${result?.code}`)
+        break
+      }
+
+      let added = 0
+      for (const item of result.data.rows) {
+        const t = parseTrader(item)
+        if (t && !traders.has(t.id)) { traders.set(t.id, t); added++ }
+      }
+      if (pageNo % 5 === 0 || !result.data.nextFlag) console.log(`  sort=${sortRule} p${pageNo}: +${added} → ${traders.size} (total avail: ${result.data.totals || '?'})`)
+      if (added === 0 && pageNo > 2) break
+      if (!result.data.nextFlag) break
+      pageNo++
+      await sleep(200)
     }
   }
 

@@ -60,12 +60,8 @@ export async function GET(
 
   const rank = (rankBefore ?? 0) + 1
 
-  // Check for on-chain attestation
-  const { data: attestation } = await supabase
-    .from('trader_attestations')
-    .select('attestation_uid')
-    .eq('trader_handle', handle)
-    .maybeSingle()
+  // Check for on-chain attestation (table not yet created)
+  const attestation = null
 
   // Check for NFT (via linked user profile)
   const { data: profile } = await supabase
