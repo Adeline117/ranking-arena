@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
 /**
  * Fetcher Integration Tests
  *
@@ -229,7 +230,7 @@ function _createMockSupabase() {
   })
 
   return {
-    client: { from: fromFn } as any,  
+    client: { from: fromFn } as unknown as SupabaseClient,  
     mocks: { from: fromFn, upsert: upsertFn },
   }
 }
