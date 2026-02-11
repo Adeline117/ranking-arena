@@ -237,7 +237,7 @@ export const TraderRow = memo(function TraderRow({
               </Box>
               {/* Trading Style Chip */}
               {(() => {
-                const style = trader.trading_style
+                const style = (trader.trading_style && trader.trading_style !== 'unknown')
                   ? getStyleInfo(trader.trading_style as any)
                   : (() => {
                       const computed = classifyStyle({
