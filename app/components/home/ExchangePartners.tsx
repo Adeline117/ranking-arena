@@ -2,107 +2,139 @@
 
 import { useLanguage } from '../Providers/LanguageProvider'
 import ExchangeLogo from '../ui/ExchangeLogo'
-import type { Exchange } from '@/lib/exchange'
+import { SOURCES_WITH_DATA, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
-const EXCHANGES: { name: string; key: Exchange }[] = [
-  { name: 'Binance', key: 'binance' },
-  { name: 'OKX', key: 'okx' },
-  { name: 'Bybit', key: 'bybit' },
-  { name: 'Bitget', key: 'bitget' },
-  { name: 'MEXC', key: 'mexc' },
-  { name: 'KuCoin', key: 'kucoin' },
-  { name: 'Gate.io', key: 'gate' },
-  { name: 'HTX', key: 'htx' },
-  { name: 'CoinEx', key: 'coinex' },
-  { name: 'BingX', key: 'bingx' as Exchange },
-  { name: 'Phemex', key: 'phemex' as Exchange },
-  { name: 'WEEX', key: 'weex' },
-  { name: 'Aevo', key: 'aevo' as Exchange },
-  { name: 'Hyperliquid', key: 'hyperliquid' as Exchange },
-  { name: 'GMX', key: 'gmx' as Exchange },
-  { name: 'dYdX', key: 'dydx' as Exchange },
-  { name: 'Jupiter', key: 'jupiter' as Exchange },
-  { name: 'Toobit', key: 'toobit' as Exchange },
-  { name: 'BTSE', key: 'btse' as Exchange },
-  { name: 'Crypto.com', key: 'cryptocom' as Exchange },
-  { name: 'Bitfinex', key: 'bitfinex' as Exchange },
-  { name: 'WhiteBit', key: 'whitebit' as Exchange },
-  { name: 'LBank', key: 'lbank' as Exchange },
-  { name: 'BloFin', key: 'blofin' as Exchange },
-  { name: 'XT.com', key: 'xt' as Exchange },
-  { name: 'Uniswap', key: 'uniswap' as Exchange },
-  { name: 'PancakeSwap', key: 'pancakeswap' as Exchange },
-]
+/**
+ * Map DB source keys to ExchangeLogo keys and display names.
+ * We deduplicate by exchange (e.g. binance_futures + binance_spot → Binance).
+ */
+function getUniqueExchanges() {
+  const SOURCE_TO_LOGO: Record<string, string> = {
+    binance_futures: 'binance',
+    binance_spot: 'binance',
+    binance_web3: 'binance',
+    bybit: 'bybit',
+    bybit_spot: 'bybit',
+    bitget_futures: 'bitget',
+    bitget_spot: 'bitget',
+    okx_futures: 'okx',
+    okx_spot: 'okx',
+    okx_web3: 'okx',
+    okx_wallet: 'okx',
+    mexc: 'mexc',
+    kucoin: 'kucoin',
+    coinex: 'coinex',
+    htx_futures: 'htx',
+    weex: 'weex',
+    phemex: 'phemex',
+    bingx: 'bingx',
+    gateio: 'gate',
+    xt: 'xt',
+    lbank: 'lbank',
+    blofin: 'blofin',
+    bitmart: 'bitmart',
+    gmx: 'gmx',
+    dydx: 'dydx',
+    hyperliquid: 'hyperliquid',
+    gains: 'gains',
+    jupiter_perps: 'jupiter',
+    aevo: 'aevo',
+    dune_gmx: 'gmx',
+    dune_hyperliquid: 'hyperliquid',
+    dune_uniswap: 'uniswap',
+    dune_defi: 'defi',
+    web3_bot: 'web3',
+  }
+
+  // Short display names (deduplicated by logo key)
+  const DISPLAY_NAMES: Record<string, string> = {
+    binance: 'Binance',
+    bybit: 'Bybit',
+    bitget: 'Bitget',
+    okx: 'OKX',
+    mexc: 'MEXC',
+    kucoin: 'KuCoin',
+    coinex: 'CoinEx',
+    htx: 'HTX',
+    weex: 'WEEX',
+    phemex: 'Phemex',
+    bingx: 'BingX',
+    gate: 'Gate.io',
+    xt: 'XT.COM',
+    lbank: 'LBank',
+    blofin: 'BloFin',
+    bitmart: 'BitMart',
+    gmx: 'GMX',
+    dydx: 'dYdX',
+    hyperliquid: 'Hyperliquid',
+    gains: 'Gains',
+    jupiter: 'Jupiter',
+    aevo: 'Aevo',
+  }
+
+  const seen = new Set<string>()
+  const result: { logoKey: string; name: string }[] = []
+
+  for (const source of SOURCES_WITH_DATA) {
+    const logoKey = SOURCE_TO_LOGO[source]
+    if (!logoKey || seen.has(logoKey)) continue
+    // Skip internal/meta sources that don't have meaningful logos
+    if (logoKey === 'defi' || logoKey === 'web3') continue
+    seen.add(logoKey)
+    result.push({
+      logoKey,
+      name: DISPLAY_NAMES[logoKey] || EXCHANGE_CONFIG[source]?.name || logoKey,
+    })
+  }
+
+  return result
+}
+
+const EXCHANGES = getUniqueExchanges()
 
 export default function ExchangePartners() {
   const { language } = useLanguage()
 
-  const doubled = [...EXCHANGES, ...EXCHANGES]
-
   return (
     <div style={{
-      overflow: 'hidden',
-      padding: '10px 0',
-      borderBottom: `1px solid var(--color-border-primary)`,
-      position: 'relative',
+      padding: '16px 0 12px',
+      borderBottom: '1px solid var(--color-border-primary)',
     }}>
-      {/* Fade edges */}
       <div style={{
-        position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
-        background: `linear-gradient(to right, var(--color-bg-primary), transparent)`,
-        zIndex: 1, pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
-        background: `linear-gradient(to left, var(--color-bg-primary), transparent)`,
-        zIndex: 1, pointerEvents: 'none',
-      }} />
-
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--color-text-tertiary)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em',
+        marginBottom: 10,
+        paddingLeft: 4,
+      }}>
+        {language === 'zh' ? `数据来源 · ${EXCHANGES.length} 个平台` : `Data Sources · ${EXCHANGES.length} Platforms`}
+      </div>
       <div style={{
         display: 'flex',
+        flexWrap: 'wrap',
+        gap: '8px 16px',
         alignItems: 'center',
-        gap: 20,
-        animation: 'exchange-scroll 35s linear infinite',
-        width: 'max-content',
       }}>
-        <span style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: 'var(--color-text-tertiary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          flexShrink: 0,
-          paddingLeft: 8,
-          paddingRight: 4,
-        }}>
-          {language === 'zh' ? '数据来源' : 'Sources'}
-        </span>
-        {doubled.map((ex, i) => (
+        {EXCHANGES.map((ex) => (
           <span
-            key={`${ex.key}-${i}`}
+            key={ex.logoKey}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 6,
-              fontSize: 13,
+              gap: 5,
+              fontSize: 12,
               fontWeight: 600,
               color: 'var(--color-text-secondary)',
               whiteSpace: 'nowrap',
-              flexShrink: 0,
             }}
           >
-            <ExchangeLogo exchange={ex.key} size={18} />
+            <ExchangeLogo exchange={ex.logoKey} size={16} />
             {ex.name}
           </span>
         ))}
       </div>
-
-      <style>{`
-        @keyframes exchange-scroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-      `}</style>
     </div>
   )
 }
