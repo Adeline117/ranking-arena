@@ -70,8 +70,8 @@ export default function HomePage({
           padding: '16px 16px',
         }}
       >
-        <ExchangePartners />
         <HomeSubNav />
+        <ExchangePartners />
         <div style={{ height: 16 }} />
         <ThreeColumnLayout
           leftSidebar={
