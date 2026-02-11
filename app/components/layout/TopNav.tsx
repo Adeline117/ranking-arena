@@ -320,11 +320,11 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               }}
             >
               <img
-                src="/logo.png"
+                src="/logo-symbol.svg"
                 alt="arena"
                 width={28}
-                height={28}
-                style={{ flexShrink: 0, borderRadius: '6px' }}
+                height={15}
+                style={{ flexShrink: 0 }}
               />
               {/* 文字：arena - 首字母变色 */}
               <Box
