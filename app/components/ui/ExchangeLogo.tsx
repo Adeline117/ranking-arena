@@ -52,6 +52,7 @@ const EXCHANGE_LOGOS: Record<string, string> = {
   synthetix: 'https://assets.coingecko.com/coins/images/3406/small/SNX.png',
   mux: 'https://assets.coingecko.com/markets/images/995/small/mux.jpeg',
   gains: 'https://assets.coingecko.com/markets/images/957/small/gains.jpeg',
+  btcc: 'https://img2.btuserlog.com/images/btcc-logo.png',
 }
 
 // 如果CDN不可用，使用SVG fallback
