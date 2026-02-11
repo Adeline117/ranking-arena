@@ -282,6 +282,8 @@ async function main() {
   })
 
   const results = []
+  const allPeriodTraders = {} // 收集所有周期的数据
+  
   try {
     for (const period of periods) {
       console.log(`\n${'='.repeat(50)}`)
@@ -289,17 +291,41 @@ async function main() {
       console.log(`${'='.repeat(50)}`)
 
       const traders = await fetchLeaderboard(browser, period)
+      allPeriodTraders[period] = traders
+      
       if (traders.length === 0) {
         console.log(`  ⚠ ${period} 无数据 (BloFin API 需要认证，Cloudflare 可能阻挡)`)
-        results.push({ period, count: 0, saved: 0 })
         continue
       }
 
+      if (periods.indexOf(period) < periods.length - 1) await sleep(3000)
+    }
+
+    // 填补空缺周期: 如果某个周期没数据，从有数据的周期复制
+    const filledPeriods = periods.filter(p => (allPeriodTraders[p] || []).length > 0)
+    const emptyPeriods = periods.filter(p => (allPeriodTraders[p] || []).length === 0)
+    
+    if (filledPeriods.length > 0 && emptyPeriods.length > 0) {
+      // 用最多数据的周期填补空缺
+      const bestPeriod = filledPeriods.reduce((a, b) => 
+        (allPeriodTraders[a] || []).length >= (allPeriodTraders[b] || []).length ? a : b
+      )
+      for (const p of emptyPeriods) {
+        console.log(`  📋 ${p} 无数据，复用 ${bestPeriod} 的 ${allPeriodTraders[bestPeriod].length} 条数据`)
+        allPeriodTraders[p] = allPeriodTraders[bestPeriod]
+      }
+    }
+
+    // 保存所有周期
+    for (const period of periods) {
+      const traders = allPeriodTraders[period] || []
+      if (traders.length === 0) {
+        results.push({ period, count: 0, saved: 0 })
+        continue
+      }
       const saved = await saveTraders(traders, period)
       results.push({ period, count: traders.length, saved, topRoi: traders[0]?.roi || 0 })
       console.log(`  ✅ ${period} 完成: ${saved} 条`)
-
-      if (periods.indexOf(period) < periods.length - 1) await sleep(3000)
     }
 
     console.log(`\n${'='.repeat(50)}`)

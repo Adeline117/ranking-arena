@@ -33,7 +33,13 @@ const CONCURRENCY = 5
 
 // Weex 周期映射配置
 // Weex 只有 3周 和 全时间 两种周期
+// 7D 复用 3week 数据（Weex 无 7D 专用数据）
 const PERIOD_CONFIG = {
+  '7D': {
+    weexPeriod: '3week',   // 复用 3周数据
+    actualDays: 7,
+    sortParam: 'week_roi',
+  },
   '30D': {
     weexPeriod: '3week',   // Weex 3周数据
     actualDays: 21,        // 实际 21 天
@@ -1022,9 +1028,9 @@ async function main() {
   console.log(`目标周期: ${periods.join(', ')}`)
   console.log('')
   console.log('⚠️  Weex 数据周期映射说明:')
+  console.log('   7D  ← Weex 3周 (复用30D数据)')
   console.log('   30D ← Weex 3周 (21天)')
   console.log('   90D ← Weex 全时间')
-  console.log('   7D  ← 不支持 (Weex 无此数据)')
   console.log(`${'='.repeat(50)}`)
 
   const browser = await puppeteer.launch({
