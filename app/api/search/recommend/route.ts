@@ -3,18 +3,8 @@
  *
  * GET /api/search/recommend - Get personalized search recommendations
  *
- * Query Parameters:
- * - userId: User ID for personalized recommendations (optional)
- * - type: Recommendation type (similar|trending|following|all) default: all
- * - based On: Base recommendations on query/trader/post (optional)
- * - limit: Number of recommendations (default: 10, max: 50)
- *
- * Returns:
- * - Personalized recommendations based on:
- *   - User search history
- *   - Trending searches
- *   - Similar traders to ones viewed
- *   - Content from followed users
+ * Returns trending traders (from leaderboard_ranks), trending posts,
+ * and posts from followed users.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -27,7 +17,6 @@ const logger = createLogger('search-recommend')
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Initialize Supabase client
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -40,41 +29,28 @@ function getSupabaseClient() {
 }
 
 /**
- * Get trending traders (based on recent activity and growth)
+ * Get trending traders from leaderboard_ranks (highest arena_score)
  */
 async function getTrendingTraders(
-  _supabase: ReturnType<typeof getSupabaseClient>,
-  _limit: number
-) {
-  // TODO: trader_sources doesn't have roi/pnl columns — needs rewrite to use trader_snapshots
-  return [] as { type: string; id: string; title: string; subtitle?: string; score?: number }[]
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function _getTrendingTraders_disabled(
   supabase: ReturnType<typeof getSupabaseClient>,
   limit: number
 ) {
   try {
-    // Get traders with high ROI and recent updates
     const { data, error } = await supabase
-      .from('trader_sources')
+      .from('leaderboard_ranks')
       .select(`
-        trader_id,
-        platform,
-        nickname,
+        source,
+        source_trader_id,
+        handle,
+        avatar_url,
+        arena_score,
         roi,
         pnl,
-        follower_count,
-        aum,
-        is_verified,
-        updated_at
+        win_rate
       `)
-      .eq('is_active', true)
-      .gte('roi', 10) // Min 10% ROI
-      .gte('follower_count', 100) // Min 100 followers
-      .order('updated_at', { ascending: false })
-      .order('roi', { ascending: false })
+      .eq('season_id', '90D')
+      .not('arena_score', 'is', null)
+      .order('arena_score', { ascending: false })
       .limit(limit)
 
     if (error) {
@@ -84,16 +60,17 @@ async function _getTrendingTraders_disabled(
 
     return (data || []).map(trader => ({
       type: 'trader',
-      id: trader.trader_id,
-      platform: trader.platform,
-      title: trader.nickname || trader.trader_id,
-      subtitle: `${trader.platform} • ROI: ${trader.roi?.toFixed(2)}%`,
+      id: trader.source_trader_id,
+      platform: trader.source,
+      title: trader.handle || trader.source_trader_id,
+      subtitle: `${trader.source} • Score: ${trader.arena_score}`,
+      arenaScore: trader.arena_score,
       roi: trader.roi,
       pnl: trader.pnl,
-      followers: trader.follower_count,
-      isVerified: trader.is_verified,
+      winRate: trader.win_rate,
       reason: 'trending',
-      url: `/trader/${trader.trader_id}`,
+      url: `/trader/${trader.source_trader_id}?platform=${trader.source}`,
+      avatarUrl: trader.avatar_url,
     }))
   } catch (error: unknown) {
     logger.error('getTrendingTraders exception', { error })
@@ -102,43 +79,34 @@ async function _getTrendingTraders_disabled(
 }
 
 /**
- * Get similar traders based on performance metrics
+ * Get similar traders based on arena_score range
  */
 async function getSimilarTraders(
-  _supabase: ReturnType<typeof getSupabaseClient>,
-  _baseTrader: { roi: number; platform: string },
-  _limit: number
-) {
-  // TODO: trader_sources doesn't have roi column — needs rewrite
-  return [] as { type: string; id: string; title: string; subtitle?: string; score?: number }[]
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function _getSimilarTraders_disabled(
   supabase: ReturnType<typeof getSupabaseClient>,
-  baseTrader: { roi: number; platform: string },
+  baseTrader: { arenaScore: number; platform: string },
   limit: number
 ) {
   try {
-    const roiMin = baseTrader.roi * 0.8
-    const roiMax = baseTrader.roi * 1.2
+    const scoreMin = baseTrader.arenaScore * 0.8
+    const scoreMax = baseTrader.arenaScore * 1.2
 
     const { data, error } = await supabase
-      .from('trader_sources')
+      .from('leaderboard_ranks')
       .select(`
-        trader_id,
-        platform,
-        nickname,
+        source,
+        source_trader_id,
+        handle,
+        avatar_url,
+        arena_score,
         roi,
         pnl,
-        follower_count,
-        is_verified
+        win_rate
       `)
-      .eq('is_active', true)
-      .eq('platform', baseTrader.platform)
-      .gte('roi', roiMin)
-      .lte('roi', roiMax)
-      .order('follower_count', { ascending: false })
+      .eq('season_id', '90D')
+      .eq('source', baseTrader.platform)
+      .gte('arena_score', scoreMin)
+      .lte('arena_score', scoreMax)
+      .order('arena_score', { ascending: false })
       .limit(limit)
 
     if (error) {
@@ -148,16 +116,17 @@ async function _getSimilarTraders_disabled(
 
     return (data || []).map(trader => ({
       type: 'trader',
-      id: trader.trader_id,
-      platform: trader.platform,
-      title: trader.nickname || trader.trader_id,
-      subtitle: `Similar performance • ROI: ${trader.roi?.toFixed(2)}%`,
+      id: trader.source_trader_id,
+      platform: trader.source,
+      title: trader.handle || trader.source_trader_id,
+      subtitle: `Similar performance • Score: ${trader.arena_score}`,
+      arenaScore: trader.arena_score,
       roi: trader.roi,
       pnl: trader.pnl,
-      followers: trader.follower_count,
-      isVerified: trader.is_verified,
+      winRate: trader.win_rate,
       reason: 'similar',
-      url: `/trader/${trader.trader_id}`,
+      url: `/trader/${trader.source_trader_id}?platform=${trader.source}`,
+      avatarUrl: trader.avatar_url,
     }))
   } catch (error: unknown) {
     logger.error('getSimilarTraders exception', { error })
@@ -200,11 +169,11 @@ async function getTrendingPosts(
       type: 'post',
       id: post.id,
       title: post.title || 'Untitled',
-      subtitle: `${(post.profiles as any)?.username || 'Unknown'} • ${post.likes_count || 0} likes`,
+      subtitle: `${((post.profiles as unknown) as Record<string, unknown>)?.username || 'Unknown'} • ${post.likes_count || 0} likes`,
       content: post.content?.substring(0, 100),
       likesCount: post.likes_count,
       commentsCount: post.comments_count,
-      author: (post.profiles as any)?.username,
+      author: ((post.profiles as unknown) as Record<string, unknown>)?.username,
       reason: 'trending',
       url: `/posts/${post.id}`,
     }))
@@ -223,7 +192,6 @@ async function getFollowingPosts(
   limit: number
 ) {
   try {
-    // Get followed users
     const { data: follows, error: followsError } = await supabase
       .from('user_follows')
       .select('following_id')
@@ -236,7 +204,6 @@ async function getFollowingPosts(
 
     const followingIds = follows.map(f => f.following_id)
 
-    // Get recent posts from followed users
     const { data: posts, error: postsError } = await supabase
       .from('posts')
       .select(`
@@ -263,11 +230,11 @@ async function getFollowingPosts(
       type: 'post',
       id: post.id,
       title: post.title || 'Untitled',
-      subtitle: `${(post.profiles as any)?.username || 'Unknown'} (following)`,
+      subtitle: `${((post.profiles as unknown) as Record<string, unknown>)?.username || 'Unknown'} (following)`,
       content: post.content?.substring(0, 100),
       likesCount: post.likes_count,
       commentsCount: post.comments_count,
-      author: (post.profiles as any)?.username,
+      author: ((post.profiles as unknown) as Record<string, unknown>)?.username,
       reason: 'following',
       url: `/posts/${post.id}`,
     }))
@@ -282,7 +249,6 @@ async function getFollowingPosts(
  */
 export async function GET(req: NextRequest) {
   try {
-    // Rate limiting
     const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.search)
     if (rateLimitResponse) {
       return rateLimitResponse
@@ -298,7 +264,6 @@ export async function GET(req: NextRequest) {
 
     let recommendations: Array<{ type: string; [key: string]: unknown }> = []
 
-    // Get different types of recommendations
     if (type === 'all' || type === 'trending') {
       const trendingTraders = await getTrendingTraders(supabase, limit)
       const trendingPosts = await getTrendingPosts(supabase, limit)
@@ -306,22 +271,25 @@ export async function GET(req: NextRequest) {
     }
 
     if (type === 'similar' && basedOn) {
-      // Parse basedOn (format: trader:binance:123 or post:456)
       const [entityType, ...rest] = basedOn.split(':')
 
       if (entityType === 'trader' && rest.length >= 2) {
         const [platform, traderId] = rest
 
-        // Get base trader data
+        // Get base trader data from leaderboard_ranks
         const { data: baseTrader } = await supabase
-          .from('trader_sources')
-          .select('roi, platform')
-          .eq('trader_id', traderId)
-          .eq('platform', platform)
+          .from('leaderboard_ranks')
+          .select('arena_score, source')
+          .eq('source_trader_id', traderId)
+          .eq('source', platform)
+          .eq('season_id', '90D')
           .single()
 
         if (baseTrader) {
-          const similar = await getSimilarTraders(supabase, baseTrader, limit)
+          const similar = await getSimilarTraders(supabase, {
+            arenaScore: baseTrader.arena_score,
+            platform: baseTrader.source,
+          }, limit)
           recommendations.push(...similar)
         }
       }
@@ -343,12 +311,9 @@ export async function GET(req: NextRequest) {
         seen.add(key)
         return true
       })
-
-      // Shuffle for variety
       recommendations.sort(() => Math.random() - 0.5)
     }
 
-    // Limit final results
     recommendations = recommendations.slice(0, limit)
 
     return NextResponse.json({

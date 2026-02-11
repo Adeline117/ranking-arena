@@ -3,9 +3,11 @@
  *
  * APIs:
  *   - elite-leader-list-v2: size=5 per category × 5 categories, days=7|30|90
- *   - leader-list-v2: 10 traders (no real pagination, but different per days)
+ *   - leader-list-v2: 10 traders per call (pagination returns same data, different sorts may vary)
  *
- * Max ~35 unique traders across all periods (API limitation)
+ * Note: XT API pagination is broken (all pages return same 10 traders).
+ * We maximize coverage by querying elite + leader across all 3 periods.
+ * Real platform limit: ~60-70 unique traders.
  *
  * Usage: node scripts/import/import_xt.mjs [7D|30D|90D|ALL]
  */
@@ -27,6 +29,7 @@ async function fetchJSON(url) {
   const r = await fetch(url, {
     agent,
     headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(15000),
   })
   const text = await r.text()
   try { return JSON.parse(text) } catch { return null }
@@ -55,30 +58,35 @@ async function main() {
     const days = DAYS_MAP[period]
     const map = new Map()
 
-    // 1. Elite list (5 per category × 5 categories)
-    const elite = await fetchJSON(`https://www.xt.com/fapi/user/v1/public/copy-trade/elite-leader-list-v2?size=5&days=${days}`)
-    if (elite?.returnCode === 0 && elite.result) {
-      for (const cat of elite.result) {
-        for (const it of (cat.items || [])) {
-          const t = parseTrader(it)
-          if (t) map.set(t.id, t)
+    // 1. Elite list (5 per category × 5 categories = up to 25)
+    try {
+      const elite = await fetchJSON(`https://www.xt.com/fapi/user/v1/public/copy-trade/elite-leader-list-v2?size=5&days=${days}`)
+      if (elite?.returnCode === 0 && elite.result) {
+        for (const cat of elite.result) {
+          for (const it of (cat.items || [])) {
+            const t = parseTrader(it)
+            if (t) map.set(t.id, t)
+          }
         }
       }
-    }
+    } catch (e) { console.log(`  elite ${period} error: ${e.message}`) }
+    console.log(`  ${period} elite: ${map.size}`)
 
-    // 2. Leader list (additional 10)
-    const leader = await fetchJSON(`https://www.xt.com/fapi/user/v1/public/copy-trade/leader-list-v2?pageNo=1&pageSize=10&days=${days}`)
-    if (leader?.returnCode === 0 && leader.result?.items) {
-      for (const it of leader.result.items) {
-        const t = parseTrader(it)
-        if (t && !map.has(t.id)) map.set(t.id, t)
+    // 2. Leader list (returns ~10 unique, pagination returns duplicates)
+    try {
+      const leader = await fetchJSON(`https://www.xt.com/fapi/user/v1/public/copy-trade/leader-list-v2?pageNo=1&pageSize=10&days=${days}`)
+      if (leader?.returnCode === 0 && leader.result?.items) {
+        for (const it of leader.result.items) {
+          const t = parseTrader(it)
+          if (t && !map.has(t.id)) map.set(t.id, t)
+        }
       }
-    }
+    } catch (e) { console.log(`  leader ${period} error: ${e.message}`) }
 
     tradersByPeriod[period] = map
     for (const [id, t] of map) allTraders.set(id, t)
     console.log(`  ${period}: ${map.size} unique traders`)
-    await sleep(300)
+    await sleep(1000)
   }
 
   console.log(`\nTotal unique: ${allTraders.size}`)
@@ -100,7 +108,7 @@ async function main() {
   let totalSaved = 0
 
   for (const p of periods) {
-    const now = new Date().toISOString()  // unique timestamp per period
+    const now = new Date().toISOString()
     const traders = [...(tradersByPeriod[p]?.values() || [])]
     if (!traders.length) { console.log(`  ${p}: no data`); continue }
     traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
@@ -117,7 +125,7 @@ async function main() {
       if (!error) saved += batch.length
       else console.log(`  upsert err: ${error.message}`)
     }
-    await sleep(100)  // ensure different timestamp
+    await sleep(100)
     console.log(`  ${p}: ${saved}/${traders.length} saved`)
     totalSaved += saved
   }
