@@ -147,18 +147,8 @@ function generateCsp(): string {
       "'self'",
       'data:',
       'blob:',
-      'https://*.supabase.co',
-      'https://assets.coingecko.com',
-      'https://avatars.githubusercontent.com',
-      // 交易所头像域名
-      'https://*.bgstatic.com',       // Bitget
-      'https://*.bycsi.com',          // Bybit
-      'https://*.bnbstatic.com',      // Binance
-      'https://*.nftstatic.com',      // Binance NFT
-      'https://*.myqcloud.com',       // 腾讯云 CDN (MEXC等)
-      'https://*.mocortech.com',      // MEXC
-      'https://*.tylhh.net',          // 其他交易所
-      'https://*.bscdnweb.com',       // BSC
+      'https:',
+      'http:',
     ],
     'font-src': ["'self'", 'data:'],
     'connect-src': [
