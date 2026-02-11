@@ -105,14 +105,18 @@ async function scrapeTraders() {
       if (m.size > 0) console.log(`  ${p}: ${m.size} from initial load`)
     }
 
-    // Fetch rank API for all periods
+    // Fetch rank API (POST, no range_time needed — returns categorized lists)
     for (const [period, rangeTime] of Object.entries(PERIOD_MAP)) {
-      const result = await page.evaluate(async (rt) => {
+      const result = await page.evaluate(async () => {
         try {
-          const r = await fetch(`/uapi/v1/copy/trader/rank?range_time=${rt}`)
+          const r = await fetch('/uapi/v1/copy/trader/rank', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nick_name: '', limit: 100 }),
+          })
           return await r.json()
         } catch (e) { return { error: e.message } }
-      }, rangeTime)
+      })
 
       if (result?.code === 200 && result.data) {
         const map = tradersByPeriod[period]
