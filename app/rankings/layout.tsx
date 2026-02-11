@@ -43,8 +43,17 @@ export default function RankingsLayout({ children }: { children: React.ReactNode
   return (
     <>
       <TopNavWrapper />
-      <RankingsSubNav />
-      {children}
+      <div
+        className="container-padding has-mobile-nav"
+        style={{
+          maxWidth: 1400,
+          margin: '0 auto',
+          padding: '16px 16px',
+        }}
+      >
+        <RankingsSubNav />
+        {children}
+      </div>
     </>
   )
 }

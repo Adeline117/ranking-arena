@@ -21,42 +21,32 @@ export default function RankingsSubNav() {
     <nav
       aria-label={isZh ? '排名分类导航' : 'Rankings category navigation'}
       style={{
-        borderBottom: '1px solid var(--color-border-primary)',
+        display: 'flex',
+        gap: tokens.spacing[1],
+        marginTop: 12,
       }}
     >
-      <div
-        style={{
-          maxWidth: 1200,
-          margin: '0 auto',
-          padding: `0 ${tokens.spacing[4]}`,
-          display: 'flex',
-          gap: tokens.spacing[1],
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-        }}
-      >
-        {TABS.map((tab) => {
-          const isActive = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              style={{
-                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                fontSize: tokens.typography.fontSize.sm,
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                textDecoration: 'none',
-                borderBottom: isActive ? '2px solid var(--color-brand)' : '2px solid transparent',
-                whiteSpace: 'nowrap',
-                transition: `all ${tokens.transition.fast}`,
-              }}
-            >
-              {isZh ? tab.labelZh : tab.labelEn}
-            </Link>
-          )
-        })}
-      </div>
+      {TABS.map((tab) => {
+        const isActive = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
+        return (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            style={{
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: isActive ? 700 : 500,
+              color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+              textDecoration: 'none',
+              borderBottom: isActive ? '2px solid var(--color-brand)' : '2px solid transparent',
+              whiteSpace: 'nowrap',
+              transition: `all ${tokens.transition.fast}`,
+            }}
+          >
+            {isZh ? tab.labelZh : tab.labelEn}
+          </Link>
+        )
+      })}
     </nav>
   )
 }
