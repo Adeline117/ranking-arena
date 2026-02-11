@@ -99,22 +99,9 @@ export default function OverviewPerformanceCard({
 
   useEffect(() => {
     setMounted(true)
-  }, [])
-
-  // 进入视口时触发动画
-  useEffect(() => {
-    if (!cardRef.current) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true)
-          observer.disconnect()
-        }
-      },
-      { threshold: 0.2 }
-    )
-    observer.observe(cardRef.current)
-    return () => observer.disconnect()
+    // Small delay to trigger bar animation after mount
+    const t = setTimeout(() => setIsVisible(true), 150)
+    return () => clearTimeout(t)
   }, [])
 
   const handlePeriodChange = (newPeriod: Period) => {
