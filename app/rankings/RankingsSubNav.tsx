@@ -6,7 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const TABS = [
-  { href: '/rankings/traders', labelZh: '交易员', labelEn: 'Traders' },
+  { href: '/', labelZh: '交易员', labelEn: 'Traders' },
   { href: '/rankings/resources', labelZh: '资料', labelEn: 'Resources' },
   { href: '/rankings/institutions', labelZh: '机构', labelEn: 'Institutions' },
   { href: '/rankings/tools', labelZh: '工具', labelEn: 'Tools' },
@@ -40,7 +40,7 @@ export default function RankingsSubNav() {
         }}
       >
         {TABS.map((tab) => {
-          const isActive = pathname.startsWith(tab.href)
+          const isActive = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
           return (
             <Link
               key={tab.href}
