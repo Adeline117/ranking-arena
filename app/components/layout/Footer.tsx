@@ -41,7 +41,6 @@ export default function Footer() {
     {
       title: isZh ? '关于' : 'About',
       links: [
-        { href: '/about', label: isZh ? '关于我们' : 'About' },
         { href: '/u/adelinewen1107', label: isZh ? '联系我们' : 'Contact' },
       { href: '/help', label: isZh ? '帮助中心' : 'Help' },
       { href: '/status', label: isZh ? '系统状态' : 'Status' },
