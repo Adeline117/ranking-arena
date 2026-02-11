@@ -227,7 +227,7 @@ html.theme-transition *::after {
   --glass-bg-primary: rgba(20, 18, 28, 0.85);
   --glass-bg-secondary: rgba(28, 25, 38, 0.9);
   --glass-bg-tertiary: rgba(37, 34, 50, 0.95);
-  --glass-border-light: var(--glass-border-light);
+  --glass-border-light: rgba(255, 255, 255, 0.1);
   --glass-border-medium: rgba(255, 255, 255, 0.15);
   --glass-border-heavy: rgba(255, 255, 255, 0.2);
   
