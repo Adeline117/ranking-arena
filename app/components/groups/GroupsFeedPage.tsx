@@ -93,7 +93,7 @@ function BookshelfTab() {
         <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.5 }}>
           {language === 'zh' ? '去书城逛逛吧' : 'Browse the library'}
         </Text>
-        <a href="/library" style={{
+        <a href="/rankings/resources" style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: 8,
@@ -209,7 +209,7 @@ function BookshelfTab() {
 
       {/* View all link */}
       <Box style={{ textAlign: 'center', marginTop: 20 }}>
-        <Link href="/library" style={{
+        <Link href="/rankings/resources" style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           color: tokens.colors.accent.primary,
           textDecoration: 'none',

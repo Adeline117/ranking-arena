@@ -137,7 +137,7 @@ export default function BookshelfTab() {
         </div>
       ) : books.length === 0 ? (
         /* Empty state - attractive library entrance */
-        <Link href="/library" style={{ textDecoration: 'none', display: 'block' }}>
+        <Link href="/rankings/resources" style={{ textDecoration: 'none', display: 'block' }}>
           <div style={{
             padding: '40px 24px',
             borderRadius: tokens.radius.xl,
@@ -242,7 +242,7 @@ export default function BookshelfTab() {
           ))}
 
           {/* Browse more link */}
-          <Link href="/library" style={{
+          <Link href="/rankings/resources" style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             aspectRatio: '2/3', borderRadius: tokens.radius.lg,
             border: `2px dashed ${tokens.colors.border.primary}`,
