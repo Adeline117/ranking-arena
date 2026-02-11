@@ -29,10 +29,13 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
     const { data } = await supabase
       .from('library_items')
       .select('*')
-      .order('rating', { ascending: false })
+      .not('cover_url', 'is', null)
+      .eq('type', 'book')
+      .order('rating', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
       .limit(6)
 
-    return (data || []).filter((i: LibraryItem) => i.cover_url || i.rating)
+    return (data || []).filter((i: LibraryItem) => i.cover_url)
   } catch {
     return []
   }
