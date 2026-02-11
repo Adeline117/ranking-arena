@@ -30,7 +30,7 @@ type BookItem = {
   id: string
   title: string
   author: string | null
-  cover_image_url: string | null
+  cover_url: string | null
   type: string | null
   category: string | null
 }
@@ -45,7 +45,7 @@ function BookshelfTab() {
     async function load() {
       const { data } = await supabase
         .from('library_items')
-        .select('id, title, author, cover_image_url, type, category')
+        .select('id, title, author, cover_url, type, category')
         .order('created_at', { ascending: false })
         .limit(20)
       if (alive) {
@@ -156,7 +156,7 @@ function BookshelfTab() {
                   title={book.title}
                   author={book.author ?? undefined}
                   category={book.category ?? undefined}
-                  coverUrl={book.cover_image_url ?? undefined}
+                  coverUrl={book.cover_url ?? undefined}
                   fontSize="sm"
                 />
                 {/* Type badge */}
