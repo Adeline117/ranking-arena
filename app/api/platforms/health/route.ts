@@ -23,18 +23,33 @@ export async function GET() {
       .select('*')
       .order('platform');
 
-    // Also get latest snapshot timestamps per platform
-    const { data: freshness } = await supabase
+    // Get latest data timestamps per platform from leaderboard_ranks (more complete)
+    const latestByPlatform = new Map<string, string>();
+
+    // Try leaderboard_ranks first (has all platforms)
+    const { data: lbFreshness } = await supabase
+      .from('leaderboard_ranks')
+      .select('platform, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(500);
+
+    for (const row of lbFreshness || []) {
+      const key = row.platform;
+      if (key && !latestByPlatform.has(key)) {
+        latestByPlatform.set(key, row.updated_at);
+      }
+    }
+
+    // Also check trader_snapshots for platforms not in leaderboard
+    const { data: snapFreshness } = await supabase
       .from('trader_snapshots')
       .select('source, captured_at')
       .order('captured_at', { ascending: false })
-      .limit(50);
+      .limit(200);
 
-    // Aggregate freshness by platform
-    const latestByPlatform = new Map<string, string>();
-    for (const row of freshness || []) {
+    for (const row of snapFreshness || []) {
       const key = row.source;
-      if (!latestByPlatform.has(key)) {
+      if (key && !latestByPlatform.has(key)) {
         latestByPlatform.set(key, row.captured_at);
       }
     }

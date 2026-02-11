@@ -113,6 +113,21 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // Fallback data when cache is empty and API fails
+    const fallback: MarketOverviewData = {
+      btcPrice: 0,
+      btcChange24h: 0,
+      ethPrice: 0,
+      ethChange24h: 0,
+      totalMarketCap: 0,
+      totalVolume24h: 0,
+      btcDominance: 0,
+      ethGasGwei: null,
+      updatedAt: new Date().toISOString(),
+    }
+
+    return NextResponse.json(fallback, {
+      headers: { 'Cache-Control': 'public, s-maxage=30' },
+    })
   }
 }
