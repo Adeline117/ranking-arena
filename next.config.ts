@@ -352,6 +352,9 @@ const nextConfig: NextConfig = {
     // Enable optimized CSS loading
     optimizeCss: true,
 
+    // Partial Prerendering — static shell + streaming dynamic parts
+    ppr: 'incremental',
+
     // Optimize font loading
     optimizeServerReact: true,
 

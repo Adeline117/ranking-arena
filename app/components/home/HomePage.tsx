@@ -5,7 +5,7 @@ import { Suspense, lazy } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import TopNav from '../layout/TopNav'
-import MobileBottomNav from '../layout/MobileBottomNav'
+const MobileBottomNav = lazy(() => import('../layout/MobileBottomNav'))
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
 import { JsonLd } from '../Providers/JsonLd'
