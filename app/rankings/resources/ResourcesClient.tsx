@@ -9,7 +9,7 @@ import type { LibraryItem } from '@/lib/types/library'
 import BookCard from '@/app/library/BookCard'
 import BookCover from '@/app/library/BookCover'
 import StarRating from '@/app/components/ui/StarRating'
-import TopLeaderboards, { type LeaderboardColumn } from '@/app/components/ui/TopLeaderboards'
+import TopLeaderboards from '@/app/components/ui/TopLeaderboards'
 import dynamic from 'next/dynamic'
 import { logger } from '@/lib/logger'
 
