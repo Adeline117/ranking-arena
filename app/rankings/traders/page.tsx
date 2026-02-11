@@ -285,8 +285,8 @@ function ExchangeQuickFilter({
 }
 
 /** Simple wrapper — no animation to avoid visual shaking */
-function RankingFadeWrapper({ transitionKey, children }: { transitionKey: string; children: React.ReactNode }) {
-  return <div key={transitionKey}>{children}</div>
+function RankingFadeWrapper({ children }: { transitionKey?: string; children: React.ReactNode }) {
+  return <div>{children}</div>
 }
 
 function RankingsContent() {
