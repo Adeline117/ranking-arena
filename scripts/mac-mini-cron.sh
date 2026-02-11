@@ -64,6 +64,7 @@ cleanup_chrome
 # ========== Tier 1: 大平台 (API/Chrome, 每轮必跑) ==========
 run_script "import_okx_futures.mjs" "" 600
 run_script "import_okx_web3.mjs" "" 600
+run_script "import_binance_web3_v2.mjs" "ALL" 600
 run_script "import_mexc.mjs" "ALL" 600
 run_script "import_kucoin.mjs" "" 600
 
