@@ -258,33 +258,41 @@ async function enrichJupiter() {
     BTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
   }
   
-  // Build mapping of address -> top-trader data
-  const traderDataMap = new Map()
-  const year = new Date().getFullYear()
+  // Build mapping of lowercase address -> original case address (Solana is case-sensitive!)
+  // Our DB stores lowercased addresses, but Jupiter trades API needs exact case
+  const addressMap = new Map() // lowercase -> original case
   
-  for (const [market, mint] of Object.entries(MARKET_MINTS)) {
-    for (const week of ['current']) {
-      const url = `https://perps-api.jup.ag/v1/top-traders?marketMint=${mint}&year=${year}&week=${week}`
+  // First check if we have original case stored in equity curve table
+  const { data: eqData } = await supabase.from('trader_equity_curve')
+    .select('source_trader_id').eq('source', 'jupiter_perps').limit(1000)
+  // These might also be lowercase, but check
+  
+  // Scan recent weeks across years for address mapping
+  const year = new Date().getFullYear()
+  const currentWeek = Math.ceil((Date.now() - new Date(year, 0, 1).getTime()) / (7 * 86400000))
+  
+  // Scan last ~20 weeks of current year + last 20 weeks of previous years
+  const scanPlan = []
+  for (let w = Math.max(1, currentWeek - 20); w <= currentWeek; w++) scanPlan.push([year, w])
+  for (let w = 32; w <= 52; w++) scanPlan.push([year - 1, w])
+  for (let w = 1; w <= 30; w++) scanPlan.push([year - 1, w])
+  
+  for (const [yr, w] of scanPlan) {
+    for (const [market, mint] of Object.entries(MARKET_MINTS)) {
+      const url = `https://perps-api.jup.ag/v1/top-traders?marketMint=${mint}&year=${yr}&week=${w}`
       const data = await fetchJSON(url)
       if (data) {
         for (const list of [data.topTradersByPnl || [], data.topTradersByVolume || []]) {
           for (const t of list) {
-            if (!t.owner) continue
-            const key = t.owner.toLowerCase()
-            if (!traderDataMap.has(key)) {
-              traderDataMap.set(key, { address: t.owner, totalPnl: 0, totalVolume: 0, markets: [] })
-            }
-            const entry = traderDataMap.get(key)
-            entry.totalPnl += parseFloat(t.totalPnlUsd || 0) / 1e6 // Jupiter PnL is in micro-USD
-            entry.totalVolume += parseFloat(t.totalVolumeUsd || 0) / 1e6
-            entry.markets.push(market)
+            if (t.owner) addressMap.set(t.owner.toLowerCase(), t.owner)
           }
         }
       }
-      await sleep(500)
+      await sleep(150)
     }
+    if (addressMap.size % 200 === 0) process.stdout.write('.')
   }
-  console.log(`  Top traders map: ${traderDataMap.size}`)
+  console.log(`\n  Address map: ${addressMap.size} (lowercase -> original case)`)
   
   // Get DB traders
   const traders = await getTradersNeedingEnrichment('jupiter_perps', LIMIT)
@@ -294,7 +302,8 @@ async function enrichJupiter() {
   
   for (let i = 0; i < traders.length; i++) {
     const t = traders[i]
-    const addr = t.source_trader_id
+    const addrLower = t.source_trader_id.toLowerCase()
+    const addr = addressMap.get(addrLower) || t.source_trader_id // Use original case if available
     
     // Try to fetch trades for position history
     if (!t.hasStats) {
@@ -317,7 +326,7 @@ async function enrichJupiter() {
           }))
         
         if (positions.length) {
-          await upsertPositionHistory('jupiter_perps', addr, positions)
+          await upsertPositionHistory('jupiter_perps', t.source_trader_id, positions)
           tradesEnriched++
         }
         
@@ -341,7 +350,7 @@ async function enrichJupiter() {
             if (dd > mdd) mdd = dd
           }
           
-          await upsertStatsDetail('jupiter_perps', addr, '30D', {
+          await upsertStatsDetail('jupiter_perps', t.source_trader_id, '30D', {
             total_trades: closingTrades.length,
             profitable_trades_pct: (wins.length / closingTrades.length) * 100,
             avg_profit: avgProfit,
@@ -373,8 +382,9 @@ async function enrichDYDX() {
   
   const INDEXER = 'https://indexer.dydx.trade/v4'
   
-  // Quick connectivity test
-  const test = await fetchJSON(`${INDEXER}/time`)
+  // Quick connectivity test with actual data endpoint
+  const testAddr = 'dydx10vzkhv7dwepg24259fmyx2ep2f7j8a90qy5f6j'
+  const test = await fetchJSON(`${INDEXER}/fills?address=${testAddr}&subaccountNumber=0&limit=1`)
   if (!test) {
     console.log('  ⚠ dYdX indexer geoblocked. Estimating from snapshot data.')
     const traders = await getTradersNeedingEnrichment('dydx', LIMIT)
@@ -492,56 +502,12 @@ async function enrichFromEstimates(source, label) {
   const needStats = traders.filter(t => !t.hasStats)
   console.log(`  DB traders: ${traders.length}, need stats: ${needStats.length}`)
   
+  // Batch insert stats estimates
   let enriched = 0
   for (const t of needStats) {
     await estimateStats(source, t)
     enriched++
-  }
-  
-  // Also generate equity curve estimates from snapshots across periods
-  const { data: periods } = await supabase.from('trader_snapshots')
-    .select('source_trader_id, season_id, roi, pnl, captured_at')
-    .eq('source', source)
-    .order('captured_at', { ascending: false })
-    .limit(LIMIT * 3)
-  
-  if (periods?.length) {
-    // Group by trader
-    const byTrader = new Map()
-    for (const p of periods) {
-      if (!byTrader.has(p.source_trader_id)) byTrader.set(p.source_trader_id, [])
-      byTrader.get(p.source_trader_id).push(p)
-    }
-    
-    let eqCount = 0
-    for (const [traderId, snaps] of byTrader) {
-      // Check if already has equity curve
-      const { count } = await supabase.from('trader_equity_curve')
-        .select('*', { count: 'exact', head: true })
-        .eq('source', source).eq('source_trader_id', traderId)
-      
-      if (count > 0) continue
-      
-      // Generate simple equity curve from available snapshots
-      const points = snaps
-        .filter(s => s.roi != null)
-        .map(s => ({
-          date: new Date(s.captured_at).toISOString().split('T')[0],
-          roi_pct: s.roi,
-          pnl_usd: s.pnl,
-        }))
-        .slice(0, 1) // Just one point per capture
-      
-      if (points.length) {
-        const period = snaps[0]?.season_id || '30D'
-        await upsertEquityCurve(source, traderId, period, points)
-        eqCount++
-      }
-      
-      if (eqCount >= 100) break // Don't go crazy
-    }
-    
-    if (eqCount > 0) console.log(`  + ${eqCount} equity curve points`)
+    if (enriched % 50 === 0) console.log(`  [${enriched}/${needStats.length}]`)
   }
   
   console.log(`  ✅ ${label}: ${enriched} stats estimated`)
