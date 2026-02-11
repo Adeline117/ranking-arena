@@ -1078,7 +1078,21 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
       <div className="flex items-center gap-3 min-w-0">
         <TraderAvatar trader={trader} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate" style={{ color: tokens.colors.text.primary, lineHeight: 1.3 }}>
+          <div
+            className="text-sm font-semibold truncate"
+            style={{ color: tokens.colors.text.primary, lineHeight: 1.3, cursor: 'pointer' }}
+            title={trader.trader_key}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              navigator.clipboard.writeText(trader.trader_key).then(() => {
+                const el = e.currentTarget
+                const orig = el.style.color
+                el.style.color = tokens.colors.accent.success
+                setTimeout(() => { el.style.color = orig }, 600)
+              }).catch(() => {})
+            }}
+          >
             {getTraderDisplayName(trader)}
           </div>
           <div className="text-xs flex items-center gap-1.5" style={{ color: tokens.colors.text.tertiary, marginTop: 2 }}>
