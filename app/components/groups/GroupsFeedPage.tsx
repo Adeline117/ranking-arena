@@ -31,7 +31,6 @@ type BookItem = {
   title: string
   author: string | null
   cover_url: string | null
-  type: string | null
   category: string | null
 }
 
@@ -45,7 +44,7 @@ function BookshelfTab() {
     async function load() {
       const { data } = await supabase
         .from('library_items')
-        .select('id, title, author, cover_url, type, category')
+        .select('id, title, author, cover_url, category')
         .order('created_at', { ascending: false })
         .limit(20)
       if (alive) {
@@ -121,7 +120,7 @@ function BookshelfTab() {
     <Box>
       <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 16 }}>
         {books.map((book) => {
-          const typeColor = categoryColors[book.type || ''] || tokens.colors.accent.primary
+          const typeColor = categoryColors[book.category || ''] || tokens.colors.accent.primary
           return (
             <Link
               key={book.id}
@@ -160,7 +159,7 @@ function BookshelfTab() {
                   fontSize="sm"
                 />
                 {/* Type badge */}
-                {book.type && (
+                {book.category && (
                   <Box style={{
                     position: 'absolute', top: 6, right: 6,
                     background: typeColor + 'DD',
@@ -172,10 +171,10 @@ function BookshelfTab() {
                     letterSpacing: '0.5px',
                     backdropFilter: 'blur(4px)',
                   }}>
-                    {book.type === 'book' ? (language === 'zh' ? '书籍' : 'Book') :
-                     book.type === 'paper' ? (language === 'zh' ? '论文' : 'Paper') :
-                     book.type === 'whitepaper' ? (language === 'zh' ? '白皮书' : 'WP') :
-                     book.type}
+                    {book.category === 'book' ? (language === 'zh' ? '书籍' : 'Book') :
+                     book.category === 'paper' ? (language === 'zh' ? '论文' : 'Paper') :
+                     book.category === 'whitepaper' ? (language === 'zh' ? '白皮书' : 'WP') :
+                     book.category}
                   </Box>
                 )}
               </Box>
