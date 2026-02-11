@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     // 收集所有收藏夹所有者的 ID
     const ownerIds = subscriptions
-      ?.map(s => (s.bookmark_folders as any)?.user_id)
+      ?.map(s => ((s.bookmark_folders as unknown as Record<string, unknown> | null)?.user_id) as string | undefined)
       .filter(Boolean) || []
     
     // 获取所有者信息
@@ -75,10 +75,10 @@ export async function GET(request: NextRequest) {
     // 格式化返回数据
     const folders = (subscriptions || [])
       .map(s => {
-        const folder = s.bookmark_folders as any
+        const folder = s.bookmark_folders as unknown as Record<string, unknown> | null
         if (!folder || !folder.is_public) return null
         
-        const owner = ownerMap[folder.user_id]
+        const owner = ownerMap[String(folder.user_id)]
         return {
           id: folder.id,
           name: folder.name,

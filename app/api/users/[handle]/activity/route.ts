@@ -77,7 +77,7 @@ export async function GET(
         id: `post-${p.id}`,
         type: 'post',
         timestamp: p.created_at,
-        data: { postId: p.id, title: p.title, group: (p as any).groups },
+        data: { postId: p.id, title: p.title, group: (p as Record<string, unknown>).groups },
       })
     }
 
@@ -91,7 +91,7 @@ export async function GET(
           itemId: r.library_item_id,
           status: r.status,
           rating: r.rating,
-          book: (r as any).library_items,
+          book: (r as Record<string, unknown>).library_items,
         },
       })
     }
@@ -102,7 +102,7 @@ export async function GET(
         id: `follow-${f.id}`,
         type: 'follow_trader',
         timestamp: f.created_at,
-        data: { traderId: f.trader_id, trader: (f as any).traders },
+        data: { traderId: f.trader_id, trader: (f as Record<string, unknown>).traders },
       })
     }
 
@@ -112,7 +112,7 @@ export async function GET(
         id: `group-${g.id}`,
         type: 'join_group',
         timestamp: g.joined_at,
-        data: { groupId: g.group_id, group: (g as any).groups },
+        data: { groupId: g.group_id, group: (g as Record<string, unknown>).groups },
       })
     }
 

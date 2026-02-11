@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
      
-    const ExchangeClass = (ccxt.default as any)[exchangeId] as new () => InstanceType<typeof ccxt.default.Exchange>
+    const ExchangeClass = (ccxt.default as Record<string, unknown>)[exchangeId] as new () => InstanceType<typeof ccxt.default.Exchange>
     const exchange = new ExchangeClass()
 
     const fetchTimeframe = exchange.timeframes?.['1m'] ? '1m' : timeframe

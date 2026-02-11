@@ -120,7 +120,7 @@ function ExchangeAuthContent() {
             style={{ marginBottom: tokens.spacing[4] }}
           >
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
-              <ExchangeLogo exchange={selectedExchange.id as any} size={32} />
+              <ExchangeLogo exchange={selectedExchange.id} size={32} />
               <Text size="lg" weight="bold">
                 {selectedExchange.name}
               </Text>
@@ -175,7 +175,7 @@ function ExchangeAuthContent() {
                   onClick={() => router.push(`/exchange/auth?exchange=${exchange.id}`)}
                   style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}
                 >
-                  <ExchangeLogo exchange={exchange.id as any} size={20} />
+                  <ExchangeLogo exchange={exchange.id} size={20} />
                   {exchange.name}
                 </Button>
               ))}

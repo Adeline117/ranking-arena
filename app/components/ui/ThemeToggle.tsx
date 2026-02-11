@@ -23,7 +23,8 @@ export default function ThemeToggle() {
     const btn = btnRef.current
 
     // Try View Transition API with circular clip-path animation
-    if (btn && 'startViewTransition' in document && typeof (document as any).startViewTransition === 'function') {
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void>; finished: Promise<void> } }
+    if (btn && doc.startViewTransition) {
       const rect = btn.getBoundingClientRect()
       const x = rect.left + rect.width / 2
       const y = rect.top + rect.height / 2
@@ -35,7 +36,7 @@ export default function ThemeToggle() {
 
       setAnimating(true)
 
-      const transition = (document as any).startViewTransition(() => {
+      const transition = doc.startViewTransition!(() => {
         document.documentElement.setAttribute('data-theme', newTheme)
         localStorage.setItem('theme', newTheme)
         setTheme(newTheme)

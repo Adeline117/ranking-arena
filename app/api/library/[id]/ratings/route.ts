@@ -59,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     let weightedSum = 0
     let weightTotal = 0
     for (const r of readRatings) {
-      const userCreatedAt = (r as any).users?.created_at || r.created_at
+      const userCreatedAt = ((r as Record<string, unknown>).users as Record<string, unknown> | undefined)?.created_at as string || r.created_at
       const pc = postCounts[r.user_id] || 0
       const w = getAccountWeight(userCreatedAt, pc)
       weightedSum += (r.rating as number) * w

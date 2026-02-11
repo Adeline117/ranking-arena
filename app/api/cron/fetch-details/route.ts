@@ -311,7 +311,7 @@ async function processTraders(
     for (const trader of traders) {
       await supabase
         .from('traders')
-        .update({ details_fetched_at: now } as any)
+        .update({ details_fetched_at: now } as Record<string, unknown>)
         .eq('source', trader.source)
         .eq('source_trader_id', trader.source_trader_id)
     }

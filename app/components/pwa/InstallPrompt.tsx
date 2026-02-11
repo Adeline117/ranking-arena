@@ -23,7 +23,7 @@ export default function InstallPrompt() {
     // 检查是否已经安装（standalone 模式）
     if (
       window.matchMedia("(display-mode: standalone)").matches ||
-      (navigator as any).standalone
+      (navigator as unknown as { standalone?: boolean }).standalone
     ) {
       setIsInstalled(true);
       return;
