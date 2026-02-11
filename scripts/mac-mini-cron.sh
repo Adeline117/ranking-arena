@@ -86,6 +86,8 @@ run_script "import_gains.mjs" "ALL" 300
 run_script "import_btcc.mjs" "ALL" 300
 run_script "import_bitfinex_v2.mjs" "ALL" 120
 run_script "import_toobit.mjs" "ALL" 120
+run_script "import_aevo.mjs" "ALL" 120
+run_script "import_gmx_v2.mjs" "ALL" 300
 
 # DEX platforms (pure API, no Chrome needed)
 # Enrich scripts need to run per period
