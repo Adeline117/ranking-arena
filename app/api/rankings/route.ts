@@ -365,21 +365,11 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   let availableSources = getCachedSources(seasonIdUpper);
   if (!availableSources) {
     try {
-      const allSources = new Set<string>();
-      let from = 0;
-      const batchSize = 1000;
-      while (true) {
-        const { data: batch } = await supabase
-          .from('leaderboard_ranks')
-          .select('source')
-          .eq('season_id', seasonIdUpper)
-          .range(from, from + batchSize - 1);
-        if (!batch || batch.length === 0) break;
-        batch.forEach((r: { source: string }) => allSources.add(r.source));
-        if (batch.length < batchSize) break;
-        from += batchSize;
-      }
-      availableSources = [...allSources].sort();
+      const { data: rpcData } = await supabase.rpc('get_distinct_sources');
+      const allSources = rpcData
+        ? rpcData.map((r: { source: string }) => r.source)
+        : [];
+      availableSources = [...new Set(allSources)].sort() as string[];
       setCachedSources(seasonIdUpper, availableSources);
     } catch {
       availableSources = [...new Set((paginatedRows || []).map((r: { source: string }) => r.source))].sort();
