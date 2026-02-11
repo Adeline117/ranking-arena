@@ -1756,7 +1756,7 @@ const zh = {
     loginWelcomeBack: '欢迎回来',
     loginCreateAccount: '创建账号',
     loginSubtitle: '探索顶级交易员的世界',
-    loginValueProp1: '追踪 32,000+ 交易员实时排名',
+    loginValueProp1: '追踪 15,000+ 交易员实时排名',
     loginValueProp2: '跨 27 个交易所对比收益与风控',
     loginValueProp3: '加入交易社区，发现投资机会',
     loginConnectWallet: '连接钱包',

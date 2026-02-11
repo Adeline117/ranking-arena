@@ -14,6 +14,7 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { encryptApiKey } from '@/lib/exchange/secure-encryption'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,8 +60,8 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id: user.id,
         exchange,
-        api_key_encrypted: api_key, // TODO: encrypt before storage
-        api_secret_encrypted: api_secret, // TODO: encrypt before storage
+        api_key_encrypted: encryptApiKey(api_key, user.id),
+        api_secret_encrypted: encryptApiKey(api_secret, user.id),
         label: label || exchange,
       })
       .select('id, exchange, label, created_at')

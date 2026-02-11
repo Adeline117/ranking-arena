@@ -12,6 +12,7 @@
 import { useOneClickSiwe, type OneClickStatus } from '@/lib/web3/useOneClickSiwe'
 import { useAccountModal } from '@rainbow-me/rainbowkit'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useWeb3Ready } from '@/lib/web3/provider'
 import { tokens } from '@/lib/design-tokens'
 
 // ============================================
@@ -183,7 +184,7 @@ const sizeStyles = {
 // Component
 // ============================================
 
-export function OneClickWalletButton({
+function OneClickWalletButtonInner({
   onSuccess,
   onError,
   className = '',
@@ -378,6 +379,46 @@ export function OneClickWalletButton({
       )}
     </div>
   )
+}
+
+/**
+ * Safe wrapper — renders a loading placeholder until Web3Provider is ready.
+ * Prevents WagmiProviderNotFoundError when the provider hasn't loaded yet.
+ */
+export function OneClickWalletButton(props: OneClickWalletButtonProps) {
+  const isReady = useWeb3Ready()
+  const { t } = useLanguage()
+
+  if (!isReady) {
+    const sizeConfig = sizeStyles[props.size || 'md']
+    return (
+      <button
+        disabled
+        className={props.className}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          padding: sizeConfig.padding,
+          borderRadius: tokens.radius.lg,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          background: 'transparent',
+          color: tokens.colors.text.tertiary,
+          fontSize: sizeConfig.fontSize,
+          fontWeight: 600,
+          cursor: 'wait',
+          width: props.fullWidth ? '100%' : 'auto',
+          opacity: 0.6,
+          ...props.style,
+        }}
+      >
+        {t('walletLoading') || 'Loading wallet...'}
+      </button>
+    )
+  }
+
+  return <OneClickWalletButtonInner {...props} />
 }
 
 export default OneClickWalletButton
