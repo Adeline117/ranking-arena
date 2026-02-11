@@ -76,6 +76,28 @@ export async function GET(request: Request) {
       'wexx.one',
       // Blofin
       'blofin.com',
+      // BingX CDN
+      'bb-os.com',
+      // BTCC
+      'btuserlog.com',
+      // GMX
+      'gmx.io',
+      // Bitfinex
+      'bitfinex.com',
+      // BTSE
+      'btse.com',
+      // dYdX
+      'dydx.exchange',
+      // WhiteBit
+      'whitebit.com',
+      // Toobit
+      'toobit.com',
+      // Aevo
+      'aevo.xyz',
+      // Hyperliquid
+      'hyperliquid.xyz',
+      // Jupiter
+      'jup.ag',
       // Our CDN
       'arenafi.org',
       // GitHub
