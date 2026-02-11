@@ -3,28 +3,28 @@
 /* 奖牌发光效果 — box-shadow is GPU-accelerated (replaces CPU-intensive filter: drop-shadow) */
 @keyframes medalGlowGold {
   0%, 100% {
-    box-shadow: 0 0 4px var(--color-gold-glow), 0 0 8px var(--color-gold-glow);
+    box-shadow: 0 0 8px var(--color-gold-glow), 0 0 18px var(--color-gold-glow), 0 0 30px var(--color-gold-glow);
   }
   50% {
-    box-shadow: 0 0 8px var(--color-gold-glow), 0 0 16px var(--color-gold-glow);
+    box-shadow: 0 0 12px var(--color-gold-glow), 0 0 28px var(--color-gold-glow), 0 0 45px var(--color-gold-glow);
   }
 }
 
 @keyframes medalGlowSilver {
   0%, 100% {
-    box-shadow: 0 0 3px var(--color-silver-glow), 0 0 6px var(--color-silver-glow);
+    box-shadow: 0 0 6px var(--color-silver-glow), 0 0 14px var(--color-silver-glow), 0 0 24px var(--color-silver-glow);
   }
   50% {
-    box-shadow: 0 0 6px var(--color-silver-glow), 0 0 12px var(--color-silver-glow);
+    box-shadow: 0 0 10px var(--color-silver-glow), 0 0 22px var(--color-silver-glow), 0 0 36px var(--color-silver-glow);
   }
 }
 
 @keyframes medalGlowBronze {
   0%, 100% {
-    box-shadow: 0 0 3px var(--color-bronze-glow), 0 0 6px var(--color-bronze-glow);
+    box-shadow: 0 0 6px var(--color-bronze-glow), 0 0 14px var(--color-bronze-glow), 0 0 24px var(--color-bronze-glow);
   }
   50% {
-    box-shadow: 0 0 6px var(--color-bronze-glow), 0 0 12px var(--color-bronze-glow);
+    box-shadow: 0 0 10px var(--color-bronze-glow), 0 0 22px var(--color-bronze-glow), 0 0 36px var(--color-bronze-glow);
   }
 }
 
