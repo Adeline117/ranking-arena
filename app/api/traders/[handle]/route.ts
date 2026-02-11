@@ -532,7 +532,7 @@ async function getTraderDetails(
               followers: snap.followers ?? 0,
               avatar_url: src.avatar_url || undefined,
               source: sourceType,
-              roi_90d: snap.roi != null ? parseFloat(snap.roi as string) * 100 : undefined,
+              roi_90d: snap.roi != null ? parseFloat(snap.roi as string) : undefined,
               arena_score: snap.arena_score != null ? parseFloat(snap.arena_score as string) : undefined,
             }
           })
@@ -574,7 +574,7 @@ async function getTraderDetails(
               followers: snap.followers ?? 0,
               avatar_url: src.avatar_url || undefined,
               source: sourceType,
-              roi_90d: snap.roi != null ? parseFloat(snap.roi as string) * 100 : undefined,
+              roi_90d: snap.roi != null ? parseFloat(snap.roi as string) : undefined,
               arena_score: snap.arena_score != null ? parseFloat(snap.arena_score as string) : undefined,
             }
           })
