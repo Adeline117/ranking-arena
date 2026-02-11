@@ -98,12 +98,22 @@ export async function getInitialTraders(
       return true
     }).slice(0, limit * 2)
 
-    // Get handles from trader_sources - parallelize with other work if needed
+    // Get handles from trader_sources
     const traderIds = uniqueSnapshots.map(s => s.source_trader_id)
-    const { data: sources } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, source, handle, avatar_url')
-      .in('source_trader_id', traderIds)
+    // Batch in chunks of 50 to avoid URL length limits
+    const sourceChunks: typeof uniqueSnapshots[] = []
+    for (let i = 0; i < traderIds.length; i += 50) {
+      sourceChunks.push(uniqueSnapshots.slice(i, i + 50))
+    }
+    const sourceResults = await Promise.all(
+      sourceChunks.map(chunk =>
+        supabase
+          .from('trader_sources')
+          .select('source_trader_id, source, handle, avatar_url')
+          .in('source_trader_id', chunk.map(s => s.source_trader_id))
+      )
+    )
+    const sources = sourceResults.flatMap(r => r.data || [])
 
     const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
     sources?.forEach(s => {
