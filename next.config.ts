@@ -240,6 +240,66 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.blofin.com',
       },
+      // BingX bb-os CDN
+      {
+        protocol: 'https',
+        hostname: '**.bb-os.com',
+      },
+      // GMX
+      {
+        protocol: 'https',
+        hostname: 'gmx.io',
+      },
+      // BTCC
+      {
+        protocol: 'https',
+        hostname: '**.btuserlog.com',
+      },
+      // Bitfinex
+      {
+        protocol: 'https',
+        hostname: '**.bitfinex.com',
+      },
+      // BTSE
+      {
+        protocol: 'https',
+        hostname: '**.btse.com',
+      },
+      // dYdX
+      {
+        protocol: 'https',
+        hostname: '**.dydx.exchange',
+      },
+      // Jupiter
+      {
+        protocol: 'https',
+        hostname: '**.jup.ag',
+      },
+      // WhiteBit
+      {
+        protocol: 'https',
+        hostname: '**.whitebit.com',
+      },
+      // Toobit
+      {
+        protocol: 'https',
+        hostname: '**.toobit.com',
+      },
+      // Aevo
+      {
+        protocol: 'https',
+        hostname: '**.aevo.xyz',
+      },
+      // Hyperliquid
+      {
+        protocol: 'https',
+        hostname: '**.hyperliquid.xyz',
+      },
+      // UI Avatars fallback
+      {
+        protocol: 'https',
+        hostname: 'ui-avatars.com',
+      },
     ],
     
     // 图片尺寸配置 - 对齐 Tailwind 响应式断点
