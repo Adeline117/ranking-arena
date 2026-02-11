@@ -133,7 +133,7 @@ describe('Z-Score Detection', () => {
 
     it('should handle null values gracefully', () => {
       const traders: TraderRankingData[] = [
-        { id: '1', handle: 't1', roi: 10, pnl: 1000, win_rate: null as any, max_drawdown: -5, trades_count: 100, followers: 50, source: 'binance' },
+        { id: '1', handle: 't1', roi: 10, pnl: 1000, win_rate: null as unknown as number, max_drawdown: -5, trades_count: 100, followers: 50, source: 'binance' },
         { id: '2', handle: 't2', roi: 12, pnl: 1200, win_rate: 60, max_drawdown: -6, trades_count: 110, followers: 55, source: 'binance' },
       ]
 
@@ -338,7 +338,7 @@ describe('Edge Cases', () => {
   it('should handle traders with missing fields', () => {
     const traders: TraderRankingData[] = [
       { id: '1', handle: 't1', roi: 10, pnl: 1000, win_rate: 0, max_drawdown: 0, trades_count: 0, followers: 50, source: 'binance' },
-      { id: '2', handle: 't2', roi: 12, pnl: 1200, win_rate: null as any, max_drawdown: null as any, trades_count: null as any, followers: 55, source: 'binance' },
+      { id: '2', handle: 't2', roi: 12, pnl: 1200, win_rate: null as unknown as number, max_drawdown: null as unknown as number, trades_count: null as unknown as number, followers: 55, source: 'binance' },
     ]
 
     const result = detectMultiDimensional(traders[1], traders)
