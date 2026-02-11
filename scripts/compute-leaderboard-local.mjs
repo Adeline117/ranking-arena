@@ -218,9 +218,13 @@ async function main() {
 
   // Backfill missing avatars from trader_sources
   console.log('\n=== Backfilling avatars ===')
-  const { count } = await supabase.rpc('exec_sql', { 
-    query: `UPDATE leaderboard_ranks lr SET avatar_url = ts.avatar_url, handle = COALESCE(NULLIF(ts.handle, ''), lr.handle) FROM trader_sources ts WHERE lr.source = ts.source AND lr.source_trader_id = ts.source_trader_id AND ts.avatar_url IS NOT NULL AND lr.avatar_url IS NULL`
-  }).catch(() => ({ count: null }))
+  let count = null
+  try {
+    const res = await supabase.rpc('exec_sql', { 
+      query: `UPDATE leaderboard_ranks lr SET avatar_url = ts.avatar_url, handle = COALESCE(NULLIF(ts.handle, ''), lr.handle) FROM trader_sources ts WHERE lr.source = ts.source AND lr.source_trader_id = ts.source_trader_id AND ts.avatar_url IS NOT NULL AND lr.avatar_url IS NULL`
+    })
+    count = res.count
+  } catch { /* RPC may not exist */ }
   // Fallback: do it via supabase client if RPC doesn't exist
   if (count === null) {
     // Get sources with missing avatars
