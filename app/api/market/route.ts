@@ -160,15 +160,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 为特定pairs获取数据
+// 为特定pairs获取数据（如果有自定义pairs则用ids过滤，否则拉top 100）
 async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
-  const ids = pairs.map((p) => p.cgId).join(',')
-  const url =
-    'https://api.coingecko.com/api/v3/coins/markets' +
-    '?vs_currency=usd' +
-    '&ids=' +
-    encodeURIComponent(ids) +
-    '&price_change_percentage=24h'
+  const isDefault = pairs === PAIRS
+  const url = isDefault
+    ? 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h'
+    : 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=' +
+      encodeURIComponent(pairs.map(p => p.cgId).join(',')) +
+      '&price_change_percentage=24h'
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 10000) // 10秒超时
@@ -198,25 +197,22 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
 
     interface CoinGeckoMarketData {
       id: string
+      symbol?: string
       current_price?: number | null
       price_change_percentage_24h?: number | null
       price_change_percentage_24h_in_currency?: number | null
     }
     
     const data = (await res.json()) as CoinGeckoMarketData[]
-    const byId = new Map<string, CoinGeckoMarketData>()
-    for (const c of data) byId.set(String(c.id), c)
-
     const rows: MarketRow[] = []
-    for (const p of pairs) {
-      const c = byId.get(p.cgId)
-      if (!c) continue // 跳过缺失的币种
-
+    for (const c of data) {
       const price = Number(c.current_price ?? NaN)
       const pct = Number(c.price_change_percentage_24h ?? c.price_change_percentage_24h_in_currency ?? 0)
-
       if (!Number.isFinite(price)) continue
-      rows.push(formatRow(p.symbol, price, Number.isFinite(pct) ? pct : 0))
+      // Use symbol from known pairs, or generate from CoinGecko data
+      const knownPair = pairs.find(p => p.cgId === c.id)
+      const symbol = knownPair?.symbol || `${(c.symbol || c.id).toUpperCase()}-USD`
+      rows.push(formatRow(symbol, price, Number.isFinite(pct) ? pct : 0))
     }
 
     return rows
