@@ -130,7 +130,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        background: tokens.glass.bg.secondary,
+        background: 'var(--glass-bg-secondary)',
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
         border: `1px solid ${config.borderColor}`,
@@ -138,7 +138,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         overflow: 'hidden',
         minWidth: 'min(320px, calc(100vw - 40px))',
         maxWidth: 'min(420px, calc(100vw - 40px))',
-        boxShadow: `${tokens.shadow.xl}, 0 0 20px ${config.textColor}15`,
+        boxShadow: 'var(--shadow-xl, 0 20px 40px rgba(0,0,0,0.15))',
       }}
     >
       {/* Content */}
@@ -233,7 +233,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
       <div
         style={{
           height: 3,
-          background: tokens.colors.bg.tertiary,
+          background: 'var(--color-bg-tertiary)',
           position: 'relative',
           overflow: 'hidden',
         }}

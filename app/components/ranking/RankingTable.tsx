@@ -481,7 +481,7 @@ function RankingTableInner(props: {
       radius="xl"
       style={{
         boxShadow: `${tokens.shadow.lg}, 0 0 0 1px var(--glass-border-light)`,
-        overflow: 'hidden',
+        overflow: viewMode === 'card' ? 'visible' : 'hidden',
         background: tokens.glass.bg.secondary,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,

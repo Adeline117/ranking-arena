@@ -147,9 +147,9 @@ html.theme-transition *::after {
   --color-violet-border: rgba(139, 92, 246, 0.25);
   
   /* Rank glow */
-  --color-gold-glow: rgba(255, 215, 0, 0.4);
-  --color-silver-glow: rgba(192, 192, 192, 0.4);
-  --color-bronze-glow: rgba(205, 127, 50, 0.4);
+  --color-gold-glow: rgba(255, 215, 0, 0.6);
+  --color-silver-glow: rgba(192, 192, 192, 0.55);
+  --color-bronze-glow: rgba(205, 127, 50, 0.55);
   --color-gold-bg: rgba(255, 215, 0, 0.08);
   --color-silver-bg: rgba(192, 192, 192, 0.08);
   --color-bronze-bg: rgba(205, 127, 50, 0.08);
@@ -342,9 +342,9 @@ html.theme-transition *::after {
   --color-violet-border: rgba(139, 92, 246, 0.2);
   
   /* Rank glow */
-  --color-gold-glow: rgba(184, 134, 11, 0.3);
-  --color-silver-glow: rgba(128, 128, 128, 0.3);
-  --color-bronze-glow: rgba(139, 90, 43, 0.3);
+  --color-gold-glow: rgba(184, 134, 11, 0.5);
+  --color-silver-glow: rgba(128, 128, 128, 0.45);
+  --color-bronze-glow: rgba(139, 90, 43, 0.45);
   --color-gold-bg: rgba(184, 134, 11, 0.08);
   --color-silver-bg: rgba(128, 128, 128, 0.08);
   --color-bronze-bg: rgba(139, 90, 43, 0.08);

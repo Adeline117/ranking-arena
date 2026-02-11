@@ -194,7 +194,7 @@ export default function StatsPage({
       )}
 
       {/* Content with blur when not Pro */}
-      <Box style={{ filter: isPro ? 'none' : 'blur(6px)', pointerEvents: isPro ? 'auto' : 'none' }}>
+      <Box style={{ filter: isPro ? 'none' : 'blur(3px)', pointerEvents: isPro ? 'auto' : 'none' }}>
         {/* Asset Breakdown - 没数据时自动隐藏 */}
         <BreakdownSection
           assetBreakdown={assetBreakdown}
