@@ -83,7 +83,12 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
   }
 
   if (search) {
-    query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,author.ilike.%${search}%`)
+    // Sanitize search input to prevent PostgREST query errors
+    const safeSearch = search.replace(/[\\%_]/g, c => `\\${c}`).replace(/[.,()]/g, '')
+    if (!safeSearch) {
+      return { items: [], total: 0, page, totalPages: 0 }
+    }
+    query = query.or(`title.ilike.%${safeSearch}%,description.ilike.%${safeSearch}%,author.ilike.%${safeSearch}%`)
   }
 
   // Apply sort order
