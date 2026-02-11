@@ -1902,6 +1902,7 @@ const en = {
     positionStatsNotAvailable: 'Position stats not available from this exchange',
     updatedAt: 'Updated',
     noDataForPeriod: 'No data for this period',
+    noEquityCurveData: 'No equity curve data available',
     scoreGuide: 'Score Guide',
     scoreGuideDetail: 'Return (0-70): Based on ROI | PnL (0-15): Based on absolute profit | Drawdown (0-8): Lower = higher | Stability (0-7): Based on win rate',
     confidenceMinimal: 'Incomplete data \u2014 drawdown & win rate are defaults',

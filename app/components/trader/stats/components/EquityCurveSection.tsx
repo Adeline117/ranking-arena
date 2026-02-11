@@ -43,7 +43,30 @@ export function EquityCurveSection({
   )
 
   if (allPeriodsEmpty) {
-    return null
+    return (
+      <Box
+        className="stats-card glass-card"
+        style={{
+          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+          borderRadius: tokens.radius.xl,
+          border: `1px solid ${tokens.colors.border.primary}60`,
+          padding: tokens.spacing[6],
+          boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 200,
+        }}
+      >
+        <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
+          {t('noEquityCurveData')}
+        </Text>
+      </Box>
+    )
   }
 
   return (
@@ -107,7 +130,20 @@ export function EquityCurveSection({
             period={period}
           />
         </Box>
-      ) : null}
+      ) : (
+        <Box style={{
+          height: 280,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: `${tokens.colors.bg.tertiary}40`,
+          borderRadius: tokens.radius.xl,
+        }}>
+          <Text size="sm" color="tertiary">
+            {t('noDataForPeriod')}
+          </Text>
+        </Box>
+      )}
     </Box>
   )
 }
