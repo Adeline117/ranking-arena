@@ -62,30 +62,30 @@ log "=== Mac Mini cron start ==="
 cleanup_chrome
 
 # ========== Tier 1: 大平台 (API/Chrome, 每轮必跑) ==========
-run_script "import_okx_futures.mjs" "" 600
-run_script "import_okx_web3.mjs" "" 600
+run_script "import_okx_futures.mjs" "ALL" 600
+run_script "import_okx_web3.mjs" "ALL" 600
 run_script "import_binance_web3_v2.mjs" "ALL" 600
 run_script "import_mexc.mjs" "ALL" 600
-run_script "import_kucoin.mjs" "" 600
+run_script "import_kucoin.mjs" "ALL" 600
 
 # ========== Tier 2: 中等平台 (Chrome) ==========
 run_script "import_coinex.mjs" "ALL" 300
-run_script "import_xt.mjs" "" 300
+run_script "import_xt.mjs" "ALL" 300
 run_script "import_lbank.mjs" "ALL" 300
-run_script "import_blofin.mjs" "" 300
-run_script "import_gateio.mjs" "" 300
-run_script "import_phemex.mjs" "" 300
+run_script "import_blofin.mjs" "ALL" 300
+run_script "import_gateio.mjs" "ALL" 300
+run_script "import_phemex.mjs" "ALL" 300
 
 # ========== Tier 3: CF-blocked (需要代理+Chrome) ==========
 run_script "import_bingx_mac.mjs" "ALL" 300
-run_script "import_weex.mjs" "" 300
+run_script "import_weex.mjs" "ALL" 300
 
 # ========== Tier 4: 纯API / DEX ==========
 run_script "import_dydx_enhanced.mjs" "ALL" 600
-run_script "import_gains.mjs" "" 300
-run_script "import_btcc.mjs" "" 300
-run_script "import_bitfinex_v2.mjs" "" 120
-run_script "import_toobit.mjs" "" 120
+run_script "import_gains.mjs" "ALL" 300
+run_script "import_btcc.mjs" "ALL" 300
+run_script "import_bitfinex_v2.mjs" "ALL" 120
+run_script "import_toobit.mjs" "ALL" 120
 
 # DEX platforms (pure API, no Chrome needed)
 # Enrich scripts need to run per period
