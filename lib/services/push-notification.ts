@@ -5,7 +5,10 @@
  * 用于交易员变动提醒等功能
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+
+// Untyped client for tables not in generated schema
+type UntypedSupabaseClient = SupabaseClient
 import { sendPushNotification as sendWebPush } from '@/lib/utils/web-push'
 import type { PushPayload } from '@/lib/utils/web-push'
 import { logger } from '@/lib/logger'
@@ -113,7 +116,7 @@ export class PushNotificationService {
     }
   ): Promise<PushSubscription> {
      
-    const { data, error } = await (this.supabase as any)
+    const { data, error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
       .upsert({
         user_id: userId,
@@ -146,7 +149,7 @@ export class PushNotificationService {
    */
   async unregisterSubscription(userId: string, token: string): Promise<void> {
      
-    const { error } = await (this.supabase as any)
+    const { error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
       .delete()
       .eq('user_id', userId)
@@ -163,7 +166,7 @@ export class PushNotificationService {
    */
   async disableSubscription(userId: string, token: string): Promise<void> {
      
-    const { error } = await (this.supabase as any)
+    const { error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
       .update({ enabled: false, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
@@ -180,7 +183,7 @@ export class PushNotificationService {
    */
   async getUserSubscriptions(userId: string): Promise<PushSubscription[]> {
      
-    const { data, error } = await (this.supabase as any)
+    const { data, error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
       .select('*')
       .eq('user_id', userId)
@@ -249,7 +252,7 @@ export class PushNotificationService {
     notification: PushNotification
   ): Promise<SendResult> {
     // Look up the subscription keys from DB
-    const { data: sub } = await (this.supabase as any)
+    const { data: sub } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
       .select('endpoint, p256dh, auth')
       .eq('token', token)

@@ -66,7 +66,7 @@ const TRIANGULAR_PATHS: [string, string, string][] = [
 
 function getExchange(id: string): Exchange {
    
-  const Ex = (ccxt as any)[id] as new (opts: object) => Exchange
+  const Ex = (ccxt as unknown as Record<string, new (opts: object) => Exchange>)[id]
   if (!Ex) throw new Error(`Unknown exchange: ${id}`)
   return new Ex({ enableRateLimit: true, timeout: 10_000 })
 }

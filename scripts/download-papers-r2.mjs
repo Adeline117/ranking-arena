@@ -106,6 +106,7 @@ async function main() {
 
       const r2Key = getR2Key(paper.content_url)
       try {
+        console.log(`  📥 [${downloaded+failed+skipped+1}] ${paper.title?.slice(0, 60)}...`)
         const cdnUrl = await downloadAndUpload(pdfUrl, r2Key)
         
         await supabase
@@ -114,12 +115,12 @@ async function main() {
           .eq('id', paper.id)
 
         downloaded++
-        if (downloaded % 10 === 0) {
-          console.log(`  ✅ ${downloaded} downloaded, ${skipped} skipped, ${failed} failed`)
+        if (downloaded % 50 === 0) {
+          console.log(`  ✅ Progress: ${downloaded} downloaded, ${skipped} skipped, ${failed} failed`)
         }
       } catch (err) {
         failed++
-        if (failed <= 5) console.error(`  ❌ ${paper.title?.slice(0, 50)}: ${err.message}`)
+        if (failed <= 20) console.error(`  ❌ ${paper.title?.slice(0, 50)}: ${err.message}`)
       }
 
       await sleep(DELAY_MS)

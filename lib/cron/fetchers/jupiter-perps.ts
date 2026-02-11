@@ -23,6 +23,12 @@ import {
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 
+// Extended trader with temporary enrichment fields
+type EnrichedTrader = TraderData & {
+  _enriched?: JupiterEnrichedStats
+  _owner?: string
+}
+
 const SOURCE = 'jupiter_perps'
 const API_BASE = 'https://perps-api.jup.ag/v1/top-traders'
 const TRADES_API = 'https://perps-api.jup.ag/v1/trades'
@@ -274,7 +280,7 @@ async function fetchPeriod(
           trader.roi ?? 0, trader.pnl ?? 0, null, stats.winRate, period
         )
         // Store enrichment data for stats_detail
-        ;(trader as any)._enriched = stats
+        ;(trader as EnrichedTrader)._enriched = stats
       })
     )
     await sleep(ENRICH_DELAY_MS)
@@ -282,7 +288,7 @@ async function fetchPeriod(
 
   // Clean up internal _owner field before upsert
   for (const t of top) {
-    delete (t as any)._owner
+    delete (t as EnrichedTrader)._owner
   }
 
   const { saved, error } = await upsertTraders(supabase, top)
@@ -292,7 +298,7 @@ async function fetchPeriod(
     console.warn(`[${SOURCE}] Saving stats details for ${Math.min(top.length, ENRICH_LIMIT)} traders (${period})...`)
     let statsSaved = 0
     for (const trader of top.slice(0, ENRICH_LIMIT)) {
-      const enriched = (trader as any)._enriched as JupiterEnrichedStats | undefined
+      const enriched = (trader as EnrichedTrader)._enriched
       const stats: StatsDetail = {
         totalTrades: enriched?.tradesCount ?? null,
         profitableTradesPct: enriched?.winRate ?? null,

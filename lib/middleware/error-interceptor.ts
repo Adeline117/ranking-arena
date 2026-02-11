@@ -33,8 +33,8 @@ export function interceptFetch() {
           status: response.status,
           message: errorData
         }))
-        ;(error as any).status = response.status
-        ;(error as any).response = response
+        ;(error as Error & { status?: number; response?: Response }).status = response.status
+        ;(error as Error & { status?: number; response?: Response }).response = response
         
         // 上报错误
         reportError(error, {

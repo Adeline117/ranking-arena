@@ -156,7 +156,7 @@ export function encryptFields<T extends Record<string, any>>(
 
   for (const field of fields) {
     if (encrypted[field] && typeof encrypted[field] === 'string') {
-      encrypted[field] = encrypt(encrypted[field] as string) as any
+      encrypted[field] = encrypt(encrypted[field] as string) as T[keyof T]
     }
   }
 
@@ -175,7 +175,7 @@ export function decryptFields<T extends Record<string, any>>(
   for (const field of fields) {
     if (decrypted[field] && typeof decrypted[field] === 'string') {
       try {
-        decrypted[field] = decrypt(decrypted[field] as string) as any
+        decrypted[field] = decrypt(decrypted[field] as string) as T[keyof T]
       } catch (error) {
         logger.error(`[Encryption] Failed to decrypt field ${String(field)}:`, error)
         // Keep encrypted value if decryption fails

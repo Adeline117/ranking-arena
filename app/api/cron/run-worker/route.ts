@@ -1,4 +1,4 @@
-// Note: Some Supabase tables may not be in generated types - using 'as any' where needed
+// Note: Some Supabase tables may not be in generated types - type assertions used where needed
 /**
  * Cron endpoint: Run worker inline (for Vercel serverless deployment)
  *

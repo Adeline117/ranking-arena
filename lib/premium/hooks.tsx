@@ -144,7 +144,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
           const fallbackSub: UserSubscription = {
             userId: session.user.id,
             tier: 'pro',
-            status: subscription.status as any,
+            status: subscription.status as UserSubscription['status'],
             startDate: new Date().toISOString(),
             endDate: null,
             trialEndDate: null,

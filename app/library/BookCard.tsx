@@ -116,7 +116,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary,
           lineHeight: 1.35, margin: 0,
           overflow: 'hidden', textOverflow: 'ellipsis',
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
         }}>
           {item.title}
         </h3>
