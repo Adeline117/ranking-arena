@@ -53,6 +53,16 @@ export interface ExtendedPerformance extends TraderPerformance {
   arena_score_v3_30d?: number
   trading_style?: string
   style_confidence?: number
+  // Per-period additional stats
+  trades_count?: number
+  trades_count_7d?: number
+  trades_count_30d?: number
+  copiers_pnl?: number
+  copiers_pnl_7d?: number
+  copiers_pnl_30d?: number
+  avg_holding_time_hours?: number
+  avg_holding_time_hours_7d?: number
+  avg_holding_time_hours_30d?: number
 }
 
 export interface OverviewPerformanceCardProps {
@@ -135,6 +145,10 @@ export default function OverviewPerformanceCard({
           calmarRatio: performance.calmar_ratio_7d,
           alpha: performance.alpha_7d,
           arenaScoreV3: performance.arena_score_v3_7d,
+          // Additional stats
+          tradesCount: performance.trades_count_7d,
+          copiersPnl: performance.copiers_pnl_7d,
+          avgHoldingTimeHours: performance.avg_holding_time_hours_7d,
         }
       case '30D':
         return {
@@ -155,6 +169,10 @@ export default function OverviewPerformanceCard({
           calmarRatio: performance.calmar_ratio_30d,
           alpha: performance.alpha_30d,
           arenaScoreV3: performance.arena_score_v3_30d,
+          // Additional stats
+          tradesCount: performance.trades_count_30d,
+          copiersPnl: performance.copiers_pnl_30d,
+          avgHoldingTimeHours: performance.avg_holding_time_hours_30d,
         }
       case '90D':
       default:
@@ -176,12 +194,16 @@ export default function OverviewPerformanceCard({
           calmarRatio: performance.calmar_ratio,
           alpha: performance.alpha,
           arenaScoreV3: performance.arena_score_v3,
+          // Additional stats
+          tradesCount: performance.trades_count,
+          copiersPnl: performance.copiers_pnl,
+          avgHoldingTimeHours: performance.avg_holding_time_hours,
         }
     }
   }
 
   const data = getData()
-  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore, sortinoRatio, calmarRatio, alpha, arenaScoreV3 } = data
+  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore, sortinoRatio, calmarRatio, alpha, arenaScoreV3, tradesCount, copiersPnl, avgHoldingTimeHours } = data
   const periodArenaScore = data.arenaScore
 
   const formatPnl = (value: number | undefined) => {
@@ -475,6 +497,26 @@ export default function OverviewPerformanceCard({
                 highlight={alpha > 0}
                 negative={alpha < 0}
                 tooltip={t('alphaTooltip') || 'Excess return vs market benchmark'}
+              />
+            )}
+            {tradesCount !== undefined && (
+              <MetricBadge
+                label={t('tradesLabel') || 'Trades'}
+                value={String(tradesCount)}
+              />
+            )}
+            {avgHoldingTimeHours !== undefined && (
+              <MetricBadge
+                label={t('avgHoldingTime') || 'Avg Hold'}
+                value={avgHoldingTimeHours < 1 ? `${Math.round(avgHoldingTimeHours * 60)}m` : `${Math.round(avgHoldingTimeHours)}h`}
+              />
+            )}
+            {copiersPnl !== undefined && (
+              <MetricBadge
+                label={t('copiersPnl') || 'Copiers PnL'}
+                value={`${copiersPnl >= 0 ? '+' : ''}$${Math.abs(copiersPnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+                highlight={copiersPnl > 0}
+                negative={copiersPnl < 0}
               />
             )}
           </Box>
