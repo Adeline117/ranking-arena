@@ -26,7 +26,7 @@ export type ExchangeWithWeb3 = typeof EXCHANGES_WITH_WEB3[number]
 export type TimeRange = '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All'
 
 /** 交易风格标签 (V2 - aligned with classification module) */
-export type TradingStyle = 'hft' | 'day_trader' | 'swing' | 'trend' | 'scalping'
+export type TradingStyle = 'short_term' | 'swing' | 'long_term'
 
 /** Legacy trading style mapping */
 export type TradingStyleLegacy = 'high_frequency' | 'swing' | 'trend' | 'scalping' | 'position'

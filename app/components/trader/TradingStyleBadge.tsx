@@ -27,59 +27,39 @@ interface StyleConfig {
 function getStyleIcon(style: TradingStyle, size: number = 14): React.ReactNode {
   const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 }
   switch (style) {
-    case 'hft':
+    case 'short_term':
       return <svg {...props}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-    case 'scalping':
-      return <svg {...props}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-    case 'day_trader':
-      return <svg {...props}><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
     case 'swing':
       return <svg {...props}><path d="M2 12c0-3.5 2.5-6 6-6 4.5 0 4.5 6 9 6 3.5 0 5-2.5 5-6"/><path d="M2 18c0-3.5 2.5-6 6-6 4.5 0 4.5 6 9 6 3.5 0 5-2.5 5-6"/></svg>
-    case 'trend':
+    case 'long_term':
       return <svg {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
   }
 }
 
 const STYLE_CONFIGS: Record<TradingStyle, StyleConfig> = {
-  hft: {
-    label: 'HFT',
-    labelZh: '高频交易',
+  short_term: {
+    label: 'Short-term',
+    labelZh: '短线',
     color: 'var(--color-accent-error)',
     bgColor: 'var(--color-accent-error-10)',
-    description: 'High-frequency trader with very short holding times',
-    descriptionZh: '高频交易者，持仓时间极短',
-  },
-  scalping: {
-    label: 'Scalper',
-    labelZh: '剥头皮',
-    color: 'var(--color-chart-teal)',
-    bgColor: 'var(--color-accent-success-10)',
-    description: 'Quick trades for small, consistent profits',
-    descriptionZh: '快速交易，获取小额稳定利润',
-  },
-  day_trader: {
-    label: 'Day Trader',
-    labelZh: '日内交易',
-    color: 'var(--color-chart-blue)',
-    bgColor: 'var(--color-accent-primary-15)',
-    description: 'Intraday positions, closes before market close',
-    descriptionZh: '日内持仓，当日平仓',
+    description: 'Short-term trader with quick entries and exits',
+    descriptionZh: '短线交易，快进快出',
   },
   swing: {
-    label: 'Swing Trader',
-    labelZh: '波段交易',
-    color: 'var(--color-chart-sage)',
-    bgColor: 'var(--color-accent-success-10)',
-    description: 'Multi-day to multi-week positions',
-    descriptionZh: '中长期持仓，数天到数周',
-  },
-  trend: {
-    label: 'Trend Follower',
-    labelZh: '趋势跟随',
-    color: 'var(--color-chart-pink)',
+    label: 'Swing',
+    labelZh: '波段',
+    color: 'var(--color-chart-blue)',
     bgColor: 'var(--color-accent-primary-15)',
-    description: 'Long-term positions following market trends',
-    descriptionZh: '长期跟随市场趋势',
+    description: 'Multi-day to multi-week positions',
+    descriptionZh: '波段操作，持仓数天到数周',
+  },
+  long_term: {
+    label: 'Long-term',
+    labelZh: '长线',
+    color: 'var(--color-chart-teal)',
+    bgColor: 'var(--color-accent-success-10)',
+    description: 'Long-term positions following trends',
+    descriptionZh: '长线持仓，跟随趋势',
   },
 }
 
