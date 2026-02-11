@@ -130,8 +130,9 @@ async function loadProgressFromServer(bookId: string): Promise<{ page: number; t
 function detectContentMode(book: BookInfo): ContentMode {
   if (book.epub_url) return 'epub'
   if (book.pdf_url) return 'pdf'
-  // file_key without pdf_url: construct CDN URL for PDF
   if (book.file_key) return 'pdf'
+  // content_url pointing to a PDF (R2 CDN or arxiv)
+  if (book.content_url?.endsWith('.pdf') || book.content_url?.includes('cdn.arenafi.org/papers/')) return 'pdf'
   return 'none'
 }
 
@@ -409,7 +410,9 @@ export default function ReadPage() {
   // ─── Load PDF ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!book || contentMode !== 'pdf') return
-    const url = book.pdf_url || (book.file_key ? `https://cdn.arenafi.org/${book.file_key}` : null)
+    const rawUrl = book.pdf_url || (book.file_key ? `https://cdn.arenafi.org/${book.file_key}` : null) || (book.content_url?.endsWith('.pdf') || book.content_url?.includes('cdn.arenafi.org/papers/') ? book.content_url : null)
+    // Proxy R2 CDN URLs through our API for CORS support
+    const url = rawUrl?.startsWith('https://cdn.arenafi.org/') ? `/api/cdn-proxy?url=${encodeURIComponent(rawUrl)}` : rawUrl
     if (!url) return
 
     setPdfLoading(true)
