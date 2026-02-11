@@ -6,11 +6,11 @@ import { t } from '@/lib/i18n'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
 
 function getColor(value: number): string {
-  if (value <= 25) return 'var(--color-accent-error)'
-  if (value <= 46) return 'var(--color-score-average)'
-  if (value <= 54) return 'var(--color-accent-warning)'
-  if (value <= 75) return 'var(--color-accent-success)'
-  return 'var(--color-accent-success)'
+  if (value <= 25) return '#ea3943'
+  if (value <= 46) return '#ea8c00'
+  if (value <= 54) return '#f5c623'
+  if (value <= 75) return '#93d900'
+  return '#16c784'
 }
 
 function getLabel(value: number): string {
@@ -19,16 +19,6 @@ function getLabel(value: number): string {
   if (value <= 54) return t('fearGreedNeutral')
   if (value <= 75) return t('fearGreedGreed')
   return t('fearGreedExtremeGreed')
-}
-
-function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const x1 = cx + r * Math.cos(toRad(startDeg))
-  const y1 = cy + r * Math.sin(toRad(startDeg))
-  const x2 = cx + r * Math.cos(toRad(endDeg))
-  const y2 = cy + r * Math.sin(toRad(endDeg))
-  const large = Math.abs(endDeg - startDeg) > 180 ? 1 : 0
-  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`
 }
 
 export default function FearGreedGauge() {
@@ -47,7 +37,7 @@ export default function FearGreedGauge() {
     if (!data) return
     const from = prevValueRef.current
     const to = data.value
-    const duration = 1000
+    const duration = 1200
     const startTime = performance.now()
 
     function animate(now: number) {
@@ -76,36 +66,47 @@ export default function FearGreedGauge() {
     )
   }
 
-  const value = animatedValue
   const displayValue = data.value
   const color = getColor(displayValue)
   const label = getLabel(displayValue)
 
-  // Gauge geometry - larger semi-circle
-  const cx = 100, cy = 88, r = 68, strokeW = 16
-  const segments = [
-    { from: 180, to: 144, color: '#ef4444' },
-    { from: 144, to: 108, color: '#f97316' },
-    { from: 108, to: 72, color: '#eab308' },
-    { from: 72, to: 36, color: '#22c55e' },
-    { from: 36, to: 0, color: '#16a34a' },
+  // Dashboard arc geometry
+  const cx = 120, cy = 100, r = 80
+  const startAngle = 135  // bottom-left
+  const endAngle = 405    // bottom-right (135 + 270)
+  const totalArc = endAngle - startAngle // 270 degrees
+
+  // Progress angle
+  const progressAngle = startAngle + (animatedValue / 100) * totalArc
+
+  // Arc path helper
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const arcPath = (from: number, to: number, radius: number) => {
+    const x1 = cx + radius * Math.cos(toRad(from))
+    const y1 = cy + radius * Math.sin(toRad(from))
+    const x2 = cx + radius * Math.cos(toRad(to))
+    const y2 = cy + radius * Math.sin(toRad(to))
+    const sweep = to - from > 180 ? 1 : 0
+    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${sweep} 1 ${x2} ${y2}`
+  }
+
+  // Gradient stops for the arc
+  const gradientSegments = [
+    { from: 0, to: 0.25, color: '#ea3943' },
+    { from: 0.25, to: 0.46, color: '#ea8c00' },
+    { from: 0.46, to: 0.54, color: '#f5c623' },
+    { from: 0.54, to: 0.75, color: '#93d900' },
+    { from: 0.75, to: 1.0, color: '#16c784' },
   ]
 
-  // Needle
-  const needleDeg = 180 - (value / 100) * 180
-  const needleRad = (needleDeg * Math.PI) / 180
-  const needleLen = r - 12
-  const nx = cx + needleLen * Math.cos(needleRad)
-  const ny = cy - needleLen * Math.sin(needleRad)
+  // Tick marks
+  const ticks = [0, 25, 50, 75, 100]
 
-  // Scale labels positions
-  const scaleLabels = [
-    { val: 0, deg: 180, text: '0' },
-    { val: 25, deg: 135, text: '25' },
-    { val: 50, deg: 90, text: '50' },
-    { val: 75, deg: 45, text: '75' },
-    { val: 100, deg: 0, text: '100' },
-  ]
+  // Needle endpoint
+  const needleAngle = toRad(progressAngle)
+  const needleLen = r - 20
+  const nx = cx + needleLen * Math.cos(needleAngle)
+  const ny = cy + needleLen * Math.sin(needleAngle)
 
   return (
     <div style={{
@@ -120,157 +121,172 @@ export default function FearGreedGauge() {
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* Top accent line */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 2,
-        background: `linear-gradient(90deg, #ea3943, #ea8c00, #f5c623, #93d900, #16c784)`,
-        opacity: 0.6,
-      }} />
-
       {/* Title */}
       <div style={{
         fontSize: tokens.typography.fontSize.base,
         fontWeight: 700,
         color: tokens.colors.text.primary,
-        marginBottom: tokens.spacing[3],
+        marginBottom: tokens.spacing[2],
         letterSpacing: '0.3px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
       }}>
-        {t('fearGreedTitle')}
+        <span>{t('fearGreedTitle')}</span>
+        {data.timestamp && (
+          <span style={{
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.tertiary,
+            fontWeight: 400,
+          }}>
+            {new Date(Number(data.timestamp) * 1000).toLocaleDateString('zh-CN')}
+          </span>
+        )}
       </div>
 
-      {/* Gauge SVG - centered */}
+      {/* Dashboard Gauge */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <svg width="200" height="110" viewBox="0 0 200 110" style={{ overflow: 'visible' }}>
+        <svg width="240" height="160" viewBox="0 0 240 160" style={{ overflow: 'visible' }}>
           <defs>
-            <filter id="gaugeGlow">
-              <feGaussianBlur stdDeviation="3" result="blur" />
+            <linearGradient id="fgGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ea3943" />
+              <stop offset="25%" stopColor="#ea8c00" />
+              <stop offset="50%" stopColor="#f5c623" />
+              <stop offset="75%" stopColor="#93d900" />
+              <stop offset="100%" stopColor="#16c784" />
+            </linearGradient>
+            <filter id="fgGlow">
+              <feGaussianBlur stdDeviation="4" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
-            <filter id="needleShadow">
-              <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor={color} floodOpacity="0.5" />
+            <filter id="fgNeedleGlow">
+              <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={color} floodOpacity="0.6" />
             </filter>
           </defs>
 
-          {/* Background track segments */}
-          {segments.map((seg, i) => (
-            <path
-              key={i}
-              d={describeArc(cx, cy, r, seg.from, seg.to)}
-              fill="none"
-              stroke={seg.color}
-              strokeWidth={strokeW}
-              strokeLinecap="butt"
-              opacity={0.15}
-            />
-          ))}
+          {/* Background track */}
+          <path
+            d={arcPath(startAngle, endAngle, r)}
+            fill="none"
+            stroke="var(--glass-border-light, rgba(255,255,255,0.08))"
+            strokeWidth="12"
+            strokeLinecap="round"
+          />
 
-          {/* Active arc segments */}
-          {segments.map((seg, i) => {
-            const segStart = ((180 - seg.from) / 180) * 100
-            const segEnd = ((180 - seg.to) / 180) * 100
-            if (value <= segStart) return null
-            const clampedEnd = Math.min(value, segEnd)
-            const drawFrom = 180 - (Math.max(segStart, 0) / 100) * 180
-            const drawTo = 180 - (clampedEnd / 100) * 180
-            if (drawFrom <= drawTo) return null
+          {/* Colored segments (background, dim) */}
+          {gradientSegments.map((seg, i) => {
+            const segFrom = startAngle + seg.from * totalArc
+            const segTo = startAngle + seg.to * totalArc
             return (
               <path
-                key={`active-${i}`}
-                d={describeArc(cx, cy, r, drawFrom, drawTo)}
+                key={i}
+                d={arcPath(segFrom, segTo, r)}
                 fill="none"
                 stroke={seg.color}
-                strokeWidth={strokeW}
+                strokeWidth="12"
                 strokeLinecap="butt"
-                filter="url(#gaugeGlow)"
+                opacity={0.15}
               />
             )
           })}
 
-          {/* Scale labels */}
-          {scaleLabels.map(sl => {
-            const rad = (sl.deg * Math.PI) / 180
-            const lx = cx + (r + 16) * Math.cos(rad)
-            const ly = cy - (r + 16) * Math.sin(rad)
+          {/* Active arc (filled up to current value) */}
+          {animatedValue > 0 && gradientSegments.map((seg, i) => {
+            const segFrom = startAngle + seg.from * totalArc
+            const segTo = startAngle + seg.to * totalArc
+            if (progressAngle <= segFrom) return null
+            const clampedTo = Math.min(progressAngle, segTo)
+            if (segFrom >= clampedTo) return null
             return (
-              <text
-                key={sl.val}
-                x={lx}
-                y={ly}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fill={tokens.colors.text.tertiary}
-                fontSize="9"
-                fontWeight="500"
-              >
-                {sl.text}
-              </text>
+              <path
+                key={`active-${i}`}
+                d={arcPath(segFrom, clampedTo, r)}
+                fill="none"
+                stroke={seg.color}
+                strokeWidth="12"
+                strokeLinecap={i === 0 ? 'round' : 'butt'}
+                filter="url(#fgGlow)"
+              />
+            )
+          })}
+
+          {/* Tick marks + labels */}
+          {ticks.map(val => {
+            const angle = toRad(startAngle + (val / 100) * totalArc)
+            const innerR = r - 10
+            const outerR = r + 10
+            const labelR = r + 22
+            const x1 = cx + innerR * Math.cos(angle)
+            const y1 = cy + innerR * Math.sin(angle)
+            const x2 = cx + outerR * Math.cos(angle)
+            const y2 = cy + outerR * Math.sin(angle)
+            const lx = cx + labelR * Math.cos(angle)
+            const ly = cy + labelR * Math.sin(angle)
+            return (
+              <g key={val}>
+                <line
+                  x1={x1} y1={y1} x2={x2} y2={y2}
+                  stroke="var(--color-text-tertiary, #666)"
+                  strokeWidth="1.5"
+                  opacity={0.4}
+                />
+                <text
+                  x={lx} y={ly}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="var(--color-text-tertiary, #666)"
+                  fontSize="10"
+                  fontWeight="500"
+                >
+                  {val}
+                </text>
+              </g>
             )
           })}
 
           {/* Needle */}
           <line
-            x1={cx}
-            y1={cy}
-            x2={nx}
-            y2={ny}
+            x1={cx} y1={cy}
+            x2={nx} y2={ny}
             stroke={color}
-            strokeWidth="2"
+            strokeWidth="2.5"
             strokeLinecap="round"
-            filter="url(#needleShadow)"
+            filter="url(#fgNeedleGlow)"
           />
-          {/* Needle center */}
-          <circle cx={cx} cy={cy} r="6" fill={tokens.colors.bg.primary} stroke={color} strokeWidth="2" />
-          <circle cx={cx} cy={cy} r="2" fill={color} />
+          {/* Needle hub */}
+          <circle cx={cx} cy={cy} r="8" fill="var(--color-bg-primary, #1a1a2e)" stroke={color} strokeWidth="2.5" />
+          <circle cx={cx} cy={cy} r="3" fill={color} />
 
-          {/* Value text below needle hub */}
+          {/* Center value */}
           <text
-            x={cx}
-            y={cy + 24}
+            x={cx} y={cy + 30}
             textAnchor="middle"
             dominantBaseline="middle"
             fill={color}
-            fontSize="24"
+            fontSize="36"
             fontWeight="800"
             fontFamily="var(--font-mono, monospace)"
-            letterSpacing="-1"
+            letterSpacing="-2"
           >
             {displayValue}
           </text>
-        </svg>
 
-        {/* Label below gauge */}
-        <div style={{
-          marginTop: tokens.spacing[2],
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 4,
-        }}>
-          <span style={{
-            fontSize: tokens.typography.fontSize.md,
-            fontWeight: 700,
-            color,
-            letterSpacing: '0.5px',
-            transition: `color ${tokens.transition.slow}`,
-          }}>
+          {/* Label below value */}
+          <text
+            x={cx} y={cy + 50}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={color}
+            fontSize="13"
+            fontWeight="600"
+            letterSpacing="0.5"
+          >
             {label}
-          </span>
-          {data.timestamp && (
-            <span style={{
-              fontSize: tokens.typography.fontSize.xs,
-              color: tokens.colors.text.tertiary,
-            }}>
-              {new Date(Number(data.timestamp) * 1000).toLocaleDateString('zh-CN')}
-            </span>
-          )}
-        </div>
+          </text>
+        </svg>
       </div>
     </div>
   )
