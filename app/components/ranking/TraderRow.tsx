@@ -191,7 +191,18 @@ export const TraderRow = memo(function TraderRow({
             disabled={!isSelected && !canAddMore()}
             readOnly
             aria-label="Select trader for comparison"
-            style={{ cursor: 'pointer', width: 16, height: 16, accentColor: tokens.colors.accent.primary }}
+            style={{
+              cursor: 'pointer',
+              width: 16,
+              height: 16,
+              accentColor: tokens.colors.accent.primary,
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              border: `2px solid ${isSelected ? tokens.colors.accent.primary : 'var(--color-text-tertiary)'}`,
+              borderRadius: 4,
+              background: isSelected ? tokens.colors.accent.primary : 'transparent',
+              position: 'relative',
+            }}
           />
         </Box>
 
