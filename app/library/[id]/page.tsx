@@ -778,7 +778,7 @@ export default function BookDetailPage() {
                       fontSize: 12, fontWeight: 600, color: tokens.colors.text.primary,
                       lineHeight: 1.3, margin: 0,
                       overflow: 'hidden', textOverflow: 'ellipsis',
-                      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any,
+                      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
                     }}>
                       {item.title}
                     </p>

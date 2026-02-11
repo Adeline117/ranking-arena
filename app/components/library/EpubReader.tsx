@@ -15,6 +15,28 @@ type FontFamily = 'sans' | 'serif' | 'mono' | 'kai'
 type LineHeight = 'compact' | 'normal' | 'relaxed'
 type PageMargin = 'narrow' | 'normal' | 'wide'
 
+// Extended epub.js types for internal APIs not exposed in @types
+interface EpubSpineItem {
+  load: (loader: (path: string) => Promise<object>) => Promise<Document>
+  cfiFromRange: (range: Range) => string
+  href: string
+  unload: () => void
+}
+
+interface EpubSpine {
+  items?: EpubSpineItem[]
+  spineItems?: EpubSpineItem[]
+}
+
+interface EpubContentsEntry {
+  document?: Document
+  content?: { ownerDocument?: Document }
+}
+
+interface EpubControlsElement extends HTMLElement {
+  __epubControls?: Record<string, () => void>
+}
+
 type EpubHighlight = {
   cfiRange: string
   text: string
@@ -371,7 +393,7 @@ export default function EpubReader({
 
           // Extract page text for audio reader
           try {
-            const contents = rendition.getContents() as any
+            const contents = rendition.getContents() as unknown as EpubContentsEntry[]
             if (contents && contents.length > 0) {
               const doc = contents[0]?.document || contents[0]?.content?.ownerDocument
               if (doc) {
@@ -546,7 +568,7 @@ export default function EpubReader({
 
     try {
       const results: SearchResult[] = []
-      const spine = book.spine as any
+      const spine = book.spine as unknown as EpubSpine
       const spineItems = spine.items || spine.spineItems || []
       for (const item of spineItems) {
         if (!item.load) continue
@@ -1216,7 +1238,7 @@ export default function EpubReader({
       <div data-epub-controls="true" style={{ display: 'none' }}
         ref={(el) => {
           if (el) {
-            (el as any).__epubControls = {
+            (el as EpubControlsElement).__epubControls = {
               goNext, goPrev,
               showSearch: () => setShowSearch(true),
               showNotes: () => setShowNotes(true),
@@ -1256,6 +1278,6 @@ function StatCard({ label, value, themeIsDark }: { label: string; value: string;
 // Export control accessor
 export function getEpubControls(container: HTMLElement | null) {
   if (!container) return null
-  const el = container.querySelector('[data-epub-controls]') as any
+  const el = container.querySelector('[data-epub-controls]') as EpubControlsElement | null
   return el?.__epubControls || null
 }

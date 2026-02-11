@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
 /**
  * Schedule Manager Unit Tests
  */
@@ -22,7 +23,7 @@ describe('ScheduleManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    manager = new ScheduleManager(mockSupabase as any)
+    manager = new ScheduleManager(mockSupabase as unknown as SupabaseClient)
   })
 
   describe('getTradersToRefresh', () => {

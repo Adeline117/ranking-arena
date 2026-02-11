@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
 /**
  * Avoid List Data Layer Tests
  * 测试避雷榜数据层
@@ -43,7 +44,7 @@ describe('getAvoidList', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
-    const result = await getAvoidList(mockSupabase as any)
+    const result = await getAvoidList(mockSupabase as unknown as SupabaseClient)
     expect(result).toEqual([])
   })
 
@@ -51,14 +52,14 @@ describe('getAvoidList', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.range.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
 
-    await expect(getAvoidList(mockSupabase as any)).rejects.toThrow()
+    await expect(getAvoidList(mockSupabase as unknown as SupabaseClient)).rejects.toThrow()
   })
 
   test('should query correct table', async () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
-    await getAvoidList(mockSupabase as any)
+    await getAvoidList(mockSupabase as unknown as SupabaseClient)
 
     expect(mockSupabase.from).toHaveBeenCalledWith('trader_avoid_scores')
   })
@@ -69,7 +70,7 @@ describe('getTraderAvoidScore', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
 
-    const result = await getTraderAvoidScore(mockSupabase as any, 'trader1', 'binance')
+    const result = await getTraderAvoidScore(mockSupabase as unknown as SupabaseClient, 'trader1', 'binance')
     expect(result).toBeNull()
   })
 
@@ -84,7 +85,7 @@ describe('getTraderAvoidScore', () => {
 
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: mockScore, error: null })
 
-    const result = await getTraderAvoidScore(mockSupabase as any, 'trader1', 'binance')
+    const result = await getTraderAvoidScore(mockSupabase as unknown as SupabaseClient, 'trader1', 'binance')
     expect(result).not.toBeNull()
     expect(result?.avoid_count).toBe(5)
   })
@@ -93,7 +94,7 @@ describe('getTraderAvoidScore', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
 
-    await getTraderAvoidScore(mockSupabase as any, 'trader123', 'bybit')
+    await getTraderAvoidScore(mockSupabase as unknown as SupabaseClient, 'trader123', 'bybit')
 
     expect(mockSupabase.from).toHaveBeenCalledWith('trader_avoid_scores')
     expect(mockSupabase.eq).toHaveBeenCalledWith('trader_id', 'trader123')
@@ -106,7 +107,7 @@ describe('getTraderAvoidVotes', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
-    const result = await getTraderAvoidVotes(mockSupabase as any, 'trader1', 'binance')
+    const result = await getTraderAvoidVotes(mockSupabase as unknown as SupabaseClient, 'trader1', 'binance')
     expect(result).toEqual([])
   })
 
@@ -114,7 +115,7 @@ describe('getTraderAvoidVotes', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
-    await getTraderAvoidVotes(mockSupabase as any, 'trader123', 'binance')
+    await getTraderAvoidVotes(mockSupabase as unknown as SupabaseClient, 'trader123', 'binance')
 
     expect(mockSupabase.from).toHaveBeenCalledWith('avoid_votes')
     expect(mockSupabase.eq).toHaveBeenCalledWith('trader_id', 'trader123')
@@ -127,7 +128,7 @@ describe('hasUserVoted', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
 
-    const result = await hasUserVoted(mockSupabase as any, 'user1', 'trader1', 'binance')
+    const result = await hasUserVoted(mockSupabase as unknown as SupabaseClient, 'user1', 'trader1', 'binance')
     expect(result).toBe(false)
   })
 
@@ -135,7 +136,7 @@ describe('hasUserVoted', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'vote1' }, error: null })
 
-    const result = await hasUserVoted(mockSupabase as any, 'user1', 'trader1', 'binance')
+    const result = await hasUserVoted(mockSupabase as unknown as SupabaseClient, 'user1', 'trader1', 'binance')
     expect(result).toBe(true)
   })
 })
@@ -145,7 +146,7 @@ describe('getUserAvoidVote', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
 
-    const result = await getUserAvoidVote(mockSupabase as any, 'user1', 'trader1', 'binance')
+    const result = await getUserAvoidVote(mockSupabase as unknown as SupabaseClient, 'user1', 'trader1', 'binance')
     expect(result).toBeNull()
   })
 
@@ -161,7 +162,7 @@ describe('getUserAvoidVote', () => {
 
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: mockVote, error: null })
 
-    const result = await getUserAvoidVote(mockSupabase as any, 'user1', 'trader1', 'binance')
+    const result = await getUserAvoidVote(mockSupabase as unknown as SupabaseClient, 'user1', 'trader1', 'binance')
     expect(result).not.toBeNull()
     expect(result?.reason).toBe('Test reason')
   })
@@ -181,7 +182,7 @@ describe('createAvoidVote', () => {
 
     mockSupabase.single.mockResolvedValueOnce({ data: mockVote, error: null })
 
-    const result = await createAvoidVote(mockSupabase as any, 'user1', {
+    const result = await createAvoidVote(mockSupabase as unknown as SupabaseClient, 'user1', {
       trader_id: 'trader1',
       source: 'binance',
       reason: 'High drawdown',
@@ -197,7 +198,7 @@ describe('createAvoidVote', () => {
     mockSupabase.single.mockResolvedValueOnce({ data: null, error: new Error('Creation failed') })
 
     await expect(
-      createAvoidVote(mockSupabase as any, 'user1', { trader_id: 'trader1', source: 'binance' })
+      createAvoidVote(mockSupabase as unknown as SupabaseClient, 'user1', { trader_id: 'trader1', source: 'binance' })
     ).rejects.toThrow()
   })
 })
@@ -212,7 +213,7 @@ describe('updateAvoidVote', () => {
 
     mockSupabase.single.mockResolvedValueOnce({ data: mockVote, error: null })
 
-    const result = await updateAvoidVote(mockSupabase as any, 'vote1', 'user1', {
+    const result = await updateAvoidVote(mockSupabase as unknown as SupabaseClient, 'vote1', 'user1', {
       reason: 'Updated reason',
     })
 
@@ -224,7 +225,7 @@ describe('updateAvoidVote', () => {
     mockSupabase.single.mockResolvedValueOnce({ data: null, error: new Error('Update failed') })
 
     await expect(
-      updateAvoidVote(mockSupabase as any, 'vote1', 'user1', { reason: 'Test' })
+      updateAvoidVote(mockSupabase as unknown as SupabaseClient, 'vote1', 'user1', { reason: 'Test' })
     ).rejects.toThrow()
   })
 })
@@ -237,7 +238,7 @@ describe('deleteAvoidVote', () => {
       .mockReturnValueOnce(mockSupabase) // First .eq() returns chain
       .mockResolvedValueOnce({ error: null }) // Second .eq() returns result
 
-    await expect(deleteAvoidVote(mockSupabase as any, 'vote1', 'user1')).resolves.toBeUndefined()
+    await expect(deleteAvoidVote(mockSupabase as unknown as SupabaseClient, 'vote1', 'user1')).resolves.toBeUndefined()
     expect(mockSupabase.delete).toHaveBeenCalled()
     expect(mockSupabase.eq).toHaveBeenCalledWith('id', 'vote1')
     expect(mockSupabase.eq).toHaveBeenCalledWith('user_id', 'user1')
@@ -249,6 +250,6 @@ describe('deleteAvoidVote', () => {
       .mockReturnValueOnce(mockSupabase) // First .eq() returns chain
       .mockResolvedValueOnce({ error: new Error('Delete failed') }) // Second .eq() returns error
 
-    await expect(deleteAvoidVote(mockSupabase as any, 'vote1', 'user1')).rejects.toThrow()
+    await expect(deleteAvoidVote(mockSupabase as unknown as SupabaseClient, 'vote1', 'user1')).rejects.toThrow()
   })
 })

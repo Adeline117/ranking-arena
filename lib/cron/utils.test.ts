@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
 /**
  * Cron Utils Tests
  * 测试 Cron 任务工具函数
@@ -336,7 +337,7 @@ describe('logCronExecution', () => {
       { name: 'test', success: true, output: 'done' },
     ]
 
-    await logCronExecution(mockSupabase as any, 'test_cron', results)
+    await logCronExecution(mockSupabase as unknown as SupabaseClient, 'test_cron', results)
 
     expect(mockSupabase.from).toHaveBeenCalledWith('cron_logs')
     expect(mockInsert).toHaveBeenCalledWith([
@@ -360,7 +361,7 @@ describe('logCronExecution', () => {
 
     // Should not throw
     await expect(
-      logCronExecution(mockSupabase as any, 'test', [])
+      logCronExecution(mockSupabase as unknown as SupabaseClient, 'test', [])
     ).resolves.not.toThrow()
   })
 })

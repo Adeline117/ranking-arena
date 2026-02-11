@@ -263,7 +263,7 @@ export async function safeFetch(
       if (!response.ok) {
         const errorData = await response.text().catch(() => response.statusText)
         const error = new Error(errorData || `HTTP ${response.status}`)
-        ;(error as any).status = response.status
+        ;(error as Error & { status?: number }).status = response.status
         throw error
       }
       

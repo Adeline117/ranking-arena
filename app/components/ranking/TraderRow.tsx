@@ -22,7 +22,7 @@ import {
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { CopyButton } from './HeroSection'
 import { useComparisonStore } from '@/lib/stores'
-import { classifyStyle, getStyleInfo } from '@/lib/utils/trading-style'
+import { classifyStyle, getStyleInfo, type TradingStyle } from '@/lib/utils/trading-style'
 
 const ScoreBreakdownLazy = dynamic(
   () => import('./ScoreBreakdown'),
@@ -249,7 +249,7 @@ export const TraderRow = memo(function TraderRow({
               {/* Trading Style Chip */}
               {(() => {
                 const style = (trader.trading_style && trader.trading_style !== 'unknown')
-                  ? getStyleInfo(trader.trading_style as any)
+                  ? getStyleInfo(trader.trading_style as TradingStyle)
                   : (() => {
                       const computed = classifyStyle({
                         avg_holding_hours: trader.avg_holding_hours,

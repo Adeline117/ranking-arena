@@ -778,9 +778,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Google OAuth - Hidden until provider is enabled in Supabase */}
+        {/* Google OAuth */}
         <button
-          hidden
           onClick={async () => {
             setError(null)
             const returnUrl = searchParams.get('returnUrl') || searchParams.get('redirect') || ''
@@ -823,7 +822,16 @@ export default function LoginPage() {
           {lang === 'zh' ? '使用 Google 登录' : 'Sign in with Google'}
         </button>
 
-        {/* Divider - hidden while Google is disabled */}
+        {/* Divider */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20,
+        }}>
+          <div style={{ flex: 1, height: 1, background: 'var(--color-border-primary)' }} />
+          <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
+            {lang === 'zh' ? '或使用邮箱' : 'or use email'}
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'var(--color-border-primary)' }} />
+        </div>
 
         {/* Title */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
