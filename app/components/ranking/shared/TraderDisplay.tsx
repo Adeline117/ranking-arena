@@ -73,7 +73,7 @@ export function RankDisplay({ rank, rankChange, isNew, glowClass }: {
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
       {isTopThree ? (
-        <Box className={glowClass} style={{ transform: 'scale(1.1)' }}>
+        <Box className={glowClass} style={{ transform: 'scale(1.1)', borderRadius: '50%', display: 'inline-flex' }}>
           <RankingBadge rank={rank as 1 | 2 | 3} size={28} />
         </Box>
       ) : (
