@@ -280,7 +280,7 @@ function ApiKeyAuthContent() {
                     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                   }}
                 >
-                  <ExchangeLogo exchange={id as any} size={24} />
+                  <ExchangeLogo exchange={id} size={24} />
                   {EXCHANGE_CONFIGS[id].name}
                 </Button>
               ))}
@@ -304,7 +304,7 @@ function ApiKeyAuthContent() {
                     marginBottom: tokens.spacing[4],
                   }}
                 >
-                  <ExchangeLogo exchange={selectedExchange as any} size={32} />
+                  <ExchangeLogo exchange={selectedExchange} size={32} />
                   <Text size="xl" weight="bold">{config.name}</Text>
                   <Button
                     variant="text"

@@ -111,14 +111,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const posts = (bookmarks || [])
       .map(b => {
         // 如果帖子不存在（已删除），记录下来
-        if (!b.posts || !(b.posts as any).id) {
+        const post = b.posts as unknown as Record<string, unknown> | null
+        if (!post || !post.id) {
           orphanedBookmarkIds.push(b.id)
           return null
         }
         return {
           bookmark_id: b.id,
           bookmarked_at: b.created_at,
-          ...(b.posts as any),
+          ...post,
         }
       })
       .filter((p): p is NonNullable<typeof p> => p !== null)

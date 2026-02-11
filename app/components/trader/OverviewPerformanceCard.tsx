@@ -13,7 +13,7 @@ import { getScoreColor as getArenaScoreColor } from '@/lib/utils/score-colors'
 const arenaScoreColor = (score: number) => getArenaScoreColor(score)
 
 // 扩展 TraderPerformance 类型
-interface ExtendedPerformance extends TraderPerformance {
+export interface ExtendedPerformance extends TraderPerformance {
   arena_score_7d?: number
   arena_score_30d?: number
   arena_score_90d?: number

@@ -280,7 +280,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                     gap: tokens.spacing[2],
                   }}
                 >
-                  <ExchangeLogo exchange={exchange.id as any} size={20} />
+                  <ExchangeLogo exchange={exchange.id} size={20} />
                   {t('bindExchange')} {exchange.name}
                 </Button>
               )}

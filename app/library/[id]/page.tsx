@@ -714,7 +714,7 @@ export default function BookDetailPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary }}>
-                          {(r.users as any)?.nickname || (isZh ? '匿名用户' : 'Anonymous')}
+                          {(r.users as Record<string, unknown> | null)?.nickname as string || (isZh ? '匿名用户' : 'Anonymous')}
                         </span>
                         {r.rating && <StarRating rating={r.rating} size={13} readonly showCount={false} />}
                       </div>

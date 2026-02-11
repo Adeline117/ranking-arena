@@ -3,11 +3,10 @@
 import { useState } from 'react'
 import { Box } from '@/app/components/base'
 import Image from 'next/image'
-import type { Exchange } from '@/lib/exchange'
 import { tokens } from '@/lib/design-tokens'
 
 interface ExchangeLogoProps {
-  exchange: Exchange
+  exchange: string
   size?: number
   className?: string
 }

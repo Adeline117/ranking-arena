@@ -33,7 +33,7 @@ export const GET = withPublic(
               .in('id', groupIds)
             const groupMap = new Map((groupData || []).map(g => [g.id, g.name]))
             posts.forEach(p => {
-              (p as any).group_name = p.group_id ? groupMap.get(p.group_id) || null : null
+              ;(p as Record<string, unknown>).group_name = p.group_id ? groupMap.get(p.group_id) || null : null
             })
           }
         }

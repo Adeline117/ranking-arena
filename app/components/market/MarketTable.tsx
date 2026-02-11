@@ -39,7 +39,7 @@ function MarketTableInner<T>({
     if (!sortKey) return data
     const col = columns.find((c) => c.key === sortKey)
     if (!col) return data
-    const getValue = col.getValue || ((row: T) => (row as any)[sortKey])
+    const getValue = col.getValue || ((row: T) => (row as Record<string, unknown>)[sortKey])
     return [...data].sort((a, b) => {
       const va = getValue(a)
       const vb = getValue(b)
@@ -169,7 +169,7 @@ function MarketTableInner<T>({
                       borderBottom: `1px solid ${tokens.colors.border.primary}`,
                     }}
                   >
-                    {col.render ? col.render(row, i) : (row as any)[col.key] ?? '--'}
+                    {col.render ? col.render(row, i) : (row as Record<string, unknown>)[col.key] as React.ReactNode ?? '--'}
                   </td>
                 ))}
               </tr>
