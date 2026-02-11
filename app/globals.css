@@ -1755,13 +1755,11 @@ a.ranking-filter-btn:active {
 
 /* ===== Ranking list fade transition on time-window switch ===== */
 .ranking-fade-enter {
-  opacity: 0;
-  transform: translateY(4px);
+  opacity: 0.6;
 }
 .ranking-fade-active {
   opacity: 1;
-  transform: translateY(0);
-  transition: opacity var(--transition-base, 0.25s) ease, transform var(--transition-base, 0.25s) ease;
+  transition: opacity var(--transition-base, 0.25s) ease;
 }
 
 /* ===== View Transitions API page transitions ===== */
