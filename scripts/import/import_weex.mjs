@@ -1,13 +1,12 @@
 /**
  * Weex Copy Trading 排行榜数据抓取
  *
- * Uses Puppeteer to bypass CF, then calls internal APIs from within the browser:
- * - /api/v1/public/trace/topTraderListView (top traders by category)
- * - /api/v1/public/trace/traderListView (paginated list with sort rules)
- * - /api/v1/public/trace/sortConditionList (available sort rules)
- *
- * All 3 periods (7D/30D/90D) use the same trader pool since Weex
- * only has 3-week and all-time data.
+ * Weex uses signed API requests (x-sig, sidecar). Strategy:
+ * 1. Load page with Puppeteer stealth
+ * 2. Intercept topTraderListView for initial 26 traders
+ * 3. Hook the page's own axios/HTTP client via evaluateOnNewDocument
+ *    to capture the request-building function
+ * 4. Use the captured function to make paginated calls
  *
  * 用法: node scripts/import/import_weex.mjs [7D|30D|90D|ALL]
  */
@@ -31,9 +30,7 @@ function parseTrader(item) {
   if (!traderId || traderId === 'undefined') return null
 
   let roi = 0
-  // totalReturnRate is already percentage (e.g. 113.24 = 113.24%)
   if (item.totalReturnRate != null) roi = parseFloat(String(item.totalReturnRate))
-  // ndaysReturnRates array
   if (roi === 0 && Array.isArray(item.ndaysReturnRates)) {
     const r = item.ndaysReturnRates.find(x => x.ndays === 21) ||
               item.ndaysReturnRates.find(x => x.ndays === 7) ||
@@ -42,18 +39,15 @@ function parseTrader(item) {
   }
   if (Math.abs(roi) > 0 && Math.abs(roi) < 1) roi *= 100
 
-  const pnl = parseFloat(String(item.threeWeeksPNL || item.profit || item.totalProfit || 0))
-  const followers = parseInt(String(item.followCount || item.followerCount || item.copierCount || 0))
-
   return {
     traderId,
     nickname: item.traderNickName || item.nickName || item.nickname || item.name || `Trader_${traderId.slice(0, 8)}`,
     avatar: item.headPic || item.avatar || item.headUrl || null,
     roi,
-    pnl,
+    pnl: parseFloat(String(item.threeWeeksPNL || item.profit || item.totalProfit || 0)),
     winRate: 0,
     maxDrawdown: 0,
-    followers,
+    followers: parseInt(String(item.followCount || item.followerCount || item.copierCount || 0)),
   }
 }
 
@@ -61,10 +55,9 @@ async function main() {
   const periods = getTargetPeriods(['7D', '30D', '90D'])
 
   console.log(`\n${'='.repeat(50)}`)
-  console.log(`Weex Copy Trading 数据抓取 (API via Puppeteer)`)
+  console.log(`Weex Copy Trading 数据抓取`)
   console.log(`${'='.repeat(50)}`)
   console.log('时间:', new Date().toISOString())
-  console.log(`目标周期: ${periods.join(', ')}`)
 
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -81,24 +74,101 @@ async function main() {
     const page = await browser.newPage()
     await page.setViewport({ width: 1920, height: 1080 })
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+
+    // Inject XHR hook before page loads to capture the HTTP client
     await page.evaluateOnNewDocument(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => false })
+      
+      // We'll store the original XMLHttpRequest.send to be able to make authenticated requests
+      // The page's HTTP client adds signed headers via interceptors
+      window.__weex_pending_requests = []
+      window.__weex_completed = []
+      
+      const origXHROpen = XMLHttpRequest.prototype.open
+      const origXHRSend = XMLHttpRequest.prototype.send
+      const origXHRSetHeader = XMLHttpRequest.prototype.setRequestHeader
+      
+      XMLHttpRequest.prototype.open = function(method, url, ...args) {
+        this.__url = url
+        this.__method = method
+        this.__headers = {}
+        return origXHROpen.call(this, method, url, ...args)
+      }
+      
+      XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+        if (this.__headers) this.__headers[name] = value
+        return origXHRSetHeader.call(this, name, value)
+      }
+      
+      XMLHttpRequest.prototype.send = function(body) {
+        // Capture the full request config including signed headers
+        if (this.__url && this.__url.includes('traderListView') && !this.__url.includes('top')) {
+          const capturedConfig = {
+            url: this.__url,
+            method: this.__method,
+            headers: {...this.__headers},
+            body: body,
+          }
+          window.__weex_last_traderListView_config = capturedConfig
+        }
+        
+        // Intercept response
+        this.addEventListener('load', () => {
+          if (this.__url && (this.__url.includes('topTraderListView') || this.__url.includes('traderListView'))) {
+            try {
+              const j = JSON.parse(this.responseText)
+              if (j.code === 'SUCCESS') {
+                if (Array.isArray(j.data)) {
+                  for (const s of j.data) {
+                    if (s.list) window.__weex_completed.push(...s.list)
+                  }
+                } else if (j.data?.rows) {
+                  window.__weex_completed.push(...j.data.rows)
+                }
+              }
+            } catch {}
+          }
+        })
+        
+        return origXHRSend.call(this, body)
+      }
     })
 
-    // Navigate to establish session/cookies
+    // Intercept responses at puppeteer level too (more reliable)
+    page.on('response', async (response) => {
+      const url = response.url()
+      if (!url.includes('topTraderListView') && !url.includes('traderListView')) return
+      try {
+        const text = await response.text().catch(() => '')
+        if (!text) return
+        const json = JSON.parse(text)
+        if (json.code !== 'SUCCESS') return
+
+        if (Array.isArray(json.data)) {
+          for (const section of json.data) {
+            for (const item of (section.list || [])) {
+              const t = parseTrader(item)
+              if (t && !traders.has(t.traderId)) traders.set(t.traderId, t)
+            }
+          }
+        } else if (json.data?.rows) {
+          for (const item of json.data.rows) {
+            const t = parseTrader(item)
+            if (t && !traders.has(t.traderId)) traders.set(t.traderId, t)
+          }
+        }
+      } catch {}
+    })
+
+    // Load page
     console.log('\n📋 加载页面...')
     await page.goto('https://www.weex.com/zh-CN/copy-trading', {
-      waitUntil: 'networkidle0',
+      waitUntil: 'networkidle2',
       timeout: 60000,
-    }).catch(() => console.log('  ⚠ 页面加载超时，继续...'))
+    }).catch(() => console.log('  ⚠ 超时'))
     await sleep(5000)
 
-    const title = await page.title()
-    console.log(`  页面标题: ${title}`)
-    if (title.includes('moment') || title.includes('Check')) {
-      console.log('  ⚠ CF 挑战，等待...')
-      await sleep(15000)
-    }
+    console.log(`  标题: ${await page.title()}, 已收集: ${traders.size}`)
 
     // Close popups
     await page.evaluate(() => {
@@ -109,141 +179,122 @@ async function main() {
         }
       })
     }).catch(() => {})
-    await sleep(1000)
 
-    // 1. Fetch topTraderListView
-    console.log('\n📊 调用 topTraderListView API...')
-    const topResult = await page.evaluate(async () => {
-      try {
-        const resp = await fetch('/api/v1/public/trace/topTraderListView', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        })
-        return await resp.json()
-      } catch (e) { return { error: e.message } }
-    })
+    // Check if we captured the traderListView config
+    const hasConfig = await page.evaluate(() => !!window.__weex_last_traderListView_config)
+    console.log(`  traderListView 配置: ${hasConfig ? '✓' : '✗'}`)
 
-    if (topResult?.data && Array.isArray(topResult.data)) {
-      for (const section of topResult.data) {
-        const list = section.list || []
-        let added = 0
-        for (const item of list) {
-          const t = parseTrader(item)
-          if (t && !traders.has(t.traderId)) { traders.set(t.traderId, t); added++ }
-        }
-        if (list.length) console.log(`  ${section.tab || section.desc || '?'}: ${list.length} 条, 新增 ${added}`)
-      }
-      console.log(`  累计: ${traders.size} 个`)
-    } else {
-      console.log(`  ⚠ topTraderListView 失败:`, topResult?.error || topResult?.msg || 'unknown')
-    }
-
-    // 2. Get sort conditions
-    console.log('\n📊 获取排序条件...')
-    const sortResult = await page.evaluate(async () => {
-      try {
-        const resp = await fetch('/api/v1/public/trace/sortConditionList', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        })
-        return await resp.json()
-      } catch (e) { return { error: e.message } }
-    })
-
-    let sortRules = []
-    if (sortResult?.data && Array.isArray(sortResult.data)) {
-      sortRules = sortResult.data.map(s => s.sortRule || s.value || s.key).filter(Boolean)
-      console.log(`  排序规则: ${sortRules.join(', ')}`)
-    } else {
-      // Fallback common sort rules
-      sortRules = ['total_roi', 'three_weeks_roi', 'follower_count', 'three_weeks_pnl', 'win_rate']
-      console.log(`  使用默认排序规则: ${sortRules.join(', ')}`)
-    }
-
-    // 3. Fetch traderListView with each sort rule
-    console.log('\n📊 调用 traderListView API (分页)...')
-    for (const sortRule of sortRules) {
-      let pageNo = 1
-      let emptyCount = 0
-
-      while (pageNo <= 20 && emptyCount < 2) {
-        const result = await page.evaluate(async (params) => {
-          try {
-            const resp = await fetch('/api/v1/public/trace/traderListView', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(params),
+    if (hasConfig) {
+      // Now paginate using the captured config as template
+      // We can't directly reuse the signed headers, but we can make the page's own HTTP client
+      // send new requests by triggering the app's state
+      console.log('\n📊 使用页面 HTTP 客户端分页...')
+      
+      // The trick: use the captured request URL and create new XHR with same auth mechanism
+      // The page's axios interceptor will add the auth headers automatically!
+      for (let sortRule of [9, 5, 6, 7, 8, 2, 1, 3, 4, 0]) {
+        let pageNo = 1
+        let hasMore = true
+        
+        while (hasMore && pageNo <= 50) {
+          const result = await page.evaluate(async ({ sortRule, pageNo }) => {
+            return new Promise((resolve) => {
+              const config = window.__weex_last_traderListView_config
+              if (!config) { resolve({ error: 'no config' }); return }
+              
+              const xhr = new XMLHttpRequest()
+              xhr.open('POST', config.url, true)
+              
+              // Set the same headers that the page's interceptor would set
+              // The interceptor fires on XMLHttpRequest.setRequestHeader
+              for (const [k, v] of Object.entries(config.headers)) {
+                try { xhr.setRequestHeader(k, v) } catch {}
+              }
+              xhr.setRequestHeader('Content-Type', 'application/json')
+              
+              xhr.onload = () => {
+                try {
+                  const j = JSON.parse(xhr.responseText)
+                  resolve(j)
+                } catch(e) { resolve({ error: 'parse: ' + e.message }) }
+              }
+              xhr.onerror = () => resolve({ error: 'network' })
+              xhr.timeout = 10000
+              xhr.ontimeout = () => resolve({ error: 'timeout' })
+              
+              xhr.send(JSON.stringify({
+                languageType: 1,
+                sortRule,
+                simulation: 0,
+                pageNo,
+                pageSize: 50,
+                nickName: ''
+              }))
             })
-            return await resp.json()
-          } catch (e) { return { error: e.message } }
-        }, { sortRule, pageNo, pageSize: 50, simulation: 0 })
+          }, { sortRule, pageNo })
 
-        let list = []
-        if (result?.data) {
-          if (Array.isArray(result.data)) list = result.data
-          else if (result.data.list) list = result.data.list
-          else if (result.data.records) list = result.data.records
+          if (result?.error) {
+            if (pageNo === 1) console.log(`  ⚠ sort ${sortRule}: ${result.error}`)
+            break
+          }
+
+          if (result?.code !== 'SUCCESS') {
+            if (pageNo === 1) console.log(`  ⚠ sort ${sortRule}: code=${result?.code}`)
+            break
+          }
+
+          const rows = result?.data?.rows || []
+          if (rows.length === 0) break
+
+          let added = 0
+          for (const item of rows) {
+            const t = parseTrader(item)
+            if (t && !traders.has(t.traderId)) { traders.set(t.traderId, t); added++ }
+          }
+
+          hasMore = result.data?.nextFlag === true
+          process.stdout.write(`\r  sort=${sortRule} p${pageNo}: +${added} → ${traders.size} (total=${result.data?.totals || '?'})`)
+
+          if (added === 0 && pageNo > 2) break
+          pageNo++
+          await new Promise(r => setTimeout(r, 300 + Math.random() * 200))
         }
-
-        if (list.length === 0) { emptyCount++; break }
-
-        let added = 0
-        for (const item of list) {
-          const t = parseTrader(item)
-          if (t && !traders.has(t.traderId)) { traders.set(t.traderId, t); added++ }
-        }
-
-        process.stdout.write(`\r  ${sortRule} p${pageNo}: +${added} → ${traders.size}`)
-        if (added === 0) emptyCount++
-        else emptyCount = 0
-
-        if (list.length < 50) break
-        pageNo++
-        await new Promise(r => setTimeout(r, 300))
+        console.log()
       }
-      console.log()
     }
 
     console.log(`\n📊 总计: ${traders.size} 个唯一交易员`)
+    await page.close()
 
-    // Save for all periods
     const allTraders = Array.from(traders.values())
     allTraders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
+
+    if (allTraders.length === 0) {
+      console.log('\n⚠ 未获取到数据')
+      process.exit(1)
+    }
 
     const results = []
     for (const period of periods) {
       console.log(`\n💾 保存 ${allTraders.length} 条 ${period} 数据...`)
       const capturedAt = new Date().toISOString()
 
-      // Upsert sources
-      const sourcesData = allTraders.map(t => ({
-        source: SOURCE,
-        source_type: 'leaderboard',
-        source_trader_id: t.traderId,
-        handle: t.nickname,
-        avatar_url: t.avatar || null,
-        is_active: true,
-      }))
-      await supabase.from('trader_sources').upsert(sourcesData, { onConflict: 'source,source_trader_id' })
+      await supabase.from('trader_sources').upsert(
+        allTraders.map(t => ({
+          source: SOURCE, source_type: 'leaderboard',
+          source_trader_id: t.traderId, handle: t.nickname,
+          avatar_url: t.avatar || null, is_active: true,
+        })), { onConflict: 'source,source_trader_id' }
+      )
 
-      // Upsert snapshots
       const snapshotsData = allTraders.map((t, idx) => {
         const arenaScore = calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, t.winRate, period).totalScore
-        if (idx < 5) console.log(`  ${idx + 1}. ${t.nickname.slice(0, 15)}: ROI ${t.roi.toFixed(2)}% → Score ${arenaScore}`)
+        if (idx < 3) console.log(`  ${idx + 1}. ${t.nickname.slice(0, 15)}: ROI ${t.roi.toFixed(2)}% → Score ${arenaScore}`)
         return {
-          source: SOURCE,
-          source_trader_id: t.traderId,
-          season_id: period,
-          rank: idx + 1,
-          roi: t.roi,
-          pnl: t.pnl || null,
-          win_rate: t.winRate || null,
-          max_drawdown: t.maxDrawdown || null,
-          followers: t.followers || null,
-          arena_score: arenaScore,
-          captured_at: capturedAt,
+          source: SOURCE, source_trader_id: t.traderId, season_id: period,
+          rank: idx + 1, roi: t.roi, pnl: t.pnl || null,
+          win_rate: t.winRate || null, max_drawdown: t.maxDrawdown || null,
+          followers: t.followers || null, arena_score: arenaScore, captured_at: capturedAt,
         }
       })
 
@@ -252,7 +303,7 @@ async function main() {
       })
 
       if (error) {
-        console.log(`  ⚠ 批量保存失败: ${error.message}`)
+        console.log(`  ⚠ 批量失败: ${error.message}`)
         let saved = 0
         for (const s of snapshotsData) {
           const { error: e } = await supabase.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
@@ -260,12 +311,10 @@ async function main() {
         }
         results.push({ period, saved })
       } else {
-        console.log(`  ✓ 保存成功: ${snapshotsData.length} 条`)
+        console.log(`  ✓ ${snapshotsData.length} 条`)
         results.push({ period, saved: snapshotsData.length })
       }
     }
-
-    await page.close()
 
     console.log(`\n${'='.repeat(50)}`)
     console.log(`✅ Weex 完成！`)
