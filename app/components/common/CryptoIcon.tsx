@@ -1,7 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { getCryptoIconPath, getGenericIconPath, normalizeCoinSymbol } from '@/lib/utils/crypto-icons'
+import { normalizeCoinSymbol } from '@/lib/utils/crypto-icons'
+
+const ICON_BASE_PATH = '/icons/crypto'
+
+// CoinCap CDN uses symbol-based URLs
+function getCdnUrl(symbol: string): string {
+  const normalized = normalizeCoinSymbol(symbol)
+  return `https://assets.coincap.io/assets/icons/${normalized}@2x.png`
+}
 
 interface CryptoIconProps {
   symbol: string
@@ -12,23 +20,28 @@ interface CryptoIconProps {
 
 /**
  * Renders a cryptocurrency icon for the given symbol.
- * Falls back to generic icon if the specific icon fails to load.
+ * Tries: 1) local SVG, 2) CoinCap CDN, 3) generic fallback.
  */
 export default function CryptoIcon({ symbol, size = 20, style, className }: CryptoIconProps) {
-  const [hasError, setHasError] = useState(false)
-  const src = hasError ? getGenericIconPath() : getCryptoIconPath(symbol)
-  const alt = normalizeCoinSymbol(symbol).toUpperCase()
+  const [fallbackLevel, setFallbackLevel] = useState(0)
+  const normalized = normalizeCoinSymbol(symbol)
+
+  const src = fallbackLevel === 0
+    ? `${ICON_BASE_PATH}/${normalized}.svg`
+    : fallbackLevel === 1
+      ? getCdnUrl(symbol)
+      : `${ICON_BASE_PATH}/generic.svg`
 
   return (
     <img
       src={src}
-      alt={alt}
+      alt={normalized.toUpperCase()}
       width={size}
       height={size}
       loading="lazy"
       className={className}
       onError={() => {
-        if (!hasError) setHasError(true)
+        if (fallbackLevel < 2) setFallbackLevel(prev => prev + 1)
       }}
       style={{
         borderRadius: '50%',
