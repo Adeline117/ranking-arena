@@ -56,7 +56,12 @@ export default function NewsFlash() {
     }
   )
 
-  const news: NewsItem[] = data?.data?.news || data?.news || []
+  const rawNews: NewsItem[] = data?.data?.news || data?.news || []
+  // 去重：按标题去重（防止重复抓取的新闻）
+  const news = rawNews.filter((item, idx, arr) => {
+    const title = item.title_zh || item.title_en || item.title
+    return arr.findIndex(n => (n.title_zh || n.title_en || n.title) === title) === idx
+  })
   const loading = isLoading
 
   const getTitle = (item: NewsItem) => {

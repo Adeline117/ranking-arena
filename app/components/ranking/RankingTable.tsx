@@ -614,37 +614,40 @@ function RankingTableInner(props: {
         flexWrap: 'wrap',
         background: tokens.glass.bg.light,
       }}>
-        {/* Trading Style Filter */}
-        <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
-          {language === 'zh' ? '风格' : 'Style'}:
-        </Text>
-        {[{ value: 'all' as const, label: language === 'zh' ? '全部' : 'All' }, ...getFilterableStyles().map(s => ({ value: s.style, label: language === 'zh' ? s.label : s.labelEn }))].map(opt => (
-          <button
-            key={opt.value}
-            onClick={() => { setStyleFilter(opt.value); setCurrentPage(1) }}
-            style={{
-              padding: '2px 10px',
-              borderRadius: tokens.radius.lg,
-              border: styleFilter === opt.value
-                ? `1px solid ${tokens.colors.accent.primary}80`
-                : `1px solid ${tokens.colors.border.primary}`,
-              background: styleFilter === opt.value
-                ? `${tokens.colors.accent.primary}20`
-                : 'transparent',
-              color: styleFilter === opt.value
-                ? tokens.colors.accent.primary
-                : tokens.colors.text.secondary,
-              fontSize: 11,
-              fontWeight: styleFilter === opt.value ? 700 : 500,
-              cursor: 'pointer',
-              transition: `all ${tokens.transition.fast}`,
-            }}
-          >
-            {opt.label}
-          </button>
-        ))}
-
-        <Box style={{ width: 1, height: 16, background: tokens.colors.border.primary, margin: `0 ${tokens.spacing[1]}` }} />
+        {/* Trading Style Filter — hidden when no style data available */}
+        {traders.some(t => t.trading_style && t.trading_style !== 'unknown') && (
+          <>
+            <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
+              {language === 'zh' ? '风格' : 'Style'}:
+            </Text>
+            {[{ value: 'all' as const, label: language === 'zh' ? '全部' : 'All' }, ...getFilterableStyles().map(s => ({ value: s.style, label: language === 'zh' ? s.label : s.labelEn }))].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => { setStyleFilter(opt.value); setCurrentPage(1) }}
+                style={{
+                  padding: '2px 10px',
+                  borderRadius: tokens.radius.lg,
+                  border: styleFilter === opt.value
+                    ? `1px solid ${tokens.colors.accent.primary}80`
+                    : `1px solid ${tokens.colors.border.primary}`,
+                  background: styleFilter === opt.value
+                    ? `${tokens.colors.accent.primary}20`
+                    : 'transparent',
+                  color: styleFilter === opt.value
+                    ? tokens.colors.accent.primary
+                    : tokens.colors.text.secondary,
+                  fontSize: 11,
+                  fontWeight: styleFilter === opt.value ? 700 : 500,
+                  cursor: 'pointer',
+                  transition: `all ${tokens.transition.fast}`,
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+            <Box style={{ width: 1, height: 16, background: tokens.colors.border.primary, margin: `0 ${tokens.spacing[1]}` }} />
+          </>
+        )}
 
         {/* Score Grade Filter */}
         <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
