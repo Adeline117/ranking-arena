@@ -205,6 +205,7 @@ function VolumeBar({ value, max }: { value: number; max: number }) {
 export default function CoreCards() {
   const [gainers, setGainers] = useState<CoinRow[]>([])
   const [losers, setLosers] = useState<CoinRow[]>([])
+  const [marketLoaded, setMarketLoaded] = useState(false)
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
 
   useEffect(() => {
@@ -215,8 +216,9 @@ export default function CoreCards() {
         const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
         setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
         setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
+        setMarketLoaded(true)
       })
-      .catch(() => {})
+      .catch(() => { setMarketLoaded(true) })
 
     fetch('/api/market/exchanges')
       .then(r => r.json())
@@ -244,7 +246,13 @@ export default function CoreCards() {
       {/* Gainers Top 5 */}
       <CardWrapper title="涨幅榜 Top5" accentColor={tokens.gradient.success}>
         {gainers.length === 0 ? (
-          <div style={{ height: 160 }} className="skeleton" />
+          marketLoaded ? (
+            <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
+              市场全线下跌，暂无上涨
+            </div>
+          ) : (
+            <div style={{ height: 160 }} className="skeleton" />
+          )
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {gainers.map((row, i) => (
@@ -257,7 +265,13 @@ export default function CoreCards() {
       {/* Losers Top 5 */}
       <CardWrapper title="跌幅榜 Top5" accentColor={tokens.gradient.error}>
         {losers.length === 0 ? (
-          <div style={{ height: 160 }} className="skeleton" />
+          marketLoaded ? (
+            <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
+              市场全线上涨，暂无下跌
+            </div>
+          ) : (
+            <div style={{ height: 160 }} className="skeleton" />
+          )
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {losers.map((row, i) => (
