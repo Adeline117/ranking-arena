@@ -1,18 +1,25 @@
 /**
- * Bitfinex Leaderboard 数据抓取 v2
- * 使用公开排行榜API: api-pub.bitfinex.com/v2/rankings
- * 竞赛类型: plu (盈亏), vol (交易量), plr (盈亏率)
+ * Bitfinex Leaderboard v2 — Fixed to include ROI from PLR endpoint
+ *
+ * Data sources:
+ *   plu  — absolute PnL (USD)
+ *   plr  — profit/loss ratio (%, used as ROI)
+ *   vol  — volume (informational)
+ *
+ * Periods mapped:
+ *   7D  → 1w endpoints
+ *   30D → 1M endpoints
+ *   90D → falls back to 1M (no 3M plr data available)
  */
 import { getSupabaseClient, sleep, getTargetPeriods } from '../lib/shared.mjs'
 
 const supabase = getSupabaseClient()
 const SOURCE = 'bitfinex'
 
-// 映射: 我们的周期 → Bitfinex竞赛key
 const PERIOD_MAP = {
-  '7D':  { key: 'plu:1w:tGLOBAL:USD', volKey: 'vol:1w:tGLOBAL:USD' },
-  '30D': { key: 'plu_diff:1M:tGLOBAL:USD', volKey: 'vol:1M:tGLOBAL:USD', plrKey: 'plr:1M:tGLOBAL:USD' },
-  '90D': { key: 'plu_diff:1M:tGLOBAL:USD', volKey: 'vol:1M:tGLOBAL:USD' }, // 90D用月度数据
+  '7D':  { pluKey: 'plu:1w:tGLOBAL:USD',      plrKey: 'plr:1w:tGLOBAL:USD',  volKey: 'vol:1w:tGLOBAL:USD' },
+  '30D': { pluKey: 'plu_diff:1M:tGLOBAL:USD',  plrKey: 'plr:1M:tGLOBAL:USD',  volKey: 'vol:1M:tGLOBAL:USD' },
+  '90D': { pluKey: 'plu_diff:1M:tGLOBAL:USD',  plrKey: 'plr:1M:tGLOBAL:USD',  volKey: 'vol:1M:tGLOBAL:USD' },
 }
 
 async function fetchRanking(compKey, limit = 250) {
@@ -22,87 +29,99 @@ async function fetchRanking(compKey, limit = 250) {
     if (!res.ok) return []
     return await res.json()
   } catch (e) {
-    console.log(`  ⚠ fetch failed: ${e.message}`)
+    console.log(`  ⚠ fetch ${compKey}: ${e.message}`)
     return []
   }
 }
 
 async function main() {
   const periods = getTargetPeriods(['7D', '30D', '90D'])
-  console.log('Bitfinex 排行榜数据抓取 v2...')
-  console.log(`周期: ${periods.join(', ')}`)
+  console.log('Bitfinex v2 — fetching PnL + ROI (PLR) data')
+  console.log(`Periods: ${periods.join(', ')}`)
 
   for (const period of periods) {
-    const config = PERIOD_MAP[period]
-    if (!config) { console.log(`  ⚠ 未知周期: ${period}`); continue }
+    const cfg = PERIOD_MAP[period]
+    if (!cfg) { console.log(`  ⚠ unknown period: ${period}`); continue }
 
-    console.log(`\n📋 抓取 ${period} (${config.key})...`)
-    
-    // Fetch PnL ranking
-    const pnlData = await fetchRanking(config.key)
-    console.log(`  盈亏排名: ${pnlData.length} 条`)
+    console.log(`\n📋 ${period}`)
 
-    // Fetch volume ranking for supplementary data
-    let volMap = new Map()
-    if (config.volKey) {
-      const volData = await fetchRanking(config.volKey)
-      for (const v of volData) {
-        if (v[2]) volMap.set(v[2], v[6] || 0)
-      }
-      console.log(`  交易量数据: ${volData.length} 条`)
+    // Fetch all three rankings in parallel
+    const [pnlData, plrData, volData] = await Promise.all([
+      fetchRanking(cfg.pluKey),
+      fetchRanking(cfg.plrKey),
+      fetchRanking(cfg.volKey),
+    ])
+    console.log(`  PnL: ${pnlData.length}, PLR(ROI): ${plrData.length}, Vol: ${volData.length}`)
+
+    // Build lookup maps by trader name (index 2)
+    const plrMap = new Map()   // name → roi %
+    for (const r of plrData) {
+      if (r[2] && r[6] != null) plrMap.set(r[2], r[6])
+    }
+    const volMap = new Map()
+    for (const r of volData) {
+      if (r[2] && r[6] != null) volMap.set(r[2], r[6])
     }
 
-    // Fetch PLR (profit/loss ratio) for win_rate proxy
-    let plrMap = new Map()
-    if (config.plrKey) {
-      const plrData = await fetchRanking(config.plrKey)
-      for (const p of plrData) {
-        if (p[2]) plrMap.set(p[2], p[6] || 0)
-      }
+    // Merge: start from PnL list, enrich with PLR; then add PLR-only traders
+    const merged = new Map()
+
+    for (const r of pnlData) {
+      const name = r[2]
+      if (!name || merged.has(name)) continue
+      merged.set(name, {
+        handle: name,
+        pnl: r[6] || 0,
+        roi: plrMap.has(name) ? plrMap.get(name) : null,
+      })
     }
 
-    if (pnlData.length === 0) {
-      console.log(`  ⚠ 无数据，跳过`)
+    // Add traders that appear only in PLR (have ROI but not in top PnL)
+    for (const r of plrData) {
+      const name = r[2]
+      if (!name || merged.has(name)) continue
+      merged.set(name, {
+        handle: name,
+        pnl: 0,
+        roi: r[6] || 0,
+      })
+    }
+
+    const traders = Array.from(merged.values())
+    if (traders.length === 0) {
+      console.log(`  ⚠ no data, skip`)
       continue
     }
 
+    console.log(`  Merged unique traders: ${traders.length}`)
+    console.log(`  With ROI: ${traders.filter(t => t.roi !== null).length}`)
+    console.log(`  With PnL: ${traders.filter(t => t.pnl !== 0).length}`)
+
     const capturedAt = new Date().toISOString()
-    
+
     // Upsert trader_sources
-    const seenSrc = new Set()
-    const traderSources = pnlData.filter(r => {
-      const id = r[2] || `bitfinex_${pnlData.indexOf(r)}`
-      if (seenSrc.has(id)) return false
-      seenSrc.add(id)
-      return true
-    }).map((r, i) => ({
+    const sourcesData = traders.map(t => ({
       source: SOURCE,
-      source_trader_id: r[2] || `bitfinex_${i}`,
-      handle: r[2] || null,
+      source_trader_id: t.handle,
+      handle: t.handle,
       avatar_url: null,
       last_refreshed_at: capturedAt,
     }))
 
     const { error: srcErr } = await supabase
       .from('trader_sources')
-      .upsert(traderSources, { onConflict: 'source,source_trader_id' })
-    if (srcErr) console.log(`  ⚠ trader_sources upsert: ${srcErr.message}`)
-    else console.log(`  ✅ trader_sources: ${traderSources.length}`)
+      .upsert(sourcesData, { onConflict: 'source,source_trader_id' })
+    if (srcErr) console.log(`  ⚠ trader_sources: ${srcErr.message}`)
+    else console.log(`  ✅ trader_sources: ${sourcesData.length}`)
 
-    // Upsert trader_snapshots (dedup by trader id)
-    const seenSnap = new Set()
-    const snapshots = pnlData.filter(r => {
-      const id = r[2] || `bitfinex_${pnlData.indexOf(r)}`
-      if (seenSnap.has(id)) return false
-      seenSnap.add(id)
-      return true
-    }).map((r, i) => ({
+    // Upsert trader_snapshots
+    const snapshots = traders.map(t => ({
       source: SOURCE,
-      source_trader_id: r[2] || `bitfinex_${i}`,
+      source_trader_id: t.handle,
       season_id: period,
-      roi: null,
-      pnl: r[6] || 0,
-      win_rate: plrMap.get(r[2]) || null,
+      roi: t.roi,
+      pnl: t.pnl,
+      win_rate: null,
       max_drawdown: null,
       trades_count: null,
       followers: 0,
@@ -112,13 +131,20 @@ async function main() {
     const { error: snapErr } = await supabase
       .from('trader_snapshots')
       .upsert(snapshots, { onConflict: 'source,source_trader_id,season_id' })
-    if (snapErr) console.log(`  ⚠ snapshots upsert: ${snapErr.message}`)
+    if (snapErr) console.log(`  ⚠ snapshots: ${snapErr.message}`)
     else console.log(`  ✅ snapshots: ${snapshots.length}`)
 
-    await sleep(1000) // Rate limit
+    // Show top 5
+    const sorted = [...traders].filter(t => t.roi !== null).sort((a, b) => (b.roi || 0) - (a.roi || 0))
+    console.log(`  Top 5 by ROI:`)
+    sorted.slice(0, 5).forEach((t, i) => {
+      console.log(`    ${i + 1}. ${t.handle}: ROI ${t.roi?.toFixed(2)}%, PnL $${t.pnl?.toFixed(0)}`)
+    })
+
+    await sleep(1000)
   }
 
-  console.log('\n✅ Bitfinex v2 完成')
+  console.log('\n✅ Bitfinex v2 done')
 }
 
 main()

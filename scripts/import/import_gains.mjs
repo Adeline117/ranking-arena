@@ -1,12 +1,17 @@
 /**
- * Gains Network (gTrade) DEX 排行榜数据抓取
- * 
- * 数据源策略：
- * 1. /leaderboard - 获取前25名交易员的完整统计数据 (PnL, wins, losses)
- * 2. /open-trades - 获取所有活跃交易员地址和仓位信息
- * 3. 合并计算: ROI, 胜率, PnL
+ * Gains Network (gTrade) DEX Leaderboard Import — Rewritten
  *
- * 用法: node scripts/import/import_gains.mjs [7D|30D|90D|ALL]
+ * Data reality:
+ *   /leaderboard/all — top 25 per period (1D/7D/30D/90D) with full stats
+ *   /open-trades     — active traders with open positions (no historical stats)
+ *
+ * Strategy:
+ *   1. Fetch /leaderboard/all from all 3 chains (arbitrum, polygon, base)
+ *   2. Merge by address, keeping best stats per trader
+ *   3. For open-trades-only traders: import with address but NO fake stats
+ *   4. Calculate ROI from PnL / estimated capital
+ *
+ * Usage: node scripts/import/import_gains.mjs [7D|30D|90D|ALL]
  */
 import {
   getSupabaseClient,
@@ -15,235 +20,226 @@ import {
 } from '../lib/shared.mjs'
 
 const supabase = getSupabaseClient()
-
 const SOURCE = 'gains'
-const TARGET_COUNT = 500
-// Fetch from all 3 chains for maximum coverage
+
 const CHAIN_BACKENDS = [
   { name: 'arbitrum', base: 'https://backend-arbitrum.gains.trade' },
-  { name: 'polygon', base: 'https://backend-polygon.gains.trade' },
-  { name: 'base', base: 'https://backend-base.gains.trade' },
+  { name: 'polygon',  base: 'https://backend-polygon.gains.trade' },
+  { name: 'base',     base: 'https://backend-base.gains.trade' },
 ]
-const API_BASE = 'https://backend-arbitrum.gains.trade'
 
-/**
- * 从所有链的 /leaderboard 获取TOP交易员完整数据
- */
-async function fetchAllLeaderboards() {
-  console.log('  📊 获取所有链的 /leaderboard 数据...')
-  const all = []
-  for (const chain of CHAIN_BACKENDS) {
-    try {
-      const response = await fetch(`${chain.base}/leaderboard`, {
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
-      })
-      if (!response.ok) { console.log(`  ⚠ ${chain.name} /leaderboard: ${response.status}`); continue }
-      const data = await response.json()
-      console.log(`  ✓ ${chain.name} 排行榜: ${data.length} 个`)
-      for (const t of data) all.push({ ...t, chain: chain.name })
-    } catch (e) { console.log(`  ✗ ${chain.name}: ${e.message}`) }
-  }
-  console.log(`  ✓ 排行榜合计: ${all.length} 个`)
-  return all
+// Gains /leaderboard/all period keys → our season_ids
+const GAINS_PERIOD_MAP = {
+  '7D':  '7',
+  '30D': '30',
+  '90D': '90',
 }
 
-/**
- * 从所有链的 /open-trades 获取活跃交易员
- */
-async function fetchAllOpenTrades() {
-  console.log('  📊 获取所有链的 /open-trades 数据...')
-  const traderMap = new Map()
-  for (const chain of CHAIN_BACKENDS) {
-    try {
-      const response = await fetch(`${chain.base}/open-trades`, {
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }
-      })
-      if (!response.ok) { console.log(`  ⚠ ${chain.name} /open-trades: ${response.status}`); continue }
-      const trades = await response.json()
-      console.log(`  ✓ ${chain.name} 活跃交易: ${trades.length} 个`)
-      for (const t of trades) {
-        const addr = (t.trade?.user || '').toLowerCase()
-        if (!addr) continue
-        if (!traderMap.has(addr)) {
-          traderMap.set(addr, { address: addr, openPositions: 0, totalCollateral: 0, totalLeverage: 0, chain: chain.name })
-        }
-        const trader = traderMap.get(addr)
-        trader.openPositions++
-        const collateral = parseInt(t.trade?.collateralAmount || '0')
-        const collateralIndex = parseInt(t.trade?.collateralIndex || '0')
-        const decimals = [18, 18, 6, 6][collateralIndex] || 6
-        trader.totalCollateral += collateral / Math.pow(10, decimals)
-        trader.totalLeverage += parseInt(t.trade?.leverage || '0') / 1000
-      }
-    } catch (e) { console.log(`  ✗ ${chain.name}: ${e.message}`) }
-  }
-  console.log(`  ✓ 活跃交易员合计: ${traderMap.size} 个`)
-  return Array.from(traderMap.values())
-}
-
-async function fetchLeaderboardData(period) {
-  console.log(`\n=== 抓取 Gains Network ${period} ===`)
-
-  // 获取两个数据源（所有链）
-  const [leaderboardData, openTraders] = await Promise.all([
-    fetchAllLeaderboards(),
-    fetchAllOpenTrades(),
-  ])
-
-  const tradersMap = new Map()
-
-  // 1. 先添加排行榜数据（有完整统计）
-  for (const t of leaderboardData) {
-    const addr = t.address.toLowerCase()
-    const totalTrades = parseInt(t.count || 0)
-    const wins = parseInt(t.count_win || 0)
-    const losses = parseInt(t.count_loss || 0)
-    const totalPnl = parseFloat(t.total_pnl_usd || t.total_pnl || 0)
-    const avgWin = parseFloat(t.avg_win || 0)
-    const avgLoss = Math.abs(parseFloat(t.avg_loss || 0))
-
-    // 估算总投入 = (wins * avgWin_collateral + losses * avgLoss_collateral)
-    // 简化: 用 avg_win 和 avg_loss 的绝对值估算平均仓位大小
-    const avgPositionSize = (avgWin + avgLoss) / 2
-    const estimatedCapital = avgPositionSize > 0 ? avgPositionSize * totalTrades : totalPnl
-
-    const roi = estimatedCapital > 0 ? (totalPnl / estimatedCapital) * 100 : 0
-    const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
-
-    tradersMap.set(addr, {
-      traderId: addr,
-      nickname: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
-      roi,
-      pnl: totalPnl,
-      winRate,
-      maxDrawdown: null, // 不可用
-      followers: 0,
-      tradesCount: totalTrades,
-      hasFullData: true,
+async function fetchJson(url) {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(15000),
     })
-  }
-
-  // 2. 添加活跃交易员（补充数据）
-  for (const t of openTraders) {
-    if (tradersMap.has(t.address)) {
-      // 更新现有数据的仓位信息
-      const existing = tradersMap.get(t.address)
-      existing.openPositions = t.openPositions
-      existing.totalCollateral = t.totalCollateral
-    } else {
-      // 新增活跃交易员（基础数据）
-      tradersMap.set(t.address, {
-        traderId: t.address,
-        nickname: `${t.address.slice(0, 6)}...${t.address.slice(-4)}`,
-        roi: null,
-        pnl: null,
-        winRate: null,
-        maxDrawdown: null,
-        followers: 0,
-        tradesCount: t.openPositions,
-        hasFullData: false,
-        openPositions: t.openPositions,
-        totalCollateral: t.totalCollateral,
-      })
-    }
-  }
-
-  // 过滤：优先有完整数据的，然后是有仓位的
-  const traders = Array.from(tradersMap.values())
-    .filter(t => t.hasFullData || (t.tradesCount > 0))
-
-  console.log(`  处理完成: ${traders.length} 个交易员 (${traders.filter(t => t.hasFullData).length} 有完整数据)`)
-  return traders
+    if (!res.ok) return null
+    return await res.json()
+  } catch { return null }
 }
 
-async function saveTraders(traders, period) {
-  if (traders.length === 0) return 0
+/**
+ * Fetch /leaderboard/all from all chains, merge by address.
+ * Returns Map<address, { pnl, wins, losses, trades, avgWin, avgLoss }> per period key.
+ */
+async function fetchLeaderboardAll() {
+  const periodTraders = new Map() // periodKey → Map<addr, stats>
 
-  // 先排序：有 ROI 的在前，然后按 ROI 或仓位排序
-  traders.sort((a, b) => {
-    if (a.hasFullData && !b.hasFullData) return -1
-    if (!a.hasFullData && b.hasFullData) return 1
-    return (b.roi || 0) - (a.roi || 0) || (b.tradesCount || 0) - (a.tradesCount || 0)
-  })
+  for (const chain of CHAIN_BACKENDS) {
+    const data = await fetchJson(`${chain.base}/leaderboard/all`)
+    if (!data) { console.log(`  ⚠ ${chain.name} /leaderboard/all failed`); continue }
 
-  const topTraders = traders.slice(0, TARGET_COUNT)
-  const capturedAt = new Date().toISOString()
+    for (const [periodKey, traders] of Object.entries(data)) {
+      if (!periodTraders.has(periodKey)) periodTraders.set(periodKey, new Map())
+      const pMap = periodTraders.get(periodKey)
 
-  const sourcesData = topTraders.map(t => ({
-    source: SOURCE,
-    source_type: 'defi',
-    source_trader_id: t.traderId,
-    handle: t.nickname,
-    profile_url: `https://gains.trade/trader/${t.traderId}`,
-    is_active: true
-  }))
+      for (const t of traders) {
+        const addr = t.address.toLowerCase()
+        const pnl = parseFloat(t.total_pnl_usd || t.total_pnl || 0)
+        const existing = pMap.get(addr)
 
-  await supabase.from('trader_sources').upsert(sourcesData, {
-    onConflict: 'source,source_trader_id'
-  })
-
-  const snapshotsData = topTraders.map((t, idx) => ({
-    source: SOURCE,
-    source_trader_id: t.traderId,
-    season_id: period,
-    rank: idx + 1,
-    roi: t.roi,
-    pnl: t.pnl,
-    win_rate: t.winRate,
-    max_drawdown: t.maxDrawdown,
-    followers: t.followers,
-    trades_count: t.tradesCount,
-    arena_score: calculateArenaScore(t.roi || 0, t.pnl || 0, t.maxDrawdown, t.winRate, period).totalScore,
-    captured_at: capturedAt
-  }))
-
-  const { error } = await supabase.from('trader_snapshots').upsert(snapshotsData, { onConflict: 'source,source_trader_id,season_id' })
-
-  if (error) {
-    console.log(`  ⚠ 批量保存失败: ${error.message}`)
-    let saved = 0
-    for (const s of snapshotsData) {
-      const { error: e } = await supabase.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
-      if (!e) saved++
+        // Keep the entry with higher absolute PnL (better data)
+        if (!existing || Math.abs(pnl) > Math.abs(existing.pnl)) {
+          pMap.set(addr, {
+            address: addr,
+            pnl,
+            wins: parseInt(t.count_win || 0),
+            losses: parseInt(t.count_loss || 0),
+            trades: parseInt(t.count || 0),
+            avgWin: parseFloat(t.avg_win || 0),
+            avgLoss: Math.abs(parseFloat(t.avg_loss || 0)),
+            chain: chain.name,
+          })
+        }
+      }
     }
-    console.log(`  逐条保存: ${saved}/${snapshotsData.length}`)
-    return saved
+    console.log(`  ✓ ${chain.name}: ${Object.keys(data).length} periods loaded`)
   }
 
-  const withRoi = topTraders.filter(t => t.roi !== null).length
-  const withWr = topTraders.filter(t => t.winRate !== null).length
-  const withPnl = topTraders.filter(t => t.pnl !== null).length
-  console.log(`  ✓ 保存成功: ${topTraders.length} 条`)
-  console.log(`    ROI覆盖: ${withRoi}/${topTraders.length} (${((withRoi/topTraders.length)*100).toFixed(0)}%)`)
-  console.log(`    PNL覆盖: ${withPnl}/${topTraders.length} (${((withPnl/topTraders.length)*100).toFixed(0)}%)`)
-  console.log(`    胜率覆盖: ${withWr}/${topTraders.length} (${((withWr/topTraders.length)*100).toFixed(0)}%)`)
-  return topTraders.length
+  return periodTraders
+}
+
+/**
+ * Fetch /open-trades from all chains → set of active addresses
+ */
+async function fetchOpenTradeAddresses() {
+  const addresses = new Set()
+  for (const chain of CHAIN_BACKENDS) {
+    const trades = await fetchJson(`${chain.base}/open-trades`)
+    if (!Array.isArray(trades)) continue
+    for (const t of trades) {
+      const addr = (t.trade?.user || '').toLowerCase()
+      if (addr) addresses.add(addr)
+    }
+    console.log(`  ✓ ${chain.name} open-trades: ${trades.length}`)
+  }
+  console.log(`  Active addresses total: ${addresses.size}`)
+  return addresses
+}
+
+function computeTraderMetrics(t) {
+  const winRate = t.trades > 0 ? (t.wins / t.trades) * 100 : null
+  // Estimate capital: average position size × number of trades
+  const avgPos = (t.avgWin + t.avgLoss) / 2
+  const estimatedCapital = avgPos > 0 ? avgPos * t.trades : Math.abs(t.pnl)
+  const roi = estimatedCapital > 0 ? (t.pnl / estimatedCapital) * 100 : 0
+  return { roi, winRate, pnl: t.pnl, trades: t.trades }
 }
 
 async function main() {
   const arg = process.argv[2]?.toUpperCase()
-  const targetPeriods = arg === 'ALL' ? ['7D', '30D', '90D'] :
-    arg && ['7D', '30D', '90D'].includes(arg) ? [arg] : ['7D', '30D', '90D']
+  const targetPeriods = arg === 'ALL' ? ['7D', '30D', '90D']
+    : arg && ['7D', '30D', '90D'].includes(arg) ? [arg]
+    : ['7D', '30D', '90D']
 
-  console.log('Gains Network (Arbitrum DEX) 数据抓取')
-  console.log('数据源: /leaderboard (完整统计) + /open-trades (活跃交易员)')
-  console.log('目标周期:', targetPeriods.join(', '))
+  console.log('Gains Network (gTrade) Import — Rewritten')
+  console.log(`Periods: ${targetPeriods.join(', ')}\n`)
+
+  // 1. Fetch leaderboard data from all chains
+  console.log('📊 Fetching leaderboard/all from all chains...')
+  const periodTraders = await fetchLeaderboardAll()
+
+  // 2. Fetch open-trade addresses
+  console.log('\n📊 Fetching open-trade addresses...')
+  const openAddresses = await fetchOpenTradeAddresses()
 
   for (const period of targetPeriods) {
-    const traders = await fetchLeaderboardData(period)
-    if (traders.length > 0) {
-      console.log(`\n📋 ${period} TOP 5:`)
-      traders.filter(t => t.hasFullData).slice(0, 5).forEach((t, i) => {
-        const wr = t.winRate !== null ? `${t.winRate.toFixed(1)}%` : 'N/A'
-        console.log(`  ${i + 1}. ${t.nickname}: ROI ${t.roi?.toFixed(2)}%, PnL $${t.pnl?.toFixed(0)}, WR ${wr}, Trades: ${t.tradesCount}`)
+    const gainsKey = GAINS_PERIOD_MAP[period]
+    if (!gainsKey) continue
+
+    console.log(`\n=== ${period} (gains key: ${gainsKey}) ===`)
+
+    const lbTraders = periodTraders.get(gainsKey) || new Map()
+    console.log(`  Leaderboard traders with full data: ${lbTraders.size}`)
+
+    // Build final trader list: leaderboard traders with stats + open-trade-only with null stats
+    const allTraders = []
+
+    // Leaderboard traders — have full stats
+    for (const [addr, t] of lbTraders) {
+      const m = computeTraderMetrics(t)
+      allTraders.push({
+        address: addr,
+        roi: m.roi,
+        pnl: m.pnl,
+        winRate: m.winRate,
+        trades: m.trades,
+        hasData: true,
       })
-      await saveTraders(traders, period)
-    } else {
-      console.log(`\n⚠ ${period} 未获取到数据`)
     }
+
+    // Open-trade-only traders — active but no stats
+    for (const addr of openAddresses) {
+      if (!lbTraders.has(addr)) {
+        allTraders.push({
+          address: addr,
+          roi: null,
+          pnl: null,
+          winRate: null,
+          trades: null,
+          hasData: false,
+        })
+      }
+    }
+
+    // Sort: traders with data first (by ROI desc), then others
+    allTraders.sort((a, b) => {
+      if (a.hasData && !b.hasData) return -1
+      if (!a.hasData && b.hasData) return 1
+      return (b.roi || 0) - (a.roi || 0)
+    })
+
+    const top = allTraders.slice(0, 500)
+    const capturedAt = new Date().toISOString()
+
+    // Upsert trader_sources
+    const sourcesData = top.map(t => ({
+      source: SOURCE,
+      source_type: 'defi',
+      source_trader_id: t.address,
+      handle: `${t.address.slice(0, 6)}...${t.address.slice(-4)}`,
+      profile_url: `https://gains.trade/trader/${t.address}`,
+      is_active: true,
+    }))
+
+    const { error: srcErr } = await supabase
+      .from('trader_sources')
+      .upsert(sourcesData, { onConflict: 'source,source_trader_id' })
+    if (srcErr) console.log(`  ⚠ trader_sources: ${srcErr.message}`)
+
+    // Upsert snapshots
+    const snapshots = top.map((t, idx) => ({
+      source: SOURCE,
+      source_trader_id: t.address,
+      season_id: period,
+      rank: idx + 1,
+      roi: t.roi,
+      pnl: t.pnl,
+      win_rate: t.winRate,
+      max_drawdown: null,
+      followers: 0,
+      trades_count: t.trades,
+      arena_score: t.hasData
+        ? calculateArenaScore(t.roi || 0, t.pnl || 0, null, t.winRate, period).totalScore
+        : null,
+      captured_at: capturedAt,
+    }))
+
+    const { error: snapErr } = await supabase
+      .from('trader_snapshots')
+      .upsert(snapshots, { onConflict: 'source,source_trader_id,season_id' })
+    if (snapErr) {
+      console.log(`  ⚠ batch upsert failed: ${snapErr.message}, trying one by one...`)
+      let saved = 0
+      for (const s of snapshots) {
+        const { error } = await supabase.from('trader_snapshots').upsert(s, { onConflict: 'source,source_trader_id,season_id' })
+        if (!error) saved++
+      }
+      console.log(`  Saved ${saved}/${snapshots.length} individually`)
+    }
+
+    const withData = top.filter(t => t.hasData).length
+    const withRoi = top.filter(t => t.roi !== null).length
+    console.log(`  ✅ Saved: ${top.length} traders (${withData} with full data, ${withRoi} with ROI)`)
+
+    // Top 5
+    top.filter(t => t.hasData).slice(0, 5).forEach((t, i) => {
+      const wr = t.winRate !== null ? `${t.winRate.toFixed(1)}%` : 'N/A'
+      console.log(`    ${i + 1}. ${t.address.slice(0, 10)}…: ROI ${t.roi?.toFixed(2)}%, PnL $${t.pnl?.toFixed(0)}, WR ${wr}, Trades: ${t.trades}`)
+    })
+
     await sleep(2000)
   }
-  console.log('\n✅ Gains Network 完成')
+
+  console.log('\n✅ Gains Network done')
 }
 
 main()
