@@ -346,19 +346,25 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   });
 
   // Collect available sources for UI filter — use RPC or large enough sample
+  // Get all distinct sources for this season — paginate to overcome Supabase 1000-row default
   let availableSources: string[];
   try {
-    const { data: allSourceRows } = await supabase
-      .rpc('get_distinct_sources', { p_season_id: window.toUpperCase() })
-      .limit(100);
-    
-    if (allSourceRows && allSourceRows.length > 0) {
-      availableSources = allSourceRows.map((r: { source: string }) => r.source).sort();
-    } else {
-      throw new Error('RPC returned empty');
+    const allSources = new Set<string>();
+    let from = 0;
+    const batchSize = 1000;
+    while (true) {
+      const { data: batch } = await supabase
+        .from('leaderboard_ranks')
+        .select('source')
+        .eq('season_id', window.toUpperCase())
+        .range(from, from + batchSize - 1);
+      if (!batch || batch.length === 0) break;
+      batch.forEach((r: { source: string }) => allSources.add(r.source));
+      if (batch.length < batchSize) break;
+      from += batchSize;
     }
+    availableSources = [...allSources].sort();
   } catch {
-    // Fallback: extract distinct sources from already-fetched rows
     availableSources = [...new Set((paginatedRows || []).map((r: { source: string }) => r.source))].sort();
   }
 
