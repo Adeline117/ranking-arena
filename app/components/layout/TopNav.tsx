@@ -309,7 +309,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               }
             }}
           >
-            {/* Logo - 莫比乌斯环 + arena */}
+            {/* Logo */}
             <Box
               data-logo-box
               style={{
@@ -319,30 +319,13 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 transition: `all ${tokens.transition.base}`,
               }}
             >
-              {/* 无限符号 ∞ — lemniscate of Bernoulli */}
-              <svg
-                width="26"
-                height="14"
-                viewBox="0 0 52 28"
-                fill="none"
-                style={{ flexShrink: 0 }}
-              >
-                <defs>
-                  <linearGradient id="infGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="var(--color-score-legendary)" />
-                    <stop offset="50%" stopColor="var(--color-brand-accent)" />
-                    <stop offset="100%" stopColor="var(--color-chart-orange)" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M26 14C26 14 20.5 3 13.5 3C7.5 3 3 7.5 3 14C3 20.5 7.5 25 13.5 25C20.5 25 26 14 26 14C26 14 31.5 3 38.5 3C44.5 3 49 7.5 49 14C49 20.5 44.5 25 38.5 25C31.5 25 26 14 26 14Z"
-                  stroke="url(#infGrad)"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              </svg>
+              <img
+                src="/logo.png"
+                alt="arena"
+                width={28}
+                height={28}
+                style={{ flexShrink: 0, borderRadius: '6px' }}
+              />
               {/* 文字：arena - 首字母变色 */}
               <Box
                 style={{
