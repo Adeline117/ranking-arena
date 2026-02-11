@@ -61,7 +61,7 @@ export async function GET(
   const rank = (rankBefore ?? 0) + 1
 
   // Check for on-chain attestation (table not yet created)
-  const attestation = null
+  const _attestation = null
 
   // Check for NFT (via linked user profile)
   const { data: profile } = await supabase
@@ -71,12 +71,12 @@ export async function GET(
     .not('wallet_address', 'is', null)
     .maybeSingle()
 
-  let hasNft = false
+  let _hasNft = false
   if (profile?.wallet_address) {
     // Check NFT balance
     try {
       const { checkNFTMembership } = await import('@/lib/web3/nft')
-      hasNft = await checkNFTMembership(profile.wallet_address)
+      _hasNft = await checkNFTMembership(profile.wallet_address)
     } catch {
       // NFT check failed, assume no NFT
     }
