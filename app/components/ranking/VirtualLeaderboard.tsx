@@ -354,7 +354,7 @@ export function VirtualLeaderboard({
               height: 16, 
               borderRadius: tokens.radius.sm,
               backgroundColor: tokens.colors.bg.tertiary,
-              animation: 'pulse 1.5s infinite',
+              // no pulse animation
             }} />
             <div style={{ 
               width: 32, 
