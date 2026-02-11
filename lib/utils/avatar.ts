@@ -49,7 +49,9 @@ export function getAvatarInitial(name: string | null | undefined): string {
   const displayName = name.includes('@') ? name.split('@')[0] : name
   
   // 取第一个字符，如果是中文取第一个字符，如果是英文取第一个字母
-  const firstChar = displayName.trim()[0]
+  const trimmed = displayName.trim()
+  if (!trimmed) return '?'
+  const firstChar = trimmed[0]
   
   // 如果是中文字符，直接返回
   if (/[\u4e00-\u9fa5]/.test(firstChar)) {
