@@ -64,9 +64,13 @@ async function main() {
   // Fetch from leaders-new for each period to get bulk data
   const enrichMap = new Map() // key: `${traderId}_${period}` → { wr, mdd }
 
+  // Build set of trader IDs we need
+  const neededIds = new Set(traderPeriods.keys())
+
   for (const [period, dt] of Object.entries(PERIOD_MAP)) {
     console.log(`Fetching ${period} leaders...`)
-    for (let page = 1; page <= 30; page++) {
+    let found = 0
+    for (let page = 1; page <= 100; page++) {
       const data = await fetchJson(`${API_BASE}/leaders-new?pageNo=${page}&pageSize=50&sortBy=roi&sortType=desc&dataType=${dt}`)
       if (!data || data.code !== 200) break
       const items = data.data?.list || []
@@ -75,14 +79,18 @@ async function main() {
       for (const item of items) {
         const id = String(item.leaderUserId || '')
         if (!id) continue
+        if (!neededIds.has(id)) continue
         let wr = item.leaderProfitOrderRatio != null ? parseFloat(item.leaderProfitOrderRatio) : null
         if (wr != null && wr > 0 && wr <= 1) wr *= 100
         const mdd = computeMDD(item.leaderTradeProfit)
         enrichMap.set(`${id}_${period}`, { wr, mdd })
+        found++
       }
-      await sleep(200)
+      // Stop if we found all needed traders
+      if (found >= neededIds.size) break
+      await sleep(150)
     }
-    console.log(`  ${period}: ${[...enrichMap.keys()].filter(k => k.endsWith(`_${period}`)).length} traders`)
+    console.log(`  ${period}: ${found} traders found`)
   }
 
   // Update DB

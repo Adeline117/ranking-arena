@@ -1,8 +1,12 @@
 {
   "regions": [
+    "sfo1",
+    "iad1",
     "hnd1",
     "sin1",
-    "hkg1"
+    "hkg1",
+    "cdg1",
+    "lhr1"
   ],
   "crons": [
     {
@@ -260,6 +264,15 @@
         {
           "key": "Cache-Control",
           "value": "s-maxage=60, stale-while-revalidate=120"
+        }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=60, stale-while-revalidate=300"
         }
       ]
     },
