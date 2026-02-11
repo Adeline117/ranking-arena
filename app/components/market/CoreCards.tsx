@@ -226,11 +226,20 @@ export default function CoreCards() {
 
   const maxVol = exchanges.length > 0 ? Math.max(...exchanges.map(e => e.trade_volume_24h_btc)) : 0
 
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'repeat(3, 1fr)',
+      gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
       gap: tokens.spacing[4],
+      overflowX: 'hidden',
     }}>
       {/* Gainers Top 5 */}
       <CardWrapper title="涨幅榜 Top5" accentColor={tokens.gradient.success}>

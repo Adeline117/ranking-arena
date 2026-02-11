@@ -133,7 +133,7 @@ function MarketPageContent() {
   }, [])
 
   return (
-    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, overflowX: 'hidden' }}>
       <TopNav email={email} />
 
       {/* L0: Sentiment Bar */}
