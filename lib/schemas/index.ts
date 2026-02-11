@@ -25,14 +25,6 @@ export const ExchangeSchema = z.enum([
   'okx',
 ])
 
-/** 已下线交易所（用于数据迁移和兼容性） */
-export const DeprecatedExchangeSchema = z.enum([
-  'kucoin',
-  'gate',
-  'mexc',
-  'coinex',
-])
-
 /** 时间范围 */
 export const TimeRangeSchema = z.enum(['7D', '30D', '90D', '1Y', '2Y', 'All'])
 
@@ -96,34 +88,6 @@ export const RankedTraderSchema = z.object({
   risk_adjusted_score: z.number().optional(),
   stability_score: z.number().optional(),
   is_suspicious: z.boolean().optional(),
-})
-
-/** 交易员统计数据 */
-export const TraderStatsSchema = z.object({
-  trading: z.object({
-    totalTrades12M: z.number().int().nonnegative(),
-    avgProfit: z.number(),
-    avgLoss: z.number(),
-    profitableTradesPct: z.number().min(0).max(100),
-  }).optional(),
-  frequentlyTraded: z.array(z.object({
-    symbol: z.string(),
-    weightPct: z.number(),
-    count: z.number().int().nonnegative(),
-    avgProfit: z.number(),
-    avgLoss: z.number(),
-    profitablePct: z.number().min(0).max(100),
-  })).optional(),
-  additionalStats: z.object({
-    tradesPerWeek: z.number().optional(),
-    avgHoldingTime: z.string().optional(),
-    activeSince: z.string().optional(),
-    profitableWeeksPct: z.number().optional(),
-    riskScore: z.number().optional(),
-    volume90d: z.number().optional(),
-    maxDrawdown: z.number().optional(),
-    sharpeRatio: z.number().optional(),
-  }).optional(),
 })
 
 // ============================================
@@ -296,7 +260,6 @@ export type SortOrder = z.infer<typeof SortOrderSchema>
 export type TraderProfile = z.infer<typeof TraderProfileSchema>
 export type TraderPerformance = z.infer<typeof TraderPerformanceSchema>
 export type RankedTrader = z.infer<typeof RankedTraderSchema>
-export type TraderStats = z.infer<typeof TraderStatsSchema>
 
 export type Post = z.infer<typeof PostSchema>
 export type CreatePostInput = z.infer<typeof CreatePostInputSchema>
