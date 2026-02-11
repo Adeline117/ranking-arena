@@ -742,11 +742,11 @@ export default function OverviewPerformanceCard({
  * 分数配色
  */
 function getScoreColor(score: number | null, max: number): string {
-  if (score == null) return tokens.colors.text.tertiary
+  if (score == null) return '#8E8E9E'
   const ratio = score / max
-  if (ratio >= 0.7) return tokens.colors.accent.success
-  if (ratio >= 0.4) return tokens.colors.accent.warning
-  return tokens.colors.accent.error
+  if (ratio >= 0.7) return '#16c784'
+  if (ratio >= 0.4) return '#f0b90b'
+  return '#ea3943'
 }
 
 /**
