@@ -160,7 +160,9 @@ async function main() {
   const hasEquity = new Set(existingEquity?.map(e => e.source_trader_id) || [])
   
   // Prioritize traders without stats
-  const needsWork = traders.filter(t => !hasStats.has(t.source_trader_id) || !hasEquity.has(t.source_trader_id))
+  // Filter to valid leaderMarks (base64-like with ==, +, / or numeric 9+ digits)
+  const isValidMark = id => id.includes('==') || id.includes('+') || id.includes('/') || /^\d{9,}$/.test(id)
+  const needsWork = traders.filter(t => isValidMark(t.source_trader_id) && (!hasStats.has(t.source_trader_id) || !hasEquity.has(t.source_trader_id)))
   const toProcess = needsWork.slice(0, LIMIT)
   
   console.log(`Total traders: ${traders.length}`)
