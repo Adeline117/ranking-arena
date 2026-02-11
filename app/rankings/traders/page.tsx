@@ -234,7 +234,7 @@ function ExchangeQuickFilter({
               if (!isActive) {
                 e.currentTarget.style.borderColor = ex.color + '40'
                 e.currentTarget.style.background = `${ex.color}0C`
-                // no hover animation
+                e.currentTarget.style.transform = 'translateY(-1px)'
                 e.currentTarget.style.boxShadow = `0 2px 8px ${ex.color}15`
               }
             }}
@@ -242,7 +242,7 @@ function ExchangeQuickFilter({
               if (!isActive) {
                 e.currentTarget.style.borderColor = tokens.colors.border.primary
                 e.currentTarget.style.background = tokens.glass.bg.light
-                // no hover animation
+                e.currentTarget.style.transform = 'none'
                 e.currentTarget.style.boxShadow = 'none'
               }
             }}
@@ -284,7 +284,7 @@ function ExchangeQuickFilter({
   )
 }
 
-/** Simple wrapper — no animation to avoid visual shaking */
+/** Simple wrapper — no remount to avoid layout shaking, but keep visual styles */
 function RankingFadeWrapper({ children }: { transitionKey?: string; children: React.ReactNode }) {
   return <div>{children}</div>
 }
@@ -496,14 +496,14 @@ function RankingsContent() {
                 if (activeWindow !== w) {
                   e.currentTarget.style.background = tokens.glass.bg.medium
                   e.currentTarget.style.color = tokens.colors.text.primary
-                  // no hover animation
+                  e.currentTarget.style.transform = 'translateY(-1px)'
                 }
               }}
               onMouseLeave={(e) => {
                 if (activeWindow !== w) {
                   e.currentTarget.style.background = tokens.glass.bg.light
                   e.currentTarget.style.color = tokens.colors.text.secondary
-                  // no hover animation
+                  e.currentTarget.style.transform = 'translateY(0)'
                 }
               }}
               onFocus={(e) => {
@@ -545,14 +545,14 @@ function RankingsContent() {
                 if (activeCategory !== cat) {
                   e.currentTarget.style.background = tokens.glass.bg.medium
                   e.currentTarget.style.color = tokens.colors.text.primary
-                  // no hover animation
+                  e.currentTarget.style.transform = 'translateY(-1px)'
                 }
               }}
               onMouseLeave={(e) => {
                 if (activeCategory !== cat) {
                   e.currentTarget.style.background = tokens.glass.bg.light
                   e.currentTarget.style.color = tokens.colors.text.secondary
-                  // no hover animation
+                  e.currentTarget.style.transform = 'translateY(0)'
                 }
               }}
               onFocus={(e) => {
@@ -652,7 +652,7 @@ function RankingsContent() {
                       right: 0,
                       height: 2,
                       background: `linear-gradient(90deg, transparent, ${tokens.colors.accent.brand}, transparent)`,
-                      // no shimmer
+                      animation: 'shimmer 1s ease-in-out infinite',
                       zIndex: 10,
                     }}
                   />
@@ -889,7 +889,7 @@ function RankChangeIndicator({ currentRank, metricRank }: { currentRank: number;
         alignItems: 'center',
         gap: 1,
         marginLeft: 4,
-        // no fade animation
+        animation: 'fadeIn 0.3s ease-in',
       }}
       title={isUp ? `↑${diff}` : `↓${Math.abs(diff)}`}
     >
@@ -975,7 +975,7 @@ function ScoreBadge({ score }: { score: number }) {
             ? `0 0 8px ${hex}30`
             : 'none',
         textShadow: score >= 90 ? `0 0 8px ${hex}60` : 'none',
-        // no glow animation
+        animation: score >= 95 ? 'score-glow 2s ease-in-out infinite' : undefined,
       }}
     >
       {/* Score progress fill bar */}
@@ -1045,10 +1045,10 @@ function TraderRow({ trader }: { trader: RankedTraderV2 }) {
                 : 'linear-gradient(135deg, var(--color-medal-bronze), #A0522D)',
               color: trader.rank === 1 ? tokens.colors.bg.primary : tokens.colors.text.primary,
               boxShadow: trader.rank === 1
-                ? 'none'
+                ? '0 0 8px var(--color-gold-glow)'
                 : trader.rank === 2
-                ? 'none'
-                : 'none',
+                ? '0 0 6px var(--color-silver-glow)'
+                : '0 0 6px var(--color-bronze-glow)',
             }}
           >
             {trader.rank}
