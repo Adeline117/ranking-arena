@@ -2,14 +2,10 @@
  * WEEX Copy Trading scraper (Playwright)
  *
  * URL: weex.com/copy-trading
- * API: http-gateway1.janapw.com/api/v1/public/trace/traderListView (POST)
- *   - Body: {languageType, sortRule, simulation, pageNo, pageSize, nickName}
- *   - totals ~350, nextFlag for pagination, pageSize=20
- *   - sortRule: 9=default, others for different sorts
- *   - Fields: traderUserId, traderNickName, headPic, followCount,
- *     totalReturnRate, ndaysReturnRates, threeWeeksPNL
- *
- * Strategy: load page to establish session, then use in-page fetch for pagination
+ * API: discovered at runtime via response interception
+ *   - traderListView (POST): paginated, sortRule for different sorts
+ *   - topTraderListView: top traders
+ *   - Old gateway (http-gateway1.weex.com) sometimes down; detect working gateway
  *
  * Usage: node scripts/import/import_weex.mjs [7D|30D|90D|ALL]
  */
@@ -24,7 +20,13 @@ import {
 const supabase = getSupabaseClient()
 const SOURCE = 'weex'
 const PROXY = 'http://127.0.0.1:7890'
-const API_URL = 'https://http-gateway1.janapw.com/api/v1/public/trace/traderListView'
+
+// Known API gateways (WEEX changes these)
+const KNOWN_GATEWAYS = [
+  'https://http-gateway1.weex.com',
+  'https://http-gateway1.janapw.com',
+  'https://www.weex.com',
+]
 
 function parseTrader(item) {
   const id = String(item.traderUserId || '')
@@ -36,7 +38,6 @@ function parseTrader(item) {
     if (Math.abs(roi) > 0 && Math.abs(roi) < 1) roi *= 100
   }
 
-  // Extract period-specific ROI from ndaysReturnRates
   const ratesByDays = {}
   if (Array.isArray(item.ndaysReturnRates)) {
     for (const r of item.ndaysReturnRates) {
@@ -46,6 +47,11 @@ function parseTrader(item) {
     }
   }
 
+  let wr = item.winRate != null ? parseFloat(String(item.winRate)) : null
+  if (wr != null && wr > 0 && wr <= 1) wr *= 100
+  let dd = item.maxDrawdown != null ? Math.abs(parseFloat(String(item.maxDrawdown))) : null
+  if (dd != null && dd > 0 && dd <= 1) dd *= 100
+
   return {
     id,
     name: item.traderNickName || item.nickName || `Trader_${id.slice(0, 8)}`,
@@ -53,16 +59,16 @@ function parseTrader(item) {
     roi,
     roi7d: ratesByDays[7] || null,
     roi21d: ratesByDays[21] || roi,
+    roi90d: ratesByDays[90] || null,
     pnl: parseFloat(String(item.threeWeeksPNL || item.profit || 0)),
     followers: parseInt(String(item.followCount || 0)),
-    winRate: item.winRate != null ? parseFloat(String(item.winRate)) : null,
-    maxDrawdown: item.maxDrawdown != null ? parseFloat(String(item.maxDrawdown)) : null,
+    winRate: wr,
+    maxDrawdown: dd,
   }
 }
 
 async function scrapeTraders() {
   console.log('WEEX: launching browser...')
-
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
   const ctx = await browser.newContext({
     proxy: { server: PROXY },
@@ -71,30 +77,47 @@ async function scrapeTraders() {
   })
   const page = await ctx.newPage()
 
-  // Also intercept responses in case direct fetch doesn't work
   const traders = new Map()
+  let discoveredApiBase = null
+
+  // Intercept to discover working API gateway
   page.on('response', async (r) => {
-    if (!r.url().includes('traderListView')) return
-    try {
-      const json = await r.json()
-      if (json.code !== 'SUCCESS' || !json.data?.rows) return
-      for (const item of json.data.rows) {
-        const t = parseTrader(item)
-        if (t && !traders.has(t.id)) traders.set(t.id, t)
-      }
-    } catch {}
+    const url = r.url()
+    if (url.includes('traderListView') || url.includes('topTraderListView')) {
+      // Discover the gateway base
+      const match = url.match(/^(https?:\/\/[^/]+)/)
+      if (match) discoveredApiBase = match[1]
+
+      try {
+        const json = await r.json()
+        if (json.code !== 'SUCCESS' || !json.data?.rows) return
+        for (const item of json.data.rows) {
+          const t = parseTrader(item)
+          if (t && !traders.has(t.id)) traders.set(t.id, t)
+        }
+        console.log(`  Intercepted: ${json.data.rows.length} traders from ${url.split('?')[0].split('/').pop()}`)
+      } catch {}
+    }
   })
 
   await page.goto('https://www.weex.com/copy-trading', { timeout: 45000, waitUntil: 'domcontentloaded' })
   await sleep(10000)
   console.log(`  Title: ${await page.title()}, intercepted: ${traders.size}`)
+  if (discoveredApiBase) console.log(`  Discovered API: ${discoveredApiBase}`)
 
-  // Try direct fetch from page context with multiple sort rules
-  for (const sortRule of [9, 5, 6, 7, 8, 2, 1]) {
+  // Determine API base URL
+  const apiBase = discoveredApiBase || 'https://www.weex.com'
+  const traderListUrl = `${apiBase}/api/v1/public/trace/traderListView`
+  const topTraderUrl = `${apiBase}/api/v1/public/trace/topTraderListView`
+
+  // Try fetching from page context with multiple sort rules
+  // sortRule: 1=followers, 2=pnl, 5=roi, 6=winRate, 7=stability, 8=new, 9=default
+  for (const sortRule of [9, 5, 2, 6, 7, 8, 1]) {
     let pageNo = 1
     let hasMore = true
+    let errorCount = 0
 
-    while (hasMore && pageNo <= 30) {
+    while (hasMore && pageNo <= 50) {
       const result = await page.evaluate(async ({ url, sortRule, pageNo }) => {
         try {
           const r = await fetch(url, {
@@ -102,14 +125,19 @@ async function scrapeTraders() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ languageType: 0, sortRule, simulation: 0, pageNo, pageSize: 20, nickName: '' }),
           })
-          const d = await r.json()
-          return d
+          return await r.json()
         } catch (e) { return { error: e.message } }
-      }, { url: API_URL, sortRule, pageNo })
+      }, { url: traderListUrl, sortRule, pageNo })
 
       if (result?.error || result?.code !== 'SUCCESS') {
-        if (pageNo === 1) console.log(`  sort=${sortRule}: failed - ${result?.error || result?.code}`)
-        break
+        errorCount++
+        if (errorCount >= 2) {
+          if (pageNo === 1) console.log(`  sort=${sortRule}: failed`)
+          break
+        }
+        await sleep(1000)
+        pageNo++
+        continue
       }
 
       const rows = result.data?.rows || []
@@ -122,13 +150,32 @@ async function scrapeTraders() {
       }
 
       hasMore = result.data?.nextFlag === true
-      process.stdout.write(`\r  sort=${sortRule} p${pageNo}: +${added} → ${traders.size} (total=${result.data?.totals || '?'})`)
-
+      if (pageNo % 5 === 0 || !hasMore) console.log(`  sort=${sortRule} p${pageNo}: +${added} → ${traders.size}`)
       if (added === 0 && pageNo > 2) break
       pageNo++
-      await sleep(300 + Math.random() * 200)
+      await sleep(200 + Math.random() * 200)
     }
-    console.log()
+  }
+
+  // Also try topTraderListView
+  const topResult = await page.evaluate(async (url) => {
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ languageType: 0 }),
+      })
+      return await r.json()
+    } catch (e) { return { error: e.message } }
+  }, topTraderUrl)
+
+  if (topResult?.code === 'SUCCESS' && topResult.data?.rows) {
+    let added = 0
+    for (const item of topResult.data.rows) {
+      const t = parseTrader(item)
+      if (t && !traders.has(t.id)) { traders.set(t.id, t); added++ }
+    }
+    if (added) console.log(`  topTraders: +${added}`)
   }
 
   console.log(`  Total: ${traders.size} unique traders`)
@@ -161,10 +208,12 @@ async function main() {
   for (const period of periods) {
     console.log(`\n💾 Saving ${traders.length} ${period} records...`)
     let saved = 0
-
     for (let i = 0; i < traders.length; i += 30) {
       const batch = traders.slice(i, i + 30).map((t, j) => {
-        const roi = t.roi || 0
+        // Use period-specific ROI if available
+        let roi = t.roi || 0
+        if (period === '7D' && t.roi7d) roi = t.roi7d
+        if (period === '90D' && t.roi90d) roi = t.roi90d
         const scores = calculateArenaScore(roi, t.pnl, t.maxDrawdown, t.winRate, period)
         return {
           source: SOURCE, source_trader_id: t.id, season_id: period,
@@ -177,7 +226,6 @@ async function main() {
       const { error } = await supabase.from('trader_snapshots').upsert(batch, { onConflict: 'source,source_trader_id,season_id' })
       if (!error) saved += batch.length
     }
-
     console.log(`  ✅ ${saved}/${traders.length} saved`)
     totalSaved += saved
   }

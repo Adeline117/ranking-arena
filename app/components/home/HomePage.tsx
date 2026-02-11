@@ -11,6 +11,7 @@ const Footer = lazy(() => import('../layout/Footer'))
 import { JsonLd } from '../Providers/JsonLd'
 import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 import ExchangePartners from './ExchangePartners'
+import HomeSubNav from './HomeSubNav'
 import GuestSignupPrompt from './GuestSignupPrompt'
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
@@ -70,6 +71,7 @@ export default function HomePage({
         }}
       >
         <ExchangePartners />
+        <HomeSubNav />
         <div style={{ height: 16 }} />
         <ThreeColumnLayout
           leftSidebar={
