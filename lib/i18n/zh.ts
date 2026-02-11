@@ -1951,6 +1951,7 @@ const zh = {
     positionStatsNotAvailable: '该交易所未提供持仓统计',
     updatedAt: '更新于',
     noDataForPeriod: '此数据源无此周期数据',
+    noEquityCurveData: '暂无收益曲线数据',
     scoreGuide: '评分说明',
     scoreGuideDetail: '收益分 (0-70)：基于 ROI 强度计算 | 盈亏分 (0-15)：基于绝对盈利 | 回撤分 (0-8)：回撤越小分数越高 | 稳定分 (0-7)：基于胜率计算',
     confidenceMinimal: '数据不完整，回撤与胜率使用默认值',
