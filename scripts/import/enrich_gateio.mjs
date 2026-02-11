@@ -177,8 +177,8 @@ async function main() {
       if (!apiData) continue
 
       const updates = {}
-      if (row.win_rate == null && apiData.winRate > 0) updates.win_rate = apiData.winRate
-      if (row.max_drawdown == null && apiData.maxDrawdown > 0) updates.max_drawdown = apiData.maxDrawdown
+      if (row.win_rate == null && apiData.winRate != null && apiData.winRate >= 0) updates.win_rate = apiData.winRate
+      if (row.max_drawdown == null && apiData.maxDrawdown != null && apiData.maxDrawdown >= 0) updates.max_drawdown = apiData.maxDrawdown
 
       if (Object.keys(updates).length === 0) continue
 
