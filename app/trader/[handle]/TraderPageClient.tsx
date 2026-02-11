@@ -186,13 +186,16 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
     })
   }, [])
 
-  // Show error toast when SWR fetch fails with no cached data
+  // Show error toast when SWR fetch fails with no cached data (skip 404s — empty state handles those)
   useEffect(() => {
     if (fetchError && !traderData) {
-      showToastRef.current(
-        tRef.current('loadFailedRetryMsg'),
-        'error'
-      )
+      const msg = fetchError?.message || ''
+      if (!msg.includes('not found') && !msg.includes('404')) {
+        showToastRef.current(
+          tRef.current('loadFailedRetryMsg'),
+          'error'
+        )
+      }
     }
   }, [fetchError, traderData])
 
