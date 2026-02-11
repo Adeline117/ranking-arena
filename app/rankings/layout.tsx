@@ -1,4 +1,6 @@
 import { Metadata } from 'next'
+import RankingsSubNav from './RankingsSubNav'
+import TopNavWrapper from './TopNavWrapper'
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
@@ -38,5 +40,11 @@ export const metadata: Metadata = {
 }
 
 export default function RankingsLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+  return (
+    <>
+      <TopNavWrapper />
+      <RankingsSubNav />
+      {children}
+    </>
+  )
 }

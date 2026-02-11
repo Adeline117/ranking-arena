@@ -1,0 +1,54 @@
+/**
+ * GET /api/bots/[id]
+ * Returns detailed bot info + all window snapshots
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const supabase = getSupabaseAdmin()
+
+    // Fetch bot source - try by slug first, then by UUID
+    let botQuery = supabase.from('bot_sources').select('*')
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    botQuery = isUuid ? botQuery.eq('id', id) : botQuery.eq('slug', id)
+
+    const { data: bot, error: botError } = await botQuery.single()
+    if (botError || !bot) {
+      return NextResponse.json({ error: 'Bot not found' }, { status: 404 })
+    }
+
+    // Fetch all snapshots
+    const { data: snapshots } = await supabase
+      .from('bot_snapshots')
+      .select('*')
+      .eq('bot_id', bot.id)
+      .order('season_id')
+
+    // Fetch equity curve
+    const { data: equityCurve } = await supabase
+      .from('bot_equity_curve')
+      .select('*')
+      .eq('bot_id', bot.id)
+      .order('timestamp', { ascending: true })
+
+    return NextResponse.json({
+      bot,
+      snapshots: snapshots || [],
+      equity_curve: equityCurve || [],
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600',
+      },
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
