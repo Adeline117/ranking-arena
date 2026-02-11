@@ -136,10 +136,10 @@ function MarketPageContent() {
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, overflowX: 'hidden' }}>
       <TopNav email={email} />
 
-      {/* L0: Sentiment Bar */}
-      <SectionErrorBoundary fallbackMessage="情绪指标加载失败">
+      {/* L0: Scrolling Price Ticker */}
+      <SectionErrorBoundary fallbackMessage="币价栏加载失败">
         <Suspense fallback={<div style={{ height: 48 }} />}>
-          <SentimentBar />
+          <PriceTicker />
         </Suspense>
       </SectionErrorBoundary>
 

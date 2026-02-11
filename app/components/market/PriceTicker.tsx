@@ -16,37 +16,67 @@ function formatPrice(n: number): string {
   return `$${n.toPrecision(4)}`
 }
 
+function getCryptoIcon(symbol: string, fallbackImage: string): string {
+  const localPath = `/icons/crypto/${symbol.toLowerCase()}.svg`
+  return localPath || fallbackImage
+}
+
 export default function PriceTicker() {
   const [coins, setCoins] = useState<TickerCoin[]>([])
+  const [imgErrors, setImgErrors] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    fetch('/api/market/spot')
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) {
+    let alive = true
+
+    const load = () => {
+      fetch('/api/market/spot')
+        .then(r => r.json())
+        .then(data => {
+          if (!alive || !Array.isArray(data)) return
           setCoins(data.slice(0, 20).map((c: Record<string, unknown>) => ({
             symbol: c.symbol as string,
             price: c.price as number,
             change24h: c.change24h as number,
             image: c.image as string,
           })))
-        }
-      })
-      .catch(() => {})
+        })
+        .catch(() => {})
+    }
+
+    load()
+    const interval = setInterval(load, 30000)
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') load()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      alive = false
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
-  if (coins.length === 0) return null
+  if (coins.length === 0) return <div style={{ height: 48 }} />
 
   const doubled = [...coins, ...coins]
 
   return (
-    <div style={{
-      overflow: 'hidden',
-      padding: '10px 0',
-      borderBottom: `1px solid ${tokens.colors.border.primary}`,
-      position: 'relative',
-      background: tokens.colors.bg.secondary,
-    }}>
+    <div
+      className="price-ticker-container"
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        overflow: 'hidden',
+        height: 48,
+        display: 'flex',
+        alignItems: 'center',
+        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        background: tokens.colors.bg.secondary,
+      }}
+    >
       {/* Fade edges */}
       <div style={{
         position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
@@ -59,16 +89,20 @@ export default function PriceTicker() {
         zIndex: 1, pointerEvents: 'none',
       }} />
 
-      <div style={{
+      <div className="price-ticker-track" style={{
         display: 'flex',
         alignItems: 'center',
         gap: 28,
-        animation: 'price-ticker-scroll 40s linear infinite',
+        animation: 'price-ticker-scroll 45s linear infinite',
         willChange: 'transform',
         width: 'max-content',
       }}>
         {doubled.map((coin, i) => {
           const color = coin.change24h >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+          const localIcon = getCryptoIcon(coin.symbol, coin.image)
+          const useLocal = !imgErrors.has(coin.symbol)
+          const imgSrc = useLocal ? localIcon : coin.image
+
           return (
             <span
               key={`${coin.symbol}-${i}`}
@@ -81,13 +115,18 @@ export default function PriceTicker() {
                 whiteSpace: 'nowrap',
               }}
             >
-              {coin.image && (
+              {imgSrc && (
                 <Image
-                  src={coin.image}
+                  src={imgSrc}
                   alt={coin.symbol}
                   width={18}
                   height={18}
                   style={{ borderRadius: '50%', flexShrink: 0 }}
+                  onError={() => {
+                    if (useLocal) {
+                      setImgErrors(prev => new Set(prev).add(coin.symbol))
+                    }
+                  }}
                 />
               )}
               <span style={{ fontWeight: 600, color: tokens.colors.text.primary }}>{coin.symbol}</span>
@@ -110,10 +149,8 @@ export default function PriceTicker() {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
-        @media (hover: hover) {
-          div:has(> [style*="price-ticker-scroll"]):hover [style*="price-ticker-scroll"] {
-            animation-play-state: paused;
-          }
+        .price-ticker-container:hover .price-ticker-track {
+          animation-play-state: paused;
         }
       `}</style>
     </div>
