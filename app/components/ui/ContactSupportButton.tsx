@@ -45,7 +45,7 @@ export default function ContactSupportButton({
         .from('user_profiles')
         .select('id')
         .eq('handle', SUPPORT_HANDLE)
-        .single()
+        .maybeSingle()
 
       if (supportUser) {
         setSupportUserId(supportUser.id)
@@ -54,7 +54,7 @@ export default function ContactSupportButton({
           .from('user_profiles')
           .select('id')
           .eq('email', SUPPORT_EMAIL)
-          .single()
+          .maybeSingle()
 
         if (profile) {
           setSupportUserId(profile.id)
