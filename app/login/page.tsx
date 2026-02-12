@@ -786,6 +786,20 @@ export default function LoginPage() {
             const callbackUrl = returnUrl
               ? `${window.location.origin}/auth/callback?returnUrl=${encodeURIComponent(returnUrl)}`
               : `${window.location.origin}/auth/callback`
+            // Detect in-app browsers (Telegram, Facebook, etc.) — Google blocks OAuth in these
+            const ua = navigator.userAgent || ''
+            const isInAppBrowser = /Telegram|TelegramBot|FBAN|FBAV|Instagram|Line\/|WeChat|MicroMessenger/i.test(ua)
+            if (isInAppBrowser) {
+              // Copy link to clipboard and prompt user to open in system browser
+              const oauthUrl = `${window.location.origin}/login${returnUrl ? '?returnUrl=' + encodeURIComponent(returnUrl) : ''}`
+              try { await navigator.clipboard.writeText(oauthUrl) } catch {}
+              setError(lang === 'zh'
+                ? '请在系统浏览器(Safari/Chrome)中打开此页面登录Google。链接已复制到剪贴板。'
+                : 'Please open this page in your system browser (Safari/Chrome) to sign in with Google. Link copied to clipboard.')
+              // Also try to open in system browser
+              window.open(oauthUrl, '_system')
+              return
+            }
             const { error: oauthError } = await supabase.auth.signInWithOAuth({
               provider: 'google',
               options: {
