@@ -68,11 +68,12 @@ export const PostListItem = memo(function PostListItem({
         textAlign: 'left',
         border: 'none',
         background: 'transparent',
-        padding: `${tokens.spacing[3]} 0`,
+        padding: `${tokens.spacing[3]} ${tokens.spacing[2]}`,
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
         cursor: 'pointer',
         color: tokens.colors.text.primary,
-        transition: `background-color ${tokens.transition.base}`,
+        transition: `background-color 0.15s ease`,
+        borderRadius: tokens.radius.md,
       }}
       onMouseEnter={(e) => {
         if (isMasonry) {

@@ -882,9 +882,12 @@ export default function BookDetailPage() {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
         }
-        @media (max-width: 640px) {
-          .book-detail-top { gap: 20px !important; }
-          .book-detail-cover { width: 180px !important; margin: 0 auto; }
+        @media (max-width: 767px) {
+          .book-detail-top { flex-direction: column !important; align-items: center !important; text-align: center; gap: 20px !important; }
+          .book-detail-cover { width: 200px !important; margin: 0 auto; }
+        }
+        @media (max-width: 480px) {
+          .book-detail-cover { width: 160px !important; }
         }
       `}</style>
       <MobileBottomNav />

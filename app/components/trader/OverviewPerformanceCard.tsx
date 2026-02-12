@@ -441,10 +441,11 @@ export default function OverviewPerformanceCard({
 
           {/* 二级指标 - 紧凑徽章布局 */}
           <Box
+            className="metric-badges-grid"
             style={{
               display: 'flex',
               flexWrap: 'wrap',
-              gap: tokens.spacing[2],
+              gap: `${tokens.spacing[2]} ${tokens.spacing[2]}`,
               opacity: isVisible ? 1 : 0,
               transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
               transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.3s',
@@ -782,12 +783,11 @@ function ScoreBar({
       </Box>
       <Box
         style={{
-          height: 8,
+          height: 6,
           background: 'var(--color-bg-hover, #E8E8EC)',
           borderRadius: tokens.radius.full,
           overflow: 'hidden',
           position: 'relative',
-          border: '1px solid var(--color-border-primary)',
         }}
       >
         <Box
@@ -833,21 +833,29 @@ function MetricBadge({
   return (
     <Box
       style={{
-        display: 'flex',
-        alignItems: 'center',
+        display: 'inline-flex',
+        alignItems: 'baseline',
         gap: 6,
-        padding: `6px 12px`,
+        padding: `5px 12px`,
         background: tokens.colors.bg.tertiary,
         borderRadius: tokens.radius.full,
-        border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : tokens.colors.border.primary}`,
+        border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : negative ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
         cursor: tooltip ? 'help' : undefined,
+        transition: 'border-color 0.2s ease',
       }}
       title={tooltip}
     >
-      <Text style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 500 }}>
+      <Text style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 500, whiteSpace: 'nowrap' }}>
         {label}
       </Text>
-      <Text style={{ fontSize: 13, color, fontWeight: 700, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+      <Text style={{
+        fontSize: 13,
+        color,
+        fontWeight: 700,
+        fontFamily: tokens.typography.fontFamily.mono.join(', '),
+        letterSpacing: '-0.02em',
+        whiteSpace: 'nowrap',
+      }}>
         {isNA ? '--' : value}
       </Text>
     </Box>

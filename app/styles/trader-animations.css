@@ -173,11 +173,12 @@
 .profile-tab-button::after {
   content: '';
   position: absolute;
-  bottom: -16px;
-  left: 0;
-  right: 0;
+  bottom: -9px;
+  left: 25%;
+  right: 25%;
   height: 2px;
   background: var(--tab-indicator-color, var(--color-brand));
+  border-radius: 1px;
   transform: scaleX(0);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
