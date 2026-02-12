@@ -35,6 +35,8 @@ function formatRelativeTime(dateStr: string, isZh: boolean): string {
 type BookDetail = {
   id: string
   title: string
+  title_en: string | null
+  title_zh: string | null
   author: string | null
   description: string | null
   category: string
@@ -53,10 +55,17 @@ type BookDetail = {
   isbn: string | null
   page_count: number | null
   language: string | null
+  language_group_id: string | null
   rating: number | null
   rating_count: number | null
   file_key: string | null
   epub_url: string | null
+}
+
+type LanguageVersion = {
+  id: string
+  title: string
+  language: string | null
 }
 
 type RatingOverview = {
@@ -97,6 +106,7 @@ export default function BookDetailPage() {
   const [reviewPage, setReviewPage] = useState(1)
   const [hasMoreReviews, setHasMoreReviews] = useState(false)
   const [similar, setSimilar] = useState<SimilarItem[]>([])
+  const [langVersions, setLangVersions] = useState<LanguageVersion[]>([])
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<any>(null)
   const [descExpanded, setDescExpanded] = useState(false)
@@ -151,6 +161,18 @@ export default function BookDetailPage() {
       .then(data => setSimilar(data.items || []))
       .catch((e) => logger.error('Unhandled error', e))
   }, [id])
+
+  // Fetch language versions when book has a language_group_id
+  useEffect(() => {
+    if (!book?.language_group_id) { setLangVersions([]); return }
+    fetch(`/api/library/language-group/${book.language_group_id}`)
+      .then(r => r.json())
+      .then(data => {
+        const versions = (data.items || []).filter((v: LanguageVersion) => v.id !== id)
+        setLangVersions(versions)
+      })
+      .catch(() => setLangVersions([]))
+  }, [book?.language_group_id, id])
 
   const [showRatingPrompt, setShowRatingPrompt] = useState(false)
   const [shortReview, setShortReview] = useState('')
@@ -331,7 +353,7 @@ export default function BookDetailPage() {
               color: tokens.colors.text.primary,
               marginBottom: 6, lineHeight: tokens.typography.lineHeight.tight,
             }}>
-              {book.title}
+              {isZh ? (book.title_zh || book.title) : (book.title_en || book.title)}
             </h1>
 
             {book.author && (
@@ -381,6 +403,37 @@ export default function BookDetailPage() {
               {book.page_count && <MetaPill label={`${book.page_count} ${isZh ? '页' : 'pages'}`} />}
               {book.isbn && <MetaPill label={`ISBN: ${book.isbn}`} />}
             </div>
+
+            {/* Language Versions */}
+            {langVersions.length > 0 && (
+              <div style={{
+                display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16,
+                padding: '10px 14px', borderRadius: tokens.radius.lg,
+                background: tokens.colors.bg.tertiary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                alignItems: 'center',
+              }}>
+                <span style={{ fontSize: 12, color: tokens.colors.text.tertiary, fontWeight: 600 }}>
+                  {isZh ? '其他语言版本' : 'Other Languages'}:
+                </span>
+                {langVersions.map(v => (
+                  <Link
+                    key={v.id}
+                    href={`/library/${v.id}`}
+                    style={{
+                      fontSize: 12, fontWeight: 600, padding: '4px 12px',
+                      borderRadius: tokens.radius.full,
+                      background: tokens.colors.accent.brandMuted,
+                      color: tokens.colors.accent.brand,
+                      textDecoration: 'none',
+                      transition: `all ${tokens.transition.fast}`,
+                    }}
+                  >
+                    {v.language === 'zh' ? '中文' : v.language === 'en' ? 'English' : v.language === 'de' ? 'Deutsch' : v.language === 'fr' ? 'Français' : v.language === 'es' ? 'Español' : v.language === 'ja' ? '日本語' : v.language || 'Other'}
+                  </Link>
+                ))}
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

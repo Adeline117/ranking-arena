@@ -262,27 +262,30 @@ export default function FearGreedGauge() {
 
           {/* Center value */}
           <text
-            x={cx} y={cy + 30}
+            x={cx} y={cy + 28}
             textAnchor="middle"
             dominantBaseline="middle"
             fill={color}
-            fontSize="36"
+            fontSize="32"
             fontWeight="800"
             fontFamily="var(--font-mono, monospace)"
-            letterSpacing="-2"
+            letterSpacing="-1.5"
+            style={{ fontVariantNumeric: 'tabular-nums' } as React.CSSProperties}
           >
             {displayValue}
           </text>
 
           {/* Label below value */}
           <text
-            x={cx} y={cy + 50}
+            x={cx} y={cy + 48}
             textAnchor="middle"
             dominantBaseline="middle"
             fill={color}
-            fontSize="13"
+            fontSize="12"
             fontWeight="600"
-            letterSpacing="0.5"
+            letterSpacing="1"
+            textDecoration="none"
+            opacity="0.85"
           >
             {label}
           </text>

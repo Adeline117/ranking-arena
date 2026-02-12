@@ -14,8 +14,21 @@ import { cs } from './scoring.mjs'
  * @returns {Promise<number>} Number of snapshots saved
  */
 export async function save(source, traders, opts = {}) {
-  const { seasonId = '30D', marketType = 'futures' } = opts
+  const { seasonId = '30D', marketType = 'futures', skipSafetyCheck = false } = opts
   if (!traders.length) return 0
+
+  // Safety check: if new data is <50% of existing data, warn and skip
+  if (!skipSafetyCheck) {
+    const { count: existingCount } = await sb
+      .from('trader_snapshots')
+      .select('*', { count: 'exact', head: true })
+      .eq('source', source)
+      .eq('season_id', seasonId)
+    if (existingCount && traders.length < existingCount * 0.5) {
+      console.warn(`⚠️  SAFETY SKIP [${source}/${seasonId}]: new=${traders.length} vs existing=${existingCount} (<50%). Skipping to prevent data loss.`)
+      return 0
+    }
+  }
 
   const now = new Date().toISOString()
 

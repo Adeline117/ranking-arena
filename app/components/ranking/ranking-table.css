@@ -43,29 +43,41 @@
 
 /* Sort reorder animation — rows fade in when sort changes */
 @keyframes rowFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .ranking-row-link {
-  animation: rowFadeIn 0.3s ease-out both;
+  animation: rowFadeIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Staggered delay for first 20 rows */
 .ranking-row-link:nth-child(1) { animation-delay: 0ms; }
-.ranking-row-link:nth-child(2) { animation-delay: 15ms; }
-.ranking-row-link:nth-child(3) { animation-delay: 30ms; }
-.ranking-row-link:nth-child(4) { animation-delay: 45ms; }
-.ranking-row-link:nth-child(5) { animation-delay: 60ms; }
-.ranking-row-link:nth-child(6) { animation-delay: 75ms; }
-.ranking-row-link:nth-child(7) { animation-delay: 90ms; }
-.ranking-row-link:nth-child(8) { animation-delay: 105ms; }
-.ranking-row-link:nth-child(9) { animation-delay: 120ms; }
-.ranking-row-link:nth-child(10) { animation-delay: 135ms; }
+.ranking-row-link:nth-child(2) { animation-delay: 20ms; }
+.ranking-row-link:nth-child(3) { animation-delay: 40ms; }
+.ranking-row-link:nth-child(4) { animation-delay: 55ms; }
+.ranking-row-link:nth-child(5) { animation-delay: 70ms; }
+.ranking-row-link:nth-child(6) { animation-delay: 82ms; }
+.ranking-row-link:nth-child(7) { animation-delay: 94ms; }
+.ranking-row-link:nth-child(8) { animation-delay: 104ms; }
+.ranking-row-link:nth-child(9) { animation-delay: 114ms; }
+.ranking-row-link:nth-child(10) { animation-delay: 122ms; }
+.ranking-row-link:nth-child(11) { animation-delay: 130ms; }
+.ranking-row-link:nth-child(12) { animation-delay: 136ms; }
+.ranking-row-link:nth-child(13) { animation-delay: 142ms; }
+.ranking-row-link:nth-child(14) { animation-delay: 148ms; }
+.ranking-row-link:nth-child(15) { animation-delay: 152ms; }
+.ranking-row-link:nth-child(n+16) { animation-delay: 160ms; }
 
 /* Sort header flash feedback */
+@keyframes sortFlash {
+  0% { color: var(--color-accent-primary, #8b6fa8); transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
 .sort-header.just-sorted {
   color: var(--color-accent-primary, #8b6fa8) !important;
+  animation: sortFlash 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* 普通行样式 */
@@ -76,12 +88,24 @@
 }
 
 .ranking-row {
-  transition: background 0.18s ease, box-shadow 0.18s ease;
+  transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: background;
 }
 
 .ranking-row:hover {
   background: var(--glass-bg-light) !important;
   box-shadow: inset 0 0 0 1px var(--glass-border-light);
+}
+
+/* Tabular number alignment for all numeric cells */
+.ranking-row .roi-cell,
+.ranking-row .col-score,
+.ranking-row .col-winrate,
+.ranking-row .col-mdd,
+.ranking-row .col-sortino,
+.ranking-row .col-alpha {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 /* Top 3 rows get subtle depth treatment */

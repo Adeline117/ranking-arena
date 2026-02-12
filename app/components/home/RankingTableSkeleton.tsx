@@ -2,6 +2,7 @@
  * RankingTableSkeleton - Server Component
  * Shows a skeleton of the ranking table before data loads.
  * This is rendered on the server and shown immediately to improve LCP.
+ * Staggered animation-delay gives a cascading shimmer effect.
  */
 
 import { tokens } from '@/lib/design-tokens'
@@ -14,6 +15,7 @@ export default function RankingTableSkeleton() {
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}`,
         padding: tokens.spacing[4],
+        overflow: 'hidden',
       }}
     >
       {/* Header skeleton */}
@@ -44,6 +46,7 @@ export default function RankingTableSkeleton() {
                 width: 60,
                 height: 32,
                 borderRadius: tokens.radius.md,
+                animationDelay: `${i * 80}ms`,
               }}
             />
           ))}
@@ -51,7 +54,7 @@ export default function RankingTableSkeleton() {
       </div>
 
       {/* Table rows skeleton */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
           <div
             key={i}
@@ -60,8 +63,8 @@ export default function RankingTableSkeleton() {
               alignItems: 'center',
               gap: tokens.spacing[3],
               padding: `${tokens.spacing[3]} ${tokens.spacing[2]}`,
-              borderRadius: tokens.radius.lg,
-              background: i <= 3 ? `${tokens.colors.accent.primary}08` : 'transparent',
+              borderBottom: `1px solid ${tokens.colors.border.primary}`,
+              background: i <= 3 ? `${tokens.colors.accent.primary}06` : 'transparent',
             }}
           >
             {/* Rank */}
@@ -72,16 +75,18 @@ export default function RankingTableSkeleton() {
                 height: 28,
                 borderRadius: tokens.radius.full,
                 flexShrink: 0,
+                animationDelay: `${i * 60}ms`,
               }}
             />
             {/* Avatar */}
             <div
               className="skeleton"
               style={{
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 borderRadius: tokens.radius.full,
                 flexShrink: 0,
+                animationDelay: `${i * 60 + 30}ms`,
               }}
             />
             {/* Name + source */}
@@ -89,18 +94,20 @@ export default function RankingTableSkeleton() {
               <div
                 className="skeleton"
                 style={{
-                  width: '70%',
-                  height: 16,
+                  width: `${65 + (i % 3) * 10}%`,
+                  height: 14,
                   borderRadius: tokens.radius.sm,
-                  marginBottom: 6,
+                  marginBottom: 8,
+                  animationDelay: `${i * 60 + 60}ms`,
                 }}
               />
               <div
                 className="skeleton"
                 style={{
-                  width: '40%',
-                  height: 12,
+                  width: `${30 + (i % 4) * 8}%`,
+                  height: 10,
                   borderRadius: tokens.radius.sm,
+                  animationDelay: `${i * 60 + 90}ms`,
                 }}
               />
             </div>
@@ -108,20 +115,22 @@ export default function RankingTableSkeleton() {
             <div
               className="skeleton"
               style={{
-                width: 50,
-                height: 32,
+                width: 48,
+                height: 28,
                 borderRadius: tokens.radius.md,
                 flexShrink: 0,
+                animationDelay: `${i * 60 + 120}ms`,
               }}
             />
             {/* ROI */}
             <div
               className="skeleton hide-mobile"
               style={{
-                width: 70,
-                height: 20,
+                width: 68,
+                height: 18,
                 borderRadius: tokens.radius.sm,
                 flexShrink: 0,
+                animationDelay: `${i * 60 + 150}ms`,
               }}
             />
           </div>

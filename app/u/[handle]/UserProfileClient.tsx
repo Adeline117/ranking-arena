@@ -10,6 +10,7 @@ import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 // Trader components for stats/portfolio tabs
 const JoinedGroups = dynamic(() => import('@/app/components/trader/JoinedGroups'), { ssr: false })
 const UserBookmarkFolders = dynamic(() => import('@/app/components/trader/UserBookmarkFolders'), { ssr: false })
@@ -26,9 +27,15 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 import { logger } from '@/lib/logger'
 
+import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
+const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), { ssr: false })
+const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
+const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
+
 const ActivityHeatmap = dynamic(() => import('@/app/components/profile/ActivityHeatmap'), { ssr: false })
 const UserStreaks = dynamic(() => import('@/app/components/profile/UserStreaks'), { ssr: false })
 const UserActivityFeed = dynamic(() => import('@/app/components/profile/UserActivityFeed'), { ssr: false })
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ProfileTradingCard = dynamic(() => import('@/app/components/profile/ProfileTradingCard'), { ssr: false })
 const ProfileBookshelf = dynamic(() => import('@/app/components/profile/ProfileBookshelf'), { ssr: false })
 const ProfileActivityFeed = dynamic(() => import('@/app/components/profile/ProfileActivityFeed'), { ssr: false })
@@ -89,9 +96,13 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
   const [profile, setProfile] = useState<ServerProfile | null>(serverProfile)
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null)
   const [followersCount, setFollowersCount] = useState(serverProfile?.followers || 0)
+  const [mounted, setMounted] = useState(false)
+  const [avatarHovered, setAvatarHovered] = useState(false)
   const profileCreationRef = useRef(false)
   const searchParams = useSearchParams()
   const pathname = usePathname()
+
+  useEffect(() => { setMounted(true) }, [])
 
   // Trader data - SWR with server fallback
   const isTrader = !!serverProfile?.traderHandle
@@ -302,7 +313,20 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
       <TopNav email={email} />
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-        {/* Profile Header */}
+        <Breadcrumb items={[
+          { label: isZh ? '社区' : 'Community', href: '/' },
+          { label: `@${profile.handle}` },
+        ]} />
+        {/* Profile Header — matches TraderHeader layout */}
+        {(() => {
+          const hasCover = Boolean(profile.cover_url)
+          const containerBackground = hasCover
+            ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${profile.cover_url}) center/cover no-repeat`
+            : `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`
+          const textColor = hasCover ? tokens.colors.white : tokens.colors.text.primary
+          const secondaryTextColor = hasCover ? 'var(--glass-bg-medium)' : tokens.colors.text.secondary
+          const textShadow = hasCover ? '0 1px 4px var(--color-overlay-dark)' : undefined
+          return (
         <Box
           className="profile-header"
           style={{
@@ -311,54 +335,56 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             alignItems: 'flex-start',
             marginBottom: tokens.spacing[6],
             padding: tokens.spacing[6],
-            background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`,
+            background: containerBackground,
             borderRadius: tokens.radius.xl,
             border: `1px solid ${tokens.colors.border.primary}50`,
             boxShadow: '0 8px 32px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
             position: 'relative',
             overflow: 'visible',
-            minHeight: 200,
+            opacity: mounted ? 1 : 0,
+            transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           }}
         >
-          {/* Background */}
+          {!hasCover && (
           <Box style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: tokens.radius.xl, pointerEvents: 'none' }}>
-            {profile.cover_url ? (
-              <>
-                <Image src={profile.cover_url} alt="" fill priority sizes="(max-width: 768px) 100vw, 800px" style={{ objectFit: 'cover' }} />
-                <Box style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, var(--color-overlay-dark) 0%, var(--color-overlay-medium) 100%)' }} />
-              </>
-            ) : (
-              <>
                 <Box style={{ position: 'absolute', top: -100, left: -100, width: 300, height: 300, background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)` }} />
                 <Box style={{ position: 'absolute', bottom: -80, right: -80, width: 200, height: 200, background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)` }} />
-              </>
-            )}
           </Box>
+          )}
 
           {/* Profile Info */}
           <Box className="profile-header-info" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[5], flex: 1, position: 'relative', zIndex: 1 }}>
             {/* Avatar */}
-            <Box style={{ position: 'relative', flexShrink: 0 }}>
+            <Box
+              style={{ position: 'relative', flexShrink: 0 }}
+              onMouseEnter={() => setAvatarHovered(true)}
+              onMouseLeave={() => setAvatarHovered(false)}
+            >
               <Box
                 className="profile-header-avatar"
                 style={{
-                  width: 88, height: 88, borderRadius: tokens.radius.full,
+                  width: 72, height: 72, borderRadius: tokens.radius.full,
                   background: profile.avatar_url ? tokens.colors.bg.secondary : getAvatarGradient(profile.id),
-                  border: `3px solid ${tokens.colors.border.primary}`,
+                  border: `3px solid ${avatarHovered ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
                   display: 'grid', placeItems: 'center',
                   overflow: 'hidden',
-                  boxShadow: `0 4px 20px var(--color-overlay-light), 0 0 0 4px ${tokens.colors.bg.primary}40`,
+                  boxShadow: avatarHovered
+                    ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${tokens.colors.accent.primary}20`
+                    : '0 4px 16px var(--color-overlay-light)',
+                  transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                  transform: avatarHovered ? 'scale(1.08)' : 'scale(1)',
+                  cursor: 'pointer',
                 }}
               >
                 {profile.avatar_url ? (
                   <Image
                     src={`/api/avatar?url=${encodeURIComponent(profile.avatar_url)}`}
-                    alt={profile.handle} width={88} height={88} priority
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    alt={profile.handle} width={72} height={72} priority
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'all 0.4s ease' }}
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 ) : (
-                  <Text size="2xl" weight="black" style={{ color: tokens.colors.white, fontSize: '32px', lineHeight: '1' }}>
+                  <Text size="2xl" weight="black" style={{ color: tokens.colors.white, textShadow: 'var(--text-shadow-md)', fontSize: '32px', lineHeight: '1' }}>
                     {getAvatarInitial(profile.handle)}
                   </Text>
                 )}
@@ -369,7 +395,12 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             {/* Info */}
             <Box style={{ flex: 1, minWidth: 0 }}>
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
-                <Text size="2xl" weight="black" style={{ color: tokens.colors.text.primary, lineHeight: tokens.typography.lineHeight.tight }}>
+                <Text size="2xl" weight="black" className="trader-name-truncate" style={{
+                  color: textColor,
+                  lineHeight: tokens.typography.lineHeight.tight,
+                  textShadow,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%',
+                }}>
                   {profile.handle}
                 </Text>
 
@@ -444,7 +475,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
               </Box>
 
               {profile.bio && (
-                <Text size="sm" style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[3], maxWidth: 500 }}>
+                <Text size="sm" style={{ color: secondaryTextColor, marginBottom: tokens.spacing[3], maxWidth: 500, textShadow }}>
                   {profile.bio}
                 </Text>
               )}
@@ -455,8 +486,8 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                   onClick={() => isOwnProfile && router.push('/following')}
                   style={{ cursor: isOwnProfile ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 4, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, borderRadius: tokens.radius.md }}
                 >
-                  <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-                    <Text as="span" weight="bold" style={{ color: tokens.colors.text.primary, marginRight: 4 }}>{followingCount}</Text>
+                  <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                    <Text as="span" weight="bold" style={{ color: textColor, marginRight: 4, textShadow }}>{followingCount}</Text>
                     {t('following')}
                   </Text>
                 </Box>
@@ -469,8 +500,8 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                   }}
                   style={{ cursor: profile.isRegistered && (isOwnProfile || profile.show_followers !== false) ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 4, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`, borderRadius: tokens.radius.md }}
                 >
-                  <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-                    <Text as="span" weight="bold" style={{ color: tokens.colors.text.primary, marginRight: 4 }}>{followersCount}</Text>
+                  <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                    <Text as="span" weight="bold" style={{ color: textColor, marginRight: 4, textShadow }}>{followersCount}</Text>
                     {t('followers')}
                   </Text>
                 </Box>
@@ -478,9 +509,22 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             </Box>
           </Box>
 
-          {/* Action buttons */}
-          <Box className="profile-header-actions action-buttons" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0, flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-            {isOwnProfile ? (
+          {/* Action buttons — matches TraderHeader order */}
+          <Box className="profile-header-actions action-buttons" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+            <button
+              onClick={() => router.push('/')}
+              style={{
+                color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.lg,
+                background: tokens.colors.bg.tertiary, border: `1px solid ${tokens.colors.border.primary}`,
+                cursor: 'pointer', fontWeight: tokens.typography.fontWeight.medium,
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            >
+              ← {t('back')}
+            </button>
+
+            {isOwnProfile && (
               <button
                 onClick={() => router.push('/settings')}
                 style={{
@@ -489,6 +533,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                   background: `${tokens.colors.accent.primary}15`, border: `1px solid ${tokens.colors.accent.primary}40`,
                   cursor: 'pointer', display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
                   fontWeight: tokens.typography.fontWeight.medium,
+                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -497,7 +542,9 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 </svg>
                 {t('editProfile')}
               </button>
-            ) : profile.isRegistered && currentUserId ? (
+            )}
+
+            {!isOwnProfile && profile.isRegistered && currentUserId && (
               <>
                 <UserFollowButton
                   targetUserId={profile.id}
@@ -509,31 +556,25 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 />
                 <MessageButton targetUserId={profile.id} currentUserId={currentUserId} size="sm" />
               </>
-            ) : null}
-
-            <button
-              onClick={() => router.push('/')}
-              style={{
-                color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm,
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.lg,
-                background: tokens.colors.bg.tertiary, border: `1px solid ${tokens.colors.border.primary}`,
-                cursor: 'pointer', fontWeight: tokens.typography.fontWeight.medium,
-              }}
-            >
-              {t('back')}
-            </button>
+            )}
           </Box>
         </Box>
+          )
+        })()}
 
-        {/* Tabs */}
+        {/* Tabs — matches TraderTabs pill style */}
         <Box
           className="profile-tabs"
           role="tablist"
           style={{
-            display: 'flex', gap: tokens.spacing[1], marginBottom: tokens.spacing[5],
-            padding: `0 ${tokens.spacing[2]}`,
-            borderBottom: `1px solid ${tokens.colors.border.primary}40`,
-            overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+            display: 'flex',
+            gap: tokens.spacing[2],
+            marginBottom: tokens.spacing[4],
+            position: 'relative',
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            paddingBottom: tokens.spacing[3],
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
             scrollbarWidth: 'none',
           }}
         >
@@ -542,37 +583,49 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             return (
               <button
                 key={tab.key}
-                className="profile-tab-button"
+                className="profile-tab-button interactive-scale"
                 onClick={() => handleProfileTabChange(tab.key)}
                 role="tab"
                 aria-selected={isActive}
                 tabIndex={isActive ? 0 : -1}
                 style={{
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: isActive
-                    ? `2px solid ${tokens.colors.accent.primary}`
-                    : '2px solid transparent',
+                  background: isActive
+                    ? `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.primary}08)`
+                    : 'transparent',
+                  border: isActive
+                    ? `1px solid ${tokens.colors.accent.primary}30`
+                    : '1px solid transparent',
                   padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                  minHeight: 44, cursor: 'pointer',
-                  transition: 'all 0.2s ease',
+                  minHeight: 44,
+                  cursor: 'pointer',
+                  position: 'relative',
+                  borderRadius: tokens.radius.lg,
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
-                  position: 'relative',
                 }}
                 onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.borderBottomColor = `${tokens.colors.accent.primary}40`
+                  if (!isActive) {
+                    e.currentTarget.style.background = `${tokens.colors.bg.tertiary}80`
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.borderBottomColor = 'transparent'
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.transform = 'translateY(0)'
+                  }
                 }}
               >
                 <Text
                   size="sm"
                   weight={isActive ? 'black' : 'medium'}
                   style={{
-                    color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
-                    transition: 'color 0.2s ease',
+                    color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                    transition: 'color 0.3s ease',
                   }}
                 >
                   {tab.label}
@@ -586,17 +639,60 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
         <Box key={activeProfileTab} style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}>
           {activeProfileTab === 'overview' && (
             <Box
-              className="profile-content"
-              style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: tokens.spacing[6] }}
+              className="profile-content profile-grid"
+              style={{ display: 'grid', gridTemplateColumns: _traderSimilar.length > 0 || !isTrader ? '1fr 300px' : '1fr', gap: tokens.spacing[8] }}
             >
               {/* Main column */}
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                {/* Trading data card (if trader) */}
+              <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                {/* Trading data — uses same OverviewPerformanceCard as trader page */}
                 {isTrader && traderPerformance && (
-                  <ProfileTradingCard
-                    performance={traderPerformance}
-                    equityCurve={traderEquityCurve?.['90D']}
+                  <Box style={{ position: 'relative' }}>
+                    <OverviewPerformanceCard
+                      performance={traderPerformance as ExtendedPerformance}
+                      equityCurve={traderEquityCurve?.['90D']}
+                      source={traderProfile?.source}
+                    />
+                    {!email && traderEquityCurve?.['90D'] && (
+                      <Box style={{
+                        position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
+                        background: 'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 60%, var(--color-lock-bg) 100%)',
+                        backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
+                        borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
+                      }}>
+                        <Link href={`/login?returnUrl=${encodeURIComponent(`/u/${handle}`)}`} style={{ textDecoration: 'none' }}>
+                          <Box style={{
+                            padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                            background: `${tokens.colors.accent.primary}20`, border: `1px solid ${tokens.colors.accent.primary}50`,
+                            borderRadius: tokens.radius.lg, cursor: 'pointer', textAlign: 'center',
+                          }}>
+                            <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
+                              {isZh ? '注册查看完整历史数据' : 'Sign up to view full history'}
+                            </Text>
+                          </Box>
+                        </Link>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+
+                {/* Equity Curve — same as trader page */}
+                {isTrader && traderEquityCurve && (
+                  <EquityCurveSection
+                    equityCurve={traderEquityCurve}
                     traderHandle={serverProfile?.traderHandle || ''}
+                    delay={0}
+                  />
+                )}
+
+                {/* Trader feed — same as trader page */}
+                {isTrader && _traderFeed.length > 0 && (
+                  <TraderFeed
+                    items={_traderFeed.filter((f: { type: string }) => f.type !== 'group_post')}
+                    title={t('activities') || (isZh ? '动态' : 'Activities')}
+                    isRegistered={traderProfile?.isRegistered}
+                    traderId={traderProfile?.id || ''}
+                    traderHandle={traderProfile?.handle || ''}
                     source={traderProfile?.source}
                   />
                 )}
@@ -677,6 +773,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
               {/* Sidebar column */}
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                {isTrader && _traderSimilar.length > 0 && <SimilarTraders traders={_traderSimilar} />}
                 <Box bg="secondary" p={4} radius="lg" border="primary">
                   <UserStreaks userId={profile.id} />
                 </Box>
@@ -785,7 +882,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             .page-container {
               padding: ${tokens.spacing[3]} !important;
             }
-            .profile-content {
+            .profile-content, .profile-grid {
               grid-template-columns: 1fr !important;
             }
             .profile-header {
@@ -800,8 +897,8 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
               align-items: center !important;
             }
             .profile-header-avatar {
-              width: 72px !important;
-              height: 72px !important;
+              width: 56px !important;
+              height: 56px !important;
             }
             .profile-header-actions {
               margin-top: ${tokens.spacing[3]} !important;

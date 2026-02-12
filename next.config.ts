@@ -353,7 +353,7 @@ const nextConfig: NextConfig = {
     optimizeCss: true,
 
     // Partial Prerendering — static shell + streaming dynamic parts
-    ppr: 'incremental',
+    // ppr merged into cacheComponents in Next.js 16
 
     // Optimize font loading
     optimizeServerReact: true,

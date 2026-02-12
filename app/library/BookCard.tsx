@@ -118,7 +118,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           overflow: 'hidden', textOverflow: 'ellipsis',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
         }}>
-          {item.title}
+          {isZh ? (item.title_zh || item.title) : (item.title_en || item.title)}
         </h3>
 
         {/* Author */}

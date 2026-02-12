@@ -294,7 +294,9 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                   color: 'rgba(255,255,255,0.9)',
                   textShadow: '0 1px 3px rgba(0,0,0,0.6)',
                   lineHeight: 1.1,
-                }}>
+                  fontFamily: 'var(--font-mono, monospace)',
+                  fontVariantNumeric: 'tabular-nums',
+                } as React.CSSProperties}>
                   {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(1)}%
                 </span>
               )}

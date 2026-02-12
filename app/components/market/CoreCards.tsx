@@ -151,8 +151,9 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
           color: tokens.colors.text.secondary,
           fontFamily: 'var(--font-mono, monospace)',
           fontSize: tokens.typography.fontSize.sm,
-          tabularNums: true,
           fontVariantNumeric: 'tabular-nums',
+          minWidth: 80,
+          textAlign: 'right',
         } as React.CSSProperties}>
           {formattedPrice}
         </span>
@@ -160,13 +161,14 @@ function CoinItem({ symbol, price, changePct, isGainer, index }: {
           color,
           fontWeight: 700,
           fontSize: tokens.typography.fontSize.sm,
-          minWidth: 68,
+          minWidth: 72,
           textAlign: 'right',
           padding: `3px ${tokens.spacing[2]}`,
           borderRadius: tokens.radius.sm,
           background: isGainer ? 'var(--color-accent-success-10)' : 'var(--color-accent-error-10)',
           fontFamily: 'var(--font-mono, monospace)',
           fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.4,
         } as React.CSSProperties}>
           {changePct}
         </span>
@@ -322,8 +324,9 @@ export default function CoreCards() {
                     fontFamily: 'var(--font-mono, monospace)',
                     fontSize: tokens.typography.fontSize.xs,
                     fontVariantNumeric: 'tabular-nums',
-                    minWidth: 76,
+                    minWidth: 80,
                     textAlign: 'right',
+                    letterSpacing: '-0.3px',
                   } as React.CSSProperties}>
                     {formatBTC(ex.trade_volume_24h_btc)}
                   </span>

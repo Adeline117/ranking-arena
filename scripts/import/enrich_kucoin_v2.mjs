@@ -1,189 +1,168 @@
 /**
  * KuCoin Enrichment v2 — WR/MDD from API trade data
  * 
- * Fetches real trade history and PnL curves from KuCoin's copy-trading API,
- * then computes win rate and max drawdown from actual data.
- * 
  * Win Rate: from positionHistory (closePnl > 0 = win)
- * Max Drawdown: from pnl/history cumulative ratio curve
+ * Max Drawdown: from pnl/history cumulative ratio curve (peak-to-trough %)
  * 
- * Usage: node scripts/import/enrich_kucoin_v2.mjs
+ * Uses puppeteer to get session cookies, then direct HTTP for speed.
  */
 
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { getSupabaseClient, calculateArenaScore, sleep } from '../lib/shared.mjs'
+import pg from 'pg'
+import fetch from 'node-fetch'
 
 puppeteer.use(StealthPlugin())
 
 const supabase = getSupabaseClient()
-const CONCURRENCY = 3
-const DELAY_MS = 800
+const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
 
-// Compute win rate from position history
 function computeWinRate(positions) {
   if (!positions || positions.length === 0) return null
   const wins = positions.filter(p => parseFloat(p.closePnl) > 0).length
   return (wins / positions.length) * 100
 }
 
-// Compute MDD from cumulative PnL ratio curve
 function computeMDD(pnlHistory) {
   if (!pnlHistory || pnlHistory.length < 2) return null
-  
-  const ratios = pnlHistory.map(p => parseFloat(p.ratio))
-  let peak = ratios[0]
-  let maxDD = 0
-  
-  for (const ratio of ratios) {
-    if (ratio > peak) peak = ratio
-    const dd = peak - ratio
-    if (dd > maxDD) maxDD = dd
+  const equities = pnlHistory.map(p => 1 + parseFloat(p.ratio))
+  let peak = equities[0], maxDD = 0
+  for (const eq of equities) {
+    if (eq > peak) peak = eq
+    if (peak > 0) {
+      const dd = (peak - eq) / peak
+      if (dd > maxDD) maxDD = dd
+    }
   }
+  return Math.min(maxDD * 100, 100)
+}
+
+async function getCookies() {
+  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] })
+  const page = await browser.newPage()
+  await page.goto('https://www.kucoin.com/copytrading', { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {})
+  await sleep(3000)
+  const cookies = await page.cookies()
+  await browser.close()
+  return cookies.map(c => `${c.name}=${c.value}`).join('; ')
+}
+
+async function fetchAPI(url, cookieStr) {
+  const r = await fetch(url, {
+    headers: {
+      'Cookie': cookieStr,
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      'Referer': 'https://www.kucoin.com/copytrading',
+    },
+    timeout: 10000,
+  })
+  return r.json()
+}
+
+async function fetchTraderData(traderId, cookieStr) {
+  const base = 'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/leadShow'
+  const [posRes, pnlRes] = await Promise.all([
+    fetchAPI(`${base}/positionHistory?leadConfigId=${traderId}&period=90d&lang=en_US`, cookieStr),
+    fetchAPI(`${base}/pnl/history?leadConfigId=${traderId}&period=90d&lang=en_US`, cookieStr),
+  ])
   
-  // Convert to percentage (ratios are already in percentage form, e.g. 9.17 = 917%)
-  // MDD as percentage points of the ratio
-  return maxDD * 100
+  return {
+    winRate: computeWinRate(posRes.success ? posRes.data : null),
+    maxDrawdown: computeMDD(pnlRes.success ? pnlRes.data : null),
+  }
 }
 
 async function main() {
-  console.log('=== KuCoin Enrichment v2: WR/MDD from API ===\n')
+  console.log('=== KuCoin Enrichment v2 ===\n')
   
-  // Get all KuCoin traders missing WR or MDD
-  const { data: traders, error } = await supabase
-    .from('trader_snapshots')
-    .select('source_trader_id, season_id, roi, pnl, win_rate, max_drawdown')
-    .eq('source', 'kucoin')
-    .or('win_rate.is.null,max_drawdown.is.null')
+  const pool = new pg.Pool({ connectionString: DB_URL })
   
-  if (error) {
-    console.error('DB error:', error.message)
-    process.exit(1)
-  }
+  // Reset bad MDD values
+  await pool.query("UPDATE trader_snapshots SET max_drawdown = NULL WHERE source = 'kucoin' AND max_drawdown > 100")
   
-  console.log(`Found ${traders.length} traders needing enrichment`)
+  // Get traders needing enrichment
+  const { rows: traders } = await pool.query(`
+    SELECT source_trader_id, season_id, roi, pnl, win_rate, max_drawdown 
+    FROM trader_snapshots WHERE source = 'kucoin' AND (win_rate IS NULL OR max_drawdown IS NULL)
+  `)
   
-  if (traders.length === 0) {
-    console.log('Nothing to do!')
-    process.exit(0)
-  }
-  
-  // Deduplicate by source_trader_id (may have multiple seasons)
   const uniqueIds = [...new Set(traders.map(t => t.source_trader_id))]
-  console.log(`Unique trader IDs: ${uniqueIds.length}`)
+  console.log(`${traders.length} snapshots, ${uniqueIds.length} unique traders\n`)
   
-  // Launch browser to get session cookies
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  })
+  if (uniqueIds.length === 0) { await pool.end(); return }
   
-  const page = await browser.newPage()
-  await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+  // Get cookies via puppeteer
+  console.log('Getting session cookies...')
+  let cookieStr = await getCookies()
+  console.log('Cookies obtained\n')
   
-  // Load the copytrading page to establish session
-  console.log('Loading KuCoin copytrading page...')
-  await page.goto('https://www.kucoin.com/copytrading', { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {})
-  await sleep(3000)
-  console.log('Session established\n')
-  
-  // Process traders in batches
   let enriched = 0, failed = 0, noData = 0
+  const BATCH = 5
   
-  for (let i = 0; i < uniqueIds.length; i += CONCURRENCY) {
-    const batch = uniqueIds.slice(i, i + CONCURRENCY)
+  for (let i = 0; i < uniqueIds.length; i += BATCH) {
+    const batch = uniqueIds.slice(i, i + BATCH)
     
-    const results = await Promise.all(batch.map(async (traderId) => {
-      try {
-        const [posResult, pnlResult] = await Promise.all([
-          page.evaluate(async (id) => {
-            const r = await fetch(`/_api/ct-copy-trade/v1/copyTrading/leadShow/positionHistory?leadConfigId=${id}&period=90d&lang=en_US`)
-            return r.json()
-          }, traderId),
-          page.evaluate(async (id) => {
-            const r = await fetch(`/_api/ct-copy-trade/v1/copyTrading/leadShow/pnl/history?leadConfigId=${id}&period=90d&lang=en_US`)
-            return r.json()
-          }, traderId),
-        ])
-        
-        const positions = posResult.success ? posResult.data : null
-        const pnlHistory = pnlResult.success ? pnlResult.data : null
-        
-        const winRate = computeWinRate(positions)
-        const maxDrawdown = computeMDD(pnlHistory)
-        
-        return { traderId, winRate, maxDrawdown, tradeCount: positions?.length || 0 }
-      } catch (e) {
-        return { traderId, error: e.message }
-      }
-    }))
+    const results = await Promise.allSettled(
+      batch.map(id => fetchTraderData(id, cookieStr))
+    )
     
-    // Update DB for each result
-    for (const r of results) {
-      if (r.error) {
+    for (let j = 0; j < batch.length; j++) {
+      const traderId = batch[j]
+      const result = results[j]
+      
+      if (result.status === 'rejected') {
         failed++
         continue
       }
       
-      if (r.winRate === null && r.maxDrawdown === null) {
+      const { winRate, maxDrawdown } = result.value
+      
+      if (winRate === null && maxDrawdown === null) {
         noData++
         continue
       }
       
-      // Find all snapshots for this trader
-      const traderSnapshots = traders.filter(t => t.source_trader_id === r.traderId)
-      
-      for (const snap of traderSnapshots) {
-        const updates = {}
-        if (r.winRate !== null && snap.win_rate === null) updates.win_rate = Math.round(r.winRate * 100) / 100
-        if (r.maxDrawdown !== null && snap.max_drawdown === null) updates.max_drawdown = Math.round(r.maxDrawdown * 100) / 100
+      const traderSnaps = traders.filter(t => t.source_trader_id === traderId)
+      for (const snap of traderSnaps) {
+        const wr = winRate !== null && snap.win_rate === null ? Math.round(winRate * 100) / 100 : snap.win_rate
+        const mdd = maxDrawdown !== null && snap.max_drawdown === null ? Math.round(maxDrawdown * 100) / 100 : snap.max_drawdown
+        const score = calculateArenaScore(snap.roi, snap.pnl, mdd, wr, snap.season_id)
         
-        if (Object.keys(updates).length === 0) continue
-        
-        // Recalculate arena score with new data
-        const newWR = updates.win_rate ?? snap.win_rate
-        const newMDD = updates.max_drawdown ?? snap.max_drawdown
-        const score = calculateArenaScore(snap.roi, snap.pnl, newMDD, newWR, snap.season_id)
-        updates.arena_score = score.totalScore
-        
-        const { error: updateError } = await supabase
-          .from('trader_snapshots')
-          .update(updates)
-          .eq('source', 'kucoin')
-          .eq('source_trader_id', r.traderId)
-          .eq('season_id', snap.season_id)
-        
-        if (updateError) {
-          console.error(`  ✗ ${r.traderId}/${snap.season_id}: ${updateError.message}`)
-          failed++
-        } else {
-          enriched++
-        }
-      }
-      
-      if (i % 30 === 0 || i + CONCURRENCY >= uniqueIds.length) {
-        console.log(`Progress: ${i + batch.length}/${uniqueIds.length} | enriched=${enriched} noData=${noData} failed=${failed}`)
+        await pool.query(
+          `UPDATE trader_snapshots SET win_rate = $1, max_drawdown = $2, arena_score = $3 
+           WHERE source = 'kucoin' AND source_trader_id = $4 AND season_id = $5`,
+          [wr, mdd, score.totalScore, traderId, snap.season_id]
+        )
+        enriched++
       }
     }
     
-    await sleep(DELAY_MS)
+    if (i % 50 === 0 || i + BATCH >= uniqueIds.length) {
+      console.log(`[${Math.min(i + BATCH, uniqueIds.length)}/${uniqueIds.length}] enriched=${enriched} noData=${noData} failed=${failed}`)
+    }
+    
+    // Refresh cookies every 200 requests
+    if (i > 0 && i % 200 === 0) {
+      console.log('Refreshing cookies...')
+      cookieStr = await getCookies()
+    }
+    
+    await sleep(300)
   }
   
-  await browser.close()
-  
   console.log(`\n=== Done ===`)
-  console.log(`Enriched: ${enriched}`)
-  console.log(`No data: ${noData}`)
-  console.log(`Failed: ${failed}`)
+  console.log(`Enriched: ${enriched}, No data: ${noData}, Failed: ${failed}`)
   
-  // Verify
-  const { data: verify } = await supabase
-    .from('trader_snapshots')
-    .select('season_id')
-    .eq('source', 'kucoin')
-    .not('win_rate', 'is', null)
-  
-  console.log(`\nTotal KuCoin traders with WR: ${verify?.length || 0}`)
+  const { rows } = await pool.query(`
+    SELECT season_id, count(*) as total, count(win_rate) as has_wr, count(max_drawdown) as has_mdd,
+      round(avg(win_rate)::numeric, 1) as avg_wr, round(avg(max_drawdown)::numeric, 1) as avg_mdd
+    FROM trader_snapshots WHERE source = 'kucoin'
+    GROUP BY season_id ORDER BY season_id
+  `)
+  console.log('\nVerification:')
+  console.table(rows)
+  await pool.end()
 }
 
 main().catch(console.error)

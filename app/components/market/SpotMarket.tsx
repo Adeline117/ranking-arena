@@ -47,7 +47,9 @@ function ChangeCell({ value }: { value: number | null }) {
       borderRadius: tokens.radius.sm,
       background: bg,
       fontSize: tokens.typography.fontSize.sm,
-    }}>
+      fontFamily: 'var(--font-mono, monospace)',
+      fontVariantNumeric: 'tabular-nums',
+    } as React.CSSProperties}>
       {value >= 0 ? '+' : ''}{value.toFixed(2)}%
     </span>
   )
