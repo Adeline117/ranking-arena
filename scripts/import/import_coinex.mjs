@@ -1,14 +1,12 @@
 /**
- * CoinEx Copy Trading 排行榜数据抓取
+ * CoinEx Copy Trading 排行榜数据抓取 (API版本)
  * 
- * URL: https://www.coinex.com/en/copy-trading/futures
- * 分页: .via-pager li.number
+ * 使用 CoinEx 内部 API 直接获取数据，无需浏览器
+ * API: /res/copy-trading/public/traders
  * 
- * 用法: node scripts/import_coinex.mjs [7D|30D|90D]
+ * 用法: node scripts/import/import_coinex.mjs [7D|30D|90D|ALL]
  */
 
-import puppeteer from 'puppeteer-extra'
-import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import {
   getSupabaseClient,
   calculateArenaScore,
@@ -16,165 +14,73 @@ import {
   getTargetPeriods,
 } from '../lib/shared.mjs'
 
-puppeteer.use(StealthPlugin())
-
 const supabase = getSupabaseClient()
 
 const SOURCE = 'coinex'
-const BASE_URL = 'https://www.coinex.com/en/copy-trading/futures'
+const API_BASE = 'https://www.coinex.com/res/copy-trading/public/traders'
 const TARGET_COUNT = 500
-const MAX_PAGES = 30
+const PAGE_SIZE = 100
+
+// Map our period names to CoinEx API time_range values
+const PERIOD_MAP = {
+  '7D': 'DAY7',
+  '30D': 'DAY30',
+  '90D': 'DAY90',
+}
+
+async function fetchPage(timeRange, page) {
+  const url = `${API_BASE}?data_type=profit_rate&time_range=${timeRange}&hide_full=0&page=${page}&limit=${PAGE_SIZE}`
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    },
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json()
+  if (json.code !== 0) throw new Error(`API error: ${json.code} ${json.message}`)
+  return json.data
+}
 
 async function fetchLeaderboardData(period) {
-  console.log(`\n=== 抓取 CoinEx ${period} 排行榜 ===`)
+  const timeRange = PERIOD_MAP[period]
+  if (!timeRange) {
+    console.log(`  ⚠ Unknown period: ${period}`)
+    return []
+  }
+  
+  console.log(`\n=== 抓取 CoinEx ${period} (${timeRange}) 排行榜 ===`)
   console.log('时间:', new Date().toISOString())
-  console.log(`目标: ${TARGET_COUNT} 个交易员`)
 
-  const allTraders = new Map()
+  const allTraders = []
+  let page = 1
 
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
-    timeout: 60000,  // 增加启动超时到 60 秒
-  })
-
-  try {
-    const page = await browser.newPage()
-    await page.setViewport({ width: 1920, height: 1080 })
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-
-    // 提取函数
-    const extractTraders = async () => {
-      return await page.evaluate(() => {
-        const results = []
-        
-        // 首先收集所有头像
-        const avatarMap = {}
-        document.querySelectorAll('img').forEach(img => {
-          const src = img.src || ''
-          if (src.includes('avatar') || src.includes('user') || src.includes('head')) {
-            const parent = img.closest('a, div, li')
-            if (parent) {
-              const text = parent.innerText?.split('\n')[0]?.trim()
-              if (text && text.length > 1 && text.length < 30) {
-                avatarMap[text] = src
-              }
-            }
-          }
-        })
-        
-        document.body.innerText.split(/\nCopy\n/).forEach((chunk, idx) => {
-          if (idx === 0) return
-          const roiMatch = chunk.match(/([\d,]+\.\d+)%/)
-          if (roiMatch) {
-            const roi = parseFloat(roiMatch[1].replace(/,/g, ''))
-            const lines = chunk.split('\n').map(l => l.trim()).filter(l => l && l.length > 2 && l.length < 25 && !l.includes('%'))
-            // Try to extract PnL: look for dollar amounts like $1,234.56 or +1,234.56 USDT
-            const pnlMatch = chunk.match(/[\+\-]?\$?([\d,]+(?:\.\d+)?)\s*(?:USDT|USD)?/i)
-            const pnl = pnlMatch ? parseFloat(pnlMatch[1].replace(/,/g, '')) : null
-            if (lines[0] && roi > 0) {
-              results.push({
-                nickName: lines[0],
-                roi,
-                pnl,
-                avatar: avatarMap[lines[0]] || null
-              })
-            }
-          }
-        })
-        return results
-      })
-    }
-
-    console.log('\n📱 访问页面...')
-    try {
-      await page.goto(BASE_URL, { waitUntil: 'networkidle2', timeout: 60000 })
-    } catch (e) {
-      console.log('  ⚠ 加载超时')
-    }
-    await sleep(8000)
-
-    // 关闭弹窗
-    await page.evaluate(() => {
-      document.querySelectorAll('button').forEach(btn => {
-        const text = btn.textContent || ''
-        if (text.includes('Got it') || text.includes('OK') || text.includes('Accept')) {
-          try { btn.click() } catch (e) {}
-        }
-      })
-    })
-    await sleep(2000)
-
-    // 第1页
-    let traders = await extractTraders()
-    traders.forEach(t => allTraders.set(t.nickName, t))
-    console.log(`  第1页: ${allTraders.size} 个`)
-
-    // 分页获取
-    console.log('\n📄 分页获取数据...')
+  while (allTraders.length < TARGET_COUNT) {
+    const data = await fetchPage(timeRange, page)
+    if (!data.data || data.data.length === 0) break
     
-    for (let pageNum = 2; pageNum <= MAX_PAGES; pageNum++) {
-      if (allTraders.size >= TARGET_COUNT) {
-        console.log(`  ✓ 已达到目标 ${TARGET_COUNT}`)
-        break
-      }
-
-      // 滚动到分页
-      await page.evaluate(() => window.scrollTo(0, 2000))
-      await sleep(500)
-
-      // 点击页码
-      const clicked = await page.evaluate((pageNum) => {
-        const items = document.querySelectorAll('.via-pager li.number')
-        for (const item of items) {
-          if (item.textContent?.trim() === String(pageNum)) {
-            item.click()
-            return true
-          }
-        }
-        // 点击下一页
-        const nextBtn = document.querySelector('.via-pager li.more')
-        if (nextBtn) {
-          nextBtn.click()
-          return 'next'
-        }
-        return false
-      }, pageNum)
-
-      if (!clicked) {
-        console.log(`  无法翻到第 ${pageNum} 页`)
-        break
-      }
-
-      await sleep(3000)
-
-      // 滚动回顶部
-      await page.evaluate(() => window.scrollTo(0, 0))
-      await sleep(500)
-
-      traders = await extractTraders()
-      const before = allTraders.size
-      traders.forEach(t => allTraders.set(t.nickName, t))
-      console.log(`  第${pageNum}页: ${traders.length} 个, 新增 ${allTraders.size - before}, 累计 ${allTraders.size}`)
+    for (const t of data.data) {
+      allTraders.push({
+        traderId: t.trader_id,
+        nickname: t.nickname || t.account_name || t.trader_id,
+        avatar: t.avatar || null,
+        roi: parseFloat(t.profit_rate || 0) * 100, // API returns decimal, convert to %
+        pnl: parseFloat(t.profit_amount || 0),
+        winRate: parseFloat(t.winning_rate || 0) * 100,
+        maxDrawdown: parseFloat(t.mdd || 0) * 100,
+        followers: t.cur_follower_num || 0,
+        aum: parseFloat(t.aum || 0),
+      })
     }
-
-    console.log(`\n📊 共获取 ${allTraders.size} 个交易员数据`)
-
-  } finally {
-    await browser.close()
+    
+    console.log(`  第${page}页: ${data.data.length} 个, 累计 ${allTraders.length}`)
+    
+    if (!data.has_next) break
+    page++
+    await sleep(300) // gentle rate limit
   }
 
-  return Array.from(allTraders.values()).map((t, idx) => ({
-    traderId: t.nickName,
-    nickname: t.nickName,
-    avatar: t.avatar || null,
-    roi: t.roi,
-    pnl: t.pnl || null,
-    winRate: null,
-    maxDrawdown: null,
-    followers: null,
-    rank: idx + 1,
-  }))
+  console.log(`📊 共获取 ${allTraders.length} 个交易员数据`)
+  return allTraders
 }
 
 async function saveTraders(traders, period) {
@@ -183,33 +89,46 @@ async function saveTraders(traders, period) {
   const capturedAt = new Date().toISOString()
   let saved = 0, errors = 0
 
-  for (const trader of traders) {
-    try {
-      await supabase.from('trader_sources').upsert({
-        source: SOURCE,
-        source_type: 'leaderboard',
-        source_trader_id: trader.traderId,
-        handle: trader.nickname,
-        avatar_url: trader.avatar || null,
-        is_active: true,
-      }, { onConflict: 'source,source_trader_id' })
+  // Batch upsert trader_sources
+  const sources = traders.map(t => ({
+    source: SOURCE,
+    source_type: 'leaderboard',
+    source_trader_id: t.traderId,
+    handle: t.nickname,
+    avatar_url: t.avatar || null,
+    is_active: true,
+  }))
+  
+  // Upsert in chunks of 100
+  for (let i = 0; i < sources.length; i += 100) {
+    const chunk = sources.slice(i, i + 100)
+    await supabase.from('trader_sources').upsert(chunk, { onConflict: 'source,source_trader_id' })
+  }
 
-      const { error } = await supabase.from('trader_snapshots').upsert({
-        source: SOURCE,
-        source_trader_id: trader.traderId,
-        season_id: period,
-        rank: trader.rank,
-        roi: trader.roi,
-        pnl: trader.pnl || null,
-        win_rate: trader.winRate || null,
-        max_drawdown: trader.maxDrawdown || null,
-        followers: trader.followers || 0,
-        arena_score: calculateArenaScore(trader.roi, trader.pnl, trader.maxDrawdown, trader.winRate, period).totalScore,
-        captured_at: capturedAt,
-      }, { onConflict: 'source,source_trader_id,season_id' })
-      if (error) errors++
-      else saved++
-    } catch (e) { errors++ }
+  // Batch upsert snapshots
+  const snapshots = traders.map((t, idx) => ({
+    source: SOURCE,
+    source_trader_id: t.traderId,
+    season_id: period,
+    rank: idx + 1,
+    roi: t.roi,
+    pnl: t.pnl || null,
+    win_rate: t.winRate || null,
+    max_drawdown: t.maxDrawdown || null,
+    followers: t.followers || 0,
+    arena_score: calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, t.winRate, period).totalScore,
+    captured_at: capturedAt,
+  }))
+
+  for (let i = 0; i < snapshots.length; i += 100) {
+    const chunk = snapshots.slice(i, i + 100)
+    const { error } = await supabase.from('trader_snapshots').upsert(chunk, { onConflict: 'source,source_trader_id,season_id' })
+    if (error) {
+      console.log(`  ⚠ Batch error:`, error.message)
+      errors += chunk.length
+    } else {
+      saved += chunk.length
+    }
   }
 
   console.log(`  ✓ 保存: ${saved}, 失败: ${errors}`)
@@ -221,17 +140,13 @@ async function main() {
   const totalStartTime = Date.now()
   
   console.log(`\n========================================`)
-  console.log(`CoinEx 数据抓取`)
+  console.log(`CoinEx 数据抓取 (API版本)`)
   console.log(`目标周期: ${periods.join(', ')}`)
   console.log(`========================================`)
 
   const results = []
 
   for (const period of periods) {
-    console.log(`\n${'='.repeat(50)}`)
-    console.log(`📊 开始抓取 ${period} 排行榜...`)
-    console.log(`${'='.repeat(50)}`)
-    
     const traders = await fetchLeaderboardData(period)
 
     if (traders.length === 0) {
@@ -242,21 +157,18 @@ async function main() {
     traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
     traders.forEach((t, idx) => t.rank = idx + 1)
 
-    const top100 = traders.slice(0, TARGET_COUNT)
+    const top = traders.slice(0, TARGET_COUNT)
 
     console.log(`\n📋 ${period} TOP 10:`)
-    top100.slice(0, 10).forEach((t, idx) => {
+    top.slice(0, 10).forEach((t, idx) => {
       console.log(`  ${idx + 1}. ${t.nickname}: ROI ${t.roi?.toFixed(2)}%`)
     })
 
-    const result = await saveTraders(top100, period)
-    results.push({ period, count: top100.length, topRoi: top100[0]?.roi || 0 })
-    
-    console.log(`\n✅ ${period} 完成！`)
+    const result = await saveTraders(top, period)
+    results.push({ period, count: top.length, topRoi: top[0]?.roi || 0 })
     
     if (periods.indexOf(period) < periods.length - 1) {
-      console.log(`\n⏳ 等待 5 秒后抓取下一个时间段...`)
-      await sleep(5000)
+      await sleep(1000)
     }
   }
   
@@ -265,7 +177,6 @@ async function main() {
   console.log(`\n${'='.repeat(60)}`)
   console.log(`✅ 全部完成！`)
   console.log(`${'='.repeat(60)}`)
-  console.log(`📊 抓取结果:`)
   for (const r of results) {
     console.log(`   ${r.period}: ${r.count} 条, TOP ROI ${r.topRoi?.toFixed(2)}%`)
   }

@@ -104,7 +104,8 @@ async function main() {
     entry.snapshots.push(snap)
     if (snap.trades_count === null || snap.trades_count === 0 || snap.win_rate === null) entry.needFills = true
     if (snap.aum === null) entry.needState = true
-    if (snap.max_drawdown === null) entry.needPortfolio = true
+    // Skip portfolio for now — only 28-222 missing, handle separately
+    // if (snap.max_drawdown === null) entry.needPortfolio = true
   }
 
   // Filter to traders that need something
@@ -140,19 +141,19 @@ async function main() {
         log(`  [${i+1}] Fetching fills for ${addr.slice(0,10)}...`)
         fills = await apiFetch({ type: 'userFills', user: addr })
         log(`  [${i+1}] Got ${Array.isArray(fills) ? fills.length : 'null'} fills`)
-        await sleep(2200)
+        await sleep(1500)
       }
 
       // 2. Fetch clearinghouseState (for AUM + open positions)
       if (needs.needState) {
         state = await apiFetch({ type: 'clearinghouseState', user: addr })
-        await sleep(2200)
+        await sleep(1500)
       }
 
       // 3. Fetch portfolio (for max_drawdown)
       if (needs.needPortfolio) {
         portfolio = await apiFetch({ type: 'portfolio', user: addr })
-        await sleep(2200)
+        await sleep(1500)
       }
 
       // Process each snapshot for this trader

@@ -97,6 +97,7 @@ for PERIOD in 7D 30D 90D; do
   run_script "enrich_hyperliquid.mjs" "$PERIOD" 1800
   run_script "enrich_jupiter_v2.mjs" "$PERIOD" 300
   run_script "enrich_gmx.mjs" "$PERIOD" 180
+  run_script "enrich_bitfinex_wr_mdd.mjs" "$PERIOD" 300
 done
 
 cleanup_chrome
