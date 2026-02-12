@@ -1,0 +1,189 @@
+/* Performance Optimizations CSS
+ * Critical CSS containment and will-change properties for ranking components
+ */
+
+/* CSS Containment for Ranking Table */
+.ranking-table-container {
+  contain: layout style paint;
+}
+
+/* Individual trader rows */
+.trader-row {
+  contain: layout style paint;
+  will-change: transform; /* For smooth animations */
+}
+
+.trader-card {
+  contain: layout style paint;
+  will-change: transform;
+}
+
+/* Virtual scroll container */
+.virtual-scroll-container {
+  contain: strict;
+  transform: translateZ(0); /* Force hardware acceleration */
+  backface-visibility: hidden;
+}
+
+/* Avatar images optimization */
+.trader-avatar {
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+/* Skeleton loading animations */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-secondary) 25%,
+    var(--color-bg-tertiary) 50%,
+    var(--color-bg-secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  contain: layout style paint;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Optimize pagination component */
+.pagination-container {
+  contain: layout style;
+}
+
+/* Score badges with containment */
+.score-badge {
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+/* Medal glow effects with performance optimization */
+.medal-glow {
+  animation: medal-pulse 2s infinite;
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+@keyframes medal-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px currentColor;
+  }
+  50% {
+    box-shadow: 0 0 16px currentColor;
+  }
+}
+
+/* Responsive optimizations */
+@media (max-width: 768px) {
+  /* Reduce animations on mobile for performance */
+  .medal-glow {
+    animation: none;
+  }
+  
+  /* Simplify skeleton on mobile */
+  .skeleton {
+    animation-duration: 2s;
+  }
+}
+
+/* Smooth scrolling optimization */
+.smooth-scroll {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Grid layout optimizations */
+.trader-grid {
+  display: grid;
+  contain: layout style;
+  gap: var(--spacing-3, 12px);
+}
+
+/* Desktop grid template */
+@media (min-width: 768px) {
+  .trader-grid-desktop {
+    grid-template-columns: 60px 1fr 120px 100px 80px 80px;
+    align-items: center;
+  }
+}
+
+/* Mobile grid template */
+@media (max-width: 767px) {
+  .trader-grid-mobile {
+    grid-template-columns: 40px 1fr 80px;
+    gap: var(--spacing-2, 8px);
+  }
+}
+
+/* Lazy loading fade-in */
+.fade-in {
+  animation: fade-in 0.3s ease-in-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Button hover optimizations */
+.btn-optimized {
+  transition: all 0.15s ease;
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+
+.btn-optimized:hover {
+  transform: translateZ(0) translateY(-1px);
+}
+
+/* Tooltip optimizations */
+.tooltip-container {
+  contain: layout style paint;
+  will-change: opacity, transform;
+}
+
+/* Time range selector optimization */
+.time-range-selector {
+  contain: layout style;
+}
+
+/* Search input optimization */
+.search-input {
+  contain: layout style;
+  will-change: value;
+}
+
+/* Loading states */
+.loading-overlay {
+  backdrop-filter: blur(2px);
+  contain: layout style paint;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .skeleton {
+    animation: none;
+    background: var(--color-bg-tertiary);
+  }
+}

@@ -1,6 +1,6 @@
 'use client'
 
-import { lazy, Suspense, useState, useCallback, useEffect } from 'react'
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo, memo } from 'react'
 import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -20,35 +20,45 @@ const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge
 const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
 const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
 
-function LoadingCard({ height = 64, lines }: { height?: number; lines?: number }) {
+const LoadingCard = memo(({ height = 64, lines }: { height?: number; lines?: number }) => {
+  const skeletonItems = useMemo(() => {
+    if (!lines) return null
+    return Array.from({ length: lines }).map((_, i) => (
+      <div
+        key={i}
+        className="skeleton"
+        style={{
+          height: 14,
+          borderRadius: 6,
+          width: i === 0 ? '60%' : i === lines - 1 ? '40%' : '90%',
+        }}
+      />
+    ))
+  }, [lines])
+
   if (lines) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '16px 20px' }}>
-        {Array.from({ length: lines }).map((_, i) => (
-          <div
-            key={i}
-            className="skeleton"
-            style={{
-              height: 14,
-              borderRadius: 6,
-              width: i === 0 ? '60%' : i === lines - 1 ? '40%' : '90%',
-            }}
-          />
-        ))}
+        {skeletonItems}
       </div>
     )
   }
   return <div className="skeleton" style={{ height, borderRadius: tokens.radius.md }} />
-}
+})
 
-function useIsMobile() {
+const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(false)
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
+  
+  const handleResize = useCallback(() => {
+    setIsMobile(window.innerWidth < 768)
   }, [])
+  
+  useEffect(() => {
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [handleResize])
+  
   return isMobile
 }
 
