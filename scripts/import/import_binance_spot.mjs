@@ -1,15 +1,14 @@
 /**
  * Binance Spot Copy Trading 排行榜数据抓取
  * 
- * 通过拦截 API 请求，获取 ROI 排序的数据
+ * 直接调用 API 获取 ROI 排序的数据（不需要 Playwright）
  * 
- * 用法: node scripts/import_binance_spot.mjs [7D|30D|90D]
+ * 用法: node scripts/import/import_binance_spot.mjs [7D|30D|90D]
  * 
- * 数据源: https://www.binance.com/zh-CN/copy-trading/spot
+ * 数据源: https://www.binance.com/copy-trading/spot
  * API: https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/home-page-list
  */
 
-import { chromium } from 'playwright'
 import { validateTraderData, deduplicateTraders, printValidationResult } from './lib/data-validation.mjs'
 import {
   getSupabaseClient,
@@ -21,20 +20,18 @@ import {
 const supabase = getSupabaseClient()
 
 const SOURCE = 'binance_spot'
-const BASE_URL = 'https://www.binance.com/zh-CN/copy-trading/spot'
+const API_URL = 'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/home-page-list'
 
 const TARGET_COUNT = 2000
 const PER_PAGE = 100
-const MAX_PAGES = 2
+const MAX_PAGES = 25  // 2500 traders max
 
 function parseTraderFromApi(item, rank) {
   const traderId = String(item.leadPortfolioId || item.portfolioId || item.encryptedUid || '')
   if (!traderId) return null
 
-  // Binance API 返回的 ROI 已经是百分比形式
   const roi = parseFloat(item.roi ?? 0)
 
-  // winRate 是 0-100 的数值，需要转换为 0-1
   let winRate = parseFloat(item.winRate ?? 0)
   if (winRate > 1) {
     winRate = winRate / 100
@@ -57,201 +54,70 @@ function parseTraderFromApi(item, rank) {
 async function fetchLeaderboardData(period) {
   console.log(`\n=== 抓取 Binance Spot ${period} 排行榜 ===`)
   console.log('时间:', new Date().toISOString())
-  console.log('URL:', BASE_URL)
   console.log(`目标: ${TARGET_COUNT} 个交易员，最多翻 ${MAX_PAGES} 页`)
 
   const traders = new Map()
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage', '--no-sandbox'],
-  })
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const body = {
+      pageNumber: page,
+      pageSize: PER_PAGE,
+      timeRange: period,
+      dataType: 'ROI',
+      order: 'DESC',
+    }
 
-  try {
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1920, height: 1080 },
-      locale: 'zh-CN',
-      timezoneId: 'Asia/Shanghai',
-    })
+    console.log(`  📡 请求第 ${page} 页...`)
 
-    await context.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
-      window.chrome = { runtime: {} }
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [{ name: 'Chrome PDF Plugin' }, { name: 'Chrome PDF Viewer' }],
-      })
-      Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] })
-    })
-
-    const page = await context.newPage()
-    
-    // 核心改进：拦截 API 请求并修改参数
-    let currentPageNum = 1
-    await page.route('**/home-page-list', async (route) => {
-      const request = route.request()
-      const postData = request.postData()
-      
-      if (postData) {
-        try {
-          const data = JSON.parse(postData)
-          // 修改为目标时间段和 ROI 排序
-          data.timeRange = period
-          data.dataType = 'ROI'
-          data.order = 'DESC'
-          data.pageNumber = currentPageNum
-          data.pageSize = PER_PAGE
-          data.portfolioType = 'ALL'  // 获取所有交易员，不只是推荐的
-          
-          console.log(`  📡 API 请求: 第 ${data.pageNumber} 页, ${data.timeRange}, 排序: ${data.dataType}`)
-          
-          await route.continue({
-            postData: JSON.stringify(data)
-          })
-        } catch (e) {
-          await route.continue()
-        }
-      } else {
-        await route.continue()
-      }
-    })
-
-    // 存储 API 响应数据
-    const apiResponses = []
-    
-    // 监听 API 响应
-    page.on('response', async (response) => {
-      const url = response.url()
-      if (url.includes('home-page-list')) {
-        try {
-          const json = await response.json()
-          if (json.data && (json.code === '000000' || json.success !== false)) {
-            const list = json.data?.list || json.data?.data || []
-            if (Array.isArray(list) && list.length > 0) {
-              console.log(`  ✓ 收到 ${list.length} 条数据`)
-              apiResponses.push({ list, pageNum: currentPageNum })
-            }
-          }
-        } catch (e) {
-          console.log(`  ⚠ 解析响应失败: ${e.message}`)
-        }
-      }
-    })
-
-    console.log('\n📱 访问页面...')
     try {
-      await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
-    } catch (e) {
-      console.log('  ⚠ 页面加载超时，继续尝试...')
-    }
-    await sleep(10000)
-    
-    // 处理第一页数据
-    for (const { list, pageNum } of apiResponses) {
-      list.forEach((item, idx) => {
-        const rank = (pageNum - 1) * PER_PAGE + idx + 1
-        const trader = parseTraderFromApi(item, rank)
-        if (trader && trader.traderId && !traders.has(trader.traderId)) {
-          traders.set(trader.traderId, trader)
-          if (traders.size <= 3) {
-            console.log(`    #${rank}: ROI ${trader.roi.toFixed(2)}%, 昵称: ${trader.nickname || '未知'}`)
-          }
-        }
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Encoding': 'identity',
+        },
+        body: JSON.stringify(body),
       })
-    }
-    apiResponses.length = 0
-    
-    console.log(`\n📄 当前已获取: ${traders.size} 个交易员`)
 
-    // 分页获取更多数据
-    while (traders.size < TARGET_COUNT && currentPageNum < MAX_PAGES) {
-      currentPageNum++
-      console.log(`\n📄 翻页到第 ${currentPageNum} 页...`)
-      
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-      await sleep(1000)
-      
-      let pageClicked = false
-      
-      pageClicked = await page.evaluate((targetPage) => {
-        const paginationContainers = document.querySelectorAll('[class*="pagination"], [class*="Pagination"], nav')
-        
-        for (const container of paginationContainers) {
-          const buttons = container.querySelectorAll('button, a, span, li')
-          for (const btn of buttons) {
-            const text = btn.textContent?.trim()
-            if (text === String(targetPage)) {
-              btn.click()
-              return true
-            }
-          }
-        }
-        
-        const nextBtns = document.querySelectorAll('[class*="next"], [aria-label*="next"]')
-        for (const btn of nextBtns) {
-          if (btn.offsetParent !== null) {
-            btn.click()
-            return true
-          }
-        }
-        
-        return false
-      }, currentPageNum)
-      
-      if (pageClicked) {
-        console.log(`  ✓ 翻页成功`)
-        await sleep(3000)
-      } else {
-        const pageSelectors = [
-          `button:text-is("${currentPageNum}")`,
-          `[class*="pagination"] >> text="${currentPageNum}"`,
-        ]
-        
-        for (const selector of pageSelectors) {
-          try {
-            const element = await page.$(selector)
-            if (element && await element.isVisible()) {
-              await element.click()
-              console.log(`  ✓ 翻页成功`)
-              pageClicked = true
-              await sleep(3000)
-              break
-            }
-          } catch (e) {}
-        }
-      }
-      
-      if (!pageClicked) {
-        console.log(`  ⚠ 翻页失败，停止分页`)
+      const json = await res.json()
+
+      if (json.code !== '000000' || !json.data) {
+        console.log(`  ⚠ API 错误: ${json.message || json.code}`)
         break
       }
-      
-      // 处理新页数据
-      await sleep(2000)
-      for (const { list, pageNum } of apiResponses) {
-        list.forEach((item, idx) => {
-          const rank = (pageNum - 1) * PER_PAGE + idx + 1
-          const trader = parseTraderFromApi(item, rank)
-          if (trader && trader.traderId && !traders.has(trader.traderId)) {
-            traders.set(trader.traderId, trader)
-          }
-        })
+
+      const list = json.data.list || []
+      const total = json.data.total || 0
+
+      if (list.length === 0) {
+        console.log(`  ℹ 第 ${page} 页无数据，停止`)
+        break
       }
-      apiResponses.length = 0
-      
-      console.log(`  当前已获取: ${traders.size} 个交易员`)
+
+      for (let i = 0; i < list.length; i++) {
+        const rank = (page - 1) * PER_PAGE + i + 1
+        const trader = parseTraderFromApi(list[i], rank)
+        if (trader && trader.traderId && !traders.has(trader.traderId)) {
+          traders.set(trader.traderId, trader)
+        }
+      }
+
+      console.log(`  ✓ 收到 ${list.length} 条，累计 ${traders.size}/${total}`)
+
+      if (traders.size >= TARGET_COUNT || traders.size >= total) {
+        break
+      }
+
+      // Rate limit: small delay between pages
+      await sleep(500)
+    } catch (e) {
+      console.log(`  ✗ 请求失败: ${e.message}`)
+      break
     }
-
-    console.log(`\n📊 共获取 ${traders.size} 个交易员数据`)
-
-    const screenshotPath = `/tmp/binance_spot_${period}_${Date.now()}.png`
-    await page.screenshot({ path: screenshotPath, fullPage: true })
-    console.log(`📸 截图保存到: ${screenshotPath}`)
-
-  } finally {
-    await browser.close()
   }
 
+  console.log(`\n📊 共获取 ${traders.size} 个交易员数据`)
   return Array.from(traders.values())
 }
 
@@ -357,8 +223,8 @@ async function main() {
       console.log(`\n✅ ${period} 完成！保存了 ${result.saved} 条数据`)
       
       if (periods.indexOf(period) < periods.length - 1) {
-        console.log(`\n⏳ 等待 5 秒后抓取下一个时间段...`)
-        await sleep(5000)
+        console.log(`\n⏳ 等待 3 秒后抓取下一个时间段...`)
+        await sleep(3000)
       }
     }
     
