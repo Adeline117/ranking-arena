@@ -1,14 +1,5 @@
-import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
-import { tokens } from '@/lib/design-tokens'
-import { Box } from '@/app/components/base'
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
-import TopNav from '@/app/components/layout/TopNav'
-import TraderPageClient from './TraderPageClient'
-import ErrorBoundary from '@/app/components/error/ErrorBoundary'
-
-// ISR: cache page for 60s — data updates via cron, client-side SWR handles freshness
-export const revalidate = 60
 
 // Pre-render top 50 trader pages at build time for instant TTFB
 export async function generateStaticParams() {
@@ -18,8 +9,6 @@ export async function generateStaticParams() {
     if (!supabaseUrl || !supabaseKey) return []
     
     const supabase = createClient(supabaseUrl, supabaseKey)
-    // Use trader_sources (real data) instead of legacy traders table
-    // Join with snapshots to get high-follower traders for pre-rendering
     const { data } = await supabase
       .from('trader_sources')
       .select('handle')
@@ -35,15 +24,42 @@ export async function generateStaticParams() {
   }
 }
 
-async function fetchTraderData(handle: string) {
+// Find the user profile associated with this trader handle
+async function findUserProfileByTraderHandle(traderHandle: string): Promise<string | null> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const res = await fetch(
-      `${baseUrl}/api/traders/${encodeURIComponent(handle)}`,
-      { next: { revalidate: 60 } }
-    )
-    if (!res.ok) return null
-    return res.json()
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+    if (!supabaseUrl || !supabaseKey) return null
+    
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    
+    // First, find the trader ID by handle
+    const { data: trader } = await supabase
+      .from('traders')
+      .select('id')
+      .eq('handle', traderHandle)
+      .maybeSingle()
+    
+    if (!trader?.id) return null
+    
+    // Then find the user who has authorized this trader
+    const { data: auth } = await supabase
+      .from('trader_authorizations')
+      .select('user_id')
+      .eq('trader_id', trader.id)
+      .eq('status', 'active')
+      .maybeSingle()
+    
+    if (!auth?.user_id) return null
+    
+    // Finally, get the user's handle
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('handle')
+      .eq('id', auth.user_id)
+      .maybeSingle()
+    
+    return profile?.handle || null
   } catch {
     return null
   }
@@ -60,23 +76,15 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // keep original if decode fails
   }
 
-  // Server-side data prefetch — eliminates client waterfall
-  const serverData = await fetchTraderData(decodedHandle)
-
-  return (
-    <ErrorBoundary 
-      pageType="trader" 
-    >
-      <Suspense fallback={
-        <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-          <TopNav email={null} />
-          <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
-            <RankingSkeleton />
-          </Box>
-        </Box>
-      }>
-        <TraderPageClient handle={decodedHandle} serverData={serverData} />
-      </Suspense>
-    </ErrorBoundary>
-  )
+  // Try to find the associated user profile
+  const userHandle = await findUserProfileByTraderHandle(decodedHandle)
+  
+  if (userHandle) {
+    // Redirect to the unified user profile page
+    redirect(`/u/${encodeURIComponent(userHandle)}`)
+  } else {
+    // If no user profile found, redirect to user page with trader handle
+    // This will show "user not registered" state
+    redirect(`/u/${encodeURIComponent(decodedHandle)}`)
+  }
 }
