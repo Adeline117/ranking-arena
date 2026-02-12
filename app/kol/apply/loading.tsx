@@ -1,8 +1,5 @@
-import { tokens } from '@/lib/design-tokens'
+import { FormPageSkeleton } from '@/app/components/ui/PageSkeleton'
+
 export default function Loading() {
-  return (
-    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="skeleton" style={{ width: 600, maxWidth: '100%', height: 400, borderRadius: tokens.radius.lg }} />
-    </div>
-  )
+  return <FormPageSkeleton />
 }

@@ -308,6 +308,7 @@ export default function PricingPage() {
               {PRO_FEATURES.map((feature, index) => (
                 <Box
                   key={index}
+                  className="pricing-feature-card"
                   style={{
                     display: 'flex',
                     gap: tokens.spacing[3],
@@ -689,7 +690,7 @@ export default function PricingPage() {
               </thead>
               <tbody>
                 {getComparisonData(t).map((row, index) => (
-                  <tr key={index}>
+                  <tr key={index} className="pricing-comparison-row">
                     <td style={{ 
                       padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                       borderBottom: '1px solid var(--color-border-secondary)',

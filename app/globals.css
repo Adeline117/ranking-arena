@@ -2736,3 +2736,106 @@ html.theme-transition * {
   }
 }
 
+/* ===== Misc Pages Visual Polish ===== */
+
+/* Settings: input focus glow */
+.settings-input:focus {
+  border-color: var(--color-brand) !important;
+  box-shadow: 0 0 0 3px var(--color-accent-primary-12), var(--shadow-inset-subtle) !important;
+}
+
+/* Settings: section card subtle separator */
+.settings-section-card + .settings-section-card {
+  border-top: 1px solid var(--color-border-primary);
+  padding-top: 24px;
+}
+
+/* Search: result item hover */
+.search-result-item {
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.search-result-item:hover {
+  background: var(--overlay-hover) !important;
+}
+.search-result-item:active {
+  transform: scale(0.995);
+}
+
+/* Flash News: timeline dot pulse for breaking */
+.flash-dot-breaking {
+  animation: flashDotPulse 2s ease-in-out infinite;
+}
+@keyframes flashDotPulse {
+  0%, 100% { box-shadow: 0 0 6px var(--color-accent-error); }
+  50% { box-shadow: 0 0 14px var(--color-accent-error), 0 0 20px var(--color-accent-error); }
+}
+
+/* Help: FAQ item expand/collapse */
+.faq-item-content {
+  animation: faqSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes faqSlideDown {
+  from { opacity: 0; transform: translateY(-6px); max-height: 0; }
+  to { opacity: 1; transform: translateY(0); max-height: 500px; }
+}
+
+/* Pricing: feature card hover */
+.pricing-feature-card {
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.pricing-feature-card:hover {
+  border-color: var(--color-pro-gradient-start) !important;
+  box-shadow: 0 0 0 1px var(--color-pro-gradient-start), 0 4px 12px var(--color-pro-badge-shadow);
+}
+
+/* Pricing: comparison table row hover */
+.pricing-comparison-row:hover td {
+  background: var(--overlay-hover);
+}
+
+/* Skeleton animation - shared */
+.skeleton {
+  background: linear-gradient(90deg, var(--color-bg-tertiary) 25%, var(--color-bg-hover) 50%, var(--color-bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s ease-in-out infinite;
+}
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Empty state shared styling */
+.empty-state {
+  text-align: center;
+}
+.empty-state-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--color-accent-primary-08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  color: var(--color-text-tertiary);
+}
+.empty-state-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 6px;
+}
+.empty-state-message {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+}
+
+/* Filter chip shared hover */
+.filter-chip {
+  transition: all var(--transition-fast);
+}
+.filter-chip:not([data-active]):hover {
+  border-color: var(--color-text-tertiary) !important;
+  color: var(--color-text-primary) !important;
+}
+

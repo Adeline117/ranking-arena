@@ -335,7 +335,9 @@ export default function FlashNewsPage() {
                         position: 'relative',
                       }}
                     >
-                      <Box style={{
+                      <Box
+                        className={item.importance === 'breaking' ? 'flash-dot-breaking' : undefined}
+                        style={{
                         position: 'absolute', left: '-7px', top: tokens.spacing[3],
                         width: '12px', height: '12px', borderRadius: '50%',
                         background: impConfig.color, border: `2.5px solid ${tokens.colors.bg.primary}`,

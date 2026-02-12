@@ -96,6 +96,8 @@ export function SectionCard({
   )
 }
 
+export const SETTINGS_INPUT_CLASS = 'settings-input'
+
 export function getInputStyle(hasError = false): React.CSSProperties {
   return {
     width: '100%',
