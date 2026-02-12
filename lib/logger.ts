@@ -91,7 +91,11 @@ class Logger {
     error: unknown,
     context?: LogContext
   ): void {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = error instanceof Error
+      ? error.message
+      : (typeof error === 'object' && error !== null && 'message' in error)
+        ? String((error as Record<string, unknown>).message)
+        : JSON.stringify(error)
     const errorObj = error instanceof Error ? error : new Error(errorMessage)
 
     this.error(
@@ -113,7 +117,11 @@ class Logger {
     error: unknown,
     context?: LogContext
   ): void {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = error instanceof Error
+      ? error.message
+      : (typeof error === 'object' && error !== null && 'message' in error)
+        ? String((error as Record<string, unknown>).message)
+        : JSON.stringify(error)
     const errorObj = error instanceof Error ? error : new Error(errorMessage)
 
     this.error(

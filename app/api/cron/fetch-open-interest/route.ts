@@ -187,13 +187,13 @@ export async function POST(request: NextRequest) {
             // Insert into database
             const { error } = await supabase
               .from('open_interest')
-              .insert({
+              .upsert({
                 platform: oi.platform,
                 symbol: oi.symbol,
                 open_interest_usd: oi.open_interest_usd,
-                open_interest_qty: oi.open_interest_qty,
+                open_interest_contracts: oi.open_interest_qty ?? null,
                 timestamp: oi.timestamp,
-              })
+              }, { onConflict: 'platform,symbol,timestamp' })
 
             if (error) {
               logger.dbError('insert-open-interest', error, { oi })
