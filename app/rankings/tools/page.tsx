@@ -197,12 +197,18 @@ export default function ToolsPage() {
           },
         ]} />
 
-        <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 20 }}>
+        <h1 style={{
+          fontSize: tokens.typography.fontSize['2xl'],
+          fontWeight: tokens.typography.fontWeight.extrabold,
+          color: 'var(--color-text-primary)',
+          marginBottom: 24,
+          letterSpacing: '-0.02em',
+        }}>
           {isZh ? '工具' : 'Tools'}
         </h1>
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
           {CATEGORY_FILTERS.map(f => {
             const active = category === f.key
             return (
@@ -210,14 +216,30 @@ export default function ToolsPage() {
                 key={f.key}
                 onClick={() => setCategory(f.key)}
                 style={{
-                  padding: '8px 18px',
-                  borderRadius: tokens.radius.lg,
-                  fontSize: 14,
-                  fontWeight: active ? 700 : 500,
-                  border: active ? 'none' : '1px solid var(--color-border-primary)',
+                  padding: '8px 20px',
+                  borderRadius: tokens.radius.full,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: active ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                  border: active ? '1px solid transparent' : '1px solid var(--color-border-primary)',
                   background: active ? tokens.gradient.purpleGold : 'var(--color-bg-secondary)',
-                  color: active ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
+                  color: active ? '#fff' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
+                  transition: `all ${tokens.transition.base}`,
+                  boxShadow: active ? tokens.shadow.sm : tokens.shadow.none,
+                }}
+                onMouseEnter={e => {
+                  if (!active) {
+                    e.currentTarget.style.borderColor = 'var(--color-brand-muted)'
+                    e.currentTarget.style.color = 'var(--color-text-primary)'
+                    e.currentTarget.style.background = 'var(--color-bg-hover)'
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!active) {
+                    e.currentTarget.style.borderColor = 'var(--color-border-primary)'
+                    e.currentTarget.style.color = 'var(--color-text-secondary)'
+                    e.currentTarget.style.background = 'var(--color-bg-secondary)'
+                  }
                 }}
               >
                 {isZh ? f.zh : f.en}
@@ -228,10 +250,11 @@ export default function ToolsPage() {
             value={sort}
             onChange={e => setSort(e.target.value)}
             style={{
-              padding: '8px 14px', borderRadius: tokens.radius.lg,
+              padding: '8px 14px', borderRadius: tokens.radius.full,
               border: '1px solid var(--color-border-primary)',
               background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
-              fontSize: 13, cursor: 'pointer', outline: 'none', marginLeft: 'auto',
+              fontSize: tokens.typography.fontSize.sm, cursor: 'pointer', outline: 'none', marginLeft: 'auto',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             {SORT_OPTIONS.map(opt => (
@@ -241,34 +264,43 @@ export default function ToolsPage() {
         </div>
 
         {/* Search */}
-        <div style={{ position: 'relative', maxWidth: 400, marginBottom: 24 }}>
+        <div style={{ position: 'relative', maxWidth: 400, marginBottom: 28 }}>
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={isZh ? '搜索工具...' : 'Search tools...'}
             style={{
-              width: '100%', padding: '10px 14px', borderRadius: tokens.radius.lg,
+              width: '100%', padding: '10px 16px', borderRadius: tokens.radius.full,
               border: '1px solid var(--color-border-primary)',
               background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
-              fontSize: 14, outline: 'none',
+              fontSize: tokens.typography.fontSize.base, outline: 'none',
+              transition: `all ${tokens.transition.base}`,
+            }}
+            onFocus={e => {
+              e.currentTarget.style.borderColor = 'var(--color-brand)'
+              e.currentTarget.style.boxShadow = '0 0 0 3px var(--color-brand-muted)'
+            }}
+            onBlur={e => {
+              e.currentTarget.style.borderColor = 'var(--color-border-primary)'
+              e.currentTarget.style.boxShadow = 'none'
             }}
           />
         </div>
 
         {/* List */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="skeleton" style={{ height: 120, borderRadius: tokens.radius.xl }} />
+              <div key={i} className="skeleton" style={{ height: 140, borderRadius: tokens.radius.xl }} />
             ))}
           </div>
         ) : tools.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--color-text-tertiary)' }}>
+          <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.base }}>
             {isZh ? '暂无数据' : 'No tools found'}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
             {tools.map(tool => (
               <ToolCard key={tool.id} tool={tool} isZh={isZh} />
             ))}
@@ -297,51 +329,57 @@ function ToolCard({ tool, isZh }: { tool: Tool; isZh: boolean }) {
         border: '1px solid var(--color-border-primary)',
         background: 'var(--color-bg-secondary)',
         textDecoration: 'none',
-        transition: 'all 0.2s ease',
+        transition: `all ${tokens.transition.base}`,
+        boxShadow: tokens.shadow.xs,
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'var(--color-brand)'
-        e.currentTarget.style.transform = 'translateY(-2px)'
-        e.currentTarget.style.boxShadow = tokens.shadow.md
+        e.currentTarget.style.borderColor = 'var(--color-brand-muted)'
+        e.currentTarget.style.transform = 'translateY(-3px)'
+        e.currentTarget.style.boxShadow = tokens.shadow.cardHover
       }}
       onMouseLeave={e => {
         e.currentTarget.style.borderColor = 'var(--color-border-primary)'
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = 'none'
+        e.currentTarget.style.boxShadow = tokens.shadow.xs
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
         {tool.logo_url ? (
           <img
             src={tool.logo_url}
             alt=""
-            width={40}
-            height={40}
-            style={{ borderRadius: tokens.radius.lg, objectFit: 'cover' }}
+            width={44}
+            height={44}
+            style={{ borderRadius: tokens.radius.xl, objectFit: 'cover', flexShrink: 0 }}
             onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
         ) : (
           <div style={{
-            width: 40, height: 40, borderRadius: tokens.radius.lg,
-            background: 'var(--color-accent-primary-12)',
+            width: 44, height: 44, borderRadius: tokens.radius.xl, flexShrink: 0,
+            background: tokens.gradient.primarySubtle,
+            border: '1px solid var(--color-border-secondary)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, fontWeight: 700, color: 'var(--color-brand)',
+            fontSize: tokens.typography.fontSize.md, fontWeight: tokens.typography.fontWeight.bold, color: 'var(--color-brand)',
           }}>
             {name[0]}
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 2 }}>{name}</div>
-          <div style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+          <div style={{
+            fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.bold,
+            color: 'var(--color-text-primary)', marginBottom: 4, lineHeight: tokens.typography.lineHeight.tight,
+          }}>{name}</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)' }}>
             <span>{CATEGORY_FILTERS.find(f => f.key === tool.category)?.[isZh ? 'zh' : 'en'] || tool.category}</span>
             {pricingLabel && (
               <span style={{
-                padding: '1px 8px',
-                borderRadius: tokens.radius.md,
-                background: tool.pricing === 'free' || tool.pricing === 'open_source' ? 'var(--color-accent-success-12)' : 'var(--color-accent-primary-08)',
-                color: tool.pricing === 'free' || tool.pricing === 'open_source' ? 'var(--color-accent-success)' : 'var(--color-text-secondary)',
-                fontSize: 11,
-                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: tokens.radius.full,
+                background: tool.pricing === 'free' || tool.pricing === 'open_source' ? 'var(--color-accent-success-12)' : tool.pricing === 'paid' ? 'var(--color-accent-warning-12, rgba(255, 184, 0, 0.12))' : 'var(--color-accent-primary-08)',
+                color: tool.pricing === 'free' || tool.pricing === 'open_source' ? 'var(--color-accent-success)' : tool.pricing === 'paid' ? 'var(--color-accent-warning, #FFB800)' : 'var(--color-text-secondary)',
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.semibold,
+                lineHeight: '1.4',
               }}>
                 {pricingLabel}
               </span>
@@ -352,12 +390,31 @@ function ToolCard({ tool, isZh }: { tool: Tool; isZh: boolean }) {
 
       {desc && (
         <p style={{
-          fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5, margin: '0 0 10px',
+          fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-secondary)',
+          lineHeight: tokens.typography.lineHeight.normal, margin: '0 0 12px',
           overflow: 'hidden', textOverflow: 'ellipsis',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
         }}>
           {desc}
         </p>
+      )}
+
+      {tool.tags && tool.tags.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          {tool.tags.slice(0, 3).map((tag, i) => (
+            <span key={i} style={{
+              padding: '2px 10px',
+              borderRadius: tokens.radius.full,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.medium,
+              background: 'var(--color-bg-tertiary)',
+              color: 'var(--color-text-tertiary)',
+              border: '1px solid var(--color-border-secondary)',
+            }}>
+              {tag}
+            </span>
+          ))}
+        </div>
       )}
 
       <StarRating

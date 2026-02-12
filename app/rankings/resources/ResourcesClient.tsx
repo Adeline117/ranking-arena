@@ -151,12 +151,15 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
           },
         ]} />
 
+        {/* Section separator */}
+        <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, var(--color-border-primary), transparent)', margin: '8px 0 32px' }} />
+
         {/* Search */}
         <div style={{ position: 'relative', maxWidth: 560, marginBottom: 24 }}>
           <svg
             width="18" height="18" viewBox="0 0 24 24" fill="none"
             stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round"
-            style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+            style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', transition: `color ${tokens.transition.fast}` }}
           >
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -165,15 +168,18 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
             value={searchInput}
             onChange={e => handleSearchInput(e.target.value)}
             placeholder={isZh ? '搜索书名、作者或关键词...' : 'Search by title, author, or keyword...'}
+            onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-accent-primary)'; e.currentTarget.style.boxShadow = `0 0 0 ${tokens.focusRing.width} ${tokens.focusRing.color}` }}
+            onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border-secondary)'; e.currentTarget.style.boxShadow = 'none' }}
             style={{
               width: '100%',
               padding: '12px 40px 12px 44px',
               borderRadius: tokens.radius.lg,
-              border: `1px solid var(--color-border-primary)`,
+              border: `1px solid var(--color-border-secondary)`,
               background: 'var(--color-bg-secondary)',
               color: 'var(--color-text-primary)',
               fontSize: 14,
               outline: 'none',
+              transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
             }}
           />
           {searchInput && (
@@ -202,14 +208,16 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
                 onClick={() => { setCategory(cat.key); setPage(1) }}
                 style={{
                   padding: '8px 18px',
-                  borderRadius: tokens.radius.lg,
-                  fontSize: 14,
-                  fontWeight: active ? 700 : 500,
-                  border: active ? 'none' : '1px solid var(--color-border-primary)',
+                  borderRadius: tokens.radius.full,
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  letterSpacing: active ? '0.01em' : undefined,
+                  border: active ? '1px solid transparent' : '1px solid var(--color-border-secondary)',
                   background: active ? tokens.gradient.purpleGold : 'var(--color-bg-secondary)',
-                  color: active ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
+                  color: active ? '#fff' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
+                  boxShadow: active ? '0 2px 8px rgba(139, 92, 246, 0.3)' : 'none',
+                  transition: `all ${tokens.transition.base}`,
                 }}
               >
                 {isZh ? cat.zh : cat.en}
@@ -220,15 +228,21 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
             value={sort}
             onChange={e => { setSort(e.target.value); setPage(1) }}
             style={{
-              padding: '8px 14px',
-              borderRadius: tokens.radius.lg,
-              border: '1px solid var(--color-border-primary)',
+              padding: '8px 28px 8px 14px',
+              borderRadius: tokens.radius.full,
+              border: '1px solid var(--color-border-secondary)',
               background: 'var(--color-bg-secondary)',
-              color: 'var(--color-text-primary)',
+              color: 'var(--color-text-secondary)',
               fontSize: 13,
+              fontWeight: 500,
               cursor: 'pointer',
               outline: 'none',
               marginLeft: 'auto',
+              appearance: 'none' as const,
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 10px center',
+              transition: `border-color ${tokens.transition.fast}`,
             }}
           >
             {SORT_OPTIONS.map(opt => (
@@ -240,14 +254,14 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
         {/* Featured */}
         {featured.length > 0 && !search && category === 'all' && (
           <section style={{ marginBottom: 40 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 20 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 20, letterSpacing: '-0.01em' }}>
               {isZh ? '精选推荐' : 'Featured'}
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 45%), 1fr))', gap: 20 }}>
               {featured.slice(0, 6).map(item => (
                 <Link key={item.id} href={`/library/${item.id}`} style={{ textDecoration: 'none' }}>
                   <div>
-                    <div style={{ width: '100%', aspectRatio: '2/3', borderRadius: tokens.radius.lg, overflow: 'hidden', marginBottom: 12, boxShadow: '0 8px 24px var(--color-overlay-medium)' }}>
+                    <div style={{ width: '100%', aspectRatio: '2/3', borderRadius: tokens.radius.lg, overflow: 'hidden', marginBottom: 12, boxShadow: tokens.shadow.md, transition: `transform ${tokens.transition.base}, box-shadow ${tokens.transition.base}` }}>
                       <BookCover title={item.title} author={item.author} category={item.category} coverUrl={item.cover_url} fontSize="sm" />
                     </div>
                     <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', lineHeight: 1.35, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
@@ -284,11 +298,14 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-            <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 6 }}>
+          <div style={{ textAlign: 'center', padding: '80px 24px', borderRadius: tokens.radius.xl, background: 'var(--color-bg-secondary)', border: '1px dashed var(--color-border-secondary)' }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="1.5" strokeLinecap="round" style={{ marginBottom: 16, opacity: 0.5 }}>
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 6 }}>
               {isZh ? '暂无内容' : 'No items found'}
             </p>
-            <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
+            <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', margin: 0 }}>
               {search ? (isZh ? '换个关键词试试' : 'Try different keywords') : (isZh ? '试试其他分类' : 'Try a different category')}
             </p>
           </div>
@@ -306,17 +323,17 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
             <button
               disabled={page <= 1}
               onClick={() => setPage(p => p - 1)}
-              style={{ padding: '8px 14px', borderRadius: tokens.radius.lg, border: '1px solid var(--color-border-primary)', background: 'transparent', color: 'var(--color-text-primary)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.35 : 1, fontSize: 13 }}
+              style={{ padding: '8px 18px', borderRadius: tokens.radius.full, border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.35 : 1, fontSize: 13, fontWeight: 500, transition: `all ${tokens.transition.fast}` }}
             >
               {isZh ? '上一页' : 'Prev'}
             </button>
-            <span style={{ padding: '8px 14px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            <span style={{ padding: '8px 14px', fontSize: 13, fontWeight: 500, color: 'var(--color-text-tertiary)' }}>
               {page} / {totalPages}
             </span>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(p => p + 1)}
-              style={{ padding: '8px 14px', borderRadius: tokens.radius.lg, border: '1px solid var(--color-border-primary)', background: 'transparent', color: 'var(--color-text-primary)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.35 : 1, fontSize: 13 }}
+              style={{ padding: '8px 18px', borderRadius: tokens.radius.full, border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.35 : 1, fontSize: 13, fontWeight: 500, transition: `all ${tokens.transition.fast}` }}
             >
               {isZh ? '下一页' : 'Next'}
             </button>
