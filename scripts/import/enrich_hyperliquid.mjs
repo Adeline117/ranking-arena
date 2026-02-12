@@ -112,7 +112,13 @@ async function main() {
   console.log(`Missing max_drawdown: ${missingDd?.length || 0}`)
   console.log(`Unique traders: ${traders.length}`)
   console.log(`Estimated time: ~${Math.ceil(traders.length * 5 / 60)} min`)
-  if (traders.length === 0) { console.log('Nothing to do!'); return }
+  if (traders.length === 0) {
+    await supabase.from('trader_snapshots')
+      .update({ captured_at: new Date().toISOString() })
+      .eq('source', SOURCE).eq('season_id', period)
+    console.log('No enrichment needed, refreshed captured_at')
+    return
+  }
 
   let enriched = 0, wrFilled = 0, ddFilled = 0, errors = 0
   const startTime = Date.now()
@@ -143,6 +149,7 @@ async function main() {
         const update = { arena_score: totalScore }
         if (needWr && wr !== null) { update.win_rate = wr; wrFilled++ }
         if (needDd && dd !== null) { update.max_drawdown = dd; ddFilled++ }
+        update.captured_at = new Date().toISOString()
         await supabase.from('trader_snapshots').update(update).eq('id', trader.id)
         enriched++
       }
