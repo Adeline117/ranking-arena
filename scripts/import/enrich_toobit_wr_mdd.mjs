@@ -86,10 +86,10 @@ async function main() {
 
   // Source 2: leaders-new (has daily PnL for MDD)
   for (const [period, dt] of Object.entries(PERIOD_MAP)) {
-    for (let page = 1; page <= 3; page++) {
+    for (let page = 1; page <= 5; page++) {
       const data = await fetchJson(`${API_BASE}/leaders-new?pageNo=${page}&pageSize=50&sortBy=roi&sortType=desc&dataType=${dt}`)
       if (!data || data.code !== 200) break
-      const items = data.data?.records || data.data?.list || []
+      const items = data.data?.list || data.data?.records || []
       if (!items.length) break
       
       for (const item of items) {

@@ -114,15 +114,16 @@ async function fetchOkx(uniqueCode) {
 // Jupiter Perps
 // ============================================
 async function fetchJupiter(wallet) {
-  // Try the JLP positions API
-  const data = await fetchJSON(`https://perps-api.jup.ag/v1/traderposition?wallet=${wallet}`)
-  if (!data || !Array.isArray(data)) return []
-  return data.filter(p => p && p.market).map(p => ({
-    symbol: p.market || 'UNKNOWN',
+  // Jupiter v2 API
+  const data = await fetchJSON(`https://perps-api.jup.ag/v2/positions?walletAddress=${wallet}`)
+  const list = data?.dataList
+  if (!list || !Array.isArray(list)) return []
+  return list.filter(p => p && p.asset).map(p => ({
+    symbol: p.asset || 'UNKNOWN',
     direction: p.side === 'short' ? 'short' : 'long',
-    entry_price: parseFloat(p.entryPrice || '0') || null,
-    max_position_size: parseFloat(p.sizeUsd || p.size || '0') || null,
-    pnl_usd: parseFloat(p.pnl || '0') || null,
+    entry_price: parseFloat(p.entryPriceUsd || '0') / 1e6 || null,
+    max_position_size: parseFloat(p.sizeUsd || '0') / 1e6 || null,
+    pnl_usd: parseFloat(p.pnlAfterFeesUsd || p.pnlBeforeFeesUsd || '0') / 1e6 || null,
     margin_mode: 'cross', status: 'open',
   }))
 }
@@ -240,8 +241,10 @@ async function main() {
 
   for (let i = 0; i < traders.length; i++) {
     const tid = traders[i]
+    let posCount = 0
     try {
       const positions = await fn(tid)
+      posCount = positions.length
       if (positions.length > 0) {
         const saved = await upsertPositions(sourceArg, tid, positions)
         if (saved > 0) { withData++; totalPos += saved }
@@ -252,7 +255,7 @@ async function main() {
     }
     await sleep(delayMs)
 
-    if (i < 5) console.log(`  #${i+1} ${tid.slice(0,15)} → ${positions?.length || 0} pos`)
+    if (i < 5) console.log(`  #${i+1} ${tid.slice(0,15)} → ${posCount} pos`)
     if ((i + 1) % 100 === 0 || i === traders.length - 1) {
       const mins = ((Date.now() - t0) / 60000).toFixed(1)
       console.log(`  [${i+1}/${traders.length}] withData=${withData} pos=${totalPos} err=${errors} | ${mins}m`)
