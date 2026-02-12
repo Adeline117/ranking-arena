@@ -9,6 +9,7 @@ import { initCsrfToken } from '@/lib/api/client'
 import { ErrorBoundary } from './ErrorBoundary'
 import { SWRConfigProvider } from '@/lib/hooks/SWRConfig'
 import { initializeErrorInterceptors } from '@/lib/middleware/error-interceptor'
+import PrivyClientProvider from './PrivyClientProvider'
 
 // Web3Provider is NO LONGER loaded at root level.
 // It's lazy-loaded only when wallet features are needed.
@@ -37,17 +38,19 @@ export default function Providers({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary>
       <SWRConfigProvider>
-        <LanguageProvider>
-          <PremiumProvider>
-            <ToastProvider>
-              <ErrorInterceptorInitializer>
-                <DialogProvider>
-                  {children}
-                </DialogProvider>
-              </ErrorInterceptorInitializer>
-            </ToastProvider>
-          </PremiumProvider>
-        </LanguageProvider>
+        <PrivyClientProvider>
+          <LanguageProvider>
+            <PremiumProvider>
+              <ToastProvider>
+                <ErrorInterceptorInitializer>
+                  <DialogProvider>
+                    {children}
+                  </DialogProvider>
+                </ErrorInterceptorInitializer>
+              </ToastProvider>
+            </PremiumProvider>
+          </LanguageProvider>
+        </PrivyClientProvider>
       </SWRConfigProvider>
     </ErrorBoundary>
   )

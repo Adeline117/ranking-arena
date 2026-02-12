@@ -168,6 +168,47 @@ async function fetchOkxPositions(uniqueCode) {
 }
 
 // ============================================
+// Binance Futures
+// ============================================
+async function fetchBinancePositions(portfolioId) {
+  const positions = []
+
+  // Closed position history (paginated)
+  for (let page = 1; page <= 5; page++) {
+    const data = await fetchJSON('https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/query-position-history', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': 'https://www.binance.com',
+        'Referer': 'https://www.binance.com/en/copy-trading',
+      },
+      body: JSON.stringify({ portfolioId, pageNumber: page, pageSize: 100 }),
+    })
+    if (!data?.data?.list?.length) break
+    for (const p of data.data.list) {
+      positions.push({
+        symbol: (p.symbol || '').replace('USDT', '').replace('BUSD', '') || 'UNKNOWN',
+        direction: p.direction === 'SHORT' || p.side === 'SELL' ? 'short' : 'long',
+        entry_price: parseFloat(p.entryPrice || p.openPrice || '0') || null,
+        exit_price: parseFloat(p.exitPrice || p.closePrice || '0') || null,
+        max_position_size: parseFloat(p.maxOpenInterest || p.amount || '0') || null,
+        closed_size: parseFloat(p.closedVolume || p.amount || '0') || null,
+        pnl_usd: parseFloat(p.pnl || p.realizedProfit || '0') || null,
+        pnl_pct: p.roe ? parseFloat(p.roe) * 100 : (p.pnlRatio ? parseFloat(p.pnlRatio) * 100 : null),
+        margin_mode: (p.marginType || 'cross').toLowerCase(),
+        status: 'closed',
+        open_time: p.openTime ? new Date(p.openTime).toISOString() : null,
+        close_time: p.closeTime ? new Date(p.closeTime).toISOString() : (p.updateTime ? new Date(p.updateTime).toISOString() : null),
+      })
+    }
+    if (data.data.list.length < 100) break
+    await sleep(500)
+  }
+
+  return positions
+}
+
+// ============================================
 // Jupiter Perps (Solana)
 // ============================================
 async function fetchJupiterPositions(traderId) {
@@ -302,6 +343,7 @@ async function getTraders(source) {
 const FETCHERS = {
   hyperliquid: { fn: fetchHyperliquidPositions, delayMs: 200 },
   okx_futures: { fn: fetchOkxPositions, delayMs: 600 },
+  binance_futures: { fn: fetchBinancePositions, delayMs: 1500 },
   jupiter_perps: { fn: fetchJupiterPositions, delayMs: 300 },
 }
 
