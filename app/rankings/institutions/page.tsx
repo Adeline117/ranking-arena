@@ -178,27 +178,46 @@ export default function InstitutionsPage() {
           },
         ]} />
 
-        <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 20 }}>
+        <h1 style={{ fontSize: tokens.typography.fontSize['3xl'], fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 8, letterSpacing: '-0.02em' }}>
           {isZh ? '机构' : 'Institutions'}
         </h1>
+        <p style={{ fontSize: tokens.typography.fontSize.base, color: 'var(--color-text-tertiary)', marginBottom: 24, lineHeight: tokens.typography.lineHeight.normal }}>
+          {isZh ? '发现并评价加密行业中的顶级机构' : 'Discover and rate top institutions in crypto'}
+        </p>
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
           {CATEGORY_FILTERS.map(f => {
             const active = category === f.key
             return (
               <button
                 key={f.key}
                 onClick={() => setCategory(f.key)}
+                onMouseEnter={e => {
+                  if (!active) {
+                    e.currentTarget.style.borderColor = 'var(--color-brand-muted)'
+                    e.currentTarget.style.color = 'var(--color-text-primary)'
+                    e.currentTarget.style.background = 'var(--color-bg-hover)'
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!active) {
+                    e.currentTarget.style.borderColor = 'var(--color-border-primary)'
+                    e.currentTarget.style.color = 'var(--color-text-secondary)'
+                    e.currentTarget.style.background = 'var(--color-bg-secondary)'
+                  }
+                }}
                 style={{
-                  padding: '8px 18px',
-                  borderRadius: tokens.radius.lg,
-                  fontSize: 14,
+                  padding: '8px 20px',
+                  borderRadius: tokens.radius.full,
+                  fontSize: tokens.typography.fontSize.sm,
                   fontWeight: active ? 700 : 500,
-                  border: active ? 'none' : '1px solid var(--color-border-primary)',
+                  border: active ? '1px solid transparent' : '1px solid var(--color-border-primary)',
                   background: active ? tokens.gradient.purpleGold : 'var(--color-bg-secondary)',
                   color: active ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
+                  transition: `all ${tokens.transition.base}`,
+                  boxShadow: active ? tokens.shadow.sm : 'none',
                 }}
               >
                 {isZh ? f.zh : f.en}
@@ -209,10 +228,11 @@ export default function InstitutionsPage() {
             value={sort}
             onChange={e => setSort(e.target.value)}
             style={{
-              padding: '8px 14px', borderRadius: tokens.radius.lg,
+              padding: '8px 14px', borderRadius: tokens.radius.full,
               border: '1px solid var(--color-border-primary)',
               background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
-              fontSize: 13, cursor: 'pointer', outline: 'none', marginLeft: 'auto',
+              fontSize: tokens.typography.fontSize.sm, cursor: 'pointer', outline: 'none', marginLeft: 'auto',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             {SORT_OPTIONS.map(opt => (
@@ -222,34 +242,48 @@ export default function InstitutionsPage() {
         </div>
 
         {/* Search */}
-        <div style={{ position: 'relative', maxWidth: 400, marginBottom: 24 }}>
+        <div style={{ position: 'relative', maxWidth: 400, marginBottom: 28 }}>
+          <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-tertiary)', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </div>
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={isZh ? '搜索机构...' : 'Search institutions...'}
+            onFocus={e => {
+              e.currentTarget.style.borderColor = 'var(--color-brand)'
+              e.currentTarget.style.boxShadow = `0 0 0 3px var(--color-brand-muted)`
+            }}
+            onBlur={e => {
+              e.currentTarget.style.borderColor = 'var(--color-border-primary)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
             style={{
-              width: '100%', padding: '10px 14px', borderRadius: tokens.radius.lg,
+              width: '100%', padding: '10px 14px 10px 38px', borderRadius: tokens.radius.xl,
               border: '1px solid var(--color-border-primary)',
               background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
-              fontSize: 14, outline: 'none',
+              fontSize: tokens.typography.fontSize.base, outline: 'none',
+              transition: `all ${tokens.transition.base}`,
             }}
           />
         </div>
 
         {/* List */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="skeleton" style={{ height: 120, borderRadius: tokens.radius.xl }} />
+              <div key={i} className="skeleton" style={{ height: 140, borderRadius: tokens.radius.xl }} />
             ))}
           </div>
         ) : institutions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--color-text-tertiary)' }}>
+          <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.base }}>
             {isZh ? '暂无数据' : 'No institutions found'}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
             {institutions.map(inst => (
               <InstitutionCard key={inst.id} institution={inst} isZh={isZh} />
             ))}
@@ -272,47 +306,50 @@ function InstitutionCard({ institution, isZh }: { institution: Institution; isZh
       rel="noopener noreferrer"
       style={{
         display: 'block',
-        padding: 20,
+        padding: 22,
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary)',
         background: 'var(--color-bg-secondary)',
         textDecoration: 'none',
-        transition: 'all 0.2s ease',
+        transition: `all ${tokens.transition.slow}`,
+        boxShadow: tokens.shadow.xs,
       }}
       onMouseEnter={e => {
         e.currentTarget.style.borderColor = 'var(--color-brand)'
-        e.currentTarget.style.transform = 'translateY(-2px)'
-        e.currentTarget.style.boxShadow = tokens.shadow.md
+        e.currentTarget.style.transform = 'translateY(-3px)'
+        e.currentTarget.style.boxShadow = tokens.shadow.cardHover
       }}
       onMouseLeave={e => {
         e.currentTarget.style.borderColor = 'var(--color-border-primary)'
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = 'none'
+        e.currentTarget.style.boxShadow = tokens.shadow.xs
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
         {institution.logo_url ? (
           <img
             src={institution.logo_url}
             alt=""
-            width={40}
-            height={40}
-            style={{ borderRadius: tokens.radius.lg, objectFit: 'cover' }}
+            width={44}
+            height={44}
+            style={{ borderRadius: tokens.radius.xl, objectFit: 'cover', border: '1px solid var(--color-border-primary)', flexShrink: 0 }}
             onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
         ) : (
           <div style={{
-            width: 40, height: 40, borderRadius: tokens.radius.lg,
-            background: 'var(--color-accent-primary-12)',
+            width: 44, height: 44, borderRadius: tokens.radius.xl,
+            background: tokens.gradient.primarySubtle,
+            border: '1px solid var(--color-border-primary)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, fontWeight: 700, color: 'var(--color-brand)',
+            fontSize: tokens.typography.fontSize.md, fontWeight: 700, color: 'var(--color-brand)',
+            flexShrink: 0,
           }}>
             {name[0]}
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 2 }}>{name}</div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+          <div style={{ fontSize: tokens.typography.fontSize.base, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+          <div style={{ fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)', fontWeight: 500 }}>
             {CATEGORY_FILTERS.find(f => f.key === institution.category)?.[isZh ? 'zh' : 'en'] || institution.category}
           </div>
         </div>
@@ -320,12 +357,30 @@ function InstitutionCard({ institution, isZh }: { institution: Institution; isZh
 
       {desc && (
         <p style={{
-          fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5, margin: '0 0 10px',
+          fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-secondary)', lineHeight: tokens.typography.lineHeight.normal, margin: '0 0 12px',
           overflow: 'hidden', textOverflow: 'ellipsis',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
         }}>
           {desc}
         </p>
+      )}
+
+      {institution.tags && institution.tags.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          {institution.tags.slice(0, 3).map(tag => (
+            <span key={tag} style={{
+              fontSize: tokens.typography.fontSize.xs,
+              padding: '3px 10px',
+              borderRadius: tokens.radius.full,
+              background: 'var(--color-bg-tertiary)',
+              color: 'var(--color-text-secondary)',
+              fontWeight: 500,
+              border: '1px solid var(--color-border-primary)',
+            }}>
+              {tag}
+            </span>
+          ))}
+        </div>
       )}
 
       <StarRating
