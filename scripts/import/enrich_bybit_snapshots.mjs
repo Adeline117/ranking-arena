@@ -7,11 +7,17 @@
  */
 
 import pg from 'pg'
+import { ProxyAgent } from 'undici'
 const { Pool } = pg
 
 const DB_URL = "postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
 const API_URL = 'https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income'
+
+// Proxy for Bybit WAF bypass
+const PROXY_URL = process.env.HTTPS_PROXY || process.env.https_proxy || 'http://127.0.0.1:7890'
+let proxyAgent
+try { proxyAgent = new ProxyAgent(PROXY_URL) } catch { proxyAgent = null }
 
 const DRY_RUN = process.argv.includes('--dry-run')
 const limitArg = process.argv.find(a => a.startsWith('--limit='))
@@ -28,7 +34,9 @@ async function fetchAPI(leaderMark) {
   const url = `${API_URL}?leaderMark=${encodeURIComponent(leaderMark)}`
   for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) })
+      const opts = { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(15000) }
+      if (proxyAgent) opts.dispatcher = proxyAgent
+      const res = await fetch(url, opts)
       if (res.status === 429) { await sleep(5000 * (i + 1)); continue }
       if (!res.ok) return null
       const text = await res.text()
@@ -59,7 +67,7 @@ async function main() {
   const res = await pool.query(`
     SELECT DISTINCT source_trader_id FROM trader_snapshots
     WHERE source='bybit' AND source_trader_id NOT LIKE '$_%' ESCAPE '$'
-    AND (trades_count IS NULL OR aum IS NULL)
+    AND (trades_count IS NULL OR aum IS NULL OR max_drawdown IS NULL)
     LIMIT $1`, [LIMIT])
   
   const ids = res.rows.map(r => r.source_trader_id)
