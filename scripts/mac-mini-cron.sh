@@ -76,7 +76,9 @@ run_script "import_blofin.mjs" "ALL" 300
 run_script "import_gateio.mjs" "ALL" 300
 run_script "import_phemex.mjs" "ALL" 300
 
-# ========== Tier 3: CF-blocked (需要代理+Chrome) ==========
+# ========== Tier 3: CF-blocked / WAF-blocked (需要代理+Chrome) ==========
+run_script "import_bybit_spot.mjs" "ALL" 300
+run_script "import_bitget_spot_fast.mjs" "ALL" 300
 run_script "import_bingx_mac.mjs" "ALL" 300
 run_script "import_weex.mjs" "ALL" 300
 
