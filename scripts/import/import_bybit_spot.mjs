@@ -32,7 +32,7 @@ const BASE_URL = 'https://www.bybit.com/copyTrade/'
 const API_PATH = '/x-api/fapi/beehive/public/v1/common/dynamic-leader-list'
 const TARGET_COUNT = 500
 const PAGE_SIZE = 50 // API max
-const PROXY = 'http://127.0.0.1:7890'
+const PROXY = process.env.HTTP_PROXY || process.env.https_proxy || (process.platform === 'darwin' ? 'http://127.0.0.1:7890' : '')
 
 const PERIOD_MAP = {
   '7D': 'DATA_DURATION_SEVEN_DAY',
@@ -76,7 +76,7 @@ async function fetchLeaderboardData(period) {
       '--disable-blink-features=AutomationControlled',
       '--disable-dev-shm-usage',
       '--disable-gpu',
-      `--proxy-server=${PROXY}`,
+      ...(PROXY ? [`--proxy-server=${PROXY}`] : []),
     ],
     timeout: 60000,
   })

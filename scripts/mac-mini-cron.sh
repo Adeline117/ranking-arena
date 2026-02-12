@@ -69,7 +69,7 @@ run_script "import_mexc.mjs" "ALL" 600
 run_script "import_kucoin.mjs" "ALL" 600
 
 # ========== Tier 2: 中等平台 (Chrome) ==========
-run_script "import_coinex.mjs" "ALL" 300
+run_script "import_coinex.mjs" "ALL" 600
 run_script "import_xt.mjs" "ALL" 300
 run_script "import_lbank.mjs" "ALL" 300
 run_script "import_blofin.mjs" "ALL" 300
