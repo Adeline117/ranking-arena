@@ -163,7 +163,14 @@ async function main() {
     .or('win_rate.is.null,max_drawdown.is.null')
 
   console.log(`Records needing enrichment: ${missing?.length || 0}`)
-  if (!missing?.length) { console.log('Nothing to do!'); return }
+  if (!missing?.length) {
+    // Still refresh captured_at to mark data as fresh
+    await supabase.from('trader_snapshots')
+      .update({ captured_at: new Date().toISOString() })
+      .eq('source', SOURCE).eq('season_id', period)
+    console.log('No enrichment needed, refreshed captured_at')
+    return
+  }
 
   // 3. Process in parallel batches
   const CONCURRENCY = 5
@@ -204,6 +211,7 @@ async function main() {
           const { totalScore } = calculateArenaScore(snap.roi || 0, snap.pnl, newMdd, newWr, period)
           updates.arena_score = totalScore
 
+          updates.captured_at = new Date().toISOString()
           const { error } = await supabase.from('trader_snapshots').update(updates).eq('id', snap.id)
           if (!error) enriched++
           else errors++
