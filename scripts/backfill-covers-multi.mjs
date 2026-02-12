@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * 多源封面搜索 - Google Books + Open Library + Amazon
- * 针对有ISBN但之前搜不到的书，用多个源尝试
- * 也处理无ISBN的热门书籍（按title搜）
+ * Multi-source cover search - Google Books + Open Library
+ * Phase 1: Books with ISBNs (highest hit rate)
+ * Phase 2: Books without ISBNs (title search)
+ * Skips papers (rarely have covers)
  */
 import { createClient } from '@supabase/supabase-js';
 
@@ -14,23 +15,12 @@ const supabase = createClient(
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let checked = 0, found = 0;
 
-async function tryGoogleByISBN(isbn) {
+async function tryGoogle(query) {
   try {
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1&fields=items(volumeInfo/imageLinks)`);
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=3`, { signal: AbortSignal.timeout(10000) });
+    if (res.status === 429) { await sleep(5000); return null; }
     if (!res.ok) return null;
     const data = await res.json();
-    const img = data.items?.[0]?.volumeInfo?.imageLinks;
-    return img?.thumbnail?.replace('http://', 'https://') || img?.smallThumbnail?.replace('http://', 'https://') || null;
-  } catch { return null; }
-}
-
-async function tryGoogleByTitle(title, author) {
-  try {
-    const q = encodeURIComponent(`${title} ${author || ''}`.trim().slice(0, 100));
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=3&fields=items(volumeInfo(title,imageLinks))`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    // Find best match
     for (const item of (data.items || [])) {
       const img = item.volumeInfo?.imageLinks;
       const cover = img?.thumbnail?.replace('http://', 'https://') || img?.smallThumbnail?.replace('http://', 'https://');
@@ -40,18 +30,17 @@ async function tryGoogleByTitle(title, author) {
   } catch { return null; }
 }
 
-async function tryOpenLibrary(isbn) {
+async function tryOpenLibraryISBN(isbn) {
   try {
-    const res = await fetch(`https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`, { redirect: 'manual' });
+    const res = await fetch(`https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
     if (res.status === 200) return `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
     return null;
   } catch { return null; }
 }
 
-async function tryOpenLibraryByTitle(title) {
+async function tryOpenLibraryTitle(title) {
   try {
-    const q = encodeURIComponent(title.slice(0, 80));
-    const res = await fetch(`https://openlibrary.org/search.json?title=${q}&limit=1&fields=cover_i`);
+    const res = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(title.slice(0,80))}&limit=1&fields=cover_i`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return null;
     const data = await res.json();
     const coverId = data.docs?.[0]?.cover_i;
@@ -62,55 +51,60 @@ async function tryOpenLibraryByTitle(title) {
 
 async function findCover(book) {
   const { isbn, title, author } = book;
+  const cleanIsbn = isbn?.replace(/[-\s]/g, '');
   
-  // Try ISBN-based searches first
-  if (isbn) {
-    const cleanIsbn = isbn.replace(/[-\s]/g, '');
-    let cover = await tryGoogleByISBN(cleanIsbn);
+  // ISBN-based
+  if (cleanIsbn) {
+    let cover = await tryGoogle(`isbn:${cleanIsbn}`);
     if (cover) return cover;
-    await sleep(200);
-    
-    cover = await tryOpenLibrary(cleanIsbn);
+    await sleep(300);
+    cover = await tryOpenLibraryISBN(cleanIsbn);
     if (cover) return cover;
-    await sleep(200);
+    await sleep(300);
   }
   
-  // Fall back to title search
+  // Title-based
   if (title) {
-    let cover = await tryGoogleByTitle(title, author);
+    let cover = await tryGoogle(`${title} ${author || ''}`.trim().slice(0, 100));
     if (cover) return cover;
-    await sleep(200);
-    
-    cover = await tryOpenLibraryByTitle(title);
+    await sleep(300);
+    cover = await tryOpenLibraryTitle(title);
     if (cover) return cover;
-    await sleep(200);
   }
   
   return null;
 }
 
-async function main() {
-  // Get books without covers, prioritize English titles (more likely to find)
-  // Supabase client caps at 1000 rows, so fetch in two batches
-  const fetchBatch = async (from, to) => {
-    const { data, error } = await supabase
-      .from('library_items')
-      .select('id, title, isbn, author')
+async function fetchBooks(filter, limit) {
+  const all = [];
+  const batchSize = 1000;
+  for (let offset = 0; offset < limit; offset += batchSize) {
+    let q = supabase.from('library_items').select('id, title, isbn, author')
       .is('cover_url', null)
-      .order('id', { ascending: true })
-      .range(from, to);
+      .in('category', ['book', 'finance']);
+    if (filter === 'with_isbn') q = q.not('isbn', 'is', null);
+    else q = q.is('isbn', null);
+    const { data, error } = await q.order('id').range(offset, offset + batchSize - 1);
     if (error) throw error;
-    return data || [];
-  };
-  const batch1 = await fetchBatch(0, 999);
-  const batch2 = await fetchBatch(1000, 1999);
-  const books = [...batch1, ...batch2];
-  const error = null;
+    if (!data?.length) break;
+    all.push(...data);
+    if (data.length < batchSize) break;
+  }
+  return all.slice(0, limit);
+}
+
+async function main() {
+  // Phase 1: Books with ISBNs
+  const isbnBooks = await fetchBooks('with_isbn', 1021);
+  // Phase 2: Fill rest of 2000 with title-only books  
+  const titleBooks = await fetchBooks('no_isbn', 2000 - isbnBooks.length);
+  const books = [...isbnBooks, ...titleBooks];
   
-  if (error) { console.error('DB error:', error); return; }
-  
-  console.log(`=== 多源封面搜索 ===`);
-  console.log(`待处理: ${books.length}`);
+  console.log(`=== Cover Backfill ===`);
+  console.log(`Phase 1 (ISBN): ${isbnBooks.length} books`);
+  console.log(`Phase 2 (title): ${titleBooks.length} books`);
+  console.log(`Total: ${books.length}`);
+  console.log(`Started: ${new Date().toISOString()}\n`);
   
   for (const book of books) {
     checked++;
@@ -119,20 +113,17 @@ async function main() {
     if (cover) {
       found++;
       await supabase.from('library_items').update({ cover_url: cover }).eq('id', book.id);
-      if (found % 10 === 0) {
-        console.log(`[${new Date().toISOString()}] checked=${checked} found=${found} (${(100*found/checked).toFixed(1)}%) — last: ${book.title?.slice(0, 50)}`);
-      }
     }
     
-    if (checked % 100 === 0) {
-      console.log(`[${new Date().toISOString()}] checked=${checked} found=${found} (${(100*found/checked).toFixed(1)}%)`);
+    if (checked % 50 === 0) {
+      console.log(`[${new Date().toISOString()}] ${checked}/${books.length} | found=${found} (${(100*found/checked).toFixed(1)}%)`);
     }
     
-    // Rate limit: ~1.5 sec per book (multiple API calls)
-    await sleep(500);
+    await sleep(700);
   }
   
-  console.log(`\n✅ 完成: ${checked} checked, ${found} found (${(100*found/checked).toFixed(1)}%)`);
+  console.log(`\n✅ Done: ${checked} checked, ${found} covers found (${(100*found/checked).toFixed(1)}%)`);
+  console.log(`Finished: ${new Date().toISOString()}`);
 }
 
 main().catch(console.error);

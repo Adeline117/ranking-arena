@@ -20,7 +20,24 @@ const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge
 const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
 const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
 
-function LoadingCard({ height = 64 }: { height?: number }) {
+function LoadingCard({ height = 64, lines }: { height?: number; lines?: number }) {
+  if (lines) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '16px 20px' }}>
+        {Array.from({ length: lines }).map((_, i) => (
+          <div
+            key={i}
+            className="skeleton"
+            style={{
+              height: 14,
+              borderRadius: 6,
+              width: i === 0 ? '60%' : i === lines - 1 ? '40%' : '90%',
+            }}
+          />
+        ))}
+      </div>
+    )
+  }
   return <div className="skeleton" style={{ height, borderRadius: tokens.radius.md }} />
 }
 
@@ -70,21 +87,31 @@ function MobileSectorsTab() {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>
-      {SECTORS.map(s => (
-        <div key={s.name} style={{
-          padding: '14px 16px',
-          background: tokens.glass.bg.secondary,
-          borderRadius: tokens.radius.lg,
-          border: tokens.glass.border.light,
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary, marginBottom: 6 }}>
-            {s.name}
+      {SECTORS.map(s => {
+        return (
+          <div key={s.name} style={{
+            padding: '14px 16px',
+            background: tokens.glass.bg.secondary,
+            borderRadius: tokens.radius.lg,
+            border: tokens.glass.border.light,
+            borderLeft: `3px solid ${s.color}`,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: tokens.colors.text.tertiary, marginBottom: 6, letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+              {s.name}
+            </div>
+            <div style={{
+              fontSize: 18,
+              fontWeight: 800,
+              color: s.color,
+              fontFamily: 'var(--font-mono, monospace)',
+              fontVariantNumeric: 'tabular-nums',
+              letterSpacing: '-0.5px',
+            } as React.CSSProperties}>
+              {s.change}
+            </div>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: s.color, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums' } as React.CSSProperties}>
-            {s.change}
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

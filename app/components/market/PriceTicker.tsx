@@ -133,10 +133,23 @@ export default function PriceTicker() {
               <span style={{
                 fontFamily: tokens.typography.fontFamily.mono.join(','),
                 color: tokens.colors.text.secondary,
-              }}>
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '-0.3px',
+              } as React.CSSProperties}>
                 {formatPrice(coin.price)}
               </span>
-              <span style={{ color, fontWeight: 600, fontSize: 12 }}>
+              <span style={{
+                color,
+                fontWeight: 600,
+                fontSize: 12,
+                fontFamily: tokens.typography.fontFamily.mono.join(','),
+                fontVariantNumeric: 'tabular-nums',
+                padding: '1px 4px',
+                borderRadius: 3,
+                background: coin.change24h >= 0
+                  ? 'var(--color-accent-success-05)'
+                  : 'var(--color-accent-error-04)',
+              } as React.CSSProperties}>
                 {coin.change24h >= 0 ? '+' : ''}{coin.change24h?.toFixed(2)}%
               </span>
             </span>

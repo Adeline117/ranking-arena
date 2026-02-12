@@ -69,7 +69,7 @@ function AnimatedROI({ roi, roiColor }: { roi: number; roiColor: string }) {
       size="md"
       weight="black"
       className="roi-value"
-      style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+      style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}
       title={`${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
     >
       {formatROI(animatedValue)}
@@ -308,7 +308,7 @@ export const TraderRow = memo(function TraderRow({
                 size="xs"
                 weight="semibold"
                 className="pnl-value"
-                style={{ color: pnlColor, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, opacity: hasPnl ? 0.85 : 0.5, cursor: hasPnl ? 'help' : 'default' }}
+                style={{ color: pnlColor, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, opacity: hasPnl ? 0.85 : 0.5, cursor: hasPnl ? 'help' : 'default', fontVariantNumeric: 'tabular-nums' }}
                 title={hasPnl ? getPnLTooltipFn(trader.source || source || '', language) : undefined}
               >
                 {pnlText}
@@ -320,7 +320,7 @@ export const TraderRow = memo(function TraderRow({
         {/* Win% */}
         <Box className="col-winrate" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.win_rate ? (
-            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm }}>
+            <Text size="sm" weight="semibold" style={{ color: trader.win_rate > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
               {trader.win_rate.toFixed(1)}%
             </Text>
           ) : (
@@ -331,7 +331,7 @@ export const TraderRow = memo(function TraderRow({
         {/* MDD */}
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.max_drawdown ? (
-            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm }}>
+            <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
               -{Math.abs(trader.max_drawdown).toFixed(1)}%
             </Text>
           ) : (

@@ -112,7 +112,7 @@ const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTra
       </span>
 
       {/* 价格 */}
-      <span style={{ color: sideColor, textAlign: 'right', fontWeight: 600 }}>
+      <span style={{ color: sideColor, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' } as React.CSSProperties}>
         ${formatPrice(trade.price)}
       </span>
 

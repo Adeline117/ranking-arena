@@ -171,7 +171,8 @@ export default function ArbitrageOpportunities() {
                     fontWeight: 800,
                     fontSize: tokens.typography.fontSize.sm,
                     fontFamily: 'var(--font-mono, monospace)',
-                  }}>
+                    fontVariantNumeric: 'tabular-nums',
+                  } as React.CSSProperties}>
                     +{opp.spreadPct.toFixed(2)}%
                   </span>
                 </div>
@@ -198,7 +199,8 @@ export default function ArbitrageOpportunities() {
                   fontWeight: 800,
                   fontSize: tokens.typography.fontSize.sm,
                   fontFamily: 'var(--font-mono, monospace)',
-                }}>
+                  fontVariantNumeric: 'tabular-nums',
+                } as React.CSSProperties}>
                   +{opp.profitPct.toFixed(2)}%
                 </span>
               </div>
@@ -236,7 +238,8 @@ export default function ArbitrageOpportunities() {
                 fontWeight: 800,
                 fontSize: tokens.typography.fontSize.sm,
                 fontFamily: 'var(--font-mono, monospace)',
-              }}>
+                fontVariantNumeric: 'tabular-nums',
+              } as React.CSSProperties}>
                 +{pc.spreadPct.toFixed(2)}%
               </span>
             </div>
