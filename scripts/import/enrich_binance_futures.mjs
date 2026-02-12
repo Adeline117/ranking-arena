@@ -111,14 +111,22 @@ async function enrichPeriod(period, concurrency) {
         const detail = await fetchTraderDetail(snap.source_trader_id, period)
         completed++
 
-        if (detail && detail.totalTrades > 0) {
-          const { error: updateErr } = await supabase
-            .from('trader_snapshots')
-            .update({ trades_count: detail.totalTrades })
-            .eq('id', snap.id)
+        if (detail) {
+          const updates = {}
+          if (detail.totalTrades > 0) updates.trades_count = detail.totalTrades
+          if (detail.winRate != null) updates.win_rate = detail.winRate
+          if (detail.maxDrawdown != null) updates.max_drawdown = detail.maxDrawdown
 
-          if (!updateErr) updated++
-          else failed++
+          if (Object.keys(updates).length > 0) {
+            const { error: updateErr } = await supabase
+              .from('trader_snapshots')
+              .update(updates)
+              .eq('id', snap.id)
+            if (!updateErr) updated++
+            else failed++
+          } else {
+            failed++
+          }
         } else {
           failed++
         }
