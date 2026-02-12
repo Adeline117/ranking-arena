@@ -1,0 +1,14 @@
+🚀 Detail API Enrichment - 全平台数据充实
+   CF Proxy: https://ranking-arena-proxy.broosbook.workers.dev
+   Limit: 1000 per platform
+   Fresh only: false
+   Platform filter: bitget
+
+
+🟣 Bitget - Detail API enrichment (via CF proxy)
+  Found 426 traders to enrich
+  ⚠ Bitget API blocked via CF proxy. Public endpoints return 404.
+  ℹ Set BITGET_API_KEY/SECRET/PASSPHRASE for broker API access.
+  ✅ Enriched 0/426
+
+✅ 全部完成! 耗时 361.3s

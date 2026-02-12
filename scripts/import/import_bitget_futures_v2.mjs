@@ -377,7 +377,7 @@ async function saveTradersBatch(results, period, capturedAt) {
     console.log(`  尝试逐条保存...`)
     let saved = 0
     for (const snapshot of snapshotsData) {
-      const { error } = await supabase.from('trader_snapshots').insert(snapshot)
+      const { error } = await supabase.from('trader_snapshots').upsert(snapshot)
       if (!error) saved++
     }
     console.log(`  逐条保存: ${saved}/${snapshotsData.length}`)
