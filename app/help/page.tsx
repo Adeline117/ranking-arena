@@ -111,10 +111,10 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
       
       {isOpen && (
         <Box
+          className="faq-item-content"
           style={{
             paddingBottom: tokens.spacing[4],
             paddingRight: tokens.spacing[6],
-            animation: 'fadeIn 0.2s ease-out',
           }}
         >
           <Text size="sm" color="secondary" style={{ lineHeight: 1.7 }}>

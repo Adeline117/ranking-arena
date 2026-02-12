@@ -1,5 +1,5 @@
-import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import { OnboardingPageSkeleton } from '@/app/components/ui/PageSkeleton'
 
 export default function Loading() {
-  return <RankingSkeleton />
+  return <OnboardingPageSkeleton />
 }
