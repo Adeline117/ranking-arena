@@ -87,8 +87,8 @@ export async function POST(request: NextRequest) {
       supabase.from('user_exchange_connections').delete().eq('user_id', user.id),
       // Remove trader links
       supabase.from('trader_links').delete().eq('user_id', user.id),
-      // Remove from groups (soft delete)
-      supabase.from('group_members').update({ deleted_at: now.toISOString() }).eq('user_id', user.id),
+      // Remove from groups
+      supabase.from('group_members').delete().eq('user_id', user.id),
       // Remove blocked users entries (both directions)
       supabase.from('blocked_users').delete().eq('blocker_id', user.id),
       supabase.from('blocked_users').delete().eq('blocked_id', user.id),

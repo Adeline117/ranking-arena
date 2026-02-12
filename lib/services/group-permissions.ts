@@ -8,7 +8,6 @@ export async function getGroupRole(supabase: SupabaseClient, userId: string, gro
     .select('role')
     .eq('group_id', groupId)
     .eq('user_id', userId)
-    .is('deleted_at', null)
     .single()
   return data?.role || null
 }
