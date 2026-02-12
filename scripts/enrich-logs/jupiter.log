@@ -1,0 +1,12 @@
+🚀 Detail API Enrichment - 全平台数据充实
+   CF Proxy: https://ranking-arena-proxy.broosbook.workers.dev
+   Limit: 1000 per platform
+   Fresh only: false
+   Platform filter: jupiter
+
+
+🪐 Jupiter Perps - enrichment
+  Found 366 traders to enrich
+  ✅ Enriched 366/366
+
+✅ 全部完成! 耗时 163.4s

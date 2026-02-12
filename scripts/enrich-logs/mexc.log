@@ -1,0 +1,12 @@
+🚀 Detail API Enrichment - 全平台数据充实
+   CF Proxy: https://ranking-arena-proxy.broosbook.workers.dev
+   Limit: 1000 per platform
+   Fresh only: false
+   Platform filter: mexc
+
+
+🟠 MEXC - Detail API enrichment
+  Found 339 traders to enrich
+  ✅ Enriched 0/339
+
+✅ 全部完成! 耗时 215.2s

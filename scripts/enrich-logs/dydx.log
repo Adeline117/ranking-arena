@@ -1,0 +1,47 @@
+🚀 Detail API Enrichment - 全平台数据充实
+   CF Proxy: https://ranking-arena-proxy.broosbook.workers.dev
+   Limit: 1000 per platform
+   Fresh only: false
+   Platform filter: dydx
+
+
+🟪 dYdX - Indexer API enrichment
+  Found 327 traders to enrich
+  ✅ 10/327
+  ✅ 20/327
+  ✅ 30/327
+  ✅ 40/327
+  ✅ 50/327
+  ✅ 60/327
+  ✅ 70/327
+  ✅ 80/327
+  ✅ 90/327
+  ✅ 100/327
+  ✅ 110/327
+  ✅ 120/327
+  ✅ 130/327
+  ✅ 140/327
+  ✅ 150/327
+  ✅ 160/327
+  ✅ 170/327
+  ✅ 180/327
+  ✅ 190/327
+  ✅ 200/327
+  ✅ 210/327
+  ✅ 220/327
+  ✅ 230/327
+  ✅ 240/327
+  ✅ 250/327
+  ✅ 260/327
+  ✅ 270/327
+  equity curve upsert error: ON CONFLICT DO UPDATE command cannot affect row a second time
+  equity curve upsert error: ON CONFLICT DO UPDATE command cannot affect row a second time
+  equity curve upsert error: ON CONFLICT DO UPDATE command cannot affect row a second time
+  ✅ 280/327
+  ✅ 290/327
+  ✅ 300/327
+  ✅ 310/327
+  ✅ 320/327
+  ✅ Enriched 327/327
+
+✅ 全部完成! 耗时 1136.0s

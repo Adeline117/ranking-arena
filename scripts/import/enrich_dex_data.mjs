@@ -62,13 +62,25 @@ async function hlApiFetch(body) {
 async function enrichHyperliquid(dryRun) {
   console.log('\n🔵 Hyperliquid: enriching trades_count...')
   
-  const { data: rows, error } = await supabase
-    .from('leaderboard_ranks')
-    .select('id, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count')
-    .eq('source', 'hyperliquid')
-    .eq('season_id', SEASON)
-    .is('trades_count', null)
-    .order('rank', { ascending: true })
+  // Fetch all rows (Supabase limits to 1000 per query)
+  let rows = []
+  let from = 0
+  while (true) {
+    const { data, error: err } = await supabase
+      .from('leaderboard_ranks')
+      .select('id, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count')
+      .eq('source', 'hyperliquid')
+      .eq('season_id', SEASON)
+      .is('trades_count', null)
+      .order('rank', { ascending: true })
+      .range(from, from + 999)
+    if (err) { console.error('DB error:', err.message); return }
+    if (!data || data.length === 0) break
+    rows.push(...data)
+    if (data.length < 1000) break
+    from += 1000
+  }
+  const error = null
 
   if (error) { console.error('DB error:', error.message); return }
   console.log(`  Found ${rows.length} traders missing trades_count`)
