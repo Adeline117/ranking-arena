@@ -91,13 +91,21 @@ async function findCover(book) {
 
 async function main() {
   // Get books without covers, prioritize English titles (more likely to find)
-  const { data: books, error } = await supabase
-    .from('library_items')
-    .select('id, title, isbn, author')
-    .in('category', ['book', 'finance'])
-    .is('cover_url', null)
-    .order('id', { ascending: true })
-    .limit(5000);
+  // Supabase client caps at 1000 rows, so fetch in two batches
+  const fetchBatch = async (from, to) => {
+    const { data, error } = await supabase
+      .from('library_items')
+      .select('id, title, isbn, author')
+      .is('cover_url', null)
+      .order('id', { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    return data || [];
+  };
+  const batch1 = await fetchBatch(0, 999);
+  const batch2 = await fetchBatch(1000, 1999);
+  const books = [...batch1, ...batch2];
+  const error = null;
   
   if (error) { console.error('DB error:', error); return; }
   
