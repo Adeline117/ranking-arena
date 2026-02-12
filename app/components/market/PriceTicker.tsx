@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Image from 'next/image'
+// Use plain <img> for crypto icons (SVGs cause 400 on Vercel image optimizer)
 import { tokens } from '@/lib/design-tokens'
 
 interface TickerCoin {
@@ -116,11 +116,12 @@ export default function PriceTicker() {
               }}
             >
               {imgSrc && (
-                <Image
+                <img
                   src={imgSrc}
                   alt={coin.symbol}
                   width={18}
                   height={18}
+                  loading="lazy"
                   style={{ borderRadius: '50%', flexShrink: 0 }}
                   onError={() => {
                     if (useLocal) {
