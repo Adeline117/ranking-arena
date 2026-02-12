@@ -41,7 +41,6 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
           .from('group_members')
           .select('group_id, role')
           .eq('user_id', userId)
-          .is('deleted_at', null)
 
         if (memberError) {
           setLoading(false)

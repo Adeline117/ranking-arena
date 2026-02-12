@@ -64,7 +64,6 @@ export async function GET(
         .from('group_members')
         .select('id, joined_at, group_id, groups(name, name_en)')
         .eq('user_id', profile.id)
-        .is('deleted_at', null)
         .order('joined_at', { ascending: false })
         .limit(limit),
     ])
