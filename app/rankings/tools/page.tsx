@@ -290,7 +290,7 @@ export default function ToolsPage() {
 
         {/* List */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: 20 }}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="skeleton" style={{ height: 140, borderRadius: tokens.radius.xl }} />
             ))}
@@ -300,7 +300,7 @@ export default function ToolsPage() {
             {isZh ? '暂无数据' : 'No tools found'}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: 20 }}>
             {tools.map(tool => (
               <ToolCard key={tool.id} tool={tool} isZh={isZh} />
             ))}

@@ -160,9 +160,9 @@ export const PostCard = memo(function PostCard({
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = tokens.glass.bg.tertiary
-        e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.boxShadow = tokens.shadow.lg
-        e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}30`
+        e.currentTarget.style.transform = 'translateY(-2px)'
+        e.currentTarget.style.boxShadow = tokens.shadow.md
+        e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}25`
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = tokens.glass.bg.secondary
@@ -269,8 +269,9 @@ export const PostCard = memo(function PostCard({
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: tokens.spacing[3],
+        gap: tokens.spacing[2],
         paddingTop: tokens.spacing[2],
+        marginTop: tokens.spacing[1],
         borderTop: `1px solid ${tokens.colors.border.primary}`,
       }}>
         <ReactButton

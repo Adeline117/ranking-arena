@@ -242,7 +242,7 @@ interface StatItemProps {
 }
 
 function StatItem({ icon, value, label, hasCover }: StatItemProps): React.ReactElement {
-  const textColor = hasCover ? 'var(--glass-bg-medium)' : tokens.colors.text.secondary
+  const textColor = hasCover ? 'var(--glass-bg-medium)' : tokens.colors.text.tertiary
   const valueColor = hasCover ? tokens.colors.white : tokens.colors.text.primary
   const textShadow = hasCover ? '0 1px 4px var(--color-overlay-dark)' : undefined
 
@@ -251,16 +251,26 @@ function StatItem({ icon, value, label, hasCover }: StatItemProps): React.ReactE
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 4,
-        padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+        gap: 6,
+        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         borderRadius: tokens.radius.md,
       }}
     >
       {icon}
+      <Text
+        as="span"
+        weight="bold"
+        style={{
+          color: valueColor,
+          textShadow,
+          fontSize: tokens.typography.fontSize.sm,
+          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+          letterSpacing: '-0.01em',
+        }}
+      >
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </Text>
       <Text size="sm" style={{ color: textColor, textShadow }}>
-        <Text as="span" weight="bold" style={{ color: valueColor, marginRight: 4, textShadow }}>
-          {typeof value === 'number' ? value.toLocaleString() : value}
-        </Text>
         {label}
       </Text>
     </Box>
@@ -529,7 +539,7 @@ export default function TraderHeader({
           </Box>
           
           {/* Stats row */}
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap', marginTop: tokens.spacing[1] }}>
             <StatItem value={followerCount} label={t('followers') || '被关注'} hasCover={hasCover} />
             <StatItem value={following} label={t('following') || '关注中'} hasCover={hasCover} />
 

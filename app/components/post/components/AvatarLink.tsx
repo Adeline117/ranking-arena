@@ -34,15 +34,15 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
       <span style={{ position: 'relative', flexShrink: 0 }}>
         <span
           style={{
-            width: 24,
-            height: 24,
+            width: 28,
+            height: 28,
             borderRadius: tokens.radius.md,
             display: 'grid',
             placeItems: 'center',
             background: tokens.colors.bg.secondary,
             border: `1px solid ${tokens.colors.border.primary}`,
             fontWeight: tokens.typography.fontWeight.black,
-            fontSize: tokens.typography.fontSize.xs,
+            fontSize: 11,
             transition: `all ${tokens.transition.base}`,
             overflow: 'hidden',
           }}
@@ -51,8 +51,8 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
             <Image
               src={avatarUrl}
               alt={handle}
-              width={24}
-              height={24}
+              width={28}
+              height={28}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               unoptimized={avatarUrl?.startsWith('data:')}
             />
@@ -62,7 +62,7 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
         </span>
         {shouldShowBadge && <ProBadgeOverlay position="bottom-right" />}
       </span>
-      <span style={{ fontWeight: 850, fontSize: 12, color: tokens.colors.text.secondary }}>
+      <span style={{ fontWeight: 700, fontSize: 12, color: tokens.colors.text.secondary, letterSpacing: '-0.01em' }}>
         {handle}
       </span>
     </Link>

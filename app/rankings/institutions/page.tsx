@@ -273,7 +273,7 @@ export default function InstitutionsPage() {
 
         {/* List */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap: 20 }}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="skeleton" style={{ height: 140, borderRadius: tokens.radius.xl }} />
             ))}
@@ -283,7 +283,7 @@ export default function InstitutionsPage() {
             {isZh ? '暂无数据' : 'No institutions found'}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap: 20 }}>
             {institutions.map(inst => (
               <InstitutionCard key={inst.id} institution={inst} isZh={isZh} />
             ))}

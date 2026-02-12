@@ -201,7 +201,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                 >
                   {trader.display_name || formatDisplayName(trader.handle || '', trader.source)}
                 </Text>
-                <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {trader.roi_90d != null && (
                     <Text
                       size="xs"
@@ -210,6 +210,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                         color: trader.roi_90d >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                         fontSize: 11,
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        letterSpacing: '-0.02em',
                       }}
                     >
                       {trader.roi_90d >= 0 ? '+' : ''}{trader.roi_90d.toFixed(2)}%
@@ -220,11 +221,12 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                       size="xs"
                       weight="bold"
                       style={{
-                        color: tokens.colors.accent.primary,
+                        color: tokens.colors.text.tertiary,
                         fontSize: 11,
+                        fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >
-                      Score {trader.arena_score.toFixed(0)}
+                      {trader.arena_score.toFixed(0)}
                     </Text>
                   )}
                 </Box>

@@ -827,12 +827,12 @@ function HotContent() {
                             className="hot-post-item"
                             style={{
                               cursor: 'pointer',
-                              padding: '12px 14px',
-                              borderRadius: tokens.radius.md,
+                              padding: '14px 16px',
+                              borderRadius: tokens.radius.lg,
                               background: 'var(--color-bg-secondary)',
                               border: `1px solid var(--color-border-primary)`,
                               boxShadow: 'none',
-                              transition: `all 0.2s ease`,
+                              transition: `all 0.2s cubic-bezier(0.4, 0, 0.2, 1)`,
                             }}
                             onClick={(e: React.MouseEvent) => {
                               if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
@@ -1099,13 +1099,13 @@ function HotContent() {
                         <Box
                           key={group.id}
                           style={{
-                            padding: '10px 14px',
-                            borderRadius: tokens.radius.md,
+                            padding: '12px 16px',
+                            borderRadius: tokens.radius.lg,
                             background: 'var(--color-bg-secondary)',
                             border: `1px solid var(--color-border-primary)`,
                             boxShadow: 'none',
                             cursor: 'pointer',
-                            transition: 'all 0.2s ease',
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                           }}
                           onClick={() => router.push(`/groups/${group.id}`)}
                           onMouseEnter={(e) => {

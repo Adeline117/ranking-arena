@@ -898,6 +898,9 @@ select:focus-visible {
   .hero-metric-value {
     font-size: 24px !important;
   }
+  .metric-badges-grid {
+    gap: 6px !important;
+  }
   .score-breakdown-layout {
     flex-direction: column !important;
     align-items: center !important;
@@ -921,7 +924,8 @@ select:focus-visible {
     text-align: center;
   }
   .book-detail-cover {
-    width: 160px !important;
+    width: 200px !important;
+    margin: 0 auto;
   }
   .book-detail-top .profile-content {
     grid-template-columns: 1fr !important;
@@ -939,6 +943,9 @@ select:focus-visible {
   .profile-header-avatar {
     width: 56px !important;
     height: 56px !important;
+  }
+  .book-detail-cover {
+    width: 160px !important;
   }
 }
 
@@ -1330,33 +1337,38 @@ select:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 64px 24px;
+  padding: 72px 32px;
   color: var(--color-text-secondary);
   text-align: center;
   gap: 16px;
+  background: var(--color-bg-secondary);
+  border-radius: 16px;
+  border: 1px solid var(--color-border-primary);
 }
 .empty-state-icon {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background: var(--color-bg-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-tertiary);
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-border-primary);
 }
 .empty-state-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--color-text-primary);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 .empty-state-message {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--color-text-tertiary);
   max-width: 320px;
-  line-height: 1.5;
+  line-height: 1.6;
   margin: 0;
 }
 
@@ -2685,5 +2697,42 @@ html.theme-transition * {
 @media (max-width: 1279px) {
   .rankings-with-sidebar { grid-template-columns: 1fr; }
   .rankings-right-sidebar { display: none; }
+}
+
+/* ============================================
+   Mobile Adaptation (375px - 768px)
+   ============================================ */
+
+@media (max-width: 767px) {
+  /* -- Hot page post modal: full-screen on mobile -- */
+  .post-modal-overlay {
+    padding: 0 !important;
+    align-items: flex-end !important;
+  }
+  .post-modal-content {
+    width: 100% !important;
+    max-height: 95vh !important;
+    border-radius: 16px 16px 0 0 !important;
+    padding: 12px !important;
+  }
+
+  /* -- Settings page: reduce gap and padding -- */
+  .settings-sidebar {
+    display: none !important;
+  }
+  .settings-mobile-nav {
+    display: flex !important;
+  }
+  .settings-mobile-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  /* -- Login card: tighter padding on very small screens -- */
+  .login-card {
+    padding: 28px 20px !important;
+    border-radius: 20px !important;
+  }
 }
 

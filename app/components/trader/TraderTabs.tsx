@@ -31,14 +31,15 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
       aria-label="交易员资料标签页"
       style={{
         display: 'flex',
-        gap: tokens.spacing[2],
-        marginBottom: tokens.spacing[4],
+        gap: tokens.spacing[1],
+        marginBottom: tokens.spacing[5],
         position: 'relative',
-        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-        paddingBottom: tokens.spacing[3],
+        padding: `${tokens.spacing[2]} ${tokens.spacing[2]}`,
+        paddingBottom: tokens.spacing[2],
         overflowX: 'auto',
         WebkitOverflowScrolling: 'touch',
         scrollbarWidth: 'none',
+        borderBottom: `1px solid ${tokens.colors.border.primary}40`,
       }}
     >
       {tabs.map((tab) => {
