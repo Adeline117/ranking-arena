@@ -324,16 +324,17 @@ export default function BookDetailPage() {
         ]} />
 
         {/* ===== Top Section: Cover + Info ===== */}
-        <div className="book-detail-top" style={{ display: 'flex', gap: 28, marginBottom: 36, flexWrap: 'wrap' }}>
+        <div className="book-detail-top" style={{ display: 'flex', gap: 36, marginBottom: 36, flexWrap: 'wrap' }}>
           {/* Cover with shadow */}
           <div className="book-detail-cover" style={{
-            width: 220, flexShrink: 0,
+            width: 280, flexShrink: 0,
           }}>
             <div style={{
               width: '100%', aspectRatio: '2/3',
               borderRadius: tokens.radius.xl,
               overflow: 'hidden',
-              boxShadow: '4px 4px 12px var(--color-overlay-medium), 8px 8px 24px var(--color-overlay-light), -1px 0 2px var(--color-overlay-subtle), 0 0 0 1px var(--glass-border-light)',
+              boxShadow: '0 8px 30px var(--color-overlay-medium), 0 20px 60px var(--color-overlay-light), 0 0 0 1px var(--glass-border-light)',
+              transition: 'transform 0.3s ease, box-shadow 0.3s ease',
             }}>
               <BookCover
                 title={book.title}
@@ -341,6 +342,7 @@ export default function BookDetailPage() {
                 category={book.category}
                 coverUrl={book.cover_url}
                 fontSize="lg"
+                priority
               />
             </div>
           </div>
@@ -348,19 +350,21 @@ export default function BookDetailPage() {
           {/* Info */}
           <div style={{ flex: 1, minWidth: 260, display: 'flex', flexDirection: 'column' }}>
             <h1 style={{
-              fontSize: tokens.typography.fontSize['2xl'],
+              fontSize: 28,
               fontWeight: tokens.typography.fontWeight.bold,
               color: tokens.colors.text.primary,
-              marginBottom: 6, lineHeight: tokens.typography.lineHeight.tight,
+              marginBottom: 8, lineHeight: 1.25,
+              letterSpacing: '-0.02em',
             }}>
               {isZh ? (book.title_zh || book.title) : (book.title_en || book.title)}
             </h1>
 
             {book.author && (
               <p style={{
-                fontSize: tokens.typography.fontSize.md,
+                fontSize: 16,
                 color: tokens.colors.text.secondary,
-                marginBottom: 16,
+                marginBottom: 20,
+                fontWeight: 500,
               }}>
                 {book.author}
               </p>
@@ -375,8 +379,9 @@ export default function BookDetailPage() {
                 border: `1px solid ${tokens.colors.border.primary}`,
               }}>
                 <span style={{
-                  fontSize: tokens.typography.fontSize['4xl'],
-                  fontWeight: tokens.typography.fontWeight.extrabold,
+                  fontSize: 42,
+                  fontWeight: 800,
+                  letterSpacing: '-0.03em',
                   color: tokens.colors.rating.filled,
                   lineHeight: 1,
                 }}>
@@ -443,16 +448,16 @@ export default function BookDetailPage() {
                   <Link
                     href={`/library/${book.id}/read`}
                     style={{
-                      padding: '10px 24px', borderRadius: tokens.radius.lg,
-                      fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
+                      padding: '14px 36px', borderRadius: tokens.radius.xl,
+                      fontSize: 16, fontWeight: 700,
                       background: tokens.gradient.primary, color: 'var(--foreground)',
                       textDecoration: 'none',
-                      display: 'inline-flex', alignItems: 'center', gap: 8,
-                      transition: `all ${tokens.transition.fast}`,
-                      boxShadow: tokens.shadow.glow,
+                      display: 'inline-flex', alignItems: 'center', gap: 10,
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 4px 16px var(--color-accent-primary-30, rgba(99,102,241,0.3))',
                     }}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                     </svg>
                     {isZh ? '开始阅读' : 'Start Reading'}
@@ -498,16 +503,39 @@ export default function BookDetailPage() {
                 )
               ) : (
                 <span style={{
-                  padding: '10px 24px', borderRadius: tokens.radius.lg,
-                  fontSize: tokens.typography.fontSize.base, fontWeight: tokens.typography.fontWeight.semibold,
+                  padding: '14px 36px', borderRadius: tokens.radius.xl,
+                  fontSize: 16, fontWeight: 600,
                   background: tokens.colors.bg.tertiary, color: tokens.colors.text.tertiary,
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  display: 'inline-flex', alignItems: 'center', gap: 10,
                 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                   </svg>
                   {isZh ? '暂无电子版' : 'No digital version'}
                 </span>
+              )}
+
+              {/* External source link when no in-app reader */}
+              {!hasReadableContent && book.source_url && (
+                <a
+                  href={book.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '14px 24px', borderRadius: tokens.radius.xl,
+                    fontSize: 14, fontWeight: 600,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: 'transparent', color: tokens.colors.text.primary,
+                    textDecoration: 'none',
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                  {isZh ? '查看来源' : 'View Source'}
+                </a>
               )}
 
               {/* Want to Read */}
@@ -692,7 +720,7 @@ export default function BookDetailPage() {
             }}>
               {/* Left: big number */}
               <div style={{ textAlign: 'center', minWidth: 100 }}>
-                <div style={{ fontSize: 56, fontWeight: 800, color: tokens.colors.rating.filled, lineHeight: 1 }}>
+                <div style={{ fontSize: 56, fontWeight: 800, color: tokens.colors.rating.filled, lineHeight: 1, letterSpacing: '-0.04em' }}>
                   {avg.toFixed(1)}
                 </div>
                 <StarRating rating={avg} size={20} readonly showCount={false} />
@@ -848,6 +876,17 @@ export default function BookDetailPage() {
         )}
 
       </main>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        @media (max-width: 640px) {
+          .book-detail-top { gap: 20px !important; }
+          .book-detail-cover { width: 180px !important; margin: 0 auto; }
+        }
+      `}</style>
       <MobileBottomNav />
     </div>
   )
