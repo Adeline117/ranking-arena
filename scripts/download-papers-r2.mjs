@@ -29,7 +29,7 @@ const s3 = new S3Client({
 
 const CDN_URL = process.env.R2_PUBLIC_URL || 'https://cdn.arenafi.org'
 const BUCKET = process.env.R2_BUCKET || 'arena-cdn'
-const BATCH_SIZE = 100
+const BATCH_SIZE = 25  // smaller batches to avoid Supabase statement timeout
 const DELAY_MS = 1500 // 1.5s between downloads (polite to arxiv)
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
@@ -85,16 +85,17 @@ async function main() {
   console.log('📄 Starting paper download to R2...')
 
   while (true) {
+    // Always query from offset 0 — successfully updated rows drop out of results
     const { data: papers, error } = await supabase
       .from('library_items')
       .select('id, content_url, title')
       .in('category', ['paper', 'whitepaper'])
       .not('content_url', 'is', null)
       .not('content_url', 'like', '%cdn.arenafi.org%')
-      .range(offset, offset + BATCH_SIZE - 1)
+      .range(0, BATCH_SIZE - 1)
       .order('id')
 
-    if (error) { console.error('DB error:', error); break }
+    if (error) { console.error('DB error:', error); await sleep(5000); continue }
     if (!papers || papers.length === 0) break
 
     for (const paper of papers) {
@@ -126,9 +127,9 @@ async function main() {
       await sleep(DELAY_MS)
     }
 
-    offset += BATCH_SIZE
+    // No offset increment needed — updated rows drop out of query
     // Safety: if we've been running too long, stop
-    if (downloaded + failed > 5000) {
+    if (downloaded + failed > 20000) {
       console.log('⏸️  Batch limit reached, restart to continue')
       break
     }
