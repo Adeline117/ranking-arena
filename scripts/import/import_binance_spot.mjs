@@ -149,6 +149,7 @@ async function saveTraders(traders, period) {
         pnl: trader.pnl,
         win_rate: normalizedWr,
         max_drawdown: trader.maxDrawdown,
+        aum: trader.aum || null,
         followers: trader.followers || 0,
         arena_score: calculateArenaScore(trader.roi, trader.pnl, trader.maxDrawdown, normalizedWr, period).totalScore,
         captured_at: capturedAt,
