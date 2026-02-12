@@ -36,7 +36,7 @@ async function fetchJSON(url, options = {}) {
       const res = await fetch(url, {
         ...options,
         headers: { 'User-Agent': UA, 'Accept': 'application/json', ...options.headers },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000),
       })
       if (res.status === 429) { await sleep(3000 * (i + 1)); continue }
       if (!res.ok) return null
@@ -55,9 +55,7 @@ async function fetchHyperliquidPositions(address) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: 'clearinghouseState', user: address }),
   })
-  if (!data?.assetPositions?.length) return []
-  
-  const openPositions = data.assetPositions
+  const openPositions = (data?.assetPositions || [])
     .filter(p => parseFloat(p.position?.szi || '0') !== 0)
     .map(p => {
       const pos = p.position
@@ -371,7 +369,10 @@ async function main() {
   for (let i = 0; i < traders.length; i++) {
     const tid = traders[i]
     try {
-      const positions = await fetchFn(tid)
+      const positions = await Promise.race([
+        fetchFn(tid),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('trader timeout 60s')), 60000))
+      ])
       if (positions.length > 0) {
         const saved = await upsertPositions(sourceArg, tid, positions)
         if (saved > 0) {
