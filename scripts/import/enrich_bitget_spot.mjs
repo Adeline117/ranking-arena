@@ -1,156 +1,186 @@
+#!/usr/bin/env node
 /**
- * Bitget Spot Data Enrichment (Browser-based)
+ * Bitget Spot WR/TC Enrichment
  * 
- * Fills missing win_rate for existing bitget_spot traders.
- * 
- * Usage: node scripts/import/enrich_bitget_spot.mjs [30D] [--batch=50] [--offset=0]
+ * Uses Puppeteer to get CF cookies, then uses node fetch with those cookies.
  */
-
+import 'dotenv/config'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-import { getSupabaseClient, calculateArenaScore, sleep } from '../lib/shared.mjs'
+import pg from 'pg'
 
 puppeteer.use(StealthPlugin())
-const supabase = getSupabaseClient()
-const SOURCE = 'bitget_spot'
 
-function parseArgs() {
-  const period = (process.argv[2] || '30D').toUpperCase()
-  let batch = 50, offset = 0
-  for (const arg of process.argv) {
-    if (arg.startsWith('--batch=')) batch = parseInt(arg.split('=')[1])
-    if (arg.startsWith('--offset=')) offset = parseInt(arg.split('=')[1])
-  }
-  return { period, batch, offset }
-}
-
-async function extractTraderData(page, traderId, period) {
-  // Skip synthetic IDs
-  if (traderId.startsWith('spot_')) return { winRate: null, maxDrawdown: null }
-
-  const details = {}
-
-  try {
-    await page.goto(`https://www.bitget.com/copy-trading/trader/${traderId}/spot`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 20000
-    }).catch(() => {})
-
-    await Promise.race([
-      page.waitForSelector('[class*="roi"], [class*="data"]', { timeout: 8000 }),
-      sleep(5000)
-    ]).catch(() => {})
-
-    // Click period tab
-    const periodMap = { '7D': '7', '30D': '30', '90D': '90' }
-    await page.evaluate((days) => {
-      const buttons = document.querySelectorAll('button, [role="tab"], div[class*="tab"]')
-      for (const btn of buttons) {
-        const text = btn.textContent || ''
-        if (text.includes(days + 'D') || text.includes(days + ' day')) {
-          btn.click(); return
-        }
-      }
-    }, periodMap[period])
-    await sleep(1500)
-
-    const pageData = await page.evaluate(() => {
-      const text = document.body.innerText
-      const result = {}
-      const winMatch = text.match(/(?:Win rate|胜率)[\s\n:]*(\d+\.?\d*)%/i)
-      if (winMatch) result.winRate = parseFloat(winMatch[1])
-      const mddMatch = text.match(/(?:MDD|Max(?:imum)? ?[Dd]rawdown|最大回撤)[\s\n:]*(\d+\.?\d*)%/i)
-      if (mddMatch) result.maxDrawdown = parseFloat(mddMatch[1])
-      return result
-    })
-
-    Object.assign(details, pageData)
-  } catch {}
-
-  return {
-    winRate: details.winRate ?? null,
-    maxDrawdown: details.maxDrawdown ?? null,
-  }
-}
+const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 async function main() {
-  const { period, batch, offset } = parseArgs()
+  const db = new pg.Client(DB_URL)
+  await db.connect()
 
-  console.log(`\n${'='.repeat(60)}`)
-  console.log(`Bitget Spot Enrichment — ${period} (batch=${batch}, offset=${offset})`)
-  console.log(`${'='.repeat(60)}`)
+  const { rows: traders } = await db.query(`
+    SELECT DISTINCT source_trader_id 
+    FROM trader_snapshots 
+    WHERE source='bitget_spot' AND (win_rate IS NULL OR trades_count IS NULL)
+  `)
+  console.log(`Found ${traders.length} bitget_spot traders missing WR/TC`)
+  if (traders.length === 0) { await db.end(); return }
 
-  const { data: missing } = await supabase
-    .from('trader_snapshots')
-    .select('id, source_trader_id, roi, pnl, win_rate, max_drawdown')
-    .eq('source', SOURCE)
-    .eq('season_id', period)
-    .is('win_rate', null)
-    .order('roi', { ascending: false })
-    .range(offset, offset + batch - 1)
-
-  if (!missing || missing.length === 0) {
-    console.log('Nothing to enrich!')
-    return
-  }
-
-  // Filter valid trader IDs (hex format, not synthetic)
-  const validTraders = missing.filter(t => !t.source_trader_id.startsWith('spot_') && /^[a-f0-9]+$/.test(t.source_trader_id))
-  console.log(`Processing ${validTraders.length} valid traders (of ${missing.length} total, offset ${offset})...`)
-
-  if (validTraders.length === 0) {
-    console.log('No valid trader IDs to process.')
-    return
-  }
-
+  // Get CF cookies via browser
+  console.log('🌐 Getting CF cookies...')
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage'],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
   })
+  const page = await browser.newPage()
+  await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+  await page.goto('https://www.bitget.com/copy-trading', { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {})
+  await sleep(5000)
 
-  let wrFilled = 0, ddFilled = 0, errors = 0
+  const cookies = await page.cookies()
+  const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ')
+  const ua = await page.evaluate(() => navigator.userAgent)
+  console.log(`✅ Got ${cookies.length} cookies`)
 
-  try {
-    const page = await browser.newPage()
-    await page.setViewport({ width: 1920, height: 1080 })
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36')
+  // Test with node fetch
+  const testTid = traders[0].source_trader_id
+  console.log(`Testing fetch for ${testTid}...`)
+  
+  const testResp = await fetch('https://www.bitget.com/v1/trigger/trace/public/cycleData', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie': cookieStr,
+      'User-Agent': ua,
+      'Origin': 'https://www.bitget.com',
+      'Referer': 'https://www.bitget.com/copy-trading',
+    },
+    body: JSON.stringify({ languageType: 0, triggerUserId: testTid, cycleTime: 90 }),
+    signal: AbortSignal.timeout(10000),
+  })
+  const testText = await testResp.text()
+  console.log(`Test result: ${testText.substring(0, 200)}`)
 
-    for (let i = 0; i < validTraders.length; i++) {
-      const trader = validTraders[i]
-      try {
-        const data = await extractTraderData(page, trader.source_trader_id, period)
-
-        const newWr = data.winRate !== null ? (data.winRate <= 1 ? data.winRate * 100 : data.winRate) : null
-        const newDd = data.maxDrawdown !== null && trader.max_drawdown === null ? data.maxDrawdown : trader.max_drawdown
-
-        if (newWr !== null || (newDd !== null && trader.max_drawdown === null)) {
-          const { totalScore } = calculateArenaScore(trader.roi || 0, trader.pnl, newDd, newWr, period)
-          const update = { arena_score: totalScore }
-          if (newWr !== null) { update.win_rate = newWr; wrFilled++ }
-          if (newDd !== null && trader.max_drawdown === null) { update.max_drawdown = newDd; ddFilled++ }
-
-          await supabase.from('trader_snapshots').update(update).eq('id', trader.id)
-        }
-      } catch (e) { errors++ }
-
-      if ((i + 1) % 10 === 0 || i === validTraders.length - 1) {
-        console.log(`  [${i + 1}/${validTraders.length}] wr+=${wrFilled} dd+=${ddFilled} err=${errors}`)
-      }
-
-      await sleep(1500 + Math.random() * 1000)
-    }
-
-    await page.close()
-  } finally {
+  const testOk = testText.includes('"00000"')
+  
+  if (!testOk) {
+    // Fallback: use page.evaluate but with proper timeout
+    console.log('⚠️ Node fetch failed CF, falling back to browser evaluate...')
+    await enrichViaBrowser(page, traders, db)
+  } else {
+    console.log('✅ Node fetch works! Using fast mode.')
     await browser.close()
+    await enrichViaFetch(traders, db, cookieStr, ua)
   }
 
-  console.log(`\n${'='.repeat(60)}`)
-  console.log(`✅ Bitget Spot ${period} enrichment done`)
-  console.log(`   Win rate filled: ${wrFilled}/${validTraders.length}`)
-  console.log(`   Max drawdown filled: ${ddFilled}`)
-  console.log(`   Errors: ${errors}`)
-  console.log(`${'='.repeat(60)}`)
+  const { rows: [v] } = await db.query(`
+    SELECT count(*) as total, count(win_rate) as has_wr, count(trades_count) as has_tc 
+    FROM trader_snapshots WHERE source='bitget_spot'
+  `)
+  console.log(`\n📊 bitget_spot: WR ${v.has_wr}/${v.total} (${(v.has_wr/v.total*100).toFixed(1)}%), TC ${v.has_tc}/${v.total} (${(v.has_tc/v.total*100).toFixed(1)}%)`)
+  await db.end()
 }
 
-main().catch(console.error)
+async function enrichViaFetch(traders, db, cookieStr, ua) {
+  let updated = 0, errors = 0
+  const headers = {
+    'Content-Type': 'application/json',
+    'Cookie': cookieStr,
+    'User-Agent': ua,
+    'Origin': 'https://www.bitget.com',
+    'Referer': 'https://www.bitget.com/copy-trading',
+  }
+
+  for (let i = 0; i < traders.length; i++) {
+    const tid = traders[i].source_trader_id
+    try {
+      const resp = await fetch('https://www.bitget.com/v1/trigger/trace/public/cycleData', {
+        method: 'POST', headers,
+        body: JSON.stringify({ languageType: 0, triggerUserId: tid, cycleTime: 90 }),
+        signal: AbortSignal.timeout(8000),
+      })
+      const result = await resp.json()
+
+      if (result?.code === '00000' && result.data?.statisticsDTO) {
+        const stats = result.data.statisticsDTO
+        const tc = parseInt(stats.totalTrades || '0') || null
+        const wr = parseFloat(stats.winningRate || '0')
+        const wrVal = isNaN(wr) ? null : wr
+        if (tc || wrVal !== null) {
+          const { rowCount } = await db.query(
+            `UPDATE trader_snapshots 
+             SET trades_count = COALESCE($1, trades_count), win_rate = COALESCE($2::text, win_rate)
+             WHERE source='bitget_spot' AND source_trader_id=$3 AND (trades_count IS NULL OR win_rate IS NULL)`,
+            [tc, wrVal, tid]
+          )
+          updated += rowCount
+        }
+      } else { errors++ }
+    } catch { errors++ }
+
+    if ((i + 1) % 50 === 0 || i === traders.length - 1)
+      console.log(`  [${i + 1}/${traders.length}] updated=${updated} errors=${errors}`)
+    await sleep(300 + Math.random() * 200)
+  }
+  console.log(`✅ Done. Updated ${updated} rows, ${errors} errors`)
+}
+
+async function enrichViaBrowser(page, traders, db) {
+  let updated = 0, errors = 0
+
+  for (let i = 0; i < traders.length; i++) {
+    const tid = traders[i].source_trader_id
+    try {
+      // Set a page-level timeout by navigating if stuck
+      const evalPromise = page.evaluate(async (uid) => {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 8000)
+        try {
+          const r = await fetch('/v1/trigger/trace/public/cycleData', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ languageType: 0, triggerUserId: uid, cycleTime: 90 }),
+            signal: ctrl.signal,
+          })
+          clearTimeout(timer)
+          const text = await r.text()
+          try { return JSON.parse(text) } catch { return { parseError: true } }
+        } catch (e) { clearTimeout(timer); return { fetchError: e.message } }
+      }, tid)
+
+      const timeout = sleep(15000).then(() => 'TIMEOUT')
+      const result = await Promise.race([evalPromise, timeout])
+
+      if (result === 'TIMEOUT') {
+        errors++
+        // Reload page to unstick
+        await page.goto('https://www.bitget.com/copy-trading', { waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {})
+        await sleep(3000)
+        continue
+      }
+
+      if (result?.code === '00000' && result.data?.statisticsDTO) {
+        const stats = result.data.statisticsDTO
+        const tc = parseInt(stats.totalTrades || '0') || null
+        const wr = parseFloat(stats.winningRate || '0')
+        const wrVal = isNaN(wr) ? null : wr
+        if (tc || wrVal !== null) {
+          const { rowCount } = await db.query(
+            `UPDATE trader_snapshots 
+             SET trades_count = COALESCE($1, trades_count), win_rate = COALESCE($2::text, win_rate)
+             WHERE source='bitget_spot' AND source_trader_id=$3 AND (trades_count IS NULL OR win_rate IS NULL)`,
+            [tc, wrVal, tid]
+          )
+          updated += rowCount
+        }
+      } else { errors++ }
+    } catch { errors++ }
+
+    if ((i + 1) % 20 === 0 || i === traders.length - 1)
+      console.log(`  [${i + 1}/${traders.length}] updated=${updated} errors=${errors}`)
+    await sleep(500 + Math.random() * 300)
+  }
+  console.log(`✅ Done. Updated ${updated} rows, ${errors} errors`)
+}
+
+main().catch(e => { console.error(e); process.exit(1) })
