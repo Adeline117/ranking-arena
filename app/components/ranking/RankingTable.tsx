@@ -478,7 +478,7 @@ function RankingTableInner(props: {
     <Box
       className="glass-card ranking-table-container"
       p={0}
-      radius="xl"
+      radius="none"
       style={{
         boxShadow: `${tokens.shadow.lg}, 0 0 0 1px var(--glass-border-light)`,
         overflow: viewMode === 'card' ? 'visible' : 'hidden',
@@ -497,7 +497,7 @@ function RankingTableInner(props: {
             gap: tokens.spacing[2],
             borderBottom: `1px solid var(--glass-border-light)`,
             background: tokens.glass.bg.light,
-            borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+            borderRadius: 0,
             flexWrap: 'wrap',
           }}
         >
@@ -606,13 +606,14 @@ function RankingTableInner(props: {
 
       {/* Search removed - use top nav search instead */}
 
-      {/* Style & Grade Filters */}
+      {/* Inline Style & Grade Filters (compact row) */}
       <Box style={{
-        display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
-        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+        display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
+        padding: `${tokens.spacing[1]} ${tokens.spacing[4]}`,
         borderBottom: `1px solid var(--glass-border-light)`,
         flexWrap: 'wrap',
         background: tokens.glass.bg.light,
+        minHeight: 32,
       }}>
         {/* Trading Style Filter — hidden when no style data available */}
         {traders.some(t => t.trading_style && t.trading_style !== 'unknown') && (
@@ -683,7 +684,7 @@ function RankingTableInner(props: {
       {/* Table Header (only in table view) - sticky */}
       {viewMode === 'table' && (
       <Box className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
-        style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'var(--color-bg-secondary)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 0, zIndex: 20, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+        style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'var(--color-bg-secondary)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 0, zIndex: 20, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', transform: 'translateZ(0)' }}>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('rank')}</Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('trader')}</Text>
@@ -749,8 +750,9 @@ function RankingTableInner(props: {
 
       <ScoreRulesModal isOpen={showScoreRulesModal} onClose={() => setShowScoreRulesModal(false)} />
 
+      <Box style={{ minHeight: 400, contain: 'layout', willChange: 'contents' }}>
       {loading ? (
-        <RankingSkeleton />
+        <Box style={{ animation: 'fadeIn 0.2s ease-in' }}><RankingSkeleton /></Box>
       ) : error ? (
         <Box style={{ padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
           <Text size="md" color="secondary">{error}</Text>
@@ -840,7 +842,7 @@ function RankingTableInner(props: {
         </>
       ) : (
         <>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 0, position: 'relative' }}>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', contain: 'layout style paint' }}>
             {isSortPending && (
               <Box style={{
                 position: 'absolute', inset: 0, zIndex: 10,
@@ -900,6 +902,7 @@ function RankingTableInner(props: {
           <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePaginationChange} />
         </>
       )}
+      </Box>
     </Box>
     </>
   )
