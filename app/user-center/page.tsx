@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import LevelBadge from '@/app/components/user/LevelBadge'
@@ -10,8 +10,11 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text, Button } from '@/app/components/base'
+import MembershipContent from './MembershipContent'
 
 type Tab = 'level' | 'membership' | 'badges' | 'bookmarks' | 'settings'
+
+const VALID_TABS: Tab[] = ['level', 'membership', 'badges', 'bookmarks', 'settings']
 
 interface UserLevelData extends LevelInfo {
   dailyExpEarned: number
@@ -31,15 +34,27 @@ interface UserStats {
 
 export default function UserCenterPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { language } = useLanguage()
   const isZh = language === 'zh'
-  const [activeTab, setActiveTab] = useState<Tab>('level')
+
+  const tabFromUrl = searchParams.get('tab') as Tab | null
+  const initialTab: Tab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'level'
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [levelData, setLevelData] = useState<UserLevelData | null>(null)
   const [stats, setStats] = useState<UserStats>({ posts: 0, followers: 0, following: 0, bookmarks: 0, likes: 0, reads: 0 })
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
+
+  // Sync tab from URL param changes
+  useEffect(() => {
+    const t = searchParams.get('tab') as Tab | null
+    if (t && VALID_TABS.includes(t)) {
+      setActiveTab(t)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     async function init() {
@@ -237,7 +252,7 @@ export default function UserCenterPage() {
       {/* Content */}
       <div className="rounded-xl p-4 sm:p-6" style={{ background: tokens.colors.bg.secondary }}>
         {activeTab === 'level' && <LevelTab info={info} dailyEarned={levelData?.dailyExpEarned ?? 0} isZh={isZh} />}
-        {activeTab === 'membership' && <MembershipTab isPro={levelData?.isPro} proExpiresAt={levelData?.proExpiresAt} isZh={isZh} />}
+        {activeTab === 'membership' && <MembershipContent />}
         {activeTab === 'badges' && <div className="text-center py-12" style={{ color: tokens.colors.text.tertiary }}>{isZh ? '成就徽章功能即将上线' : 'Achievement badges coming soon'}</div>}
         {activeTab === 'bookmarks' && <div className="text-center py-12" style={{ color: tokens.colors.text.tertiary }}>{isZh ? '收藏夹功能即将上线' : 'Bookmarks coming soon'}</div>}
         {activeTab === 'settings' && (
@@ -478,74 +493,4 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
   )
 }
 
-function MembershipTab({ isPro, proExpiresAt, isZh }: { isPro?: boolean; proExpiresAt?: string | null; isZh: boolean }) {
-  const router = useRouter()
-
-  return (
-    <div className="space-y-6">
-      <div className="p-6 rounded-lg" style={{ background: tokens.colors.bg.tertiary }}>
-        <h3 className="text-lg font-bold mb-2" style={{ color: tokens.colors.text.primary }}>
-          {isZh ? 'Pro 会员状态' : 'Pro Membership Status'}
-        </h3>
-        {isPro ? (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded text-sm font-bold" style={{ color: 'var(--color-accent-warning)', background: 'var(--color-accent-primary-08)' }}>
-                PRO
-              </span>
-              <span className="text-sm" style={{ color: tokens.colors.accent.success }}>
-                {isZh ? '已激活' : 'Active'}
-              </span>
-            </div>
-            {proExpiresAt && (
-              <p className="text-sm" style={{ color: tokens.colors.text.tertiary }}>
-                {isZh ? '到期时间' : 'Expires'}: {new Date(proExpiresAt).toLocaleDateString(isZh ? 'zh-CN' : 'en-US')}
-              </p>
-            )}
-          </div>
-        ) : (
-          <div>
-            <p className="mb-4" style={{ color: tokens.colors.text.tertiary }}>
-              {isZh ? '升级Pro会员，解锁更多特权' : 'Upgrade to Pro to unlock more features'}
-            </p>
-            <button
-              onClick={() => router.push('/pricing')}
-              className="px-6 py-2 font-bold rounded-lg transition-colors"
-              style={{ background: 'var(--color-accent-warning)', color: tokens.colors.black }}
-            >
-              {isZh ? '升级 Pro' : 'Upgrade Pro'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <h3 className="text-lg font-bold mb-4" style={{ color: tokens.colors.text.primary }}>
-          {isZh ? 'Pro 特权' : 'Pro Benefits'}
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {(isZh ? [
-            '每日额外 +50 EXP',
-            '专属金色标识',
-            '高级数据分析',
-            '优先客服支持',
-            '专属Pro小组',
-            '去广告体验',
-          ] : [
-            'Extra +50 EXP daily',
-            'Exclusive gold badge',
-            'Advanced data analytics',
-            'Priority support',
-            'Exclusive Pro group',
-            'Ad-free experience',
-          ]).map((perk) => (
-            <div key={perk} className="flex items-center gap-2 p-3 rounded-lg" style={{ background: tokens.colors.bg.tertiary }}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--color-accent-warning)' }} />
-              <span className="text-sm" style={{ color: tokens.colors.text.secondary }}>{perk}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
+// MembershipTab removed - now uses MembershipContent component
