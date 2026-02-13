@@ -157,11 +157,11 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (!groupError && newGroup) {
-      // Add creator as admin member
+      // Add creator as owner member
       await supabase.from('group_members').insert({
         group_id: newGroup.id,
         user_id: user.id,
-        role: 'admin',
+        role: 'owner',
       })
     }
 
