@@ -26,15 +26,10 @@ const PERIOD = args.find(a => a.startsWith('--period='))?.split('=')[1] || '90D'
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
-async function enrichTrader(browser, traderId) {
-  const ctx = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  })
-  const page = await ctx.newPage()
-  
+async function enrichTrader(page, traderId) {
   const captured = { detail: null, cycle: null }
   
-  page.on('response', async (resp) => {
+  const handler = async (resp) => {
     if (resp.status() !== 200) return
     const url = resp.url()
     try {
@@ -44,20 +39,25 @@ async function enrichTrader(browser, traderId) {
         captured.cycle = await resp.json()
       }
     } catch {}
-  })
+  }
+  
+  page.on('response', handler)
   
   try {
     await page.goto(
       `https://www.bitget.com/copy-trading/trader/${traderId}/futures`,
-      { waitUntil: 'domcontentloaded', timeout: 25000 }
+      { waitUntil: 'domcontentloaded', timeout: 20000 }
     )
-    await sleep(6000)
+    // Wait for key API calls (max 5s)
+    for (let i = 0; i < 10; i++) {
+      if (captured.detail && captured.cycle) break
+      await sleep(500)
+    }
   } catch (err) {
     // Page may still have loaded API calls
   }
   
-  await page.close().catch(() => {})
-  await ctx.close().catch(() => {})
+  page.removeListener('response', handler)
   return captured
 }
 
@@ -144,6 +144,13 @@ async function main() {
   }
   
   const browser = await chromium.launch({ headless: true })
+  const ctx = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  })
+  const page = await ctx.newPage()
+  // Block images to speed up (keep JS/CSS which trigger API calls)
+  await page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2}', route => route.abort())
+  
   let enriched = 0, failed = 0, ecTotal = 0, sdTotal = 0
   const now = new Date().toISOString()
   
@@ -152,7 +159,7 @@ async function main() {
     process.stdout.write(`[${i+1}/${validTraders.length}] ${traderId} ... `)
     
     try {
-      const captured = await enrichTrader(browser, traderId)
+      const captured = await enrichTrader(page, traderId)
       const parts = []
       
       // Equity curve
@@ -194,9 +201,11 @@ async function main() {
       failed++
     }
     
-    if (i < validTraders.length - 1) await sleep(3000)
+    if (i < validTraders.length - 1) await sleep(2000)
   }
   
+  await page.close().catch(() => {})
+  await ctx.close().catch(() => {})
   await browser.close()
   
   console.log(`\n${'='.repeat(50)}`)
