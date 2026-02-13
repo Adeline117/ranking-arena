@@ -151,6 +151,8 @@ export default function RootLayout({
         {/* Preload critical above-fold resources for LCP */}
         <link rel="preload" href="/logo-symbol.svg" as="image" type="image/svg+xml" />
         <link rel="preconnect" href="https://assets.coingecko.com" />
+        <link rel="preconnect" href="https://iknktzifjdyujdccyhsv.supabase.co" />
+        <link rel="dns-prefetch" href="https://iknktzifjdyujdccyhsv.supabase.co" />
         
         {/* Font preloading is handled automatically by next/font.
             Removed hardcoded preload link — the hashed filename (e.g. be2afef9-s.woff2)

@@ -347,6 +347,11 @@ const nextConfig: NextConfig = {
       '@coinbase/wallet-sdk',
       '@metamask/sdk',
       'epubjs',
+      '@walletconnect/web3wallet',
+      '@walletconnect/core',
+      '@walletconnect/utils',
+      '@walletconnect/types',
+      'recharts',
     ],
 
     // Enable optimized CSS loading
