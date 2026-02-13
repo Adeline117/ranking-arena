@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Suspense } from 'react'
 import { logger } from '@/lib/logger'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
 
 function AuthCallbackContent() {
   const router = useRouter()
@@ -23,25 +24,57 @@ function AuthCallbackContent() {
         return
       }
 
+      const isAddAccount = searchParams.get('addAccount') === 'true' || localStorage.getItem('arena_adding_account') === 'true'
+      if (isAddAccount) {
+        localStorage.removeItem('arena_adding_account')
+      }
+
       const returnUrl = searchParams.get('returnUrl')
-      const defaultRedirect = returnUrl && returnUrl.startsWith('/') ? returnUrl : '/'
+      const defaultRedirect = isAddAccount ? '/' : (returnUrl && returnUrl.startsWith('/') ? returnUrl : '/')
+
+      // Save new account to multi-account store
+      const saveToStore = async (sess: typeof session) => {
+        if (!isAddAccount || !sess) return
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('handle, avatar_url')
+          .eq('id', user.id)
+          .maybeSingle()
+        const store = useMultiAccountStore.getState()
+        store.accounts.forEach((a) => {
+          if (a.isActive) store.addAccount({ ...a, isActive: false })
+        })
+        store.addAccount({
+          userId: user.id,
+          email: user.email || '',
+          handle: profile?.handle || null,
+          avatarUrl: profile?.avatar_url || null,
+          refreshToken: sess.refresh_token,
+          lastActiveAt: new Date().toISOString(),
+          isActive: true,
+        })
+      }
 
       if (session) {
+        await saveToStore(session)
         // Check if this is a new user (created within the last 30 seconds)
         const createdAt = new Date(session.user.created_at).getTime()
         const now = Date.now()
         const isNewUser = now - createdAt < 30_000
 
-        router.replace(isNewUser ? '/onboarding' : defaultRedirect)
+        router.replace(isAddAccount ? '/' : (isNewUser ? '/onboarding' : defaultRedirect))
       } else {
         // Wait a moment for supabase to process the hash fragment
         setTimeout(async () => {
           const { data: { session: retrySession } } = await supabase.auth.getSession()
           if (retrySession) {
+            await saveToStore(retrySession)
             const createdAt = new Date(retrySession.user.created_at).getTime()
             const now = Date.now()
             const isNewUser = now - createdAt < 30_000
-            router.replace(isNewUser ? '/onboarding' : defaultRedirect)
+            router.replace(isAddAccount ? '/' : (isNewUser ? '/onboarding' : defaultRedirect))
           } else {
             router.replace('/login?error=no_session')
           }

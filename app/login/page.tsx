@@ -11,6 +11,7 @@ const PrivyLoginButton = dynamic(() => import('@/app/components/auth/PrivyLoginB
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import { logger } from '@/lib/logger'
+import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
 
 // 密码强度计算函数
 function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labelKey: string; color: string } {
@@ -253,9 +254,51 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
 
+  const isAddAccount = searchParams.get('addAccount') === 'true'
+
+  // Save new account to multi-account store after login
+  const saveNewAccountToStore = useCallback(async () => {
+    if (!isAddAccount && !localStorage.getItem('arena_adding_account')) return
+    localStorage.removeItem('arena_adding_account')
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('handle, avatar_url')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const store = useMultiAccountStore.getState()
+    // Deactivate all existing accounts
+    store.accounts.forEach((a) => {
+      if (a.isActive) {
+        store.addAccount({ ...a, isActive: false })
+      }
+    })
+    // Add new account as active
+    store.addAccount({
+      userId: user.id,
+      email: user.email || '',
+      handle: profile?.handle || null,
+      avatarUrl: profile?.avatar_url || null,
+      refreshToken: session.refresh_token,
+      lastActiveAt: new Date().toISOString(),
+      isActive: true,
+    })
+  }, [isAddAccount])
+
   // Get returnUrl from query params for post-login redirect
   // Support both 'returnUrl' and 'redirect' parameters for compatibility
   const getRedirectUrl = useCallback((userHandle?: string | null, userEmail?: string | null): string => {
+    // If adding account, always go home
+    if (isAddAccount || localStorage.getItem('arena_adding_account')) {
+      return '/'
+    }
     const returnUrl = searchParams.get('returnUrl') || searchParams.get('redirect')
     if (returnUrl && returnUrl.startsWith('/')) {
       return returnUrl
@@ -263,7 +306,7 @@ export default function LoginPage() {
     if (userHandle) return `/u/${userHandle}`
     if (userEmail) return `/u/${userEmail.split('@')[0]}`
     return '/'
-  }, [searchParams])
+  }, [searchParams, isAddAccount])
 
 
   const passwordStrength = getPasswordStrength(password)
@@ -302,19 +345,21 @@ export default function LoginPage() {
       if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified && !redirected) {
         redirected = true
          
-        supabase.auth.getUser().then(({ data: { user } }) => {
-          if (user) {
-            supabase
-              .from('user_profiles')
-              .select('handle')
-              .eq('id', user.id)
-              .maybeSingle()
-              .then(({ data: userProfile }) => {
-                router.push(getRedirectUrl(userProfile?.handle, user.email))
-              })
-          } else {
-            router.push(getRedirectUrl())
-          }
+        saveNewAccountToStore().then(() => {
+          supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user) {
+              supabase
+                .from('user_profiles')
+                .select('handle')
+                .eq('id', user.id)
+                .maybeSingle()
+                .then(({ data: userProfile }) => {
+                  router.push(getRedirectUrl(userProfile?.handle, user.email))
+                })
+            } else {
+              router.push(getRedirectUrl())
+            }
+          })
         })
       }
     })
@@ -460,6 +505,8 @@ export default function LoginPage() {
           await createUserProfile(data.user.id, email)
           showToast(t('loginCodeVerified'), 'success')
         } else {
+          await saveNewAccountToStore()
+
           const { data: userProfile } = await supabase
             .from('user_profiles')
             .select('handle')
@@ -606,6 +653,8 @@ export default function LoginPage() {
         }
 
        
+      await saveNewAccountToStore()
+
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: userProfile } = await supabase
@@ -784,8 +833,13 @@ export default function LoginPage() {
           onClick={async () => {
             setError(null)
             const returnUrl = searchParams.get('returnUrl') || searchParams.get('redirect') || ''
-            const callbackUrl = returnUrl
-              ? `${window.location.origin}/auth/callback?returnUrl=${encodeURIComponent(returnUrl)}`
+            const addAccountParam = isAddAccount ? 'addAccount=true' : ''
+            const params = [
+              returnUrl ? `returnUrl=${encodeURIComponent(returnUrl)}` : '',
+              addAccountParam,
+            ].filter(Boolean).join('&')
+            const callbackUrl = params
+              ? `${window.location.origin}/auth/callback?${params}`
               : `${window.location.origin}/auth/callback`
             // Detect in-app browsers (Telegram, Facebook, etc.) — Google blocks OAuth in these
             const ua = navigator.userAgent || ''
