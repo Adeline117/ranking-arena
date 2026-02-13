@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload to TestFlight
         if: github.event_name == 'push'
-        uses: apple-actions/upload-testflight-build@v1
+        uses: apple-actions/upload-testflight-build@v4
         with:
           app-path: ios/App/build/ipa/App.ipa
           issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
