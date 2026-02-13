@@ -166,23 +166,12 @@ export const TraderRow = memo(function TraderRow({
           background: top3Bg || zebraBg || 'transparent',
         }}
       >
-        {/* Compare checkbox */}
+        {/* Compare checkbox — hidden, use toolbar compare instead */}
         <Box
           className="compare-checkbox-cell"
           onClick={handleCompareToggle}
           style={{
-            position: 'absolute',
-            left: -4,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 28,
-            height: 28,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: isSelected ? 1 : 0,
-            transition: 'opacity 0.15s ease',
-            zIndex: 2,
+            display: 'none',
           }}
         >
           <input
