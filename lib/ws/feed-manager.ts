@@ -128,6 +128,11 @@ export class FeedManager extends EventEmitter {
     this.subscribers.add(callback)
     return () => {
       this.subscribers.delete(callback)
+      // Auto-stop when no subscribers remain to prevent resource leaks in serverless
+      if (this.subscribers.size === 0 && this.started) {
+        this.stop()
+        FeedManager.instance = null
+      }
     }
   }
 

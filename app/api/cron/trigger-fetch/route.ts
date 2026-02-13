@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 function isAuthorized(req: Request): boolean {
   const authHeader = req.headers.get('authorization')
