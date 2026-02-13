@@ -61,11 +61,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: '封禁失败' }, { status: 500 })
     }
 
-    // Soft delete from group_members
+    // Remove from group_members
     if (targetRole) {
       const { error: deleteError } = await supabase
         .from('group_members')
-        .update({ deleted_at: new Date().toISOString() })
+        .delete()
         .eq('group_id', groupId)
         .eq('user_id', targetUserId)
 
