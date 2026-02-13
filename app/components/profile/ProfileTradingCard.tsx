@@ -92,7 +92,7 @@ export default function ProfileTradingCard({
       {/* Header */}
       <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[3] }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="lg" weight="black">📊 {isZh ? '交易数据' : 'Trading'}</Text>
+          <Text size="lg" weight="black">{isZh ? '交易数据' : 'Trading'}</Text>
           {source && (
             <Box style={{
               padding: '1px 8px', borderRadius: tokens.radius.full,

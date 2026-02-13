@@ -113,7 +113,7 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
         onMouseEnter={(e) => { e.currentTarget.style.borderColor = tokens.colors.accent?.primary || tokens.colors.accent.brand }}
         onMouseLeave={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary }}
       >
-        <span style={{ fontSize: compact ? 14 : 16 }}>⭐</span>
+        <span style={{ fontSize: compact ? 14 : 16 }}>★</span>
         {!compact && (isZh ? '收藏到...' : 'Save to...')}
       </button>
 

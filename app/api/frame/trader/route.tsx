@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
           {/* Bottom branding */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 20, fontWeight: 800, color: C.brand }}>⚔️ Arena</span>
+              <span style={{ fontSize: 20, fontWeight: 800, color: C.brand }}>Arena</span>
               <span style={{ fontSize: 14, color: C.sub }}>arenafi.org</span>
             </div>
             <span style={{ fontSize: 12, color: 'rgba(154,154,154,0.5)' }}>Farcaster Frame</span>

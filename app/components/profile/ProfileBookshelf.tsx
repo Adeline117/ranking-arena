@@ -55,7 +55,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
     return (
       <Box bg="secondary" p={4} radius="lg" border="primary">
         <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
-          📚 {isZh ? '书架' : 'Bookshelf'}
+          {isZh ? '书架' : 'Bookshelf'}
         </Text>
         <Box style={{ display: 'grid', gridTemplateColumns: expanded ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(3, 1fr)', gap: tokens.spacing[3] }}>
           {[1, 2, 3].map(i => (
@@ -73,7 +73,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
     return (
       <Box bg="secondary" p={4} radius="lg" border="primary">
         <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-          📚 {isZh ? '书架' : 'Bookshelf'}
+          {isZh ? '书架' : 'Bookshelf'}
         </Text>
         <Text size="sm" color="tertiary">{isZh ? '还没有添加书籍' : 'No books yet'}</Text>
       </Box>
@@ -86,7 +86,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
     <Box bg="secondary" p={4} radius="lg" border="primary">
       {/* Header */}
       <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[3] }}>
-        <Text size="lg" weight="black">📚 {isZh ? '书架' : 'Bookshelf'}</Text>
+        <Text size="lg" weight="black">{isZh ? '书架' : 'Bookshelf'}</Text>
         <Text size="xs" color="tertiary">{items.length} {isZh ? '本' : 'books'}</Text>
       </Box>
 

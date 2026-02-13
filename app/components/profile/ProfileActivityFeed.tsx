@@ -15,10 +15,10 @@ type ActivityItem = {
 }
 
 const ICONS: Record<string, string> = {
-  post: '📝',
-  book_rating: '📖',
-  follow_trader: '👤',
-  join_group: '👥',
+  post: '●',
+  book_rating: '●',
+  follow_trader: '●',
+  join_group: '●',
 }
 
 function formatRelativeTime(ts: string, isZh: boolean): string {

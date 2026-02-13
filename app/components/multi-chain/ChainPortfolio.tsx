@@ -18,12 +18,12 @@ export interface ChainData {
   error?: string
 }
 
-const CHAIN_ICONS: Record<string, string> = {
-  ethereum: '⟠',
-  base: '🔵',
-  arbitrum: '🔷',
-  optimism: '🔴',
-  solana: '◎',
+const CHAIN_ICON_COLORS: Record<string, string> = {
+  ethereum: '#627EEA',
+  base: '#0052FF',
+  arbitrum: '#28A0F0',
+  optimism: '#FF0420',
+  solana: '#9945FF',
 }
 
 const CHAIN_COLORS: Record<string, string> = {
@@ -39,7 +39,7 @@ interface ChainPortfolioProps {
 }
 
 export default function ChainPortfolio({ data }: ChainPortfolioProps) {
-  const icon = CHAIN_ICONS[data.chain] || '🔗'
+  const dotColor = CHAIN_ICON_COLORS[data.chain] || CHAIN_COLORS[data.chain] || 'var(--color-accent-primary)'
   const color = CHAIN_COLORS[data.chain] || 'var(--color-accent-primary)'
   const hasAssets = parseFloat(data.nativeBalance) > 0 || data.tokens.length > 0
 
@@ -55,7 +55,7 @@ export default function ChainPortfolio({ data }: ChainPortfolioProps) {
     >
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-        <span style={{ fontSize: '20px' }}>{icon}</span>
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor, display: 'inline-block' }} />
         <h3 style={{
           color: tokens.colors.text.primary,
           fontSize: tokens.typography.fontSize.base,

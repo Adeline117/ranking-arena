@@ -18,15 +18,15 @@ interface Activity {
 }
 
 const ACTIVITY_ICONS: Record<string, string> = {
-  rate_book: '⭐',
-  want_read: '📚',
-  reading: '📖',
-  read_book: '✅',
-  review_book: '✍️',
-  follow_trader: '📊',
-  follow_user: '👤',
-  join_group: '👥',
-  create_post: '📝',
+  rate_book: '★',
+  want_read: '●',
+  reading: '●',
+  read_book: '✓',
+  review_book: '●',
+  follow_trader: '●',
+  follow_user: '●',
+  join_group: '●',
+  create_post: '●',
 }
 
 function getActivityLink(activity: Activity): string {
@@ -285,7 +285,7 @@ export default function UserActivityFeed({ handle }: { handle: string }) {
                     }}
                   >
                     <span style={{ marginRight: 6 }}>
-                      {ACTIVITY_ICONS[activity.activity_type] || '📌'}
+                      {ACTIVITY_ICONS[activity.activity_type] || '●'}
                     </span>
                     <ActivityDescription activity={activity} isZh={isZh} />
                   </Text>
