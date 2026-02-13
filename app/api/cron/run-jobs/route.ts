@@ -17,6 +17,9 @@ import { JobRunner, prewarmTopTraders } from '@/lib/services/job-runner';
 import type { Platform } from '@/lib/types/leaderboard';
 import logger from '@/lib/logger'
 
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
 export async function GET(request: NextRequest) {
   // Verify cron secret
   const authHeader = request.headers.get('authorization');

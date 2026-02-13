@@ -16,6 +16,7 @@ import { checkNFTMembership } from '@/lib/web3/nft'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 const logger = createLogger('subscription-expiry')
 

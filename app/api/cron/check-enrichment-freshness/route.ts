@@ -18,6 +18,7 @@ import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 120
 
 // Enrichment 过期阈值（毫秒）
 const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000 // 12 小时

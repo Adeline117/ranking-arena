@@ -98,6 +98,7 @@ const HomePageClientOptimized = memo<HomePageClientOptimizedProps>(({
         }}
       >
         {/* Load performance optimization CSS */}
+        {/* eslint-disable-next-line @next/next/no-css-tags */}
         <link 
           rel="stylesheet" 
           href="/styles/performance-optimizations.css"

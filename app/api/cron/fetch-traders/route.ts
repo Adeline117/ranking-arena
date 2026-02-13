@@ -30,6 +30,7 @@ import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 300
 
 /**
  * GET - 健康检查

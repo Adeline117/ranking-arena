@@ -19,6 +19,7 @@ import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 120
 
 // 数据过期阈值（毫秒）
 const STALE_THRESHOLD_MS = 8 * 60 * 60 * 1000 // 8 小时

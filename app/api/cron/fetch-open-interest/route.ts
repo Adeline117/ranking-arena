@@ -196,7 +196,8 @@ export async function POST(request: NextRequest) {
               }, { onConflict: 'platform,symbol,timestamp' })
 
             if (error) {
-              logger.dbError('insert-open-interest', error, { oi })
+              // Log locally but don't send to Sentry — these are expected DB conflicts
+              console.warn(`[OI] DB error for ${oi.platform}/${oi.symbol}: ${error.message || JSON.stringify(error)}`)
               errors++
             } else {
               inserted++

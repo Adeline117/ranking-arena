@@ -8,8 +8,7 @@
 
 export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || '';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const privyConfig: any = {
+export const privyConfig: Record<string, unknown> = {
   loginMethods: ['google', 'email', 'wallet'],
   appearance: {
     theme: 'dark',

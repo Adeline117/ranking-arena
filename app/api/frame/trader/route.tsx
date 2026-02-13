@@ -158,6 +158,7 @@ export async function GET(request: NextRequest) {
               {avatar ? (
                 <img
                   src={avatar}
+                  alt="Trader avatar"
                   width={88}
                   height={88}
                   style={{ borderRadius: '50%', border: `3px solid ${C.brand}` }}
