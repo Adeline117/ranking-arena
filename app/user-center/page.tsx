@@ -185,7 +185,7 @@ export default function UserCenterPage() {
               <div className="h-2 rounded-full overflow-hidden" style={{ background: tokens.colors.bg.tertiary }}>
                 <div
                   className="h-full rounded-full transition-all"
-                  style={{ width: `${info.progress}%`, backgroundColor: info.colorHex }}
+                  style={{ width: `${info.progress}%`, background: 'linear-gradient(90deg, var(--color-chart-violet), var(--color-brand), var(--color-accent-primary))' }}
                 />
               </div>
             </div>
@@ -259,72 +259,219 @@ export default function UserCenterPage() {
 
 function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp: number }; dailyEarned: number; isZh: boolean }) {
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[8] }}>
+      {/* Current Level Card */}
       <div>
-        <h3 className="text-lg font-bold mb-4" style={{ color: tokens.colors.text.primary }}>
+        <h3 style={{
+          fontSize: tokens.typography.fontSize.lg,
+          fontWeight: tokens.typography.fontWeight.bold,
+          color: tokens.colors.text.primary,
+          marginBottom: tokens.spacing[4],
+        }}>
           {isZh ? '当前等级' : 'Current Level'}
         </h3>
-        <div className="flex items-center gap-4 p-4 rounded-lg" style={{ background: tokens.colors.bg.tertiary }}>
-          <LevelBadge exp={info.currentExp} size="lg" showName />
-          <div className="flex-1">
-            <div className="text-sm" style={{ color: tokens.colors.text.tertiary }}>
-              {isZh ? '经验值' : 'EXP'}: {info.currentExp.toLocaleString()}
-              {info.nextExp && ` / ${info.nextExp.toLocaleString()}`}
+        <div style={{
+          background: tokens.colors.bg.tertiary,
+          borderRadius: tokens.radius.xl,
+          padding: tokens.spacing[6],
+          border: `1px solid ${tokens.colors.border.primary}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[5] }}>
+            <div style={{
+              flexShrink: 0,
+              width: 64,
+              height: 64,
+              borderRadius: tokens.radius.xl,
+              background: `linear-gradient(135deg, ${info.colorHex}22, ${info.colorHex}44)`,
+              border: `2px solid ${info.colorHex}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <LevelBadge exp={info.currentExp} size="lg" showName={false} />
             </div>
-            <div className="text-sm mt-1" style={{ color: tokens.colors.text.tertiary }}>
-              {isZh ? '今日已获得' : 'Earned today'}: +{dailyEarned} EXP
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap' }}>
+                <span style={{ fontSize: tokens.typography.fontSize.xl, fontWeight: tokens.typography.fontWeight.bold, color: info.colorHex }}>
+                  Lv{info.level} {info.name}
+                </span>
+                <span style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
+                  {info.nameEn}
+                </span>
+              </div>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary,
+                marginBottom: tokens.spacing[2],
+              }}>
+                <span>EXP {info.currentExp.toLocaleString()}{info.nextExp ? ` / ${info.nextExp.toLocaleString()}` : ''}</span>
+                <span style={{ color: tokens.colors.accent.success, fontWeight: tokens.typography.fontWeight.semibold }}>
+                  +{dailyEarned} {isZh ? '今日' : 'today'}
+                </span>
+              </div>
+              {/* Gradient progress bar */}
+              <div style={{
+                height: 8,
+                borderRadius: tokens.radius.full,
+                background: tokens.colors.bg.hover,
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  height: '100%',
+                  borderRadius: tokens.radius.full,
+                  width: `${info.progress}%`,
+                  background: 'linear-gradient(90deg, var(--color-chart-violet), var(--color-brand), var(--color-accent-primary))',
+                  transition: 'width 0.5s ease',
+                }} />
+              </div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Ways to Earn EXP */}
       <div>
-        <h3 className="text-lg font-bold mb-4" style={{ color: tokens.colors.text.primary }}>
+        <h3 style={{
+          fontSize: tokens.typography.fontSize.lg,
+          fontWeight: tokens.typography.fontWeight.bold,
+          color: tokens.colors.text.primary,
+          marginBottom: tokens.spacing[4],
+        }}>
           {isZh ? '经验获取途径' : 'Ways to Earn EXP'}
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+          gap: tokens.spacing[3],
+        }}>
           {EXP_ACTIONS.map((action) => (
-            <div key={action.key} className="flex justify-between items-center p-3 rounded-lg" style={{ background: tokens.colors.bg.tertiary }}>
-              <span className="text-sm" style={{ color: tokens.colors.text.secondary }}>
+            <div key={action.key} style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              background: tokens.colors.bg.tertiary,
+              borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}>
+              <span style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary }}>
                 {action.label}
               </span>
-              <span className="text-sm">
-                <span style={{ color: tokens.colors.accent.success }}>+{action.exp}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
+                <span style={{
+                  display: 'inline-block',
+                  padding: `2px ${tokens.spacing[2]}`,
+                  borderRadius: tokens.radius.full,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  background: 'var(--color-accent-success)',
+                  color: '#fff',
+                }}>
+                  +{action.exp}
+                </span>
                 {action.dailyLimit !== null && (
-                  <span style={{ color: tokens.colors.text.tertiary }} className="ml-1">
-                    ({action.dailyLimit}/{isZh ? '天' : 'day'})
+                  <span style={{
+                    display: 'inline-block',
+                    padding: `2px ${tokens.spacing[2]}`,
+                    borderRadius: tokens.radius.full,
+                    fontSize: tokens.typography.fontSize.xs,
+                    background: tokens.colors.bg.hover,
+                    color: tokens.colors.text.tertiary,
+                  }}>
+                    {action.dailyLimit}/{isZh ? '天' : 'd'}
                   </span>
                 )}
-              </span>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Level Overview */}
       <div>
-        <h3 className="text-lg font-bold mb-4" style={{ color: tokens.colors.text.primary }}>
+        <h3 style={{
+          fontSize: tokens.typography.fontSize.lg,
+          fontWeight: tokens.typography.fontWeight.bold,
+          color: tokens.colors.text.primary,
+          marginBottom: tokens.spacing[4],
+        }}>
           {isZh ? '等级一览' : 'Level Overview'}
         </h3>
-        <div className="space-y-2">
-          {LEVELS.map((lvl) => (
-            <div
-              key={lvl.level}
-              className="flex items-center justify-between p-3 rounded-lg"
-              style={{
-                background: info.level === lvl.level ? tokens.colors.bg.tertiary : tokens.colors.bg.hover,
-                ...(info.level === lvl.level ? { boxShadow: `inset 0 0 0 1px ${lvl.colorHex}` } : {}),
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <span className="font-bold" style={{ color: lvl.colorHex }}>
-                  Lv{lvl.level}
-                </span>
-                <span style={{ color: tokens.colors.text.secondary }}>{lvl.name}</span>
-                <span className="text-sm" style={{ color: tokens.colors.text.tertiary }}>{lvl.nameEn}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+          {LEVELS.map((lvl) => {
+            const isCurrent = info.level === lvl.level
+            return (
+              <div
+                key={lvl.level}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+                  borderRadius: tokens.radius.lg,
+                  background: isCurrent
+                    ? `linear-gradient(135deg, ${lvl.colorHex}18, ${lvl.colorHex}08)`
+                    : tokens.colors.bg.tertiary,
+                  border: isCurrent
+                    ? `1.5px solid ${lvl.colorHex}`
+                    : `1px solid ${tokens.colors.border.primary}`,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], minWidth: 0 }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 36,
+                    height: 36,
+                    borderRadius: tokens.radius.md,
+                    background: `${lvl.colorHex}20`,
+                    color: lvl.colorHex,
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: tokens.typography.fontSize.sm,
+                    flexShrink: 0,
+                  }}>
+                    {lvl.level}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontWeight: tokens.typography.fontWeight.semibold,
+                        color: isCurrent ? lvl.colorHex : tokens.colors.text.primary,
+                      }}>
+                        {lvl.name}
+                      </span>
+                      <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+                        {lvl.nameEn}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
+                  {isCurrent && (
+                    <span style={{
+                      padding: `2px ${tokens.spacing[2]}`,
+                      borderRadius: tokens.radius.full,
+                      fontSize: tokens.typography.fontSize.xs,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      background: lvl.colorHex,
+                      color: '#fff',
+                    }}>
+                      {isZh ? '当前' : 'Current'}
+                    </span>
+                  )}
+                  <span style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: tokens.colors.text.tertiary,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {lvl.minExp.toLocaleString()} EXP
+                  </span>
+                </div>
               </div>
-              <span className="text-sm" style={{ color: tokens.colors.text.tertiary }}>{lvl.minExp.toLocaleString()} EXP</span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

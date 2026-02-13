@@ -93,7 +93,7 @@ function AccountRow({
 export default function AccountSwitcher({ onClose }: AccountSwitcherProps): React.ReactElement {
   const router = useRouter()
   const { t } = useLanguage()
-  const { accounts, activeAccount, inactiveAccounts, isPro, switchAccount, removeAccount, signOutAll } = useMultiAccount()
+  const { accounts, activeAccount, inactiveAccounts, isPro, switchAccount, removeAccount, signOutAll, addCurrentAccount } = useMultiAccount()
   const [switchingId, setSwitchingId] = useState<string | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -118,14 +118,17 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps): Reac
     window.location.reload()
   }, [switchAccount, removeAccount, onClose, t])
 
-  const handleAddAccount = useCallback(() => {
+  const handleAddAccount = useCallback(async () => {
     onClose?.()
     if (!isPro) {
       router.push('/settings?section=subscription')
       return
     }
+    // 保存当前账号session再跳转
+    await addCurrentAccount()
+    localStorage.setItem('arena_adding_account', 'true')
     router.push('/login?addAccount=true')
-  }, [isPro, onClose, router])
+  }, [isPro, onClose, router, addCurrentAccount])
 
   const handleSignOutAll = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
