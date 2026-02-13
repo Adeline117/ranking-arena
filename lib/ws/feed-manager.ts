@@ -106,7 +106,10 @@ export class FeedManager extends EventEmitter {
       feed.on('connected', (info) => this.emit('connected', info))
       feed.on('disconnected', (info) => this.emit('disconnected', info))
       feed.on('reconnecting', (info) => this.emit('reconnecting', info))
-      feed.on('error', (info) => this.emit('error', info))
+      feed.on('error', (info) => {
+        console.warn(`[ws] Feed error for ${exchangeId}:`, info)
+        this.emit('error', info)
+      })
 
       this.feeds.set(exchangeId, feed)
       feed.connect()
