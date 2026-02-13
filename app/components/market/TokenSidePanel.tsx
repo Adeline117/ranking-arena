@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -136,6 +136,15 @@ export default function TokenSidePanel({ token, onClose }: {
   const [ohlcData, setOhlcData] = useState<OHLCVDataPoint[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState('30')
   const [chartLoading, setChartLoading] = useState(false)
+  const [chartTheme, setChartTheme] = useState<'dark' | 'light'>('dark')
+
+  useEffect(() => {
+    const getTheme = () => (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark'
+    setChartTheme(getTheme())
+    const observer = new MutationObserver(() => setChartTheme(getTheme()))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -352,7 +361,7 @@ export default function TokenSidePanel({ token, onClose }: {
                     data={ohlcData}
                     type="candlestick"
                     height={280}
-                    theme="dark"
+                    theme={chartTheme}
                     locale="zh"
                   />
                 )}

@@ -23,7 +23,7 @@ export default function HomeSubNav() {
       style={{
         display: 'flex',
         gap: tokens.spacing[1],
-        marginTop: 12,
+        marginTop: 4,
       }}
     >
       {TABS.map((tab) => {
