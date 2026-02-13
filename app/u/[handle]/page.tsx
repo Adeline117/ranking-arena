@@ -51,14 +51,16 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   // Only select columns that actually exist in user_profiles table
   const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role'
 
-  const [handleResult, uuidResult] = await Promise.all([
+  const [handleResult, handleIlikeResult, uuidResult] = await Promise.all([
     supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
+    // Case-insensitive fallback
+    supabase.from('user_profiles').select(selectFields).ilike('handle', decodedHandle).maybeSingle(),
     uuidRegex.test(handle)
       ? supabase.from('user_profiles').select(selectFields).eq('id', handle).maybeSingle()
       : Promise.resolve({ data: null }),
   ])
 
-  const userProfile = handleResult.data || uuidResult.data
+  const userProfile = handleResult.data || handleIlikeResult.data || uuidResult.data
 
   if (!userProfile) return null
 

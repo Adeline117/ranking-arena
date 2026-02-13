@@ -11,6 +11,8 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import TraderHeader from '@/app/components/trader/TraderHeader'
+import TraderTabs from '@/app/components/trader/TraderTabs'
 // Trader components for stats/portfolio tabs
 const JoinedGroups = dynamic(() => import('@/app/components/trader/JoinedGroups'), { ssr: false })
 const UserBookmarkFolders = dynamic(() => import('@/app/components/trader/UserBookmarkFolders'), { ssr: false })
