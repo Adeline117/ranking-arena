@@ -768,8 +768,8 @@ function HotContent() {
                     key={tab.value}
                     onClick={() => setActiveHotTab(tab.value)}
                     style={{
-                      padding: '8px 16px',
-                      minHeight: 44,
+                      padding: '5px 12px',
+                      minHeight: 32,
                       borderRadius: tokens.radius.lg,
                       border: activeHotTab === tab.value ? 'none' : tokens.glass.border.light,
                       background: activeHotTab === tab.value ? tokens.gradient.primary : tokens.glass.bg.light,
@@ -777,7 +777,7 @@ function HotContent() {
                       WebkitBackdropFilter: tokens.glass.blur.sm,
                       color: activeHotTab === tab.value ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
                       fontWeight: activeHotTab === tab.value ? 900 : 600,
-                      fontSize: '12px',
+                      fontSize: '11px',
                       cursor: 'pointer',
                       transition: tokens.transition.all,
                       boxShadow: activeHotTab === tab.value ? `0 4px 12px var(--color-accent-primary-40)` : 'none',

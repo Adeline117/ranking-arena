@@ -25,19 +25,31 @@ const CATEGORY_MAP: Record<string, string> = {
   XLM: 'L1', ALGO: 'L1', ICP: 'L1', FIL: 'Infra', AR: 'Infra', THETA: 'Infra',
 }
 
-function getChangeColor(changePct: number): string {
+function getChangeColor(changePct: number, isLight = false): string {
   const maxPct = 10
   const clamped = Math.max(-maxPct, Math.min(maxPct, changePct))
   const intensity = Math.abs(clamped) / maxPct
 
+  if (isLight) {
+    if (clamped >= 0) {
+      const r = Math.round(34 + (1 - intensity) * 160)
+      const g = Math.round(139 + (1 - intensity) * 80)
+      const b = Math.round(34 + (1 - intensity) * 160)
+      return `rgb(${r}, ${g}, ${b})`
+    } else {
+      const r = Math.round(200 + (1 - intensity) * 40)
+      const g = Math.round(50 + (1 - intensity) * 140)
+      const b = Math.round(50 + (1 - intensity) * 140)
+      return `rgb(${r}, ${g}, ${b})`
+    }
+  }
+
   if (clamped >= 0) {
-    // Richer green: from muted #2a6b4a → vivid #16a34a
     const r = Math.round(42 - intensity * 20)
     const g = Math.round(107 + intensity * 56)
     const b = Math.round(74 - intensity * 0)
     return `rgb(${r}, ${g}, ${b})`
   } else {
-    // Richer red: from muted #8b3a3a → vivid #dc2626
     const r = Math.round(139 + intensity * 81)
     const g = Math.round(58 - intensity * 20)
     const b = Math.round(58 - intensity * 20)
@@ -122,6 +134,15 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const [coins, setCoins] = useState<{ name: string; category: string; marketCap: number; change1h: number; change24h: number; change7d: number }[]>([])
   const [loading, setLoading] = useState(true)
+  const [isLight, setIsLight] = useState(false)
+
+  useEffect(() => {
+    const getLight = () => document.documentElement.getAttribute('data-theme') === 'light'
+    setIsLight(getLight())
+    const observer = new MutationObserver(() => setIsLight(getLight()))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
 
   // Fetch real data from /api/market/spot
   const fetchData = useCallback(async () => {
@@ -257,7 +278,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 top: node.y,
                 width: node.width,
                 height: node.height,
-                background: getChangeColor(node.changePct),
+                background: getChangeColor(node.changePct, isLight),
                 border: '1px solid var(--color-overlay-light)',
                 cursor: 'pointer',
                 display: 'flex',
@@ -277,7 +298,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                   fontSize,
                   fontWeight: 800,
                   color: 'var(--color-on-accent)',
-                  textShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0px 1px rgba(0,0,0,0.5)',
+                  textShadow: isLight ? '0 1px 2px rgba(255,255,255,0.6)' : '0 1px 4px rgba(0,0,0,0.7), 0 0px 1px rgba(0,0,0,0.5)',
                   lineHeight: 1.1,
                   maxWidth: '90%',
                   overflow: 'hidden',
@@ -292,7 +313,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                   fontSize: Math.max(9, fontSize * 0.7),
                   fontWeight: 700,
                   color: 'rgba(255,255,255,0.9)',
-                  textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+                  textShadow: isLight ? '0 1px 2px rgba(255,255,255,0.5)' : '0 1px 3px rgba(0,0,0,0.6)',
                   lineHeight: 1.1,
                   fontFamily: 'var(--font-mono, monospace)',
                   fontVariantNumeric: 'tabular-nums',
@@ -305,7 +326,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                   fontSize: 9,
                   fontWeight: 500,
                   color: 'rgba(255,255,255,0.65)',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                  textShadow: isLight ? 'none' : '0 1px 2px rgba(0,0,0,0.5)',
                   marginTop: 2,
                   maxWidth: '90%',
                   overflow: 'hidden',
@@ -360,7 +381,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
           { label: '大涨', val: 8 },
         ].map(item => (
           <span key={item.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 12, height: 12, borderRadius: 2, background: getChangeColor(item.val) }} />
+            <span style={{ width: 12, height: 12, borderRadius: 2, background: getChangeColor(item.val, isLight) }} />
             {item.label}
           </span>
         ))}
