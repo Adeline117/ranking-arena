@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 // DEX 平台集合
 const DEX_PLATFORMS = new Set([
