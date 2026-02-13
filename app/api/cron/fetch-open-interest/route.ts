@@ -139,17 +139,15 @@ async function fetchOpenInterest(
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      // 403/451 are expected (WAF/geo-block) — don't send to Sentry
+      console.warn(`[oi] ${exchange.name} ${symbol}: HTTP ${response.status}`)
+      return null
     }
 
     const data = await response.json()
     return exchange.responseMapper(data, symbol)
   } catch (error) {
-    logger.error(
-      `Failed to fetch open interest from ${exchange.name}`,
-      { symbol },
-      error instanceof Error ? error : new Error(String(error))
-    )
+    console.warn(`[oi] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`)
     return null
   }
 }

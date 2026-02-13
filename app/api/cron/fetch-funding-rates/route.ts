@@ -138,17 +138,15 @@ async function fetchFundingRate(
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      // 403/451 are expected (WAF/geo-block) — don't send to Sentry
+      console.warn(`[funding] ${exchange.name} ${symbol}: HTTP ${response.status}`)
+      return []
     }
 
     const data = await response.json()
     return exchange.responseMapper(data, symbol)
   } catch (error) {
-    logger.error(
-      `Failed to fetch funding rate from ${exchange.name}`,
-      { symbol },
-      error instanceof Error ? error : new Error(String(error))
-    )
+    console.warn(`[funding] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`)
     return []
   }
 }
