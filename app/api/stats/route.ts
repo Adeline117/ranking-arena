@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+export const runtime = 'edge'
+
 // Cache stats for 5 minutes
 export const revalidate = 300
 
@@ -41,11 +43,15 @@ export async function GET() {
     return NextResponse.json({
       traderCount,
       exchangeCount,
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
     })
   } catch {
     return NextResponse.json({
       traderCount: 31000,
       exchangeCount: 16,
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
     })
   }
 }
