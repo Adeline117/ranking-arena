@@ -16,8 +16,8 @@ export const experimental_ppr = true
  * Auth is handled client-side to maintain static generation
  */
 export default async function Page() {
-  // Fetch initial traders server-side — load 200 for good first impression
-  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 200)
+  // Fetch initial traders server-side — load 50 for fast FCP/LCP, rest lazy-loaded client-side
+  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 50)
 
   return (
     <Suspense fallback={<RankingTableSkeleton />}>
