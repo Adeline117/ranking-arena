@@ -23,7 +23,7 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import CreatePostFAB from '@/app/components/ui/CreatePostFAB'
+// CreatePostFAB removed per Adeline's request
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 
 // Use design token for brand color
@@ -1462,7 +1462,6 @@ function HotContent() {
         </div>,
         document.body
       )}
-      <CreatePostFAB />
       <MobileBottomNav />
     </Box>
   )
