@@ -80,9 +80,54 @@ async function enrichBinanceFutures() {
   console.log(`\n✅ Binance: ${updated} updated, ${failed} failed`)
 }
 
+async function enrichLeaderboardRanks() {
+  console.log(`\n🔍 Fetching leaderboard_ranks binance_futures with NULL avatar (limit=${LIMIT})...`)
+  
+  // First, get avatars already in trader_sources to avoid redundant API calls
+  const known = await supabaseGet(
+    `trader_sources?source=eq.binance_futures&avatar_url=not.is.null&select=source_trader_id,avatar_url&limit=5000`
+  )
+  const cache = new Map(known.map(t => [t.source_trader_id, t.avatar_url]))
+  console.log(`  ${cache.size} avatars cached from trader_sources`)
+
+  const traders = await supabaseGet(
+    `leaderboard_ranks?source=eq.binance_futures&avatar_url=is.null&select=id,source_trader_id,handle&limit=${LIMIT}`
+  )
+  console.log(`  Found ${traders.length} leaderboard entries without avatars`)
+  if (!traders.length) return
+
+  let updated = 0, failed = 0, fromCache = 0
+  for (let i = 0; i < traders.length; i += CONCURRENCY) {
+    const batch = traders.slice(i, i + CONCURRENCY)
+    const results = await Promise.all(batch.map(async t => {
+      // Check cache first
+      if (cache.has(t.source_trader_id)) return { t, avatar: cache.get(t.source_trader_id) }
+      const avatar = await fetchBinanceAvatar(t.source_trader_id)
+      if (avatar) cache.set(t.source_trader_id, avatar) // cache for later
+      return { t, avatar }
+    }))
+    for (const { t, avatar } of results) {
+      if (avatar) {
+        await supabaseUpdate('leaderboard_ranks', t.id, { avatar_url: avatar })
+        updated++
+        if (cache.has(t.source_trader_id)) fromCache++
+      } else {
+        failed++
+      }
+    }
+    const done = Math.min(i + CONCURRENCY, traders.length)
+    if (done % 50 === 0 || done === traders.length) {
+      console.log(`  ${done}/${traders.length} | ✅ ${updated} (${fromCache} cached) | ❌ ${failed}`)
+    }
+    await sleep(200)
+  }
+  console.log(`\n✅ Leaderboard Ranks: ${updated} updated (${fromCache} from cache), ${failed} failed`)
+}
+
 async function main() {
   console.log(`🖼️  Avatar Enrichment ${TEST_MODE ? '(TEST)' : '(FULL)'}`)
   await enrichBinanceFutures()
+  await enrichLeaderboardRanks()
   console.log('\nDone!')
 }
 
