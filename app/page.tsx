@@ -16,9 +16,8 @@ export const experimental_ppr = true
  * Auth is handled client-side to maintain static generation
  */
 export default async function Page() {
-  // Fetch initial traders server-side to eliminate client waterfall
-  // 首屏只加载20条，减少LCP时间；更多数据通过客户端"加载更多"按钮获取
-  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 20)
+  // Fetch initial traders server-side — load 200 for good first impression
+  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 200)
 
   return (
     <Suspense fallback={<RankingTableSkeleton />}>
