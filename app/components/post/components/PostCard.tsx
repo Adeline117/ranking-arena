@@ -8,6 +8,7 @@ import { renderContentWithLinks, ARENA_PURPLE, truncateText } from '@/lib/utils/
 import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/types'
 import { ReactButton } from './PostActions'
 import { AvatarLink } from './AvatarLink'
+import LevelBadge from '@/app/components/user/LevelBadge'
 import { memo } from 'react'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
@@ -112,7 +113,10 @@ export const PostCard = memo(function PostCard({
           fontSize: tokens.typography.fontSize.xs,
           color: tokens.colors.text.tertiary,
         }}>
-          <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
+            <LevelBadge exp={(post as any).author_exp || 0} size="sm" />
+          </span>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
             {/* 投票结果指示器 */}
@@ -173,7 +177,10 @@ export const PostCard = memo(function PostCard({
     >
       {/* 头部 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
+          <LevelBadge exp={(post as any).author_exp || 0} size="sm" />
+        </span>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {post.group_name && post.group_id && (

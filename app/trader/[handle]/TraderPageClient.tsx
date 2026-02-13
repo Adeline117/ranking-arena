@@ -23,6 +23,7 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 const TraderPageV2 = dynamic(() => import('@/app/components/trader/TraderPageV2'), {
   loading: () => <RankingSkeleton />,
 })
+const AlertConfig = dynamic(() => import('@/app/components/alerts/AlertConfig'), { ssr: false })
 const _TraderAboutCard = dynamic(() => import('@/app/components/trader/TraderAboutCard'))
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
@@ -145,6 +146,8 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
 
   // Phase 3B: useTransition for non-urgent tab switches
   const [, startTransition] = useTransition()
+
+  const [showAlertConfig, setShowAlertConfig] = useState(false)
 
   // Read tab from URL, default to 'overview'
   const urlTab = searchParams.get('tab') as TabKey | null
@@ -285,6 +288,61 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
           winRate={performance?.win_rate}
           currentUserId={currentUserId}
         />
+
+        {/* Alert Config (Pro only) */}
+        {isPro && currentUserId && (
+          <>
+            <Box style={{ display: 'flex', justifyContent: 'flex-end', marginTop: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
+              <button
+                onClick={() => setShowAlertConfig(true)}
+                title={language === 'zh' ? '设置提醒' : 'Set Alerts'}
+                style={{
+                  background: 'none',
+                  border: `1px solid var(--color-border-primary, ${tokens.colors.border.primary})`,
+                  borderRadius: 8,
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  color: tokens.colors.text.secondary,
+                  fontSize: 13,
+                  transition: `opacity ${tokens.transition.fast}`,
+                }}
+              >
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {language === 'zh' ? '提醒' : 'Alerts'}
+              </button>
+            </Box>
+            {showAlertConfig && (
+              <Box
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  zIndex: 1000,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.5)',
+                }}
+                onClick={() => setShowAlertConfig(false)}
+              >
+                <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{ maxWidth: 500, width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
+                  <AlertConfig
+                    traderId={profile.id}
+                    traderHandle={profile.handle || handle}
+                    source={profile.source}
+                    userId={currentUserId}
+                    onClose={() => setShowAlertConfig(false)}
+                  />
+                </Box>
+              </Box>
+            )}
+          </>
+        )}
 
         {/* Tabs */}
         <TraderTabs

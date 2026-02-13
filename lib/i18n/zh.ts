@@ -53,6 +53,8 @@ const zh = {
     details: '详情',
     copy: '复制',
     myHome: '我的主页',
+    userCenter: '用户中心',
+    multiChain: '多链资产',
     notifications: '通知',
     searchPlaceholder: '搜索交易员、帖子、小组...',
     rank: '排名',
