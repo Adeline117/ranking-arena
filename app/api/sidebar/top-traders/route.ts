@@ -17,8 +17,8 @@ export const GET = withPublic(
         // Step 1: Get top traders from leaderboard_ranks (same source as main ranking table)
         const { data: snapData, error: snapErr } = await supabase
           .from('leaderboard_ranks')
-          .select('source, source_trader_id, roi, pnl, arena_score')
-          .eq('time_range', '90D')
+          .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score')
+          .eq('season_id', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
           .order('rank', { ascending: true })
@@ -28,30 +28,15 @@ export const GET = withPublic(
           return { traders: [] }
         }
 
-        // Step 2: Batch fetch handles/avatars
-        const { data: sourceData } = await supabase
-          .from('trader_sources')
-          .select('source, source_trader_id, handle, avatar_url')
-          .eq('is_active', true)
-          .in('source', snapData.map(d => d.source))
-          .in('source_trader_id', snapData.map(d => d.source_trader_id))
-
-        const sourceMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
-        if (sourceData) {
-          sourceData.forEach(s => sourceMap.set(`${s.source}:${s.source_trader_id}`, { handle: s.handle, avatar_url: s.avatar_url }))
-        }
-
-        const traders = snapData.map(d => {
-          const src = sourceMap.get(`${d.source}:${d.source_trader_id}`)
-          return {
-            source: d.source,
-            source_trader_id: d.source_trader_id,
-            handle: src?.handle || null,
-            avatar_url: src?.avatar_url || null,
-            roi: d.roi,
-            arena_score: d.arena_score,
-          }
-        })
+        // leaderboard_ranks already has handle + avatar_url
+        const traders = snapData.map(d => ({
+          source: d.source,
+          source_trader_id: d.source_trader_id,
+          handle: d.handle || null,
+          avatar_url: d.avatar_url || null,
+          roi: d.roi,
+          arena_score: d.arena_score,
+        }))
 
         return { traders }
       },
