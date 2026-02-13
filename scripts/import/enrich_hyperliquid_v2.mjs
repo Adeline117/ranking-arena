@@ -42,24 +42,7 @@ async function apiFetch(body) {
 async function fetchTraderData(address, period) {
   const result = { win_rate: null, max_drawdown: null, trades_count: null }
 
-  // Get fills for win_rate and trades_count
-  try {
-    const fills = await apiFetch({ type: 'userFills', user: address })
-    if (Array.isArray(fills) && fills.length > 0) {
-      const days = WINDOW_DAYS[period]
-      const cutoff = Date.now() - days * 24 * 3600 * 1000
-      const closed = fills.filter(f => f.time >= cutoff && parseFloat(f.closedPnl || '0') !== 0)
-      if (closed.length >= 3) {
-        const wins = closed.filter(f => parseFloat(f.closedPnl) > 0).length
-        result.win_rate = parseFloat(((wins / closed.length) * 100).toFixed(2))
-        result.trades_count = closed.length
-      }
-    }
-  } catch {}
-
-  await sleep(2000)
-
-  // Get portfolio for max_drawdown
+  // Get portfolio for max_drawdown (most reliable endpoint)
   try {
     const portfolio = await apiFetch({ type: 'portfolio', user: address })
     if (Array.isArray(portfolio)) {
@@ -68,7 +51,7 @@ async function fetchTraderData(address, period) {
       if (periodData?.accountValueHistory && periodData?.pnlHistory) {
         const avh = periodData.accountValueHistory
         const ph = periodData.pnlHistory
-        if (avh.length > 0 && ph.length > 0) {
+        if (avh.length > 1 && ph.length > 1) {
           let maxDD = 0
           for (let i = 0; i < ph.length; i++) {
             const startAV = parseFloat(avh[i]?.[1] || '0')
@@ -84,6 +67,21 @@ async function fetchTraderData(address, period) {
             result.max_drawdown = parseFloat((Math.abs(maxDD) * 100).toFixed(2))
           }
         }
+      }
+    }
+  } catch {}
+
+  await sleep(1500)
+
+  // Get fills for win_rate and trades_count
+  try {
+    const fills = await apiFetch({ type: 'userFillsByTime', user: address, startTime: Date.now() - WINDOW_DAYS[period] * 86400000 })
+    if (Array.isArray(fills) && fills.length > 0) {
+      const closed = fills.filter(f => parseFloat(f.closedPnl || '0') !== 0)
+      if (closed.length >= 3) {
+        const wins = closed.filter(f => parseFloat(f.closedPnl) > 0).length
+        result.win_rate = parseFloat(((wins / closed.length) * 100).toFixed(2))
+        result.trades_count = closed.length
       }
     }
   } catch {}
@@ -133,24 +131,27 @@ async function main() {
   for (let i = 0; i < traderKeys.length; i++) {
     const key = traderKeys[i]
     const snapshots = byTrader.get(key)
+    console.log(`  Processing ${i+1}/${traderKeys.length}: ${key.slice(0,10)}... (${snapshots.length} rows)`)
     try {
       const data = await fetchTraderData(key, WINDOW_ARG)
+      console.log(`    API result: wr=${data.win_rate} mdd=${data.max_drawdown} tc=${data.trades_count}`)
       const update = {}
       if (data.win_rate !== null) { update.win_rate = data.win_rate; wrFilled++ }
       if (data.max_drawdown !== null) { update.max_drawdown = data.max_drawdown; ddFilled++ }
       if (data.trades_count !== null) { update.trades_count = data.trades_count; tcFilled++ }
 
       if (Object.keys(update).length > 0) {
-        for (const s of snapshots) {
-          await sb.from('trader_snapshots_v2').update(update).eq('id', s.id)
-        }
+        // Batch update all snapshots for this trader+window
+        const ids = snapshots.map(s => s.id)
+        const { error: ue } = await sb.from('trader_snapshots_v2').update(update).in('id', ids)
+        if (ue) console.error(`  Update error for ${key}: ${ue.message}`)
         enriched++
       }
     } catch (e) { errors++ }
 
     await sleep(2000)
 
-    if ((i + 1) % 50 === 0 || i === traderKeys.length - 1) {
+    if ((i + 1) % 10 === 0 || i === traderKeys.length - 1) {
       console.log(`  [${i + 1}/${traderKeys.length}] wr+=${wrFilled} dd+=${ddFilled} tc+=${tcFilled} enriched=${enriched} err=${errors}`)
     }
   }
