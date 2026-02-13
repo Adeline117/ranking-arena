@@ -68,51 +68,53 @@ const SKIP_ROUTES = [
 // Rate Limiting
 // ============================================
 
-let ratelimit: Ratelimit | null = null
-function getRateLimiter(): Ratelimit | null {
-  if (ratelimit) return ratelimit
+// Tiered rate limiting: different limits for different route categories
+type RateLimitTier = 'health' | 'admin' | 'auth' | 'upload' | 'read' | 'write'
+
+const TIER_CONFIG: Record<RateLimitTier, { requests: number; window: `${number} s`; prefix: string }> = {
+  health: { requests: 200, window: '60 s', prefix: 'mw:rl:health' },
+  admin:  { requests: 60,  window: '60 s', prefix: 'mw:rl:admin' },
+  auth:   { requests: 10,  window: '60 s', prefix: 'mw:rl:auth' },
+  upload: { requests: 20,  window: '60 s', prefix: 'mw:rl:upload' },
+  read:   { requests: 120, window: '60 s', prefix: 'mw:rl:read' },
+  write:  { requests: 30,  window: '60 s', prefix: 'mw:rl:write' },
+}
+
+const tierLimiters = new Map<RateLimitTier, Ratelimit>()
+
+function getTieredLimiter(tier: RateLimitTier): Ratelimit | null {
+  const cached = tierLimiters.get(tier)
+  if (cached) return cached
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) return null
   try {
-    ratelimit = new Ratelimit({
+    const cfg = TIER_CONFIG[tier]
+    const limiter = new Ratelimit({
       redis: new Redis({ url, token }),
-      limiter: Ratelimit.slidingWindow(120, '60 s'),
-      prefix: 'mw:ratelimit',
+      limiter: Ratelimit.slidingWindow(cfg.requests, cfg.window),
+      prefix: cfg.prefix,
       analytics: false,
     })
-    return ratelimit
+    tierLimiters.set(tier, limiter)
+    return limiter
   } catch {
     return null
   }
 }
 
-let writeRatelimit: Ratelimit | null = null
-function getWriteRateLimiter(): Ratelimit | null {
-  if (writeRatelimit) return writeRatelimit
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  try {
-    writeRatelimit = new Ratelimit({
-      redis: new Redis({ url, token }),
-      limiter: Ratelimit.slidingWindow(30, '60 s'),
-      prefix: 'mw:ratelimit:write',
-      analytics: false,
-    })
-    return writeRatelimit
-  } catch {
+function classifyRoute(pathname: string, method: string): RateLimitTier | null {
+  // Skip internal routes
+  if (pathname.startsWith('/api/cron/') || pathname.startsWith('/api/webhook/') || pathname.startsWith('/api/stripe/')) {
     return null
   }
+  if (pathname.startsWith('/api/health')) return 'health'
+  if (pathname.startsWith('/api/admin/')) return 'admin'
+  if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/settings/2fa/')) return 'auth'
+  if (pathname.includes('/upload') || pathname.startsWith('/api/avatar')) return 'upload'
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) return 'write'
+  return 'read'
 }
-
-const WRITE_PATHS = [
-  '/api/posts',
-  '/api/comments',
-  '/api/trader-alerts',
-  '/api/saved-filters',
-  '/api/avoid-list',
-]
 
 // 允许的 CORS 源
 const ALLOWED_ORIGINS = [
@@ -414,33 +416,34 @@ export async function proxy(request: NextRequest) {
     return response
   }
   
-  // API 路由限流检查
+  // API 路由分层限流检查
   if (pathname.startsWith('/api/')) {
-    const isWriteMethod = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)
-    const isWritePath = WRITE_PATHS.some(p => pathname.startsWith(p))
-    const useWriteLimit = isWriteMethod && isWritePath
-    const limiter = useWriteLimit ? getWriteRateLimiter() : getRateLimiter()
+    const tier = classifyRoute(pathname, method)
+    if (tier) {
+      const limiter = getTieredLimiter(tier)
+      if (limiter) {
+        try {
+          const forwarded = request.headers.get('x-forwarded-for')
+          const ip = forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'anonymous'
+          const { success, limit, remaining, reset } = await limiter.limit(ip)
 
-    if (limiter) {
-      try {
-        const forwarded = request.headers.get('x-forwarded-for')
-        const ip = forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'anonymous'
-        const { success, limit, remaining, reset } = await limiter.limit(ip)
-
-        if (!success) {
-          const rateLimitResponse = NextResponse.json(
-            { success: false, error: '请求过于频繁，请稍后再试', code: 'RATE_LIMIT_EXCEEDED' },
-            { status: 429 }
-          )
-          rateLimitResponse.headers.set('X-RateLimit-Limit', limit.toString())
-          rateLimitResponse.headers.set('X-RateLimit-Remaining', remaining.toString())
-          rateLimitResponse.headers.set('X-RateLimit-Reset', reset.toString())
-          rateLimitResponse.headers.set('X-Request-ID', requestId)
-          addCorsHeaders(request, rateLimitResponse)
-          return rateLimitResponse
+          if (!success) {
+            const retryAfter = Math.ceil((reset - Date.now()) / 1000)
+            const rateLimitResponse = NextResponse.json(
+              { success: false, error: '请求过于频繁，请稍后再试', code: 'RATE_LIMIT_EXCEEDED' },
+              { status: 429 }
+            )
+            rateLimitResponse.headers.set('Retry-After', String(Math.max(1, retryAfter)))
+            rateLimitResponse.headers.set('X-RateLimit-Limit', limit.toString())
+            rateLimitResponse.headers.set('X-RateLimit-Remaining', remaining.toString())
+            rateLimitResponse.headers.set('X-RateLimit-Reset', reset.toString())
+            rateLimitResponse.headers.set('X-Request-ID', requestId)
+            addCorsHeaders(request, rateLimitResponse)
+            return rateLimitResponse
+          }
+        } catch {
+          // 限流检查失败时放行 (fail-open)
         }
-      } catch {
-        // 限流检查失败时放行 (fail-open)
       }
     }
   }
