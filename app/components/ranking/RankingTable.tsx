@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, memo, useCallback, useTransition } from 'react'
+import React, { useState, useEffect, useRef, memo, useCallback, useTransition, useMemo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
@@ -36,6 +36,7 @@ import { getScoreGradeLetter } from '@/lib/utils/score-explain'
 // Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
 // This deferred load saves ~5KB from the render-blocking CSS path
 import { useRankingTableStyles } from './useRankingTableStyles'
+import { useVirtualizer } from '@tanstack/react-virtual'
 
 // Column customization types
 export type ColumnKey = 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha' | 'style'
@@ -272,7 +273,7 @@ function RankingTableInner(props: {
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [_sortAnimationKey, setSortAnimationKey] = useState(0)
-  const itemsPerPage = 20
+  const itemsPerPage = 100
 
   // Mobile card view: load more instead of pagination
   const [cardVisibleCount, setCardVisibleCount] = useState(20)
@@ -445,6 +446,23 @@ function RankingTableInner(props: {
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
+
+  // Virtual scrolling for large lists
+  const VIRTUAL_THRESHOLD = 30
+  const useVirtual = paginatedTraders.length > VIRTUAL_THRESHOLD
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const tableVirtualizer = useVirtualizer({
+    count: useVirtual ? paginatedTraders.length : 0,
+    getScrollElement: () => tableScrollRef.current,
+    estimateSize: () => 56, // minHeight of TraderRow
+    overscan: 5,
+  })
+
+  // Reset virtualizer scroll position on page/sort/filter changes
+  const resetKey = useMemo(() => `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}-${gradeFilter}`, [currentPage, sortColumn, sortDir, debouncedSearch, styleFilter, gradeFilter])
+  useEffect(() => {
+    if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
+  }, [resetKey])
 
   // Wrap parseSourceInfo with translation function
   const parseSourceInfoWithT = useCallback((src: string) => parseSourceInfoUtil(src, t), [t])
@@ -806,7 +824,11 @@ function RankingTableInner(props: {
         </Box>
       ) : viewMode === 'card' ? (
         <>
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: tokens.spacing[3], padding: tokens.spacing[4] }}>
+          <Box
+            style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: tokens.spacing[3], padding: tokens.spacing[4],
+            }}
+          >
             {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
               const rank = idx + 1
               return (
@@ -842,7 +864,13 @@ function RankingTableInner(props: {
         </>
       ) : (
         <>
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', contain: 'layout style paint' }}>
+          <Box
+            ref={useVirtual ? tableScrollRef : undefined}
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', contain: 'layout style paint',
+              ...(useVirtual ? { maxHeight: '80vh', overflowY: 'auto' } : {}),
+            }}
+          >
             {isSortPending && (
               <Box style={{
                 position: 'absolute', inset: 0, zIndex: 10,
@@ -859,17 +887,47 @@ function RankingTableInner(props: {
                 }} />
               </Box>
             )}
-            {paginatedTraders.map((trader, idx) => {
-              const rank = startIndex + idx + 1
-              return (
-                <TraderRow key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
-                  trader={trader} rank={rank} source={source} language={language}
-                  searchQuery={debouncedSearch}
-                  getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
-                  isExpanded={expandedRowId === trader.id}
-                  onToggleExpand={(id) => setExpandedRowId(prev => prev === id ? null : id)} />
-              )
-            })}
+            {useVirtual ? (
+              <div style={{ height: tableVirtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+                {tableVirtualizer.getVirtualItems().map(virtualRow => {
+                  const trader = paginatedTraders[virtualRow.index]
+                  const rank = startIndex + virtualRow.index + 1
+                  return (
+                    <div
+                      key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + virtualRow.index}`}
+                      data-index={virtualRow.index}
+                      ref={tableVirtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      <TraderRow
+                        trader={trader} rank={rank} source={source} language={language}
+                        searchQuery={debouncedSearch}
+                        getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
+                        isExpanded={expandedRowId === trader.id}
+                        onToggleExpand={(id) => setExpandedRowId(prev => prev === id ? null : id)} />
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              paginatedTraders.map((trader, idx) => {
+                const rank = startIndex + idx + 1
+                return (
+                  <TraderRow key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
+                    trader={trader} rank={rank} source={source} language={language}
+                    searchQuery={debouncedSearch}
+                    getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
+                    isExpanded={expandedRowId === trader.id}
+                    onToggleExpand={(id) => setExpandedRowId(prev => prev === id ? null : id)} />
+                )
+              })
+            )}
           </Box>
           {/* Registration CTA after first page for non-logged-in users */}
           {!props.loggedIn && currentPage === 1 && sortedTraders.length > itemsPerPage && (
