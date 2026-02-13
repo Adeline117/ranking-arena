@@ -5,6 +5,9 @@ import { ARENA_SCORE_SCHEMA_UID } from '@/lib/web3/contracts'
 import type { Address } from 'viem'
 import { logger } from '@/lib/logger'
 
+export const dynamic = 'force-dynamic'
+export const maxDuration = 120
+
 const CRON_SECRET = process.env.CRON_SECRET
 
 /**

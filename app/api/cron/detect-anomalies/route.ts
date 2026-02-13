@@ -8,6 +8,9 @@
  * @module app/api/cron/detect-anomalies
  */
 
+export const dynamic = 'force-dynamic'
+export const maxDuration = 120
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import {
