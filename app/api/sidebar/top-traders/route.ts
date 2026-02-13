@@ -14,17 +14,14 @@ export const GET = withPublic(
     const data = await getOrSetWithLock(
       'sidebar:top-traders',
       async () => {
-        // Step 1: Get top traders from snapshots
+        // Step 1: Get top traders from leaderboard_ranks (same source as main ranking table)
         const { data: snapData, error: snapErr } = await supabase
-          .from('trader_snapshots')
+          .from('leaderboard_ranks')
           .select('source, source_trader_id, roi, pnl, arena_score')
-          .eq('season_id', '90D')
+          .eq('time_range', '90D')
           .not('arena_score', 'is', null)
           .gt('arena_score', 0)
-          .lte('roi', 5000)
-          .gte('roi', -5000)
-          .or('roi.neq.0,pnl.neq.0')
-          .order('arena_score', { ascending: false })
+          .order('rank', { ascending: true })
           .limit(10)
 
         if (snapErr || !snapData || snapData.length === 0) {
