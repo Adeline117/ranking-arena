@@ -386,7 +386,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
     setJoining(true)
     try {
-      const { error } = await supabase.from('group_members').insert({ group_id: groupId, user_id: userId })
+      const { error } = await supabase.from('group_members').insert({ group_id: groupId, user_id: userId, role: 'member' })
       if (error) throw error
 
       await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
