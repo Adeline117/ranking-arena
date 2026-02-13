@@ -1,6 +1,6 @@
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
-import { Skeleton, RankingSkeleton, SkeletonCard, SkeletonText } from '@/app/components/ui/Skeleton'
+import { Skeleton, RankingSkeleton, SkeletonCard } from '@/app/components/ui/Skeleton'
 
 /**
  * 首页加载状态

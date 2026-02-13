@@ -32,8 +32,8 @@ export function Web3Provider({ children }: Web3ProviderProps) {
   }, [])
 
   if (!Provider) {
-    // Render children without web3 context while loading
-    return <Web3ReadyContext.Provider value={false}>{children}</Web3ReadyContext.Provider>
+    // Don't render children until provider is ready — prevents WagmiProviderNotFoundError
+    return <Web3ReadyContext.Provider value={false}><div style={{ minHeight: 100 }} /></Web3ReadyContext.Provider>
   }
 
   return (

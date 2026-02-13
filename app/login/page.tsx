@@ -793,7 +793,7 @@ export default function LoginPage() {
             if (isInAppBrowser) {
               // Copy link to clipboard and prompt user to open in system browser
               const oauthUrl = `${window.location.origin}/login${returnUrl ? '?returnUrl=' + encodeURIComponent(returnUrl) : ''}`
-              try { await navigator.clipboard.writeText(oauthUrl) } catch {}
+              try { await navigator.clipboard.writeText(oauthUrl) } catch { /* clipboard may not be available */ }
               setError(lang === 'zh'
                 ? '请在系统浏览器(Safari/Chrome)中打开此页面登录Google。链接已复制到剪贴板。'
                 : 'Please open this page in your system browser (Safari/Chrome) to sign in with Google. Link copied to clipboard.')

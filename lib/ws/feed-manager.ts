@@ -56,6 +56,7 @@ export class FeedManager extends EventEmitter {
 
   private constructor(config: Partial<FeedManagerConfig> = {}) {
     super()
+    this.setMaxListeners(100) // Prevent EventEmitter memory leak warnings with many SSE clients
     this.config = { ...DEFAULT_CONFIG, ...config }
   }
 

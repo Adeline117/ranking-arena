@@ -1,48 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useTransition, memo, useMemo } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, useCallback, useRef, useTransition, memo } from 'react'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { useToast } from '../ui/Toast'
 import type { Trader } from '../ranking/RankingTable'
 
 import TimeRangeSelector from './TimeRangeSelector'
 import type { TimeRange } from './hooks/useTraderData'
-import { CategoryType } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
-import { useLanguage } from '../Providers/LanguageProvider'
-import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
-// Lazy load heavy components with optimized loading states
-const OptimizedRankingTable = dynamic(() => import('../ranking/OptimizedRankingTable'), {
-  ssr: true,
-  loading: () => (
-    <Box style={{ minHeight: '400px', contain: 'layout style' }}>
-      <div className="skeleton" style={{ 
-        height: 400, 
-        borderRadius: tokens.radius.lg,
-        contain: 'layout style paint'
-      }} />
-    </Box>
-  ),
-})
-
-const AdvancedFilter = dynamic(() => import('../premium/AdvancedFilter'), {
-  ssr: false,
-  loading: () => (
-    <Box style={{ 
-      padding: tokens.spacing[3], 
-      background: 'var(--color-bg-secondary)', 
-      borderRadius: tokens.radius.md,
-      contain: 'layout style'
-    }}>
-      <Box className="skeleton" style={{ height: 40, borderRadius: tokens.radius.sm }} />
-    </Box>
-  ),
-})
-
+// Lazy load non-critical components
 const DataFreshnessIndicator = dynamic(() => import('../ui/DataFreshnessIndicator'), {
   ssr: false,
 })
@@ -67,34 +35,28 @@ interface OptimizedRankingSectionProps {
 const OptimizedRankingSection = memo<OptimizedRankingSectionProps>(({
   traders,
   loading,
-  isLoggedIn,
+  isLoggedIn: _isLoggedIn,
   activeTimeRange,
   onTimeRangeChange,
   lastUpdated,
   error,
   onRetry,
-  onRefresh,
-  availableSources,
+  onRefresh: _onRefresh,
+  availableSources: _availableSources,
 }) => {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { showToast } = useToast()
-  const { language, t } = useLanguage()
-  const { isPro, isLoading: premiumLoading } = useSubscription()
-  const { getAuthHeaders } = useAuthSession()
+  const { isPro } = useSubscription()
 
   // UI state
-  const [category, setCategory] = useState<CategoryType>('all')
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
   const [enableVirtualScroll, setEnableVirtualScroll] = useState(true)
   
   // Performance transition
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
 
   // Reset pagination when time range changes
   const prevTimeRange = useRef(activeTimeRange)
@@ -123,11 +85,8 @@ const OptimizedRankingSection = memo<OptimizedRankingSectionProps>(({
     return () => window.removeEventListener('resize', checkViewMode)
   }, [traders.length, viewMode])
 
-  // Memoized visible columns configuration
-  const visibleColumns = useMemo(() => ['score', 'roi', 'winrate', 'mdd'] as ('score' | 'roi' | 'winrate' | 'mdd')[], [])
-
   // Optimized sort handler
-  const handleSort = useCallback((column: typeof sortColumn) => {
+  const _handleSort = useCallback((column: typeof sortColumn) => {
     startTransition(() => {
       if (sortColumn === column) {
         setSortDir(prev => prev === 'desc' ? 'asc' : 'desc')
@@ -139,7 +98,7 @@ const OptimizedRankingSection = memo<OptimizedRankingSectionProps>(({
   }, [sortColumn])
 
   // Optimized pagination handler
-  const handlePageChange = useCallback((page: number) => {
+  const _handlePageChange = useCallback((page: number) => {
     startTransition(() => {
       setCurrentPage(page)
       // Smooth scroll to top
@@ -150,13 +109,13 @@ const OptimizedRankingSection = memo<OptimizedRankingSectionProps>(({
   }, [])
 
   // Optimized search handler with debouncing
-  const handleSearchChange = useCallback((query: string) => {
+  const _handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query)
     setCurrentPage(1) // Reset to first page on search
   }, [])
 
   // Toggle view mode
-  const toggleViewMode = useCallback((mode: 'table' | 'card') => {
+  const _toggleViewMode = useCallback((mode: 'table' | 'card') => {
     setViewMode(mode)
     setCurrentPage(1) // Reset pagination
   }, [])

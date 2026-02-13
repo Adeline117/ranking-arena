@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useRef, memo, useMemo, useCallback, useTransition } from 'react'
-import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { Box, Text } from '../base'
@@ -11,7 +10,6 @@ import { TraderRow } from './TraderRow'
 import { TraderCard } from './TraderCard'
 import { AvatarPreload } from '../ui/AvatarPreload'
 import type { Trader, ColumnKey } from './RankingTable'
-import { VirtualLeaderboard } from './VirtualLeaderboard'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getMedalGlowClass, parseSourceInfo as parseSourceInfoUtil, getPnLTooltip } from './utils'
 
@@ -76,7 +74,7 @@ const VirtualTableRow = memo<{
   rank: number
   searchQuery?: string
   source?: string
-}>(({ index, trader, rank, searchQuery, source }) => {
+}>(({ index: _index, trader, rank, searchQuery, source }) => {
   // CSS containment for performance
   const style: React.CSSProperties = {
     position: 'absolute',
@@ -120,8 +118,8 @@ export default function OptimizedRankingTable({
   itemsPerPage = 50,
   enableVirtualScroll = true,
   visibleColumns,
-  onSearchChange,
-  timeRange,
+  onSearchChange: _onSearchChange,
+  timeRange: _timeRange,
   source,
 }: OptimizedRankingTableProps) {
   const { t } = useLanguage()
@@ -164,6 +162,7 @@ export default function OptimizedRankingTable({
   }, [traders, sortColumn, sortDir, debouncedSearch])
 
   // Virtual scrolling setup
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: sortedTraders.length,
     getScrollElement: () => parentRef.current,
@@ -178,7 +177,7 @@ export default function OptimizedRankingTable({
   const endIndex = startIndex + itemsPerPage
   const paginatedTraders = enableVirtualScroll ? sortedTraders : sortedTraders.slice(startIndex, endIndex)
 
-  const handleSort = useCallback((column: typeof sortColumn) => {
+  const _handleSort = useCallback((column: typeof sortColumn) => {
     startTransition(() => {
       onSort(column)
     })
