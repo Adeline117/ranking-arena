@@ -140,11 +140,9 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
 //   }
 // }
 
-// 强制动态渲染，避免静态生成时 Upstash Redis 调用问题
-export const dynamic = 'force-dynamic'
-
-// ISR: 每小时重新生成静态页面（暂时禁用）
-// export const revalidate = 3600
+// ISR: 每小时重新生成，配合 page.tsx 的 generateStaticParams
+// 运行时 Redis 可用，无需 force-dynamic
+export const revalidate = 3600
 
 export default function TraderLayout({
   children,

@@ -25,10 +25,16 @@ export async function generateStaticParams() {
   }
 }
 
+// 模块级单例，避免每次请求创建新客户端
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const supabaseInstance = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
+
 function getSupabase() {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  return createClient(supabaseUrl, supabaseKey)
+  if (!supabaseInstance) {
+    throw new Error('Supabase not configured')
+  }
+  return supabaseInstance
 }
 
 // Find the user profile associated with this trader handle
@@ -110,14 +116,18 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // keep original if decode fails
   }
 
-  // 1. Try to find the associated user profile → redirect to /u/[handle]
-  const userHandle = await findUserProfileByTraderHandle(decodedHandle)
+  // 并行查询注册用户和未注册交易员数据，避免瀑布式加载
+  const [userHandle, traderData] = await Promise.all([
+    findUserProfileByTraderHandle(decodedHandle),
+    fetchUnregisteredTrader(decodedHandle),
+  ])
+
+  // 1. 优先跳转到注册用户页面
   if (userHandle) {
     redirect(`/u/${encodeURIComponent(userHandle)}`)
   }
 
-  // 2. Try to fetch unregistered trader data
-  const traderData = await fetchUnregisteredTrader(decodedHandle)
+  // 2. 展示未注册交易员数据
   if (traderData) {
     return <TraderProfileClient data={traderData} />
   }
