@@ -287,15 +287,17 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
   // ============================================================
   // UNIFIED PROFILE — trading data + social data in one layout
   // ============================================================
-  const canViewFull = isPro || isOwnProfile
+  const _canViewFull = isPro || isOwnProfile
   const followingCount = (profile.following || 0) + (profile.followingTraders || 0)
+
+  // Trader tab type (matches TraderPageClient exactly)
+  type TraderTabKey = 'overview' | 'stats' | 'portfolio'
+  const traderActiveTab = (activeProfileTab === 'overview' || activeProfileTab === 'stats' || activeProfileTab === 'portfolio')
+    ? activeProfileTab as TraderTabKey
+    : 'overview'
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') || (isZh ? '概览' : 'Overview') },
-    ...(isTrader ? [
-      { key: 'stats' as ProfileTabKey, label: isZh ? '统计' : 'Stats' },
-      { key: 'portfolio' as ProfileTabKey, label: isZh ? '持仓' : 'Portfolio' },
-    ] : []),
     { key: 'activity', label: isZh ? '动态' : 'Activity' },
     { key: 'bookshelf', label: isZh ? '书架' : 'Bookshelf' },
     { key: 'followers', label: `${t('followers') || (isZh ? '粉丝' : 'Followers')} (${followersCount})` },
@@ -303,6 +305,196 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     { key: 'bookmarks', label: t('bookmarks') || (isZh ? '收藏' : 'Bookmarks') },
   ]
 
+  // ============================================================
+  // TRADER MODE: identical to TraderPageClient layout
+  // ============================================================
+  if (isTrader) {
+    return (
+      <Box
+        className="trader-page-container"
+        style={{
+          minHeight: '100vh',
+          background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+          color: tokens.colors.text.primary,
+        }}
+      >
+        <TopNav email={email} />
+
+        <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
+          <Breadcrumb items={[
+            { label: language === 'zh' ? '排行榜' : 'Leaderboard', href: '/rankings' },
+            { label: traderProfile?.handle || profile.handle || handle },
+          ]} />
+
+          {/* TraderHeader — identical to trader page */}
+          <TraderHeader
+            handle={traderProfile?.handle || traderProfile?.trader_key || serverProfile?.traderHandle || ''}
+            displayName={traderProfile?.display_name || undefined}
+            traderId={traderProfile?.id || profile.id}
+            avatarUrl={traderProfile?.avatar_url || profile.avatar_url}
+            coverUrl={traderProfile?.cover_url || profile.cover_url}
+            isRegistered={traderProfile?.isRegistered ?? profile.isRegistered}
+            followers={traderProfile?.followers ?? profile.followers}
+            copiers={traderProfile?.copiers}
+            source={traderProfile?.source}
+            isPro={isPro}
+            roi90d={traderPerformance?.roi_90d}
+            maxDrawdown={traderPerformance?.max_drawdown}
+            winRate={traderPerformance?.win_rate}
+            currentUserId={currentUserId}
+          />
+
+          {/* TraderTabs — identical to trader page */}
+          <TraderTabs
+            activeTab={traderActiveTab}
+            onTabChange={(tab) => handleProfileTabChange(tab as ProfileTabKey)}
+            isPro={isPro}
+            onProRequired={() => router.push('/pricing')}
+          />
+
+          {/* Tab Content with animation — identical to trader page */}
+          <Box
+            key={traderActiveTab}
+            style={{
+              animation: 'fadeInUp 0.4s ease-out forwards',
+            }}
+          >
+            {traderActiveTab === 'overview' && (
+              <Box
+                className="profile-grid"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: _traderSimilar.length > 0 ? '1fr 300px' : '1fr',
+                  gap: tokens.spacing[8],
+                }}
+              >
+                <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                  {traderPerformance ? (
+                    <Box style={{ position: 'relative' }}>
+                      <OverviewPerformanceCard
+                        performance={traderPerformance as ExtendedPerformance}
+                        equityCurve={traderEquityCurve?.['90D']}
+                        source={traderProfile?.source}
+                      />
+                      {!email && traderEquityCurve?.['90D'] && (
+                        <Box style={{
+                          position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
+                          background: 'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 60%, var(--color-lock-bg) 100%)',
+                          backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
+                          borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
+                        }}>
+                          <Link href={`/login?returnUrl=${encodeURIComponent(`/u/${handle}`)}`} style={{ textDecoration: 'none' }}>
+                            <Box style={{
+                              padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                              background: `${tokens.colors.accent.primary}20`, border: `1px solid ${tokens.colors.accent.primary}50`,
+                              borderRadius: tokens.radius.lg, cursor: 'pointer', textAlign: 'center',
+                            }}>
+                              <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
+                                {language === 'zh' ? '注册查看完整历史数据' : 'Sign up to view full history'}
+                              </Text>
+                            </Box>
+                          </Link>
+                        </Box>
+                      )}
+                    </Box>
+                  ) : (
+                    <Box style={{
+                      padding: tokens.spacing[6],
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: tokens.radius.xl,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      textAlign: 'center',
+                    }}>
+                      <Text size="sm" color="tertiary">
+                        {t('noPerformanceData')}
+                      </Text>
+                    </Box>
+                  )}
+                  {/* Equity Curve Chart */}
+                  {traderEquityCurve && (
+                    <EquityCurveSection
+                      equityCurve={traderEquityCurve}
+                      traderHandle={traderProfile?.handle || serverProfile?.traderHandle || ''}
+                      delay={0}
+                    />
+                  )}
+                  <TraderFeed
+                    items={_traderFeed.filter((f: { type: string }) => f.type !== 'group_post')}
+                    title={t('activities')}
+                    isRegistered={traderProfile?.isRegistered}
+                    traderId={traderProfile?.id || ''}
+                    traderHandle={traderProfile?.handle || ''}
+                    source={traderProfile?.source}
+                  />
+                </Box>
+
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                  {_traderSimilar.length > 0 && <SimilarTraders traders={_traderSimilar} />}
+                </Box>
+              </Box>
+            )}
+
+            {(() => {
+              const isOwn = !!(currentUserId && profile.id === currentUserId)
+              const canView = isPro || isOwn
+              return (
+                <>
+                  {traderActiveTab === 'stats' && (
+                    traderStats ? (
+                      <StatsPage
+                        stats={traderStats}
+                        traderHandle={traderProfile?.handle || serverProfile?.traderHandle || ''}
+                        assetBreakdown={traderAssetBreakdown}
+                        equityCurve={traderEquityCurve}
+                        positionHistory={traderPositionHistory}
+                        isPro={canView}
+                        onUnlock={() => router.push('/pricing')}
+                      />
+                    ) : (
+                      <Box style={{
+                        padding: tokens.spacing[6],
+                        background: tokens.colors.bg.secondary,
+                        borderRadius: tokens.radius.xl,
+                        border: `1px solid ${tokens.colors.border.primary}`,
+                        textAlign: 'center',
+                      }}>
+                        <Text size="sm" color="tertiary">
+                          {t('noStatsData')}
+                        </Text>
+                      </Box>
+                    )
+                  )}
+
+                  {traderActiveTab === 'portfolio' && <PortfolioTable items={traderPortfolio} history={traderPositionHistory} isPro={canView} onUnlock={() => router.push('/pricing')} />}
+                </>
+              )
+            })()}
+          </Box>
+
+          <style>{`
+            .profile-tabs::-webkit-scrollbar { display: none; }
+            @keyframes fadeInUp {
+              from { opacity: 0; transform: translateY(8px); }
+              to { opacity: 1; transform: translateY(0); }
+            }
+            @media (max-width: 768px) {
+              .page-container {
+                padding: ${tokens.spacing[3]} !important;
+              }
+              .profile-grid {
+                grid-template-columns: 1fr !important;
+              }
+            }
+          `}</style>
+        </Box>
+      </Box>
+    )
+  }
+
+  // ============================================================
+  // NON-TRADER MODE: original user profile layout
+  // ============================================================
   return (
     <Box
       className="user-profile-page"
@@ -319,7 +511,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           { label: isZh ? '社区' : 'Community', href: '/' },
           { label: `@${profile.handle}` },
         ]} />
-        {/* Profile Header — matches TraderHeader layout */}
+        {/* Profile Header */}
         {(() => {
           const hasCover = Boolean(profile.cover_url)
           const containerBackground = hasCover
@@ -423,25 +615,6 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                   </Box>
                 )}
 
-                {isTrader && traderProfile?.source && (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px',
-                    background: `linear-gradient(135deg, ${tokens.colors.accent.primary}18, ${tokens.colors.accent.brand}12)`,
-                    borderRadius: tokens.radius.full, fontSize: 11, fontWeight: 700,
-                    color: tokens.colors.accent.primary, letterSpacing: '0.04em',
-                    border: `1px solid ${tokens.colors.accent.primary}25`,
-                    backdropFilter: 'blur(8px)',
-                    boxShadow: `0 2px 8px ${tokens.colors.accent.primary}10`,
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                      <line x1="8" y1="21" x2="16" y2="21" />
-                      <line x1="12" y1="17" x2="12" y2="21" />
-                    </svg>
-                    {traderProfile.source.toUpperCase()}
-                  </span>
-                )}
-
                 {profile.proBadgeTier === 'pro' && <ProBadge size="sm" showLabel={true} />}
 
                 {profile.role === 'developer' && (
@@ -511,7 +684,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             </Box>
           </Box>
 
-          {/* Action buttons — matches TraderHeader order */}
+          {/* Action buttons */}
           <Box className="profile-header-actions action-buttons" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
             <button
               onClick={() => router.push('/')}
@@ -564,7 +737,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           )
         })()}
 
-        {/* Tabs — matches TraderTabs pill style */}
+        {/* Tabs */}
         <Box
           className="profile-tabs"
           role="tablist"
@@ -642,65 +815,12 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           {activeProfileTab === 'overview' && (
             <Box
               className="profile-content profile-grid"
-              style={{ display: 'grid', gridTemplateColumns: _traderSimilar.length > 0 || !isTrader ? '1fr 300px' : '1fr', gap: tokens.spacing[8] }}
+              style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: tokens.spacing[8] }}
             >
               {/* Main column */}
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                {/* Trading data — uses same OverviewPerformanceCard as trader page */}
-                {isTrader && traderPerformance && (
-                  <Box style={{ position: 'relative' }}>
-                    <OverviewPerformanceCard
-                      performance={traderPerformance as ExtendedPerformance}
-                      equityCurve={traderEquityCurve?.['90D']}
-                      source={traderProfile?.source}
-                    />
-                    {!email && traderEquityCurve?.['90D'] && (
-                      <Box style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
-                        background: 'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 60%, var(--color-lock-bg) 100%)',
-                        backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
-                        borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
-                      }}>
-                        <Link href={`/login?returnUrl=${encodeURIComponent(`/u/${handle}`)}`} style={{ textDecoration: 'none' }}>
-                          <Box style={{
-                            padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-                            background: `${tokens.colors.accent.primary}20`, border: `1px solid ${tokens.colors.accent.primary}50`,
-                            borderRadius: tokens.radius.lg, cursor: 'pointer', textAlign: 'center',
-                          }}>
-                            <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                              {isZh ? '注册查看完整历史数据' : 'Sign up to view full history'}
-                            </Text>
-                          </Box>
-                        </Link>
-                      </Box>
-                    )}
-                  </Box>
-                )}
-
-                {/* Equity Curve — same as trader page */}
-                {isTrader && traderEquityCurve && (
-                  <EquityCurveSection
-                    equityCurve={traderEquityCurve}
-                    traderHandle={serverProfile?.traderHandle || ''}
-                    delay={0}
-                  />
-                )}
-
-                {/* Trader feed — same as trader page */}
-                {isTrader && _traderFeed.length > 0 && (
-                  <TraderFeed
-                    items={_traderFeed.filter((f: { type: string }) => f.type !== 'group_post')}
-                    title={t('activities') || (isZh ? '动态' : 'Activities')}
-                    isRegistered={traderProfile?.isRegistered}
-                    traderId={traderProfile?.id || ''}
-                    traderHandle={traderProfile?.handle || ''}
-                    source={traderProfile?.source}
-                  />
-                )}
-
                 {/* Guidance cards for own profile */}
-                {isOwnProfile && !isTrader && (
+                {isOwnProfile && (
                   <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                     {[
                       {
@@ -775,7 +895,6 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
               {/* Sidebar column */}
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                {isTrader && _traderSimilar.length > 0 && <SimilarTraders traders={_traderSimilar} />}
                 <Box bg="secondary" p={4} radius="lg" border="primary">
                   <UserStreaks userId={profile.id} />
                 </Box>
@@ -790,43 +909,6 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 </Box>
               </Box>
             </Box>
-          )}
-
-          {/* Stats tab (trader only) */}
-          {activeProfileTab === 'stats' && isTrader && (
-            traderStats ? (
-              <StatsPage
-                stats={traderStats}
-                traderHandle={serverProfile?.traderHandle || ''}
-                assetBreakdown={traderAssetBreakdown}
-                equityCurve={traderEquityCurve}
-                positionHistory={traderPositionHistory}
-                isPro={canViewFull}
-                onUnlock={() => router.push('/pricing')}
-              />
-            ) : (
-              <Box style={{
-                padding: tokens.spacing[6],
-                background: tokens.colors.bg.secondary,
-                borderRadius: tokens.radius.xl,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                textAlign: 'center',
-              }}>
-                <Text size="sm" color="tertiary">
-                  {t('noStatsData') || (isZh ? '暂无统计数据' : 'No stats data')}
-                </Text>
-              </Box>
-            )
-          )}
-
-          {/* Portfolio tab (trader only) */}
-          {activeProfileTab === 'portfolio' && isTrader && (
-            <PortfolioTable
-              items={traderPortfolio}
-              history={traderPositionHistory}
-              isPro={canViewFull}
-              onUnlock={() => router.push('/pricing')}
-            />
           )}
 
           {activeProfileTab === 'activity' && (
