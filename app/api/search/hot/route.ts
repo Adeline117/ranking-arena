@@ -8,6 +8,7 @@ import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 
+export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 interface HotSearchItem {
