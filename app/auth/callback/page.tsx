@@ -24,16 +24,24 @@ function AuthCallbackContent() {
       }
 
       const returnUrl = searchParams.get('returnUrl')
-      const redirect = returnUrl && returnUrl.startsWith('/') ? returnUrl : '/'
+      const defaultRedirect = returnUrl && returnUrl.startsWith('/') ? returnUrl : '/'
 
       if (session) {
-        router.replace(redirect)
+        // Check if this is a new user (created within the last 30 seconds)
+        const createdAt = new Date(session.user.created_at).getTime()
+        const now = Date.now()
+        const isNewUser = now - createdAt < 30_000
+
+        router.replace(isNewUser ? '/onboarding' : defaultRedirect)
       } else {
         // Wait a moment for supabase to process the hash fragment
         setTimeout(async () => {
           const { data: { session: retrySession } } = await supabase.auth.getSession()
           if (retrySession) {
-            router.replace(redirect)
+            const createdAt = new Date(retrySession.user.created_at).getTime()
+            const now = Date.now()
+            const isNewUser = now - createdAt < 30_000
+            router.replace(isNewUser ? '/onboarding' : defaultRedirect)
           } else {
             router.replace('/login?error=no_session')
           }

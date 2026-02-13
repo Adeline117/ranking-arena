@@ -27,6 +27,7 @@ const UserFollowButton = dynamic(() => import('@/app/components/ui/UserFollowBut
 const MessageButton = dynamic(() => import('@/app/components/ui/MessageButton'), { ssr: false })
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
+import LevelBadge from '@/app/components/user/LevelBadge'
 import { logger } from '@/lib/logger'
 
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
@@ -597,6 +598,8 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 }}>
                   {profile.handle}
                 </Text>
+
+                <LevelBadge exp={(profile as any).exp || 0} size="md" />
 
                 {profile.isVerifiedTrader && (
                   <Box

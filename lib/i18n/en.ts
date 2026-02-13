@@ -53,6 +53,8 @@ const en = {
     details: 'Details',
     copy: 'Copy',
     myHome: 'My Home',
+    userCenter: 'User Center',
+    multiChain: 'Multi-Chain',
     notifications: 'Notifications',
     searchPlaceholder: 'Search traders, posts, groups...',
     rank: 'Rank',

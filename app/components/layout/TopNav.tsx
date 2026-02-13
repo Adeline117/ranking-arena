@@ -717,6 +717,44 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     <span>{t('myHome')}</span>
                   </Link>
                   <Link
+                    href="/user-center"
+                    role="menuitem"
+                    className="top-nav-menu-link"
+                    style={MENU_LINK_STYLE}
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                    <span>{t('userCenter') || '用户中心'}</span>
+                  </Link>
+                  <Link
+                    href="/portfolio"
+                    role="menuitem"
+                    className="top-nav-menu-link"
+                    style={MENU_LINK_STYLE}
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                      <path d="M22 12A10 10 0 0 0 12 2v10z" />
+                    </svg>
+                    <span>{t('portfolio') || '投资组合'}</span>
+                  </Link>
+                  <Link
+                    href="/multi-chain"
+                    role="menuitem"
+                    className="top-nav-menu-link"
+                    style={MENU_LINK_STYLE}
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    </svg>
+                    <span>{t('multiChain') || '多链资产'}</span>
+                  </Link>
+                  <Link
                     href="/inbox"
                     role="menuitem"
                     className="top-nav-menu-link"
