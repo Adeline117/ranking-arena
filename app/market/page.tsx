@@ -20,7 +20,7 @@ const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge
 const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
 const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
 
-const LoadingCard = memo(({ height = 64, lines }: { height?: number; lines?: number }) => {
+const LoadingCard = memo(function LoadingCard({ height = 64, lines }: { height?: number; lines?: number }) {
   const skeletonItems = useMemo(() => {
     if (!lines) return null
     return Array.from({ length: lines }).map((_, i) => (
