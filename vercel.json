@@ -1,22 +1,6 @@
 {
   "regions": [
-    "sfo1",
-    "iad1",
-    "pdx1",
-    "cle1",
-    "gru1",
-    "hnd1",
-    "sin1",
-    "hkg1",
-    "icn1",
-    "bom1",
-    "cdg1",
-    "lhr1",
-    "fra1",
-    "arn1",
-    "syd1",
-    "cpt1",
-    "dub1"
+    "sfo1"
   ],
   "crons": [
     {
