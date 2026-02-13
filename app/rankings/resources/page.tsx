@@ -41,46 +41,29 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
   }
 }
 
-async function fetchTopBooks(): Promise<LibraryItem[]> {
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data } = await supabase
-      .from('library_items')
-      .select('*')
-      .eq('category', 'book')
-      .order('rating', { ascending: false, nullsFirst: false })
-      .limit(10)
-    return data || []
-  } catch {
-    return []
-  }
-}
+const TOP_FIELDS = 'id,title,title_en,title_zh,author,category,cover_url,rating,rating_count,view_count,language'
 
-async function fetchTopPapers(): Promise<LibraryItem[]> {
+async function fetchTopByCategory(category: string): Promise<LibraryItem[]> {
   try {
     const supabase = getSupabaseAdmin()
+    // Try rated items first
     const { data } = await supabase
       .from('library_items')
-      .select('*')
-      .eq('category', 'paper')
-      .order('rating', { ascending: false, nullsFirst: false })
+      .select(TOP_FIELDS)
+      .eq('category', category)
+      .not('rating', 'is', null)
+      .order('rating', { ascending: false })
       .limit(10)
-    return data || []
-  } catch {
-    return []
-  }
-}
-
-async function fetchTopWhitepapers(): Promise<LibraryItem[]> {
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data } = await supabase
+    if (data && data.length >= 5) return data as LibraryItem[]
+    // Fallback: most viewed
+    const { data: fallback } = await supabase
       .from('library_items')
-      .select('*')
-      .eq('category', 'whitepaper')
-      .order('rating', { ascending: false, nullsFirst: false })
+      .select(TOP_FIELDS)
+      .eq('category', category)
+      .order('view_count', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
       .limit(10)
-    return data || []
+    return (fallback || []) as LibraryItem[]
   } catch {
     return []
   }
@@ -90,9 +73,9 @@ export default async function ResourcesPage() {
   const [{ items, total }, featured, topBooks, topPapers, topWhitepapers] = await Promise.all([
     fetchLibraryItems(),
     fetchFeatured(),
-    fetchTopBooks(),
-    fetchTopPapers(),
-    fetchTopWhitepapers(),
+    fetchTopByCategory('book'),
+    fetchTopByCategory('paper'),
+    fetchTopByCategory('whitepaper'),
   ])
 
   return (
