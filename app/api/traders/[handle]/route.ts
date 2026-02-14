@@ -21,6 +21,7 @@ import { z } from 'zod'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { calculateArenaScore, calculateOverallScore } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
+import { ALL_SOURCES, type TraderSource as TraderSourceType } from '@/lib/constants/exchanges'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -53,38 +54,40 @@ const SOURCE_ALIASES: Record<string, string[]> = {
   binance_spot: ['binance_spot'],
   bitget_spot: ['bitget_spot'],
   bybit: ['bybit'],
+  bybit_spot: ['bybit_spot'],
+  okx_futures: ['okx_futures'],
+  okx_spot: ['okx_spot'],
   okx_web3: ['okx', 'okx_web3'],
+  okx_wallet: ['okx_wallet'],
   mexc: ['mexc'],
   kucoin: ['kucoin'],
   coinex: ['coinex'],
+  htx_futures: ['htx_futures', 'htx'],
+  weex: ['weex'],
+  phemex: ['phemex'],
+  bingx: ['bingx'],
+  gateio: ['gateio'],
+  xt: ['xt'],
+  lbank: ['lbank'],
+  blofin: ['blofin'],
+  bitmart: ['bitmart'],
   hyperliquid: ['hyperliquid'],
   gmx: ['gmx'],
   dydx: ['dydx'],
   gains: ['gains'],
+  jupiter_perps: ['jupiter_perps'],
+  aevo: ['aevo'],
   binance_web3: ['binance_web3'],
+  dune_gmx: ['dune_gmx'],
+  dune_hyperliquid: ['dune_hyperliquid'],
+  dune_uniswap: ['dune_uniswap'],
+  dune_defi: ['dune_defi'],
+  web3_bot: ['web3_bot'],
 }
 
-// 支持的交易所 source 列表
-const TRADER_SOURCES = [
-  // CEX 合约
-  'binance_futures',
-  'bitget_futures',
-  'bybit',
-  'mexc',
-  'coinex',
-  'okx_web3',
-  'kucoin',
-  // CEX 现货
-  'binance_spot',
-  'bitget_spot',
-  'binance_web3',
-  // DEX / On-chain
-  'gmx',
-  'hyperliquid',
-  'dydx',
-  'gains',
-] as const
-type SourceType = typeof TRADER_SOURCES[number]
+// 支持的交易所 source 列表 — 使用 ALL_SOURCES 统一配置
+const TRADER_SOURCES = ALL_SOURCES
+type SourceType = TraderSourceType
 
 // Helper: get all source aliases for a given source type
 function getSourceAliases(sourceType: string): string[] {

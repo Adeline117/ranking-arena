@@ -94,12 +94,38 @@ async function fetchUnregisteredTrader(handle: string): Promise<UnregisteredTrad
       .eq('source_trader_id', traderSource.source_trader_id)
       .maybeSingle()
     
+    // Fallback to trader_snapshots if leaderboard_ranks has no data
+    let snapshotData: Record<string, unknown> | null = null
+    if (!rankData) {
+      const { data: snapshot } = await supabase
+        .from('trader_snapshots')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, profitability_score, risk_control_score, execution_score')
+        .eq('source', traderSource.source)
+        .eq('source_trader_id', traderSource.source_trader_id)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      
+      if (snapshot) {
+        snapshotData = {
+          roi: snapshot.roi,
+          pnl: snapshot.pnl,
+          win_rate: snapshot.win_rate != null ? (snapshot.win_rate <= 1 ? snapshot.win_rate * 100 : snapshot.win_rate) : null,
+          max_drawdown: snapshot.max_drawdown,
+          arena_score: snapshot.arena_score,
+          profitability_score: snapshot.profitability_score,
+          risk_control_score: snapshot.risk_control_score,
+          execution_score: snapshot.execution_score,
+        }
+      }
+    }
+    
     return {
       handle: traderSource.handle || handle,
       avatar_url: traderSource.avatar_url,
       source: traderSource.source,
       source_trader_id: traderSource.source_trader_id,
-      ...(rankData || {}),
+      ...(rankData || snapshotData || {}),
     }
   } catch {
     return null
