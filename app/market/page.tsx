@@ -1,6 +1,7 @@
 'use client'
 
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, memo } from 'react'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -126,6 +127,7 @@ function MobileSectorsTab() {
 }
 
 function WatchlistPlaceholder() {
+  const { t } = useLanguage()
   return (
     <div style={{
       display: 'flex',
@@ -140,7 +142,7 @@ function WatchlistPlaceholder() {
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}>
         <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
       </svg>
-      <span>自选列表即将推出</span>
+      <span>{t('watchlistComingSoon')}</span>
     </div>
   )
 }

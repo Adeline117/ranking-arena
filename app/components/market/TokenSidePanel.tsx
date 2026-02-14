@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
 import type { OHLCVDataPoint } from '@/app/components/charts/TradingViewChart'
 import type { Time } from 'lightweight-charts'
@@ -131,6 +132,7 @@ export default function TokenSidePanel({ token, onClose }: {
   token: TokenInfo | null
   onClose: () => void
 }) {
+  const { t } = useLanguage()
   const panelRef = useRef<HTMLDivElement>(null)
   const [coinDetail, setCoinDetail] = useState<CoinDetail | null>(null)
   const [ohlcData, setOhlcData] = useState<OHLCVDataPoint[]>([])
@@ -394,19 +396,19 @@ export default function TokenSidePanel({ token, onClose }: {
                 color: tokens.colors.text.primary,
                 marginBottom: 8,
               }}>
-                基本面数据
+                {t('fundamentalData')}
               </div>
-              <StatRow label="排名" value={`#${token.rank}`} />
-              <StatRow label="市值" value={formatNum(token.marketCap)} />
-              <StatRow label="24h 成交量" value={formatNum(token.volume24h)} />
-              <StatRow label="24h 最高" value={formatPrice(token.high24h)} />
-              <StatRow label="24h 最低" value={formatPrice(token.low24h)} />
+              <StatRow label={t('marketRank')} value={`#${token.rank}`} />
+              <StatRow label={t('tokenMarketCap')} value={formatNum(token.marketCap)} />
+              <StatRow label={t('tokenVolume24h')} value={formatNum(token.volume24h)} />
+              <StatRow label={t('tokenHigh24h')} value={formatPrice(token.high24h)} />
+              <StatRow label={t('tokenLow24h')} value={formatPrice(token.low24h)} />
               {md && (
                 <>
-                  <StatRow label="完全稀释估值" value={formatNum(md.fully_diluted_valuation?.usd)} />
-                  <StatRow label="流通量" value={formatSupply(md.circulating_supply)} />
-                  <StatRow label="总供应量" value={formatSupply(md.total_supply)} />
-                  <StatRow label="最大供应量" value={formatSupply(md.max_supply)} />
+                  <StatRow label={t('fullyDilutedValuation')} value={formatNum(md.fully_diluted_valuation?.usd)} />
+                  <StatRow label={t('circulatingSupply')} value={formatSupply(md.circulating_supply)} />
+                  <StatRow label={t('totalSupply')} value={formatSupply(md.total_supply)} />
+                  <StatRow label={t('maxSupply')} value={formatSupply(md.max_supply)} />
                 </>
               )}
             </div>
@@ -420,7 +422,7 @@ export default function TokenSidePanel({ token, onClose }: {
                   color: tokens.colors.text.primary,
                   marginBottom: 8,
                 }}>
-                  历史极值
+                  {t('historicalExtremes')}
                 </div>
                 <div style={{
                   display: 'grid',
@@ -432,7 +434,7 @@ export default function TokenSidePanel({ token, onClose }: {
                     background: tokens.colors.bg.tertiary,
                     borderRadius: tokens.radius.md,
                   }}>
-                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>历史最高</div>
+                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>{t('allTimeHigh')}</div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.accent.success, fontFamily: 'var(--font-mono, monospace)' }}>
                       {formatPrice(md.ath.usd)}
                     </div>
@@ -448,7 +450,7 @@ export default function TokenSidePanel({ token, onClose }: {
                     background: tokens.colors.bg.tertiary,
                     borderRadius: tokens.radius.md,
                   }}>
-                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>历史最低</div>
+                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>{t('allTimeLow')}</div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.accent.error, fontFamily: 'var(--font-mono, monospace)' }}>
                       {formatPrice(md.atl.usd)}
                     </div>

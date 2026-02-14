@@ -4,8 +4,10 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function CreatePostFAB() {
+  const { t } = useLanguage()
   const { accessToken, authChecked } = useAuthSession()
   const router = useRouter()
   const [hover, setHover] = useState(false)
@@ -26,7 +28,7 @@ export default function CreatePostFAB() {
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      aria-label="发帖"
+      aria-label={t('createPost')}
       style={{
         position: 'fixed',
         bottom: 80,

@@ -642,12 +642,13 @@ function ApiKeyAuthContent() {
 }
 
 export default function ApiKeyAuthPage() {
+  const { t } = useLanguage()
   return (
     <Suspense fallback={
       <Box style={{ minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: '24px' }}>
-          <Text size="lg">Loading...</Text>
+          <Text size="lg">{t('loading')}</Text>
         </Box>
       </Box>
     }>

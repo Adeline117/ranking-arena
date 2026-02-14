@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import TopNav from '@/app/components/layout/TopNav'
@@ -105,6 +106,7 @@ const TRADING_STYLE_MAP: Record<string, string> = {
 }
 
 export default function TraderProfileClient({ data }: { data: UnregisteredTraderData }) {
+  const { t } = useLanguage()
   const [copied, setCopied] = useState(false)
   const exchangeName = EXCHANGE_NAMES[data.source] || data.source
   const displayName = formatDisplayName(data.handle, data.source)
@@ -231,11 +233,11 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
           gap: tokens.spacing[3],
           marginBottom: tokens.spacing[6],
         }}>
-          <StatCard label="Arena 评分" value={data.arena_score != null ? formatNumber(data.arena_score, 1) : '--'} />
+          <StatCard label={t('arenaScoreLabel')} value={data.arena_score != null ? formatNumber(data.arena_score, 1) : '--'} />
           <StatCard label="ROI" value={formatPercent(data.roi)} color={roiColor} />
           <StatCard label="PnL" value={formatUsd(data.pnl)} color={pnlColor} />
-          <StatCard label="胜率" value={formatPercent(data.win_rate)} />
-          <StatCard label="最大回撤" value={formatPercent(data.max_drawdown)} color="var(--color-danger)" />
+          <StatCard label={t('winRate')} value={formatPercent(data.win_rate)} />
+          <StatCard label={t('maxDrawdown')} value={formatPercent(data.max_drawdown)} color="var(--color-danger)" />
         </Box>
 
         {/* Dimension Scores */}
@@ -246,11 +248,11 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
           marginBottom: tokens.spacing[6],
         }}>
           <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)', marginBottom: tokens.spacing[4], display: 'block' }}>
-            维度评分
+            {t('dimensionScores')}
           </Text>
-          <ScoreBar label="盈利能力" score={data.profitability_score} />
-          <ScoreBar label="风控能力" score={data.risk_control_score} />
-          <ScoreBar label="执行能力" score={data.execution_score} />
+          <ScoreBar label={t('profitability')} score={data.profitability_score} />
+          <ScoreBar label={t('riskControl')} score={data.risk_control_score} />
+          <ScoreBar label={t('execution')} score={data.execution_score} />
         </Box>
 
         {/* Advanced Metrics */}

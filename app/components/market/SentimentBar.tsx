@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRealtimeMarket, type PriceFlash } from '@/lib/hooks/useRealtimeMarket'
 
 interface SentimentData {
@@ -75,6 +76,7 @@ function Separator() {
 }
 
 export default function SentimentBar() {
+  const { t } = useLanguage()
   const [data, setData] = useState<SentimentData | null>(null)
 
   const { prices, flashes } = useRealtimeMarket({
@@ -194,7 +196,7 @@ export default function SentimentBar() {
       {data.fearGreedValue != null && (
         <>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: tokens.colors.text.tertiary }}>恐惧贪婪</span>
+            <span style={{ color: tokens.colors.text.tertiary }}>{t('fearGreed')}</span>
             <span style={{
               fontWeight: 700,
               color: getFearGreedColor(data.fearGreedValue),
@@ -217,7 +219,7 @@ export default function SentimentBar() {
       {data.liquidation24h != null && (
         <>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: tokens.colors.text.tertiary }}>24h清算</span>
+            <span style={{ color: tokens.colors.text.tertiary }}>{t('liquidation24h')}</span>
             <span style={{ color: tokens.colors.accent.error, fontWeight: 600 }}>
               {formatUsd(data.liquidation24h)}
             </span>

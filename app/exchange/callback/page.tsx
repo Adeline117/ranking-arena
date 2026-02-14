@@ -214,12 +214,13 @@ function ExchangeCallbackPageContent() {
 }
 
 export default function ExchangeCallbackPage() {
+  const { t } = useLanguage()
   return (
     <Suspense fallback={
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={null} />
         <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="lg">Loading...</Text>
+          <Text size="lg">{t('loading')}</Text>
         </Box>
       </Box>
     }>

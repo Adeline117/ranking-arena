@@ -3193,6 +3193,50 @@ const en = {
     dmcaContactDesc: 'For copyright-related matters, please contact:',
     dmcaContactEmail: 'Email: copyright@arenafi.org -- Please include "Copyright Notice" or "DMCA Notice" in the subject line. We will process valid notices as soon as possible (typically within 5 business days).',
 
+    // Market panel
+    fundamentalData: 'Fundamentals',
+    historicalExtremes: 'Historical Extremes',
+    marketRank: 'Rank',
+    tokenMarketCap: 'Market Cap',
+    tokenVolume24h: '24h Volume',
+    tokenHigh24h: '24h High',
+    tokenLow24h: '24h Low',
+    fullyDilutedValuation: 'Fully Diluted Valuation',
+    circulatingSupply: 'Circulating Supply',
+    totalSupply: 'Total Supply',
+    maxSupply: 'Max Supply',
+    allTimeHigh: 'All-Time High',
+    allTimeLow: 'All-Time Low',
+    gainersTop5: 'Top 5 Gainers',
+    losersTop5: 'Top 5 Losers',
+    fundFlow: 'Fund Flow',
+    noGainers: 'All markets down, no gainers',
+    noLosers: 'All markets up, no losers',
+    fearGreed: 'Fear & Greed',
+    liquidation24h: '24h Liquidation',
+    watchlistComingSoon: 'Watchlist coming soon',
+
+    // Trader profile
+    arenaScoreLabel: 'Arena Score',
+    dimensionScores: 'Dimension Scores',
+    profitability: 'Profitability',
+    riskControl: 'Risk Control',
+    execution: 'Execution',
+    compareAnalysis: 'Comparison Analysis',
+    traderProfileTabs: 'Trader profile tabs',
+
+    // UI elements
+    goToTraderProfile: 'Go to trader profile',
+    verifiedOnChain: 'Verified On-Chain',
+
+    // Group apply placeholders
+    groupNameZhPlaceholder: 'e.g. BTC Trading Group',
+    groupDescZhPlaceholder: 'Describe your group...',
+    ruleInputZhPlaceholder: 'Enter rule (Chinese)',
+    ruleInputEnPlaceholder: 'Enter rule (English)',
+    adminRoleZhPlaceholder: 'Chinese (e.g. Master)',
+    memberRoleZhPlaceholder: 'Chinese (e.g. Disciple)',
+
 } as const
 
 export default en

@@ -27,7 +27,7 @@ type Rule = {
 
 export default function ApplyGroupPage() {
   const _router = useRouter()
-  const { t: _t, language } = useLanguage()
+  const { t, language } = useLanguage()
   const { isPro } = useSubscription()
   const { showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -489,7 +489,7 @@ export default function ApplyGroupPage() {
                     style={tabStyle(activeTab === 'zh')}
                     onClick={() => setActiveTab('zh')}
                   >
-                    中文
+                    {t('chinese')}
                   </button>
                   {showMultiLang && (
                     <button
@@ -548,7 +548,7 @@ export default function ApplyGroupPage() {
                         }
                       }}
                       onBlur={() => validateField('nameZh', nameZh)}
-                      placeholder="例如：BTC 交易讨论组"
+                      placeholder={t('groupNameZhPlaceholder')}
                       style={{
                         ...inputStyle,
                         borderColor: fieldErrors.name ? tokens.colors.accent.error : tokens.colors.border.primary
@@ -574,7 +574,7 @@ export default function ApplyGroupPage() {
                     <textarea
                       value={descriptionZh}
                       onChange={(e) => setDescriptionZh(e.target.value)}
-                      placeholder="介绍一下你的小组..."
+                      placeholder={t('groupDescZhPlaceholder')}
                       style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
                       maxLength={500}
                     />
@@ -717,13 +717,13 @@ export default function ApplyGroupPage() {
                         
                         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                           <Box>
-                            <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>中文</Text>
+                            <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>{t('chinese')}</Text>
                             <input
                               type="text"
                               value={rule.zh}
                               onChange={(e) => updateRule(index, 'zh', e.target.value)}
                               style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
-                              placeholder="规则内容（中文）"
+                              placeholder={t('ruleContentZhPlaceholder')}
                             />
                           </Box>
                           {showMultiLang && (
@@ -734,7 +734,7 @@ export default function ApplyGroupPage() {
                                 value={rule.en}
                                 onChange={(e) => updateRule(index, 'en', e.target.value)}
                                 style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
-                                placeholder="Rule content (English)"
+                                placeholder={t('ruleContentEnPlaceholder')}
                               />
                             </Box>
                           )}
@@ -762,7 +762,7 @@ export default function ApplyGroupPage() {
                       value={newRuleZh}
                       onChange={(e) => setNewRuleZh(e.target.value)}
                       style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
-                      placeholder={language === 'zh' ? '输入规则内容（中文）' : 'Enter rule (Chinese)'}
+                      placeholder={t('ruleInputZhPlaceholder')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
@@ -776,7 +776,7 @@ export default function ApplyGroupPage() {
                         value={newRuleEn}
                         onChange={(e) => setNewRuleEn(e.target.value)}
                         style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
-                        placeholder="Enter rule (English)"
+                        placeholder={t('ruleInputEnPlaceholder')}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
@@ -1055,7 +1055,7 @@ export default function ApplyGroupPage() {
                       type="text"
                       value={roleNames.admin.zh}
                       onChange={(e) => setRoleNames({ ...roleNames, admin: { ...roleNames.admin, zh: e.target.value } })}
-                      placeholder="中文（如：掌门）"
+                      placeholder={t('adminRoleZhPlaceholder')}
                       style={{ ...inputStyle, padding: tokens.spacing[2] }}
                       maxLength={20}
                     />
@@ -1078,7 +1078,7 @@ export default function ApplyGroupPage() {
                       type="text"
                       value={roleNames.member.zh}
                       onChange={(e) => setRoleNames({ ...roleNames, member: { ...roleNames.member, zh: e.target.value } })}
-                      placeholder="中文（如：弟子）"
+                      placeholder={t('memberRoleZhPlaceholder')}
                       style={{ ...inputStyle, padding: tokens.spacing[2] }}
                       maxLength={20}
                     />

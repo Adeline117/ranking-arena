@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 
 interface AvatarLinkProps {
@@ -13,6 +14,7 @@ interface AvatarLinkProps {
 }
 
 export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: AvatarLinkProps) {
+  const { t } = useLanguage()
   if (!handle) return null
 
   const href = `/u/${encodeURIComponent(handle)}`
@@ -29,7 +31,7 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
         textDecoration: 'none',
         color: tokens.colors.text.primary,
       }}
-      title="进入交易者主页"
+      title={t('goToTraderProfile')}
     >
       <span style={{ position: 'relative', flexShrink: 0 }}>
         <span

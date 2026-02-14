@@ -28,7 +28,7 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
     <Box
       className="profile-tabs"
       role="tablist"
-      aria-label="交易员资料标签页"
+      aria-label={t('traderProfileTabs')}
       style={{
         display: 'flex',
         gap: tokens.spacing[1],
