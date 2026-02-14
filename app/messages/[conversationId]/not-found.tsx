@@ -18,7 +18,7 @@ export default function NotFound() {
         Conversation Not Found
       </h1>
       <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
-        This conversation doesn't exist or has been deleted.
+        This conversation does not exist or has been deleted.
       </p>
       <Link
         href="/messages"

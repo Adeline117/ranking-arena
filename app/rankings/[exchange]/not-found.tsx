@@ -18,7 +18,7 @@ export default function NotFound() {
         Exchange Not Found
       </h1>
       <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
-        This exchange ranking page doesn't exist.
+        This exchange ranking page does not exist.
       </p>
       <Link
         href="/rankings"

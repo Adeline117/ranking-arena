@@ -18,7 +18,7 @@ export default function NotFound() {
         Folder Not Found
       </h1>
       <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
-        This bookmark folder doesn't exist or has been deleted.
+        This bookmark folder does not exist or has been deleted.
       </p>
       <Link
         href="/favorites"
