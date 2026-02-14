@@ -44,7 +44,7 @@ export default function PortfolioPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
-  const { t, language } = useLanguage()
+  const { language } = useLanguage()
   const isZh = language === 'zh'
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)

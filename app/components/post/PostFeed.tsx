@@ -589,7 +589,6 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       lockRef.current.delete(key)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, openPost?.id, showToast])
 
   // Built-in poll voting (bull/bear/wait) - preserved for future use
