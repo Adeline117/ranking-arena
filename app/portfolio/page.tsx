@@ -8,6 +8,9 @@ import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import PortfolioOverview from '@/app/components/portfolio/PortfolioOverview'
 import PositionList from '@/app/components/portfolio/PositionList'
 import AddExchangeModal from '@/app/components/portfolio/AddExchangeModal'
+import { useToast } from '@/app/components/ui/Toast'
+import { useDialog } from '@/app/components/ui/Dialog'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface Portfolio {
   id: string
@@ -39,12 +42,18 @@ interface Snapshot {
 
 export default function PortfolioPage() {
   const router = useRouter()
+  const { showToast } = useToast()
+  const { showConfirm } = useDialog()
+  const { t, language } = useLanguage()
+  const isZh = language === 'zh'
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [snapshots] = useState<Snapshot[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
+  const [syncingId, setSyncingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Auth check
   useEffect(() => {
@@ -102,28 +111,58 @@ export default function PortfolioPage() {
     })
     if (!res.ok) {
       const json = await res.json()
-      throw new Error(json.error || 'Failed to add exchange')
+      throw new Error(json.error || (isZh ? '添加交易所失败' : 'Failed to add exchange'))
     }
+    showToast(isZh ? '交易所连接成功' : 'Exchange connected successfully', 'success')
     await loadPortfolios()
   }
 
   const handleSync = async (portfolioId: string) => {
-    if (!token) return
-    await fetch('/api/portfolio/sync', {
-      method: 'POST',
-      headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ portfolio_id: portfolioId }),
-    })
-    await loadPositions()
+    if (!token || syncingId) return
+    setSyncingId(portfolioId)
+    try {
+      const res = await fetch('/api/portfolio/sync', {
+        method: 'POST',
+        headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portfolio_id: portfolioId }),
+      })
+      if (!res.ok) {
+        showToast(isZh ? '同步失败，请稍后重试' : 'Sync failed, please try again', 'error')
+        return
+      }
+      await loadPositions()
+      showToast(isZh ? '同步成功' : 'Synced successfully', 'success')
+    } catch {
+      showToast(isZh ? '网络错误' : 'Network error', 'error')
+    } finally {
+      setSyncingId(null)
+    }
   }
 
   const handleDelete = async (portfolioId: string) => {
-    if (!token) return
-    await fetch(`/api/portfolio?id=${portfolioId}`, {
-      method: 'DELETE',
-      headers: fetchHeaders(),
-    })
-    await Promise.all([loadPortfolios(), loadPositions()])
+    if (!token || deletingId) return
+    const confirmed = await showConfirm(
+      isZh ? '移除交易所' : 'Remove Exchange',
+      isZh ? '确定要移除此交易所连接吗？相关仓位数据也会被清除。' : 'Are you sure you want to remove this exchange connection? Related position data will also be cleared.'
+    )
+    if (!confirmed) return
+    setDeletingId(portfolioId)
+    try {
+      const res = await fetch(`/api/portfolio?id=${portfolioId}`, {
+        method: 'DELETE',
+        headers: fetchHeaders(),
+      })
+      if (!res.ok) {
+        showToast(isZh ? '移除失败' : 'Remove failed', 'error')
+        return
+      }
+      await Promise.all([loadPortfolios(), loadPositions()])
+      showToast(isZh ? '已移除' : 'Removed', 'success')
+    } catch {
+      showToast(isZh ? '网络错误' : 'Network error', 'error')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   // Totals from positions
@@ -137,9 +176,9 @@ export default function PortfolioPage() {
       <div style={styles.page}>
         <div style={styles.container}>
           <div style={styles.header}>
-            <h1 style={styles.title}>Portfolio</h1>
+            <h1 style={styles.title}>{isZh ? '投资组合' : 'Portfolio'}</h1>
             <button style={styles.addBtn} onClick={() => setShowAddModal(true)}>
-              + Connect Exchange
+              + {isZh ? '连接交易所' : 'Connect Exchange'}
             </button>
           </div>
 
@@ -154,7 +193,7 @@ export default function PortfolioPage() {
           {/* Connected exchanges */}
           {portfolios.length > 0 && (
             <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>Connected Exchanges</h2>
+              <h2 style={styles.sectionTitle}>{isZh ? '已连接交易所' : 'Connected Exchanges'}</h2>
               <div style={styles.exchangeList}>
                 {portfolios.map(p => (
                   <div key={p.id} style={styles.exchangeCard}>
@@ -167,11 +206,11 @@ export default function PortfolioPage() {
                       )}
                     </div>
                     <div style={styles.exchangeActions}>
-                      <button style={styles.syncBtn} onClick={() => handleSync(p.id)}>
-                        Sync
+                      <button style={{ ...styles.syncBtn, opacity: syncingId === p.id ? 0.6 : 1 }} onClick={() => handleSync(p.id)} disabled={!!syncingId}>
+                        {syncingId === p.id ? (isZh ? '同步中...' : 'Syncing...') : (isZh ? '同步' : 'Sync')}
                       </button>
-                      <button style={styles.deleteBtn} onClick={() => handleDelete(p.id)}>
-                        Remove
+                      <button style={{ ...styles.deleteBtn, opacity: deletingId === p.id ? 0.6 : 1 }} onClick={() => handleDelete(p.id)} disabled={!!deletingId}>
+                        {deletingId === p.id ? '...' : (isZh ? '移除' : 'Remove')}
                       </button>
                     </div>
                   </div>
