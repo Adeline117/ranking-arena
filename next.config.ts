@@ -351,7 +351,6 @@ const nextConfig: NextConfig = {
       '@walletconnect/core',
       '@walletconnect/utils',
       '@walletconnect/types',
-      'recharts',
     ],
 
     // Enable optimized CSS loading
