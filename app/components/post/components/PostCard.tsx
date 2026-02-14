@@ -124,7 +124,7 @@ export const PostCard = memo(function PostCard({
               <span style={{
                 color: pollColor(pollWinner),
                 fontWeight: 700,
-                fontSize: 10,
+                fontSize: 12,
               }}>
                 {pollLabel(pollWinner, t)}
               </span>

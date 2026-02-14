@@ -65,7 +65,7 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
             {tab.zhSub && (
               <span style={{
                 display: 'block',
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: 400,
                 color: isActive ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
                 marginTop: 1,

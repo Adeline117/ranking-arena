@@ -207,7 +207,7 @@ function ExportRankingButton({ traders, source, timeRange, language }: {
           borderRadius: tokens.radius.md, overflow: 'hidden', zIndex: 100, minWidth: 160,
           boxShadow: tokens.shadow.md,
         }}>
-          <div style={{ padding: '6px 12px', fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600 }}>CSV</div>
+          <div style={{ padding: '6px 12px', fontSize: 12, color: tokens.colors.text.tertiary, fontWeight: 600 }}>CSV</div>
           {counts.map(n => (
             <button key={`csv-${n}`} onClick={() => doExport(n, 'csv')}
               style={{ display: 'block', width: '100%', padding: '6px 16px', background: 'transparent', border: 'none', color: tokens.colors.text.primary, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
@@ -216,7 +216,7 @@ function ExportRankingButton({ traders, source, timeRange, language }: {
             >Top {n}</button>
           ))}
           <div style={{ borderTop: `1px solid ${tokens.colors.border.primary}`, margin: '4px 0' }} />
-          <div style={{ padding: '6px 12px', fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600 }}>JSON</div>
+          <div style={{ padding: '6px 12px', fontSize: 12, color: tokens.colors.text.tertiary, fontWeight: 600 }}>JSON</div>
           {counts.map(n => (
             <button key={`json-${n}`} onClick={() => doExport(n, 'json')}
               style={{ display: 'block', width: '100%', padding: '6px 16px', background: 'transparent', border: 'none', color: tokens.colors.text.primary, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}
@@ -608,7 +608,7 @@ function RankingTableInner(props: {
                     border: '1px solid var(--color-border-primary)',
                     background: 'transparent',
                     color: 'var(--color-text-tertiary)',
-                    fontSize: 11, fontWeight: 500,
+                    fontSize: 12, fontWeight: 500,
                     cursor: 'pointer', opacity: 0.7,
                   }}
                   title={t('proFeature')}
@@ -655,7 +655,7 @@ function RankingTableInner(props: {
                   color: styleFilter === opt.value
                     ? tokens.colors.accent.primary
                     : tokens.colors.text.secondary,
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: styleFilter === opt.value ? 700 : 500,
                   cursor: 'pointer',
                   transition: `all ${tokens.transition.fast}`,
@@ -688,7 +688,7 @@ function RankingTableInner(props: {
               color: gradeFilter === g
                 ? tokens.colors.accent.primary
                 : tokens.colors.text.secondary,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: gradeFilter === g ? 700 : 500,
               cursor: 'pointer',
               transition: `all ${tokens.transition.fast}`,

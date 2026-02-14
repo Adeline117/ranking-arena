@@ -251,7 +251,7 @@ export const TraderRow = memo(function TraderRow({
                   <span style={{
                     padding: '1px 6px',
                     borderRadius: tokens.radius.md,
-                    fontSize: 10,
+                    fontSize: 12,
                     fontWeight: 600,
                     color: style.color,
                     background: style.bgColor,

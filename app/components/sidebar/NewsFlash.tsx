@@ -113,7 +113,7 @@ export default function NewsFlash() {
                 <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                   {impConfig && (
                     <span style={{
-                      fontSize: 10, fontWeight: 700, color: tokens.colors.white,
+                      fontSize: 12, fontWeight: 700, color: tokens.colors.white,
                       background: impConfig.color, padding: '1px 6px',
                       borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
@@ -122,7 +122,7 @@ export default function NewsFlash() {
                   )}
                   {catConfig && (
                     <span style={{
-                      fontSize: 10, fontWeight: 600, color: catConfig.color,
+                      fontSize: 12, fontWeight: 600, color: catConfig.color,
                       background: `${catConfig.color}15`, padding: '1px 6px',
                       borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>

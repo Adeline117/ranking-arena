@@ -353,7 +353,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                     <Text size="sm" weight="semibold">{folder.name}</Text>
                     {folder.is_default && (
                       <span style={{
-                        fontSize: 10,
+                        fontSize: 12,
                         padding: '2px 6px',
                         background: tokens.colors.accent?.primary + '20',
                         color: tokens.colors.accent?.primary,
@@ -364,7 +364,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                     )}
                     {folder.is_public && (
                       <span style={{
-                        fontSize: 10,
+                        fontSize: 12,
                         padding: '2px 6px',
                         background: 'var(--color-accent-success-20)',
                         color: 'var(--color-accent-success)',
