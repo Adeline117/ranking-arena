@@ -124,14 +124,24 @@ async function main() {
   console.log('--- Propagating V3 scores to leaderboard_ranks ---')
   // For each season, get latest snapshots with v3 scores and update matching leaderboard_ranks
   for (const season of SEASONS) {
-    const { data: scored } = await supabase
-      .from('trader_snapshots')
-      .select('source, source_trader_id, arena_score_v3, profitability_score, risk_control_score, execution_score, score_completeness, score_penalty')
-      .eq('season_id', season)
-      .not('arena_score_v3', 'is', null)
-      .order('captured_at', { ascending: false })
+    // Paginate to get ALL scored snapshots (not just default 1000)
+    const scored = []
+    let page = 0
+    while (true) {
+      const { data, error: fetchErr } = await supabase
+        .from('trader_snapshots')
+        .select('source, source_trader_id, arena_score_v3, profitability_score, risk_control_score, execution_score, score_completeness, score_penalty')
+        .eq('season_id', season)
+        .not('arena_score_v3', 'is', null)
+        .order('captured_at', { ascending: false })
+        .range(page * 1000, (page + 1) * 1000 - 1)
+      if (fetchErr || !data?.length) break
+      scored.push(...data)
+      if (data.length < 1000) break
+      page++
+    }
     
-    if (!scored?.length) continue
+    if (!scored.length) continue
     
     // Dedupe by source+trader
     const map = new Map()
