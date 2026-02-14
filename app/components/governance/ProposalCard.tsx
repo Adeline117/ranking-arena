@@ -7,7 +7,8 @@
  * and inline vote buttons for active proposals.
  */
 
-import { useState, memo } from 'react'
+import { useState, memo, useCallback } from 'react'
+import { useSWRConfig } from 'swr'
 import type { SnapshotProposal } from '@/lib/web3/snapshot'
 import { getProposalUrl, getArenaSpaceId } from '@/lib/web3/snapshot'
 import { VoteButton } from './VoteButton'
@@ -30,10 +31,28 @@ export const ProposalCard = memo(function ProposalCard({ proposal }: ProposalCar
   const totalVotes = proposal.scores_total || 0
   const isActive = proposal.state === 'active'
   const [selectedChoice, setSelectedChoice] = useState<number | null>(null)
+  const { mutate } = useSWRConfig()
+
+  const handleVoted = useCallback((choiceIndex: number) => {
+    setSelectedChoice(choiceIndex)
+    // Revalidate proposals list after a short delay to let Snapshot process
+    setTimeout(() => {
+      mutate((key: unknown) => Array.isArray(key) && key[0] === 'snapshot-proposals')
+    }, 3000)
+  }, [mutate])
 
   const now = Math.floor(Date.now() / 1000)
   const endDate = new Date(proposal.end * 1000)
   const isExpired = now > proposal.end
+
+  const formatTimeRemaining = () => {
+    if (isExpired) return `Ended ${endDate.toLocaleDateString()}`
+    const diff = proposal.end - now
+    if (diff < 3600) return `Ends in ${Math.ceil(diff / 60)}m`
+    if (diff < 86400) return `Ends in ${Math.floor(diff / 3600)}h`
+    const days = Math.floor(diff / 86400)
+    return `Ends in ${days}d ${Math.floor((diff % 86400) / 3600)}h`
+  }
 
   return (
     <div className="p-5 rounded-2xl transition-all duration-200" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border-primary)' }}>
@@ -115,7 +134,7 @@ export const ProposalCard = memo(function ProposalCard({ proposal }: ProposalCar
                   proposalId={proposal.id}
                   choice={i + 1}
                   choiceLabel={choice}
-                  onVoted={() => setSelectedChoice(i + 1)}
+                  onVoted={() => handleVoted(i + 1)}
                   disabled={selectedChoice !== null && selectedChoice !== i + 1}
                 />
               </div>
@@ -126,10 +145,7 @@ export const ProposalCard = memo(function ProposalCard({ proposal }: ProposalCar
 
       {/* Footer: end time */}
       <div className="mt-3 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        {isExpired
-          ? `Ended ${endDate.toLocaleDateString()}`
-          : `Ends ${endDate.toLocaleDateString()} ${endDate.toLocaleTimeString()}`
-        }
+        {formatTimeRemaining()}
       </div>
     </div>
   )

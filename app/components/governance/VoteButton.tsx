@@ -9,9 +9,9 @@
  * The signature is submitted directly to Snapshot Hub.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useAccount, useSignTypedData } from 'wagmi'
-import { getArenaSpaceId } from '@/lib/web3/snapshot'
+import { getArenaSpaceId, hasVoted as checkHasVoted } from '@/lib/web3/snapshot'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
@@ -64,6 +64,16 @@ export function VoteButton({
   const [voted, setVoted] = useState(hasVoted)
 
   const spaceId = getArenaSpaceId()
+
+  // Check if user has already voted on this proposal
+  useEffect(() => {
+    if (!address || !proposalId || hasVoted) return
+    let cancelled = false
+    checkHasVoted(proposalId, address).then((result) => {
+      if (!cancelled && result) setVoted(true)
+    }).catch(() => { /* ignore check errors */ })
+    return () => { cancelled = true }
+  }, [address, proposalId, hasVoted])
 
   const handleVote = useCallback(async () => {
     if (!address || !spaceId) return
