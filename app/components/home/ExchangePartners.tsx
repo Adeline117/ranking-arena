@@ -1,8 +1,37 @@
 'use client'
 
+import Link from 'next/link'
 import { useLanguage } from '../Providers/LanguageProvider'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import type { Exchange } from '@/lib/exchange'
+
+// Map display exchange key to the primary DB source used in /rankings/[exchange]
+const EXCHANGE_SOURCE_MAP: Record<string, string> = {
+  binance: 'binance_futures',
+  okx: 'okx_futures',
+  bybit: 'bybit',
+  bitget: 'bitget_futures',
+  mexc: 'mexc',
+  kucoin: 'kucoin',
+  gate: 'gateio',
+  htx: 'htx_futures',
+  coinex: 'coinex',
+  bingx: 'bingx',
+  phemex: 'phemex',
+  weex: 'weex',
+  aevo: 'aevo',
+  hyperliquid: 'hyperliquid',
+  gmx: 'gmx',
+  dydx: 'dydx',
+  jupiter: 'jupiter_perps',
+  toobit: '',
+  btcc: '',
+  bitfinex: '',
+  lbank: 'lbank',
+  blofin: 'blofin',
+  xt: 'xt',
+  gains: 'gains',
+}
 
 const EXCHANGES: { name: string; key: Exchange }[] = [
   { name: 'Binance', key: 'binance' },
@@ -74,24 +103,42 @@ export default function ExchangePartners() {
         }}>
           {language === 'zh' ? '数据来源' : 'Sources'}
         </span>
-        {doubled.map((ex, i) => (
-          <span
-            key={`${ex.key}-${i}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'var(--color-text-secondary)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            <ExchangeLogo exchange={ex.key} size={18} />
-            {ex.name}
-          </span>
-        ))}
+        {doubled.map((ex, i) => {
+          const source = EXCHANGE_SOURCE_MAP[ex.key] || ''
+          const content = (
+            <>
+              <ExchangeLogo exchange={ex.key} size={18} />
+              {ex.name}
+            </>
+          )
+          const sharedStyle: React.CSSProperties = {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            textDecoration: 'none',
+          }
+          return source ? (
+            <Link
+              key={`${ex.key}-${i}`}
+              href={`/rankings/${source}`}
+              style={sharedStyle}
+            >
+              {content}
+            </Link>
+          ) : (
+            <span
+              key={`${ex.key}-${i}`}
+              style={sharedStyle}
+            >
+              {content}
+            </span>
+          )
+        })}
       </div>
 
       <style>{`
