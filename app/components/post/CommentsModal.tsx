@@ -68,7 +68,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: size === 24 ? 10 : 12,
+    fontSize: 12,
     fontWeight: 700,
     color: tokens.colors.text.tertiary,
   }) satisfies CSSProperties,

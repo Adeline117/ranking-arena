@@ -217,7 +217,7 @@ export default function BookshelfTab() {
               {/* Status badge */}
               <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
                 <span style={{
-                  fontSize: 10, padding: '1px 7px', borderRadius: tokens.radius.full,
+                  fontSize: 12, padding: '1px 7px', borderRadius: tokens.radius.full,
                   background: book.status === 'read' ? tokens.colors.accent.brandMuted : tokens.colors.accent.brandMuted,
                   color: book.status === 'read' ? tokens.colors.accent.success : tokens.colors.accent.brand,
                   fontWeight: 600,

@@ -391,7 +391,7 @@ export default function ReportModal({
                       <circle cx="8.5" cy="8.5" r="1.5"/>
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
-                    <span style={{ fontSize: 10, color: tokens.colors.text.tertiary }}>{uploading ? '...' : t('upload') || '上传'}</span>
+                    <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{uploading ? '...' : t('upload') || '上传'}</span>
                     <input
                       type="file"
                       accept="image/*"

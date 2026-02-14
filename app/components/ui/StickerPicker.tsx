@@ -89,7 +89,7 @@ export default function StickerPicker({ onSelect, isOpen, onClose }: StickerPick
                 style={{ objectFit: 'contain' }}
               />
               <span style={{
-                fontSize: 10,
+                fontSize: 12,
                 color: tokens.colors.text.tertiary,
                 lineHeight: 1.2,
                 textAlign: 'center',

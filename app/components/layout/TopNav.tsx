@@ -600,7 +600,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                       boxShadow: tokens.shadow.glowError,
                     }}
                   >
-                    <span style={{ fontSize: 10, fontWeight: 800, color: tokens.colors.white, lineHeight: 1 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: tokens.colors.white, lineHeight: 1 }}>
                       {totalUnread > 99 ? '99+' : totalUnread}
                     </span>
                   </Box>
@@ -776,7 +776,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                             borderRadius: '50%',
                             background: tokens.colors.accent.error,
                             color: tokens.colors.white,
-                            fontSize: 10,
+                            fontSize: 12,
                             fontWeight: 900,
                             display: 'flex',
                             alignItems: 'center',

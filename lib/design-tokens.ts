@@ -106,7 +106,7 @@ export const tokens = {
       mono: ['Menlo', 'Monaco', '"Courier New"', 'monospace'],
     },
     fontSize: {
-      xs: '11px',    // 0.6875rem
+      xs: '12px',    // 0.75rem — minimum for iOS (prevents auto-zoom)
       sm: '13px',    // 0.8125rem
       base: '14px',  // 0.875rem
       md: '16px',    // 1rem

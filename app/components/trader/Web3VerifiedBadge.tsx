@@ -12,7 +12,7 @@ interface Web3VerifiedBadgeProps {
  */
 export function Web3VerifiedBadge({ size = 'sm' }: Web3VerifiedBadgeProps) {
   const iconSize = size === 'sm' ? 12 : 16
-  const fontSize = size === 'sm' ? 10 : 12
+  const fontSize = 12
 
   return (
     <span

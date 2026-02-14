@@ -193,7 +193,7 @@ export default function TopTraders() {
                   {roiStr && (
                     <div
                       style={{
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: 600,
                         color: t.roi! >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                         lineHeight: 1.3,

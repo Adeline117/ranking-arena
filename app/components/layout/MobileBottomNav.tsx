@@ -113,7 +113,7 @@ function NotificationBadge({ count, ariaLabel }: NotificationBadgeProps): React.
         borderRadius: tokens.radius.md,
         background: 'var(--color-accent-error)',
         color: tokens.colors.white,
-        fontSize: 10,
+        fontSize: 12,
         fontWeight: 700,
         display: 'flex',
         alignItems: 'center',
@@ -340,7 +340,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
 
       <span
         style={{
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: active ? 700 : 500,
           letterSpacing: '0.3px',
           transition: `all ${tokens.transition.fast}`,

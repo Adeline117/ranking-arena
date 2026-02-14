@@ -209,7 +209,7 @@ export default function FollowListModal({
             {isOwnProfile && (
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
                 <span style={{
-                  fontSize: 10,
+                  fontSize: 12,
                   color: isPublic ? tokens.colors.accent.success : tokens.colors.accent.warning,
                 }}>
                   {isPublic ? '\u25CB' : '\u25CF'}

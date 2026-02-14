@@ -404,7 +404,7 @@ function ParamTable({
         color: tokens.colors.text.tertiary,
         textTransform: 'uppercase',
         letterSpacing: '0.05em',
-        fontSize: compact ? 10 : 11,
+        fontSize: 12,
       }}>
         {headers.map((h, i) => (
           <div key={i}>{h}</div>

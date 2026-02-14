@@ -254,7 +254,7 @@ function ProBadge(): React.ReactElement {
         borderRadius: tokens.radius.sm,
         background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, ${tokens.colors.accent.brandHover})`,
         color: tokens.colors.white,
-        fontSize: 10,
+        fontSize: 12,
         fontWeight: 700,
       }}
     >
