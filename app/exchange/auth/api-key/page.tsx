@@ -108,6 +108,44 @@ const EXCHANGE_CONFIGS = {
       ],
     },
   },
+  htx: {
+    name: 'HTX',
+    apiManagementUrl: 'https://www.htx.com/en-us/apikey/',
+    needsPassphrase: false,
+    steps: {
+      zh: [
+        { title: '登录 HTX', desc: '访问 HTX 官网，登录您的账户' },
+        { title: '进入 API 管理', desc: '点击右上角头像 → 「API 管理」' },
+        { title: '创建 API Key', desc: '点击「创建 API Key」，输入备注名称' },
+        { title: '设置只读权限', desc: '只勾选「读取」权限，不要开启交易权限，完成验证后复制 API Key 和 Secret' },
+      ],
+      en: [
+        { title: 'Login to HTX', desc: 'Visit HTX website and login to your account' },
+        { title: 'Go to API Management', desc: 'Click avatar on top right, select "API Management"' },
+        { title: 'Create API Key', desc: 'Click "Create API Key", enter a remark' },
+        { title: 'Set Read-Only Permission', desc: 'Only check "Read" permission. Do not enable trading. Copy API Key and Secret after verification' },
+      ],
+    },
+  },
+  weex: {
+    name: 'WEEX',
+    apiManagementUrl: 'https://www.weex.com/account/api',
+    needsPassphrase: false,
+    steps: {
+      zh: [
+        { title: '登录 WEEX', desc: '访问 WEEX 官网，登录您的账户' },
+        { title: '进入 API 管理', desc: '点击右上角头像 → 「API 管理」' },
+        { title: '创建 API Key', desc: '点击「创建 API」，输入备注名称' },
+        { title: '设置只读权限', desc: '只勾选「只读」权限，完成验证后复制 API Key 和 Secret' },
+      ],
+      en: [
+        { title: 'Login to WEEX', desc: 'Visit WEEX website and login to your account' },
+        { title: 'Go to API Management', desc: 'Click avatar on top right, select "API Management"' },
+        { title: 'Create API Key', desc: 'Click "Create API", enter a remark' },
+        { title: 'Set Read-Only Permission', desc: 'Only check "Read-Only" permission. Copy API Key and Secret after verification' },
+      ],
+    },
+  },
 } as const
 
 type ExchangeId = keyof typeof EXCHANGE_CONFIGS

@@ -89,11 +89,15 @@ export async function validateExchangeCredentials(
         apiKey: credentials.apiKey,
         apiSecret: credentials.apiSecret,
       })
+    case 'htx':
+    case 'weex':
     case 'okx':
     case 'kucoin':
     case 'gate':
-      // 暂未实现
-      throw new Error(`暂不支持交易所: ${exchange}`)
+      // Credential format validation only -- no API call verification available yet
+      if (!credentials.apiKey || !credentials.apiSecret) return false
+      if (credentials.apiKey.length < 10 || credentials.apiSecret.length < 10) return false
+      return true
     default:
       throw new Error(`未知交易所: ${exchange}`)
   }
