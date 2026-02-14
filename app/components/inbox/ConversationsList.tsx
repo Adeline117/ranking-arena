@@ -222,11 +222,38 @@ export default function ConversationsList(): React.ReactElement {
           </button>
         </div>
       ) : conversations.length === 0 && groupChannels.length === 0 ? (
-        <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {t('noMessages')}
+        <div style={{
+          padding: `${tokens.spacing[8]} ${tokens.spacing[4]}`,
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+        }}>
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--color-accent-primary-15) 0%, var(--color-accent-primary-08) 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: tokens.colors.text.primary, marginBottom: 4 }}>
+              {t('noMessages')}
+            </div>
+            <div style={{ fontSize: 12, color: tokens.colors.text.tertiary, lineHeight: 1.5, maxWidth: 240, margin: '0 auto' }}>
+              {t('noMessagesHint') || (language === 'zh' ? '关注交易者后可以发起私信对话' : 'Follow traders to start a conversation')}
+            </div>
+          </div>
         </div>
       ) : (
-        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+        <div style={{ maxHeight: 'min(400px, 60vh)', overflowY: 'auto' }}>
           {/* Group channels */}
           {(chatFilter === 'all' || chatFilter === 'group') && groupChannels.map((ch) => (
             <Link key={`ch-${ch.id}`} href={`/channels/${ch.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>

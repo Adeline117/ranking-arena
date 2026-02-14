@@ -232,7 +232,7 @@ export default function NotificationsList() {
 
       {/* Notifications list */}
       {!collapsed && (
-        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+        <div style={{ maxHeight: 'min(400px, 60vh)', overflowY: 'auto' }}>
           {loading ? (
             <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
               {t('loading')}
