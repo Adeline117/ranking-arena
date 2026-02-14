@@ -233,9 +233,9 @@ const OptimizedRankingSection = memo<OptimizedRankingSectionProps>(({
                       background: `linear-gradient(45deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
                       flexShrink: 0
                     }} />
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <Text weight="semibold">{trader.handle}</Text>
-                      <Text size="sm" color="tertiary">{trader.source}</Text>
+                    <Box style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                      <Text weight="semibold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{trader.handle}</Text>
+                      <Text size="sm" color="tertiary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{trader.source}</Text>
                     </Box>
                     <Box style={{ textAlign: 'right' }}>
                       <Text weight="bold" color="primary">{(trader.arena_score ?? 0).toFixed(1)}</Text>

@@ -13,7 +13,7 @@ import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } fro
 import HomeSubNav from './HomeSubNav'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
-import HomePageClient from './HomePageClientOptimized'
+import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 // HomePageWithSubNav removed from homepage - only used in groups page
 import type { InitialTrader } from '@/lib/getInitialTraders'
