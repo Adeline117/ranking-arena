@@ -278,6 +278,7 @@ const en = {
     pollDescription: 'Let readers vote: Bullish / Bearish / Wait',
     imagesOptional: 'Images (optional, max 9)',
     addImage: 'Add Image',
+    upload: 'Upload',
     uploadingImage: 'Uploading...',
     imageSupport: 'Supports JPG, PNG, GIF, WebP, max 5MB each',
     mentionTip: 'Tip: Use @username to mention others, links will be clickable',
