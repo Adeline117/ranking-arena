@@ -260,7 +260,7 @@ function _IconFont() {
 export default function ReadPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
   const { isPremium, isLoading: premiumLoading } = usePremium()
 
@@ -353,17 +353,17 @@ export default function ReadPage() {
     fetch(`/api/library/${id}`)
       .then(r => r.json())
       .then(data => {
-        if (!data.item) { setError(isZh ? '未找到该书籍' : 'Book not found'); return }
+        if (!data.item) { setError(t('readerBookNotFound')); return }
         const item = data.item as BookInfo
         const mode = detectContentMode(item)
         if (mode === 'none') {
-          setError(isZh ? '该书籍暂无阅读资源' : 'No reading resource available')
+          setError(t('readerNoResource'))
           return
         }
         setBook(item)
         setContentMode(mode)
       })
-      .catch(() => setError(isZh ? '加载失败' : 'Failed to load'))
+      .catch(() => setError(t('readerLoadFailed')))
       .finally(() => setLoading(false))
   }, [id, isZh])
 
@@ -472,7 +472,7 @@ export default function ReadPage() {
           }
         }
       } catch {
-        if (!cancelled) setError(isZh ? '无法加载 PDF' : 'Unable to load PDF')
+        if (!cancelled) setError(t('readerPdfLoadFailed'))
       } finally {
         if (!cancelled) setPdfLoading(false)
       }
@@ -516,7 +516,7 @@ export default function ReadPage() {
         // Build TOC from chapters
         if (chapters.length > 1) {
           const tocItems: TocItem[] = chapters.map((ch, i) => ({
-            title: ch.title || `${isZh ? '第' : 'Chapter '}${i + 1}${isZh ? '章' : ''}`,
+            title: ch.title || `${t('readerChapterPrefix')}${i + 1}${t('readerChapterSuffix')}`,
             pageIndex: i, // will be mapped to page numbers after pagination
             level: 0,
           }))
@@ -540,7 +540,7 @@ export default function ReadPage() {
           }
         }
       } catch {
-        if (!cancelled) setError(isZh ? '无法加载内容' : 'Unable to load content')
+        if (!cancelled) setError(t('readerHtmlLoadFailed'))
       } finally {
         if (!cancelled) setHtmlLoading(false)
       }
@@ -754,9 +754,9 @@ export default function ReadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <div style={{ width: 40, height: 40, border: '3px solid var(--glass-border-light)', borderTopColor: 'var(--color-accent-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <p style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
-          {pdfLoading ? (isZh ? `正在加载文档...${pdfLoadProgress > 0 ? ` ${pdfLoadProgress}%` : ''}` : `Loading document...${pdfLoadProgress > 0 ? ` ${pdfLoadProgress}%` : ''}`)
-            : htmlLoading ? (isZh ? '正在加载文档...' : 'Loading document...')
-            : (isZh ? '加载中...' : 'Loading...')}
+          {pdfLoading ? `${t('readerLoadingDoc')}${pdfLoadProgress > 0 ? ` ${pdfLoadProgress}%` : ''}`
+            : htmlLoading ? t('readerLoadingDoc')
+            : t('readerLoading')}
         </p>
         {pdfLoading && pdfLoadProgress > 0 && (
           <div style={{ width: 200, height: 4, borderRadius: 2, background: 'var(--glass-bg-medium)', overflow: 'hidden' }}>
@@ -769,7 +769,7 @@ export default function ReadPage() {
   }
 
   if (error || !book) {
-    const isNoContent = error === (isZh ? '该书籍暂无阅读资源' : 'No reading resource available')
+    const isNoContent = error === t('readerNoResource')
     return (
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <div style={{
@@ -784,16 +784,16 @@ export default function ReadPage() {
         </div>
         <h2 style={{ color: 'var(--color-text-primary)', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
           {isNoContent
-            ? (isZh ? '暂无内容' : 'No Content Available')
-            : (isZh ? '加载失败' : 'Failed to Load')}
+            ? t('readerNoContentTitle')
+            : t('readerLoadFailed')}
         </h2>
         <p style={{ color: 'var(--color-text-tertiary)', fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400, lineHeight: 1.6 }}>
           {isNoContent
-            ? (isZh ? '该书籍暂无电子版阅读资源，请稍后再来查看。' : 'No digital reading resource is available for this book yet. Please check back later.')
-            : (error || (isZh ? '未找到该书籍' : 'Book not found'))}
+            ? t('readerNoContentDesc')
+            : (error || t('readerBookNotFound'))}
         </p>
         <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: 'var(--color-accent-primary)', color: 'var(--foreground)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
-          {isZh ? '返回书籍详情' : 'Back to Book'}
+          {t('readerBackToBook')}
         </Link>
       </div>
     )
@@ -806,17 +806,17 @@ export default function ReadPage() {
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
         <h2 style={{ color: 'var(--color-text-primary)', fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-          {isZh ? '升级会员解锁阅读' : 'Upgrade to unlock reading'}
+          {t('readerUpgradeTitle')}
         </h2>
         <p style={{ color: 'var(--color-text-tertiary)', fontSize: 14, marginBottom: 24, textAlign: 'center', maxWidth: 400 }}>
-          {isZh ? '该书籍仅对会员开放，升级会员即可畅读所有付费内容。' : 'This book is available to members only.'}
+          {t('readerUpgradeDesc')}
         </p>
         <div style={{ display: 'flex', gap: 12 }}>
           <Link href="/membership" style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, background: tokens.gradient.primary, color: 'var(--foreground)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
-            {isZh ? '升级会员' : 'Upgrade'}
+            {t('readerUpgrade')}
           </Link>
           <Link href={`/library/${id}`} style={{ padding: '10px 24px', borderRadius: tokens.radius.lg, border: '1px solid var(--color-border-primary)', color: 'var(--color-text-primary)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
-            {isZh ? '返回' : 'Back'}
+            {t('readerBack')}
           </Link>
         </div>
       </div>
@@ -851,9 +851,9 @@ export default function ReadPage() {
           backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         }}>
           <Breadcrumb items={[
-            { label: isZh ? '书库' : 'Library', href: '/library' },
+            { label: t('readerLibrary'), href: '/library' },
             { label: book.title, href: `/library/${id}` },
-            { label: isZh ? '阅读' : 'Reading' },
+            { label: t('readerReading') },
           ]} />
         </div>
       </div>
@@ -899,7 +899,7 @@ export default function ReadPage() {
           background: theme === 'dark' ? 'var(--color-backdrop-heavy)' : 'var(--color-backdrop-heavy)',
           backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
         }}>
-          <ToolbarBtn onClick={() => router.push(`/library/${id}`)} title={isZh ? '返回' : 'Back'}>
+          <ToolbarBtn onClick={() => router.push(`/library/${id}`)} title={t('readerBack')}>
             <IconBack />
           </ToolbarBtn>
 
@@ -911,12 +911,12 @@ export default function ReadPage() {
           </div>
 
           {(toc.length > 0 || epubToc.length > 0) && (
-            <ToolbarBtn onClick={() => { setShowToc(p => !p); setShowSettings(false) }} active={showToc} title={isZh ? '目录' : 'Contents'}>
+            <ToolbarBtn onClick={() => { setShowToc(p => !p); setShowSettings(false) }} active={showToc} title={t('readerContents')}>
               <IconToc />
             </ToolbarBtn>
           )}
           {contentMode !== 'epub' && (
-            <ToolbarBtn onClick={toggleBookmark} active={isCurrentPageBookmarked} title={isZh ? '书签' : 'Bookmark'}>
+            <ToolbarBtn onClick={toggleBookmark} active={isCurrentPageBookmarked} title={t('readerBookmark')}>
               <IconBookmark filled={isCurrentPageBookmarked} />
             </ToolbarBtn>
           )}
@@ -925,33 +925,33 @@ export default function ReadPage() {
               <ToolbarBtn onClick={() => {
                 const ctrl = getEpubControls(epubContainerRef.current)
                 ctrl?.toggleSearch()
-              }} title={isZh ? '搜索' : 'Search'}>
+              }} title={t('readerSearch')}>
                 <IconSearch />
               </ToolbarBtn>
               <ToolbarBtn onClick={() => {
                 const ctrl = getEpubControls(epubContainerRef.current)
                 ctrl?.toggleNotes()
-              }} title={isZh ? '笔记' : 'Notes'}>
+              }} title={t('readerNotes')}>
                 <IconNotes />
               </ToolbarBtn>
               <ToolbarBtn onClick={() => {
                 const ctrl = getEpubControls(epubContainerRef.current)
                 ctrl?.toggleStats()
-              }} title={isZh ? '统计' : 'Stats'}>
+              }} title={t('readerStats')}>
                 <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="8" width="4" height="13"/><rect x="17" y="3" width="4" height="18"/></svg>
               </ToolbarBtn>
               <ToolbarBtn onClick={() => {
                 const ctrl = getEpubControls(epubContainerRef.current)
                 ctrl?.toggleTypography()
-              }} title={isZh ? '排版' : 'Typography'}>
+              }} title={t('readerTypography')}>
                 <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
               </ToolbarBtn>
             </>
           )}
-          <ToolbarBtn onClick={() => { setShowSettings(p => !p); setShowToc(false) }} active={showSettings} title={isZh ? '设置' : 'Settings'}>
+          <ToolbarBtn onClick={() => { setShowSettings(p => !p); setShowToc(false) }} active={showSettings} title={t('readerSettings')}>
             <IconSettings />
           </ToolbarBtn>
-          <ToolbarBtn onClick={toggleFullscreen} title={isZh ? '全屏' : 'Fullscreen'}>
+          <ToolbarBtn onClick={toggleFullscreen} title={t('readerFullscreen')}>
             <IconFullscreen />
           </ToolbarBtn>
         </div>
@@ -993,7 +993,7 @@ export default function ReadPage() {
               fontSize: 13, fontWeight: 500,
             }}>
               <IconChevronLeft />
-              <span className="reader-hide-mobile">{isZh ? '上一页' : 'Prev'}</span>
+              <span className="reader-hide-mobile">{t('readerPrevPage')}</span>
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)', fontSize: 13 }}>
@@ -1019,7 +1019,7 @@ export default function ReadPage() {
               padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 13, fontWeight: 500,
             }}>
-              <span className="reader-hide-mobile">{isZh ? '下一页' : 'Next'}</span>
+              <span className="reader-hide-mobile">{t('readerNextPage')}</span>
               <IconChevronRight />
             </button>
           </div>
@@ -1041,7 +1041,7 @@ export default function ReadPage() {
               background: themeColors.pageBg,
             }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: theme === 'dark' ? 'var(--color-on-accent)' : 'var(--color-text-primary)' }}>
-                {isZh ? '目录' : 'Contents'}
+                {t('readerContents')}
               </span>
               <button onClick={() => setShowToc(false)} style={{ background: 'none', border: 'none', color: theme === 'dark' ? 'var(--glass-border-heavy)' : 'var(--color-backdrop-light)', cursor: 'pointer', padding: 4 }}>
                 <IconClose />
@@ -1052,7 +1052,7 @@ export default function ReadPage() {
             {bookmarks.length > 0 && (
               <div style={{ padding: '12px 16px', borderBottom: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}` }}>
                 <p style={{ fontSize: 12, fontWeight: 600, color: theme === 'dark' ? 'var(--glass-bg-medium)' : 'var(--color-backdrop-light)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                  {isZh ? '书签' : 'Bookmarks'}
+                  {t('readerBookmarks')}
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {bookmarks.map(page => (
@@ -1062,7 +1062,7 @@ export default function ReadPage() {
                       color: currentPage === page ? 'var(--color-on-accent)' : (theme === 'dark' ? 'var(--color-text-secondary)' : 'var(--color-backdrop)'),
                       border: 'none', cursor: 'pointer',
                     }}>
-                      {isZh ? '第' : 'p.'}{page}{isZh ? '页' : ''}
+                      {t('readerPagePrefix')}{page}{t('readerPageSuffix')}
                     </button>
                   ))}
                 </div>
@@ -1089,26 +1089,26 @@ export default function ReadPage() {
           }}>
             {/* Theme */}
             <p style={{ fontSize: tokens.typography.fontSize.sm, fontWeight: 600, marginBottom: 12, color: themeColors.settingsLabel }}>
-              {isZh ? '阅读主题' : 'Reading Theme'}
+              {t('readerTheme')}
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18 }}>
-              {(Object.keys(THEME_PRESETS) as ReadingTheme[]).map(t => (
-                <button key={t} onClick={() => setTheme(t)} style={{
+              {(Object.keys(THEME_PRESETS) as ReadingTheme[]).map(themeKey => (
+                <button key={themeKey} onClick={() => setTheme(themeKey)} style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
                   background: 'none', border: 'none', cursor: 'pointer', padding: 4,
                 }}>
                   <div style={{
                     width: 36, height: 36, borderRadius: '50%',
-                    background: THEME_PRESETS[t].dot,
-                    border: theme === t ? '3px solid var(--color-accent-primary)' : `2px solid ${theme === 'dark' ? 'var(--glass-border-medium)' : 'var(--color-overlay-light)'}`,
+                    background: THEME_PRESETS[themeKey].dot,
+                    border: theme === themeKey ? '3px solid var(--color-accent-primary)' : `2px solid ${theme === 'dark' ? 'var(--glass-border-medium)' : 'var(--color-overlay-light)'}`,
                     transition: 'border 0.2s',
                   }} />
                   <span style={{
                     fontSize: 11,
-                    color: theme === t ? 'var(--color-accent-primary)' : themeColors.settingsOption,
-                    fontWeight: theme === t ? 600 : 400,
+                    color: theme === themeKey ? 'var(--color-accent-primary)' : themeColors.settingsOption,
+                    fontWeight: theme === themeKey ? 600 : 400,
                   }}>
-                    {isZh ? THEME_PRESETS[t].labelZh : THEME_PRESETS[t].label}
+                    {isZh ? THEME_PRESETS[themeKey].labelZh : THEME_PRESETS[themeKey].label}
                   </span>
                 </button>
               ))}
@@ -1117,7 +1117,7 @@ export default function ReadPage() {
             {/* Font Size */}
             <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
               <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: themeColors.settingsLabel }}>
-                {isZh ? '字号' : 'Font Size'}
+                {t('readerFontSize')}
               </p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                 {(Object.keys(FONT_SIZES) as FontSize[]).map(s => (
@@ -1138,7 +1138,7 @@ export default function ReadPage() {
             {contentMode === 'html' && (
               <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: themeColors.settingsLabel }}>
-                  {isZh ? '行距' : 'Line Height'}
+                  {t('readerLineHeight')}
                 </p>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                   {(['compact', 'normal', 'relaxed'] as const).map(lh => (
@@ -1149,7 +1149,7 @@ export default function ReadPage() {
                       border: 'none', cursor: 'pointer', fontSize: 13,
                       fontWeight: 600, transition: 'all 0.15s',
                     }}>
-                      {isZh ? ({ compact: '紧凑', normal: '标准', relaxed: '宽松' }[lh]) : ({ compact: 'Tight', normal: 'Normal', relaxed: 'Wide' }[lh])}
+                      {({ compact: t('readerLineHeightCompact'), normal: t('readerLineHeightNormal'), relaxed: t('readerLineHeightRelaxed') }[lh])}
                     </button>
                   ))}
                 </div>
@@ -1160,7 +1160,7 @@ export default function ReadPage() {
             {(contentMode === 'html' || contentMode === 'epub') && (
               <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: themeColors.settingsLabel }}>
-                  {isZh ? '字体' : 'Font'}
+                  {t('readerFontFamily')}
                 </p>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                   {(Object.keys(FONT_FAMILIES) as FontFamily[]).map(f => (
@@ -1321,16 +1321,16 @@ export default function ReadPage() {
           border: `1px solid ${theme === 'dark' ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'}`,
           animation: 'slideUp 0.3s ease',
         }}>
-          <span style={{ fontSize: 13 }}>{isZh ? '加入书架?' : 'Add to shelf?'}</span>
+          <span style={{ fontSize: 13 }}>{t('readerAddToShelfTitle')}</span>
           <button onClick={handleAddToShelf} style={{
             padding: '5px 14px', borderRadius: tokens.radius.md, background: 'var(--color-accent-primary)',
             color: 'var(--foreground)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-          }}>{isZh ? '加入' : 'Add'}</button>
+          }}>{t('readerAddToShelf')}</button>
           <button onClick={() => setShowBookshelfPrompt(false)} style={{
             padding: '5px 10px', borderRadius: tokens.radius.md, background: 'transparent',
             color: themeColors.text, border: '1px solid var(--color-overlay-medium)',
             cursor: 'pointer', fontSize: 12, opacity: 0.6,
-          }}>{isZh ? '稍后' : 'Later'}</button>
+          }}>{t('readerDismiss')}</button>
         </div>
       )}
 

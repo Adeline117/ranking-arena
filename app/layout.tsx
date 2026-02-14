@@ -56,7 +56,7 @@ export const metadata: Metadata = {
     template: "%s | Arena",
   },
   description:
-    "聚合 Binance、Bybit、Bitget、OKX、MEXC、KuCoin 等 30+ 交易所的 90 天 ROI 排行榜。关注顶级交易员，加入交易社区。",
+    "Aggregating 90-day ROI leaderboards from 30+ exchanges including Binance, Bybit, Bitget, OKX, MEXC, KuCoin. Follow top traders and join the trading community. | 聚合 Binance、Bybit、Bitget、OKX、MEXC、KuCoin 等 30+ 交易所的 90 天 ROI 排行榜。关注顶级交易员，加入交易社区。",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
   applicationName: "Arena",
   keywords: [
@@ -97,9 +97,9 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    title: "Arena - 加密货币交易员排行榜与社区",
+    title: "Arena - Crypto Trader Leaderboard & Community",
     description:
-      "聚合 30+ 交易所 90 天 ROI 排行榜，实时更新，关注顶级交易员，分享交易见解。",
+      "Aggregating 90-day ROI leaderboards from 30+ exchanges, updated in real-time. Follow top traders and share trading insights.",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
     siteName: "Arena",
     locale: "zh_CN",
@@ -114,9 +114,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Arena - 加密货币交易员排行榜与社区",
+    title: "Arena - Crypto Trader Leaderboard & Community",
     description:
-      "聚合 Binance、Bybit、Bitget、OKX、MEXC 等 30+ 交易所 90 天 ROI 排行榜。",
+      "Aggregating 90-day ROI leaderboards from 30+ exchanges including Binance, Bybit, Bitget, OKX, MEXC.",
     images: [
       `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
     ],
