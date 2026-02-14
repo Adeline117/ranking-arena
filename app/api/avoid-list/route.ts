@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         user ? getUserAvoidVote(supabase, user.id, trader_id, source) : null,
       ])
 
-      return successWithPagination(
+      const response = successWithPagination(
         {
           avoid_score: avoidScore,
           votes,
@@ -64,14 +64,18 @@ export async function GET(request: NextRequest) {
         },
         { limit, offset, has_more: votes.length === limit }
       )
+      response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+      return response
     } else {
       // 获取避雷榜
       const avoidList = await getAvoidList(supabase, { limit, offset })
 
-      return successWithPagination(
+      const response = successWithPagination(
         { avoid_list: avoidList },
         { limit, offset, has_more: avoidList.length === limit }
       )
+      response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+      return response
     }
   } catch (error: unknown) {
     return handleError(error, 'avoid-list GET')
