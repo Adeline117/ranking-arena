@@ -3175,6 +3175,31 @@ const zh = {
     loginTermsAnd: '和',
     stickers: '贴纸',
 
+    // DMCA
+    dmcaTitle: '版权政策 (Copyright / DMCA Policy)',
+    dmcaLastUpdated: '最后更新: 2026年2月8日',
+    dmcaOverviewTitle: '1. 概述',
+    dmcaOverviewDesc: 'Arena尊重知识产权，并期望平台用户同样尊重知识产权。如果你认为本平台上的内容侵犯了你的版权，请按照以下流程提交通知。',
+    dmcaNoticeTitle: '2. 侵权通知流程 (Notice and Takedown)',
+    dmcaNoticeDesc: '如果你是版权所有者或其授权代理人，认为本平台上的内容侵犯了你的版权，请向我们发送包含以下信息的书面通知：',
+    dmcaNotice1: '你的联系信息（姓名、地址、电话、邮箱）',
+    dmcaNotice2: '被侵权作品的描述',
+    dmcaNotice3: '涉嫌侵权内容在本平台上的位置（URL）',
+    dmcaNotice4: '声明你善意认为该内容的使用未经版权所有者、其代理人或法律授权',
+    dmcaNotice5: '声明通知中的信息准确，且你是版权所有者或其授权代理人',
+    dmcaNotice6: '你的签名（电子签名即可）',
+    dmcaCounterTitle: '3. 反通知流程 (Counter-Notice)',
+    dmcaCounterDesc: '如果你认为被移除的内容不构成侵权，你可以提交反通知 (counter-notice)，包含以下信息：',
+    dmcaCounter1: '你的联系信息',
+    dmcaCounter2: '被移除内容的描述和原始位置',
+    dmcaCounter3: '声明你善意认为内容被错误移除',
+    dmcaCounter4: '同意接受新加坡法院管辖',
+    dmcaCounter5: '你的签名',
+    dmcaCounterProcess: '收到有效的反通知后，我们将把反通知转发给原投诉人。如原投诉人未在10个工作日内提起法律诉讼，我们可能会恢复被移除的内容。',
+    dmcaContactTitle: '4. 联系方式 (Contact)',
+    dmcaContactDesc: '版权相关事宜请联系：',
+    dmcaContactEmail: '邮箱: copyright@arenafi.org -- 请在邮件主题中注明"版权通知"或"DMCA Notice"。我们将在收到有效通知后尽快处理（通常在5个工作日内）。',
+
 } as const
 
 export default zh

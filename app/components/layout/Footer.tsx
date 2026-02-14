@@ -32,10 +32,10 @@ export default function Footer() {
     {
       title: isZh ? '法律' : 'Legal',
       links: [
-        { href: '/legal/terms', label: isZh ? '服务条款' : 'Terms' },
-        { href: '/legal/privacy', label: isZh ? '隐私政策' : 'Privacy' },
-        { href: '/legal/disclaimer', label: isZh ? '风险免责声明' : 'Disclaimer' },
-        { href: '/legal/dmca', label: isZh ? '版权政策' : 'DMCA' },
+        { href: '/terms', label: isZh ? '服务条款' : 'Terms' },
+        { href: '/privacy', label: isZh ? '隐私政策' : 'Privacy' },
+        { href: '/disclaimer', label: isZh ? '风险免责声明' : 'Disclaimer' },
+        { href: '/dmca', label: isZh ? '版权政策' : 'DMCA' },
       ],
     },
     {
