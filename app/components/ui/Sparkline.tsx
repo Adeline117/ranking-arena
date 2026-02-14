@@ -1,6 +1,6 @@
 'use client'
 
-import React, { memo } from 'react'
+import React, { memo, useId } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 interface SparklineProps {
@@ -67,6 +67,9 @@ export const Sparkline = memo(function Sparkline({
     )
   }
 
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- memo component, stable call order
+  const gradientId = useId()
+
   // Sparkline curve
   const min = Math.min(...data)
   const max = Math.max(...data)
@@ -84,9 +87,14 @@ export const Sparkline = memo(function Sparkline({
 
   const isUp = data[data.length - 1] >= data[0]
   const strokeColor = color || (isUp ? tokens.colors.sentiment.bull : tokens.colors.sentiment.bear)
+  const fillId = `spark-fill-${gradientId.replace(/:/g, '')}`
 
   // Area fill path
   const areaPath = `M${points[0]} ${points.slice(1).map(p => `L${p}`).join(' ')} L${(padding + effectiveW).toFixed(1)},${(padding + effectiveH).toFixed(1)} L${padding},${(padding + effectiveH).toFixed(1)} Z`
+
+  const first = data[0]
+  const last = data[data.length - 1]
+  const changePercent = first !== 0 ? (((last - first) / Math.abs(first)) * 100).toFixed(1) : '0.0'
 
   return (
     <svg
@@ -94,15 +102,16 @@ export const Sparkline = memo(function Sparkline({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       className={className}
-      aria-label="ROI curve"
+      role="img"
+      aria-label={`ROI trend: ${isUp ? '+' : ''}${changePercent}% over ${data.length} points`}
     >
       <defs>
-        <linearGradient id={`spark-fill-${isUp ? 'up' : 'down'}`} x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={strokeColor} stopOpacity={0.3} />
           <stop offset="100%" stopColor={strokeColor} stopOpacity={0} />
         </linearGradient>
       </defs>
-      <path d={areaPath} fill={`url(#spark-fill-${isUp ? 'up' : 'down'})`} />
+      <path d={areaPath} fill={`url(#${fillId})`} />
       <polyline
         points={points.join(' ')}
         fill="none"

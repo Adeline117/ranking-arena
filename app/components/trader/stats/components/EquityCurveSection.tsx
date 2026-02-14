@@ -26,11 +26,24 @@ export function EquityCurveSection({
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
   const [chartType, setChartType] = useState<'roi' | 'pnl'>('roi')
   const [mounted, setMounted] = useState(false)
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
 
   useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setPrefersReducedMotion(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      setMounted(true)
+      return
+    }
     const timer = setTimeout(() => setMounted(true), delay * 1000)
     return () => clearTimeout(timer)
-  }, [delay])
+  }, [delay, prefersReducedMotion])
 
   const currentData = equityCurve?.[period] || []
   const hasData = currentData.length > 0
@@ -54,7 +67,7 @@ export function EquityCurveSection({
           boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
           opacity: mounted ? 1 : 0,
           transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-          transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: prefersReducedMotion ? 'none' : 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -80,7 +93,7 @@ export function EquityCurveSection({
         boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
         opacity: mounted ? 1 : 0,
         transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: prefersReducedMotion ? 'none' : 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
@@ -210,6 +223,14 @@ function SimpleLineChart({
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
   const chartRef = useRef<HTMLDivElement>(null)
 
+  const formatAxisLabel = (val: number) => {
+    const abs = Math.abs(val)
+    const sign = val < 0 ? '-' : ''
+    if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
+    if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`
+    return `${sign}$${abs.toFixed(0)}`
+  }
+
   if (data.length === 0) {
     return null
   }
@@ -221,8 +242,9 @@ function SimpleLineChart({
 
   const width = 100
   const height = 100
+  const denominator = data.length > 1 ? data.length - 1 : 1
   const points = data.map((d, i) => {
-    const x = (i / (data.length - 1)) * width
+    const x = (i / denominator) * width
     const y = height - ((d[dataKey] - minValue) / range) * height
     return `${x},${y}`
   })
@@ -279,10 +301,10 @@ function SimpleLineChart({
         justifyContent: 'space-between',
       }}>
         <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}>
-          {dataKey === 'roi' ? `${maxValue.toFixed(0)}%` : `$${(maxValue / 1000).toFixed(0)}K`}
+          {dataKey === 'roi' ? `${maxValue.toFixed(0)}%` : formatAxisLabel(maxValue)}
         </Text>
         <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}>
-          {dataKey === 'roi' ? `${minValue.toFixed(0)}%` : `$${(minValue / 1000).toFixed(0)}K`}
+          {dataKey === 'roi' ? `${minValue.toFixed(0)}%` : formatAxisLabel(minValue)}
         </Text>
       </Box>
 
@@ -329,9 +351,9 @@ function SimpleLineChart({
           {/* Hover vertical line */}
           {hoverIndex !== null && (
             <line
-              x1={(hoverIndex / (data.length - 1)) * width}
+              x1={(hoverIndex / denominator) * width}
               y1="0"
-              x2={(hoverIndex / (data.length - 1)) * width}
+              x2={(hoverIndex / denominator) * width}
               y2="100"
               stroke={tokens.colors.text.tertiary}
               strokeWidth="1"
@@ -342,7 +364,7 @@ function SimpleLineChart({
 
           {/* Hover dot */}
           {hoverIndex !== null && (() => {
-            const cx = (hoverIndex / (data.length - 1)) * width
+            const cx = (hoverIndex / denominator) * width
             const cy = height - ((data[hoverIndex][dataKey] - minValue) / range) * height
             return <circle cx={cx} cy={cy} r="4" fill={color} stroke={tokens.colors.bg.primary} strokeWidth="2" vectorEffect="non-scaling-stroke" />
           })()}
@@ -384,6 +406,16 @@ function SimpleLineChart({
             <Text size="sm" weight="bold" style={{ color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
               {formatTooltipValue(hoverData[dataKey])}
             </Text>
+            {dataKey === 'roi' && hoverData.pnl !== undefined && (
+              <Text size="xs" color="tertiary" style={{ display: 'block', marginTop: 2, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+                PnL: {formatTooltipValue(hoverData.pnl).replace(/[+-]/, m => m)}
+              </Text>
+            )}
+            {dataKey === 'pnl' && hoverData.roi !== undefined && (
+              <Text size="xs" color="tertiary" style={{ display: 'block', marginTop: 2, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+                ROI: {hoverData.roi >= 0 ? '+' : ''}{hoverData.roi.toFixed(2)}%
+              </Text>
+            )}
           </Box>
         )}
       </Box>
