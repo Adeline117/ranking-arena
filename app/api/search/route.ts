@@ -181,9 +181,9 @@ export const GET = withPublic(
       total: traders.length + posts.length + library.length + users.length,
     }
 
-    // 缓存 30 秒
+    // 缓存 5 分钟（pg_trgm索引加速后可以更长TTL）
     try {
-      await cacheSet(cacheKey, result, { ttl: 120 })
+      await cacheSet(cacheKey, result, { ttl: 300 })
     } catch {
       // 非关键
     }
