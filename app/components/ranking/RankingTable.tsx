@@ -451,11 +451,14 @@ function RankingTableInner(props: {
   const VIRTUAL_THRESHOLD = 30
   const useVirtual = paginatedTraders.length > VIRTUAL_THRESHOLD
   const tableScrollRef = useRef<HTMLDivElement>(null)
+  const [scrollMounted, setScrollMounted] = useState(false)
+  useEffect(() => { setScrollMounted(true) }, [])
   const tableVirtualizer = useVirtualizer({
-    count: useVirtual ? paginatedTraders.length : 0,
+    count: useVirtual && scrollMounted ? paginatedTraders.length : 0,
     getScrollElement: () => tableScrollRef.current,
     estimateSize: () => 56, // minHeight of TraderRow
     overscan: 5,
+    enabled: scrollMounted,
   })
 
   // Reset virtualizer scroll position on page/sort/filter changes

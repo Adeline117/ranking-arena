@@ -14,6 +14,16 @@ import { logger } from '@/lib/logger'
 
 const EpubReader = dynamic(() => import('@/app/components/library/EpubReader'), { ssr: false })
 
+// pdfjs-dist types (dynamically imported)
+type PDFDocumentProxy = import('pdfjs-dist').PDFDocumentProxy
+type PDFRenderTask = ReturnType<import('pdfjs-dist/types/src/display/api').PDFPageProxy['render']>
+
+interface EpubTocEntry {
+  label: string
+  href: string
+  subitems?: EpubTocEntry[]
+}
+
 // ─── Types ───────────────────────────────────────────────────────────
 
 type BookInfo = {
@@ -263,7 +273,7 @@ export default function ReadPage() {
   const [contentMode, setContentMode] = useState<ContentMode>('none')
 
   // PDF state
-  const [pdfDoc, setPdfDoc] = useState<any>(null)
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
   const [totalPages, setTotalPages] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [pdfLoading, setPdfLoading] = useState(false)
@@ -278,7 +288,7 @@ export default function ReadPage() {
   const [htmlLoading, setHtmlLoading] = useState(false)
 
   // ePub state
-  const [epubToc, setEpubToc] = useState<any[]>([])
+  const [epubToc, setEpubToc] = useState<EpubTocEntry[]>([])
   const [epubGoToHref, setEpubGoToHref] = useState<string | null>(null)
   const [epubReady, setEpubReady] = useState(false)
   const epubContainerRef = useRef<HTMLDivElement>(null)
@@ -306,8 +316,8 @@ export default function ReadPage() {
 
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const pdfDocRef = useRef<any>(null)
-  const renderTaskRef = useRef<any>(null)
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null)
+  const renderTaskRef = useRef<PDFRenderTask | null>(null)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
   const toolbarTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -394,7 +404,13 @@ export default function ReadPage() {
   }, [id, isLoggedIn])
 
   // ─── Extract TOC from PDF ─────────────────────────────────────────
-  const extractToc = useCallback(async (doc: any, outline: any[], level: number): Promise<TocItem[]> => {
+  interface PDFOutlineItem {
+    title: string
+    dest: string | unknown[] | null
+    items?: PDFOutlineItem[]
+  }
+
+  const extractToc = useCallback(async (doc: PDFDocumentProxy, outline: PDFOutlineItem[], level: number): Promise<TocItem[]> => {
     const items: TocItem[] = []
     for (const entry of outline) {
       let pageIndex = 0
@@ -1345,8 +1361,8 @@ export default function ReadPage() {
     </div>
   )
 
-  function renderEpubTocItems(items: any[], level = 0): React.ReactNode {
-    return items.map((item: any, i: number) => (
+  function renderEpubTocItems(items: EpubTocEntry[], level = 0): React.ReactNode {
+    return items.map((item: EpubTocEntry, i: number) => (
       <div key={i}>
         <button
           onClick={() => { setEpubGoToHref(item.href); setShowToc(false); setTimeout(() => setEpubGoToHref(null), 100) }}

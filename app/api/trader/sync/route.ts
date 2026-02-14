@@ -12,6 +12,8 @@ import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
 import { logger } from '@/lib/logger'
 import { calculateArenaScore } from '@/lib/utils/arena-score'
 import type { Period } from '@/lib/utils/arena-score'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { TraderData } from '@/lib/adapters/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -36,7 +38,19 @@ export async function POST(request: NextRequest) {
     const body: SyncRequest = await request.json()
     const { authorizationId, userId } = body
 
-    let authorizations: any[] = []
+    interface TraderAuthorization {
+      id: string
+      user_id: string
+      trader_id: string
+      platform: string
+      encrypted_api_key: string
+      encrypted_api_secret: string
+      status: string
+      last_verified_at: string | null
+      verification_error: string | null
+    }
+
+    let authorizations: TraderAuthorization[] = []
 
     if (authorizationId) {
       // Sync specific authorization
@@ -179,7 +193,7 @@ export async function POST(request: NextRequest) {
 async function syncPlatformData(
   platform: string,
   credentials: { apiKey: string; apiSecret: string; traderId: string }
-): Promise<{ success: boolean; data?: any; error?: string; recordsCount?: number }> {
+): Promise<{ success: boolean; data?: TraderData; error?: string; recordsCount?: number }> {
   const platformLower = platform.toLowerCase()
 
   try {
@@ -224,9 +238,9 @@ async function syncPlatformData(
  * Store synced data into trader_snapshots
  */
 async function storeSyncedData(
-  supabase: any,
-  authorization: any,
-  traderData: any
+  supabase: SupabaseClient,
+  authorization: { id: string; platform: string; trader_id: string },
+  traderData: TraderData
 ) {
   // Calculate arena score
   const period: Period = traderData.periodDays === 30 ? '30D' : '7D'

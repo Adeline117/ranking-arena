@@ -22,7 +22,7 @@ interface ExchangeConfig {
   name: string
   url: string
   symbols: string[]
-  responseMapper: (data: any, symbol: string) => OpenInterestData | null
+  responseMapper: (data: Record<string, unknown>, symbol: string) => OpenInterestData | null
 }
 
 interface OpenInterestData {
@@ -42,13 +42,13 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'binance',
     url: 'https://fapi.binance.com/fapi/v1/openInterest',
     symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'],
-    responseMapper: (data: any, symbol: string) => {
+    responseMapper: (data: Record<string, unknown>, symbol: string) => {
       if (!data || !data.openInterest) return null
       return {
         platform: 'binance',
-        symbol: data.symbol || symbol,
-        open_interest_usd: parseFloat(data.openInterest) * parseFloat(data.price || 0), // Approximate USD value
-        open_interest_qty: parseFloat(data.openInterest),
+        symbol: (data.symbol as string) || symbol,
+        open_interest_usd: parseFloat(data.openInterest as string) * parseFloat((data.price as string) || '0'),
+        open_interest_qty: parseFloat(data.openInterest as string),
         timestamp: new Date().toISOString(),
       }
     },
@@ -57,9 +57,10 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'bybit',
     url: 'https://api.bybit.com/v5/market/open-interest',
     symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
-    responseMapper: (data: any, symbol: string) => {
-      if (!data.result?.list || data.result.list.length === 0) return null
-      const oi = data.result.list[0]
+    responseMapper: (data: Record<string, unknown>, symbol: string) => {
+      const result = data.result as { list?: Array<Record<string, string>> } | undefined
+      if (!result?.list || result.list.length === 0) return null
+      const oi = result.list[0]
       return {
         platform: 'bybit',
         symbol: oi.symbol || symbol,
@@ -72,9 +73,10 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'okx',
     url: 'https://www.okx.com/api/v5/public/open-interest',
     symbols: ['BTC-USDT-SWAP', 'ETH-USDT-SWAP', 'SOL-USDT-SWAP'],
-    responseMapper: (data: any, symbol: string) => {
-      if (!data.data || data.data.length === 0) return null
-      const oi = data.data[0]
+    responseMapper: (data: Record<string, unknown>, symbol: string) => {
+      const items = data.data as Array<Record<string, string>> | undefined
+      if (!items || items.length === 0) return null
+      const oi = items[0]
       return {
         platform: 'okx',
         symbol: oi.instId || symbol,
@@ -87,13 +89,14 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'bitget',
     url: 'https://api.bitget.com/api/v2/mix/market/open-interest',
     symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
-    responseMapper: (data: any, symbol: string) => {
-      if (!data.data || !data.data.openInterest) return null
+    responseMapper: (data: Record<string, unknown>, symbol: string) => {
+      const d = data.data as Record<string, string> | undefined
+      if (!d || !d.openInterest) return null
       return {
         platform: 'bitget',
-        symbol: data.data.symbol || symbol,
-        open_interest_usd: parseFloat(data.data.openInterestUsd || data.data.openInterest),
-        open_interest_qty: parseFloat(data.data.openInterest),
+        symbol: d.symbol || symbol,
+        open_interest_usd: parseFloat(d.openInterestUsd || d.openInterest),
+        open_interest_qty: parseFloat(d.openInterest),
         timestamp: new Date().toISOString(),
       }
     },

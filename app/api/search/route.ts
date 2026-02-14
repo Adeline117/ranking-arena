@@ -73,7 +73,7 @@ export const GET = withPublic(
 
     // 并行查询所有表 — 每个独立容错，不因一个失败影响整体
      
-    const safeQuery = async (promise: PromiseLike<{ data: any; error: any }>): Promise<any[]> => {
+    const safeQuery = async <T>(promise: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> => {
       try {
         const { data, error } = await promise
         if (error) return []
@@ -131,7 +131,12 @@ export const GET = withPublic(
     }
 
      
-    const traders: UnifiedSearchResult[] = tradersData.map((t: any) => ({
+    interface TraderSourceRow { source_trader_id: string; handle: string | null; source: string }
+    interface PostRow { id: string; title: string | null; author_handle: string | null; created_at: string; view_count: number | null }
+    interface LibraryRow { id: string; title: string; author: string | null; slug: string | null; category: string | null }
+    interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
+
+    const traders: UnifiedSearchResult[] = (tradersData as TraderSourceRow[]).map((t) => ({
       id: `${t.source}:${t.source_trader_id}`,
       type: 'trader' as const,
       title: `@${t.handle || t.source_trader_id}`,
@@ -140,7 +145,7 @@ export const GET = withPublic(
     }))
 
      
-    const posts: UnifiedSearchResult[] = postsData.map((p: any) => ({
+    const posts: UnifiedSearchResult[] = (postsData as PostRow[]).map((p) => ({
       id: p.id,
       type: 'post' as const,
       title: p.title || '无标题',
@@ -150,8 +155,8 @@ export const GET = withPublic(
     }))
 
      
-    const library: UnifiedSearchResult[] = libraryData.map(
-      (l: any) => ({
+    const library: UnifiedSearchResult[] = (libraryData as LibraryRow[]).map(
+      (l) => ({
         id: l.id,
         type: 'library' as const,
         title: l.title,
@@ -161,7 +166,7 @@ export const GET = withPublic(
     )
 
      
-    const users: UnifiedSearchResult[] = usersData.map((u: any) => ({
+    const users: UnifiedSearchResult[] = (usersData as UserRow[]).map((u) => ({
       id: u.id,
       type: 'user' as const,
       title: u.display_name || `@${u.handle}`,

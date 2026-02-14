@@ -14,7 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .eq('status', 'read')
       .gte('rating', 4)
 
-    const userIds = (highRaters || []).map((r: any) => r.user_id)
+    const userIds = (highRaters || []).map((r: { user_id: string }) => r.user_id)
 
     let results: { id: string; title: string; author: string | null; cover_url: string | null; rating: number | null; rating_count: number | null; count: number }[] = []
 
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
           if (books) {
             const freqMap = Object.fromEntries(sorted)
-            results = books.map((b: any) => ({ ...b, count: freqMap[b.id] || 0 }))
+            results = books.map((b: { id: string; title: string; author: string | null; cover_url: string | null; rating: number | null; rating_count: number | null }) => ({ ...b, count: freqMap[b.id] || 0 }))
             results.sort((a, b) => b.count - a.count)
           }
         }
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const { data: fallback } = await query
         if (fallback) {
-          results.push(...fallback.map((b: any) => ({ ...b, count: 0 })))
+          results.push(...fallback.map((b: { id: string; title: string; author: string | null; cover_url: string | null; rating: number | null; rating_count: number | null }) => ({ ...b, count: 0 })))
         }
       }
     }

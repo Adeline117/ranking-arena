@@ -170,10 +170,16 @@ function generateCsp(): string {
       'wss://*.walletconnect.com',
       'https://*.walletconnect.org',
       'wss://*.walletconnect.org',
+      // Privy auth
+      'https://auth.privy.io',
+      'https://*.privy.io',
+      // WalletConnect pulse
+      'https://pulse.walletconnect.org',
     ],
     'frame-src': [
       "'self'",
       'https://vercel.live',
+      'https://auth.privy.io',
     ],
     'object-src': ["'none'"],
     'base-uri': ["'self'"],
