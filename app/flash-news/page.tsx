@@ -499,12 +499,26 @@ export default function FlashNewsPage() {
               <div ref={sentinelRef} style={{ height: 1 }} />
               {loadingMore && (
                 <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
-                  <Text size="sm" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                    <Box style={{
+                      width: 16, height: 16, borderRadius: '50%',
+                      border: `2px solid var(--color-accent-primary)`,
+                      borderTopColor: 'transparent',
+                      animation: 'spin 0.6s linear infinite',
+                    }} />
+                    <Text size="sm" color="tertiary">{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+                  </Box>
                 </Box>
               )}
               {!hasMore && news.length > 0 && (
-                <Box style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-                  <Text size="sm" color="tertiary">{language === 'zh' ? '没有更多了' : 'No more news'}</Text>
+                <Box style={{
+                  textAlign: 'center', padding: tokens.spacing[4],
+                  borderTop: `1px solid ${tokens.colors.border.primary}`,
+                  marginTop: tokens.spacing[2],
+                }}>
+                  <Text size="sm" color="tertiary">
+                    {language === 'zh' ? `-- 共 ${news.length} 条快讯 --` : `-- ${news.length} news total --`}
+                  </Text>
                 </Box>
               )}
             </Box>
