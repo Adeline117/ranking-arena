@@ -139,7 +139,7 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
             {data.avatar_url ? (
               <Image src={data.avatar_url} alt={displayName} width={72} height={72} style={{ objectFit: 'cover' }} />
             ) : (
-              <Text size="xl" weight="bold" style={{ color: '#fff' }}>{initial}</Text>
+              <Text size="xl" weight="bold" style={{ color: tokens.colors.white }}>{initial}</Text>
             )}
           </Box>
 
