@@ -1,58 +1,14 @@
 /**
- * Sentry 客户端配置
- * 用于捕获浏览器端错误
+ * Sentry client config -- intentionally empty.
  *
- * Performance: Uses lazyLoadIntegrations to defer loading non-critical
- * Sentry integrations until after page load, reducing initial bundle size.
+ * The @sentry/nextjs webpack plugin auto-injects this file into the client
+ * bundle. A synchronous `import * as Sentry` here would add ~200KB+ to the
+ * critical path and block FCP/LCP.
+ *
+ * All client-side Sentry initialization is handled in instrumentation-client.ts
+ * via requestIdleCallback / dynamic import, keeping Sentry entirely off the
+ * critical rendering path.
+ *
+ * DO NOT add Sentry.init() here -- it will create a duplicate init and undo
+ * the deferred loading strategy.
  */
-
-import * as Sentry from '@sentry/nextjs'
-
-Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-
-  // Reduce tracing overhead — only sample 5% of transactions
-  tracesSampleRate: 0.05,
-
-  environment: process.env.NODE_ENV,
-
-  debug: false,
-
-  replaysSessionSampleRate: 0,
-  replaysOnErrorSampleRate: 0.1,
-
-  ignoreErrors: [
-    'ResizeObserver loop',
-    'ChunkLoadError',
-    'Loading chunk',
-    'Network request failed',
-    'AbortError',
-    'NEXT_NOT_FOUND',
-    // Common non-actionable errors
-    'Non-Error promise rejection captured',
-    'TypeError: Failed to fetch',
-    'TypeError: NetworkError',
-    'TypeError: Load failed',
-  ],
-
-  // Reduce noise from third-party scripts
-  denyUrls: [
-    /extensions\//i,
-    /^chrome:\/\//i,
-    /^moz-extension:\/\//i,
-  ],
-
-  beforeSend(event) {
-    if (event.user) {
-      delete event.user.ip_address
-    }
-    return event
-  },
-
-  initialScope: {
-    tags: {
-      app: 'ranking-arena',
-      platform: 'client',
-    },
-  },
-})

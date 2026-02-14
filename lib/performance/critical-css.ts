@@ -229,8 +229,7 @@ export function getResourceHints(): Array<{ rel: string; href: string; crossOrig
     { rel: 'dns-prefetch', href: 'https://api.coingecko.com' },
     // Sentry -- error reporting (also in layout.tsx head)
     { rel: 'dns-prefetch', href: 'https://o4509384792580096.ingest.us.sentry.io' },
-    // Stripe -- payment processing
-    { rel: 'dns-prefetch', href: 'https://js.stripe.com' },
+    // Stripe -- server-side only (no client-side js.stripe.com needed)
   ]
 
   // Upstash Redis -- server-side cache, add dns-prefetch only (not fetched from browser)
