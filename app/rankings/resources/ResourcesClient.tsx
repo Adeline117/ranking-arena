@@ -315,7 +315,7 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 48, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 40, flexWrap: 'wrap' }}>
             <button
               disabled={page <= 1}
               onClick={() => setPage(p => p - 1)}
