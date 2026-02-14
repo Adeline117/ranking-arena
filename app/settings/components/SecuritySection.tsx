@@ -89,6 +89,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
             onChange={(e) => props.setNewEmail(e.target.value)}
             onBlur={() => props.markTouched('newEmail')}
             placeholder={t('enterNewEmail')}
+            autoComplete="email"
             style={{ ...getInputStyle(props.touchedFields.newEmail && !newEmailValidation.valid), flex: 1 }}
           />
           <Button
@@ -158,6 +159,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               value={props.currentPassword}
               onChange={(e) => props.setCurrentPassword(e.target.value)}
               placeholder={t('currentPasswordPlaceholder')}
+              autoComplete="current-password"
               style={getInputStyle()}
             />
             <Box>
@@ -167,6 +169,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 onChange={(e) => props.setNewPassword(e.target.value)}
                 onBlur={() => props.markTouched('newPassword')}
                 placeholder={t('newPasswordPlaceholder')}
+                autoComplete="new-password"
                 style={getInputStyle(props.touchedFields.newPassword && !newPasswordValidation.valid)}
               />
               {props.touchedFields.newPassword && props.newPassword && !newPasswordValidation.valid && (
@@ -182,6 +185,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 onChange={(e) => props.setConfirmNewPassword(e.target.value)}
                 onBlur={() => props.markTouched('confirmPassword')}
                 placeholder={t('confirmPasswordPlaceholder')}
+                autoComplete="new-password"
                 style={getInputStyle(props.touchedFields.confirmPassword && !confirmPasswordValidation.valid)}
               />
               {props.touchedFields.confirmPassword && props.confirmNewPassword && !confirmPasswordValidation.valid && (
@@ -326,6 +330,8 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                   onChange={(e) => props.setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
                   maxLength={6}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   style={{
                     ...getInputStyle(),
                     maxWidth: 160,
@@ -409,6 +415,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 value={props.disablePassword}
                 onChange={(e) => props.setDisablePassword(e.target.value)}
                 placeholder={t('enterCurrentPasswordPlaceholder')}
+                autoComplete="current-password"
                 style={{ ...getInputStyle(), maxWidth: 240 }}
               />
               <Button
