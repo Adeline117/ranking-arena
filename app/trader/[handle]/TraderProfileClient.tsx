@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
@@ -8,6 +9,12 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import Image from 'next/image'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatDisplayName } from '@/app/components/ranking/utils'
+import { JsonLd } from '@/app/components/Providers/JsonLd'
+import {
+  generateTraderProfilePageSchema,
+  generateBreadcrumbSchema,
+  combineSchemas,
+} from '@/lib/seo'
 
 export interface UnregisteredTraderData {
   handle: string
@@ -99,6 +106,7 @@ const TRADING_STYLE_MAP: Record<string, string> = {
 }
 
 export default function TraderProfileClient({ data }: { data: UnregisteredTraderData }) {
+  const [copied, setCopied] = useState(false)
   const exchangeName = EXCHANGE_NAMES[data.source] || data.source
   const displayName = formatDisplayName(data.handle, data.source)
   const gradient = getAvatarGradient(data.handle)
@@ -107,8 +115,34 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
   const pnlColor = (data.pnl ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'
   const tradingStyle = data.trading_style ? (TRADING_STYLE_MAP[data.trading_style] || data.trading_style) : '--'
 
+  const copyHandle = useCallback(() => {
+    navigator.clipboard.writeText(data.handle).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => { /* fallback */ })
+  }, [data.handle])
+
+  const structuredData = combineSchemas(
+    generateTraderProfilePageSchema({
+      handle: data.handle,
+      id: data.source_trader_id,
+      source: data.source,
+      roi90d: data.roi ?? undefined,
+      winRate: data.win_rate ?? undefined,
+      maxDrawdown: data.max_drawdown ?? undefined,
+      arenaScore: data.arena_score ?? undefined,
+      avatarUrl: data.avatar_url ?? undefined,
+    }),
+    generateBreadcrumbSchema([
+      { name: 'Home', url: process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org' },
+      { name: 'Ranking', url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/rankings` },
+      { name: data.handle },
+    ])
+  )
+
   return (
     <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
+      <JsonLd data={structuredData} />
       <TopNav />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[4]}` }}>
         <Breadcrumb items={[
@@ -144,7 +178,35 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
           </Box>
 
           <Box style={{ flex: 1 }}>
-            <Text size="xl" weight="bold" style={{ color: 'var(--color-text-primary)' }}>{displayName}</Text>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+              <Text size="xl" weight="bold" style={{ color: 'var(--color-text-primary)' }}>{displayName}</Text>
+              <button
+                onClick={copyHandle}
+                title={copied ? 'Copied!' : `Copy: ${data.handle}`}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  color: copied ? 'var(--color-success)' : 'var(--color-text-tertiary)',
+                  transition: 'color 0.2s ease',
+                  flexShrink: 0,
+                }}
+              >
+                {copied ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                )}
+              </button>
+            </Box>
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginTop: 4 }}>
               <Text size="sm" style={{
                 color: 'var(--color-text-tertiary)',

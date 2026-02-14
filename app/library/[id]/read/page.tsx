@@ -267,6 +267,7 @@ export default function ReadPage() {
   const [totalPages, setTotalPages] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfLoadProgress, setPdfLoadProgress] = useState(0)
   const [pageRendering, setPageRendering] = useState(false)
   const [toc, setToc] = useState<TocItem[]>([])
 
@@ -286,6 +287,7 @@ export default function ReadPage() {
   const [theme, setTheme] = useState<ReadingTheme>(() => lsGet('theme', 'dark'))
   const [fontSize, setFontSize] = useState<FontSize>(() => lsGet('fontSize', 'medium'))
   const [fontFamily, setFontFamily] = useState<FontFamily>(() => lsGet('fontFamily', 'sans'))
+  const [lineHeight, setLineHeight] = useState<'compact' | 'normal' | 'relaxed'>(() => lsGet('lineHeight', 'normal'))
 
   // Bookmarks
   const [bookmarks, setBookmarks] = useState<number[]>(() => lsGet(`bookmarks_${id}`, []))
@@ -320,6 +322,7 @@ export default function ReadPage() {
   useEffect(() => { lsSet('theme', theme) }, [theme])
   useEffect(() => { lsSet('fontSize', fontSize) }, [fontSize])
   useEffect(() => { lsSet('fontFamily', fontFamily) }, [fontFamily])
+  useEffect(() => { lsSet('lineHeight', lineHeight) }, [lineHeight])
   useEffect(() => { lsSet(`bookmarks_${id}`, bookmarks) }, [bookmarks, id])
 
   // Re-paginate HTML content when font size changes
@@ -422,7 +425,13 @@ export default function ReadPage() {
       try {
         const pdfjsLib = await import('pdfjs-dist')
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
-        const doc = await pdfjsLib.getDocument({ url: url!, disableAutoFetch: false, disableStream: false }).promise
+        const loadingTask = pdfjsLib.getDocument({ url: url!, disableAutoFetch: false, disableStream: false })
+        loadingTask.onProgress = (progress: { loaded: number; total: number }) => {
+          if (progress.total > 0) {
+            setPdfLoadProgress(Math.round((progress.loaded / progress.total) * 100))
+          }
+        }
+        const doc = await loadingTask.promise
         if (cancelled) return
         setPdfDoc(doc)
         pdfDocRef.current = doc
@@ -729,8 +738,15 @@ export default function ReadPage() {
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <div style={{ width: 40, height: 40, border: '3px solid var(--glass-border-light)', borderTopColor: 'var(--color-accent-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <p style={{ color: 'var(--color-text-tertiary)', fontSize: 14 }}>
-          {pdfLoading || htmlLoading ? (isZh ? '正在加载文档...' : 'Loading document...') : (isZh ? '加载中...' : 'Loading...')}
+          {pdfLoading ? (isZh ? `正在加载文档...${pdfLoadProgress > 0 ? ` ${pdfLoadProgress}%` : ''}` : `Loading document...${pdfLoadProgress > 0 ? ` ${pdfLoadProgress}%` : ''}`)
+            : htmlLoading ? (isZh ? '正在加载文档...' : 'Loading document...')
+            : (isZh ? '加载中...' : 'Loading...')}
         </p>
+        {pdfLoading && pdfLoadProgress > 0 && (
+          <div style={{ width: 200, height: 4, borderRadius: 2, background: 'var(--glass-bg-medium)', overflow: 'hidden' }}>
+            <div style={{ width: `${pdfLoadProgress}%`, height: '100%', borderRadius: 2, background: 'var(--color-accent-primary)', transition: 'width 0.3s ease' }} />
+          </div>
+        )}
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     )
@@ -1102,6 +1118,28 @@ export default function ReadPage() {
               </div>
             </div>
 
+            {/* Line Height (HTML mode) */}
+            {contentMode === 'html' && (
+              <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: themeColors.settingsLabel }}>
+                  {isZh ? '行距' : 'Line Height'}
+                </p>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                  {(['compact', 'normal', 'relaxed'] as const).map(lh => (
+                    <button key={lh} onClick={() => setLineHeight(lh)} style={{
+                      flex: 1, padding: '8px 4px', borderRadius: 10,
+                      background: lineHeight === lh ? 'var(--color-accent-primary)' : themeColors.settingsControlBg,
+                      color: lineHeight === lh ? 'var(--color-on-accent)' : themeColors.settingsOptionInactive,
+                      border: 'none', cursor: 'pointer', fontSize: 13,
+                      fontWeight: 600, transition: 'all 0.15s',
+                    }}>
+                      {isZh ? ({ compact: '紧凑', normal: '标准', relaxed: '宽松' }[lh]) : ({ compact: 'Tight', normal: 'Normal', relaxed: 'Wide' }[lh])}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Font Family (HTML/ePub mode) */}
             {(contentMode === 'html' || contentMode === 'epub') && (
               <div style={{ borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`, paddingTop: 14, marginBottom: 14 }}>
@@ -1200,12 +1238,12 @@ export default function ReadPage() {
               background: themeColors.pageBg,
               color: themeColors.text,
               borderRadius: tokens.radius.sm,
-              padding: '40px 36px',
+              padding: 'clamp(20px, 5vw, 40px) clamp(16px, 4vw, 36px)',
               minHeight: 'calc(100vh - 160px)',
               boxShadow: theme !== 'dark' ? '0 2px 20px var(--color-overlay-subtle)' : '0 2px 20px var(--color-overlay-medium)',
               fontFamily: fontFamilyConfig.css,
               fontSize: fontSizeConfig.body,
-              lineHeight: 1.85,
+              lineHeight: lineHeight === 'compact' ? 1.5 : lineHeight === 'relaxed' ? 2.1 : 1.85,
               letterSpacing: '0.01em',
               wordBreak: 'break-word',
               animation: flipDirection ? `page-flip-${flipDirection} 0.3s ease` : 'none',

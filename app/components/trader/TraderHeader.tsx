@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
@@ -307,8 +307,18 @@ export default function TraderHeader({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
   const [showAlertConfig, setShowAlertConfig] = useState(false)
   const router = useRouter()
+  const [handleCopied, setHandleCopied] = useState(false)
   const { t } = useLanguage()
   const { showToast: _showToast } = useToast()
+
+  const copyHandle = useCallback(() => {
+    navigator.clipboard.writeText(handle).then(() => {
+      setHandleCopied(true)
+      setTimeout(() => setHandleCopied(false), 2000)
+    }).catch(() => {
+      // fallback
+    })
+  }, [handle])
 
   useEffect(() => {
     setMounted(true)
@@ -477,6 +487,33 @@ export default function TraderHeader({
             >
               {displayNameProp || formatDisplayName(handle, source)}
             </Text>
+
+            <button
+              onClick={copyHandle}
+              title={handleCopied ? 'Copied!' : `Copy: ${handle}`}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'inline-flex',
+                alignItems: 'center',
+                color: handleCopied ? tokens.colors.accent.success : tokens.colors.text.tertiary,
+                transition: 'color 0.2s ease',
+                flexShrink: 0,
+              }}
+            >
+              {handleCopied ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              )}
+            </button>
 
             {uid && (
               <Badge color={tokens.colors.accent.primary} style={{ padding: `3px ${tokens.spacing[2]}` }} title={t('userNumber')}>

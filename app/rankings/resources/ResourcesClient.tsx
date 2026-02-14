@@ -20,6 +20,8 @@ const CATEGORIES = [
   { key: 'paper', en: 'Papers', zh: '论文' },
   { key: 'book', en: 'Books', zh: '书籍' },
   { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书' },
+  { key: 'research', en: 'Research', zh: '研报' },
+  { key: 'academic_paper', en: 'Academic', zh: '学术论文' },
 ]
 
 const SORT_OPTIONS = [
