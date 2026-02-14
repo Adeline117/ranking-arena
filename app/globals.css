@@ -87,28 +87,28 @@ html.theme-transition *::after {
   
   /* Accent colors */
   --color-accent-primary: #8b6fa8;
-  --color-accent-primary-08: var(--color-accent-primary-08);
-  --color-accent-primary-12: var(--color-accent-primary-12);
-  --color-accent-primary-30: var(--color-accent-primary-30);
-  --color-accent-primary-40: var(--color-accent-primary-40);
-  --color-accent-primary-60: var(--color-accent-primary-60);
+  --color-accent-primary-08: rgba(139, 111, 168, 0.08);
+  --color-accent-primary-10: rgba(139, 111, 168, 0.1);
+  --color-accent-primary-12: rgba(139, 111, 168, 0.12);
+  --color-accent-primary-15: rgba(139, 111, 168, 0.15);
+  --color-accent-primary-20: rgba(139, 111, 168, 0.2);
+  --color-accent-primary-30: rgba(139, 111, 168, 0.3);
+  --color-accent-primary-40: rgba(139, 111, 168, 0.4);
+  --color-accent-primary-60: rgba(139, 111, 168, 0.6);
   --color-accent-success: #2fe57d;
-  --color-accent-success-20: var(--color-accent-success-20);
-  --color-accent-error: #ff7c7c;
-  --color-accent-error-20: rgba(255, 124, 124, 0.2);
-  --color-accent-warning: #ffc107;
-  --color-accent-primary-15: var(--color-accent-primary-15);
-  --color-accent-primary-10: var(--color-accent-primary-10);
-  --color-accent-primary-20: var(--color-accent-primary-20);
   --color-accent-success-04: rgba(47, 229, 125, 0.04);
   --color-accent-success-05: rgba(47, 229, 125, 0.05);
-  --color-accent-success-10: var(--color-accent-success-10);
+  --color-accent-success-10: rgba(47, 229, 125, 0.1);
   --color-accent-success-12: rgba(47, 229, 125, 0.12);
+  --color-accent-success-20: rgba(47, 229, 125, 0.2);
+  --color-accent-error: #ff7c7c;
   --color-accent-error-04: rgba(255, 124, 124, 0.04);
   --color-accent-error-08: rgba(255, 124, 124, 0.08);
-  --color-accent-error-10: var(--color-accent-error-10);
+  --color-accent-error-10: rgba(255, 124, 124, 0.1);
   --color-accent-error-12: rgba(255, 124, 124, 0.12);
-  --color-accent-error-15: var(--color-accent-error-15);
+  --color-accent-error-15: rgba(255, 124, 124, 0.15);
+  --color-accent-error-20: rgba(255, 124, 124, 0.2);
+  --color-accent-warning: #ffc107;
   
   /* Overlay/backdrop */
   --color-backdrop: rgba(0, 0, 0, 0.6);
@@ -181,7 +181,7 @@ html.theme-transition *::after {
   --color-highlight-bg: rgba(149, 117, 205, 0.4);
   --color-highlight-row: rgba(149, 117, 205, 0.1);
   --color-unread-bg: rgba(149, 117, 205, 0.06);
-  --color-notification-unread: var(--color-notification-unread);
+  --color-notification-unread: rgba(139, 111, 168, 0.08);
   
   /* Sidebar bg */
   --color-sidebar-bg: rgba(20, 18, 28, 0.9);
