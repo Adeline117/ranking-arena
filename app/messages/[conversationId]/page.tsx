@@ -192,10 +192,11 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
+        ...getCsrfHeaders(),
       },
       body: JSON.stringify({ conversationId }),
     }).catch(() => {})
-  }, [conversationId, accessToken, messages.length])
+  }, [conversationId, accessToken])
 
   // 注入 spin 动画样式
   useEffect(() => {
@@ -288,13 +289,27 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   }, [])
 
   // 滚动到底部
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior })
+  }, [])
+
+  // Track whether we're loading older messages to avoid scrolling to bottom
+  const isLoadingOlderRef = useRef(false)
+  const prevMessageCountRef = useRef(0)
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    // Don't scroll to bottom when loading older messages (prepending)
+    if (isLoadingOlderRef.current) {
+      isLoadingOlderRef.current = false
+      prevMessageCountRef.current = messages.length
+      return
+    }
+    // Only scroll if messages were appended (new message) or initial load
+    if (messages.length > 0) {
+      scrollToBottom(prevMessageCountRef.current === 0 ? 'instant' : 'smooth')
+    }
+    prevMessageCountRef.current = messages.length
+  }, [messages, scrollToBottom])
 
   const loadMessages = useCallback(async (uid: string, convId: string, token?: string) => {
     try {
@@ -371,6 +386,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       const data = await res.json()
 
       if (data.messages?.length) {
+        isLoadingOlderRef.current = true
         setMessages(prev => [...data.messages, ...prev])
         setHasMore(!!data.has_more)
       } else {
@@ -1510,21 +1526,6 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
                           : renderTextWithLinks(msg.content, isMine ? 'var(--color-brand-accent)' : 'var(--color-accent-primary)')}
                       </Text>
                     )}
-                    {/* Show text for messages without media */}
-                    {!msg.media_url && (
-                      <Text
-                        size="sm"
-                        style={{
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {hasStickers(msg.content)
-                          ? renderWithStickers(msg.content, 64)
-                          : renderTextWithLinks(msg.content, isMine ? 'var(--color-brand-accent)' : 'var(--color-accent-primary)')}
-                      </Text>
-                    )}
                   </Box>
                   </Box>{/* close message row with avatar */}
 
@@ -2040,7 +2041,13 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
           <textarea
             ref={inputRef}
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={(e) => {
+              setNewMessage(e.target.value)
+              // Auto-resize textarea
+              const el = e.target
+              el.style.height = 'auto'
+              el.style.height = `${Math.min(el.scrollHeight, 100)}px`
+            }}
             onKeyDown={handleKeyDown}
             onPaste={async (e) => {
               const items = e.clipboardData?.items
