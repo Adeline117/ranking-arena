@@ -743,11 +743,11 @@ export default function OverviewPerformanceCard({
  * 分数配色
  */
 function getScoreColor(score: number | null, max: number): string {
-  if (score == null) return '#8E8E9E'
+  if (score == null) return 'var(--color-text-tertiary)'
   const ratio = score / max
-  if (ratio >= 0.7) return '#16c784'
-  if (ratio >= 0.4) return '#f0b90b'
-  return '#ea3943'
+  if (ratio >= 0.7) return 'var(--color-accent-success)'
+  if (ratio >= 0.4) return 'var(--color-accent-warning)'
+  return 'var(--color-accent-error)'
 }
 
 /**

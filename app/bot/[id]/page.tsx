@@ -13,7 +13,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useBotDetail } from '@/lib/hooks/useBotRankings'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
-import ErrorBoundary from '@/app/components/error/ErrorBoundary'
+import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { Box } from '@/app/components/base'
 import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
 

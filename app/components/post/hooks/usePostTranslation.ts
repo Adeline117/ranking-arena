@@ -1,288 +1,211 @@
-/**
- * usePostTranslation Hook
- *
- * Manages post and comment translation functionality.
- * Extracted from PostFeed.tsx to improve maintainability.
- */
+'use client'
 
 import { useState, useCallback } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { logger } from '@/lib/logger'
+import type { Comment } from './usePostComments'
 
-export interface UsePostTranslationOptions {
-  targetLanguage: 'zh' | 'en'
-  accessToken: string | null
-  onToast?: (message: string, type?: 'success' | 'error' | 'warning') => void
+type Post = {
+  id: string
+  title?: string | null
+  content?: string | null
 }
 
-export interface UsePostTranslationReturn {
-  // Single post translation
+export interface PostTranslationState {
   translatedContent: string | null
+  setTranslatedContent: (v: string | null) => void
   showingOriginal: boolean
+  setShowingOriginal: (v: boolean) => void
   translating: boolean
-  translatePost: (content: string, cacheKey: string) => Promise<void>
-  toggleOriginal: () => void
-  clearTranslation: () => void
-
-  // Batch post translation (list)
   translatedListPosts: Record<string, { title?: string; body?: string }>
   translatingList: boolean
-  translatePostList: (posts: Array<{ id: string; title?: string; body?: string }>) => Promise<void>
-
-  // Comment translation
   translatedComments: Record<string, string>
   translatingComments: boolean
-  translateComments: (comments: Array<{ id: string; body: string }>) => Promise<void>
-
-  // Translation cache
-  translationCache: Record<string, string>
+  isChineseText: (text: string) => boolean
+  extractImagesFromContent: (content: string) => string[]
+  removeImagesFromContent: (content: string) => string
+  translateContent: (postId: string, content: string, targetLang: 'zh' | 'en') => Promise<void>
+  translateListPosts: (posts: Post[], targetLang: 'zh' | 'en') => Promise<void>
+  translateComments: (comments: Comment[], targetLang: 'zh' | 'en') => Promise<void>
 }
 
-export function usePostTranslation(options: UsePostTranslationOptions): UsePostTranslationReturn {
-  const { targetLanguage, accessToken, onToast } = options
-
-  // Single post translation state
+export function usePostTranslation({
+  accessToken,
+  showToast,
+  t,
+}: {
+  accessToken: string | null
+  showToast: (msg: string, type: 'error' | 'success' | 'warning' | 'info') => void
+  t: (key: string) => string
+}): PostTranslationState {
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
   const [showingOriginal, setShowingOriginal] = useState(true)
   const [translating, setTranslating] = useState(false)
   const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
-
-  // List translation state
   const [translatedListPosts, setTranslatedListPosts] = useState<Record<string, { title?: string; body?: string }>>({})
   const [translatingList, setTranslatingList] = useState(false)
-
-  // Comment translation state
   const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({})
   const [translatingComments, setTranslatingComments] = useState(false)
 
-  // Helper: Remove image markdown from content (avoid translating image links)
-  const removeImageMarkdown = useCallback((content: string): string => {
-    return content.replace(/!\[.*?\]\(.*?\)/g, '')
+  const isChineseText = useCallback((text: string) => {
+    if (!text) return false
+    const chineseRegex = /[\u4e00-\u9fa5]/g
+    const chineseMatches = text.match(chineseRegex)
+    const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
+    return chineseRatio > 0.1
   }, [])
 
-  // Helper: Extract images from content
-  const extractImages = useCallback((content: string): string[] => {
-    const imageRegex = /!\[.*?\]\(.*?\)/g
-    return content.match(imageRegex) || []
-  }, [])
-
-  // Translate single post content
-  const translatePost = useCallback(async (content: string, cacheKey: string) => {
-    if (!accessToken) {
-      onToast?.('Please login to translate', 'warning')
-      return
+  const extractImagesFromContent = useCallback((content: string): string[] => {
+    const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
+    const images: string[] = []
+    let match
+    while ((match = imageRegex.exec(content)) !== null) {
+      images.push(match[0])
     }
+    return images
+  }, [])
 
-    // Check cache
+  const removeImagesFromContent = useCallback((content: string): string => {
+    return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '').replace(/\n{3,}/g, '\n\n').trim()
+  }, [])
+
+  const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
+    const cacheKey = `${postId}-content-${targetLang}`
+    const originalImages = extractImagesFromContent(content)
+
     if (translationCache[cacheKey]) {
-      const images = extractImages(content)
-      setTranslatedContent(translationCache[cacheKey] + '\n\n' + images.join('\n'))
+      let cachedWithImages = translationCache[cacheKey]
+      if (originalImages.length > 0 && !cachedWithImages.includes('![')) {
+        cachedWithImages += '\n\n' + originalImages.join('\n')
+      }
+      setTranslatedContent(cachedWithImages)
       setShowingOriginal(false)
       return
     }
 
     setTranslating(true)
-
     try {
-      // Remove images before translation
-      const contentWithoutImages = removeImageMarkdown(content)
+      const textToTranslate = removeImagesFromContent(content)
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', ...getCsrfHeaders() }
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
 
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: {
-          ...await getCsrfHeaders(),
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          text: contentWithoutImages,
-          target_lang: targetLanguage,
-        }),
+        headers,
+        body: JSON.stringify({ text: textToTranslate, targetLang, contentType: 'post_content', contentId: postId }),
       })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Translation failed')
-      }
-
       const data = await response.json()
-      const translated = data.translated_text || ''
 
-      // Cache the translation
-      setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
-
-      // Append original images back
-      const images = extractImages(content)
-      const finalTranslated = translated + (images.length > 0 ? '\n\n' + images.join('\n') : '')
-
-      setTranslatedContent(finalTranslated)
-      setShowingOriginal(false)
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Translation failed'
-      onToast?.(message, 'error')
+      if (response.ok && data.success && data.data?.translatedText) {
+        let translated = data.data.translatedText
+        if (originalImages.length > 0) translated += '\n\n' + originalImages.join('\n')
+        setTranslatedContent(translated)
+        setShowingOriginal(false)
+        setTranslationCache(prev => ({ ...prev, [cacheKey]: data.data.translatedText }))
+      } else {
+        showToast(data.error || t('translationFailed'), 'error')
+      }
+    } catch {
+      showToast(t('translationServiceError'), 'error')
     } finally {
       setTranslating(false)
     }
-  }, [accessToken, targetLanguage, translationCache, onToast, removeImageMarkdown, extractImages])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken])
 
-  // Toggle between original and translated
-  const toggleOriginal = useCallback(() => {
-    setShowingOriginal(prev => !prev)
-  }, [])
-
-  // Clear translation
-  const clearTranslation = useCallback(() => {
-    setTranslatedContent(null)
-    setShowingOriginal(true)
-  }, [])
-
-  // Translate post list (batch)
-  const translatePostList = useCallback(async (
-    posts: Array<{ id: string; title?: string; body?: string }>
-  ) => {
-    if (!accessToken || posts.length === 0) return
+  const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
+    if (translatingList) return
+    const needsTranslation = postsToTranslate.filter(p => {
+      if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
+      const titleIsChinese = p.title ? isChineseText(p.title) : false
+      const contentIsChinese = p.content ? isChineseText(p.content) : false
+      return (p.title && (targetLang === 'en' ? titleIsChinese : !titleIsChinese)) ||
+             (p.content && (targetLang === 'en' ? contentIsChinese : !contentIsChinese))
+    })
+    if (needsTranslation.length === 0) return
 
     setTranslatingList(true)
-
     try {
-      // Prepare translation requests (max 10 posts)
-      const requests: Array<{ text: string; key: string; type: 'title' | 'body'; postId: string }> = []
-
-      for (const post of posts.slice(0, 10)) {
-        if (post.title) {
-          requests.push({
-            text: post.title,
-            key: `title_${post.id}`,
-            type: 'title',
-            postId: post.id,
-          })
+      const items: Array<{ id: string; text: string; contentType: 'post_title' | 'post_content'; contentId: string }> = []
+      for (const post of needsTranslation.slice(0, 10)) {
+        if (post.title && !translatedListPosts[post.id]?.title) {
+          items.push({ id: `${post.id}_title`, text: post.title, contentType: 'post_title', contentId: post.id })
         }
-
-        if (post.body) {
-          // Translate preview (first 200 chars) to save API calls
-          const preview = post.body.substring(0, 200)
-          const previewWithoutImages = removeImageMarkdown(preview)
-
-          if (previewWithoutImages.length > 10) {
-            requests.push({
-              text: previewWithoutImages,
-              key: `body_${post.id}`,
-              type: 'body',
-              postId: post.id,
-            })
-          }
+        if (post.content && !translatedListPosts[post.id]?.body) {
+          const contentPreview = removeImagesFromContent(post.content).slice(0, 200)
+          if (contentPreview) items.push({ id: `${post.id}_body`, text: contentPreview, contentType: 'post_content', contentId: post.id })
         }
       }
+      if (items.length === 0) { setTranslatingList(false); return }
 
-      if (requests.length === 0) {
-        setTranslatingList(false)
-        return
-      }
-
-      // Call batch translation API
-      const response = await fetch('/api/translate/batch', {
+      const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: {
-          ...await getCsrfHeaders(),
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          texts: requests.map(r => ({ text: r.text, key: r.key })),
-          target_lang: targetLanguage,
-        }),
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        body: JSON.stringify({ items, targetLang }),
       })
-
-      if (!response.ok) {
-        throw new Error('Batch translation failed')
-      }
-
       const data = await response.json()
-      const translations = data.translations || []
-
-      // Group translations by post ID
-      const translatedMap: Record<string, { title?: string; body?: string }> = {}
-
-      for (let i = 0; i < translations.length; i++) {
-        const request = requests[i]
-        const translated = translations[i].translated_text || ''
-
-        if (!translatedMap[request.postId]) {
-          translatedMap[request.postId] = {}
-        }
-
-        if (request.type === 'title') {
-          translatedMap[request.postId].title = translated
-        } else {
-          translatedMap[request.postId].body = translated
-        }
+      if (response.ok && data.success && data.data?.results) {
+        const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
+        setTranslatedListPosts(prev => {
+          const updated = { ...prev }
+          for (const [id, result] of Object.entries(results)) {
+            const [postId, type] = id.split('_')
+            if (!updated[postId]) updated[postId] = {}
+            if (type === 'title') updated[postId].title = result.translatedText
+            else if (type === 'body') updated[postId].body = result.translatedText
+          }
+          return updated
+        })
       }
+    } catch { /* silent */ }
+    finally { setTranslatingList(false) }
+  }, [translatingList, translatedListPosts, isChineseText, removeImagesFromContent])
 
-      setTranslatedListPosts(prev => ({ ...prev, ...translatedMap }))
-    } catch (err: unknown) {
-      // Silent fail for batch translation
-      logger.error('Batch translation failed:', err)
-    } finally {
-      setTranslatingList(false)
-    }
-  }, [accessToken, targetLanguage, removeImageMarkdown])
-
-  // Translate comments (batch)
-  const translateComments = useCallback(async (
-    comments: Array<{ id: string; body: string }>
-  ) => {
-    if (!accessToken || comments.length === 0) return
+  const translateComments = useCallback(async (commentsToTranslate: Comment[], targetLang: 'zh' | 'en') => {
+    if (translatingComments) return
+    const allComments: Comment[] = []
+    commentsToTranslate.forEach(c => {
+      if (!translatedComments[c.id] && c.content) {
+        const hasChinese = isChineseText(c.content)
+        if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese)) allComments.push(c)
+      }
+      if (c.replies) {
+        c.replies.forEach(r => {
+          if (!translatedComments[r.id] && r.content) {
+            const hasChinese = isChineseText(r.content)
+            if ((targetLang === 'en' && hasChinese) || (targetLang === 'zh' && !hasChinese)) allComments.push(r)
+          }
+        })
+      }
+    })
+    if (allComments.length === 0) return
 
     setTranslatingComments(true)
-
     try {
-      const response = await fetch('/api/translate/batch', {
+      const items = allComments.slice(0, 20).map(comment => ({
+        id: comment.id, text: comment.content || '', contentType: 'comment' as const, contentId: comment.id,
+      }))
+      const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: {
-          ...await getCsrfHeaders(),
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          texts: comments.map(c => ({ text: c.body, key: c.id })),
-          target_lang: targetLanguage,
-        }),
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        body: JSON.stringify({ items, targetLang }),
       })
-
-      if (!response.ok) {
-        throw new Error('Comment translation failed')
-      }
-
       const data = await response.json()
-      const translations = data.translations || []
-
-      const translatedMap: Record<string, string> = {}
-      translations.forEach((t: { translated_text?: string }, i: number) => {
-        translatedMap[comments[i].id] = t.translated_text || ''
-      })
-
-      setTranslatedComments(prev => ({ ...prev, ...translatedMap }))
-    } catch (err: unknown) {
-      // Silent fail for comment translation
-      logger.error('Comment translation failed:', err)
-    } finally {
-      setTranslatingComments(false)
-    }
-  }, [accessToken, targetLanguage])
+      if (response.ok && data.success && data.data?.results) {
+        const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
+        setTranslatedComments(prev => {
+          const updated = { ...prev }
+          for (const [id, result] of Object.entries(results)) updated[id] = result.translatedText
+          return updated
+        })
+      }
+    } catch { /* silent */ }
+    finally { setTranslatingComments(false) }
+  }, [translatingComments, translatedComments, isChineseText])
 
   return {
-    translatedContent,
-    showingOriginal,
-    translating,
-    translatePost,
-    toggleOriginal,
-    clearTranslation,
-    translatedListPosts,
-    translatingList,
-    translatePostList,
-    translatedComments,
-    translatingComments,
-    translateComments,
-    translationCache,
+    translatedContent, setTranslatedContent, showingOriginal, setShowingOriginal,
+    translating, translatedListPosts, translatingList, translatedComments, translatingComments,
+    isChineseText, extractImagesFromContent, removeImagesFromContent,
+    translateContent, translateListPosts, translateComments,
   }
 }

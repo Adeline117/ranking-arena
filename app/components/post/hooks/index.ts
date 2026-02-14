@@ -7,8 +7,8 @@
  */
 
 export { usePostFeedData, type UsePostFeedDataOptions, type UsePostFeedDataReturn } from './usePostFeedData'
-export { usePostActions, type UsePostActionsOptions, type UsePostActionsReturn } from './usePostActions'
-export { usePostTranslation, type UsePostTranslationOptions, type UsePostTranslationReturn } from './usePostTranslation'
+export { usePostActions } from './usePostActions'
+export { usePostTranslation } from './usePostTranslation'
 
 // Re-export existing hooks
 export { usePostComments, type Comment } from './usePostComments'

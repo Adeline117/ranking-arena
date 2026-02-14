@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { LibraryItem } from '@/lib/types/library'
 import ResourcesClient from './ResourcesClient'
 import { logger } from '@/lib/logger'
-import ErrorBoundary from '@/app/components/error/ErrorBoundary'
+import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 
 export const revalidate = 300
 

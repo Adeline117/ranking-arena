@@ -18,7 +18,7 @@ const LazyWeb3Boundary = dynamic(() => import('@/lib/web3/wallet-components').th
 const ImageCropper = dynamic(() => import('@/app/components/ui/ImageCropper').then(m => ({ default: m.ImageCropper })), { ssr: false })
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import ErrorBoundary from '@/app/components/error/ErrorBoundary'
+import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { validateHandle } from './validation'
 
