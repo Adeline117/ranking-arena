@@ -49,7 +49,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       users: { id: string; nickname: string | null; avatar_url: string | null; created_at: string } | null
     }
 
-    const typedRatings = (ratings || []) as RatingRow[]
+    const typedRatings = (ratings || []) as unknown as RatingRow[]
     const readRatings = typedRatings.filter((r) => r.status === 'read' && r.rating != null)
 
     // Get user post counts for weighting

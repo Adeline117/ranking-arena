@@ -345,6 +345,7 @@ async function computeSeason(
       handle: t.handle,
       avatar_url: t.avatar_url,
       computed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       profitability_score: t.profitability_score,
       risk_control_score: t.risk_control_score,
       execution_score: t.execution_score,
