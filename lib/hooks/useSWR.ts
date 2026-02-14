@@ -233,6 +233,7 @@ export function useTraderEquity(handle: string | undefined) {
     {
       ...defaultConfig,
       revalidateOnFocus: false,
+      refreshInterval: 5 * 60 * 1000, // 5 分钟刷新资金曲线
     }
   )
 }

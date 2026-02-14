@@ -27,10 +27,10 @@ export const CACHE_PREFIX = {
 export const CACHE_TTL = {
   /** 排行榜缓存：5 分钟 */
   TRADERS_LIST: 300,
-  /** 交易员详情：1 分钟 */
-  TRADER_DETAIL: 60,
-  /** 交易员性能数据：2 分钟 */
-  TRADER_PERFORMANCE: 120,
+  /** 交易员详情：3 分钟 */
+  TRADER_DETAIL: 180,
+  /** 交易员性能数据：3 分钟 */
+  TRADER_PERFORMANCE: 180,
   /** 帖子列表：30 秒 */
   POSTS_LIST: 30,
   /** 单个帖子：1 分钟 */
