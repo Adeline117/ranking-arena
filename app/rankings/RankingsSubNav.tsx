@@ -23,7 +23,7 @@ export default function RankingsSubNav() {
       style={{
         display: 'flex',
         gap: tokens.spacing[1],
-        marginTop: 12,
+        marginTop: 4,
       }}
     >
       {TABS.map((tab) => {

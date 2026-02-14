@@ -41,19 +41,35 @@ export const metadata: Metadata = {
 
 export default function RankingsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <>
+    <div style={{ minHeight: '100vh', position: 'relative' }}>
+      <div
+        className="mesh-gradient-bg"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'linear-gradient(135deg, var(--color-accent-primary-08) 0%, transparent 40%, var(--color-accent-primary-08) 100%)',
+          opacity: 0.5,
+          pointerEvents: 'none',
+          zIndex: 0,
+          transform: 'translateZ(0)',
+          contain: 'strict layout paint',
+        }}
+      />
       <TopNavWrapper />
       <div
         className="container-padding has-mobile-nav"
         style={{
           maxWidth: 1400,
           margin: '0 auto',
-          padding: '16px 16px',
+          padding: '8px 16px',
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         <RankingsSubNav />
+        <div style={{ height: 16 }} />
         {children}
       </div>
-    </>
+    </div>
   )
 }
