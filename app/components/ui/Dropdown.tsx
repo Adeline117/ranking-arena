@@ -157,7 +157,7 @@ export function Dropdown<T = string>({
         aria-haspopup="listbox"
         aria-controls="dropdown-list"
         aria-invalid={hasError}
-        aria-errormessage={errorMessage}
+        aria-describedby={errorMessage ? 'dropdown-error' : undefined}
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         onKeyDown={(e) => {
@@ -331,6 +331,8 @@ export function Dropdown<T = string>({
       {/* Error message */}
       {errorMessage && (
         <p
+          id="dropdown-error"
+          role="alert"
           style={{
             marginTop: tokens.spacing[1],
             fontSize: tokens.typography.fontSize.sm,

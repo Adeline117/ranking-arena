@@ -91,7 +91,7 @@ export default function AdminPage() {
         </Box>
 
         {/* Tabs */}
-        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[6], flexWrap: 'wrap' }}>
+        <Box role="tablist" aria-label={t('adminDashboard')} style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[6], flexWrap: 'wrap' }}>
           <Button
             variant={activeTab === 'dashboard' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('dashboard')}

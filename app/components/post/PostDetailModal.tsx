@@ -47,6 +47,51 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   // Prevent duplicate submissions
   const commentPendingRef = useRef(false)
   const reactionPendingRef = useRef(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  // Focus management: trap focus, handle Escape, restore focus on close
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement
+
+    const timer = setTimeout(() => {
+      if (dialogRef.current) {
+        const firstFocusable = dialogRef.current.querySelector<HTMLElement>(
+          'button, [href], input, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        firstFocusable?.focus()
+      }
+    }, 50)
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocusRef.current?.focus()
+    }
+  }, [onClose])
 
   // Read from canonical store
   const post = usePostStore(s => s.posts[postId])
@@ -153,6 +198,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={t('postDetail') || 'Post detail'}
