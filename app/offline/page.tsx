@@ -21,7 +21,7 @@ export default function OfflinePage() {
     // Try to load cached leaderboard data from Cache API
     async function loadCachedData() {
       try {
-        const cache = await caches.open('ranking-arena-v2')
+        const cache = await caches.open('ranking-arena-v3')
         const keys = await cache.keys()
         const tradersReq = keys.find((r) => r.url.includes('/api/traders'))
         if (tradersReq) {
