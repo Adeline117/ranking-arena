@@ -32,6 +32,8 @@ export default function robots(): MetadataRoute.Robots {
           "/kol",
           "/tip",
           "/pricing/success",
+          "/multi-chain",
+          "/frame/",
         ],
       },
     ],

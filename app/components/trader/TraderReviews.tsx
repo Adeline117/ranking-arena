@@ -159,7 +159,7 @@ function ReviewAvatar({ handle, avatarUrl }: { handle?: string; avatarUrl?: stri
   return (
     <Link href={handle ? `/u/${encodeURIComponent(handle)}` : '#'} style={{ textDecoration: 'none', flexShrink: 0 }}>
       {avatarUrl ? (
-        <Image src={avatarUrl} alt="" width={size} height={size} sizes={`${size}px`} loading="lazy" style={{ borderRadius: '50%', objectFit: 'cover' }} />
+        <Image src={avatarUrl} alt={`${handle || 'User'} avatar`} width={size} height={size} sizes={`${size}px`} loading="lazy" style={{ borderRadius: '50%', objectFit: 'cover' }} />
       ) : (
         <Box style={{
           width: size,
