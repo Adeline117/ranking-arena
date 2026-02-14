@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense, useCallback } from 'react'
+import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
@@ -10,6 +10,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { logger } from '@/lib/logger'
+import type { UnifiedSearchResponse } from '@/app/api/search/route'
 
 interface SearchResult {
   type: 'library' | 'group' | 'post' | 'trader'
@@ -138,6 +139,8 @@ function SearchContent() {
     return parts.length > 0 ? parts : text
   }, [])
 
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   useEffect(() => {
     if (!query.trim()) {
       setLibraryResults([])
@@ -151,43 +154,71 @@ function SearchContent() {
       setLoading(true)
       setSearchError(false)
 
-      const sanitized = query.trim().slice(0, 100).replace(/[\\%_]/g, c => `\\${c}`)
-      if (!sanitized) { setLoading(false); return }
+      // Abort previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      const controller = new AbortController()
+      abortControllerRef.current = controller
 
       try {
-        const [libRes, groupRes, postRes, traderRes] = await Promise.allSettled([
-          supabase.from('library_items')
-            .select('id, title, author, category, cover_url', { count: 'exact' })
-            .or(`title.ilike.%${sanitized}%,author.ilike.%${sanitized}%`)
-            .limit(SECTION_LIMIT),
+        // Use unified search API instead of direct Supabase queries
+        // This leverages server-side caching and consistent search logic
+        const [apiRes, groupRes] = await Promise.allSettled([
+          fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=${SECTION_LIMIT}`, {
+            signal: controller.signal,
+          }),
+          // Groups are not in the unified API, query separately
           supabase.from('groups')
             .select('id, name, member_count, description', { count: 'exact' })
-            .ilike('name', `%${sanitized}%`)
-            .limit(SECTION_LIMIT),
-          supabase.from('posts')
-            .select('id, title, content, author_handle', { count: 'exact' })
-            .or(`title.ilike.%${sanitized}%,content.ilike.%${sanitized}%`)
-            .limit(SECTION_LIMIT),
-          supabase.from('trader_sources')
-            .select('source_trader_id, handle, source', { count: 'exact' })
-            .or(`handle.ilike.%${sanitized}%,source_trader_id.ilike.%${sanitized}%`)
+            .ilike('name', `%${query.trim().slice(0, 100).replace(/[\\%_]/g, c => `\\${c}`)}%`)
             .limit(SECTION_LIMIT),
         ])
 
-        // Library
-        if (libRes.status === 'fulfilled') {
-          const { data, count } = libRes.value
-          setLibTotal(count || 0)
-          setLibraryResults((data || []).map((item: Record<string, unknown>) => ({
+        if (controller.signal.aborted) return
+
+        // Process unified API results
+        if (apiRes.status === 'fulfilled' && apiRes.value.ok) {
+          const json = await apiRes.value.json()
+          const data: UnifiedSearchResponse = json.data || json
+
+          // Library
+          setLibTotal(data.results.library.length)
+          setLibraryResults(data.results.library.map(item => ({
             type: 'library' as const,
-            id: item.id as string,
-            title: (item.title as string) || '',
-            subtitle: (item.author as string) || undefined,
-            meta: (item.category as string) || undefined,
+            id: item.id,
+            title: item.title,
+            subtitle: item.subtitle || undefined,
+            meta: item.meta?.category as string || undefined,
           })))
+
+          // Posts
+          setPostTotal(data.results.posts.length)
+          setPostResults(data.results.posts.map(p => ({
+            type: 'post' as const,
+            id: p.id,
+            title: p.title,
+            subtitle: p.subtitle ? `${isZh ? '作者' : 'by'}: ${p.subtitle}` : undefined,
+          })))
+
+          // Traders
+          setTraderTotal(data.results.traders.length)
+          setTraderResults(data.results.traders.map(t => ({
+            type: 'trader' as const,
+            id: t.href.replace('/trader/', ''),
+            title: t.title,
+            subtitle: t.subtitle || undefined,
+          })))
+        } else {
+          setLibraryResults([])
+          setPostResults([])
+          setTraderResults([])
+          setLibTotal(0)
+          setPostTotal(0)
+          setTraderTotal(0)
         }
 
-        // Groups
+        // Groups (separate query)
         if (groupRes.status === 'fulfilled') {
           const { data, count } = groupRes.value
           setGroupTotal(count || 0)
@@ -199,44 +230,25 @@ function SearchContent() {
             meta: g.description ? ((g.description as string).slice(0, 60)) : undefined,
           })))
         }
-
-        // Posts
-        if (postRes.status === 'fulfilled') {
-          const { data, count } = postRes.value
-          setPostTotal(count || 0)
-          setPostResults((data || []).map((p: Record<string, unknown>) => ({
-            type: 'post' as const,
-            id: p.id as string,
-            title: (p.title as string) || ((p.content as string) || '').slice(0, 60),
-            subtitle: (p.author_handle as string) ? `${isZh ? '作者' : 'by'}: ${p.author_handle}` : undefined,
-          })))
-        }
-
-        // Traders
-        if (traderRes.status === 'fulfilled') {
-          const { data, count } = traderRes.value
-          setTraderTotal(count || 0)
-          setTraderResults((data || []).map((t: Record<string, unknown>) => {
-            const platform = ((t.source as string) || '').replace(/_/g, ' ').toUpperCase()
-            return {
-              type: 'trader' as const,
-              id: t.source_trader_id as string,
-              title: (t.handle as string) || (t.source_trader_id as string),
-              subtitle: platform || undefined,
-            }
-          }))
-        }
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return
         logger.error('Search error:', error)
         setSearchError(true)
         showToast(isZh ? '搜索失败' : 'Search failed', 'error')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
 
     const timeout = setTimeout(doSearch, 300)
-    return () => clearTimeout(timeout)
+    return () => {
+      clearTimeout(timeout)
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [query, isZh, showToast])
 
   const getHref = (result: SearchResult) => {

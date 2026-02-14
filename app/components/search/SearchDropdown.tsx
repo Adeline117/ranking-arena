@@ -289,7 +289,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       return
     }
 
-    const searchTimer = setTimeout(async () => { // 150ms debounce for fast response
+    const searchTimer = setTimeout(async () => { // 200ms debounce — fast enough for responsiveness, avoids excess API calls
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
@@ -321,7 +321,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           setSearching(false)
         }
       }
-    }, 150)
+    }, 200)
 
     return () => {
       clearTimeout(searchTimer)
