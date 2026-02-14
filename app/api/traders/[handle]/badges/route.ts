@@ -18,11 +18,13 @@ export async function GET(
     return NextResponse.json({ error: 'Handle required' }, { status: 400 })
   }
 
+  const cacheHeaders = { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
+
   // Check cache first
   const cacheKey = `badges:${handle}`
   const { data: cached } = await tieredGet<{ badges: EarnedBadge[] }>(cacheKey, 'warm')
   if (cached) {
-    return NextResponse.json(cached)
+    return NextResponse.json(cached, { headers: cacheHeaders })
   }
 
   const supabase = getSupabaseAdmin()
@@ -93,5 +95,5 @@ export async function GET(
   // Cache for 5 minutes (warm tier)
   await tieredSet(cacheKey, response, 'warm')
 
-  return NextResponse.json(response)
+  return NextResponse.json(response, { headers: cacheHeaders })
 }
