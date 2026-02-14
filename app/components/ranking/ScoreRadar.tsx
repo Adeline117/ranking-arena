@@ -29,10 +29,10 @@ export const ScoreRadar = memo(function ScoreRadar({
   const cy = size / 2
   const r = size * 0.38 // max radius
 
-  // Normalize to 0-1
-  const pNorm = Math.min(profitability / 35, 1)
-  const rNorm = Math.min(riskControl / 40, 1)
-  const eNorm = Math.min(execution / 25, 1)
+  // Normalize to 0-1, guard against NaN/undefined
+  const pNorm = Math.min((Number.isFinite(profitability) ? profitability : 0) / 35, 1)
+  const rNorm = Math.min((Number.isFinite(riskControl) ? riskControl : 0) / 40, 1)
+  const eNorm = Math.min((Number.isFinite(execution) ? execution : 0) / 25, 1)
 
   // Three axes at 120 degree intervals, starting from top
   // Top: 收益能力, Bottom-left: 风险控制, Bottom-right: 执行质量

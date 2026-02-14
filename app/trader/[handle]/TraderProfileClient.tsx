@@ -38,7 +38,7 @@ function formatNumber(val: number | null | undefined, decimals = 2): string {
 
 function formatPercent(val: number | null | undefined): string {
   if (val == null || isNaN(val)) return '--'
-  return `${(val * 100).toFixed(2)}%`
+  return `${val.toFixed(2)}%`
 }
 
 function formatUsd(val: number | null | undefined): string {

@@ -112,9 +112,9 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
       return []
     }
 
-    // Map to TraderData shape
+    // Map to TraderData shape — use handle as trader_key for correct routing to /trader/[handle]
     return (data || []).map(row => ({
-      trader_key: `${row.source}:${row.source_trader_id}`,
+      trader_key: row.handle || row.source_trader_id,
       display_name: row.handle || row.source_trader_id,
       avatar_url: row.avatar_url,
       platform: row.source,
