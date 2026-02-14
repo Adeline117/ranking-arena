@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
 import { usePostStore, type CommentData } from '@/lib/stores/postStore'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export type Comment = {
   id: string
@@ -25,6 +26,7 @@ interface UsePostCommentsOptions {
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
   onCommentCountChange?: (postId: string, delta: number) => void
+  t?: (key: string) => string
 }
 
 // Convert Comment to CommentData for store compatibility
@@ -47,7 +49,10 @@ export function usePostComments({
   showToast,
   showDangerConfirm,
   onCommentCountChange,
+  t: externalT,
 }: UsePostCommentsOptions) {
+  const { t: hookT } = useLanguage()
+  const t = externalT || hookT
   const [comments, setComments] = useState<Comment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState('')
@@ -66,11 +71,11 @@ export function usePostComments({
   // Auth guard helper
   const requireAuth = useCallback((): boolean => {
     if (!accessToken) {
-      showToast('请先登录', 'warning')
+      showToast(t('pleaseLogin'), 'warning')
       return false
     }
     return true
-  }, [accessToken, showToast])
+  }, [accessToken, showToast, t])
 
   const loadComments = useCallback(async (postId: string): Promise<void> => {
     setLoadingComments(true)
@@ -103,7 +108,7 @@ export function usePostComments({
       )
 
       if (!ok) {
-        showToast(getHttpErrorMessage(status, data?.error || '发表评论失败'), 'error')
+        showToast(getHttpErrorMessage(status, data?.error || t('commentFailedRetry')), 'error')
         return
       }
 
@@ -114,15 +119,15 @@ export function usePostComments({
         usePostStore.getState().addComment(postId, toCommentData(newComment))
         onCommentCountChange?.(postId, 1)
       } else {
-        showToast(data?.error || '发表评论失败', 'error')
+        showToast(data?.error || t('commentFailedRetry'), 'error')
       }
     } catch {
-      showToast('网络异常，请重试', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       submittingCommentRef.current = false
       setSubmittingComment(false)
     }
-  }, [accessToken, newComment, requireAuth, showToast, onCommentCountChange])
+  }, [accessToken, newComment, requireAuth, showToast, onCommentCountChange, t])
 
   const toggleCommentLike = useCallback(async (postId: string, commentId: string): Promise<void> => {
     if (!requireAuth() || commentLikeLoading[commentId]) return
@@ -154,14 +159,14 @@ export function usePostComments({
         }
         setComments(prev => prev.map(updateCommentLike))
       } else {
-        showToast(getHttpErrorMessage(status, data?.error || '点赞失败'), status === 429 ? 'warning' : 'error')
+        showToast(getHttpErrorMessage(status, data?.error || t('operationFailed')), status === 429 ? 'warning' : 'error')
       }
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
     }
-  }, [accessToken, commentLikeLoading, requireAuth, showToast])
+  }, [accessToken, commentLikeLoading, requireAuth, showToast, t])
 
   const toggleCommentDislike = useCallback(async (postId: string, commentId: string): Promise<void> => {
     if (!requireAuth() || commentLikeLoading[commentId]) return
@@ -193,14 +198,14 @@ export function usePostComments({
         }
         setComments(prev => prev.map(updateComment))
       } else {
-        showToast(getHttpErrorMessage(status, data?.error || '操作失败'), status === 429 ? 'warning' : 'error')
+        showToast(getHttpErrorMessage(status, data?.error || t('operationFailed')), status === 429 ? 'warning' : 'error')
       }
     } catch {
-      showToast('网络错误', 'error')
+      showToast(t('networkError'), 'error')
     } finally {
       setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
     }
-  }, [accessToken, commentLikeLoading, requireAuth, showToast])
+  }, [accessToken, commentLikeLoading, requireAuth, showToast, t])
 
   const submitReply = useCallback(async (postId: string, parentId: string): Promise<void> => {
     if (!requireAuth() || !replyContent.trim()) return
@@ -225,22 +230,22 @@ export function usePostComments({
         setReplyingTo(null)
         setExpandedReplies(prev => ({ ...prev, [parentId]: true }))
         onCommentCountChange?.(postId, 1)
-        showToast('已回复', 'success')
+        showToast(t('replied'), 'success')
       } else {
-        showToast(data?.error || '回复失败', 'error')
+        showToast(data?.error || t('operationFailed'), 'error')
       }
     } catch {
-      showToast('回复失败', 'error')
+      showToast(t('operationFailed'), 'error')
     } finally {
       submittingReplyRef.current = false
       setSubmittingReply(false)
     }
-  }, [accessToken, replyContent, requireAuth, showToast, onCommentCountChange])
+  }, [accessToken, replyContent, requireAuth, showToast, onCommentCountChange, t])
 
   const deleteComment = useCallback(async (postId: string, commentId: string): Promise<void> => {
     if (!requireAuth()) return
 
-    const confirmed = await showDangerConfirm('删除评论', '确定要删除这条评论吗？')
+    const confirmed = await showDangerConfirm(t('deleteComment'), t('confirmDeleteComment'))
     if (!confirmed) return
 
     setDeletingCommentId(commentId)
@@ -264,16 +269,16 @@ export function usePostComments({
           .filter((c): c is Comment => c !== null)
         )
         onCommentCountChange?.(postId, -1)
-        showToast('已删除', 'success')
+        showToast(t('deleted'), 'success')
       } else {
-        showToast(data?.error || '删除评论失败', 'error')
+        showToast(data?.error || t('operationFailed'), 'error')
       }
     } catch {
-      showToast('删除评论失败', 'error')
+      showToast(t('operationFailed'), 'error')
     } finally {
       setDeletingCommentId(null)
     }
-  }, [accessToken, requireAuth, showDangerConfirm, showToast, onCommentCountChange])
+  }, [accessToken, requireAuth, showDangerConfirm, showToast, onCommentCountChange, t])
 
   return {
     comments,
