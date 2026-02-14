@@ -68,6 +68,13 @@ export interface UpdateVerifiedTraderInput {
 }
 
 // ============================================
+// Field constants
+// ============================================
+
+const CLAIM_FIELDS = 'id, user_id, trader_id, source, verification_method, verification_data, status, reject_reason, reviewed_by, reviewed_at, verified_at, created_at, updated_at'
+const VERIFIED_TRADER_FIELDS = 'id, user_id, trader_id, source, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url, verified_at, verification_method, can_pin_posts, can_reply_reviews, can_receive_messages, created_at, updated_at'
+
+// ============================================
 // 查询函数
 // ============================================
 
@@ -127,7 +134,7 @@ export async function getVerifiedTrader(
 ): Promise<VerifiedTrader | null> {
   const { data, error } = await supabase
     .from('verified_traders')
-    .select('*')
+    .select(VERIFIED_TRADER_FIELDS)
     .eq('trader_id', traderId)
     .eq('source', source)
     .maybeSingle()
@@ -148,7 +155,7 @@ export async function getUserClaim(
 ): Promise<TraderClaim | null> {
   const { data, error } = await supabase
     .from('trader_claims')
-    .select('*')
+    .select(CLAIM_FIELDS)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -171,7 +178,7 @@ export async function getUserVerifiedTrader(
 ): Promise<VerifiedTrader | null> {
   const { data, error } = await supabase
     .from('verified_traders')
-    .select('*')
+    .select(VERIFIED_TRADER_FIELDS)
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -193,7 +200,7 @@ export async function getPendingClaims(
 
   const { data, error } = await supabase
     .from('trader_claims')
-    .select('*')
+    .select(CLAIM_FIELDS)
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
     .range(offset, offset + limit - 1)

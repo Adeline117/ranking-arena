@@ -106,7 +106,7 @@ export async function getTraderReviews(
 
   let query = supabase
     .from('trader_reviews')
-    .select('*')
+    .select('id, trader_id, user_id, rating, content, like_count, created_at, updated_at')
     .eq('trader_id', traderId)
 
   if (sort === 'top') {

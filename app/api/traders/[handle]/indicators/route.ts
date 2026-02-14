@@ -35,30 +35,16 @@ async function findTraderSource(
 ): Promise<{ traderId: string; source: SourceType } | null> {
   const decodedHandle = decodeURIComponent(handle)
 
-  for (const sourceType of TRADER_SOURCES) {
-    const { data: byHandle } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', sourceType)
-      .eq('handle', decodedHandle)
-      .limit(1)
-      .maybeSingle() as { data: TraderSourceResult | null }
+  // Single query instead of looping through 9 sources × 2 queries each
+  const { data } = await supabase
+    .from('trader_sources')
+    .select('source_trader_id, source')
+    .or(`handle.eq.${decodedHandle},source_trader_id.eq.${decodedHandle}`)
+    .limit(1)
+    .maybeSingle()
 
-    if (byHandle) {
-      return { traderId: byHandle.source_trader_id, source: sourceType }
-    }
-
-    const { data: byId } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', sourceType)
-      .eq('source_trader_id', decodedHandle)
-      .limit(1)
-      .maybeSingle() as { data: TraderSourceResult | null }
-
-    if (byId) {
-      return { traderId: byId.source_trader_id, source: sourceType }
-    }
+  if (data) {
+    return { traderId: data.source_trader_id, source: data.source as SourceType }
   }
 
   return null

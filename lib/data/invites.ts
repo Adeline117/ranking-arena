@@ -109,7 +109,7 @@ export async function validateInviteCode(
 ): Promise<{ valid: boolean; invite?: InviteCode; error?: string }> {
   const { data: invite, error } = await supabase
     .from('invite_codes')
-    .select('*')
+    .select('id, code, creator_id, max_uses, current_uses, trial_days, trial_tier, expires_at, created_at, is_active')
     .eq('code', code.toUpperCase())
     .single()
 
@@ -221,7 +221,7 @@ export async function getUserInviteCodes(
 ): Promise<InviteCode[]> {
   const { data, error } = await supabase
     .from('invite_codes')
-    .select('*')
+    .select('id, code, creator_id, max_uses, current_uses, trial_days, trial_tier, expires_at, created_at, is_active')
     .eq('creator_id', userId)
     .order('created_at', { ascending: false })
 
@@ -241,7 +241,7 @@ export async function getInviteRedemptions(
 ): Promise<InviteRedemption[]> {
   const { data, error } = await supabase
     .from('invite_redemptions')
-    .select('*')
+    .select('id, code_id, user_id, redeemed_at, trial_expires_at')
     .eq('code_id', codeId)
     .order('redeemed_at', { ascending: false })
 

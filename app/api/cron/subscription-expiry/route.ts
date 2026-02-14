@@ -72,33 +72,40 @@ export async function GET(request: NextRequest) {
       .gt('current_period_end', now.toISOString())
 
     if (expiringSubscriptions && expiringSubscriptions.length > 0) {
-      for (const sub of expiringSubscriptions) {
-        try {
-          // 检查是否已发送过提醒 (避免重复)
-          const { data: existingNotif } = await supabase
-            .from('notifications')
-            .select('id')
-            .eq('user_id', sub.user_id)
-            .eq('type', 'subscription_expiring')
-            .gte('created_at', new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString())
-            .single()
+      // Batch check: which users already got a reminder in the last 3 days
+      const expiringUserIds = expiringSubscriptions.map(s => s.user_id)
+      const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: existingNotifs } = await supabase
+        .from('notifications')
+        .select('user_id')
+        .in('user_id', expiringUserIds)
+        .eq('type', 'subscription_expiring')
+        .gte('created_at', threeDaysAgo)
+      const alreadyNotified = new Set(existingNotifs?.map(n => n.user_id) || [])
 
-          if (!existingNotif) {
-            const expiryDate = new Date(sub.current_period_end!).toLocaleDateString('zh-CN')
-            await supabase.from('notifications').insert({
-              user_id: sub.user_id,
-              type: 'subscription_expiring',
-              title: 'Pro 会员即将到期',
-              body: `您的 Pro 会员将于 ${expiryDate} 到期。如需继续使用 Pro 功能，请前往会员中心续费。`,
-              data: {
-                expiryDate: sub.current_period_end,
-                plan: sub.plan,
-              },
-            })
-            results.expiringReminders++
+      // Batch insert notifications for users who haven't been notified
+      const toInsert = expiringSubscriptions
+        .filter(sub => !alreadyNotified.has(sub.user_id))
+        .map(sub => {
+          const expiryDate = new Date(sub.current_period_end!).toLocaleDateString('zh-CN')
+          return {
+            user_id: sub.user_id,
+            type: 'subscription_expiring',
+            title: 'Pro 会员即将到期',
+            body: `您的 Pro 会员将于 ${expiryDate} 到期。如需继续使用 Pro 功能，请前往会员中心续费。`,
+            data: {
+              expiryDate: sub.current_period_end,
+              plan: sub.plan,
+            },
           }
-        } catch (err) {
-          results.errors.push(`Expiring reminder error for ${sub.user_id}: ${err}`)
+        })
+
+      if (toInsert.length > 0) {
+        const { error: insertErr } = await supabase.from('notifications').insert(toInsert)
+        if (insertErr) {
+          results.errors.push(`Batch expiring reminder error: ${insertErr.message}`)
+        } else {
+          results.expiringReminders = toInsert.length
         }
       }
     }
