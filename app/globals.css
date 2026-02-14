@@ -821,6 +821,7 @@ select:focus-visible {
   overflow-x: hidden;
   scrollbar-width: thin;
   flex-shrink: 0;
+  overscroll-behavior: contain;
 }
 
 .three-col-left::-webkit-scrollbar,
@@ -1028,10 +1029,6 @@ select:focus-visible {
 
 /* Prevent overscroll chaining on sidebar containers only */
 .three-col-left,
-.three-col-right {
-  overscroll-behavior: contain;
-}
-
 /* Reduce paint for fixed elements */
 .fixed-header, .fixed-nav {
   will-change: transform;
@@ -1643,6 +1640,7 @@ select:focus-visible {
 /* Mobile sidebar widgets - collapsible area */
 .mobile-sidebar-widgets {
   display: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 @media (max-width: 1023px) {
   .mobile-sidebar-widgets {
@@ -2578,11 +2576,6 @@ td[data-numeric],
   box-shadow: 0 1px 20px rgba(0, 0, 0, 0.1), 0 0 0 1px var(--color-border-primary);
 }
 
-/* Improved mobile sidebar transitions */
-.mobile-sidebar-widgets {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 .mobile-sidebar-widgets > div:last-child {
   overflow: hidden;
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
@@ -2644,30 +2637,6 @@ td[data-numeric],
   .has-desktop-sidebar .three-col-center {
     margin-left: 0;
   }
-}
-
-/* Enhanced theme transition performance */
-html.theme-transition * {
-  transition-property: background-color, color, border-color, box-shadow, fill, stroke !important;
-  transition-duration: 0.3s !important;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
-
-/* Improved loading states consistency */
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-bg-secondary) 0%,
-    var(--color-bg-tertiary) 50%,
-    var(--color-bg-secondary) 100%
-  );
-  background-size: 200% 100%;
-  animation: skeleton-loading 1.5s ease-in-out infinite;
-}
-
-@keyframes skeleton-loading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 
 /* Enhanced focus indicators for accessibility */
@@ -2793,49 +2762,5 @@ html.theme-transition * {
   background: var(--overlay-hover);
 }
 
-/* Skeleton animation - shared */
-.skeleton {
-  background: linear-gradient(90deg, var(--color-bg-tertiary) 25%, var(--color-bg-hover) 50%, var(--color-bg-tertiary) 75%);
-  background-size: 200% 100%;
-  animation: skeletonShimmer 1.5s ease-in-out infinite;
-}
-@keyframes skeletonShimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* Empty state shared styling */
-.empty-state {
-  text-align: center;
-}
-.empty-state-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: var(--color-accent-primary-08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 20px;
-  color: var(--color-text-tertiary);
-}
-.empty-state-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 6px;
-}
-.empty-state-message {
-  font-size: 13px;
-  color: var(--color-text-tertiary);
-}
-
-/* Filter chip shared hover */
-.filter-chip {
-  transition: all var(--transition-fast);
-}
-.filter-chip:not([data-active]):hover {
-  border-color: var(--color-text-tertiary) !important;
-  color: var(--color-text-primary) !important;
-}
+/* Duplicate CSS removed — definitions kept at their first occurrence above */
 

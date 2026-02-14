@@ -380,10 +380,12 @@ export async function GET(req: NextRequest) {
       results.results.posts.length +
       results.results.users.length
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: results,
     })
+    response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+    return response
   } catch (error: unknown) {
     logger.error('Advanced search error', { error })
     // Never expose internal error details to the client

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       .from('groups')
       .select('id', { count: 'exact', head: true })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         groups: groups || [],
@@ -69,6 +69,8 @@ export async function GET(request: NextRequest) {
         },
       },
     })
+    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+    return response
   } catch (error: unknown) {
     logger.apiError('/api/groups', error, {})
     return NextResponse.json(

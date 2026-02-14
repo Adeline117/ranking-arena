@@ -43,7 +43,9 @@ export async function GET(req: NextRequest) {
     const sortFn = SORT_FN[sortBy] ?? SORT_FN.volume
     traders.sort(sortFn)
 
-    return NextResponse.json({ traders, count: traders.length })
+    const response = NextResponse.json({ traders, count: traders.length })
+    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+    return response
   } catch (err) {
     logger.error('[dex/traders] Error:', err)
     return NextResponse.json(

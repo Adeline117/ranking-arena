@@ -316,7 +316,7 @@ export async function GET(req: NextRequest) {
 
     recommendations = recommendations.slice(0, limit)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         recommendations,
@@ -328,6 +328,8 @@ export async function GET(req: NextRequest) {
         },
       },
     })
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    return response
   } catch (error: unknown) {
     logger.error('Recommendations error', { error })
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
