@@ -121,7 +121,7 @@ export default function TradingViewChart({
   const colors = getChartColors(theme)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || !data || data.length === 0) return
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
@@ -277,6 +277,26 @@ export default function TradingViewChart({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using only primary deps
   }, [data, type, height, theme, color, topColor, bottomColor, showVolume, locale])
+
+  if (!data || data.length === 0) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--color-text-tertiary)',
+          fontSize: 14,
+          background: 'var(--color-bg-secondary)',
+          borderRadius: 8,
+        }}
+      >
+        {locale === 'zh' ? '暂无图表数据' : 'No chart data available'}
+      </div>
+    )
+  }
 
   return (
     <div
