@@ -48,6 +48,8 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
       return
     }
 
+    let alive = true
+
     const load = async () => {
       try {
         // 如果是自己的主页，显示所有收藏夹；否则只显示公开的
@@ -63,6 +65,8 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
         }
 
         const { data, error } = await query
+
+        if (!alive) return
 
         if (error) {
           // 如果表不存在或权限不足，静默处理
@@ -85,7 +89,7 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
             .eq('user_id', currentUserId || '')
             .in('folder_id', folderIds)
           
-          if (subs) {
+          if (alive && subs) {
             const subsMap: Record<string, boolean> = {}
             subs.forEach(s => { subsMap[s.folder_id] = true })
             setSubscriptions(subsMap)
@@ -93,13 +97,14 @@ export default function UserBookmarkFolders({ userId, isOwnProfile = false }: Us
         }
       } catch (_err) {
         // 静默处理异常，不显示收藏夹组件
-        setFolders([])
+        if (alive) setFolders([])
       } finally {
-        setLoading(false)
+        if (alive) setLoading(false)
       }
     }
 
     load()
+    return () => { alive = false }
   }, [userId, isOwnProfile, accessToken, currentUserId])
 
   // 处理订阅/取消订阅

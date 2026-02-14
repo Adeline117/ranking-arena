@@ -27,10 +27,13 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
   const [hasConnection, setHasConnection] = useState(false)
 
   useEffect(() => {
+    let alive = true
+
     async function checkConnection(): Promise<void> {
       try {
          
         const { data: { user } } = await supabase.auth.getUser()
+        if (!alive) return
         if (!user) {
           setHasConnection(false)
           return
@@ -49,7 +52,7 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
           .eq('is_active', true)
           .maybeSingle()
 
-        setHasConnection(!!data)
+        if (alive) setHasConnection(!!data)
       } catch (err: unknown) {
         if (err instanceof Error) {
           logger.error('[ClaimTrader] Connection check failed:', {
@@ -58,11 +61,12 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
             source,
           })
         }
-        setHasConnection(false)
+        if (alive) setHasConnection(false)
       }
     }
 
     checkConnection()
+    return () => { alive = false }
   }, [userId, source])
 
   const handleClaim = async () => {

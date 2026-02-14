@@ -107,21 +107,25 @@ export function BadgeDisplay({
   const [hoveredBadge, setHoveredBadge] = useState<string | null>(null)
 
   useEffect(() => {
+    let alive = true
+
     async function fetchBadges() {
       try {
         const res = await fetch(`/api/traders/${encodeURIComponent(traderHandle)}/badges`)
+        if (!alive) return
         if (res.ok) {
           const data = await res.json()
-          setBadges(data.badges || [])
+          if (alive) setBadges(data.badges || [])
         }
       } catch {
         // Failed to fetch badges
       } finally {
-        setLoading(false)
+        if (alive) setLoading(false)
       }
     }
 
     fetchBadges()
+    return () => { alive = false }
   }, [traderHandle])
 
   if (loading || badges.length === 0) return null
