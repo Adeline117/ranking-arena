@@ -135,6 +135,11 @@ async function fetchLeaderboardData(period) {
           // ROI normalization: if < 10, it's probably decimal form
           if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
 
+          // metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
+          const mv = item.metricValues || []
+          const profitLossRatio = mv[4] ? parseFloat(String(mv[4]).replace(/[^0-9.\-+]/g, '')) : null
+          const sharpeRatio = mv[5] ? parseFloat(String(mv[5]).replace(/[^0-9.\-+]/g, '')) : null
+
           allTraders.set(traderId, {
             traderId,
             nickname: item.nickName || item.leaderName || null,
@@ -144,6 +149,8 @@ async function fetchLeaderboardData(period) {
             winRate,
             maxDrawdown,
             followers,
+            profitLossRatio: isNaN(profitLossRatio) ? null : profitLossRatio,
+            sharpeRatio: isNaN(sharpeRatio) ? null : sharpeRatio,
           })
         }
 
@@ -196,6 +203,9 @@ async function fetchLeaderboardData(period) {
             if (!traderId || allTraders.has(traderId)) continue
             let roi = parseFloat(item.roi || item.roiRate || 0)
             if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+            const mvFb = item.metricValues || []
+            const plrFb = mvFb[4] ? parseFloat(String(mvFb[4]).replace(/[^0-9.\-+]/g, '')) : null
+            const srFb = mvFb[5] ? parseFloat(String(mvFb[5]).replace(/[^0-9.\-+]/g, '')) : null
             allTraders.set(traderId, {
               traderId,
               nickname: item.nickName || item.leaderName || null,
@@ -204,6 +214,8 @@ async function fetchLeaderboardData(period) {
               winRate: parseFloat(item.winRate || 0),
               maxDrawdown: parseFloat(item.mdd || 0),
               followers: parseInt(item.followerCount || 0),
+              profitLossRatio: isNaN(plrFb) ? null : plrFb,
+              sharpeRatio: isNaN(srFb) ? null : srFb,
             })
             newCount++
           }
@@ -255,6 +267,8 @@ async function saveTradersBatch(traders, period) {
       win_rate: normalizedWinRate,
       max_drawdown: t.maxDrawdown || null,
       followers: t.followers || null,
+      sharpe_ratio: t.sharpeRatio || null,
+      profit_loss_ratio: t.profitLossRatio || null,
       arena_score: arenaScore,
       captured_at: capturedAt,
     }
