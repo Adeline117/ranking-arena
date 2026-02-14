@@ -95,7 +95,9 @@ self.addEventListener('activate', (event) => {
       })
       .then(() => {
         // Trim cache after cleanup
-        await trimCache();
+        return trimCache();
+      })
+      .then(() => {
         // 立即控制所有客户端
         return self.clients.claim();
       })

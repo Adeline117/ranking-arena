@@ -25,6 +25,13 @@ export const maxDuration = 120
 const STALE_THRESHOLD_MS = 8 * 60 * 60 * 1000 // 8 小时
 const CRITICAL_THRESHOLD_MS = 24 * 60 * 60 * 1000 // 24 小时
 
+// 平台级阈值覆盖（毫秒）— 某些平台 API 不稳定或更新频率低
+const PLATFORM_THRESHOLD_OVERRIDES: Record<string, { stale: number; critical: number }> = {
+  blofin: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // BloFin API 频繁限流
+  gmx: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // On-chain, less frequent
+  gains: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // On-chain
+}
+
 // 平台显示名称映射
 const PLATFORM_NAMES: Record<string, string> = {
   binance_futures: 'Binance 合约',
@@ -127,10 +134,15 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         ageMs = now - new Date(lastUpdate).getTime()
         ageHours = Math.round((ageMs / (1000 * 60 * 60)) * 10) / 10
 
-        if (ageMs >= CRITICAL_THRESHOLD_MS) {
+        // Use per-platform threshold overrides if available
+        const overrides = PLATFORM_THRESHOLD_OVERRIDES[platform]
+        const critThreshold = overrides?.critical ?? CRITICAL_THRESHOLD_MS
+        const staleThreshold = overrides?.stale ?? STALE_THRESHOLD_MS
+
+        if (ageMs >= critThreshold) {
           status = 'critical'
           criticalPlatforms.push(platform)
-        } else if (ageMs >= STALE_THRESHOLD_MS) {
+        } else if (ageMs >= staleThreshold) {
           status = 'stale'
           stalePlatforms.push(platform)
         } else {
