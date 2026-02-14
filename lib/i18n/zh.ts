@@ -3200,6 +3200,50 @@ const zh = {
     dmcaContactDesc: '版权相关事宜请联系：',
     dmcaContactEmail: '邮箱: copyright@arenafi.org -- 请在邮件主题中注明"版权通知"或"DMCA Notice"。我们将在收到有效通知后尽快处理（通常在5个工作日内）。',
 
+    // 市场面板
+    fundamentalData: '基本面数据',
+    historicalExtremes: '历史极值',
+    marketRank: '排名',
+    tokenMarketCap: '市值',
+    tokenVolume24h: '24h 成交量',
+    tokenHigh24h: '24h 最高',
+    tokenLow24h: '24h 最低',
+    fullyDilutedValuation: '完全稀释估值',
+    circulatingSupply: '流通量',
+    totalSupply: '总供应量',
+    maxSupply: '最大供应量',
+    allTimeHigh: '历史最高',
+    allTimeLow: '历史最低',
+    gainersTop5: '涨幅榜 Top5',
+    losersTop5: '跌幅榜 Top5',
+    fundFlow: '资金流向',
+    noGainers: '市场全线下跌，暂无上涨',
+    noLosers: '市场全线上涨，暂无下跌',
+    fearGreed: '恐惧贪婪',
+    liquidation24h: '24h清算',
+    watchlistComingSoon: '自选列表即将推出',
+
+    // 交易员资料
+    arenaScoreLabel: 'Arena 评分',
+    dimensionScores: '维度评分',
+    profitability: '盈利能力',
+    riskControl: '风控能力',
+    execution: '执行能力',
+    compareAnalysis: '对比分析',
+    traderProfileTabs: '交易员资料标签页',
+
+    // UI元素
+    goToTraderProfile: '进入交易者主页',
+    verifiedOnChain: '链上验证',
+
+    // 小组申请 placeholders
+    groupNameZhPlaceholder: '例如：BTC 交易讨论组',
+    groupDescZhPlaceholder: '介绍一下你的小组...',
+    ruleInputZhPlaceholder: '输入规则内容（中文）',
+    ruleInputEnPlaceholder: '输入规则内容（英文）',
+    adminRoleZhPlaceholder: '中文（如：掌门）',
+    memberRoleZhPlaceholder: '中文（如：弟子）',
+
 } as const
 
 export default zh

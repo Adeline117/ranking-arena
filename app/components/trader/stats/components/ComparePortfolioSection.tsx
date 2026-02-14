@@ -70,7 +70,7 @@ export function ComparePortfolioSection({
     >
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="lg" weight="black">对比分析</Text>
+          <Text size="lg" weight="black">{t('compareAnalysis')}</Text>
         </Box>
         <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
           <PeriodSelector value={period} onChange={setPeriod} t={t} />

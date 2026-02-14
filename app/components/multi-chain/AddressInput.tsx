@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface AddressInputProps {
   onSubmit: (address: string) => void
@@ -9,6 +10,7 @@ interface AddressInputProps {
 }
 
 export default function AddressInput({ onSubmit, isLoading }: AddressInputProps) {
+  const { t } = useLanguage()
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -40,7 +42,7 @@ export default function AddressInput({ onSubmit, isLoading }: AddressInputProps)
           value={value}
           onChange={(e) => { setValue(e.target.value); setError(null) }}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
-          placeholder="Enter EVM (0x...) or Solana address"
+          placeholder={t('enterEvmOrSolanaAddress')}
           disabled={isLoading}
           style={{
             flex: 1,

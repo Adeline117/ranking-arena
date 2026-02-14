@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Link from 'next/link'
 
@@ -205,6 +206,7 @@ function VolumeBar({ value, max }: { value: number; max: number }) {
 }
 
 export default function CoreCards() {
+  const { t } = useLanguage()
   const [gainers, setGainers] = useState<CoinRow[]>([])
   const [losers, setLosers] = useState<CoinRow[]>([])
   const [marketLoaded, setMarketLoaded] = useState(false)
@@ -260,11 +262,11 @@ export default function CoreCards() {
       overflowX: 'hidden',
     }}>
       {/* Gainers Top 5 */}
-      <CardWrapper title="涨幅榜 Top5" accentColor={tokens.gradient.success}>
+      <CardWrapper title={t('gainersTop5')} accentColor={tokens.gradient.success}>
         {gainers.length === 0 ? (
           marketLoaded ? (
             <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
-              市场全线下跌，暂无上涨
+              {t('noGainers')}
             </div>
           ) : (
             <div style={{ height: 160 }} className="skeleton" />
@@ -279,11 +281,11 @@ export default function CoreCards() {
       </CardWrapper>
 
       {/* Losers Top 5 */}
-      <CardWrapper title="跌幅榜 Top5" accentColor={tokens.gradient.error}>
+      <CardWrapper title={t('losersTop5')} accentColor={tokens.gradient.error}>
         {losers.length === 0 ? (
           marketLoaded ? (
             <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
-              市场全线上涨，暂无下跌
+              {t('noLosers')}
             </div>
           ) : (
             <div style={{ height: 160 }} className="skeleton" />
@@ -298,7 +300,7 @@ export default function CoreCards() {
       </CardWrapper>
 
       {/* Exchange Volume / Fund Flow */}
-      <CardWrapper title="资金流向" accentColor={tokens.gradient.purple}>
+      <CardWrapper title={t('fundFlow')} accentColor={tokens.gradient.purple}>
         {exchanges.length === 0 ? (
           <div style={{ height: 160 }} className="skeleton" />
         ) : (

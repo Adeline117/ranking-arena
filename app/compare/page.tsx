@@ -442,10 +442,11 @@ function CompareContent() {
 }
 
 export default function ComparePage() {
+  const { t } = useLanguage()
   return (
     <Suspense fallback={
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: 'var(--color-text-secondary)' }}>Loading...</Text>
+        <Text style={{ color: 'var(--color-text-secondary)' }}>{t('loading')}</Text>
       </Box>
     }>
       <CompareContent />

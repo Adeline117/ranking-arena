@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 
@@ -73,7 +74,7 @@ export default function GroupSettings({
         {/* Language tabs */}
         <Box>
           <Box style={{ display: 'flex', borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-            <button type="button" style={langTabStyle(langTab === 'zh')} onClick={() => setLangTab('zh')} disabled={!editMode}>中文</button>
+            <button type="button" style={langTabStyle(langTab === 'zh')} onClick={() => setLangTab('zh')} disabled={!editMode}>{t('chinese')}</button>
             {showMultiLang && <button type="button" style={langTabStyle(langTab === 'en')} onClick={() => setLangTab('en')} disabled={!editMode}>English</button>}
             {!showMultiLang && editMode && (
               <button type="button" style={{ ...langTabStyle(false), color: tokens.colors.accent?.primary || tokens.colors.accent.brand, border: 'none' }} onClick={() => { setShowMultiLang(true); setLangTab('en') }}>+ {t('addLanguage')}</button>
@@ -113,7 +114,7 @@ export default function GroupSettings({
                   </Box>
                   {editMode ? (
                     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                      <Box><Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>中文</Text><input type="text" value={rule.zh} onChange={(e) => updateRule(index, 'zh', e.target.value)} style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }} placeholder={t('ruleContentZhPlaceholder')} /></Box>
+                      <Box><Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>{t('chinese')}</Text><input type="text" value={rule.zh} onChange={(e) => updateRule(index, 'zh', e.target.value)} style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }} placeholder={t('ruleContentZhPlaceholder')} /></Box>
                       {showMultiLang && <Box><Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>English</Text><input type="text" value={rule.en} onChange={(e) => updateRule(index, 'en', e.target.value)} style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }} placeholder={t('ruleContentEnPlaceholder')} /></Box>}
                     </Box>
                   ) : (<Box><Text size="sm">{rule.zh || rule.en}</Text>{rule.en && rule.zh && <Text size="xs" color="tertiary">{rule.en}</Text>}</Box>)}

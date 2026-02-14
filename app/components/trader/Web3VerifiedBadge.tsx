@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface Web3VerifiedBadgeProps {
   size?: 'sm' | 'md'
@@ -11,6 +12,7 @@ interface Web3VerifiedBadgeProps {
  * 纯文字+SVG，不使用emoji
  */
 export function Web3VerifiedBadge({ size = 'sm' }: Web3VerifiedBadgeProps) {
+  const { t } = useLanguage()
   const iconSize = size === 'sm' ? 12 : 16
   const fontSize = 12
 
@@ -27,7 +29,7 @@ export function Web3VerifiedBadge({ size = 'sm' }: Web3VerifiedBadgeProps) {
         whiteSpace: 'nowrap',
         lineHeight: 1.2,
       }}
-      title="Verified On-Chain / 链上验证"
+      title={t('verifiedOnChain')}
     >
       <svg
         width={iconSize}

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const SUPPORTED_EXCHANGES = [
   'binance',
@@ -26,6 +27,7 @@ interface AddExchangeModalProps {
 }
 
 export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchangeModalProps) {
+  const { t } = useLanguage()
   const [exchange, setExchange] = useState(SUPPORTED_EXCHANGES[0])
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
@@ -104,7 +106,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
               type="password"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
-              placeholder="Enter API Key"
+              placeholder={t('enterApiKeyPlaceholder')}
               style={styles.input}
               autoComplete="off"
             />
@@ -116,7 +118,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
               type="password"
               value={apiSecret}
               onChange={e => setApiSecret(e.target.value)}
-              placeholder="Enter API Secret"
+              placeholder={t('enterApiSecretPlaceholder')}
               style={styles.input}
               autoComplete="off"
             />
