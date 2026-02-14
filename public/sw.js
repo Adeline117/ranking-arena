@@ -3,8 +3,11 @@
  * 提供离线支持和缓存策略
  */
 
-const CACHE_NAME = 'ranking-arena-v2';
+const CACHE_NAME = 'ranking-arena-v3';
 const OFFLINE_URL = '/offline';
+
+// Maximum number of entries in the runtime cache
+const MAX_CACHE_ENTRIES = 200;
 
 // 预缓存的静态资源
 const PRECACHE_ASSETS = [
@@ -91,6 +94,8 @@ self.addEventListener('activate', (event) => {
         );
       })
       .then(() => {
+        // Trim cache after cleanup
+        await trimCache();
         // 立即控制所有客户端
         return self.clients.claim();
       })
@@ -243,6 +248,13 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// Handle SKIP_WAITING message from client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // 后台同步
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-posts') {
@@ -274,7 +286,7 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body,
     icon: data.icon || '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
+    badge: '/icons/icon-192x192.png',
     vibrate: [100, 50, 100],
     tag: data.type || 'arena',
     data: {
@@ -315,6 +327,16 @@ self.addEventListener('notificationclick', (event) => {
     );
   }
 });
+
+// Trim cache to MAX_CACHE_ENTRIES (FIFO)
+async function trimCache() {
+  const cache = await caches.open(CACHE_NAME);
+  const keys = await cache.keys();
+  if (keys.length > MAX_CACHE_ENTRIES) {
+    const toDelete = keys.slice(0, keys.length - MAX_CACHE_ENTRIES);
+    await Promise.all(toDelete.map((key) => cache.delete(key)));
+  }
+}
 
 // 同步帖子函数（示例）
 async function syncPosts() {
