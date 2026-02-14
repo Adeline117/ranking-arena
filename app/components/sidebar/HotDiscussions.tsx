@@ -91,7 +91,9 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
       setLoading(false)
     }
     fetchData()
-    return () => { alive = false }
+    // Refresh every 3 minutes
+    const interval = setInterval(fetchData, 180000)
+    return () => { alive = false; clearInterval(interval) }
   }, [limit])
 
   function getTitle(post: HotPost): string {
