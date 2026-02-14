@@ -357,6 +357,8 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
           key={activeTab}
           style={{
             animation: 'fadeInUp 0.4s ease-out forwards',
+            opacity: isTabPending ? 0.6 : 1,
+            transition: 'opacity 0.2s ease',
           }}
         >
           {activeTab === 'overview' && (
