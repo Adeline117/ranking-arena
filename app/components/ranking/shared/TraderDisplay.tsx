@@ -268,7 +268,7 @@ export function MetricStat({ label, value, color }: {
       <Text size="xs" style={{ marginBottom: 2, display: 'block', color: TRADER_TEXT_TERTIARY }}>
         {label}
       </Text>
-      <Text size="md" weight="semibold" style={{ color: color || TRADER_TEXT_TERTIARY }}>
+      <Text size="md" weight="semibold" style={{ color: color || TRADER_TEXT_TERTIARY, fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </Text>
     </Box>
