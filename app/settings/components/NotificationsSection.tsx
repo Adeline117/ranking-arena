@@ -25,6 +25,7 @@ interface NotificationsSectionProps {
   emailDigest: 'none' | 'daily' | 'weekly'
   onEmailDigestChange: (v: 'none' | 'daily' | 'weekly') => void
   onToast?: (message: string, type: 'success' | 'error') => void
+  onToggleSave?: (field: string, value: boolean) => void
 }
 
 export const NotificationsSection = React.memo(function NotificationsSection(props: NotificationsSectionProps) {
@@ -59,7 +60,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(pro
             <Box>
               <Text size="sm" weight="medium">{t(item.labelKey as keyof typeof import('@/lib/i18n').translations.zh)}</Text>
             </Box>
-            <ToggleSwitch checked={item.value} onChange={(v) => item.setter(v)} />
+            <ToggleSwitch checked={item.value} onChange={(v) => { item.setter(v); props.onToggleSave?.(`notify_${item.key}`, v) }} />
           </Box>
         ))}
       </Box>

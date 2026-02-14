@@ -161,7 +161,7 @@ function SettingsContent() {
   const [notifyMention, setNotifyMention] = useState(true)
   const [notifyMessage, setNotifyMessage] = useState(true)
   const [hapticEnabled, setHapticEnabled] = useState(true)
-  const [savingNotifications, setSavingNotifications] = useState(false)
+  // notification toggles now auto-save individually
 
   // Privacy settings
   const [showFollowers, setShowFollowers] = useState(true)
@@ -814,20 +814,21 @@ function SettingsContent() {
     finally { setDeletingAccount(false) }
   }
 
-  // ===== Notification save =====
-  const _handleSaveNotifications = async () => {
-    if (submittingRef.current || savingNotifications || !userId) return
-    submittingRef.current = true; setSavingNotifications(true)
+  // ===== Notification toggle auto-save =====
+  const handleNotificationToggleSave = useCallback(async (field: string, value: boolean) => {
+    if (!userId) return
     try {
-      const { error } = await supabase.from('user_profiles').update({
-        notify_follow: notifyFollow, notify_like: notifyLike, notify_comment: notifyComment,
-        notify_mention: notifyMention, notify_message: notifyMessage,
-      }).eq('id', userId)
-      if (error) { showToast(t('saveFailedRetry'), 'error'); return }
-      showToast(t('notificationsSaved'), 'success')
+      const { error } = await supabase.from('user_profiles').update({ [field]: value }).eq('id', userId)
+      if (error) { showToast(t('saveFailed'), 'error'); return }
+      showToast(t('settingsSaved'), 'success')
+      if (initialValuesRef.current) {
+        const camelKey = field.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+        if (camelKey in initialValuesRef.current) {
+          (initialValuesRef.current as Record<string, unknown>)[camelKey] = value
+        }
+      }
     } catch { showToast(t('saveFailed'), 'error') }
-    finally { setSavingNotifications(false); submittingRef.current = false }
-  }
+  }, [userId, showToast, t])
 
   // ===== Render: auth required / loading states =====
   if (!loading && !userId) {
@@ -1025,6 +1026,7 @@ function SettingsContent() {
             hapticEnabled={hapticEnabled} setHapticEnabled={setHapticEnabled}
             emailDigest={emailDigest} onEmailDigestChange={handleEmailDigestChange}
             onToast={showToast}
+            onToggleSave={handleNotificationToggleSave}
           />
 
           <PrivacySection
