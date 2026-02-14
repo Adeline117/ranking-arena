@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
   query = query.range(offset, offset + limit - 1)
 
    
-  const { data: snapshots, count, error } = await query as { data: any[] | null; count: number | null; error: any }
+  const { data: snapshots, count, error } = await query as { data: Record<string, unknown>[] | null; count: number | null; error: { message: string } | null }
 
   if (error) {
     logger.error('[Rankings API] Query error:', error)
@@ -240,7 +240,7 @@ export async function GET(request: NextRequest) {
   })
 
   // Filter out traders with no display name (NULL handles)
-  const filteredTraders = traders.filter((t: any) => t.display_name != null);
+  const filteredTraders = traders.filter((t) => t.display_name != null);
 
   const response: RankingsResponse = {
     traders: filteredTraders,

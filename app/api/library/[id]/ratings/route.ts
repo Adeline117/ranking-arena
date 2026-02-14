@@ -38,10 +38,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Filter to only 'read' ratings for scoring
-    const readRatings = (ratings || []).filter((r: any) => r.status === 'read' && r.rating != null)
+    interface RatingRow {
+      id: string
+      rating: number | null
+      review: string | null
+      status: string
+      created_at: string
+      updated_at: string | null
+      user_id: string
+      users: { id: string; nickname: string | null; avatar_url: string | null; created_at: string } | null
+    }
+
+    const typedRatings = (ratings || []) as RatingRow[]
+    const readRatings = typedRatings.filter((r) => r.status === 'read' && r.rating != null)
 
     // Get user post counts for weighting
-    const userIds = readRatings.map((r: any) => r.user_id)
+    const userIds = readRatings.map((r) => r.user_id)
     const postCounts: Record<string, number> = {}
     if (userIds.length > 0) {
       const { data: posts } = await supabase
@@ -59,7 +71,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     let weightedSum = 0
     let weightTotal = 0
     for (const r of readRatings) {
-      const userCreatedAt = ((r as Record<string, unknown>).users as Record<string, unknown> | undefined)?.created_at as string || r.created_at
+      const userCreatedAt = r.users?.created_at || r.created_at
       const pc = postCounts[r.user_id] || 0
       const w = getAccountWeight(userCreatedAt, pc)
       weightedSum += (r.rating as number) * w
@@ -76,7 +88,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     let C = 3.0 // default fallback
     if (globalStats && globalStats.length > 0) {
-      const sum = globalStats.reduce((acc: number, item: any) => acc + (Number(item.rating) || 0), 0)
+      const sum = globalStats.reduce((acc: number, item: { rating: number | null }) => acc + (Number(item.rating) || 0), 0)
       C = sum / globalStats.length
     }
 
@@ -94,10 +106,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Simple average
-    const average = v > 0 ? readRatings.reduce((s: number, r: any) => s + r.rating, 0) / v : 0
+    const average = v > 0 ? readRatings.reduce((s: number, r) => s + (r.rating as number), 0) / v : 0
 
     return NextResponse.json({
-      ratings: (ratings || []).map((r: any) => ({
+      ratings: typedRatings.map((r) => ({
         ...r,
         users: r.users ? { id: r.users.id, nickname: r.users.nickname, avatar_url: r.users.avatar_url } : null,
       })),

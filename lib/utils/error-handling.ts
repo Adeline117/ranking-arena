@@ -13,12 +13,27 @@ export interface ErrorInfo {
   code?: string | number
 }
 
+// Error-like object with optional properties for detection
+interface ErrorLike {
+  message?: string
+  status?: number
+  code?: string | number
+  response?: { status?: number }
+}
+
+function toErrorLike(error: unknown): ErrorLike | null {
+  if (!error) return null
+  if (typeof error === 'object') return error as ErrorLike
+  return { message: String(error) }
+}
+
 // 网络错误检测
-function isNetworkError(error: any): boolean {
-  if (!error) return false
+function isNetworkError(error: unknown): boolean {
+  const e = toErrorLike(error)
+  if (!e) return false
   
   // 检查常见的网络错误标识
-  const errorMessage = String(error.message || error).toLowerCase()
+  const errorMessage = String(e.message || error).toLowerCase()
   const networkErrorPatterns = [
     'network',
     'fetch',
@@ -36,27 +51,29 @@ function isNetworkError(error: any): boolean {
 }
 
 // 超时错误检测
-function isTimeoutError(error: any): boolean {
-  if (!error) return false
+function isTimeoutError(error: unknown): boolean {
+  const e = toErrorLike(error)
+  if (!e) return false
   
-  const errorMessage = String(error.message || error).toLowerCase()
+  const errorMessage = String(e.message || error).toLowerCase()
   const timeoutPatterns = ['timeout', 'timed out', 'deadline', 'request took too long']
   
   return timeoutPatterns.some(pattern => errorMessage.includes(pattern))
 }
 
 // 服务器错误检测  
-function isServerError(error: any): boolean {
-  if (!error) return false
+function isServerError(error: unknown): boolean {
+  const e = toErrorLike(error)
+  if (!e) return false
   
   // 检查HTTP状态码
-  const status = error.status || error.code || error.response?.status
+  const status = e.status || e.code || e.response?.status
   if (typeof status === 'number' && status >= 500) {
     return true
   }
   
   // 检查错误消息
-  const errorMessage = String(error.message || error).toLowerCase()
+  const errorMessage = String(e.message || error).toLowerCase()
   const serverErrorPatterns = [
     'server error',
     'internal server',
@@ -72,15 +89,16 @@ function isServerError(error: any): boolean {
 }
 
 // 认证错误检测
-function isAuthError(error: any): boolean {
-  if (!error) return false
+function isAuthError(error: unknown): boolean {
+  const e = toErrorLike(error)
+  if (!e) return false
   
-  const status = error.status || error.code || error.response?.status
+  const status = e.status || e.code || e.response?.status
   if (status === 401 || status === 403) {
     return true
   }
   
-  const errorMessage = String(error.message || error).toLowerCase()
+  const errorMessage = String(e.message || error).toLowerCase()
   const authErrorPatterns = [
     'unauthorized',
     'forbidden',
@@ -95,15 +113,16 @@ function isAuthError(error: any): boolean {
 }
 
 // 验证错误检测
-function isValidationError(error: any): boolean {
-  if (!error) return false
+function isValidationError(error: unknown): boolean {
+  const e = toErrorLike(error)
+  if (!e) return false
   
-  const status = error.status || error.code || error.response?.status
+  const status = e.status || e.code || e.response?.status
   if (status === 400 || status === 422) {
     return true
   }
   
-  const errorMessage = String(error.message || error).toLowerCase()
+  const errorMessage = String(e.message || error).toLowerCase()
   const validationErrorPatterns = [
     'validation',
     'invalid',
@@ -118,7 +137,7 @@ function isValidationError(error: any): boolean {
 /**
  * 解析错误并返回友好的错误信息
  */
-export function parseError(error: any): ErrorInfo {
+export function parseError(error: unknown): ErrorInfo {
   if (!error) {
     return {
       type: 'unknown',
@@ -145,12 +164,13 @@ export function parseError(error: any): ErrorInfo {
   }
 
   // 服务器错误
+  const el = toErrorLike(error)
   if (isServerError(error)) {
     return {
       type: 'server',
       message: t('serverErrorFriendly'),
       originalError: error,
-      code: error.status || error.code || error.response?.status
+      code: el?.status || el?.code || el?.response?.status
     }
   }
 
@@ -160,7 +180,7 @@ export function parseError(error: any): ErrorInfo {
       type: 'auth',
       message: t('authenticationFailed'),
       originalError: error,
-      code: error.status || error.code || error.response?.status
+      code: el?.status || el?.code || el?.response?.status
     }
   }
 
@@ -168,9 +188,9 @@ export function parseError(error: any): ErrorInfo {
   if (isValidationError(error)) {
     return {
       type: 'validation',
-      message: error.message || t('operationFailed'),
+      message: el?.message || t('operationFailed'),
       originalError: error,
-      code: error.status || error.code || error.response?.status
+      code: el?.status || el?.code || el?.response?.status
     }
   }
 
@@ -185,14 +205,14 @@ export function parseError(error: any): ErrorInfo {
 /**
  * 获取友好的错误消息
  */
-export function getErrorMessage(error: any): string {
+export function getErrorMessage(error: unknown): string {
   return parseError(error).message
 }
 
 /**
  * 判断错误是否可重试
  */
-export function isRetryableError(error: any): boolean {
+export function isRetryableError(error: unknown): boolean {
   const errorInfo = parseError(error)
   
   // 网络错误、超时错误、服务器错误通常可以重试
@@ -202,7 +222,7 @@ export function isRetryableError(error: any): boolean {
 /**
  * 错误上报到 Sentry（如果可用）
  */
-export function reportError(error: any, context?: Record<string, any>) {
+export function reportError(error: unknown, context?: Record<string, unknown>) {
   const errorInfo = parseError(error)
   
   // 只上报服务器错误和未知错误
@@ -242,7 +262,7 @@ export function reportError(error: any, context?: Record<string, any>) {
 /**
  * 处理 API 响应错误
  */
-export function handleApiError(error: any): never {
+export function handleApiError(error: unknown): never {
   const errorInfo = parseError(error)
   reportError(error, { source: 'api' })
   throw new Error(errorInfo.message)
@@ -256,7 +276,7 @@ export async function safeFetch(
   options?: RequestInit,
   retries: number = 1
 ): Promise<Response> {
-  let lastError: any
+  let lastError: unknown
   
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -293,7 +313,7 @@ export async function safeFetch(
  * 创建错误处理的 React Hook
  */
 export function createErrorHandler(onError?: (errorInfo: ErrorInfo) => void) {
-  return (error: any, context?: Record<string, any>) => {
+  return (error: unknown, context?: Record<string, unknown>) => {
     const errorInfo = parseError(error)
     reportError(error, context)
     

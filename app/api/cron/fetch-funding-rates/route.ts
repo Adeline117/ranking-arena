@@ -22,7 +22,7 @@ interface ExchangeConfig {
   name: string
   url: string
   symbols: string[]
-  responseMapper: (data: any, symbol: string) => FundingRateData[]
+  responseMapper: (data: Record<string, unknown>, symbol: string) => FundingRateData[]
 }
 
 interface FundingRateData {
@@ -41,15 +41,15 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'binance',
     url: 'https://fapi.binance.com/fapi/v1/fundingRate',
     symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'],
-    responseMapper: (data: any[], symbol: string) => {
+    responseMapper: (data: Record<string, unknown>, symbol: string) => {
       // Binance returns array of historical rates, take the most recent
       if (!Array.isArray(data) || data.length === 0) return []
-      const latest = data[data.length - 1]
+      const latest = data[data.length - 1] as Record<string, string | number>
       return [{
         platform: 'binance',
         symbol,
-        funding_rate: parseFloat(latest.fundingRate),
-        funding_time: new Date(latest.fundingTime).toISOString(),
+        funding_rate: parseFloat(String(latest.fundingRate)),
+        funding_time: new Date(Number(latest.fundingTime)).toISOString(),
       }]
     },
   },
@@ -57,9 +57,10 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'bybit',
     url: 'https://api.bybit.com/v5/market/funding/history',
     symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
-    responseMapper: (data: any, _symbol: string) => {
-      if (!data.result?.list || data.result.list.length === 0) return []
-      const latest = data.result.list[0]
+    responseMapper: (data: Record<string, unknown>, _symbol: string) => {
+      const result = data.result as { list?: Array<Record<string, string>> } | undefined
+      if (!result?.list || result.list.length === 0) return []
+      const latest = result.list[0]
       return [{
         platform: 'bybit',
         symbol: latest.symbol,
@@ -72,9 +73,10 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'okx',
     url: 'https://www.okx.com/api/v5/public/funding-rate',
     symbols: ['BTC-USDT-SWAP', 'ETH-USDT-SWAP', 'SOL-USDT-SWAP'],
-    responseMapper: (data: any, _symbol: string) => {
-      if (!data.data || data.data.length === 0) return []
-      const latest = data.data[0]
+    responseMapper: (data: Record<string, unknown>, _symbol: string) => {
+      const items = data.data as Array<Record<string, string>> | undefined
+      if (!items || items.length === 0) return []
+      const latest = items[0]
       return [{
         platform: 'okx',
         symbol: latest.instId,
@@ -87,13 +89,14 @@ const EXCHANGES: ExchangeConfig[] = [
     name: 'bitget',
     url: 'https://api.bitget.com/api/v2/mix/market/current-fund-rate',
     symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
-    responseMapper: (data: any, symbol: string) => {
-      if (!data.data || !data.data.fundingRate) return []
+    responseMapper: (data: Record<string, unknown>, symbol: string) => {
+      const d = data.data as Record<string, string> | undefined
+      if (!d || !d.fundingRate) return []
       return [{
         platform: 'bitget',
-        symbol: data.data.symbol || symbol,
-        funding_rate: parseFloat(data.data.fundingRate),
-        funding_time: new Date(parseInt(data.data.fundingTime)).toISOString(),
+        symbol: d.symbol || symbol,
+        funding_rate: parseFloat(d.fundingRate),
+        funding_time: new Date(parseInt(d.fundingTime)).toISOString(),
       }]
     },
   },
