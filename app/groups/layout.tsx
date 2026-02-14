@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     url: `${baseUrl}/groups`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena 交易小组' }],
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena 交易小组' }],
   },
   twitter: {
     card: 'summary',

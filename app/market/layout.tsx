@@ -15,13 +15,13 @@ export const metadata: Metadata = {
     url: `${baseUrl}/market`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena Market Overview' }],
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Market Overview' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Market Overview | Arena',
     description: 'Real-time crypto market sentiment, sector performance, and spot prices.',
-    images: [`${baseUrl}/og.png`],
+    images: [`${baseUrl}/og-image.png`],
   },
 }
 

@@ -53,7 +53,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
           title: post.title,
           description,
           images: ogImage ? [ogImage] : undefined,
-          creator: '@arena_fi',
+          creator: '@arenafi',
         },
         robots: {
           index: true,
