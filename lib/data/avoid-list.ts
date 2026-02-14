@@ -75,7 +75,7 @@ export async function getAvoidList(
 
   const { data, error } = await supabase
     .from('trader_avoid_scores')
-    .select('*')
+    .select('trader_id, source, avoid_count, high_drawdown_count, fake_data_count, inconsistent_count, avg_loss_percent, avg_follow_days, latest_vote_at')
     .order('avoid_count', { ascending: false })
     .range(offset, offset + limit - 1)
 
@@ -85,11 +85,12 @@ export async function getAvoidList(
 
   if (!data || data.length === 0) return []
 
-  // 获取交易员信息
-  const _traderKeys = data.map(d => `${d.trader_id}:${d.source}`)
+  // 获取交易员信息 - only fetch matching traders instead of entire table
+  const traderIds = data.map(d => d.trader_id)
   const { data: sources } = await supabase
     .from('trader_sources')
     .select('source_trader_id, source, handle')
+    .in('source_trader_id', traderIds)
 
   const handleMap = new Map<string, string>()
   sources?.forEach(s => {
@@ -112,7 +113,7 @@ export async function getTraderAvoidScore(
 ): Promise<TraderAvoidScore | null> {
   const { data, error } = await supabase
     .from('trader_avoid_scores')
-    .select('*')
+    .select('trader_id, source, avoid_count, high_drawdown_count, fake_data_count, inconsistent_count, avg_loss_percent, avg_follow_days, latest_vote_at')
     .eq('trader_id', traderId)
     .eq('source', source)
     .maybeSingle()
@@ -137,7 +138,7 @@ export async function getTraderAvoidVotes(
 
   const { data, error } = await supabase
     .from('avoid_votes')
-    .select('*')
+    .select('id, user_id, trader_id, source, reason, reason_type, loss_amount, loss_percent, follow_duration_days, screenshot_url, created_at, updated_at')
     .eq('trader_id', traderId)
     .eq('source', source)
     .order('created_at', { ascending: false })
@@ -166,7 +167,7 @@ export async function getTraderAvoidVotes(
     return {
       ...vote,
       author_handle: profile?.handle || '匿名用户',
-      author_avatar_url: profile?.avatar_url || null,
+      author_avatar_url: profile?.avatar_url || undefined,
     }
   })
 }
@@ -206,7 +207,7 @@ export async function getUserAvoidVote(
 ): Promise<AvoidVote | null> {
   const { data, error } = await supabase
     .from('avoid_votes')
-    .select('*')
+    .select('id, user_id, trader_id, source, reason, reason_type, loss_amount, loss_percent, follow_duration_days, screenshot_url, created_at, updated_at')
     .eq('user_id', userId)
     .eq('trader_id', traderId)
     .eq('source', source)

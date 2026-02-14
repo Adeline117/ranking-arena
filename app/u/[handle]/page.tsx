@@ -74,9 +74,9 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
 
   try {
     const [followersRes, followingRes, tradersRes, subscriptionData, claimedTraderRes] = await Promise.all([
-      supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', userProfile.id),
-      supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', userProfile.id),
-      supabase.from('trader_follows').select('*', { count: 'exact', head: true }).eq('user_id', userProfile.id),
+      supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('following_id', userProfile.id),
+      supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('follower_id', userProfile.id),
+      supabase.from('trader_follows').select('id', { count: 'exact', head: true }).eq('user_id', userProfile.id),
       supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('trader_authorizations').select('id, trader_id').eq('user_id', userProfile.id).eq('status', 'active').limit(1).maybeSingle(),
     ])

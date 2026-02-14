@@ -41,7 +41,7 @@ export default function FollowingFeed() {
         // Get posts from followed users
         const { data: postsData } = await supabase
           .from('posts')
-          .select('*')
+          .select('id, title, content, author_id, author_handle, group_id, poll_enabled, poll_bull, poll_bear, poll_wait, like_count, dislike_count, comment_count, bookmark_count, repost_count, view_count, hot_score, is_pinned, images, created_at, updated_at, original_post_id')
           .in('author_id', ids)
           .eq('status', 'active')
           .order('created_at', { ascending: false })

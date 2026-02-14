@@ -127,7 +127,7 @@ export async function getPostComments(
 
   const { data: allTopComments, error } = await supabase
     .from('comments')
-    .select('*')
+    .select('id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at')
     .eq('post_id', postId)
     .is('parent_id', null)
 
@@ -140,7 +140,7 @@ export async function getPostComments(
   const commentIds = comments.map(c => c.id)
   const { data: replies } = await supabase
     .from('comments')
-    .select('*')
+    .select('id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at')
     .in('parent_id', commentIds)
     .order('created_at', { ascending: true })
 
@@ -193,7 +193,7 @@ export async function getCommentById(
 ): Promise<Comment | null> {
   const { data, error } = await supabase
     .from('comments')
-    .select('*')
+    .select('id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at')
     .eq('id', commentId)
     .maybeSingle()
 
@@ -287,7 +287,7 @@ export async function getCommentCount(
 ): Promise<number> {
   const { count, error } = await supabase
     .from('comments')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .eq('post_id', postId)
 
   if (error) return 0

@@ -66,7 +66,7 @@ export async function getUserNotifications(
 
   let query = supabase
     .from('notifications')
-    .select('*')
+    .select('id, user_id, type, title, message, link, read, actor_id, reference_id, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
@@ -128,7 +128,7 @@ export async function getUnreadNotificationCount(
 ): Promise<number> {
   const { count, error } = await supabase
     .from('notifications')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('read', false)
 
