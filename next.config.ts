@@ -498,6 +498,7 @@ const nextConfig: NextConfig = {
       { source: '/legal/privacy', destination: '/privacy', permanent: true },
       { source: '/legal/disclaimer', destination: '/disclaimer', permanent: true },
       { source: '/legal/dmca', destination: '/dmca', permanent: true },
+      { source: '/community', destination: '/groups', permanent: false },
     ];
   },
 };
