@@ -260,7 +260,7 @@ export const PostListItem = memo(function PostListItem({
       )}
 
       {/* Reactions + Meta */}
-      <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap', color: tokens.colors.text.secondary, fontSize: 12, alignItems: 'center' }}>
+      <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'nowrap', color: tokens.colors.text.secondary, fontSize: 12, alignItems: 'center', overflow: 'hidden' }}>
         <ReactButton
           onClick={(e) => {
             e.preventDefault()
