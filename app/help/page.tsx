@@ -13,6 +13,17 @@ import ContactSupportButton from '@/app/components/ui/ContactSupportButton'
 // FAQ data using i18n
 const getFaqData = (t: (key: string) => string) => {
   return {
+    gettingStarted: {
+      title: t('helpGettingStartedTitle'),
+      items: [
+        { q: t('helpWhatIsArenaQ'), a: t('helpWhatIsArenaA') },
+        { q: t('helpHowToStartQ'), a: t('helpHowToStartA') },
+        { q: t('helpArenaScoreQ'), a: t('helpArenaScoreA') },
+        { q: t('helpFollowTraderQ'), a: t('helpFollowTraderA') },
+        { q: t('helpJoinGroupQ'), a: t('helpJoinGroupA') },
+        { q: t('helpFreeVsProQ'), a: t('helpFreeVsProA') },
+      ],
+    },
     subscription: {
       title: t('helpSubscriptionTitle'),
       items: [

@@ -413,6 +413,14 @@ export default function OnboardingPage() {
         {/* Step 2: Interests */}
         {step === 'interests' && (
           <div key="interests" className="step-content">
+            <button onClick={() => goToStep('welcome')} style={{
+              background: 'none', border: 'none', color: textSecondary, cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, padding: '4px 0', marginBottom: 12,
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              {tr('back')}
+            </button>
             <Text size="2xl" weight="black" style={{
               marginBottom: 8, textAlign: 'center',
               background: `linear-gradient(135deg, ${textPrimary} 0%, var(--color-brand-accent) 100%)`,
@@ -471,6 +479,14 @@ export default function OnboardingPage() {
         {/* Step 3: Follow Traders */}
         {step === 'traders' && (
           <div key="traders" className="step-content">
+            <button onClick={() => goToStep('interests')} style={{
+              background: 'none', border: 'none', color: textSecondary, cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, padding: '4px 0', marginBottom: 12,
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              {tr('back')}
+            </button>
             <Text size="2xl" weight="black" style={{
               marginBottom: 8, textAlign: 'center',
               background: `linear-gradient(135deg, ${textPrimary} 0%, var(--color-brand-accent) 100%)`,
@@ -569,6 +585,14 @@ export default function OnboardingPage() {
         {/* Step 4: Join Groups */}
         {step === 'groups' && (
           <div key="groups" className="step-content">
+            <button onClick={() => goToStep('traders')} style={{
+              background: 'none', border: 'none', color: textSecondary, cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, padding: '4px 0', marginBottom: 12,
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              {tr('back')}
+            </button>
             <Text size="2xl" weight="black" style={{
               marginBottom: 8, textAlign: 'center',
               background: `linear-gradient(135deg, ${textPrimary} 0%, var(--color-brand-accent) 100%)`,
