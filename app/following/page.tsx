@@ -145,7 +145,7 @@ export default function FollowingPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
-  const { accessToken, authChecked, email, getAuthHeadersAsync } = useAuthSession()
+  const { authChecked, email, getAuthHeadersAsync } = useAuthSession()
   const [userId, setUserId] = useState<string | null>(null)
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)

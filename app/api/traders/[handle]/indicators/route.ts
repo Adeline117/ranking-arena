@@ -14,12 +14,8 @@ export const revalidate = 300 // 5分钟
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-const TRADER_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
-type SourceType = typeof TRADER_SOURCES[number]
-
-interface TraderSourceResult {
-  source_trader_id: string
-}
+const _TRADER_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
+type SourceType = typeof _TRADER_SOURCES[number]
 
 interface SnapshotRow {
   roi: number | null
