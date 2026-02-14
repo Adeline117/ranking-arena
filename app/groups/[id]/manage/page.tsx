@@ -201,10 +201,10 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     return () => clearTimeout(timer)
   }, [memberSearch])
 
-  // Reset member page when role filter changes
+  // Reset member page when role filter changes or tab switches
   useEffect(() => {
     setMemberPage(0)
-  }, [memberRoleFilter])
+  }, [memberRoleFilter, activeTab])
 
   // 加载数据
   useEffect(() => {

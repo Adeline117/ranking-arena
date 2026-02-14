@@ -166,6 +166,7 @@ export function useGroupPosts({
       .from('posts')
       .select(POST_SELECT_FIELDS)
       .eq('group_id', groupId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(POST_PAGE_SIZE)
 
