@@ -1,7 +1,23 @@
 'use client'
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
+
+// SSR-safe localStorage wrapper
+const safeStorage: StateStorage = {
+  getItem: (name) => {
+    if (typeof window === 'undefined') return null
+    try { return localStorage.getItem(name) } catch { return null }
+  },
+  setItem: (name, value) => {
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(name, value) } catch { /* ignore */ }
+  },
+  removeItem: (name) => {
+    if (typeof window === 'undefined') return
+    try { localStorage.removeItem(name) } catch { /* ignore */ }
+  },
+}
 
 export interface StoredAccount {
   userId: string
@@ -72,6 +88,7 @@ export const useMultiAccountStore = create<MultiAccountState>()(
     }),
     {
       name: 'arena-multi-accounts',
+      storage: createJSONStorage(() => safeStorage),
     }
   )
 )

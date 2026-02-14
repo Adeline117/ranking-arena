@@ -1,5 +1,7 @@
-import React, { memo } from 'react'
+import React, { memo, useCallback } from 'react'
 import Link from 'next/link'
+import { mutate } from 'swr'
+import { fetcher } from '@/lib/hooks/useSWR'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -116,6 +118,13 @@ export const TraderRow = memo(function TraderRow({
   const removeTrader = useComparisonStore(s => s.removeTrader)
   const canAddMore = useComparisonStore(s => s.canAddMore)
 
+  // Prefetch trader detail on hover (warm SWR cache)
+  const handleMouseEnter = useCallback(() => {
+    const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
+    // Prefetch into SWR cache without blocking — only if not already cached
+    mutate(detailUrl, fetcher(detailUrl), { revalidate: false })
+  }, [traderHandle])
+
   const handleCompareToggle = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -151,6 +160,7 @@ export const TraderRow = memo(function TraderRow({
       style={{ textDecoration: 'none', display: 'block' }}
       aria-label={`#${rank} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}
       tabIndex={0}
+      onMouseEnter={handleMouseEnter}
     >
       <Box
         className="ranking-row ranking-table-grid ranking-table-grid-custom touch-target"
