@@ -36,15 +36,17 @@ export function interceptFetch() {
         ;(error as Error & { status?: number; response?: Response }).status = response.status
         ;(error as Error & { status?: number; response?: Response }).response = response
         
-        // 上报错误
-        reportError(error, {
-          source: 'fetch',
-          url: args[0],
-          status: response.status
-        })
+        // 只上报 5xx 服务器错误，跳过 4xx 用户错误
+        if (response.status >= 500) {
+          reportError(error, {
+            source: 'fetch',
+            url: typeof args[0] === 'string' ? args[0] : String(args[0]),
+            status: response.status
+          })
+        }
         
-        // 显示友好错误提示
-        if (globalToast) {
+        // 显示友好错误提示（跳过 401 — 静默处理认证过期）
+        if (globalToast && response.status !== 401) {
           globalToast(getErrorMessage(error), 'error')
         }
         
@@ -53,14 +55,8 @@ export function interceptFetch() {
       
       return response
     } catch (error) {
-      // 网络错误或其他错误
+      // 网络错误或其他错误 — 不上报 Sentry（用户网络问题）
       const friendlyMessage = getErrorMessage(error)
-      
-      // 上报错误
-      reportError(error, {
-        source: 'fetch',
-        url: args[0]
-      })
       
       // 显示友好错误提示（仅对网络错误显示，避免重复）
       if (globalToast && error instanceof TypeError) {

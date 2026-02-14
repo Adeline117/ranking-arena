@@ -23,10 +23,15 @@ Sentry.init({
   ignoreErrors: [
     'ECONNRESET',
     'AbortError',
+    'The operation was aborted',
+    'Failed to fetch',
+    'JWTExpired',
+    'JWT expired',
+    'Invalid Refresh Token',
   ],
   
   // 在发送前处理事件
-  beforeSend(event) {
+  beforeSend(event, hint) {
     // 脱敏处理
     if (event.user) {
       delete event.user.ip_address
@@ -35,6 +40,13 @@ Sentry.init({
     if (event.request?.headers) {
       delete event.request.headers['authorization']
       delete event.request.headers['cookie']
+    }
+    
+    // 不上报 4xx 客户端错误
+    const statusCode = (hint?.originalException as { statusCode?: number })?.statusCode
+      ?? (hint?.originalException as { status?: number })?.status
+    if (statusCode && statusCode >= 400 && statusCode < 500) {
+      return null
     }
     
     return event

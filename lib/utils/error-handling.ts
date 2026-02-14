@@ -205,7 +205,8 @@ export function isRetryableError(error: any): boolean {
 export function reportError(error: any, context?: Record<string, any>) {
   const errorInfo = parseError(error)
   
-  // 只上报未知错误和服务器错误，避免垃圾数据
+  // 只上报服务器错误和未知错误
+  // 不上报: 网络错误(用户网络问题)、超时、认证(401/403)、验证(400)
   if (!['unknown', 'server'].includes(errorInfo.type)) {
     return
   }
@@ -214,9 +215,11 @@ export function reportError(error: any, context?: Record<string, any>) {
   if (typeof window !== 'undefined') {
     import('@sentry/nextjs').then((Sentry) => {
       Sentry.captureException(errorInfo.originalError || error, {
+        level: errorInfo.type === 'server' ? 'error' : 'warning',
         tags: {
           errorType: errorInfo.type,
-          errorCode: errorInfo.code,
+          errorCode: String(errorInfo.code || 'unknown'),
+          source: context?.source as string || 'client',
         },
         contexts: {
           errorInfo: {
@@ -226,10 +229,12 @@ export function reportError(error: any, context?: Record<string, any>) {
           },
           additional: context
         },
+        fingerprint: errorInfo.code
+          ? ['{{ default }}', String(errorInfo.code)]
+          : ['{{ default }}'],
       })
     }).catch(() => {
       // Sentry 加载失败时静默处理
-      console.error('Error reporting:', errorInfo)
     })
   }
 }

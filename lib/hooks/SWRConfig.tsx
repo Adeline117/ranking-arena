@@ -39,11 +39,18 @@ export function SWRConfigProvider({ children }: { children: ReactNode }) {
         
         // 错误处理
         onError: (error, key) => {
-          // 在生产环境中，可以将错误发送到错误监控服务
+          // 不上报 4xx 错误（用户侧问题）
+          const status = error?.status || error?.response?.status
+          if (status && status >= 400 && status < 500) return
+          
           if (process.env.NODE_ENV === 'production') {
             logger.error('SWR Error:', { key, error })
-            // 这里可以集成 Sentry 或其他错误监控服务
-            // Sentry.captureException(error, { tags: { swr_key: key } })
+            import('@sentry/nextjs').then((Sentry) => {
+              Sentry.captureException(error, {
+                tags: { source: 'swr', swr_key: String(key) },
+                level: 'warning',
+              })
+            }).catch(() => {})
           }
         },
         

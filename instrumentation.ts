@@ -29,6 +29,12 @@ export const onRequestError = async (
     renderType: 'dynamic' | 'dynamic-resume'
   }
 ) => {
+  // 不上报已知的非关键错误
+  const msg = err.message || ''
+  if (/ECONNRESET|ENOTFOUND|ETIMEDOUT|AbortError|JWTExpired|JWT expired/.test(msg)) {
+    return
+  }
+  
   // 动态导入 Sentry 以避免边缘运行时问题
   const Sentry = await import('@sentry/nextjs')
   
@@ -37,6 +43,7 @@ export const onRequestError = async (
       routerKind: context.routerKind,
       routePath: context.routePath,
       routeType: context.routeType,
+      source: 'nextjs-instrumentation',
     },
     extra: {
       digest: err.digest,
