@@ -29,7 +29,7 @@ export default function SavedFilters({
   onLoadFilter,
   userId,
 }: SavedFiltersProps) {
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
   const [isOpen, setIsOpen] = useState(false)
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [filterName, setFilterName] = useState('')
@@ -50,7 +50,6 @@ export default function SavedFilters({
     isLoading: _isLoading,
   } = useSavedFilters({ userId })
   
-  // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -65,7 +64,6 @@ export default function SavedFilters({
     }
   }, [])
   
-  // 保存筛选
   const handleSave = () => {
     if (!filterName.trim()) return
     saveFilter(filterName, currentConditions)
@@ -73,7 +71,6 @@ export default function SavedFilters({
     setShowSaveModal(false)
   }
   
-  // 加载筛选
   const handleLoad = (id: string) => {
     const conditions = loadFilter(id)
     if (conditions) {
@@ -82,7 +79,6 @@ export default function SavedFilters({
     }
   }
   
-  // 删除筛选
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     if (showConfirmDelete === id) {
@@ -90,13 +86,11 @@ export default function SavedFilters({
       setShowConfirmDelete(null)
     } else {
       setShowConfirmDelete(id)
-      // 3秒后自动取消确认状态
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
       confirmTimerRef.current = setTimeout(() => setShowConfirmDelete(null), 3000)
     }
   }
   
-  // 导出筛选
   const handleExport = () => {
     const json = exportFilters()
     const blob = new Blob([json], { type: 'application/json' })
@@ -108,7 +102,6 @@ export default function SavedFilters({
     URL.revokeObjectURL(url)
   }
   
-  // 导入筛选
   const handleImport = () => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -121,9 +114,9 @@ export default function SavedFilters({
       reader.onload = (event) => {
         const json = event.target?.result as string
         if (importFilters(json)) {
-          alert(language === 'zh' ? '导入成功！' : 'Import successful!')
+          alert(t('importSuccessful'))
         } else {
-          alert(language === 'zh' ? '导入失败，请检查文件格式' : 'Import failed, please check file format')
+          alert(t('importFailedFormat'))
         }
       }
       reader.readAsText(file)
@@ -131,7 +124,6 @@ export default function SavedFilters({
     input.click()
   }
   
-  // 使用模板
   const handleUseTemplate = (template: typeof FILTER_TEMPLATES[0]) => {
     onLoadFilter(template.conditions)
     clearActiveFilter()
@@ -161,11 +153,11 @@ export default function SavedFilters({
             transition: `all ${tokens.transition.fast}`,
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
           }}
-          title={language === 'zh' ? '保存当前筛选' : 'Save current filter'}
+          title={t('saveCurrentFilter')}
         >
           <Plus size={14} />
           <span style={{ display: 'none', ['@media (min-width: 768px)' as string]: { display: 'inline' } }}>
-            {language === 'zh' ? '保存' : 'Save'}
+            {t('saveLabel')}
           </span>
         </button>
         
@@ -192,7 +184,7 @@ export default function SavedFilters({
         >
           <Bookmark size={14} fill={activeFilterId ? tokens.colors.accent.primary : 'none'} />
           <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {activeFilter?.name || (language === 'zh' ? '我的筛选' : 'My Filters')}
+            {activeFilter?.name || t('myFiltersLabel')}
           </span>
           <ChevronDown 
             size={14} 
@@ -231,7 +223,7 @@ export default function SavedFilters({
                 background: tokens.colors.bg.secondary,
               }}>
                 <Text size="xs" weight="bold" color="tertiary">
-                  {language === 'zh' ? '已保存' : 'SAVED'} ({savedFilters.length})
+                  {t('savedLabel')} ({savedFilters.length})
                 </Text>
               </Box>
               <Box style={{ maxHeight: 200, overflowY: 'auto' }}>
@@ -248,6 +240,7 @@ export default function SavedFilters({
                       togglePin(filter.id)
                     }}
                     language={language}
+                    t={t}
                   />
                 ))}
               </Box>
@@ -262,7 +255,7 @@ export default function SavedFilters({
             background: tokens.colors.bg.secondary,
           }}>
             <Text size="xs" weight="bold" color="tertiary">
-              {language === 'zh' ? '快速筛选' : 'QUICK FILTERS'}
+              {t('quickFiltersLabel')}
             </Text>
           </Box>
           <Box>
@@ -318,10 +311,10 @@ export default function SavedFilters({
                 cursor: 'pointer',
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
               }}
-              title={language === 'zh' ? '导出筛选' : 'Export filters'}
+              title={t('exportFiltersTitle')}
             >
               <Download size={12} />
-              {language === 'zh' ? '导出' : 'Export'}
+              {t('exportFiltersLabel')}
             </button>
             <button
               onClick={handleImport}
@@ -340,10 +333,10 @@ export default function SavedFilters({
                 cursor: 'pointer',
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
               }}
-              title={language === 'zh' ? '导入筛选' : 'Import filters'}
+              title={t('importFiltersTitle')}
             >
               <Upload size={12} />
-              {language === 'zh' ? '导入' : 'Import'}
+              {t('importFiltersLabel')}
             </button>
             {activeFilterId && (
               <button
@@ -367,7 +360,7 @@ export default function SavedFilters({
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
                 }}
               >
-                {language === 'zh' ? '清除' : 'Clear'}
+                {t('clearFilterLabel')}
               </button>
             )}
           </Box>
@@ -384,7 +377,7 @@ export default function SavedFilters({
             setShowSaveModal(false)
             setFilterName('')
           }}
-          language={language}
+          t={t}
         />
       )}
     </div>
@@ -403,6 +396,7 @@ function FilterItem({
   onDelete,
   onTogglePin,
   language,
+  t,
 }: {
   filter: SavedFilter
   isActive: boolean
@@ -411,6 +405,7 @@ function FilterItem({
   onDelete: (e: React.MouseEvent) => void
   onTogglePin: (e: React.MouseEvent) => void
   language: string
+  t: (key: string) => string
 }) {
   return (
     <button
@@ -438,12 +433,10 @@ function FilterItem({
         if (!isActive) e.currentTarget.style.background = 'transparent'
       }}
     >
-      {/* 固定图标 */}
       {filter.isPinned && (
         <Pin size={12} style={{ color: tokens.colors.accent.warning, flexShrink: 0 }} />
       )}
       
-      {/* 名称和使用次数 */}
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Text 
           size="sm" 
@@ -458,11 +451,10 @@ function FilterItem({
           {filter.name}
         </Text>
         <Text size="xs" color="tertiary">
-          {language === 'zh' ? `使用 ${filter.useCount} 次` : `Used ${filter.useCount} times`}
+          {t('usedTimes').replace('{n}', String(filter.useCount))}
         </Text>
       </Box>
       
-      {/* 操作按钮 */}
       <Box style={{ display: 'flex', gap: tokens.spacing[1], flexShrink: 0 }}>
         <button
           onClick={onTogglePin}
@@ -478,9 +470,7 @@ function FilterItem({
           }}
           onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
           onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
-          title={filter.isPinned 
-            ? (language === 'zh' ? '取消固定' : 'Unpin') 
-            : (language === 'zh' ? '固定' : 'Pin')}
+          title={filter.isPinned ? t('unpinFilter') : t('pinFilter')}
         >
           <Pin size={14} fill={filter.isPinned ? tokens.colors.accent.warning : 'none'} />
         </button>
@@ -501,15 +491,12 @@ function FilterItem({
           onMouseLeave={(e) => {
             if (!isConfirmingDelete) e.currentTarget.style.opacity = '0.6'
           }}
-          title={isConfirmingDelete 
-            ? (language === 'zh' ? '确认删除？' : 'Confirm delete?')
-            : (language === 'zh' ? '删除' : 'Delete')}
+          title={isConfirmingDelete ? t('confirmDeleteFilter') : t('delete')}
         >
           {isConfirmingDelete ? <Check size={14} /> : <Trash2 size={14} />}
         </button>
       </Box>
       
-      {/* 激活标记 */}
       {isActive && (
         <Check size={14} style={{ color: tokens.colors.accent.primary, flexShrink: 0 }} />
       )}
@@ -522,13 +509,13 @@ function SaveFilterModal({
   onFilterNameChange,
   onSave,
   onCancel,
-  language,
+  t,
 }: {
   filterName: string
   onFilterNameChange: (name: string) => void
   onSave: () => void
   onCancel: () => void
-  language: string
+  t: (key: string) => string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   
@@ -570,7 +557,7 @@ function SaveFilterModal({
         onClick={(e) => e.stopPropagation()}
       >
         <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-          {language === 'zh' ? '保存筛选条件' : 'Save Filter'}
+          {t('saveFilterConditions')}
         </Text>
         
         <input
@@ -579,8 +566,8 @@ function SaveFilterModal({
           value={filterName}
           onChange={(e) => onFilterNameChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={language === 'zh' ? '输入筛选名称...' : 'Enter filter name...'}
-          aria-label={language === 'zh' ? '筛选名称' : 'Filter name'}
+          placeholder={t('enterFilterName')}
+          aria-label={t('filterNameAriaLabel')}
           style={{
             width: '100%',
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -610,7 +597,7 @@ function SaveFilterModal({
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
             }}
           >
-            {language === 'zh' ? '取消' : 'Cancel'}
+            {t('cancel')}
           </button>
           <button
             onClick={onSave}
@@ -630,7 +617,7 @@ function SaveFilterModal({
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
             }}
           >
-            {language === 'zh' ? '保存' : 'Save'}
+            {t('save')}
           </button>
         </Box>
       </Box>

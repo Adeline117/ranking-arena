@@ -80,11 +80,8 @@ export default function ApplyGroupPage() {
     const newErrors = { ...fieldErrors }
 
     if (fieldName === 'nameZh' || fieldName === 'nameEn') {
-      // At least one name (Chinese or English) is required
       if (!nameZh.trim() && !nameEn.trim()) {
-        newErrors['name'] = language === 'zh'
-          ? '请至少填写一个小组名称（中文或英文）'
-          : 'Please enter at least one group name (Chinese or English)'
+        newErrors['name'] = t('nameRequiredError')
       } else {
         delete newErrors['name']
       }
@@ -110,11 +107,9 @@ export default function ApplyGroupPage() {
       }
     } catch (err) {
       logger.error('Error fetching applications:', err)
-      // 静默失败，不影响用户操作
     }
   }
 
-  // 添加规则
   const addRule = () => {
     const zhText = newRuleZh.trim()
     const enText = newRuleEn.trim()
@@ -126,37 +121,34 @@ export default function ApplyGroupPage() {
     setNewRuleEn('')
   }
 
-  // 删除规则
   const removeRule = (index: number) => {
     setRules(rules.filter((_, i) => i !== index))
   }
 
-  // 编辑规则
   const updateRule = (index: number, lang: 'zh' | 'en', value: string) => {
     const newRules = [...rules]
     newRules[index] = { ...newRules[index], [lang]: value }
     setRules(newRules)
   }
 
-  // 处理图片上传
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
     if (!userId) {
-      showToast(language === 'zh' ? '请先登录' : 'Please login first', 'warning')
+      showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
 
-    const file = files[0] // 头像只支持单张图片
+    const file = files[0]
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
-      showToast(language === 'zh' ? '不支持的图片格式，仅支持 jpg, png, gif, webp' : 'Unsupported image format. Only jpg, png, gif, webp are allowed', 'error')
+      showToast(t('unsupportedImageFormat'), 'error')
       return
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      showToast(language === 'zh' ? '图片大小不能超过 5MB' : 'Image size cannot exceed 5MB', 'error')
+      showToast(t('imageSizeExceed5MB'), 'error')
       return
     }
 
@@ -173,7 +165,7 @@ export default function ApplyGroupPage() {
       })
 
       if (!response.ok) {
-        let errorMsg = language === 'zh' ? '上传失败' : 'Upload failed'
+        let errorMsg = t('uploadFailed')
         try {
           const errorData = await response.json()
           errorMsg = errorData.error || errorMsg
@@ -186,10 +178,10 @@ export default function ApplyGroupPage() {
 
       const data = await response.json()
       setAvatarUrl(data.url)
-      showToast(language === 'zh' ? '图片上传成功' : 'Image uploaded successfully', 'success')
+      showToast(t('imageUploadSuccess'), 'success')
     } catch (error: unknown) {
       logger.error('Upload error:', error)
-      const errorMsg = error instanceof Error ? error.message : (language === 'zh' ? '网络错误，请稍后重试' : 'Network error, please try again later')
+      const errorMsg = error instanceof Error ? error.message : t('networkError')
       showToast(errorMsg, 'error')
     } finally {
       setUploading(false)
@@ -203,23 +195,19 @@ export default function ApplyGroupPage() {
     e.preventDefault()
 
     if (!accessToken) {
-      setError(language === 'zh' ? '请先登录' : 'Please login first')
+      setError(t('pleaseLoginFirst'))
       return
     }
 
-    // Validate all fields before submitting
     const newErrors: Record<string, string> = {}
 
-    // At least one name is required
     if (!nameZh.trim() && !nameEn.trim()) {
-      newErrors['name'] = language === 'zh'
-        ? '请至少填写一个小组名称（中文或英文）'
-        : 'Please enter at least one group name (Chinese or English)'
+      newErrors['name'] = t('nameRequiredError')
     }
 
     if (Object.keys(newErrors).length > 0) {
       setFieldErrors(newErrors)
-      setError(language === 'zh' ? '请修正表单错误' : 'Please fix the form errors')
+      setError(t('fixFormErrors'))
       return
     }
 
@@ -242,35 +230,30 @@ export default function ApplyGroupPage() {
           avatar_url: avatarUrl.trim() || null,
           role_names: roleNames,
           rules_json: rules.length > 0 ? rules : null,
-          // 兼容旧版：将规则合并为文本（仅中文，英文通过rules_json获取）
           rules: rules.map(r => r.zh).filter(Boolean).join('\n') || null,
-          // Pro 专属小组选项
           is_premium_only: isPro && isPremiumOnly,
         })
       })
 
-      // 检查响应状态
       if (!res.ok) {
-        let errorMessage = language === 'zh' ? '提交失败' : 'Submission failed'
+        let errorMessage = t('submissionFailed')
         
         try {
           const data = await res.json()
-          // 使用API返回的错误信息
           if (data.error) {
             errorMessage = data.error
           } else if (data.message) {
             errorMessage = data.message
           }
         } catch (_parseError) {
-          // 如果JSON解析失败，尝试获取状态文本
           if (res.status === 401) {
-            errorMessage = language === 'zh' ? '身份验证失败，请重新登录' : 'Authentication failed, please login again'
+            errorMessage = t('authenticationFailed')
           } else if (res.status === 403) {
-            errorMessage = language === 'zh' ? '没有权限执行此操作' : 'Permission denied'
+            errorMessage = t('permissionDenied')
           } else if (res.status === 400) {
-            errorMessage = language === 'zh' ? '请求参数错误' : 'Invalid request parameters'
+            errorMessage = t('invalidRequestParams')
           } else if (res.status === 500) {
-            errorMessage = language === 'zh' ? '服务器错误，请稍后重试' : 'Server error, please try again later'
+            errorMessage = t('serverError')
           }
         }
         
@@ -285,12 +268,11 @@ export default function ApplyGroupPage() {
         fetchMyApplications(accessToken)
       }
     } catch (err) {
-      // 处理网络错误和其他异常
       logger.error('Submit error:', err)
-      let errorMessage = language === 'zh' ? '网络错误，请检查网络连接' : 'Network error, please check your connection'
+      let errorMessage = t('networkErrorCheckConnection')
       
       if (err instanceof TypeError && err.message.includes('fetch')) {
-        errorMessage = language === 'zh' ? '无法连接到服务器，请检查网络连接' : 'Unable to connect to server, please check your connection'
+        errorMessage = t('cannotConnectToServer')
       }
       
       setError(errorMessage)
@@ -332,10 +314,10 @@ export default function ApplyGroupPage() {
   })
 
   const getStatusBadge = (status: string) => {
-    const styles: Record<string, { bg: string; color: string; text: { zh: string; en: string } }> = {
-      pending: { bg: 'var(--color-orange-bg-light)', color: 'var(--color-accent-warning)', text: { zh: '待审核', en: 'Pending' } },
-      approved: { bg: 'var(--color-accent-success-20)', color: 'var(--color-accent-success)', text: { zh: '已通过', en: 'Approved' } },
-      rejected: { bg: 'var(--color-red-bg-light)', color: 'var(--color-accent-error)', text: { zh: '已拒绝', en: 'Rejected' } }
+    const styles: Record<string, { bg: string; color: string; key: string }> = {
+      pending: { bg: 'var(--color-orange-bg-light)', color: 'var(--color-accent-warning)', key: 'pendingReview' },
+      approved: { bg: 'var(--color-accent-success-20)', color: 'var(--color-accent-success)', key: 'approved' },
+      rejected: { bg: 'var(--color-red-bg-light)', color: 'var(--color-accent-error)', key: 'rejected' }
     }
     const style = styles[status] || styles.pending
     return (
@@ -351,7 +333,7 @@ export default function ApplyGroupPage() {
           fontWeight: tokens.typography.fontWeight.bold,
         }}
       >
-        {style.text[language]}
+        {t(style.key)}
       </Box>
     )
   }
@@ -361,14 +343,14 @@ export default function ApplyGroupPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Card title={language === 'zh' ? '申请创办小组' : 'Apply to Create Group'}>
+          <Card title={t('applyCreateGroup')}>
             <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
               <Text size="lg" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-                {language === 'zh' ? '请先登录后再申请创办小组' : 'Please login to apply for creating a group'}
+                {t('groupApplyLoginRequired')}
               </Text>
               <Link href="/login?redirect=/groups/apply">
                 <Button variant="primary">
-                  {language === 'zh' ? '去登录' : 'Login'}
+                  {t('goToLogin')}
                 </Button>
               </Link>
             </Box>
@@ -383,7 +365,7 @@ export default function ApplyGroupPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
         <TopNav email={email} />
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Card title={language === 'zh' ? '小组已创建' : 'Group Created'}>
+          <Card title={t('groupApplyCreated')}>
             <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
               <Box style={{ 
                 width: 64, 
@@ -401,20 +383,18 @@ export default function ApplyGroupPage() {
                 </svg>
               </Box>
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                {language === 'zh' ? '小组创建成功！' : 'Group created successfully!'}
+                {t('groupCreatedSuccess')}
               </Text>
               <Text color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>
-                {language === 'zh' 
-                  ? '你的小组已创建，现在可以开始邀请成员加入。' 
-                  : 'Your group is live! Start inviting members to join.'}
+                {t('groupCreatedDesc')}
               </Text>
               <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
                 <Button variant="secondary" onClick={() => setSuccess(false)}>
-                  {language === 'zh' ? '继续申请' : 'Apply Another'}
+                  {t('applyAnother')}
                 </Button>
                 <Link href="/groups">
                   <Button variant="primary">
-                    {language === 'zh' ? '返回小组' : 'Back to Groups'}
+                    {t('backToGroups')}
                   </Button>
                 </Link>
               </Box>
@@ -443,12 +423,12 @@ export default function ApplyGroupPage() {
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
-          ← {language === 'zh' ? '返回小组' : 'Back to Groups'}
+          ← {t('backToGroups')}
         </Link>
 
         {/* 已有的申请 */}
         {existingApplications.length > 0 && (
-          <Card title={language === 'zh' ? '我的申请' : 'My Applications'} style={{ marginBottom: tokens.spacing[6] }}>
+          <Card title={t('myApplications')} style={{ marginBottom: tokens.spacing[6] }}>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
               {existingApplications.map((app) => (
                 <Box
@@ -477,7 +457,7 @@ export default function ApplyGroupPage() {
         )}
 
         {/* 申请表单 */}
-        <Card title={language === 'zh' ? '申请创办小组' : 'Apply to Create Group'}>
+        <Card title={t('applyCreateGroup')}>
           <form onSubmit={handleSubmit}>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[5] }}>
               
@@ -513,7 +493,7 @@ export default function ApplyGroupPage() {
                         setActiveTab('en')
                       }}
                     >
-                      + {language === 'zh' ? '添加多语言' : 'Add Language'}
+                      + {t('addLanguageBtn')}
                     </button>
                   )}
                 </Box>
@@ -531,10 +511,9 @@ export default function ApplyGroupPage() {
                     borderTop: 'none',
                   }}
                 >
-                  {/* 小组名称（中文） */}
                   <Box>
                     <label style={labelStyle}>
-                      小组名称 *
+                      {t('groupNameRequired')}
                     </label>
                     <input
                       type="text"
@@ -564,11 +543,10 @@ export default function ApplyGroupPage() {
                     )}
                   </Box>
 
-                  {/* 小组简介（中文） */}
                   <Box>
                     <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <label style={labelStyle}>
-                        小组简介
+                        {t('groupDescription')}
                       </label>
                     </Box>
                     <textarea
@@ -616,11 +594,10 @@ export default function ApplyGroupPage() {
                         }}
                         style={{ padding: 0, color: tokens.colors.text.tertiary }}
                       >
-                        {language === 'zh' ? '移除英文' : 'Remove English'}
+                        {t('removeEnglish')}
                       </Button>
                     </Box>
 
-                    {/* 小组名称（英文） */}
                     <Box>
                       <label style={labelStyle}>
                         Group Name
@@ -652,7 +629,6 @@ export default function ApplyGroupPage() {
                       )}
                     </Box>
 
-                    {/* 小组简介（英文） */}
                     <Box>
                       <label style={labelStyle}>
                         Group Description
@@ -679,15 +655,12 @@ export default function ApplyGroupPage() {
               {/* 小组规则 */}
               <Box>
                 <Text weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                  {language === 'zh' ? '小组规则' : 'Group Rules'}
+                  {t('groupRules')}
                 </Text>
                 <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                  {language === 'zh' 
-                    ? '一条一条添加小组规则，成员需要遵守这些规则' 
-                    : 'Add rules one by one that members must follow'}
+                  {t('groupRulesDesc')}
                 </Text>
 
-                {/* 已添加的规则列表 */}
                 {rules.length > 0 && (
                   <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
                     {rules.map((rule, index) => (
@@ -702,7 +675,7 @@ export default function ApplyGroupPage() {
                       >
                         <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
                           <Text size="sm" weight="bold" color="secondary">
-                            {language === 'zh' ? `规则 ${index + 1}` : `Rule ${index + 1}`}
+                            {t('ruleNumber').replace('{n}', String(index + 1))}
                           </Text>
                           <Button
                             type="button"
@@ -711,7 +684,7 @@ export default function ApplyGroupPage() {
                             onClick={() => removeRule(index)}
                             style={{ padding: 0, color: 'var(--color-accent-error)', fontSize: tokens.typography.fontSize.xs }}
                           >
-                            {language === 'zh' ? '删除' : 'Delete'}
+                            {t('delete')}
                           </Button>
                         </Box>
                         
@@ -744,7 +717,6 @@ export default function ApplyGroupPage() {
                   </Box>
                 )}
 
-                {/* 添加新规则 */}
                 <Box
                   style={{
                     padding: tokens.spacing[3],
@@ -754,7 +726,7 @@ export default function ApplyGroupPage() {
                   }}
                 >
                   <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                    {language === 'zh' ? '添加新规则' : 'Add New Rule'}
+                    {t('addNewRule')}
                   </Text>
                   <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                     <input
@@ -793,7 +765,7 @@ export default function ApplyGroupPage() {
                       disabled={!newRuleZh.trim() && !newRuleEn.trim()}
                       style={{ alignSelf: 'flex-start' }}
                     >
-                      + {language === 'zh' ? '添加规则' : 'Add Rule'}
+                      + {t('addRule')}
                     </Button>
                   </Box>
                 </Box>
@@ -802,15 +774,12 @@ export default function ApplyGroupPage() {
               {/* 小组头像 */}
               <Box>
                 <label style={labelStyle}>
-                  {language === 'zh' ? '小组头像' : 'Group Avatar'}
+                  {t('groupAvatar')}
                 </label>
                 <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {language === 'zh' 
-                    ? '可以直接上传图片或输入图片URL' 
-                    : 'Upload an image directly or enter an image URL'}
+                  {t('avatarUploadDesc')}
                 </Text>
                 
-                {/* 图片预览 */}
                 {avatarUrl && (
                   <Box style={{ marginBottom: tokens.spacing[3] }}>
                     <Box
@@ -864,7 +833,6 @@ export default function ApplyGroupPage() {
                   </Box>
                 )}
 
-                {/* 上传按钮和URL输入 */}
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
                   <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
                     <input
@@ -881,9 +849,7 @@ export default function ApplyGroupPage() {
                       disabled={uploading}
                       style={{ flexShrink: 0 }}
                     >
-                      {uploading 
-                        ? (language === 'zh' ? '上传中...' : 'Uploading...')
-                        : (language === 'zh' ? '上传图片' : 'Upload Image')}
+                      {uploading ? t('uploadingImage') : t('uploadImage')}
                     </Button>
                     <Box style={{ flex: 1, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                       <Box
@@ -894,7 +860,7 @@ export default function ApplyGroupPage() {
                         }}
                       />
                       <Text size="xs" color="tertiary" style={{ whiteSpace: 'nowrap' }}>
-                        {language === 'zh' ? '或' : 'or'}
+                        {t('orWord')}
                       </Text>
                       <Box
                         style={{
@@ -954,7 +920,7 @@ export default function ApplyGroupPage() {
                     <Box style={{ flex: 1 }}>
                       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
                         <Text weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                          {language === 'zh' ? 'Pro 专属小组' : 'Pro Exclusive Group'}
+                          {t('proExclusiveGroup')}
                         </Text>
                         <Box
                           style={{
@@ -970,9 +936,7 @@ export default function ApplyGroupPage() {
                         </Box>
                       </Box>
                       <Text size="sm" color="secondary" style={{ lineHeight: 1.5 }}>
-                        {language === 'zh' 
-                          ? '开启后，只有 Pro 会员才能加入此小组。组长和组员都需要是 Pro 会员。' 
-                          : 'When enabled, only Pro members can join this group. Both the leader and members must be Pro members.'}
+                        {t('proExclusiveGroupDesc')}
                       </Text>
                     </Box>
                   </Box>
@@ -1008,12 +972,10 @@ export default function ApplyGroupPage() {
                     </Box>
                     <Box style={{ flex: 1 }}>
                       <Text size="sm" weight="semibold" style={{ marginBottom: 2 }}>
-                        {language === 'zh' ? '升级 Pro 创建专属小组' : 'Upgrade to Pro for Exclusive Groups'}
+                        {t('upgradeProForGroups')}
                       </Text>
                       <Text size="xs" color="tertiary">
-                        {language === 'zh' 
-                          ? 'Pro 会员可以创建只允许会员加入的专属小组' 
-                          : 'Pro members can create exclusive groups that only members can join'}
+                        {t('proGroupDescFree')}
                       </Text>
                     </Box>
                     <Link href="/pricing" style={{ textDecoration: 'none' }}>
@@ -1027,7 +989,7 @@ export default function ApplyGroupPage() {
                           fontWeight: 600,
                         }}
                       >
-                        {language === 'zh' ? '升级' : 'Upgrade'}
+                        {t('upgrade')}
                       </Button>
                     </Link>
                   </Box>
@@ -1037,19 +999,16 @@ export default function ApplyGroupPage() {
               {/* 角色称呼设置 */}
               <Box>
                 <Text weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                  {language === 'zh' ? '角色称呼设置' : 'Role Names'}
+                  {t('roleNameSettings')}
                 </Text>
                 <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                  {language === 'zh' 
-                    ? '自定义小组内角色的称呼（可选）' 
-                    : 'Customize role names for your group (optional)'}
+                  {t('roleNameSettingsDesc')}
                 </Text>
 
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-                  {/* 管理员 */}
                   <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
                     <Text size="sm" color="secondary">
-                      {language === 'zh' ? '管理员' : 'Admin'}
+                      {t('adminRole')}
                     </Text>
                     <input
                       type="text"
@@ -1069,10 +1028,9 @@ export default function ApplyGroupPage() {
                     />
                   </Box>
 
-                  {/* 成员 */}
                   <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
                     <Text size="sm" color="secondary">
-                      {language === 'zh' ? '成员' : 'Member'}
+                      {t('groupMember')}
                     </Text>
                     <input
                       type="text"
@@ -1094,7 +1052,6 @@ export default function ApplyGroupPage() {
                 </Box>
               </Box>
 
-              {/* 错误信息 */}
               {error && (
                 <Box
                   style={{
@@ -1110,17 +1067,14 @@ export default function ApplyGroupPage() {
                 </Box>
               )}
 
-              {/* 提交按钮 */}
               <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
                 <Link href="/groups">
                   <Button variant="secondary" type="button">
-                    {language === 'zh' ? '取消' : 'Cancel'}
+                    {t('cancel')}
                   </Button>
                 </Link>
                 <Button variant="primary" type="submit" disabled={loading}>
-                  {loading 
-                    ? (language === 'zh' ? '提交中...' : 'Submitting...') 
-                    : (language === 'zh' ? '提交申请' : 'Submit Application')}
+                  {loading ? t('submittingText') : t('submitApplication')}
                 </Button>
               </Box>
             </Box>

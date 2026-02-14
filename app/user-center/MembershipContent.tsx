@@ -31,7 +31,7 @@ interface MembershipInfo {
 }
 
 export default function MembershipContent() {
-  const { language } = useLanguage()
+  const { t, language } = useLanguage()
   const isZh = language === 'zh'
   const router = useRouter()
   const { showToast } = useToast()
@@ -110,7 +110,7 @@ export default function MembershipContent() {
         }}>
           <div>
             <div style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 4 }}>
-              {isZh ? '当前方案' : 'Current Plan'}
+              {t('currentPlan')}
             </div>
             <div style={{
               fontSize: 28,
@@ -135,7 +135,7 @@ export default function MembershipContent() {
                 cursor: 'pointer',
               }}
             >
-              {isZh ? '升级 Pro' : 'Upgrade to Pro'}
+              {t('upgradePro')}
             </button>
           )}
         </div>
@@ -155,9 +155,7 @@ export default function MembershipContent() {
                 color: tokens.colors.accent.warning,
                 fontWeight: 600,
               }}>
-                {isZh
-                  ? `Pro 会员将在 ${daysUntilExpiry} 天后到期，届时将降级为 Free 方案。`
-                  : `Your Pro membership expires in ${daysUntilExpiry} day${daysUntilExpiry > 1 ? 's' : ''}. You will be downgraded to Free.`}
+                {t('proExpiryWarning').replace('{days}', String(daysUntilExpiry))}
               </div>
             )
           }
@@ -175,28 +173,28 @@ export default function MembershipContent() {
           }}>
             <div>
               <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                {isZh ? '订阅状态' : 'Status'}
+                {t('subscriptionStatusLabel')}
               </div>
               <div style={{ fontWeight: 600, marginTop: 4, color: tokens.colors.text.primary }}>
-                {info.subscription.status === 'active' ? (isZh ? '已激活' : 'Active') :
-                  info.subscription.status === 'canceled' ? (isZh ? '已取消' : 'Canceled') :
-                    info.subscription.status === 'past_due' ? (isZh ? '逾期' : 'Past Due') : info.subscription.status}
+                {info.subscription.status === 'active' ? t('statusActive') :
+                  info.subscription.status === 'canceled' ? t('statusCanceled') :
+                    info.subscription.status === 'past_due' ? t('statusPastDue') : info.subscription.status}
               </div>
             </div>
             {info.subscription.plan && (
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                  {isZh ? '计费周期' : 'Billing Cycle'}
+                  {t('billingCycle')}
                 </div>
                 <div style={{ fontWeight: 600, marginTop: 4, color: tokens.colors.text.primary }}>
-                  {info.subscription.plan === 'yearly' ? (isZh ? '年付' : 'Yearly') : (isZh ? '月付' : 'Monthly')}
+                  {info.subscription.plan === 'yearly' ? t('yearlyPrice') : t('monthlyPrice')}
                 </div>
               </div>
             )}
             {info.subscription.currentPeriodEnd && (
               <div>
                 <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                  {info.subscription.cancelAtPeriodEnd ? (isZh ? '到期日' : 'Expires') : (isZh ? '下次续费' : 'Next Renewal')}
+                  {info.subscription.cancelAtPeriodEnd ? t('expiresLabel') : t('nextRenewal')}
                 </div>
                 <div style={{ fontWeight: 600, marginTop: 4, color: tokens.colors.text.primary }}>
                   {new Date(info.subscription.currentPeriodEnd).toLocaleDateString(
@@ -209,11 +207,11 @@ export default function MembershipContent() {
         )}
       </div>
 
-      {/* NFT Membership - only show when relevant */}
+      {/* NFT Membership */}
       {(info?.nft?.hasNft || isPro) && (
         <div style={cardStyle}>
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: tokens.colors.text.primary }}>
-            {isZh ? 'NFT 会员证' : 'NFT Membership Card'}
+            {t('nftMembershipCard')}
           </h3>
 
           {info?.nft?.hasNft ? (
@@ -247,14 +245,14 @@ export default function MembershipContent() {
               </div>
               {info.nft.expiresAt && (
                 <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-                  {isZh ? '有效期至' : 'Valid until'} {new Date(info.nft.expiresAt).toLocaleDateString(isZh ? 'zh-CN' : 'en-US')}
+                  {t('validUntil')} {new Date(info.nft.expiresAt).toLocaleDateString(isZh ? 'zh-CN' : 'en-US')}
                 </div>
               )}
             </div>
           ) : (
             <div style={{ color: tokens.colors.text.tertiary }}>
               <p style={{ marginBottom: 12, fontSize: 14 }}>
-                {isZh ? 'Pro 会员可铸造专属 NFT 会员证' : 'Pro members can mint an exclusive NFT membership card'}
+                {t('proMintNft')}
               </p>
               <button
                 onClick={() => router.push('/settings')}
@@ -269,7 +267,7 @@ export default function MembershipContent() {
                   fontSize: 14,
                 }}
               >
-                {isZh ? '绑定钱包' : 'Link Wallet'}
+                {t('linkWallet')}
               </button>
             </div>
           )}
@@ -279,7 +277,7 @@ export default function MembershipContent() {
       {/* Benefits Comparison */}
       <div style={cardStyle}>
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: tokens.colors.text.primary }}>
-          {isZh ? '权益对比' : 'Benefits Comparison'}
+          {t('benefitsComparison')}
         </h3>
 
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -292,7 +290,7 @@ export default function MembershipContent() {
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '12px 8px', borderBottom: `1px solid ${tokens.colors.border.primary}`, color: tokens.colors.text.secondary, fontWeight: 600 }}>
-                  {isZh ? '功能' : 'Feature'}
+                  {t('featureLabel')}
                 </th>
                 <th style={{ textAlign: 'center', padding: '12px 8px', borderBottom: `1px solid ${tokens.colors.border.primary}`, color: tokens.colors.text.tertiary, fontWeight: 600 }}>
                   Free
@@ -309,18 +307,18 @@ export default function MembershipContent() {
               </tr>
             </thead>
             <tbody>
-              <BenefitRow feature={isZh ? '关注交易员' : 'Follow Traders'} free={`${FEATURE_LIMITS.free.maxFollows}`} pro={`${FEATURE_LIMITS.pro.maxFollows}`} />
-              <BenefitRow feature={isZh ? '历史数据' : 'Historical Data'} free={`${FEATURE_LIMITS.free.historicalDays} ${isZh ? '天' : 'days'}`} pro={`${FEATURE_LIMITS.pro.historicalDays} ${isZh ? '天' : 'days'}`} />
-              <BenefitRow feature={isZh ? '排行榜浏览' : 'Rankings Browse'} free={isZh ? '基础排序' : 'Basic sort'} pro={isZh ? '全部排序+筛选' : 'All sorts + filters'} highlight />
-              <BenefitRow feature={isZh ? '交易员变动提醒' : 'Trader Alerts'} free="--" pro={isZh ? '支持' : 'Yes'} highlight />
-              <BenefitRow feature={isZh ? '交易员对比' : 'Trader Compare'} free={isZh ? '2人' : '2'} pro={isZh ? '5人' : '5'} highlight />
-              <BenefitRow feature={isZh ? 'Arena Score 详情' : 'Arena Score Details'} free="--" pro={isZh ? '支持' : 'Yes'} highlight />
-              <BenefitRow feature={isZh ? '交易所平台筛选' : 'Exchange Filter'} free="--" pro={isZh ? '支持' : 'Yes'} highlight />
-              <BenefitRow feature={isZh ? '数据导出' : 'Data Export'} free="--" pro="Top 10/50/100" highlight />
-              <BenefitRow feature={isZh ? 'API 访问' : 'API Access'} free="--" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay}${isZh ? '次/天' : '/day'}`} highlight />
-              <BenefitRow feature={isZh ? '私聊消息' : 'Direct Messages'} free={isZh ? '基础' : 'Basic'} pro={isZh ? '无限制' : 'Unlimited'} highlight />
-              <BenefitRow feature={isZh ? 'Pro 专属群组' : 'Pro Groups'} free="--" pro={isZh ? '支持' : 'Yes'} highlight />
-              <BenefitRow feature={isZh ? 'NFT 会员证' : 'NFT Membership'} free="--" pro={isZh ? '支持' : 'Yes'} highlight />
+              <BenefitRow feature={t('followTradersLabel')} free={`${FEATURE_LIMITS.free.maxFollows}`} pro={`${FEATURE_LIMITS.pro.maxFollows}`} />
+              <BenefitRow feature={t('historicalDataLabel')} free={`${FEATURE_LIMITS.free.historicalDays} ${t('days')}`} pro={`${FEATURE_LIMITS.pro.historicalDays} ${t('days')}`} />
+              <BenefitRow feature={t('rankingsBrowse')} free={t('basicSort')} pro={t('allSortsFilters')} highlight />
+              <BenefitRow feature={t('traderAlerts')} free="--" pro={t('supportedYes')} highlight />
+              <BenefitRow feature={t('traderCompare')} free={t('traderComparePeople').replace('{n}', '2')} pro={t('traderComparePeople').replace('{n}', '5')} highlight />
+              <BenefitRow feature={t('scoreBreakdown')} free="--" pro={t('supportedYes')} highlight />
+              <BenefitRow feature={t('exchangeFilterLabel')} free="--" pro={t('supportedYes')} highlight />
+              <BenefitRow feature={t('dataExportLabel')} free="--" pro="Top 10/50/100" highlight />
+              <BenefitRow feature={t('apiAccessLabel')} free="--" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay}${t('callsPerDay')}`} highlight />
+              <BenefitRow feature={t('directMessagesLabel')} free={t('basicLabel')} pro={t('unlimitedLabel')} highlight />
+              <BenefitRow feature={t('proGroups')} free="--" pro={t('supportedYes')} highlight />
+              <BenefitRow feature={t('nftMembershipLabel')} free="--" pro={t('supportedYes')} highlight />
             </tbody>
           </table>
         </div>
@@ -329,7 +327,7 @@ export default function MembershipContent() {
       {/* Usage Stats */}
       <div style={cardStyle}>
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: tokens.colors.text.primary }}>
-          {isZh ? '使用统计' : 'Usage Stats'}
+          {t('usageStatsTitle')}
         </h3>
 
         <div style={{
@@ -338,13 +336,13 @@ export default function MembershipContent() {
           gap: 16,
         }}>
           <UsageStat
-            label={isZh ? '已关注交易员' : 'Followed Traders'}
+            label={t('followedTradersUsage')}
             value={info?.usage?.followedTraders || 0}
             max={isPro ? FEATURE_LIMITS.pro.maxFollows : FEATURE_LIMITS.free.maxFollows}
           />
           {isPro && (
             <UsageStat
-              label={isZh ? '今日 API 调用' : 'API Calls Today'}
+              label={t('apiCallsTodayLabel')}
               value={info?.usage?.apiCallsToday || 0}
               max={FEATURE_LIMITS.pro.apiCallsPerDay}
             />
@@ -356,7 +354,7 @@ export default function MembershipContent() {
       {isPro && (
         <div style={{ ...cardStyle, marginBottom: 0 }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: tokens.colors.text.primary }}>
-            {isZh ? '订阅管理' : 'Manage Subscription'}
+            {t('manageSubscription')}
           </h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
             <button
@@ -368,10 +366,10 @@ export default function MembershipContent() {
                     const { url } = await res.json()
                     window.location.href = url
                   } else {
-                    showToast(isZh ? '支付系统暂未开放，敬请期待' : 'Payment system coming soon', 'error')
+                    showToast(t('paymentSystemComingSoon'), 'error')
                   }
                 } catch {
-                  showToast(isZh ? '操作失败，请稍后再试' : 'Failed, please try again', 'error')
+                  showToast(t('operationFailedTryAgain'), 'error')
                 }
               }}
               style={{
@@ -385,7 +383,7 @@ export default function MembershipContent() {
                 fontSize: 14,
               }}
             >
-              {isZh ? '升级/降级方案' : 'Change Plan'}
+              {t('changePlan')}
             </button>
             <button
               onClick={async () => {
@@ -396,10 +394,10 @@ export default function MembershipContent() {
                     const { url } = await res.json()
                     window.location.href = url + '/billing'
                   } else {
-                    showToast(isZh ? '支付系统暂未开放，敬请期待' : 'Payment system coming soon', 'error')
+                    showToast(t('paymentSystemComingSoon'), 'error')
                   }
                 } catch {
-                  showToast(isZh ? '操作失败，请稍后再试' : 'Failed, please try again', 'error')
+                  showToast(t('operationFailedTryAgain'), 'error')
                 }
               }}
               style={{
@@ -413,12 +411,12 @@ export default function MembershipContent() {
                 fontSize: 14,
               }}
             >
-              {isZh ? '账单历史' : 'Billing History'}
+              {t('billingHistory')}
             </button>
             {info?.subscription && !info.subscription.cancelAtPeriodEnd && (
               <button
                 onClick={async () => {
-                  if (!confirm(isZh ? '确定要取消订阅吗？取消后将在当前周期结束时失效。' : 'Are you sure you want to cancel? Your subscription will remain active until the end of the current billing period.')) return
+                  if (!confirm(t('cancelSubscriptionConfirm'))) return
                   const headers = await getAuthHeadersAsync()
                   const res = await fetch('/api/stripe/portal', { method: 'POST', headers })
                   if (res.ok) {
@@ -437,7 +435,7 @@ export default function MembershipContent() {
                   fontSize: 14,
                 }}
               >
-                {isZh ? '取消订阅' : 'Cancel Subscription'}
+                {t('cancelSubscription')}
               </button>
             )}
             {info?.subscription?.cancelAtPeriodEnd && (
@@ -450,7 +448,7 @@ export default function MembershipContent() {
                 fontWeight: 600,
                 fontSize: 14,
               }}>
-                {isZh ? '订阅将在到期后取消' : 'Subscription will cancel at period end'}
+                {t('subscriptionCancelAtEnd')}
               </div>
             )}
           </div>
