@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function NetworkStatusBanner() {
   const [isOffline, setIsOffline] = useState(false)
   const [show, setShow] = useState(false)
+  const { t } = useLanguage()
 
   useEffect(() => {
     const handleOffline = () => { setIsOffline(true); setShow(true) }
@@ -63,14 +65,14 @@ export default function NetworkStatusBanner() {
             <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
             <line x1="12" y1="20" x2="12.01" y2="20" />
           </svg>
-          网络连接已断开
+          {t('networkDisconnected')}
         </>
       ) : (
         <>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>
-          网络已恢复
+          {t('networkReconnected')}
         </>
       )}
     </div>
