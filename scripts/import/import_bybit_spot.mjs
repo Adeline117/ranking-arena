@@ -167,6 +167,8 @@ async function fetchLeaderboardData(period) {
           maxDrawdown: parsePercent(mv[1]) || 0,
           pnl: parseNumber(mv[2]) || 0, // follower profit (closest to PnL available)
           winRate: parsePercent(mv[3]) || 0,
+          profitLossRatio: parseNumber(mv[4]) || null,
+          sharpeRatio: parseNumber(mv[5]) || null,
           followers: parseInt(item.currentFollowerCount || 0),
         })
         newCount++
@@ -237,6 +239,8 @@ async function saveTradersBatch(traders, period) {
       win_rate: wr,
       max_drawdown: t.maxDrawdown || null,
       followers: t.followers || null,
+      sharpe_ratio: t.sharpeRatio || null,
+      profit_loss_ratio: t.profitLossRatio || null,
       arena_score: arenaScore,
       captured_at: capturedAt,
     }
@@ -298,7 +302,7 @@ async function main() {
     console.log(`\n📋 ${period} TOP 10:`)
     top.slice(0, 10).forEach((t, idx) => {
       console.log(
-        `  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}% | WR ${t.winRate?.toFixed(1)}% | DD ${t.maxDrawdown?.toFixed(1)}%`
+        `  ${idx + 1}. ${t.nickname || t.traderId}: ROI ${t.roi?.toFixed(2)}% | WR ${t.winRate?.toFixed(1)}% | DD ${t.maxDrawdown?.toFixed(1)}% | Sharpe ${t.sharpeRatio ?? 'N/A'} | P/L ${t.profitLossRatio ?? 'N/A'}`
       )
     })
 
