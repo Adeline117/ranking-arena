@@ -167,7 +167,7 @@ function LeaderboardCard({ column }: { column: LeaderboardColumn }) {
                 {entry.logoUrl ? (
                   <img
                     src={entry.logoUrl}
-                    alt=""
+                    alt={`${entry.name} logo`}
                     width={32} height={32}
                     style={{
                       borderRadius: tokens.radius.md, objectFit: 'cover', flexShrink: 0,
