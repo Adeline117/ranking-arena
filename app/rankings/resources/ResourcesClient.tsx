@@ -285,7 +285,7 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
 
         {/* Grid */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(180px, 45%), 1fr))', gap: 20 }}>
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div className="skeleton" style={{ aspectRatio: '2/3', borderRadius: tokens.radius.lg }} />
@@ -306,7 +306,7 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
             </p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(180px, 45%), 1fr))', gap: 20 }}>
             {items.map((item, idx) => (
               <BookCard key={item.id} item={item} isZh={isZh} priority={idx < 6} />
             ))}

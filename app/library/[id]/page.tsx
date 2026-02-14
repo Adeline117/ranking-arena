@@ -254,12 +254,17 @@ export default function BookDetailPage() {
       <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <TopNav />
         <main style={{ maxWidth: 960, margin: '0 auto', padding: '80px 16px 100px' }}>
-          <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 36, flexWrap: 'wrap' }}>
             <div style={{ width: 220, aspectRatio: '2/3', borderRadius: tokens.radius.xl, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
             <div style={{ flex: 1, minWidth: 260, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ height: 28, width: '70%', borderRadius: tokens.radius.sm, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ height: 32, width: '70%', borderRadius: tokens.radius.sm, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
               <div style={{ height: 18, width: '40%', borderRadius: tokens.radius.sm, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
-              <div style={{ height: 40, width: '50%', borderRadius: tokens.radius.md, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} style={{ height: 28, width: 70, borderRadius: tokens.radius.full, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                ))}
+              </div>
+              <div style={{ height: 48, width: 160, borderRadius: tokens.radius.xl, background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite', marginTop: 8 }} />
             </div>
           </div>
         </main>
