@@ -15,7 +15,6 @@ import { withAuth } from '@/lib/api/middleware'
 import { normalizeSubscriptionTier } from '@/lib/types/premium'
 import type { TimeRange } from '@/lib/types/trader'
 import { createLogger } from '@/lib/utils/logger'
-import { query } from '@/lib/db'
 
 const logger = createLogger('snapshots-api')
 
@@ -68,93 +67,67 @@ export const POST = withAuth(
       const expiresAt = new Date()
       expiresAt.setDate(expiresAt.getDate() + expiryDays)
 
-      // Get current ranking data from trader_snapshots_v2
-      const window = timeRangeToWindow(timeRange)
-      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-
-      const conditions: string[] = [`s."window" = $1`, `s.as_of_ts >= $2`]
-      const params: unknown[] = [window, cutoff]
-      let paramIdx = 3
-
-      if (exchange) {
-        conditions.push(`s.platform = $${paramIdx}`)
-        params.push(exchange)
-        paramIdx++
-      }
-
-      const whereClause = conditions.join(' AND ')
+      // Get current ranking data from trader_snapshots (v1 table with season_id)
+      const seasonId = timeRange.toUpperCase() // '7D' / '30D' / '90D'
 
       let tradersResult: { rows: SnapshotRow[] }
       try {
-        tradersResult = await query<SnapshotRow>(
-          `SELECT s.platform, s.trader_key, s.roi_pct, s.pnl_usd,
-                  s.win_rate_pct, s.max_drawdown_pct, s.trades_count,
-                  s.copier_count, s.arena_score, s.metrics,
-                  src.display_name
-           FROM trader_snapshots_v2 s
-           LEFT JOIN trader_sources_v2 src ON src.platform = s.platform AND src.trader_key = s.trader_key
-           WHERE ${whereClause}
-           ORDER BY s.roi_pct DESC NULLS LAST
-           LIMIT $${paramIdx}`,
-          [...params, MAX_SNAPSHOT_TRADERS],
-        )
-      } catch (dbError) {
-        // Fallback: use Supabase client when direct DB connection fails
-        logger.warn('Direct DB query failed, falling back to Supabase client', { error: String(dbError) })
+        let snapshotQuery = supabase
+          .from('trader_snapshots')
+          .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score')
+          .eq('season_id', seasonId)
+          .not('arena_score', 'is', null)
+          .order('roi', { ascending: false, nullsFirst: false })
+          .limit(MAX_SNAPSHOT_TRADERS)
 
-        try {
-          let supabaseQuery = supabase
-            .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate_pct, max_drawdown_pct, trades_count, copier_count, arena_score, metrics')
-            .eq('window', window)
-            .gte('as_of_ts', cutoff)
-            .order('roi_pct', { ascending: false, nullsFirst: false })
-            .limit(MAX_SNAPSHOT_TRADERS)
+        if (exchange) {
+          snapshotQuery = snapshotQuery.eq('source', exchange)
+        }
 
-          if (exchange) {
-            supabaseQuery = supabaseQuery.eq('platform', exchange)
-          }
+        const { data: snapshotData, error: snapshotError } = await snapshotQuery
 
-          const { data: fallbackData, error: fallbackError } = await supabaseQuery
+        if (snapshotError) {
+          throw snapshotError
+        }
 
-          if (fallbackError) {
-            throw fallbackError
-          }
+        // Fetch display names from trader_sources
+        const traderIds = (snapshotData || []).map(t => t.source_trader_id)
+        const handleMap = new Map<string, string>()
 
-          // Fetch display names separately
-          const traderKeys = (fallbackData || []).map(t => `${t.platform}:${t.trader_key}`)
-          const displayNameMap = new Map<string, string>()
+        if (traderIds.length > 0) {
+          const { data: sourcesData } = await supabase
+            .from('trader_sources')
+            .select('source_trader_id, handle')
+            .in('source_trader_id', traderIds)
 
-          if (traderKeys.length > 0) {
-            const platforms = [...new Set((fallbackData || []).map(t => t.platform))]
-            const keys = [...new Set((fallbackData || []).map(t => t.trader_key))]
-
-            const { data: sourcesData } = await supabase
-              .from('trader_sources_v2')
-              .select('platform, trader_key, display_name')
-              .in('platform', platforms)
-              .in('trader_key', keys)
-
-            if (sourcesData) {
-              for (const src of sourcesData) {
-                displayNameMap.set(`${src.platform}:${src.trader_key}`, src.display_name || '')
-              }
+          if (sourcesData) {
+            for (const src of sourcesData) {
+              handleMap.set(src.source_trader_id, src.handle || '')
             }
           }
-
-          tradersResult = {
-            rows: (fallbackData || []).map(row => ({
-              ...row,
-              display_name: displayNameMap.get(`${row.platform}:${row.trader_key}`) || null,
-            })) as SnapshotRow[],
-          }
-        } catch (fallbackError) {
-          logger.error('Supabase fallback also failed', { error: String(fallbackError) })
-          return NextResponse.json(
-            { success: false, error: 'Failed to fetch ranking data' },
-            { status: 500 }
-          )
         }
+
+        tradersResult = {
+          rows: (snapshotData || []).map(row => ({
+            platform: row.source,
+            trader_key: row.source_trader_id,
+            roi_pct: row.roi,
+            pnl_usd: row.pnl,
+            win_rate_pct: row.win_rate != null ? (row.win_rate <= 1 ? row.win_rate * 100 : row.win_rate) : null,
+            max_drawdown_pct: row.max_drawdown,
+            trades_count: row.trades_count,
+            copier_count: row.followers,
+            arena_score: row.arena_score,
+            metrics: null,
+            display_name: handleMap.get(row.source_trader_id) || null,
+          })) as SnapshotRow[],
+        }
+      } catch (dbError) {
+        logger.error('Failed to fetch snapshot data', { error: String(dbError) })
+        return NextResponse.json(
+          { success: false, error: 'Failed to fetch ranking data' },
+          { status: 500 }
+        )
       }
 
       // Deduplicate by platform:trader_key
@@ -165,60 +138,6 @@ export const POST = withAuth(
         seen.add(key)
         return true
       })
-
-      // If v2 table is empty, fallback to v1 trader_snapshots table
-      if (traders.length === 0) {
-        logger.warn('No v2 data found, trying v1 trader_snapshots fallback')
-
-        const seasonId = window.toUpperCase() // v1 uses '7D'/'30D'/'90D'
-        let v1Query = supabase
-          .from('trader_snapshots')
-          .select('source_trader_id, source, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score')
-          .eq('season_id', seasonId)
-          .order('arena_score', { ascending: false, nullsFirst: false })
-          .limit(MAX_SNAPSHOT_TRADERS)
-
-        if (exchange) {
-          v1Query = v1Query.eq('source', exchange)
-        }
-
-        const { data: v1Data } = await v1Query
-
-        if (v1Data && v1Data.length > 0) {
-          // Fetch handles from trader_sources (v1)
-          const v1TraderIds = v1Data.map(t => t.source_trader_id)
-          const { data: v1Sources } = await supabase
-            .from('trader_sources')
-            .select('source_trader_id, handle')
-            .in('source_trader_id', v1TraderIds)
-
-          const v1HandleMap = new Map<string, string>()
-          v1Sources?.forEach(s => {
-            v1HandleMap.set(s.source_trader_id, s.handle || '')
-          })
-
-          // Deduplicate
-          const v1Seen = new Set<string>()
-          for (const row of v1Data) {
-            const key = `${row.source}:${row.source_trader_id}`
-            if (v1Seen.has(key)) continue
-            v1Seen.add(key)
-            traders.push({
-              platform: row.source,
-              trader_key: row.source_trader_id,
-              roi_pct: row.roi,
-              pnl_usd: row.pnl,
-              win_rate_pct: row.win_rate != null ? (row.win_rate <= 1 ? row.win_rate * 100 : row.win_rate) : null,
-              max_drawdown_pct: row.max_drawdown,
-              trades_count: row.trades_count,
-              copier_count: row.followers,
-              arena_score: row.arena_score,
-              metrics: null,
-              display_name: v1HandleMap.get(row.source_trader_id) || null,
-            } as SnapshotRow)
-          }
-        }
-      }
 
       if (traders.length === 0) {
         return NextResponse.json(
@@ -409,14 +328,4 @@ type SnapshotRow = Record<string, unknown> & {
   display_name: string | null
 }
 
-/**
- * Map TimeRange (7D/30D/90D) to v2 window format (7d/30d/90d)
- */
-function timeRangeToWindow(timeRange: TimeRange): string {
-  switch (timeRange) {
-    case '7D': return '7d'
-    case '30D': return '30d'
-    case '90D': return '90d'
-    default: return '90d'
-  }
-}
+/* timeRangeToWindow removed — snapshots now use season_id directly */

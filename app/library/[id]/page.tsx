@@ -134,7 +134,7 @@ export default function BookDetailPage() {
         setUserReview(data.userReview || null)
         if (data.userReview) setShortReview(data.userReview)
       })
-      .catch((e) => logger.error('Unhandled error', e))
+      .catch((e) => { if (e instanceof TypeError && e.message.includes('fetch')) { logger.warn('Network error fetching library data', { id, error: String(e) }) } else { logger.warn('Failed to load library data', { id, error: String(e) }) } })
       .finally(() => setLoading(false))
   }, [id, getAuthHeaders])
 
@@ -158,7 +158,7 @@ export default function BookDetailPage() {
     fetch(`/api/library/${id}/similar`)
       .then(r => r.json())
       .then(data => setSimilar(data.items || []))
-      .catch((e) => logger.error('Unhandled error', e))
+      .catch((e) => { if (e instanceof TypeError && e.message.includes('fetch')) { logger.warn('Network error fetching library data', { id, error: String(e) }) } else { logger.warn('Failed to load library data', { id, error: String(e) }) } })
   }, [id])
 
   // Fetch language versions when book has a language_group_id

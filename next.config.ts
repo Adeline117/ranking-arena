@@ -300,6 +300,15 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'ui-avatars.com',
       },
+      // Static global CDN (exchange avatars)
+      {
+        protocol: 'https',
+        hostname: '**.static-global.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'a.static-global.com',
+      },
     ],
     
     // 图片尺寸配置 - 对齐 Tailwind 响应式断点
