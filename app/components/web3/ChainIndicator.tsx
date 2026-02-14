@@ -8,7 +8,7 @@
  */
 
 import { useAccount, useChainId, useSwitchChain } from 'wagmi'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { CHAIN_CONFIGS, CHAIN_IDS, type SupportedChainId } from '@/lib/web3/multi-chain'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -33,6 +33,18 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
   const { switchChain, isPending } = useSwitchChain()
   const { t } = useLanguage()
   const [showDropdown, setShowDropdown] = useState(false)
+
+  const closeDropdown = useCallback(() => setShowDropdown(false), [])
+
+  // Close dropdown on Escape key
+  useEffect(() => {
+    if (!showDropdown) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeDropdown()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showDropdown, closeDropdown])
 
   if (!isConnected) return null
 

@@ -243,7 +243,7 @@ function OneClickWalletButtonInner({
       case 'success':
         return {
           ...baseStyles,
-          background: 'linear-gradient(135deg, ${tokens.colors.accent.success} 0%, ${tokens.colors.accent.success} 100%)',
+          background: `linear-gradient(135deg, ${tokens.colors.accent.success} 0%, ${tokens.colors.accent.success} 100%)`,
           color: tokens.colors.white,
         }
       case 'error':
@@ -267,7 +267,7 @@ function OneClickWalletButtonInner({
           // Connected but idle - show gradient
           return {
             ...baseStyles,
-            background: 'linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)',
+            background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)`,
             color: tokens.colors.white,
           }
         }

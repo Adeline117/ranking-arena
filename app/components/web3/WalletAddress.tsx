@@ -8,9 +8,12 @@
 
 import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { getAddressExplorerUrl, type SupportedChainId, CHAIN_IDS } from '@/lib/web3/multi-chain'
 
 interface WalletAddressProps {
   address: string
+  /** Chain ID for explorer link. Defaults to Base mainnet. */
+  chainId?: SupportedChainId
   showCopy?: boolean
   className?: string
 }
@@ -19,7 +22,7 @@ function shortenAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
 }
 
-export function WalletAddress({ address, showCopy = true, className = '' }: WalletAddressProps) {
+export function WalletAddress({ address, chainId = CHAIN_IDS.BASE, showCopy = true, className = '' }: WalletAddressProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(async () => {
@@ -50,9 +53,9 @@ export function WalletAddress({ address, showCopy = true, className = '' }: Wall
         <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
       </svg>
 
-      {/* Address link to Basescan */}
+      {/* Address link to block explorer */}
       <a
-        href={`https://basescan.org/address/${address}`}
+        href={getAddressExplorerUrl(chainId, address)}
         target="_blank"
         rel="noopener noreferrer"
         className="text-xs font-mono hover:text-purple-400 transition-colors no-underline"

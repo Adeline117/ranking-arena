@@ -117,7 +117,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                   justifyContent: 'center',
                 }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${tokens.colors.accent.brand}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="6" width="20" height="12" rx="2" />
                   <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
                 </svg>
@@ -196,7 +196,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.md,
                 border: 'none',
-                background: 'linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)',
+                background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)`,
                 color: tokens.colors.white,
                 fontWeight: 700,
                 fontSize: tokens.typography.fontSize.sm,

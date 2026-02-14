@@ -32,8 +32,23 @@ export function Web3Provider({ children }: Web3ProviderProps) {
   }, [])
 
   if (!Provider) {
-    // Don't render children until provider is ready — prevents WagmiProviderNotFoundError
-    return <Web3ReadyContext.Provider value={false}><div style={{ minHeight: 100 }} /></Web3ReadyContext.Provider>
+    // Show a subtle loading state until the wallet SDK is ready
+    return (
+      <Web3ReadyContext.Provider value={false}>
+        <div style={{ minHeight: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              width: 20,
+              height: 20,
+              border: '2px solid var(--color-border-primary)',
+              borderTopColor: 'var(--color-accent-primary)',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }}
+          />
+        </div>
+      </Web3ReadyContext.Provider>
+    )
   }
 
   return (
