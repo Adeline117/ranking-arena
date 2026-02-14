@@ -57,7 +57,7 @@ export default function FollowingFeed() {
     }
 
     fetchFollowingPosts()
-  }, [user, authLoading])
+  }, [user, authLoading, isZh, showToast])
 
   // Not logged in
   if (!authLoading && !user) {

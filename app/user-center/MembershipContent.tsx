@@ -31,7 +31,7 @@ interface MembershipInfo {
 }
 
 export default function MembershipContent() {
-  const { t, language } = useLanguage()
+  const { language } = useLanguage()
   const isZh = language === 'zh'
   const router = useRouter()
   const { showToast } = useToast()

@@ -367,7 +367,7 @@ export default function LoginPage() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [router, isRegister, codeVerified, getRedirectUrl])
+  }, [router, isRegister, codeVerified, getRedirectUrl, saveNewAccountToStore])
 
   useEffect(() => {
     if (countdown > 0) {
