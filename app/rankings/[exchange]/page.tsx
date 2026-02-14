@@ -72,7 +72,7 @@ export async function generateMetadata({
       card: 'summary_large_image',
       title,
       description,
-      creator: '@arena_fi',
+      creator: '@arenafi',
     },
     robots: { index: true, follow: true },
   }

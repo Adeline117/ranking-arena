@@ -99,7 +99,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           title: `${profile.handle}${roiStr} · Arena`,
           description,
           images: [ogImageUrl.toString()],
-          creator: '@arena_fi',
+          creator: '@arenafi',
         },
         robots: {
           index: true,

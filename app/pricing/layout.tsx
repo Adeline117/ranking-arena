@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     url: `${baseUrl}/pricing`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena Pro' }],
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro' }],
   },
   twitter: {
     card: 'summary',

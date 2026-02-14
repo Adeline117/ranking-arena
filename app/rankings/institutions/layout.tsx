@@ -15,13 +15,13 @@ export const metadata: Metadata = {
     url: `${baseUrl}/rankings/institutions`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og.png`, width: 1200, height: 630, alt: 'Arena Institution Rankings' }],
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Institution Rankings' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Institution Rankings | Arena',
     description: 'Top crypto institutions ranked by community ratings.',
-    images: [`${baseUrl}/og.png`],
+    images: [`${baseUrl}/og-image.png`],
   },
 }
 

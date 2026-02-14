@@ -120,7 +120,7 @@ export const metadata: Metadata = {
     images: [
       `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
     ],
-    creator: "@Arena_com",
+    creator: '@arenafi',
   },
   robots: {
     index: true,
