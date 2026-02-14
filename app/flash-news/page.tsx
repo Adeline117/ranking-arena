@@ -266,10 +266,10 @@ export default function FlashNewsPage() {
   return (
     <Box style={{ background: tokens.colors.bg.primary, minHeight: '100vh', color: tokens.colors.text.primary }}>
       <TopNav />
-      <Box style={{ maxWidth: '800px', margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[3]}` }}>
+      <Box style={{ maxWidth: '800px', margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[4]}` }}>
         {/* Header */}
-        <Box style={{ marginBottom: tokens.spacing[6] }}>
-          <Text style={{ fontSize: tokens.typography.fontSize['3xl'], fontWeight: tokens.typography.fontWeight.black, marginBottom: tokens.spacing[2], letterSpacing: '-0.5px' }}>
+        <Box style={{ marginBottom: tokens.spacing[5] }}>
+          <Text style={{ fontSize: tokens.typography.fontSize['3xl'], fontWeight: tokens.typography.fontWeight.black, marginBottom: tokens.spacing[1], letterSpacing: '-0.5px' }}>
             {language === 'zh' ? '快讯中心' : 'Flash News'}
           </Text>
           <Text style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: tokens.typography.lineHeight.relaxed }}>
@@ -286,7 +286,7 @@ export default function FlashNewsPage() {
         </Box>
 
         {/* Category Filter */}
-        <Box style={{ marginBottom: tokens.spacing[5], display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
+        <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
           {CATEGORIES.map((cat) => {
             const isActive = selectedCategory === cat.key
             return (
@@ -320,8 +320,29 @@ export default function FlashNewsPage() {
         {/* News Timeline */}
         <div style={{ transition: 'opacity 0.3s ease', opacity: loading ? 0.5 : 1 }}>
           {loading && news.length === 0 ? (
-            <Box style={{ textAlign: 'center', padding: tokens.spacing[5], color: tokens.colors.text.secondary }}>
-              <Text>{language === 'zh' ? '加载中...' : 'Loading...'}</Text>
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Box key={i} style={{
+                  display: 'flex', borderLeft: `2px solid ${tokens.colors.border.primary}`,
+                  paddingLeft: tokens.spacing[3], position: 'relative',
+                }}>
+                  <Box style={{
+                    position: 'absolute', left: '-7px', top: tokens.spacing[3],
+                    width: 12, height: 12, borderRadius: '50%',
+                    background: tokens.colors.bg.tertiary, border: `2.5px solid ${tokens.colors.bg.primary}`,
+                  }} />
+                  <Box style={{ flex: 1 }}>
+                    <Box style={{
+                      padding: tokens.spacing[4], borderRadius: tokens.radius.lg,
+                      background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
+                    }}>
+                      <Box className="skeleton" style={{ height: 14, width: '30%', borderRadius: 6, marginBottom: tokens.spacing[2] }} />
+                      <Box className="skeleton" style={{ height: 18, width: '90%', borderRadius: 6, marginBottom: tokens.spacing[2] }} />
+                      <Box className="skeleton" style={{ height: 14, width: '70%', borderRadius: 6 }} />
+                    </Box>
+                  </Box>
+                </Box>
+              ))}
             </Box>
           ) : news.length === 0 ? (
             <div className="empty-state" style={{ padding: '80px 24px' }}>

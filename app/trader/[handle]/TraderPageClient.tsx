@@ -367,7 +367,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
               style={{
                 display: 'grid',
                 gridTemplateColumns: similarTraders.length > 0 ? '1fr 300px' : '1fr',
-                gap: tokens.spacing[8],
+                gap: tokens.spacing[6],
               }}
             >
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
@@ -414,12 +414,20 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                   </Box>
                 ) : (
                   <Box style={{
-                    padding: tokens.spacing[6],
+                    padding: `${tokens.spacing[8]} ${tokens.spacing[6]}`,
                     background: tokens.colors.bg.secondary,
                     borderRadius: tokens.radius.xl,
                     border: `1px solid ${tokens.colors.border.primary}`,
                     textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: tokens.spacing[3],
                   }}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--color-text-tertiary)', opacity: 0.4 }}>
+                      <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M7 16l4-8 4 4 4-6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                     <Text size="sm" color="tertiary">
                       {t('noPerformanceData')}
                     </Text>
@@ -467,12 +475,20 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                     />
                   ) : (
                     <Box style={{
-                      padding: tokens.spacing[6],
+                      padding: `${tokens.spacing[8]} ${tokens.spacing[6]}`,
                       background: tokens.colors.bg.secondary,
                       borderRadius: tokens.radius.xl,
                       border: `1px solid ${tokens.colors.border.primary}`,
                       textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: tokens.spacing[3],
                     }}>
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--color-text-tertiary)', opacity: 0.4 }}>
+                        <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+                      </svg>
                       <Text size="sm" color="tertiary">
                         {t('noStatsData')}
                       </Text>

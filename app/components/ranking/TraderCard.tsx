@@ -187,7 +187,7 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label="PnL"
-            value={trader.pnl != null ? `$${Math.abs(trader.pnl) >= 1000 ? `${(trader.pnl / 1000).toFixed(1)}K` : trader.pnl.toFixed(0)}` : '—'}
+            value={trader.pnl != null ? `${trader.pnl >= 0 ? '+' : ''}$${Math.abs(trader.pnl) >= 1_000_000 ? `${(trader.pnl / 1_000_000).toFixed(1)}M` : Math.abs(trader.pnl) >= 1000 ? `${(trader.pnl / 1000).toFixed(1)}K` : trader.pnl.toFixed(0)}` : '—'}
             color={trader.pnl != null ? ((trader.pnl >= 0) ? tokens.colors.accent.success : TRADER_ACCENT_ERROR) : undefined}
           />
           <MetricStat

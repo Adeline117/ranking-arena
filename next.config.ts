@@ -98,15 +98,11 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'assets.coingecko.com',
+        hostname: '**.coingecko.com',
       },
       {
         protocol: 'https',
         hostname: 's2.coinmarketcap.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'coin-images.coingecko.com',
       },
       {
         protocol: 'https',
@@ -304,10 +300,6 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: '**.static-global.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'a.static-global.com',
       },
     ],
     
