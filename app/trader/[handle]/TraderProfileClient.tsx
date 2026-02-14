@@ -6,7 +6,6 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
-import Image from 'next/image'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
@@ -171,7 +170,8 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
             justifyContent: 'center',
           }}>
             {data.avatar_url ? (
-              <Image src={data.avatar_url} alt={displayName} width={72} height={72} style={{ objectFit: 'cover' }} />
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt={displayName} width={72} height={72} style={{ objectFit: 'cover', width: 72, height: 72 }} />
             ) : (
               <Text size="xl" weight="bold" style={{ color: tokens.colors.white }}>{initial}</Text>
             )}
