@@ -318,7 +318,7 @@ function CompareContent() {
 
             {!accessToken ? (
               <Text size="sm" color="tertiary">
-                登录后可从关注列表选择
+                {t('compareLoginToSelect') || 'Log in to select from your following list'}
               </Text>
             ) : followedLoading ? (
               <Text size="sm" color="tertiary">{t('loading')}</Text>

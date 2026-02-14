@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text, Button } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
@@ -486,7 +488,11 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
-      <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
+      <Box className="has-mobile-nav" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
+        <Breadcrumb items={[
+          { label: t('favorites'), href: '/favorites' },
+          { label: folder.name },
+        ]} />
         {/* 返回链接 */}
         <Link
           href="/favorites"
@@ -818,6 +824,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       
       {/* 帖子详情弹窗 */}
       <PostDetailModal />
+      <MobileBottomNav />
     </Box>
   )
 }

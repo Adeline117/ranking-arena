@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
+import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
@@ -143,13 +145,12 @@ export default function FollowingPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
-  const [email, setEmail] = useState<string | null>(null)
+  const { accessToken, authChecked, email, getAuthHeadersAsync } = useAuthSession()
   const [userId, setUserId] = useState<string | null>(null)
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
   const [sortMode, setSortMode] = useState<SortMode>('recent')
   const [unfollowingId, setUnfollowingId] = useState<string | null>(null)
-  const { getAuthHeadersAsync } = useAuthSession()
 
   // Inline unfollow with optimistic UI
   const handleUnfollow = useCallback(async (item: FollowItem, e: React.MouseEvent) => {
@@ -189,12 +190,11 @@ export default function FollowingPage() {
   }, [items, unfollowingId, getAuthHeadersAsync, showToast, t, language])
 
   useEffect(() => {
-     
+    if (!authChecked) return
     supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
     })
-  }, [])
+  }, [authChecked])
 
   useEffect(() => {
     if (!userId) {
@@ -351,7 +351,8 @@ export default function FollowingPage() {
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
-      <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+      <Box className="has-mobile-nav" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
+        <Breadcrumb items={[{ label: t('myFollowing') }]} />
         {/* 页面标题 */}
         <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
           {t('myFollowing')}
@@ -666,6 +667,7 @@ export default function FollowingPage() {
           </>
         )}
       </Box>
+      <MobileBottomNav />
     </Box>
   )
 }
