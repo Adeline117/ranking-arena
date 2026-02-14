@@ -322,8 +322,8 @@ export default function ApplyGroupPage() {
   const tabStyle = (isActive: boolean): React.CSSProperties => ({
     padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
     borderRadius: `${tokens.radius.lg} ${tokens.radius.lg} 0 0`,
-    border: ('1px solid ' + isActive ? tokens.colors.border.primary : 'transparent'),
-    borderBottom: isActive ? 'none' : ('1px solid ' + tokens.colors.border.primary),
+    border: `1px solid ${isActive ? tokens.colors.border.primary : 'transparent'}`,
+    borderBottom: isActive ? 'none' : `1px solid ${tokens.colors.border.primary}`,
     background: isActive ? tokens.colors.bg.secondary : 'transparent',
     color: isActive ? tokens.colors.text.primary : tokens.colors.text.tertiary,
     cursor: 'pointer',

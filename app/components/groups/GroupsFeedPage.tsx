@@ -14,6 +14,7 @@ import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text } from '@/app/components/base'
 import BookCover from '@/app/library/BookCover'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
 
 type Group = {
@@ -231,22 +232,10 @@ function BookshelfTab() {
 
 export default function GroupsFeedPage() {
   const { language: _language, t } = useLanguage()
-  const [email, setEmail] = useState<string | null>(null)
+  const { email, userId } = useAuthSession()
   const [myGroups, setMyGroups] = useState<Group[]>([])
   const [_loadingGroups, setLoadingGroups] = useState(true)
-  const [userId, setUserId] = useState<string | null>(null)
   const [subTab, setSubTab] = useState<SubTabKey>('recommended')
-  const [_activeTab, _setActiveTab] = useState<'feed' | 'discover'>('feed')
-  const [_allGroups, _setAllGroups] = useState<Group[]>([])
-  const [_loadingDiscover, _setLoadingDiscover] = useState(false)
-
-  useEffect(() => {
-     
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setUserId(data.user?.id ?? null)
-    })
-  }, [])
 
   // Load user's joined groups
   useEffect(() => {

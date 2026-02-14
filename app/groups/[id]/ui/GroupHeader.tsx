@@ -14,6 +14,7 @@ type Group = {
   member_count?: number | null
   created_at?: string | null
   owner_handle?: string | null
+  is_premium_only?: boolean | null
 }
 
 interface GroupHeaderProps {
@@ -118,6 +119,20 @@ export default function GroupHeader({
                 onClick={onShowGroupInfo}
               >
                 {language === 'en' && group.name_en ? group.name_en : group.name}
+                {group.is_premium_only && (
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: tokens.colors.white,
+                    background: 'var(--color-pro-badge-bg)',
+                    padding: '2px 6px',
+                    borderRadius: tokens.radius.full,
+                    marginLeft: tokens.spacing[2],
+                    verticalAlign: 'middle',
+                  }}>
+                    Pro
+                  </span>
+                )}
                 <span style={{
                   fontSize: 11,
                   color: tokens.colors.text.tertiary,
