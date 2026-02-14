@@ -76,7 +76,7 @@ export default function BookshelfTab() {
     } finally {
       setLoading(false)
     }
-  }, [userId, filter])
+  }, [userId, filter, isZh, showToast])
 
   useEffect(() => {
     if (userId) fetchBookshelf()

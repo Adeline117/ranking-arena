@@ -14,8 +14,8 @@ export const revalidate = 60 // 1分钟，与 Cache-Control s-maxage 一致
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-const TRADER_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
-type SourceType = typeof TRADER_SOURCES[number]
+const _TRADER_SOURCES = ['binance', 'binance_web3', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
+type SourceType = typeof _TRADER_SOURCES[number]
 
 interface EquityDataPoint {
   time: string
@@ -37,10 +37,6 @@ interface SnapshotRow {
   pnl: number | null
   captured_at: string
   season_id: string | null
-}
-
-interface TraderSourceResult {
-  source_trader_id: string
 }
 
 // 查找交易员来源 - single query instead of looping 9 sources × 2 queries
