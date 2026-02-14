@@ -254,7 +254,16 @@ export default function UserCenterPage() {
         {activeTab === 'level' && <LevelTab info={info} dailyEarned={levelData?.dailyExpEarned ?? 0} isZh={isZh} />}
         {activeTab === 'membership' && <MembershipContent />}
         {activeTab === 'badges' && <div className="text-center py-12" style={{ color: tokens.colors.text.tertiary }}>{isZh ? '成就徽章功能即将上线' : 'Achievement badges coming soon'}</div>}
-        {activeTab === 'bookmarks' && <div className="text-center py-12" style={{ color: tokens.colors.text.tertiary }}>{isZh ? '收藏夹功能即将上线' : 'Bookmarks coming soon'}</div>}
+        {activeTab === 'bookmarks' && (
+          <div className="text-center py-12">
+            <p style={{ color: tokens.colors.text.tertiary, marginBottom: 16 }}>
+              {isZh ? '在收藏夹页面管理您收藏的内容' : 'Manage your bookmarked content in the Favorites page'}
+            </p>
+            <Button variant="primary" onClick={() => router.push('/favorites')}>
+              {isZh ? '打开收藏夹' : 'Open Favorites'}
+            </Button>
+          </div>
+        )}
         {activeTab === 'settings' && (
           <div className="text-center py-12">
             <p style={{ color: tokens.colors.text.tertiary, marginBottom: 16 }}>

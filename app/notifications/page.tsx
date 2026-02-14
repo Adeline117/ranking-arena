@@ -285,6 +285,11 @@ export default function NotificationsPage() {
           display: 'flex',
           gap: tokens.spacing[2],
           marginBottom: tokens.spacing[4],
+          overflowX: 'auto',
+          paddingBottom: tokens.spacing[1],
+          WebkitOverflowScrolling: 'touch',
+          msOverflowStyle: 'none',
+          scrollbarWidth: 'none',
         }}>
           <FilterTab
             label={t('all')}

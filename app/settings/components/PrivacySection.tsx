@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
-import { SectionCard, RadioOption } from './shared'
+import { SectionCard, ToggleSwitch, RadioOption } from './shared'
 
 interface BlockedUserInfo {
   blockedId: string
@@ -42,15 +42,15 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
         <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
           {t('followListVisibilityNote')}
         </Text>
-        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
-            <input type="checkbox" checked={props.showFollowing} onChange={(e) => props.setShowFollowing(e.target.checked)} style={{ width: 18, height: 18, accentColor: tokens.colors.accent.brand }} />
-            <Text size="sm">{t('showFollowingListLabel')}</Text>
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
-            <input type="checkbox" checked={props.showFollowers} onChange={(e) => props.setShowFollowers(e.target.checked)} style={{ width: 18, height: 18, accentColor: tokens.colors.accent.brand }} />
-            <Text size="sm">{t('showFollowersListLabel')}</Text>
-          </label>
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.md }}>
+            <Text size="sm" weight="medium">{t('showFollowingListLabel')}</Text>
+            <ToggleSwitch checked={props.showFollowing} onChange={(v) => props.setShowFollowing(v)} />
+          </Box>
+          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.md }}>
+            <Text size="sm" weight="medium">{t('showFollowersListLabel')}</Text>
+            <ToggleSwitch checked={props.showFollowers} onChange={(v) => props.setShowFollowers(v)} />
+          </Box>
         </Box>
       </Box>
 
@@ -59,13 +59,13 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
         <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
           {t('proBadgeTitle')}
         </Text>
-        <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], cursor: 'pointer' }}>
-          <input type="checkbox" checked={props.showProBadge} onChange={(e) => props.setShowProBadge(e.target.checked)} style={{ width: 18, height: 18, accentColor: tokens.colors.accent.brand }} />
+        <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.md }}>
           <Box>
-            <Text size="sm">{t('showProBadgeLabel')}</Text>
+            <Text size="sm" weight="medium">{t('showProBadgeLabel')}</Text>
             <Text size="xs" color="tertiary">{t('proBadgeNote')}</Text>
           </Box>
-        </label>
+          <ToggleSwitch checked={props.showProBadge} onChange={(v) => props.setShowProBadge(v)} />
+        </Box>
       </Box>
 
       {/* DM Permission */}
