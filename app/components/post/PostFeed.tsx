@@ -72,6 +72,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const lockRef = useRef<Set<string>>(new Set())
+  const postsRef = useRef(posts)
+  postsRef.current = posts
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // Comments hook
@@ -487,7 +489,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable
   }, [props.initialPostId, posts, openPost, setComments])
 
-  // 点赞/踩 - per-postId lock (waits for API response before allowing next action)
+  // 点赞/踩 - optimistic update with server reconciliation
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
     if (!accessToken) {
       showToast(t('pleaseLogin'), 'warning')
@@ -497,6 +499,38 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     const key = `react-${postId}-${reactionType}`
     if (lockRef.current.has(key)) return
     lockRef.current.add(key)
+
+    // Capture previous state for rollback
+    const prevPost = postsRef.current.find(p => p.id === postId)
+    const prevOpenPost = openPost?.id === postId ? openPost : null
+
+    // Optimistic update: compute expected new state
+    if (prevPost) {
+      const currentReaction = prevPost.user_reaction
+      const newReaction = currentReaction === reactionType ? null : reactionType
+      const optimistic = {
+        like_count: prevPost.like_count + (
+          reactionType === 'up'
+            ? (currentReaction === 'up' ? -1 : 1)
+            : (currentReaction === 'up' ? -1 : 0)
+        ),
+        dislike_count: prevPost.dislike_count + (
+          reactionType === 'down'
+            ? (currentReaction === 'down' ? -1 : 1)
+            : (currentReaction === 'down' ? -1 : 0)
+        ),
+        user_reaction: newReaction,
+      }
+
+      const applyUpdate = (updates: typeof optimistic) => {
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p))
+        if (openPost?.id === postId) {
+          setOpenPost(prev => prev ? { ...prev, ...updates } : null)
+        }
+      }
+
+      applyUpdate(optimistic)
+    }
 
     try {
       const response = await fetch(`/api/posts/${postId}/like`, {
@@ -513,48 +547,49 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
       if (response.ok && json.success) {
         const result = json.data
-        // 更新本地状态
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return {
-              ...p,
-              like_count: result.like_count,
-              dislike_count: result.dislike_count,
-              user_reaction: result.reaction,
-            }
-          }
-          return p
-        }))
+        // Reconcile with server truth
+        const serverUpdate = {
+          like_count: result.like_count,
+          dislike_count: result.dislike_count,
+          user_reaction: result.reaction,
+        }
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...serverUpdate } : p))
 
-        // Also update canonical store
         usePostStore.getState().updatePostReaction(postId, {
           like_count: result.like_count,
           dislike_count: result.dislike_count,
           reaction: result.reaction,
         })
 
-        // 如果弹窗打开，也更新弹窗中的帖子
         if (openPost?.id === postId) {
-          setOpenPost(prev => prev ? {
-            ...prev,
-            like_count: result.like_count,
-            dislike_count: result.dislike_count,
-            user_reaction: result.reaction,
-          } : null)
+          setOpenPost(prev => prev ? { ...prev, ...serverUpdate } : null)
         }
       } else {
-        // FIX: Show error toast when API returns error
+        // Rollback optimistic update
+        if (prevPost) {
+          setPosts(prev => prev.map(p => p.id === postId ? { ...p, like_count: prevPost.like_count, dislike_count: prevPost.dislike_count, user_reaction: prevPost.user_reaction } : p))
+          if (prevOpenPost) {
+            setOpenPost(prev => prev ? { ...prev, like_count: prevOpenPost.like_count, dislike_count: prevOpenPost.dislike_count, user_reaction: prevOpenPost.user_reaction } : null)
+          }
+        }
         const errorMsg = json.error || json.message || t('operationFailed')
         showToast(errorMsg, 'error')
       }
     } catch (err) {
-      // FIX: Show error toast for network/unexpected errors
+      // Rollback optimistic update
+      if (prevPost) {
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, like_count: prevPost.like_count, dislike_count: prevPost.dislike_count, user_reaction: prevPost.user_reaction } : p))
+        if (prevOpenPost) {
+          setOpenPost(prev => prev ? { ...prev, like_count: prevOpenPost.like_count, dislike_count: prevOpenPost.dislike_count, user_reaction: prevOpenPost.user_reaction } : null)
+        }
+      }
       logger.error('[PostFeed] toggleReaction error:', err)
       showToast(t('networkError'), 'error')
     } finally {
       lockRef.current.delete(key)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, openPost?.id, showToast])
 
   // Built-in poll voting (bull/bear/wait) - preserved for future use

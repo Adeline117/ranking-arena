@@ -171,6 +171,14 @@ class Logger {
   }
 
   /**
+   * 关键业务日志（生产环境始终可见，用于支付、认证等）
+   * 使用 warn 级别确保在生产环境输出
+   */
+  critical(message: string, ...data: unknown[]): void {
+    this.output('warn', `[CRITICAL] ${message}`, ...data)
+  }
+
+  /**
    * Error 级别日志（生产环境可见）
    */
   error(message: string, ...data: unknown[]): void {

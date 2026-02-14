@@ -62,10 +62,35 @@ class Logger {
   }
 
   /**
+   * Check if an error should be reported to Sentry
+   * Filters out user-caused errors (network, auth, rate-limit)
+   */
+  private shouldReportToSentry(error: Error): boolean {
+    const msg = error.message || ''
+    const status = (error as Error & { status?: number; statusCode?: number }).status
+      ?? (error as Error & { status?: number; statusCode?: number }).statusCode
+
+    // Don't report 4xx client errors
+    if (status && status >= 400 && status < 500) return false
+
+    // Don't report network/timeout errors (user-side or upstream)
+    const skipPatterns = [
+      'ECONNRESET', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE',
+      'AbortError', 'fetch failed', 'Failed to fetch',
+      'JWTExpired', 'JWT expired', 'Invalid Refresh Token',
+      'Too Many Requests', 'FUNCTION_INVOCATION_TIMEOUT',
+    ]
+    if (skipPatterns.some(p => msg.includes(p))) return false
+
+    return true
+  }
+
+  /**
    * Send error to Sentry (production only)
    */
   private sendToSentry(error: Error, context?: LogContextArg): void {
     if (!this.isProduction) return
+    if (!this.shouldReportToSentry(error)) return
 
     try {
       import('@sentry/nextjs').then((Sentry) => {
