@@ -8,6 +8,7 @@ import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '@/app/library/BookCover'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
+import { useToast } from '@/app/components/ui/Toast'
 
 type ShelfBook = {
   id: string
@@ -22,6 +23,7 @@ type ShelfBook = {
 
 export default function BookshelfTab() {
   const { language } = useLanguage()
+  const { showToast } = useToast()
   const isZh = language === 'zh'
 
   const [books, setBooks] = useState<ShelfBook[]>([])
@@ -55,6 +57,7 @@ export default function BookshelfTab() {
 
       if (error) {
         setBooks([])
+        showToast(isZh ? '加载书架失败' : 'Failed to load bookshelf', 'error')
         return
       }
 
@@ -69,6 +72,7 @@ export default function BookshelfTab() {
     } catch (e) {
       logger.error('Failed to fetch bookshelf:', e)
       setBooks([])
+      showToast(isZh ? '加载书架失败' : 'Failed to load bookshelf', 'error')
     } finally {
       setLoading(false)
     }

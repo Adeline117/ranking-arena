@@ -9,11 +9,13 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import PostCard from '@/app/components/post/components/PostCard'
 import type { PostWithUserState } from '@/lib/types'
 import { logger } from '@/lib/logger'
+import { useToast } from '@/app/components/ui/Toast'
 
 export default function FollowingFeed() {
   const { user, loading: authLoading } = useAuthSession()
   const { language } = useLanguage()
   const isZh = language === 'zh'
+  const { showToast } = useToast()
   const [posts, setPosts] = useState<PostWithUserState[]>([])
   const [loading, setLoading] = useState(true)
   const [followingIds, setFollowingIds] = useState<string[]>([])
@@ -48,6 +50,7 @@ export default function FollowingFeed() {
         setPosts((postsData as PostWithUserState[]) || [])
       } catch (e) {
         logger.error('Failed to fetch following feed:', e)
+        showToast(isZh ? '加载关注动态失败' : 'Failed to load feed', 'error')
       } finally {
         setLoading(false)
       }

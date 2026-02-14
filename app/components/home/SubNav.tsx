@@ -34,6 +34,7 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
           <button
             key={tab.key}
             onClick={() => onTabChange(tab.key)}
+            className="btn-press"
             style={{
               padding: '8px 16px',
               fontSize: 14,
@@ -45,6 +46,19 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
               cursor: 'pointer',
               transition: `all ${tokens.transition.base}`,
               marginBottom: -1,
+              borderRadius: `${tokens.radius.md} ${tokens.radius.md} 0 0`,
+            }}
+            onMouseEnter={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.color = tokens.colors.text.primary
+                e.currentTarget.style.backgroundColor = 'var(--color-bg-hover)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.color = tokens.colors.text.secondary
+                e.currentTarget.style.backgroundColor = 'transparent'
+              }
             }}
           >
             {tab.icon} {isZh ? tab.zhLabel : tab.enLabel}

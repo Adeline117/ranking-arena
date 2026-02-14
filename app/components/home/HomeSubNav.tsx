@@ -32,6 +32,7 @@ export default function HomeSubNav() {
           <Link
             key={tab.href}
             href={tab.href}
+            className="btn-press"
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
               fontSize: tokens.typography.fontSize.sm,
@@ -41,6 +42,19 @@ export default function HomeSubNav() {
               borderBottom: isActive ? '2px solid var(--color-brand)' : '2px solid transparent',
               whiteSpace: 'nowrap',
               transition: `all ${tokens.transition.fast}`,
+              borderRadius: `${tokens.radius.md} ${tokens.radius.md} 0 0`,
+            }}
+            onMouseEnter={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.color = 'var(--color-text-primary)'
+                e.currentTarget.style.backgroundColor = 'var(--color-bg-hover)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.color = 'var(--color-text-secondary)'
+                e.currentTarget.style.backgroundColor = 'transparent'
+              }
             }}
           >
             {isZh ? tab.labelZh : tab.labelEn}

@@ -573,6 +573,7 @@ export default function RankingSection({
           )}
           {!loading && onRefresh && (
             <button
+              className="btn-press"
               onClick={onRefresh}
               aria-label={t('refreshData')}
               title={t('refreshData')}
