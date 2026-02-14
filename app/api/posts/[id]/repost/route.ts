@@ -28,7 +28,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 解析请求体
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .maybeSingle()
 
     if (!originalPost) {
-      return NextResponse.json({ error: '帖子不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
     // 获取用户 handle
@@ -82,17 +82,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (insertError) {
       logger.error('Error creating repost:', insertError)
-      return NextResponse.json({ error: '转发失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Repost failed' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       post_id: newPost.id,
-      message: '转发成功'
+      message: 'Repost successful'
     })
 
   } catch (error: unknown) {
     logger.error('Error creating repost:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

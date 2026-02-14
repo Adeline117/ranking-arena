@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          message: '组合建议功能需要升级到 Pro 或更高版本',
+          message: 'Portfolio suggestions require Pro or higher',
           upgrade_required: true,
         },
         { status: 403 }
@@ -81,14 +81,14 @@ export async function GET(request: NextRequest) {
       .limit(200)
 
     if (tradersError) {
-      logger.error('[Portfolio] 获取交易员数据失败:', tradersError)
+      logger.error('[Portfolio] 获取交易员数据Failed:', tradersError)
       return handleError(tradersError, 'portfolio suggestions')
     }
 
     if (!tradersData || tradersData.length < 10) {
       return success({
         suggestions: [],
-        message: '交易员数据不足，无法生成组合建议',
+        message: 'Insufficient trader data to generate portfolio suggestions',
       })
     }
 

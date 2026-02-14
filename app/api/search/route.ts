@@ -148,7 +148,7 @@ export const GET = withPublic(
     const posts: UnifiedSearchResult[] = (postsData as PostRow[]).map((p) => ({
       id: p.id,
       type: 'post' as const,
-      title: p.title || '无标题',
+      title: p.title || 'Untitled',
       subtitle: p.author_handle ? `@${p.author_handle}` : undefined,
       href: `/post/${p.id}`,
       meta: { view_count: p.view_count },

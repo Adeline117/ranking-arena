@@ -21,14 +21,14 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 async function authenticateUser(request: NextRequest, supabase: ReturnType<typeof createClient<any>>): Promise<{ userId: string } | { error: string; status: number }> {
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return { error: '未授权：缺少认证令牌', status: 401 }
+    return { error: 'Unauthorized: missing auth token', status: 401 }
   }
 
   const token = authHeader.slice(7)
   const { data: { user }, error: authError } = await supabase.auth.getUser(token)
 
   if (authError || !user) {
-    return { error: '身份验证失败', status: 401 }
+    return { error: 'Authentication failed', status: 401 }
   }
 
   return { userId: user.id }
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (followerId === followingId) {
-      return NextResponse.json({ error: '不能关注自己' }, { status: 400 })
+      return NextResponse.json({ error: 'Cannot follow yourself' }, { status: 400 })
     }
 
     if (action === 'follow') {
@@ -134,10 +134,10 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ success: true, following: true })
         }
         if (error.message?.includes('Could not find the table')) {
-          return NextResponse.json({ error: '关注功能暂未开放', tableNotFound: true }, { status: 503 })
+          return NextResponse.json({ error: 'Follow feature not available yet', tableNotFound: true }, { status: 503 })
         }
         logger.error('[User Follow API] 关注错误:', error)
-        return NextResponse.json({ error: '关注操作失败' }, { status: 500 })
+        return NextResponse.json({ error: 'Follow operation failed' }, { status: 500 })
       }
 
       // 检查是否互相关注
@@ -163,10 +163,10 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         if (error.message?.includes('Could not find the table')) {
-          return NextResponse.json({ error: '关注功能暂未开放', tableNotFound: true }, { status: 503 })
+          return NextResponse.json({ error: 'Follow feature not available yet', tableNotFound: true }, { status: 503 })
         }
         logger.error('[User Follow API] 取消关注错误:', error)
-        return NextResponse.json({ error: '取消关注操作失败' }, { status: 500 })
+        return NextResponse.json({ error: 'Unfollow operation failed' }, { status: 500 })
       }
 
       return NextResponse.json({ success: true, following: false, mutual: false })

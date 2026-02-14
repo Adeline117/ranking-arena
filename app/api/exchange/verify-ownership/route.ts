@@ -1,5 +1,5 @@
 /**
- * 验证用户是否拥有某个交易员账号
+ * 验证用户是否拥有某traders allowed for comparison账号
  * POST /api/exchange/verify-ownership
  * 
  * 请求体：
@@ -44,13 +44,13 @@ async function _getBinanceAccountId(config: BinanceConfig): Promise<string | nul
     // 实际验证需要通过对比交易数据或其他方式
     return null
   } catch (error: unknown) {
-    logger.error('[verify-ownership] 获取Binance账号ID失败:', error)
+    logger.error('[verify-ownership] 获取Binance账号IDFailed:', error)
     return null
   }
 }
 
 /**
- * 验证用户是否拥有某个交易员账号
+ * 验证用户是否拥有某traders allowed for comparison账号
  * 通过对比用户绑定的账号与交易员ID是否匹配
  */
 export async function POST(req: NextRequest) {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     // 1. Auth check
     const user = await getAuthUser(req)
     if (!user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // CSRF validation
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     if (!exchange || !traderId || !source) {
       return NextResponse.json(
-        { error: '缺少必要参数：exchange, traderId, source' },
+        { error: 'Missing required parameters: exchange, traderId, source' },
         { status: 400 }
       )
     }
@@ -93,9 +93,9 @@ export async function POST(req: NextRequest) {
     if (connError || !connection) {
       return NextResponse.json(
         { 
-          error: '请先绑定交易所账号',
+          error: 'Please connect your exchange account first',
           needConnect: true,
-          message: '请先在设置页面绑定您的交易所账号，然后才能认领交易员账号。'
+          message: 'Please connect your exchange account in settings before claiming a trader account.'
         },
         { status: 404 }
       )
@@ -130,14 +130,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         verified: true,
-        message: '账号验证成功',
+        message: 'Account verification successful',
       })
     } catch (verifyError: unknown) {
-      logger.error('[verify-ownership] 验证失败:', verifyError)
-      const msg = verifyError instanceof Error ? verifyError.message : '无法验证账号所有权，请检查您的API凭证是否正确。'
+      logger.error('[verify-ownership] 验证Failed:', verifyError)
+      const msg = verifyError instanceof Error ? verifyError.message : 'Unable to verify account ownership. Please check your API credentials.'
       return NextResponse.json(
         { 
-          error: '账号验证失败',
+          error: 'Account verification failed',
           verified: false,
           message: msg
         },
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
     }
   } catch (error: unknown) {
     logger.error('[verify-ownership] 错误:', error)
-    const message = error instanceof Error ? error.message : '验证失败'
+    const message = error instanceof Error ? error.message : 'Verification failed'
     return NextResponse.json(
       { error: message },
       { status: 500 }

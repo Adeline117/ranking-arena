@@ -16,7 +16,7 @@ export async function POST(
 
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -24,7 +24,7 @@ export async function POST(
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 检查操作者权限
@@ -37,7 +37,7 @@ export async function POST(
 
     const operatorRole = operatorMember?.role as string | null
     if (!operatorRole || operatorRole === 'member') {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -48,11 +48,11 @@ export async function POST(
     }
 
     if (!message || message.trim().length === 0) {
-      return NextResponse.json({ error: '通知内容不能为空' }, { status: 400 })
+      return NextResponse.json({ error: 'Notification content cannot be empty' }, { status: 400 })
     }
 
     if (message.length > 500) {
-      return NextResponse.json({ error: '通知内容不能超过500字' }, { status: 400 })
+      return NextResponse.json({ error: 'Notification content cannot exceed 500 characters' }, { status: 400 })
     }
 
     // 获取小组名称
@@ -62,7 +62,7 @@ export async function POST(
       .eq('id', groupId)
       .single()
 
-    const groupName = groupData?.name || '小组'
+    const groupName = groupData?.name || 'Group'
 
     // 获取目标成员列表
     let memberIds: string[] = []
@@ -82,10 +82,10 @@ export async function POST(
     }
 
     if (memberIds.length === 0) {
-      return NextResponse.json({ error: '没有可通知的成员' }, { status: 400 })
+      return NextResponse.json({ error: 'No members to notify' }, { status: 400 })
     }
 
-    const notifyTitle = title?.trim() || `「${groupName}」管理通知`
+    const notifyTitle = title?.trim() || `${groupName} admin notification`
     const notifyMessage = message.trim()
 
     // 批量发送通知和私信
@@ -162,6 +162,6 @@ export async function POST(
 
   } catch (error: unknown) {
     logger.error('Group notify error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

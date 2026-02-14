@@ -14,7 +14,7 @@ function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !key) {
-    throw new Error('Supabase 环境变量未配置')
+    throw new Error('Supabase environment variables not configured')
   }
   return createClient(url, key)
 }
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     // 检查是否为 Pro 会员
     if (!hasFeatureAccess(tier, 'premium_groups')) {
       return NextResponse.json(
-        { error: '此功能仅限 Pro 会员', code: 'PRO_REQUIRED' },
+        { error: 'Pro membership required', code: 'PRO_REQUIRED' },
         { status: 403 }
       )
     }
@@ -52,8 +52,8 @@ export async function GET(request: NextRequest) {
     })
     
     if (error) {
-      logger.error('获取群信息失败', { error, userId: user.id })
-      return NextResponse.json({ error: '获取群信息失败' }, { status: 500 })
+      logger.error('Failed to fetch group info', { error, userId: user.id })
+      return NextResponse.json({ error: 'Failed to fetch group info' }, { status: 500 })
     }
     
     return NextResponse.json({
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     
   } catch (error: unknown) {
     logger.error('GET error', { error })
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     // 检查是否为 Pro 会员
     if (!hasFeatureAccess(tier, 'premium_groups')) {
       return NextResponse.json(
-        { error: '此功能仅限 Pro 会员', code: 'PRO_REQUIRED' },
+        { error: 'Pro membership required', code: 'PRO_REQUIRED' },
         { status: 403 }
       )
     }
@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
     })
     
     if (error) {
-      logger.error('加入群失败', { error })
-      return NextResponse.json({ error: '加入群失败' }, { status: 500 })
+      logger.error('Failed to join group', { error })
+      return NextResponse.json({ error: 'Failed to join group' }, { status: 500 })
     }
     
     if (data?.success) {
@@ -106,19 +106,19 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json({
         success: true,
-        message: data.message === 'joined' ? '已加入 Pro 会员官方群' : '你已经在 Pro 会员官方群中',
+        message: data.message === 'joined' ? 'Joined Pro official group' : 'You are already in the Pro official group',
         group_id: data.group_id
       })
     } else {
       return NextResponse.json(
-        { error: data?.message || '加入群失败' },
+        { error: data?.message || 'Failed to join group' },
         { status: 500 }
       )
     }
     
   } catch (error: unknown) {
     logger.error('POST error', { error })
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -141,18 +141,18 @@ export async function DELETE(request: NextRequest) {
     })
     
     if (error) {
-      logger.error('离开群失败', { error, userId: user.id })
-      return NextResponse.json({ error: '离开群失败' }, { status: 500 })
+      logger.error('Failed to leave group', { error, userId: user.id })
+      return NextResponse.json({ error: 'Failed to leave group' }, { status: 500 })
     }
     
     return NextResponse.json({
       success: true,
-      message: data ? '已离开 Pro 会员官方群' : '你不在 Pro 会员官方群中'
+      message: data ? 'Left Pro official group' : 'You are not in the Pro official group'
     })
     
   } catch (error: unknown) {
     logger.error('DELETE error', { error })
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -175,7 +175,7 @@ export async function joinProOfficialGroup(userId: string): Promise<{
       if (error.message.includes('function') || error.code === '42883') {
         return await joinProOfficialGroupFallback(userId)
       }
-      logger.error('加入群失败', { error, userId })
+      logger.error('Failed to join group', { error, userId })
       return { success: false, message: error.message }
     }
     

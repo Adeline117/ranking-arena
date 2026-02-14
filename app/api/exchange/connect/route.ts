@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     // Bitget 需要 passphrase
     if (exchange === 'bitget' && !passphrase) {
-      const error = new Error('Bitget 需要提供 passphrase') as Error & { statusCode?: number }
+      const error = new Error('Bitget requires a passphrase') as Error & { statusCode?: number }
       error.statusCode = 400
       throw error
     }
@@ -63,14 +63,14 @@ export async function POST(req: NextRequest) {
       })
       
       if (!isValid) {
-        const error = new Error('API Key 或 Secret 无效，请检查您的凭证') as Error & { statusCode?: number }
+        const error = new Error('Invalid API Key or Secret. Please check your credentials.') as Error & { statusCode?: number }
         error.statusCode = 400
         throw error
       }
     } catch (err: unknown) {
       if (err instanceof Error && 'statusCode' in err && err.statusCode) throw err
       logger.error('验证凭证失败', { error: err, exchange, userId: user.id })
-      const error = new Error(err instanceof Error ? err.message : 'API 凭证验证失败')
+      const error = new Error(err instanceof Error ? err.message : 'API credential verification failed')
       ;(error as Error & { statusCode?: number }).statusCode = 400
       throw error
     }
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         .eq('id', existing.id)
 
       if (updateError) {
-        throw new Error('更新连接失败')
+        throw new Error('Failed to update connection')
       }
     } else {
       const { error: insertError } = await adminSupabase
@@ -116,12 +116,12 @@ export async function POST(req: NextRequest) {
         })
 
       if (insertError) {
-        throw new Error('创建连接失败')
+        throw new Error('Failed to create connection')
       }
     }
 
     return success({
-      message: `已成功连接 ${exchange}，正在同步数据...`,
+      message: `Successfully connected to ${exchange}. Syncing data...`,
     })
   } catch (error: unknown) {
     return handleError(error, 'exchange/connect')

@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
         expires_at: subscription.expires_at,
         price_paid: subscription.price_paid,
       },
-      message: tier === 'trial' ? '试用已开始！' : '订阅成功！',
+      message: tier === 'trial' ? 'Trial started!' : 'Subscription successful!',
     }, 201)
   } catch (e: unknown) {
     return handleError(e)
@@ -269,7 +269,7 @@ export async function DELETE(request: NextRequest) {
       return error('Failed to cancel subscription', 500)
     }
 
-    return success({ message: '订阅已取消，您可以继续使用直到当前周期结束。' })
+    return success({ message: 'Subscription cancelled. You can continue using until the end of the current period.' })
   } catch (e: unknown) {
     return handleError(e)
   }

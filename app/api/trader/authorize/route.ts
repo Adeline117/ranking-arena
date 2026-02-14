@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
       traderId: validationResult.traderId,
       nickname: validationResult.nickname,
       permissions: validationResult.permissions,
-      message: '授权成功！您的实盘数据将在几分钟内开始同步。',
+      message: 'Authorization successful! Your live trading data will start syncing in a few minutes.',
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})
@@ -364,7 +364,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '授权已撤销',
+      message: 'Authorization revoked',
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})

@@ -32,7 +32,7 @@ export async function POST(
     
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -40,29 +40,29 @@ export async function POST(
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 检查操作者权限
     const operatorRole = await getGroupRole(supabase, groupId, user.id)
     if (!operatorRole || operatorRole === 'member') {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // 检查目标用户角色
     const targetRole = await getGroupRole(supabase, groupId, targetUserId)
     if (!targetRole) {
-      return NextResponse.json({ error: '目标用户不是小组成员' }, { status: 404 })
+      return NextResponse.json({ error: 'Target user is not a group member' }, { status: 404 })
     }
 
     // 管理员不能禁言组长或其他管理员
     if (operatorRole === 'admin' && (targetRole === 'owner' || targetRole === 'admin')) {
-      return NextResponse.json({ error: '无权限禁言此用户' }, { status: 403 })
+      return NextResponse.json({ error: 'No permission to mute this user' }, { status: 403 })
     }
 
     // 组长不能禁言自己
     if (operatorRole === 'owner' && targetUserId === user.id) {
-      return NextResponse.json({ error: '不能禁言自己' }, { status: 400 })
+      return NextResponse.json({ error: 'Cannot mute yourself' }, { status: 400 })
     }
 
     const body = await request.json()
@@ -81,7 +81,7 @@ export async function POST(
 
     if (updateError) {
       logger.error('Mute error:', updateError)
-      return NextResponse.json({ error: '禁言失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Mute failed' }, { status: 500 })
     }
 
     // 发送私信通知给被禁言用户
@@ -93,7 +93,7 @@ export async function POST(
         .eq('id', groupId)
         .single()
 
-      const groupName = groupData?.name || '小组'
+      const groupName = groupData?.name || 'Group'
 
       // 格式化禁言时长
       let durationText = ''
@@ -102,14 +102,14 @@ export async function POST(
         const now = new Date()
         const diffMs = mutedDate.getTime() - now.getTime()
         const diffHours = Math.round(diffMs / (1000 * 60 * 60))
-        if (diffHours <= 4) durationText = '3小时'
-        else if (diffHours <= 25) durationText = '1天'
-        else if (diffHours <= 170) durationText = '7天'
-        else durationText = '永久'
+        if (diffHours <= 4) durationText = '3 hours'
+        else if (diffHours <= 25) durationText = '1 day'
+        else if (diffHours <= 170) durationText = '7 days'
+        else durationText = 'permanently'
       }
 
-      const reasonText = reason ? `\n原因: ${reason}` : ''
-      const messageContent = `您已被「${groupName}」禁言${durationText}。${reasonText}`
+      const reasonText = reason ? `\nReason: ${reason}` : ''
+      const messageContent = `You have been muted in "${groupName}" for ${durationText}. ${reasonText}`
 
       // 创建或获取会话并发送私信
       const orderedUser1 = user.id < targetUserId ? user.id : targetUserId
@@ -156,7 +156,7 @@ export async function POST(
       await createNotification(supabase, {
         user_id: targetUserId,
         type: 'system',
-        title: '小组禁言通知',
+        title: 'Group mute notification',
         message: messageContent,
         link: `/groups/${groupId}`,
         actor_id: user.id,
@@ -181,7 +181,7 @@ export async function POST(
 
   } catch (error: unknown) {
     logger.error('Mute error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -195,7 +195,7 @@ export async function DELETE(
     
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -203,13 +203,13 @@ export async function DELETE(
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 检查操作者权限
     const operatorRole = await getGroupRole(supabase, groupId, user.id)
     if (!operatorRole || operatorRole === 'member') {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // 解除禁言
@@ -225,7 +225,7 @@ export async function DELETE(
 
     if (updateError) {
       logger.error('Unmute error:', updateError)
-      return NextResponse.json({ error: '解除禁言失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to unmute' }, { status: 500 })
     }
 
     // Audit log (fire-and-forget)
@@ -241,6 +241,6 @@ export async function DELETE(
 
   } catch (error: unknown) {
     logger.error('Unmute error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

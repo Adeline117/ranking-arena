@@ -43,9 +43,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (folderError || !folder) {
       // 如果列不存在错误，忽略
       if (folderError?.code === '42703') {
-        return success({ error: '收藏夹不存在' }, 404)
+        return success({ error: 'Folder not found' }, 404)
       }
-      return success({ error: '收藏夹不存在' }, 404)
+      return success({ error: 'Folder not found' }, 404)
     }
 
     // 获取订阅者数量（通过计数订阅表）
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     // 检查访问权限
     const isOwner = user?.id === folder.user_id
     if (!folder.is_public && !isOwner) {
-      return success({ error: '无权访问此收藏夹' }, 403)
+      return success({ error: 'No permission to access this folder' }, 403)
     }
 
     // 检查当前用户是否已订阅此收藏夹
@@ -186,11 +186,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .single()
 
     if (folderError || !folder) {
-      return success({ error: '收藏夹不存在' }, 404)
+      return success({ error: 'Folder not found' }, 404)
     }
 
     if (folder.user_id !== user.id) {
-      return success({ error: '无权修改此收藏夹' }, 403)
+      return success({ error: 'No permission to modify this folder' }, 403)
     }
 
     const body = await request.json()
@@ -201,7 +201,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (name !== undefined) {
       // 默认收藏夹不能修改名称
       if (folder.is_default) {
-        return success({ error: '默认收藏夹不能修改名称' }, 400)
+        return success({ error: 'Cannot rename the default folder' }, 400)
       }
       updateData.name = name
     }
@@ -222,7 +222,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (Object.keys(updateData).length === 0) {
-      return success({ error: '没有要更新的内容' }, 400)
+      return success({ error: 'Nothing to update' }, 400)
     }
 
     updateData.updated_at = new Date().toISOString()
@@ -237,7 +237,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (updateError) {
       if (updateError.code === '23505') {
-        return success({ error: '已存在同名收藏夹' }, 409)
+        return success({ error: 'A folder with this name already exists' }, 409)
       }
       throw updateError
     }
@@ -263,16 +263,16 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       .single()
 
     if (folderError || !folder) {
-      return success({ error: '收藏夹不存在' }, 404)
+      return success({ error: 'Folder not found' }, 404)
     }
 
     if (folder.user_id !== user.id) {
-      return success({ error: '无权删除此收藏夹' }, 403)
+      return success({ error: 'No permission to delete this folder' }, 403)
     }
 
     // 默认收藏夹不能删除
     if (folder.is_default) {
-      return success({ error: '默认收藏夹不能删除' }, 400)
+      return success({ error: 'Cannot delete the default folder' }, 400)
     }
 
     // 删除收藏夹（收藏记录会通过 CASCADE 自动删除）
@@ -285,7 +285,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       throw deleteError
     }
 
-    return success({ message: '收藏夹已删除' })
+    return success({ message: 'Folder deleted' })
   } catch (error: unknown) {
     return handleError(error, 'bookmark-folders/[id] DELETE')
   }

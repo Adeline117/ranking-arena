@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -29,12 +29,12 @@ export async function GET(request: NextRequest) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 检查是否是管理员
     if (!await isAdmin(supabase, user.id)) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // 获取所有待审核的申请
@@ -53,13 +53,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       logger.error('Fetch edit applications error:', error)
-      return NextResponse.json({ error: '获取失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Fetch failed' }, { status: 500 })
     }
 
     return NextResponse.json({ applications })
 
   } catch (error: unknown) {
     logger.error('Get edit applications error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

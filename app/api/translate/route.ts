@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     logger.error('Translation error', { error: String(error) })
     return NextResponse.json(
-      { success: false, error: '翻译服务出错' },
+      { success: false, error: 'Translation service error' },
       { status: 500 }
     )
   }
@@ -130,7 +130,7 @@ async function handleSingleTranslate(
 ) {
   if (!text || !targetLang) {
     return NextResponse.json(
-      { success: false, error: '缺少必要参数' },
+      { success: false, error: 'Missing required parameters' },
       { status: 400 }
     )
   }
@@ -187,7 +187,7 @@ async function handleSingleTranslate(
 
   if (!translatedText) {
     return NextResponse.json(
-      { success: false, error: '翻译失败' },
+      { success: false, error: 'Translation failed' },
       { status: 500 }
     )
   }
@@ -232,7 +232,7 @@ async function handleBatchTranslate(
 ) {
   if (!items || items.length === 0 || !targetLang) {
     return NextResponse.json(
-      { success: false, error: '缺少必要参数' },
+      { success: false, error: 'Missing required parameters' },
       { status: 400 }
     )
   }

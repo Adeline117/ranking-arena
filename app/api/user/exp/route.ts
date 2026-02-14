@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const action = validateString(body.action)
 
     if (!action || !EXP_ACTIONS.find((a) => a.key === action)) {
-      return new Response(JSON.stringify({ error: '无效的操作类型' }), { status: 400 })
+      return new Response(JSON.stringify({ error: 'Invalid operation type' }), { status: 400 })
     }
 
     const today = new Date().toISOString().split('T')[0]
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     const expToAdd = getExpForAction(action, todayActionExp)
 
     if (expToAdd === 0) {
-      return success({ message: '今日该操作经验已达上限', added: 0 })
+      return success({ message: 'Daily experience limit reached for this action', added: 0 })
     }
 
     const newExp = (levelData.exp ?? 0) + expToAdd

@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // Check requester is owner/admin
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .maybeSingle()
 
     if (!membership || (membership.role !== 'owner' && membership.role !== 'admin')) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // Rate limit: max 10 invites per hour per user
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .gte('created_at', oneHourAgo.toISOString())
 
     if ((recentInviteCount ?? 0) >= 10) {
-      return NextResponse.json({ error: '每小时最多生成10个邀请链接' }, { status: 429 })
+      return NextResponse.json({ error: 'Maximum 10 invite links per hour' }, { status: 429 })
     }
 
     // Generate 7-day invite token
@@ -156,6 +156,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     })
   } catch (error: unknown) {
     logger.apiError('/api/groups/[id]/invite', error, {})
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

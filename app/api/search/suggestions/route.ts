@@ -132,7 +132,7 @@ export const GET = withPublic(
         type: 'symbol',
         value: symbol,
         label: `${symbol}/USDT`,
-        subLabel: '热门交易对',
+        subLabel: 'Hot trading pairs',
       })
     })
 
@@ -141,8 +141,8 @@ export const GET = withPublic(
       suggestions.push({
         type: 'keyword',
         value: query,
-        label: `搜索 "${query}"`,
-        subLabel: '关键词搜索',
+        label: `Search "${query}"`,
+        subLabel: 'Keyword search',
       })
     }
 

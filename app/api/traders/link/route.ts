@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getUser(req)
     if (!user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await req.json()
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     if (!traderId || !source) {
       return NextResponse.json(
-        { error: '缺少必要参数：traderId, source' },
+        { error: 'Missing required parameters: traderId, source' },
         { status: 400 }
       )
     }
@@ -63,9 +63,9 @@ export async function POST(req: NextRequest) {
     if (!connection) {
       return NextResponse.json(
         {
-          error: '请先绑定对应交易所账号',
+          error: 'Please connect the corresponding exchange account first',
           needConnect: true,
-          message: '请先在设置页面绑定您的交易所账号，然后才能关联交易员身份。',
+          message: 'Please connect your exchange account in settings before linking trader identity.',
         },
         { status: 400 }
       )
@@ -87,20 +87,20 @@ export async function POST(req: NextRequest) {
     if (insertError) {
       if (insertError.code === '23505') {
         return NextResponse.json(
-          { error: '该交易员账号已被关联' },
+          { error: 'This trader account is already linked' },
           { status: 409 }
         )
       }
       logger.error('[trader-link] Insert error:', insertError)
       return NextResponse.json(
-        { error: '关联失败' },
+        { error: 'Link failed' },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ success: true, link })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : '未知错误'
+    const message = error instanceof Error ? error.message : 'Unknown error'
     logger.error('[trader-link] POST error:', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getUser(req)
     if (!user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const adminSupabase = getSupabaseAdmin()
@@ -126,12 +126,12 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       logger.error('[trader-link] GET error:', error)
-      return NextResponse.json({ error: '获取失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Fetch failed' }, { status: 500 })
     }
 
     return NextResponse.json({ links: links || [] })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : '未知错误'
+    const message = error instanceof Error ? error.message : 'Unknown error'
     logger.error('[trader-link] GET error:', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
@@ -144,7 +144,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const user = await getUser(req)
     if (!user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { searchParams } = new URL(req.url)
@@ -152,7 +152,7 @@ export async function DELETE(req: NextRequest) {
 
     if (!linkId) {
       return NextResponse.json(
-        { error: '缺少参数：id' },
+        { error: 'Missing parameter: id' },
         { status: 400 }
       )
     }
@@ -167,7 +167,7 @@ export async function DELETE(req: NextRequest) {
       .single()
 
     if (!existing || existing.user_id !== user.id) {
-      return NextResponse.json({ error: '无权操作' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     const { error: deleteError } = await adminSupabase
@@ -178,12 +178,12 @@ export async function DELETE(req: NextRequest) {
 
     if (deleteError) {
       logger.error('[trader-link] DELETE error:', deleteError)
-      return NextResponse.json({ error: '取消关联失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to unlink' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : '未知错误'
+    const message = error instanceof Error ? error.message : 'Unknown error'
     logger.error('[trader-link] DELETE error:', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }

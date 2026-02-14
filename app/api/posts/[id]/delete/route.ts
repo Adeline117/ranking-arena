@@ -22,7 +22,7 @@ export async function DELETE(
     // 验证用户身份
     const authHeader = request.headers.get('Authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const token = authHeader.split(' ')[1]
@@ -31,7 +31,7 @@ export async function DELETE(
     // 验证 token 并获取用户
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '认证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 获取帖子信息，验证所有权
@@ -42,11 +42,11 @@ export async function DELETE(
       .single()
 
     if (fetchError || !post) {
-      return NextResponse.json({ error: '帖子不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
     if (post.author_id !== user.id) {
-      return NextResponse.json({ error: '无权删除此帖子' }, { status: 403 })
+      return NextResponse.json({ error: 'No permission to delete this post' }, { status: 403 })
     }
 
     // 删除帖子相关的评论（记录错误但继续删除帖子）
@@ -87,7 +87,7 @@ export async function DELETE(
 
     if (deleteError) {
       logger.error('Delete error', { error: deleteError, postId, userId: user.id })
-      return NextResponse.json({ error: '删除失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
     }
 
     // 清除帖子列表缓存
@@ -96,7 +96,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     logger.error('Error deleting post', { error })
-    const _errorMessage = error instanceof Error ? error.message : '服务器错误'
+    const _errorMessage = error instanceof Error ? error.message : 'Server error'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

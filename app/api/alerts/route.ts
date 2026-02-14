@@ -44,8 +44,8 @@ export async function GET(request: NextRequest) {
     const { data: history, error: queryError, count } = await query
 
     if (queryError) {
-      logger.error('[alerts] 查询历史失败:', queryError)
-      return error('获取提醒历史失败', 500)
+      logger.error('[alerts] 查询历史Failed:', queryError)
+      return error('Failed to fetch alert history', 500)
     }
 
     return success({ history: history || [], total: count || 0 })

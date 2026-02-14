@@ -60,12 +60,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
     const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
     if (!validateCsrfToken(cookieToken, headerToken) && false) { // CSRF disabled: auth token is sufficient
-      return NextResponse.json({ error: 'CSRF 验证失败' }, { status: 403 })
+      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 检查帖子是否存在
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .maybeSingle()
 
     if (!post) {
-      return NextResponse.json({ error: '帖子不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
     // 获取请求体中的 folder_id（提前获取，用于判断是移动收藏夹还是取消收藏）
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
         if (updateError) {
           apiLogger.error('Error updating bookmark folder:', updateError)
-          return NextResponse.json({ error: '移动收藏夹失败' }, { status: 500 })
+          return NextResponse.json({ error: 'Failed to move bookmark folder' }, { status: 500 })
         }
 
         // 获取当前帖子的收藏计数（不变）
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
       if (deleteError) {
         apiLogger.error('Error removing bookmark:', deleteError)
-        return NextResponse.json({ error: '取消收藏失败' }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to remove bookmark' }, { status: 500 })
       }
 
       // 使用原子递减操作避免竞态条件
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             .from('bookmark_folders')
             .insert({
               user_id: user.id,
-              name: '默认收藏夹',
+              name: 'Default',
               is_default: true
             })
             .select('id')
@@ -234,12 +234,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
         apiLogger.error('Error adding bookmark:', insertError)
         // 提供更详细的错误信息
         if (insertError.code === '23503') {
-          return NextResponse.json({ error: '帖子不存在或已被删除' }, { status: 404 })
+          return NextResponse.json({ error: 'Post not found or deleted' }, { status: 404 })
         }
         if (insertError.code === '23505') {
-          return NextResponse.json({ error: '已经收藏过此帖子' }, { status: 409 })
+          return NextResponse.json({ error: 'Already bookmarked' }, { status: 409 })
         }
-        return NextResponse.json({ error: `收藏失败: ${insertError.message}` }, { status: 500 })
+        return NextResponse.json({ error: `Bookmark failed: ${insertError.message}` }, { status: 500 })
       }
 
       // 使用原子递增操作避免竞态条件
@@ -281,7 +281,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   } catch (error: unknown) {
     apiLogger.error('Error toggling bookmark:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 

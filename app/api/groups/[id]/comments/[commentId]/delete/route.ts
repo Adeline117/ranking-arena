@@ -31,7 +31,7 @@ export async function POST(
     
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -39,12 +39,12 @@ export async function POST(
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 检查权限
     if (!await canManageGroup(supabase, groupId, user.id)) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // 获取评论信息，检查是否属于此小组的帖子
@@ -55,11 +55,11 @@ export async function POST(
       .single()
 
     if (!commentData) {
-      return NextResponse.json({ error: '评论不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
     }
 
     if (commentData.deleted_at) {
-      return NextResponse.json({ error: '评论已被删除' }, { status: 400 })
+      return NextResponse.json({ error: 'Comment already deleted' }, { status: 400 })
     }
 
     // 检查帖子是否属于此小组
@@ -70,7 +70,7 @@ export async function POST(
       .single()
 
     if (!postData || postData.group_id !== groupId) {
-      return NextResponse.json({ error: '评论不属于此小组' }, { status: 400 })
+      return NextResponse.json({ error: 'Comment does not belong to this group' }, { status: 400 })
     }
 
     // 软删除评论
@@ -79,19 +79,19 @@ export async function POST(
       .update({
         deleted_at: new Date().toISOString(),
         deleted_by: user.id,
-        delete_reason: '管理员删除'
+        delete_reason: 'Deleted by admin'
       })
       .eq('id', commentId)
 
     if (updateError) {
       logger.error('Delete comment error:', updateError)
-      return NextResponse.json({ error: '删除失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
 
   } catch (error: unknown) {
     logger.error('Delete comment error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

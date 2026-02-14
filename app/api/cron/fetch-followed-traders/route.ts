@@ -38,7 +38,7 @@ function getSupabaseAdmin() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!url || !serviceKey) {
-    throw new Error('Supabase 环境变量未配置')
+    throw new Error('Supabase environment variables not configured')
   }
 
   return createClient(url, serviceKey, {
@@ -67,7 +67,7 @@ export async function GET(req: Request) {
       .order('created_at', { ascending: false })
 
     if (fetchError) {
-      logger.error('[FollowedTraders Cron] 获取关注列表失败:', fetchError)
+      logger.error('[FollowedTraders Cron] 获取关注列表Failed:', fetchError)
       return NextResponse.json(
         { ok: false, error: fetchError.message },
         { status: 500 }
@@ -111,7 +111,7 @@ export async function GET(req: Request) {
         alertResult = await runTraderAlertDetection(supabaseUrl, supabaseKey)
       }
     } catch (alertError) {
-      logger.error('[FollowedTraders Cron] 异动检测失败:', alertError)
+      logger.error('[FollowedTraders Cron] 异动检测Failed:', alertError)
     }
 
     const duration = Date.now() - startTime
@@ -126,7 +126,7 @@ export async function GET(req: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error: unknown) {
-    logger.error('[FollowedTraders Cron] 执行失败:', error)
+    logger.error('[FollowedTraders Cron] 执行Failed:', error)
     return NextResponse.json(
       {
         ok: false,

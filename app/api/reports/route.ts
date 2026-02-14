@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     // Verify authentication
     const user = await getAuthUser(req)
     if (!user) {
-      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Please log in first' }, { status: 401 })
     }
 
     const auth = { userId: user.id }
@@ -42,38 +42,38 @@ export async function POST(req: NextRequest) {
     // Validate content_type
     if (!content_type || !VALID_CONTENT_TYPES.includes(content_type as ContentType)) {
       return NextResponse.json(
-        { error: '无效的举报类型', valid_types: VALID_CONTENT_TYPES },
+        { error: 'Invalid report type', valid_types: VALID_CONTENT_TYPES },
         { status: 400 }
       )
     }
 
     // Validate content_id
     if (!content_id || typeof content_id !== 'string') {
-      return NextResponse.json({ error: '缺少内容ID' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing content ID' }, { status: 400 })
     }
 
     // Validate reason
     if (!reason || !VALID_REASONS.includes(reason as ReportReason)) {
       return NextResponse.json(
-        { error: '请选择举报原因', valid_reasons: VALID_REASONS },
+        { error: 'Please select a report reason', valid_reasons: VALID_REASONS },
         { status: 400 }
       )
     }
 
     // Validate description: required, min 15 chars, max 1000
     if (!description || typeof description !== 'string' || description.trim().length < 15) {
-      return NextResponse.json({ error: '举报理由至少15个字符' }, { status: 400 })
+      return NextResponse.json({ error: 'Report reason must be at least 15 characters' }, { status: 400 })
     }
     if (description.length > 1000) {
-      return NextResponse.json({ error: '举报说明最多1000字符' }, { status: 400 })
+      return NextResponse.json({ error: 'Report description max 1000 characters' }, { status: 400 })
     }
 
     // Validate images: at least 1 required
     if (!images || !Array.isArray(images) || images.length === 0) {
-      return NextResponse.json({ error: '请至少上传一张截图作为证据' }, { status: 400 })
+      return NextResponse.json({ error: 'Please upload at least one screenshot as evidence' }, { status: 400 })
     }
     if (images.length > 4) {
-      return NextResponse.json({ error: '最多上传4张截图' }, { status: 400 })
+      return NextResponse.json({ error: 'Maximum 4 screenshots' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existingReport) {
-      return NextResponse.json({ error: '您已举报过此内容' }, { status: 400 })
+      return NextResponse.json({ error: 'You have already reported this content' }, { status: 400 })
     }
 
     // Validate that the content exists and user has access
@@ -102,11 +102,11 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
 
       if (!conversation) {
-        return NextResponse.json({ error: '对话不存在' }, { status: 404 })
+        return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
       }
 
       if (conversation.user1_id !== auth.userId && conversation.user2_id !== auth.userId) {
-        return NextResponse.json({ error: '无权举报此对话' }, { status: 403 })
+        return NextResponse.json({ error: 'No permission to report this conversation' }, { status: 403 })
       }
     } else if (content_type === 'user') {
       // For user reports, content_id is the user_id being reported
@@ -117,12 +117,12 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
 
       if (!reportedUser) {
-        return NextResponse.json({ error: '用户不存在' }, { status: 404 })
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
       }
 
       // Can't report yourself
       if (content_id === auth.userId) {
-        return NextResponse.json({ error: '不能举报自己' }, { status: 400 })
+        return NextResponse.json({ error: 'Cannot report yourself' }, { status: 400 })
       }
     }
 
@@ -143,14 +143,14 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       logger.error('Failed to create report', { error, userId: auth.userId, content_type, content_id })
-      return NextResponse.json({ error: '举报提交失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to submit report' }, { status: 500 })
     }
 
     logger.info('Report created', { reportId: report.id, userId: auth.userId, content_type, content_id, reason })
 
     return NextResponse.json({
       ok: true,
-      message: '举报已提交，我们会尽快处理',
+      message: 'Report submitted, we will review it shortly',
       report: {
         id: report.id,
         content_type: report.content_type,

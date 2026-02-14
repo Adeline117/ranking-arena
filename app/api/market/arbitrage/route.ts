@@ -13,7 +13,7 @@ export async function GET() {
     response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60')
     return response
   } catch (err) {
-    log.error('套利检测失败', err)
-    return NextResponse.json({ ok: false, opportunities: [], error: '套利检测失败' }, { status: 500 })
+    log.error('Arbitrage detection failed', err)
+    return NextResponse.json({ ok: false, opportunities: [], error: 'Arbitrage detection failed' }, { status: 500 })
   }
 }

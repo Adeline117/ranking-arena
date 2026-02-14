@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       maxSize = MAX_FILE_SIZE
     } else {
       return NextResponse.json({
-        error: '不支持的文件类型',
+        error: 'Unsupported file type',
         allowedTypes: {
           images: ['jpg', 'png', 'gif', 'webp'],
           videos: ['mp4', 'webm', 'mov'],
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     if (file.size > maxSize) {
       const maxSizeMB = Math.round(maxSize / (1024 * 1024))
       return NextResponse.json({
-        error: `文件太大，最大允许 ${maxSizeMB}MB`,
+        error: `File too large, maximum ${maxSizeMB}MB`,
       }, { status: 400 })
     }
 

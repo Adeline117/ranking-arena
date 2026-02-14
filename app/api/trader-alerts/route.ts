@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'trader_alerts')) {
-      return error('此功能需要 Pro 会员', 403)
+      return error('Pro membership required', 403)
     }
 
     // 获取查询参数
@@ -83,8 +83,8 @@ export async function GET(request: NextRequest) {
     const { data: alerts, error: queryError } = await query
 
     if (queryError) {
-      logger.error('[trader-alerts] 查询失败:', queryError)
-      return error('获取提醒配置失败', 500)
+      logger.error('[trader-alerts] 查询Failed:', queryError)
+      return error('Failed to fetch alert config', 500)
     }
 
     return success({ alerts: alerts || [] })
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'trader_alerts')) {
-      return error('此功能需要 Pro 会员', 403)
+      return error('Pro membership required', 403)
     }
 
     const body = await request.json()
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!traderId) {
-      return error('缺少 trader_id', 400)
+      return error('Missing trader_id', 400)
     }
 
     // 检查是否已存在配置
@@ -175,8 +175,8 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (updateError) {
-        logger.error('[trader-alerts] 更新失败:', updateError)
-        return error('更新提醒配置失败', 500)
+        logger.error('[trader-alerts] 更新Failed:', updateError)
+        return error('Failed to update alert config', 500)
       }
       result = data
     } else {
@@ -188,8 +188,8 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (insertError) {
-        logger.error('[trader-alerts] 创建失败:', insertError)
-        return error('创建提醒配置失败', 500)
+        logger.error('[trader-alerts] 创建Failed:', insertError)
+        return error('Failed to create alert config', 500)
       }
       result = data
     }
@@ -213,7 +213,7 @@ export async function DELETE(request: NextRequest) {
     const traderId = searchParams.get('trader_id')
 
     if (!alertId && !traderId) {
-      return error('需要提供 id 或 trader_id', 400)
+      return error('Either id or trader_id is required', 400)
     }
 
     let query = supabase
@@ -230,8 +230,8 @@ export async function DELETE(request: NextRequest) {
     const { error: deleteError } = await query
 
     if (deleteError) {
-      logger.error('[trader-alerts] 删除失败:', deleteError)
-      return error('删除提醒配置失败', 500)
+      logger.error('[trader-alerts] 删除Failed:', deleteError)
+      return error('Failed to delete alert config', 500)
     }
 
     return success({ deleted: true })

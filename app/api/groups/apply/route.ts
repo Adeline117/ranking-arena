@@ -17,13 +17,13 @@ export async function POST(request: NextRequest) {
     const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
     const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
     if (!validateCsrfToken(cookieToken, headerToken) && false) { // CSRF disabled: auth token is sufficient
-      return NextResponse.json({ error: 'CSRF 验证失败' }, { status: 403 })
+      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 
     // 验证用户身份
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     // 验证 token
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 解析请求体
@@ -51,15 +51,15 @@ export async function POST(request: NextRequest) {
 
     // 验证必填字段
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      return NextResponse.json({ error: '小组名称不能为空' }, { status: 400 })
+      return NextResponse.json({ error: 'Group name cannot be empty' }, { status: 400 })
     }
 
     if (name.trim().length > 50) {
-      return NextResponse.json({ error: '小组名称不能超过50个字符' }, { status: 400 })
+      return NextResponse.json({ error: 'Group name cannot exceed 50 characters' }, { status: 400 })
     }
 
     if (description && description.length > 500) {
-      return NextResponse.json({ error: '小组简介不能超过500个字符' }, { status: 400 })
+      return NextResponse.json({ error: 'Group description cannot exceed 500 characters' }, { status: 400 })
     }
 
     // 如果要创建 Pro 专属小组，需要验证用户是 Pro 会员
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       const isPro = profile?.subscription_tier === 'pro'
       
       if (!isPro) {
-        return NextResponse.json({ error: '只有 Pro 会员才能创建专属小组' }, { status: 403 })
+        return NextResponse.json({ error: 'Only Pro members can create exclusive groups' }, { status: 403 })
       }
     }
 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (existingApplication) {
-      return NextResponse.json({ error: '您已有待审核的小组申请，请等待审核结果' }, { status: 400 })
+      return NextResponse.json({ error: 'You already have a pending group application' }, { status: 400 })
     }
 
     // 检查小组名是否已存在
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (existingGroup) {
-      return NextResponse.json({ error: '该小组名称已被使用' }, { status: 400 })
+      return NextResponse.json({ error: 'This group name is already taken' }, { status: 400 })
     }
 
     // 默认角色名称（admin 包含组长和管理员）
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       logger.dbError('create-group-application', insertError, { userId: user.id, groupName: name })
-      return NextResponse.json({ error: '申请提交失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to submit application' }, { status: 500 })
     }
 
     // Auto-create the group immediately
@@ -167,14 +167,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '小组创建成功！',
+      message: 'Group created successfully!',
       application,
       group: newGroup || null,
     })
 
   } catch (error: unknown) {
     logger.apiError('/api/groups/apply', error, {})
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 获取用户的所有申请
@@ -203,13 +203,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       logger.dbError('fetch-group-applications', error, { userId: user.id })
-      return NextResponse.json({ error: '获取申请列表失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch application list' }, { status: 500 })
     }
 
     return NextResponse.json({ applications })
 
   } catch (error: unknown) {
     logger.apiError('/api/groups/apply', error, {})
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

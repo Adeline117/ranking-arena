@@ -46,7 +46,7 @@ export async function POST(
       .eq('channel_id', channelId)
 
     if ((count || 0) + userIds.length > 50) {
-      return NextResponse.json({ error: '群聊最多50人' }, { status: 400 })
+      return NextResponse.json({ error: 'Group chat max 50 members' }, { status: 400 })
     }
 
     const newMembers = userIds.map((id: string) => ({
@@ -90,7 +90,7 @@ export async function DELETE(
         .maybeSingle()
 
       if (mem?.role === 'owner') {
-        return NextResponse.json({ error: '群主不能退出，请先转让群主或解散群聊' }, { status: 400 })
+        return NextResponse.json({ error: 'Owner cannot leave. Please transfer ownership or disband the group first.' }, { status: 400 })
       }
 
       await supabase
@@ -123,12 +123,12 @@ export async function DELETE(
       .maybeSingle()
 
     if (targetMem?.role === 'owner') {
-      return NextResponse.json({ error: '不能移除群主' }, { status: 400 })
+      return NextResponse.json({ error: 'Cannot remove the group owner' }, { status: 400 })
     }
 
     // Admin can only remove members, not other admins (unless owner)
     if (myMembership.role === 'admin' && targetMem?.role === 'admin') {
-      return NextResponse.json({ error: '管理员不能移除其他管理员' }, { status: 403 })
+      return NextResponse.json({ error: 'Admins cannot remove other admins' }, { status: 403 })
     }
 
     await supabase

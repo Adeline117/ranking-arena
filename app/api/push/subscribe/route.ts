@@ -23,7 +23,7 @@ export const POST = withAuth(
     if (!token || !provider) {
       return NextResponse.json({
         success: false,
-        error: '缺少必要参数: token, provider',
+        error: 'Missing required parameters: token, provider',
       }, { status: 400 })
     }
 
@@ -31,7 +31,7 @@ export const POST = withAuth(
     if (!validProviders.includes(provider)) {
       return NextResponse.json({
         success: false,
-        error: '无效的 provider',
+        error: 'Invalid provider',
       }, { status: 400 })
     }
 
@@ -49,10 +49,10 @@ export const POST = withAuth(
         data: subscription,
       })
     } catch (error: unknown) {
-      logger.error('[push/subscribe] 注册订阅失败:', error)
+      logger.error('[push/subscribe] 注册订阅Failed:', error)
       return NextResponse.json({
         success: false,
-        error: '注册订阅失败',
+        error: 'Failed to register subscription',
       }, { status: 500 })
     }
   },
@@ -68,7 +68,7 @@ export const DELETE = withAuth(
     if (!token) {
       return NextResponse.json({
         success: false,
-        error: '缺少必要参数: token',
+        error: 'Missing required parameter: token',
       }, { status: 400 })
     }
 
@@ -80,10 +80,10 @@ export const DELETE = withAuth(
         success: true,
       })
     } catch (error: unknown) {
-      logger.error('[push/subscribe] 取消订阅失败:', error)
+      logger.error('[push/subscribe] 取消订阅Failed:', error)
       return NextResponse.json({
         success: false,
-        error: '取消订阅失败',
+        error: 'Failed to unsubscribe',
       }, { status: 500 })
     }
   },

@@ -148,7 +148,7 @@ export async function GET(req: Request) {
     await sendRateLimitedAlert(
       {
         title: 'Enrichment 数据严重过期',
-        message: `${criticalItems.length} 个 enrichment 数据项超过 48 小时未更新`,
+        message: `${criticalItems.length} enrichment data items not updated in 48+ hours`,
         level: 'critical',
         details: {
           '过期项': items.substring(0, 200),

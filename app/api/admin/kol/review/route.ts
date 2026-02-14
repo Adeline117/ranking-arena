@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data })
   } catch (_err) {
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     const { applicationId, action, reviewer_notes } = await req.json()
 
     if (!applicationId || !['approved', 'rejected'].includes(action)) {
-      return NextResponse.json({ error: '参数错误' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 })
     }
 
     // Get application
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       .single()
 
     if (fetchErr || !app) {
-      return NextResponse.json({ error: '申请不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Application not found' }, { status: 404 })
     }
 
     // Update application status
@@ -80,6 +80,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true })
   } catch (_err) {
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

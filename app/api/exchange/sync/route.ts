@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (connError || !connection) {
-      return notFound('未找到有效的交易所连接')
+      return notFound('No active exchange connection found')
     }
 
     // 解密凭证
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (err: unknown) {
       logger.error('Decryption failed', { error: String(err) })
-      const error = new Error('解密凭证失败') as Error & { statusCode?: number }
+      const error = new Error('Failed to decrypt credentials') as Error & { statusCode?: number }
       error.statusCode = 500
       throw error
     }
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : '同步失败'
+      const errorMessage = err instanceof Error ? err.message : 'Sync failed'
       logger.error(`${exchange} sync failed`, { error: errorMessage })
       
       // 更新连接状态为失败
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
       .eq('id', connection.id)
 
     return success({
-      message: '同步成功',
+      message: 'Sync successful',
       tradesCount: stats?.totalTrades ?? 0,
       stats,
     })

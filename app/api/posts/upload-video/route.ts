@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     // Authenticate from JWT, not from client-submitted formData
     const user = await getAuthUser(request)
     if (!user) {
-      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Please log in first' }, { status: 401 })
     }
     const userId = user.id
 
@@ -35,14 +35,14 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File
 
     if (!file) {
-      return NextResponse.json({ error: '未提供视频文件' }, { status: 400 })
+      return NextResponse.json({ error: 'No video file provided' }, { status: 400 })
     }
 
     // 验证文件类型
     if (!ALLOWED_VIDEO_TYPES.includes(file.type)) {
       return NextResponse.json(
         {
-          error: '不支持的视频格式。支持的格式: MP4, WebM, MOV, AVI, MKV',
+          error: 'Unsupported video format. Supported formats: MP4, WebM, MOV, AVI, MKV',
           supportedFormats: ['MP4', 'WebM', 'MOV', 'AVI', 'MKV']
         },
         { status: 400 }
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     if (file.size > MAX_VIDEO_SIZE) {
       return NextResponse.json(
         {
-          error: `视频文件过大。最大允许 ${MAX_VIDEO_SIZE / 1024 / 1024}MB`,
+          error: `Video file too large. Maximum ${MAX_VIDEO_SIZE / 1024 / 1024}MB`,
           maxSize: MAX_VIDEO_SIZE,
           currentSize: file.size
         },
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Error uploading video:', error)
-    const _errorMessage = error instanceof Error ? error.message : '视频上传失败'
+    const _errorMessage = error instanceof Error ? error.message : 'Video upload failed'
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

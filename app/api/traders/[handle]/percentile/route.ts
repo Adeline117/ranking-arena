@@ -46,7 +46,7 @@ export async function GET(
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'score_breakdown')) {
-      return error('此功能需要 Pro 会员', 403)
+      return error('Pro membership required', 403)
     }
 
     // 解析参数
@@ -61,7 +61,7 @@ export async function GET(
       .maybeSingle()
 
     if (traderError || !trader) {
-      return error('找不到该交易员', 404)
+      return error('Trader not found', 404)
     }
 
     // 确定同类类型（futures/spot/web3）
@@ -82,8 +82,8 @@ export async function GET(
       .not('arena_score', 'is', null)
 
     if (catError) {
-      logger.error('[percentile] 查询同类交易员失败:', catError)
-      return error('获取分位数据失败', 500)
+      logger.error('[percentile] 查询同类交易员Failed:', catError)
+      return error('Failed to fetch percentile data', 500)
     }
 
     const totalInCategory = categoryTraders?.length || 0

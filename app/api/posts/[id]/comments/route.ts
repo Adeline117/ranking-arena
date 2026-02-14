@@ -75,7 +75,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .maybeSingle()
 
       if (membership?.muted_until && new Date(membership.muted_until) > new Date()) {
-        return new Response(JSON.stringify({ error: '您已被禁言', success: false }), {
+        return new Response(JSON.stringify({ error: 'You have been muted', success: false }), {
           status: 403,
           headers: { 'Content-Type': 'application/json' },
         })

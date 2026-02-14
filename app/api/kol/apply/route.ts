@@ -16,19 +16,19 @@ export async function POST(req: Request) {
     const supabase = getSupabase()
     const authHeader = req.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Please log in first' }, { status: 401 })
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.slice(7))
     if (authError || !user) {
-      return NextResponse.json({ error: '认证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     const body = await req.json()
     const { tier, platform, platform_handle, follower_count, description, proof_url } = body
 
     if (!tier || !['tier1', 'tier2', 'tier3'].includes(tier)) {
-      return NextResponse.json({ error: '请选择有效的等级' }, { status: 400 })
+      return NextResponse.json({ error: 'Please select a valid tier' }, { status: 400 })
     }
 
     // Check for existing pending application
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (existing) {
-      return NextResponse.json({ error: '你已有一个待审核的申请' }, { status: 409 })
+      return NextResponse.json({ error: 'You already have a pending application' }, { status: 409 })
     }
 
     const { data, error } = await supabase
@@ -59,12 +59,12 @@ export async function POST(req: Request) {
 
     if (error) {
       logger.error('KOL application error:', error)
-      return NextResponse.json({ error: '提交失败，请稍后重试' }, { status: 500 })
+      return NextResponse.json({ error: 'Submission failed, please try again later' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (err) {
     logger.error('KOL apply error:', err)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

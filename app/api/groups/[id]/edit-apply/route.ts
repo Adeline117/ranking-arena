@@ -44,7 +44,7 @@ export async function POST(
     
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -52,12 +52,12 @@ export async function POST(
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 只有组长可以提交修改申请
     if (!await isGroupOwner(supabase, groupId, user.id)) {
-      return NextResponse.json({ error: '只有组长可以修改小组信息' }, { status: 403 })
+      return NextResponse.json({ error: 'Only the group owner can modify group info' }, { status: 403 })
     }
 
     // 检查是否已有待审核的修改申请
@@ -69,7 +69,7 @@ export async function POST(
       .maybeSingle()
 
     if (existingApp) {
-      return NextResponse.json({ error: '您已有待审核的修改申请，请等待审核结果' }, { status: 400 })
+      return NextResponse.json({ error: 'You already have a pending edit application' }, { status: 400 })
     }
 
     let body: {
@@ -86,7 +86,7 @@ export async function POST(
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json({ error: '请求格式错误' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request format' }, { status: 400 })
     }
     const {
       name,
@@ -102,11 +102,11 @@ export async function POST(
 
     // 验证
     if (name && name.length > 50) {
-      return NextResponse.json({ error: '小组名称不能超过50个字符' }, { status: 400 })
+      return NextResponse.json({ error: 'Group name cannot exceed 50 characters' }, { status: 400 })
     }
 
     if (description && description.length > 500) {
-      return NextResponse.json({ error: '小组简介不能超过500个字符' }, { status: 400 })
+      return NextResponse.json({ error: 'Group description cannot exceed 500 characters' }, { status: 400 })
     }
 
     // 创建修改申请
@@ -131,18 +131,18 @@ export async function POST(
 
     if (insertError) {
       logger.error('Create edit application error:', insertError)
-      return NextResponse.json({ error: '提交失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Submission failed' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: '修改申请已提交，请等待管理员审核',
+      message: 'Edit application submitted, pending admin review',
       application
     })
 
   } catch (error: unknown) {
     logger.error('Edit apply error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -156,7 +156,7 @@ export async function GET(
     
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -164,12 +164,12 @@ export async function GET(
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 检查是否是组长
     if (!await isGroupOwner(supabase, groupId, user.id)) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     const { data: applications, error } = await supabase
@@ -180,13 +180,13 @@ export async function GET(
 
     if (error) {
       logger.error('Fetch edit applications error:', error)
-      return NextResponse.json({ error: '获取失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Fetch failed' }, { status: 500 })
     }
 
     return NextResponse.json({ applications })
 
   } catch (error: unknown) {
     logger.error('Get edit applications error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

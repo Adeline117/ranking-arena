@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic'
 export const GET = withApiMiddleware(
   async ({ user, supabase, request }) => {
     if (!user) {
-      return createErrorResponse('未授权', 401)
+      return createErrorResponse('Unauthorized', 401)
     }
 
     const traderId = request.nextUrl.searchParams.get('traderId')
@@ -39,8 +39,8 @@ export const GET = withApiMiddleware(
     const { data, error } = await query
 
     if (error) {
-      logger.error('获取跟单配置失败', error)
-      return createErrorResponse('获取跟单配置失败', 500)
+      logger.error('Failed to fetch copy trade config', error)
+      return createErrorResponse('Failed to fetch copy trade config', 500)
     }
 
     return NextResponse.json({ configs: data })
@@ -55,14 +55,14 @@ export const GET = withApiMiddleware(
 export const POST = withApiMiddleware(
   async ({ user, supabase, request }) => {
     if (!user) {
-      return createErrorResponse('未授权', 401)
+      return createErrorResponse('Unauthorized', 401)
     }
 
     const body = await request.json()
     const { traderId, exchange, settings, active, id } = body
 
     if (!traderId || !exchange) {
-      return createErrorResponse('缺少必要参数: traderId, exchange', 400)
+      return createErrorResponse('Missing required parameters: traderId, exchange', 400)
     }
 
     // 验证 settings 结构
@@ -93,8 +93,8 @@ export const POST = withApiMiddleware(
         .single()
 
       if (error) {
-        logger.error('更新跟单配置失败', error)
-        return createErrorResponse('更新跟单配置失败', 500)
+        logger.error('Failed to update copy trade config', error)
+        return createErrorResponse('Failed to update copy trade config', 500)
       }
 
       return NextResponse.json({ config: data })
@@ -117,8 +117,8 @@ export const POST = withApiMiddleware(
       .single()
 
     if (error) {
-      logger.error('创建跟单配置失败', error)
-      return createErrorResponse('创建跟单配置失败', 500)
+      logger.error('Failed to create copy trade config', error)
+      return createErrorResponse('Failed to create copy trade config', 500)
     }
 
     return NextResponse.json({ config: data })
@@ -133,12 +133,12 @@ export const POST = withApiMiddleware(
 export const DELETE = withApiMiddleware(
   async ({ user, supabase, request }) => {
     if (!user) {
-      return createErrorResponse('未授权', 401)
+      return createErrorResponse('Unauthorized', 401)
     }
 
     const id = request.nextUrl.searchParams.get('id')
     if (!id) {
-      return createErrorResponse('缺少 id 参数', 400)
+      return createErrorResponse('Missing id parameter', 400)
     }
 
     const { error } = await supabase
@@ -148,8 +148,8 @@ export const DELETE = withApiMiddleware(
       .eq('user_id', user.id)
 
     if (error) {
-      logger.error('删除跟单配置失败', error)
-      return createErrorResponse('删除跟单配置失败', 500)
+      logger.error('Failed to delete copy trade config', error)
+      return createErrorResponse('Failed to delete copy trade config', 500)
     }
 
     return NextResponse.json({ success: true })
