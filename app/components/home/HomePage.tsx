@@ -22,7 +22,6 @@ import type { InitialTrader } from '@/lib/getInitialTraders'
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
-// MarketOverviewBar moved to /market page
 
 interface HomePageProps {
   initialTraders?: InitialTrader[]

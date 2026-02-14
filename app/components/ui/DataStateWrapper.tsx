@@ -12,7 +12,7 @@ interface EmptyAction {
   variant?: 'primary' | 'secondary'
 }
 
-interface DataStateWrapperProps {
+interface DataStateWrapperProps<T = unknown> {
   // 兼容旧 API
   isLoading?: boolean
   error?: Error | string | null | undefined
@@ -25,8 +25,8 @@ interface DataStateWrapperProps {
   
   // 新增的增强属性
   loading?: boolean  // 备用的加载状态名
-  data?: any
-  customIsEmpty?: (data: any) => boolean
+  data?: T
+  customIsEmpty?: (data: T) => boolean
   loadingType?: 'card' | 'list' | 'table' | 'trader' | 'ranking' | 'text'
   loadingCount?: number
   showRetry?: boolean

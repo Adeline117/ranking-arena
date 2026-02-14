@@ -9,7 +9,6 @@ import ErrorBoundary from '@/app/components/error/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 
-const _SentimentBar = lazy(() => import('@/app/components/market/SentimentBar'))
 const CoreCards = lazy(() => import('@/app/components/market/CoreCards'))
 const SectorTreemap = lazy(() => import('@/app/components/market/SectorTreemap'))
 const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))

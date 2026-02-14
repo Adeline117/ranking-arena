@@ -115,7 +115,7 @@ export const PostCard = memo(function PostCard({
         }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
-            <LevelBadge exp={(post as any).author_exp || 0} size="sm" />
+            <LevelBadge exp={post.author_exp || 0} size="sm" />
           </span>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
@@ -179,7 +179,7 @@ export const PostCard = memo(function PostCard({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
-          <LevelBadge exp={(post as any).author_exp || 0} size="sm" />
+          <LevelBadge exp={post.author_exp || 0} size="sm" />
         </span>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
