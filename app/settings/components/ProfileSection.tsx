@@ -213,6 +213,7 @@ export const ProfileSection = React.memo(function ProfileSection({
           onChange={(e) => setHandle(e.target.value.slice(0, MAX_HANDLE_LENGTH))}
           onBlur={markTouched}
           placeholder={t('setUsername')}
+          autoComplete="username"
           style={getInputStyle(touchedHandle && !handleValidation.valid)}
         />
         <Box style={{ display: 'flex', justifyContent: 'space-between', marginTop: tokens.spacing[1] }}>

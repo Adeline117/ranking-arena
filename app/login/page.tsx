@@ -974,6 +974,8 @@ export default function LoginPage() {
             }}
             onBlur={() => markTouched('email')}
             disabled={codeVerified}
+            autoComplete="email"
+            autoFocus
           />
           {touchedFields.email && email && !emailValidation.valid && (
             <div style={{ marginTop: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1034,6 +1036,8 @@ export default function LoginPage() {
                       textAlign: 'center',
                     }}
                     placeholder="000000"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     onKeyDown={(e) => {
@@ -1122,6 +1126,7 @@ export default function LoginPage() {
                     value={handle}
                     onChange={(e) => setHandle(e.target.value)}
                     onBlur={() => markTouched('handle')}
+                    autoComplete="username"
                   />
                   {touchedFields.handle && handle && !handleValidation.valid && (
                     <div style={{ marginTop: 6, fontSize: 12 }}>
@@ -1154,6 +1159,7 @@ export default function LoginPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       onBlur={() => markTouched('password')}
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
@@ -1271,6 +1277,7 @@ export default function LoginPage() {
                           handleLogin()
                         }
                       }}
+                      autoComplete="current-password"
                     />
                     <button
                       type="button"
@@ -1413,6 +1420,8 @@ export default function LoginPage() {
                           textAlign: 'center',
                         }}
                         placeholder="000000"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
                         value={code}
                         onChange={(e) => setCode(e.target.value)}
                         onKeyDown={(e) => {
