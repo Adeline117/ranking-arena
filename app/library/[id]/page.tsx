@@ -13,7 +13,6 @@ import { usePremium } from '@/lib/premium/hooks'
 import StarRating from '@/app/components/ui/StarRating'
 import BookCover from '../BookCover'
 import ShareButton from '@/app/components/common/ShareButton'
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
 import AddToCollectionButton from '@/app/components/features/AddToCollectionButton'
 import { logger } from '@/lib/logger'
 
@@ -577,6 +576,9 @@ export default function BookDetailPage() {
               />
 
               {/* Add to Collection */}
+              {session && (
+                <AddToCollectionButton itemType="book" itemId={book.id} />
+              )}
             </div>
 
             {/* User rating - show for all logged in users */}

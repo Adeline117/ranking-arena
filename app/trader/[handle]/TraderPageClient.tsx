@@ -145,7 +145,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
   const loading = swrLoading && !serverData
 
   // Phase 3B: useTransition for non-urgent tab switches
-  const [, startTransition] = useTransition()
+  const [isTabPending, startTransition] = useTransition()
 
   const [showAlertConfig, setShowAlertConfig] = useState(false)
 
