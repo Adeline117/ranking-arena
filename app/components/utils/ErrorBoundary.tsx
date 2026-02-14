@@ -15,6 +15,8 @@ interface Props {
   showDetails?: boolean
   /** 错误边界的级别 */
   level?: 'page' | 'section' | 'component'
+  /** 页面类型标识（用于 Sentry 标签等） */
+  pageType?: string
 }
 
 interface State {
@@ -427,3 +429,5 @@ export function withErrorBoundary<P extends object>(
     )
   }
 }
+
+export default ErrorBoundary
