@@ -73,7 +73,7 @@ export const ScoreRadar = memo(function ScoreRadar({
   ]
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible' }}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Score radar: ${isZh ? '收益' : 'Profit'} ${profitability}/35, ${isZh ? '风控' : 'Risk'} ${riskControl}/40, ${isZh ? '执行' : 'Exec'} ${execution}/25`} style={{ overflow: 'visible' }}>
       {/* Grid */}
       {gridPaths.map((d, i) => (
         <path key={i} d={d} fill="none" stroke="var(--color-border-secondary)" strokeWidth={0.5} opacity={0.5} />
