@@ -42,6 +42,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Only HTTP/HTTPS URLs are allowed' }, { status: 400 })
     }
 
+    // SSRF protection: block internal/private IPs and cloud metadata endpoints
+    const hostname = validUrl.hostname.toLowerCase()
+    const blockedHostnames = ['localhost', '0.0.0.0', '[::1]', 'metadata.google.internal']
+    if (blockedHostnames.includes(hostname)) {
+      return NextResponse.json({ error: 'URL not allowed' }, { status: 400 })
+    }
+
+    // Block private/reserved IP ranges
+    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+    if (ipv4Match) {
+      const [, a, b] = ipv4Match.map(Number)
+      if (
+        a === 127 ||                          // 127.0.0.0/8 loopback
+        a === 10 ||                           // 10.0.0.0/8 private
+        (a === 172 && b >= 16 && b <= 31) ||  // 172.16.0.0/12 private
+        (a === 192 && b === 168) ||           // 192.168.0.0/16 private
+        (a === 169 && b === 254) ||           // 169.254.0.0/16 link-local + cloud metadata
+        a === 0                               // 0.0.0.0/8
+      ) {
+        return NextResponse.json({ error: 'URL not allowed' }, { status: 400 })
+      }
+    }
+
     // 获取 HTML
     const response = await fetch(url, {
       headers: {
@@ -73,9 +96,8 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Error fetching link preview:', error)
-    const message = error instanceof Error ? error.message : 'Failed to fetch link preview'
     return NextResponse.json(
-      { error: message },
+      { error: 'Failed to fetch link preview' },
       { status: 500 }
     )
   }
