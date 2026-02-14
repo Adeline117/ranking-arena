@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const post = await getPostById(supabase, id)
     if (!post) {
-      return notFound('帖子不存在')
+      return notFound('Post not found')
     }
 
     // 增加浏览次数（使用原子操作，不阻塞响应）

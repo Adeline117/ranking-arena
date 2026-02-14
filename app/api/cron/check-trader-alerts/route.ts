@@ -33,7 +33,7 @@ function getSupabaseAdmin() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!url || !serviceKey) {
-    throw new Error('Supabase 环境变量未配置')
+    throw new Error('Supabase environment variables not configured')
   }
 
   return createClient(url, serviceKey, {
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
       .limit(MAX_ALERTS_PER_RUN)
 
     if (alertsError) {
-      logger.error('[TraderAlerts Cron] 获取提醒配置失败:', alertsError)
+      logger.error('[TraderAlerts Cron] 获取提醒配置Failed:', alertsError)
       return NextResponse.json({ ok: false, error: alertsError.message }, { status: 500 })
     }
 
@@ -145,7 +145,7 @@ export async function POST(req: Request) {
       .in('source_trader_id', traderIds)
 
     if (tradersError) {
-      logger.error('[TraderAlerts Cron] 获取交易员数据失败:', tradersError)
+      logger.error('[TraderAlerts Cron] 获取交易员数据Failed:', tradersError)
       return NextResponse.json({ ok: false, error: tradersError.message }, { status: 500 })
     }
 
@@ -162,7 +162,7 @@ export async function POST(req: Request) {
       .limit(MAX_ALERTS_PER_RUN)
 
     if (snapshotsError) {
-      logger.error('[TraderAlerts Cron] 获取快照失败:', snapshotsError)
+      logger.error('[TraderAlerts Cron] 获取快照Failed:', snapshotsError)
       // 继续执行，可能是第一次运行
     }
 
@@ -208,7 +208,7 @@ export async function POST(req: Request) {
         })
 
       if (insertError) {
-        logger.error('[TraderAlerts Cron] 保存快照失败:', insertError)
+        logger.error('[TraderAlerts Cron] 保存快照Failed:', insertError)
       }
     }
 
@@ -258,7 +258,7 @@ export async function POST(req: Request) {
             trader_id: alert.trader_id,
             type: 'trader_alert',
             title: 'ROI 变动提醒',
-            message: `交易员 ${alert.trader_id} ROI ${direction} ${change.toFixed(2)}%（${prevSnapshot.roi_90d.toFixed(2)}% → ${currentData.roi.toFixed(2)}%）`,
+            message: `Trader ${alert.trader_id} ROI ${direction} ${change.toFixed(2)}%（${prevSnapshot.roi_90d.toFixed(2)}% → ${currentData.roi.toFixed(2)}%）`,
             link: `/trader/${encodeURIComponent(alert.trader_id)}`,
           })
 
@@ -285,7 +285,7 @@ export async function POST(req: Request) {
             trader_id: alert.trader_id,
             type: 'trader_alert',
             title: '回撤预警',
-            message: `交易员 ${alert.trader_id} 最大回撤达到 ${drawdown.toFixed(2)}%`,
+            message: `Trader ${alert.trader_id} max drawdown reached ${drawdown.toFixed(2)}%`,
             link: `/trader/${encodeURIComponent(alert.trader_id)}`,
           })
 
@@ -296,7 +296,7 @@ export async function POST(req: Request) {
             alert_type: 'drawdown',
             old_value: prevSnapshot.max_drawdown,
             new_value: currentData.max_drawdown,
-            message: `回撤达到 ${drawdown.toFixed(2)}%`,
+            message: `Drawdown reached ${drawdown.toFixed(2)}%`,
           })
         }
       }
@@ -311,7 +311,7 @@ export async function POST(req: Request) {
             trader_id: alert.trader_id,
             type: 'trader_alert',
             title: 'Arena Score 变动',
-            message: `交易员 ${alert.trader_id} Arena Score ${direction} ${change.toFixed(1)} 分（${prevSnapshot.arena_score.toFixed(1)} → ${currentData.arena_score.toFixed(1)}）`,
+            message: `Trader ${alert.trader_id} Arena Score ${direction} ${change.toFixed(1)} pts (${prevSnapshot.arena_score.toFixed(1)} → ${currentData.arena_score.toFixed(1)}）`,
             link: `/trader/${encodeURIComponent(alert.trader_id)}`,
           })
 
@@ -336,7 +336,7 @@ export async function POST(req: Request) {
         .insert(alertLogsToInsert)
 
       if (logsError) {
-        logger.error('[TraderAlerts Cron] 批量保存日志失败:', logsError)
+        logger.error('[TraderAlerts Cron] 批量保存日志Failed:', logsError)
       }
     }
 
@@ -361,7 +361,7 @@ export async function POST(req: Request) {
         .insert(historyToInsert)
 
       if (historyError) {
-        logger.error('[TraderAlerts Cron] 保存 alert_history 失败:', historyError)
+        logger.error('[TraderAlerts Cron] 保存 alert_history Failed:', historyError)
       }
     }
 
@@ -401,7 +401,7 @@ export async function POST(req: Request) {
         .insert(notifications)
 
       if (notifyError) {
-        logger.error('[TraderAlerts Cron] 发送通知失败:', notifyError)
+        logger.error('[TraderAlerts Cron] 发送通知Failed:', notifyError)
       } else {
         alertsSent = alertsToSend.length
       }
@@ -420,7 +420,7 @@ export async function POST(req: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error: unknown) {
-    logger.error('[TraderAlerts Cron] 执行失败:', error)
+    logger.error('[TraderAlerts Cron] 执行Failed:', error)
     return NextResponse.json(
       {
         ok: false,

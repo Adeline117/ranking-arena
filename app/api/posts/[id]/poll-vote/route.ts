@@ -102,7 +102,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const optionIndexes: number[] = body.optionIndexes
 
     if (!Array.isArray(optionIndexes) || optionIndexes.length === 0) {
-      throw new Error('请选择至少一个选项')
+      throw new Error('Please select at least one option')
     }
 
     // 获取投票信息
@@ -113,25 +113,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (pollError || !poll) {
-      throw new Error('投票不存在')
+      throw new Error('Poll not found')
     }
 
     // 检查是否已过期
     if (poll.end_at && new Date(poll.end_at) <= new Date()) {
-      throw new Error('投票已结束')
+      throw new Error('Poll has ended')
     }
 
     // 检查选项索引是否有效
     const optionsCount = poll.options.length
     for (const idx of optionIndexes) {
       if (idx < 0 || idx >= optionsCount) {
-        throw new Error('无效的选项')
+        throw new Error('Invalid option')
       }
     }
 
     // 单选投票只能选一个
     if (poll.type === 'single' && optionIndexes.length > 1) {
-      throw new Error('单选投票只能选择一个选项')
+      throw new Error('Single-choice poll allows only one option')
     }
 
     // 删除现有投票
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .insert(newVotes)
 
     if (insertError) {
-      throw new Error('投票失败: ' + insertError.message)
+      throw new Error('Vote failed: ' + insertError.message)
     }
 
     // Recount votes from poll_votes table (source of truth) to avoid race conditions.
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (updateError) {
-      logger.error('更新投票计数失败:', updateError)
+      logger.error('更新投票计数Failed:', updateError)
       return success({
         poll: {
           id: poll.id,

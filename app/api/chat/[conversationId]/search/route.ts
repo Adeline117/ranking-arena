@@ -20,7 +20,7 @@ export async function GET(
     // Authenticate user
     const user = await getAuthUser(request)
     if (!user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -34,7 +34,7 @@ export async function GET(
     const toDate = searchParams.get('to') // optional: filter end date
 
     if (!query || query.trim().length === 0) {
-      return NextResponse.json({ error: '搜索关键词不能为空' }, { status: 400 })
+      return NextResponse.json({ error: 'Search query cannot be empty' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
@@ -94,7 +94,7 @@ export async function GET(
 
     if (searchError) {
       logger.error('[Chat Search] Query error:', searchError)
-      return NextResponse.json({ error: '搜索失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Search failed' }, { status: 500 })
     }
 
     // Determine if there's a next page
@@ -134,6 +134,6 @@ export async function GET(
     })
   } catch (error: unknown) {
     logger.error('[Chat Search] Error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

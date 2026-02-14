@@ -99,13 +99,13 @@ export async function POST(request: NextRequest) {
     const source = validateString(body.source, { required: true, fieldName: 'source' })
 
     if (!trader_id || !source) {
-      return handleError(new Error('缺少必填参数'), 'avoid-list POST')
+      return handleError(new Error('Missing required parameters'), 'avoid-list POST')
     }
 
     // 检查是否已投票
     const alreadyVoted = await hasUserVoted(supabase, user.id, trader_id, source)
     if (alreadyVoted) {
-      return handleError(new Error('您已经对该交易员投过避雷票'), 'avoid-list POST')
+      return handleError(new Error('You have already voted to avoid this trader'), 'avoid-list POST')
     }
 
     const reason = validateString(body.reason, { maxLength: 1000 })

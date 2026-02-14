@@ -31,11 +31,11 @@ export async function GET(
     const { handle } = await params
     
     if (!handle) {
-      return NextResponse.json({ error: '缺少 handle 参数' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing handle parameter' }, { status: 400 })
     }
 
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return NextResponse.json({ error: '服务器配置错误' }, { status: 500 })
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -49,7 +49,7 @@ export async function GET(
       .single()
 
     if (traderError || !trader) {
-      return NextResponse.json({ error: '交易员不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
     }
 
     const { source, source_trader_id } = trader
@@ -177,9 +177,9 @@ export async function GET(
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
     return response
   } catch (error: unknown) {
-    logger.error('[API] 交易员聚合数据获取失败:', error)
+    logger.error('[API] 交易员聚合数据获取Failed:', error)
     return NextResponse.json(
-      { error: '服务器错误' },
+      { error: 'Server error' },
       { status: 500 }
     )
   }

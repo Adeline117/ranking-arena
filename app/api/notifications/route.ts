@@ -58,12 +58,12 @@ export async function PUT(request: NextRequest) {
 
     if (mark_all) {
       await markAllNotificationsAsRead(supabase, user.id)
-      return success({ message: '已标记所有通知为已读' })
+      return success({ message: 'All notifications marked as read' })
     } else if (notification_id) {
       await markNotificationAsRead(supabase, notification_id, user.id)
-      return success({ message: '已标记为已读' })
+      return success({ message: 'Marked as read' })
     } else {
-      return handleError(new Error('请提供 notification_id 或设置 mark_all 为 true'), 'notifications PUT')
+      return handleError(new Error('Please provide notification_id or set mark_all to true'), 'notifications PUT')
     }
   } catch (error: unknown) {
     return handleError(error, 'notifications PUT')
@@ -79,11 +79,11 @@ export async function DELETE(request: NextRequest) {
     const notification_id = validateString(body.notification_id)
 
     if (!notification_id) {
-      return handleError(new Error('请提供 notification_id'), 'notifications DELETE')
+      return handleError(new Error('Please provide notification_id'), 'notifications DELETE')
     }
 
     await deleteNotification(supabase, notification_id, user.id)
-    return success({ message: '已删除通知' })
+    return success({ message: 'Notification deleted' })
   } catch (error: unknown) {
     return handleError(error, 'notifications DELETE')
   }

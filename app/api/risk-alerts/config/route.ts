@@ -34,7 +34,7 @@ export const GET = withAuth(
     if (!hasFeatureAccess(tier, 'trader_alerts')) {
       return NextResponse.json({
         success: false,
-        error: '此功能需要 Pro 会员',
+        error: 'Pro membership required',
         requiresPro: true,
         defaultThresholds: DEFAULT_THRESHOLDS,
       }, { status: 403 })
@@ -57,10 +57,10 @@ export const GET = withAuth(
         },
       })
     } catch (error: unknown) {
-      logger.error('[risk-alerts/config] 获取配置失败:', error)
+      logger.error('[risk-alerts/config] 获取配置Failed:', error)
       return NextResponse.json({
         success: false,
-        error: '获取配置失败',
+        error: 'Failed to fetch config',
       }, { status: 500 })
     }
   },
@@ -77,7 +77,7 @@ export const POST = withAuth(
     if (!traderId || !alertType) {
       return NextResponse.json({
         success: false,
-        error: '缺少必要参数: traderId, alertType',
+        error: 'Missing required parameters: traderId, alertType',
       }, { status: 400 })
     }
 
@@ -85,7 +85,7 @@ export const POST = withAuth(
     if (!validAlertTypes.includes(alertType)) {
       return NextResponse.json({
         success: false,
-        error: '无效的预警类型',
+        error: 'Invalid alert type',
       }, { status: 400 })
     }
 
@@ -101,7 +101,7 @@ export const POST = withAuth(
     if (!hasFeatureAccess(tier, 'trader_alerts')) {
       return NextResponse.json({
         success: false,
-        error: '此功能需要 Pro 会员',
+        error: 'Pro membership required',
         requiresPro: true,
       }, { status: 403 })
     }
@@ -125,10 +125,10 @@ export const POST = withAuth(
         data: config,
       })
     } catch (error: unknown) {
-      logger.error('[risk-alerts/config] 创建配置失败:', error)
+      logger.error('[risk-alerts/config] 创建配置Failed:', error)
       return NextResponse.json({
         success: false,
-        error: '创建配置失败',
+        error: 'Failed to create config',
       }, { status: 500 })
     }
   },
@@ -145,7 +145,7 @@ export const DELETE = withAuth(
     if (!traderId || !alertType) {
       return NextResponse.json({
         success: false,
-        error: '缺少必要参数: traderId, alertType',
+        error: 'Missing required parameters: traderId, alertType',
       }, { status: 400 })
     }
 
@@ -161,7 +161,7 @@ export const DELETE = withAuth(
     if (!hasFeatureAccess(tier, 'trader_alerts')) {
       return NextResponse.json({
         success: false,
-        error: '此功能需要 Pro 会员',
+        error: 'Pro membership required',
         requiresPro: true,
       }, { status: 403 })
     }
@@ -174,10 +174,10 @@ export const DELETE = withAuth(
         success: true,
       })
     } catch (error: unknown) {
-      logger.error('[risk-alerts/config] 删除配置失败:', error)
+      logger.error('[risk-alerts/config] 删除配置Failed:', error)
       return NextResponse.json({
         success: false,
-        error: '删除配置失败',
+        error: 'Failed to delete config',
       }, { status: 500 })
     }
   },

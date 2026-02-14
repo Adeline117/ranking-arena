@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -23,24 +23,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // Check actor's role
     const actorRole = await getGroupRole(supabase, user.id, groupId)
     if (!canManageMembers(actorRole)) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // Check target's role - cannot ban the owner
     const targetRole = await getGroupRole(supabase, targetUserId, groupId)
     if (targetRole === 'owner') {
-      return NextResponse.json({ error: '不能封禁组长' }, { status: 403 })
+      return NextResponse.json({ error: 'Cannot ban the group owner' }, { status: 403 })
     }
 
     // Admin cannot ban other admins
     if (actorRole === 'admin' && targetRole === 'admin') {
-      return NextResponse.json({ error: '管理员不能封禁其他管理员' }, { status: 403 })
+      return NextResponse.json({ error: 'Admins cannot ban other admins' }, { status: 403 })
     }
 
     const body = await request.json().catch(() => ({}))
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (banError) {
       logger.error('Ban insert error:', banError)
-      return NextResponse.json({ error: '封禁失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Ban failed' }, { status: 500 })
     }
 
     // Remove from group_members
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     logger.error('Ban user error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -119,7 +119,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -127,13 +127,13 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // Check actor's role
     const actorRole = await getGroupRole(supabase, user.id, groupId)
     if (!canManageMembers(actorRole)) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // Remove from group_bans
@@ -145,7 +145,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     if (unbanError) {
       logger.error('Unban error:', unbanError)
-      return NextResponse.json({ error: '解除封禁失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to unban' }, { status: 500 })
     }
 
     // Log to group_audit_log (fire-and-forget)
@@ -160,6 +160,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     logger.error('Unban user error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json(
-        { error: '请先登录' },
+        { error: 'Please log in first' },
         { status: 401 }
       )
     }
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: '登录已过期，请重新登录' },
+        { error: 'Session expired, please log in again' },
         { status: 401 }
       )
     }
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     // 验证参数
     if (!post_id) {
       return NextResponse.json(
-        { error: '缺少 post_id 参数' },
+        { error: 'Missing post_id parameter' },
         { status: 400 }
       )
     }
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     const amount = Number(amount_cents)
     if (!amount || amount < 100 || amount > 50000) {
       return NextResponse.json(
-        { error: '打赏金额无效（$1 - $500）' },
+        { error: 'Invalid tip amount ($1 - $500)' },
         { status: 400 }
       )
     }
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     if (recentPendingTip) {
       return NextResponse.json(
-        { error: '请勿重复打赏，请稍后再试' },
+        { error: 'Duplicate tip detected, please try again later' },
         { status: 429 }
       )
     }
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     if (postError || !post) {
       return NextResponse.json(
-        { error: '帖子不存在' },
+        { error: 'Post not found' },
         { status: 404 }
       )
     }
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     // 不能给自己打赏
     if (post.author_id === user.id) {
       return NextResponse.json(
-        { error: '不能给自己的帖子打赏' },
+        { error: 'Cannot tip your own post' },
         { status: 400 }
       )
     }
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
     if (tipError) {
       logger.error('[Tip Checkout] Insert error:', tipError)
       return NextResponse.json(
-        { error: '创建打赏记录失败' },
+        { error: 'Failed to create tip record' },
         { status: 500 }
       )
     }
@@ -175,8 +175,8 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: `打赏 @${post.author_handle || 'user'}`,
-              description: post.title ? `帖子: ${post.title.slice(0, 50)}` : '感谢创作者',
+              name: `Tip @${post.author_handle || 'user'}`,
+              description: post.title ? `Post: ${post.title.slice(0, 50)}` : 'Thank the creator',
             },
             unit_amount: amount,
           },
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
     
     if (message.includes('STRIPE_SECRET_KEY')) {
       return NextResponse.json(
-        { error: '支付系统未配置，请联系管理员' },
+        { error: 'Payment system not configured, please contact admin' },
         { status: 503 }
       )
     }

@@ -67,17 +67,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (folderError || !folder) {
-      return success({ error: '收藏夹不存在' }, 404)
+      return success({ error: 'Folder not found' }, 404)
     }
 
     // 不能订阅自己的收藏夹
     if (folder.user_id === user.id) {
-      return success({ error: '不能收藏自己的收藏夹' }, 400)
+      return success({ error: 'Cannot subscribe to your own folder' }, 400)
     }
 
     // 只能订阅公开的收藏夹
     if (!folder.is_public) {
-      return success({ error: '该收藏夹不是公开的' }, 403)
+      return success({ error: 'This folder is not public' }, 403)
     }
 
     // 检查是否已订阅
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (existing) {
-      return success({ error: '已经收藏过此收藏夹' }, 409)
+      return success({ error: 'Already subscribed to this folder' }, 409)
     }
 
     // 创建订阅
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     return success({
-      message: '收藏成功',
+      message: 'Subscribed successfully',
       is_subscribed: true,
       subscriber_count: subscriberCount,
     }, 201)
@@ -142,7 +142,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       .single()
 
     if (findError || !subscription) {
-      return success({ error: '未收藏此收藏夹' }, 404)
+      return success({ error: 'Not subscribed to this folder' }, 404)
     }
 
     // 删除订阅
@@ -169,7 +169,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     return success({
-      message: '已取消收藏',
+      message: 'Unsubscribed successfully',
       is_subscribed: false,
       subscriber_count: subscriberCount,
     })

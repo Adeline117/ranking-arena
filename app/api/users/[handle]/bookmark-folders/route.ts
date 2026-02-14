@@ -33,7 +33,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .single()
 
     if (profileError || !userProfile) {
-      return success({ error: '用户不存在', folders: [] }, 404)
+      return success({ error: 'User not found', folders: [] }, 404)
     }
 
     const isOwnProfile = currentUser?.id === userProfile.id

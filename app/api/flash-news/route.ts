@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (!userProfile || userProfile.role !== 'admin') {
-      return error('权限不足', 403)
+      return error('Insufficient permissions', 403)
     }
 
     const body = await request.json()
@@ -161,19 +161,19 @@ export async function POST(request: NextRequest) {
     })
 
     if (!title || !source) {
-      return error('标题和来源为必填字段', 400)
+      return error('Title and source are required', 400)
     }
 
     // 验证分类 — support both legacy and new category values
     const validCategories = ['crypto', 'macro', 'defi', 'regulation', 'market', 'btc_eth', 'altcoin', 'exchange']
     if (newsItem.category && !validCategories.includes(newsItem.category)) {
-      return error('无效的分类', 400)
+      return error('Invalid category', 400)
     }
 
     // 验证重要性
     const validImportance = ['breaking', 'important', 'normal']
     if (newsItem.importance && !validImportance.includes(newsItem.importance)) {
-      return error('无效的重要性等级', 400)
+      return error('Invalid importance level', 400)
     }
 
     const newsData = {
@@ -196,8 +196,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) {
-      logger.error('[flash-news] 创建失败:', insertError)
-      return error('创建快讯失败', 500)
+      logger.error('[flash-news] 创建Failed:', insertError)
+      return error('Failed to create flash news', 500)
     }
 
     return success({ news: data, created: true })
@@ -227,14 +227,14 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (!userProfile || userProfile.role !== 'admin') {
-      return error('权限不足', 403)
+      return error('Insufficient permissions', 403)
     }
 
     const { searchParams } = new URL(request.url)
     const newsId = searchParams.get('id')
 
     if (!newsId) {
-      return error('缺少快讯 ID', 400)
+      return error('Missing flash news ID', 400)
     }
 
     const body = await request.json()
@@ -250,7 +250,7 @@ export async function PUT(request: NextRequest) {
         fieldName: 'title',
       })
       if (!title) {
-        return error('标题无效', 400)
+        return error('Invalid title', 400)
       }
       updateData.title = title
     }
@@ -265,7 +265,7 @@ export async function PUT(request: NextRequest) {
     if (newsItem.category) {
       const validCategories = ['crypto', 'macro', 'defi', 'regulation', 'market', 'btc_eth', 'altcoin', 'exchange']
       if (!validCategories.includes(newsItem.category)) {
-        return error('无效的分类', 400)
+        return error('Invalid category', 400)
       }
       updateData.category = newsItem.category
     }
@@ -273,7 +273,7 @@ export async function PUT(request: NextRequest) {
     if (newsItem.importance) {
       const validImportance = ['breaking', 'important', 'normal']
       if (!validImportance.includes(newsItem.importance)) {
-        return error('无效的重要性等级', 400)
+        return error('Invalid importance level', 400)
       }
       updateData.importance = newsItem.importance
     }
@@ -286,8 +286,8 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (updateError) {
-      logger.error('[flash-news] 更新失败:', updateError)
-      return error('更新快讯失败', 500)
+      logger.error('[flash-news] 更新Failed:', updateError)
+      return error('Failed to update flash news', 500)
     }
 
     return success({ news: data, updated: true })
@@ -313,14 +313,14 @@ export async function DELETE(request: NextRequest) {
       .single()
 
     if (!userProfile || userProfile.role !== 'admin') {
-      return error('权限不足', 403)
+      return error('Insufficient permissions', 403)
     }
 
     const { searchParams } = new URL(request.url)
     const newsId = searchParams.get('id')
 
     if (!newsId) {
-      return error('缺少快讯 ID', 400)
+      return error('Missing flash news ID', 400)
     }
 
     const { error: deleteError } = await supabase
@@ -329,8 +329,8 @@ export async function DELETE(request: NextRequest) {
       .eq('id', newsId)
 
     if (deleteError) {
-      logger.error('[flash-news] 删除失败:', deleteError)
-      return error('删除快讯失败', 500)
+      logger.error('[flash-news] 删除Failed:', deleteError)
+      return error('Failed to delete flash news', 500)
     }
 
     return success({ deleted: true })

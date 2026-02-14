@@ -18,24 +18,24 @@ export async function POST(req: Request) {
     const supabase = getSupabase()
     const authHeader = req.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Please log in first' }, { status: 401 })
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.slice(7))
     if (authError || !user) {
-      return NextResponse.json({ error: '认证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     const { content_type, content_id, reason, description } = await req.json()
 
     if (!VALID_TYPES.includes(content_type)) {
-      return NextResponse.json({ error: '无效的内容类型' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid content type' }, { status: 400 })
     }
     if (!VALID_REASONS.includes(reason)) {
-      return NextResponse.json({ error: '无效的举报原因' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid report reason' }, { status: 400 })
     }
     if (!content_id) {
-      return NextResponse.json({ error: '缺少内容ID' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing content ID' }, { status: 400 })
     }
 
     // Check duplicate report
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (existing) {
-      return NextResponse.json({ error: '你已举报过该内容' }, { status: 409 })
+      return NextResponse.json({ error: 'You have already reported this content' }, { status: 409 })
     }
 
     const { error } = await supabase
@@ -63,11 +63,11 @@ export async function POST(req: Request) {
       })
 
     if (error) {
-      return NextResponse.json({ error: '提交失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Submission failed' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (_err) {
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

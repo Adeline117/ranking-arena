@@ -29,7 +29,7 @@ export const GET = withAuth(
     if (!hasFeatureAccess(tier, 'trader_alerts')) {
       return NextResponse.json({
         success: false,
-        error: '此功能需要 Pro 会员',
+        error: 'Pro membership required',
         requiresPro: true,
       }, { status: 403 })
     }
@@ -46,10 +46,10 @@ export const GET = withAuth(
         },
       })
     } catch (error: unknown) {
-      logger.error('[risk-alerts] 获取预警失败:', error)
+      logger.error('[risk-alerts] 获取预警Failed:', error)
       return NextResponse.json({
         success: false,
-        error: '获取预警失败',
+        error: 'Failed to fetch alerts',
       }, { status: 500 })
     }
   },
@@ -74,7 +74,7 @@ export const POST = withAuth(
     if (!hasFeatureAccess(tier, 'trader_alerts')) {
       return NextResponse.json({
         success: false,
-        error: '此功能需要 Pro 会员',
+        error: 'Pro membership required',
         requiresPro: true,
       }, { status: 403 })
     }
@@ -89,7 +89,7 @@ export const POST = withAuth(
       } else {
         return NextResponse.json({
           success: false,
-          error: '需要提供 alertId 或 markAll',
+          error: 'Please provide alertId or markAll',
         }, { status: 400 })
       }
 
@@ -97,10 +97,10 @@ export const POST = withAuth(
         success: true,
       })
     } catch (error: unknown) {
-      logger.error('[risk-alerts] 标记预警失败:', error)
+      logger.error('[risk-alerts] 标记预警Failed:', error)
       return NextResponse.json({
         success: false,
-        error: '标记预警失败',
+        error: 'Failed to mark alerts',
       }, { status: 500 })
     }
   },

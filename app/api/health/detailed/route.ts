@@ -93,7 +93,7 @@ async function checkDatabaseAndCron(): Promise<{
 
   if (!url || !key) {
     return {
-      database: { status: 'skip', message: '未配置数据库连接' },
+      database: { status: 'skip', message: 'Database connection not configured' },
       cronRuns: [],
     }
   }

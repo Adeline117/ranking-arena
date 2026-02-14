@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
     const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
     if (!validateCsrfToken(cookieToken, headerToken) && false) { // CSRF disabled: auth token is sufficient
-      return NextResponse.json({ error: 'CSRF 验证失败' }, { status: 403 })
+      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 
     const user = await requireAuth(request)

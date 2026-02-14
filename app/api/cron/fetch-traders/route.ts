@@ -41,7 +41,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: true,
-    message: 'Cron 端点正常',
+    message: 'Cron endpoint healthy',
     platforms,
     config: {
       hasSupabaseUrl: !!url,
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     if (!url || !serviceKey) {
       return NextResponse.json(
         {
-          error: 'Supabase 环境变量缺失',
+          error: 'Supabase environment variables missing',
           missing: { url: !url, serviceKey: !serviceKey },
         },
         { status: 500 }
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
     if (platforms.length === 0) {
       return NextResponse.json(
         {
-          error: '无有效平台',
+          error: 'No valid platforms',
           supported: getSupportedPlatforms(),
         },
         { status: 400 }

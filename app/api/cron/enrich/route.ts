@@ -377,15 +377,15 @@ async function handleEnrichment(req: Request) {
     // Send alert (rate limited to 1 per 10 minutes per platform)
     await sendRateLimitedAlert(
       {
-        title: 'Enrichment 失败率过高',
-        message: `${period} 周期 enrichment 失败率 ${(failureRate * 100).toFixed(0)}%\n失败: ${totalFailed}/${total}`,
+        title: 'Enrichment failure rate过高',
+        message: `${period} period enrichment failure rate ${(failureRate * 100).toFixed(0)}%\nFailed: ${totalFailed}/${total}`,
         level: failureRate > 0.5 ? 'critical' : 'warning',
         details: {
           '周期': period,
           '平台': platforms.join(', '),
           '成功': totalEnriched,
           '失败': totalFailed,
-          '失败率': `${(failureRate * 100).toFixed(1)}%`,
+          'failure rate': `${(failureRate * 100).toFixed(1)}%`,
         },
       },
       `enrichment:${period}`,

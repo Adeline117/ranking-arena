@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getAuthUser(request)
     if (!user) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const body = await request.json()
@@ -20,11 +20,11 @@ export async function POST(request: NextRequest) {
       body?.events
 
     if (!Array.isArray(events) || events.length === 0) {
-      return NextResponse.json({ error: '无效事件数据' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid event data' }, { status: 400 })
     }
 
     if (events.length > 100) {
-      return NextResponse.json({ error: '单次最多100条事件' }, { status: 400 })
+      return NextResponse.json({ error: 'Maximum 100 events per request' }, { status: 400 })
     }
 
     // 验证并构建插入行
@@ -38,20 +38,20 @@ export async function POST(request: NextRequest) {
       }))
 
     if (rows.length === 0) {
-      return NextResponse.json({ error: '无有效事件' }, { status: 400 })
+      return NextResponse.json({ error: 'No valid events' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
     const { error } = await supabase.from('user_activity').insert(rows)
 
     if (error) {
-      logger.error('[activity] 插入失败:', error)
-      return NextResponse.json({ error: '保存失败' }, { status: 500 })
+      logger.error('[activity] 插入Failed:', error)
+      return NextResponse.json({ error: 'Save failed' }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true, count: rows.length })
   } catch (err) {
     logger.error('[activity] 请求异常:', err)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

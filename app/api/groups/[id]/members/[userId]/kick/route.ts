@@ -13,7 +13,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -21,12 +21,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // Cannot kick yourself
     if (user.id === targetUserId) {
-      return NextResponse.json({ error: '不能踢出自己' }, { status: 400 })
+      return NextResponse.json({ error: 'Cannot kick yourself' }, { status: 400 })
     }
 
     // Check requester's role
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .maybeSingle()
 
     if (!requesterMembership || (requesterMembership.role !== 'owner' && requesterMembership.role !== 'admin')) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // Check target's role
@@ -50,17 +50,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .maybeSingle()
 
     if (!targetMembership) {
-      return NextResponse.json({ error: '该用户不是小组成员' }, { status: 404 })
+      return NextResponse.json({ error: 'User is not a group member' }, { status: 404 })
     }
 
     // Owner can kick anyone except self (already checked); admin can only kick members
     if (requesterMembership.role === 'admin' && targetMembership.role !== 'member') {
-      return NextResponse.json({ error: '管理员只能踢出普通成员' }, { status: 403 })
+      return NextResponse.json({ error: 'Admins can only kick regular members' }, { status: 403 })
     }
 
     // Cannot kick the owner
     if (targetMembership.role === 'owner') {
-      return NextResponse.json({ error: '不能踢出组长' }, { status: 403 })
+      return NextResponse.json({ error: 'Cannot kick the group owner' }, { status: 403 })
     }
 
     // Remove from group_members
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (deleteError) {
       logger.error('Kick member error:', deleteError)
-      return NextResponse.json({ error: '操作失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Operation failed' }, { status: 500 })
     }
 
     // Atomically decrement member_count to avoid race conditions
@@ -105,8 +105,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .insert({
         user_id: targetUserId,
         type: 'system',
-        title: '您已被移出小组',
-        message: `您已被管理员移出小组`,
+        title: 'You have been removed from the group',
+        message: `You have been removed from the group by admin`,
         link: `/groups/${groupId}`,
         actor_id: user.id,
         reference_id: groupId,
@@ -128,6 +128,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
     logger.error('Kick member error:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

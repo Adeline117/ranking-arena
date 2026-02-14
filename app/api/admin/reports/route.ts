@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ data })
   } catch {
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const { reportId, status, action_taken } = await req.json()
 
     if (!reportId || !['reviewed', 'actioned', 'dismissed'].includes(status)) {
-      return NextResponse.json({ error: '参数错误' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 })
     }
 
     const { error } = await supabase
@@ -50,6 +50,6 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
   } catch {
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

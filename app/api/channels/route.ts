@@ -84,15 +84,15 @@ export async function POST(request: NextRequest) {
     const { name, memberIds, description } = await request.json()
 
     if (!name?.trim()) {
-      return NextResponse.json({ error: '请输入群聊名称' }, { status: 400 })
+      return NextResponse.json({ error: 'Please enter a group name' }, { status: 400 })
     }
 
     if (!memberIds || memberIds.length < 1) {
-      return NextResponse.json({ error: '至少选择1位成员' }, { status: 400 })
+      return NextResponse.json({ error: 'Select at least 1 member' }, { status: 400 })
     }
 
     if (memberIds.length > 50) {
-      return NextResponse.json({ error: '群聊人数不能超过50人' }, { status: 400 })
+      return NextResponse.json({ error: 'Group cannot exceed 50 members' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (channelError) {
-      return NextResponse.json({ error: '创建群聊失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to create group chat' }, { status: 500 })
     }
 
     // Add the creator as owner
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     if (memberError) {
       // Cleanup channel if member insert fails
       await supabase.from('chat_channels').delete().eq('id', channel.id)
-      return NextResponse.json({ error: '添加成员失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
     }
 
     return NextResponse.json({ channel })

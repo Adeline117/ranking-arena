@@ -105,7 +105,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const traderId = await resolveTraderIdByHandle(supabase, handle)
     if (!traderId) {
       return new Response(
-        JSON.stringify({ success: false, error: '交易员不存在' }),
+        JSON.stringify({ success: false, error: 'Trader not found' }),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       )
     }
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // 不能给自己评价
     if (traderId === user.id) {
       return new Response(
-        JSON.stringify({ success: false, error: '不能给自己评价' }),
+        JSON.stringify({ success: false, error: 'Cannot review yourself' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const rating = validateNumber(body.rating, { min: 1, max: 5 })
     if (!rating) {
       return new Response(
-        JSON.stringify({ success: false, error: '评分必须在 1-5 之间' }),
+        JSON.stringify({ success: false, error: 'Rating must be between 1 and 5' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }

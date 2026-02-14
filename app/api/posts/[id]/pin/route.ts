@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (postError || !post) {
-      throw new Error('帖子不存在')
+      throw new Error('Post not found')
     }
 
     // Check authorization: author OR group admin/owner
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (!authorized) {
-      throw new Error('无权置顶此帖子')
+      throw new Error('No permission to pin this post')
     }
 
     // 切换置顶状态
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq('id', postId)
 
     if (updateError) {
-      throw new Error('更新置顶状态失败: ' + updateError.message)
+      throw new Error('Failed to update pin status: ' + updateError.message)
     }
 
     // If pinning, unpin other posts in the same context
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     return success({
       is_pinned: newPinnedState,
-      message: newPinnedState ? '已置顶' : '已取消置顶',
+      message: newPinnedState ? 'Pinned' : 'Unpinned',
     })
   } catch (error: unknown) {
     return handleError(error, 'posts/[id]/pin')

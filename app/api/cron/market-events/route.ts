@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     )
 
     if (!res.ok) {
-      return new Response(JSON.stringify({ error: '获取市场数据失败' }), { status: 502 })
+      return new Response(JSON.stringify({ error: 'Failed to fetch market data' }), { status: 502 })
     }
 
     const coins: CoinMarketData[] = await res.json()
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     )
 
     if (significantMoves.length === 0) {
-      return new Response(JSON.stringify({ message: '无显著市场事件', created: 0 }))
+      return new Response(JSON.stringify({ message: 'No significant market events', created: 0 }))
     }
 
     // 查找默认小组
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
     }
 
     return new Response(
-      JSON.stringify({ message: `创建了 ${created} 个市场讨论帖`, created }),
+      JSON.stringify({ message: `Created ${created} market discussion posts`, created }),
       { headers: { 'Content-Type': 'application/json' } }
     )
   } catch (error: unknown) {

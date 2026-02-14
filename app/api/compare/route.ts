@@ -1,6 +1,6 @@
 /**
  * 交易员对比 API
- * Pro 会员功能：批量获取多个交易员数据用于对比
+ * Pro 会员功能：批量获取多traders allowed for comparison数据用于对比
  */
 
 import { NextRequest } from 'next/server'
@@ -40,7 +40,7 @@ interface TraderCompareData {
 }
 
 /**
- * GET - 获取多个交易员的对比数据
+ * GET - 获取多traders allowed for comparison的对比数据
  * Query params: ids=trader1,trader2,trader3 (最多5个)
  */
 export async function GET(request: NextRequest) {
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'trader_comparison')) {
-      return error('此功能需要 Pro 会员', 403)
+      return error('Pro membership required', 403)
     }
 
     // 检查配额
@@ -75,17 +75,17 @@ export async function GET(request: NextRequest) {
     const idsParam = searchParams.get('ids')
 
     if (!idsParam) {
-      return error('缺少 ids 参数', 400)
+      return error('Missing ids parameter', 400)
     }
 
     const traderIds = idsParam.split(',').map(id => id.trim()).filter(Boolean)
 
     if (traderIds.length === 0) {
-      return error('至少需要一个交易员 ID', 400)
+      return error('At least one trader ID is required', 400)
     }
 
     if (traderIds.length > MAX_TRADERS_TO_COMPARE) {
-      return error(`最多只能对比 ${MAX_TRADERS_TO_COMPARE} 个交易员`, 400)
+      return error(`Maximum ${MAX_TRADERS_TO_COMPARE} traders allowed for comparison`, 400)
     }
 
     // 查询交易员来源信息 (handle, avatar_url)
@@ -95,8 +95,8 @@ export async function GET(request: NextRequest) {
       .in('source_trader_id', traderIds)
 
     if (sourcesError) {
-      logger.error('[compare] 查询 trader_sources 失败:', sourcesError)
-      return error('获取交易员数据失败', 500)
+      logger.error('[compare] 查询 trader_sources Failed:', sourcesError)
+      return error('Failed to fetch trader data', 500)
     }
 
     // 查询交易员快照数据 (performance metrics)
@@ -107,8 +107,8 @@ export async function GET(request: NextRequest) {
       .order('captured_at', { ascending: false })
 
     if (snapshotsError) {
-      logger.error('[compare] 查询 trader_snapshots 失败:', snapshotsError)
-      return error('获取交易员数据失败', 500)
+      logger.error('[compare] 查询 trader_snapshots Failed:', snapshotsError)
+      return error('Failed to fetch trader data', 500)
     }
 
     // Deduplicate snapshots - keep latest per trader

@@ -27,7 +27,7 @@ export async function POST(
     
     const authHeader = request.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未登录' }, { status: 401 })
+      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
     }
 
     const token = authHeader.slice(7)
@@ -35,12 +35,12 @@ export async function POST(
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
-      return NextResponse.json({ error: '身份验证失败' }, { status: 401 })
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
     }
 
     // 检查是否是管理员
     if (!await isAdmin(supabase, user.id)) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     // 获取申请信息
@@ -51,11 +51,11 @@ export async function POST(
       .single()
 
     if (fetchError || !application) {
-      return NextResponse.json({ error: '申请不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'Application not found' }, { status: 404 })
     }
 
     if (application.status !== 'pending') {
-      return NextResponse.json({ error: '该申请已被处理' }, { status: 400 })
+      return NextResponse.json({ error: 'This application has already been processed' }, { status: 400 })
     }
 
     // 更新申请状态为 approved
@@ -71,17 +71,17 @@ export async function POST(
 
     if (updateError) {
       logger.error('Error approving application:', updateError)
-      return NextResponse.json({ error: '批准失败' }, { status: 500 })
+      return NextResponse.json({ error: 'Approval failed' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: '已批准该小组申请'
+      message: 'Group application approved'
     })
 
   } catch (error: unknown) {
     logger.error('Error approving application:', error)
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 

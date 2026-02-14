@@ -23,7 +23,7 @@ export const DELETE = withApiMiddleware(
   async ({ user, supabase, request }) => {
     // 需要认证
     if (!user) {
-      return createErrorResponse('未授权', 401)
+      return createErrorResponse('Unauthorized', 401)
     }
 
     // 解析请求体
@@ -31,13 +31,13 @@ export const DELETE = withApiMiddleware(
     const { exchange } = body
 
     if (!exchange) {
-      return createErrorResponse('缺少必要参数：exchange', 400)
+      return createErrorResponse('Missing required parameter: exchange', 400)
     }
 
     // 验证 exchange 参数
     const validExchanges = ['binance', 'bybit', 'bitget', 'mexc', 'okx', 'kucoin', 'coinex', 'gmx']
     if (!validExchanges.includes(exchange.toLowerCase())) {
-      return createErrorResponse('无效的交易所参数', 400)
+      return createErrorResponse('Invalid exchange parameter', 400)
     }
 
     // 软删除：设置为非活跃
@@ -51,15 +51,15 @@ export const DELETE = withApiMiddleware(
       .eq('exchange', exchange.toLowerCase())
 
     if (updateError) {
-      logger.error('断开连接失败', { error: updateError, userId: user.id, exchange })
-      return createErrorResponse('断开连接失败', 500)
+      logger.error('Failed to disconnect', { error: updateError, userId: user.id, exchange })
+      return createErrorResponse('Failed to disconnect', 500)
     }
 
     logger.info('用户断开交易所连接', { userId: user.id, exchange })
 
     return {
       success: true,
-      message: '已断开连接',
+      message: 'Disconnected successfully',
     }
   },
   {

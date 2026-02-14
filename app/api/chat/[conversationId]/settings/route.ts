@@ -46,7 +46,7 @@ export async function GET(
   try {
     const user = await getAuthUser(request)
     if (!user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -81,7 +81,7 @@ export async function GET(
     })
   } catch (error: unknown) {
     logger.apiError('/api/chat/[conversationId]/settings', error, { method: 'GET' })
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
 
@@ -92,7 +92,7 @@ export async function PATCH(
   try {
     const user = await getAuthUser(request)
     if (!user) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const resolvedParams = params instanceof Promise ? await params : params
@@ -111,7 +111,7 @@ export async function PATCH(
 
     // Validate remark length
     if (body.remark !== undefined && body.remark !== null && body.remark.length > 50) {
-      return NextResponse.json({ error: '备注名最多50个字符' }, { status: 400 })
+      return NextResponse.json({ error: 'Nickname max 50 characters' }, { status: 400 })
     }
 
     // Build update object with only provided fields
@@ -123,7 +123,7 @@ export async function PATCH(
     if ('cleared_before' in body) updateData.cleared_before = body.cleared_before
 
     if (Object.keys(updateData).length === 0) {
-      return NextResponse.json({ error: '没有可更新的字段' }, { status: 400 })
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
     }
 
     // Upsert: create if not exists, update if exists
@@ -147,7 +147,7 @@ export async function PATCH(
 
       if (error) {
         logger.dbError('update-chat-settings', error, { conversationId })
-        return NextResponse.json({ error: '更新设置失败' }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })
       }
       result = data
     } else {
@@ -171,7 +171,7 @@ export async function PATCH(
 
       if (error) {
         logger.dbError('insert-chat-settings', error, { conversationId })
-        return NextResponse.json({ error: '保存设置失败' }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 })
       }
       result = data
     }
@@ -179,6 +179,6 @@ export async function PATCH(
     return NextResponse.json({ settings: result })
   } catch (error: unknown) {
     logger.apiError('/api/chat/[conversationId]/settings', error, { method: 'PATCH' })
-    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

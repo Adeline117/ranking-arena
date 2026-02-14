@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic'
 export const GET = withApiMiddleware(
   async ({ user, supabase, request }) => {
     if (!user) {
-      return createErrorResponse('未授权', 401)
+      return createErrorResponse('Unauthorized', 401)
     }
 
     const configId = request.nextUrl.searchParams.get('configId')
@@ -35,7 +35,7 @@ export const GET = withApiMiddleware(
         .single()
 
       if (!config) {
-        return createErrorResponse('配置不存在或无权限', 404)
+        return createErrorResponse('Config not found or no permission', 404)
       }
     }
 
@@ -53,8 +53,8 @@ export const GET = withApiMiddleware(
     const { data, error } = await query
 
     if (error) {
-      logger.error('获取跟单日志失败', error)
-      return createErrorResponse('获取跟单日志失败', 500)
+      logger.error('Failed to fetch copy trade logs', error)
+      return createErrorResponse('Failed to fetch copy trade logs', 500)
     }
 
     return NextResponse.json({ logs: data })

@@ -40,7 +40,7 @@ export async function GET(
       .maybeSingle()
 
     if (userError || !targetUser) {
-      return NextResponse.json({ error: '用户不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // 检查隐私设置：如果关闭了关注列表展示，只有本人可以查看
@@ -48,7 +48,7 @@ export async function GET(
       return NextResponse.json({ 
         following: [],
         hidden: true,
-        message: '该用户已关闭关注列表展示'
+        message: 'This user has hidden their following list'
       })
     }
 

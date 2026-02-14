@@ -20,13 +20,13 @@ export const GET = withApiMiddleware(
   async ({ user, supabase, request }) => {
     // 需要认证
     if (!user) {
-      return createErrorResponse('未授权', 401)
+      return createErrorResponse('Unauthorized', 401)
     }
 
     const traderId = request.nextUrl.searchParams.get('traderId')
 
     if (!traderId) {
-      return createErrorResponse('缺少 traderId 参数', 400)
+      return createErrorResponse('Missing traderId parameter', 400)
     }
 
     const { data, error } = await supabase
@@ -43,7 +43,7 @@ export const GET = withApiMiddleware(
         return NextResponse.json({ following: false, tableNotFound: true })
       }
       logger.error('查询关注状态失败', { error, traderId, userId: user.id })
-      return createErrorResponse('查询失败', 500)
+      return createErrorResponse('Query failed', 500)
     }
 
     return { following: !!data }
@@ -64,18 +64,18 @@ export const POST = withApiMiddleware(
   async ({ user, supabase, request }) => {
     // 需要认证
     if (!user) {
-      return createErrorResponse('未授权', 401)
+      return createErrorResponse('Unauthorized', 401)
     }
 
     const body = await request.json()
     const { traderId, action } = body
 
     if (!traderId) {
-      return createErrorResponse('缺少 traderId 参数', 400)
+      return createErrorResponse('Missing traderId parameter', 400)
     }
 
     if (!action || !['follow', 'unfollow'].includes(action)) {
-      return createErrorResponse('无效的 action 参数，必须是 follow 或 unfollow', 400)
+      return createErrorResponse('Invalid action parameter, must be follow or unfollow', 400)
     }
 
     if (action === 'follow') {
@@ -93,12 +93,12 @@ export const POST = withApiMiddleware(
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
           return NextResponse.json(
-            { success: false, error: '关注功能暂未开放', tableNotFound: true },
+            { success: false, error: 'Follow feature not available yet', tableNotFound: true },
             { status: 503 }
           )
         }
-        logger.error('关注失败', { error, traderId, userId: user.id })
-        return createErrorResponse('关注失败', 500)
+        logger.error('Follow failed', { error, traderId, userId: user.id })
+        return createErrorResponse('Follow failed', 500)
       }
 
       logger.info('用户关注交易员', { userId: user.id, traderId })
@@ -116,12 +116,12 @@ export const POST = withApiMiddleware(
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
           return NextResponse.json(
-            { success: false, error: '关注功能暂未开放', tableNotFound: true },
+            { success: false, error: 'Follow feature not available yet', tableNotFound: true },
             { status: 503 }
           )
         }
-        logger.error('取消关注失败', { error, traderId, userId: user.id })
-        return createErrorResponse('取消关注失败', 500)
+        logger.error('Unfollow failed', { error, traderId, userId: user.id })
+        return createErrorResponse('Unfollow failed', 500)
       }
 
       logger.info('用户取消关注交易员', { userId: user.id, traderId })

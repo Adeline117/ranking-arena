@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       if (error.code === '23505') {
-        throw new Error('已存在同名收藏夹')
+        throw new Error('A folder with this name already exists')
       }
       throw error
     }

@@ -39,11 +39,11 @@ export async function POST(request: NextRequest) {
     const amount_cents = Number(body.amount_cents ?? 100)
 
     if (!post_id) {
-      return error('缺少 post_id 参数', 400)
+      return error('Missing post_id parameter', 400)
     }
 
     if (amount_cents <= 0 || amount_cents > 100000) {
-      return error('打赏金额无效', 400)
+      return error('Invalid tip amount', 400)
     }
 
     // 检查帖子是否存在
@@ -54,12 +54,12 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (!post) {
-      return error('帖子不存在', 404)
+      return error('Post not found', 404)
     }
 
     // 不能给自己的帖子打赏
     if (post.author_id === user.id) {
-      return error('不能给自己的帖子打赏', 400)
+      return error('Cannot tip your own post', 400)
     }
 
     // 写入 gifts 表
@@ -72,10 +72,10 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       logger.error('Insert error', { error: insertError, postId: post_id, userId: user.id, amountCents: amount_cents })
-      return error('打赏失败: ' + insertError.message, 500)
+      return error('Tip failed: ' + insertError.message, 500)
     }
 
-    return success({ message: '打赏成功' })
+    return success({ message: 'Tip successful' })
   } catch (e: unknown) {
     return handleError(e, 'tip POST')
   }

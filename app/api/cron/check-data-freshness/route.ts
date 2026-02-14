@@ -90,7 +90,7 @@ export interface FreshnessReport {
 export async function buildFreshnessReport(): Promise<FreshnessReport> {
   const { url, serviceKey } = getSupabaseEnv()
   if (!url || !serviceKey) {
-    throw new Error('Supabase 环境变量缺失')
+    throw new Error('Supabase environment variables missing')
   }
 
   const supabase = createClient(url, serviceKey, {

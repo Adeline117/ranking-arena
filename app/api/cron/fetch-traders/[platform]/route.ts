@@ -51,7 +51,7 @@ export async function GET(request: Request, { params }: Params) {
     const { url, serviceKey } = getSupabaseEnv()
     if (!url || !serviceKey) {
       return NextResponse.json(
-        { error: 'Supabase 环境变量缺失' },
+        { error: 'Supabase environment variables missing' },
         { status: 500 }
       )
     }

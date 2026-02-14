@@ -27,7 +27,7 @@ interface FilterConfig {
   roi_max?: number         // 最大 ROI
   drawdown_min?: number    // 最小回撤
   drawdown_max?: number    // 最大回撤
-  period?: '7D' | '30D' | '90D'  // 周期
+  period?: '7D' | '30D' | '90D'  // period
   min_pnl?: number         // 最小 PnL
   min_score?: number       // 最小 Arena Score
   min_win_rate?: number    // 最小胜率
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'advanced_filter')) {
-      return error('此功能需要 Pro 会员', 403)
+      return error('Pro membership required', 403)
     }
 
     // 获取筛选配置列表
@@ -74,8 +74,8 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false })
 
     if (queryError) {
-      logger.error('[saved-filters] 查询失败:', queryError)
-      return error('获取筛选配置失败', 500)
+      logger.error('[saved-filters] 查询Failed:', queryError)
+      return error('Failed to fetch saved filters', 500)
     }
 
     return success({ filters: filters || [] })
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     // 检查是否有权限
     if (!hasFeatureAccess(tier, 'advanced_filter')) {
-      return error('此功能需要 Pro 会员', 403)
+      return error('Pro membership required', 403)
     }
 
     const body = await request.json()
@@ -121,12 +121,12 @@ export async function POST(request: NextRequest) {
     })
 
     if (!name) {
-      return error('请输入筛选配置名称', 400)
+      return error('Filter name is required', 400)
     }
 
     // 验证 filter_config
     if (!filter.filter_config || typeof filter.filter_config !== 'object') {
-      return error('筛选配置无效', 400)
+      return error('Invalid filter config', 400)
     }
 
     const filterData = {
@@ -149,8 +149,8 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (updateError) {
-        logger.error('[saved-filters] 更新失败:', updateError)
-        return error('更新筛选配置失败', 500)
+        logger.error('[saved-filters] 更新Failed:', updateError)
+        return error('Failed to update filter', 500)
       }
       result = data
     } else {
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         .eq('user_id', user.id)
 
       if ((count || 0) >= MAX_SAVED_FILTERS) {
-        return error(`最多只能保存 ${MAX_SAVED_FILTERS} 个筛选配置`, 400)
+        return error(`Maximum ${MAX_SAVED_FILTERS} saved filters allowed`, 400)
       }
 
       const { data, error: insertError } = await supabase
@@ -172,8 +172,8 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (insertError) {
-        logger.error('[saved-filters] 创建失败:', insertError)
-        return error('创建筛选配置失败', 500)
+        logger.error('[saved-filters] 创建Failed:', insertError)
+        return error('Failed to create filter', 500)
       }
       result = data
     }
@@ -196,7 +196,7 @@ export async function PUT(request: NextRequest) {
     const filterId = searchParams.get('id')
 
     if (!filterId) {
-      return error('缺少筛选配置 ID', 400)
+      return error('Filter ID is required', 400)
     }
 
     // 更新使用统计
@@ -246,7 +246,7 @@ export async function DELETE(request: NextRequest) {
     const filterId = searchParams.get('id')
 
     if (!filterId) {
-      return error('缺少筛选配置 ID', 400)
+      return error('Filter ID is required', 400)
     }
 
     const { error: deleteError } = await supabase
@@ -256,8 +256,8 @@ export async function DELETE(request: NextRequest) {
       .eq('user_id', user.id)
 
     if (deleteError) {
-      logger.error('[saved-filters] 删除失败:', deleteError)
-      return error('删除筛选配置失败', 500)
+      logger.error('[saved-filters] 删除Failed:', deleteError)
+      return error('Failed to delete filter', 500)
     }
 
     return success({ deleted: true })

@@ -1,8 +1,6 @@
 /**
- * 生成交易所授权URL
+ * Generate exchange authorization URL
  * GET /api/exchange/authorize?exchange=binance
- * 
- * 返回授权URL，用户将被重定向到交易所登录页面
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,7 +17,6 @@ const EXCHANGE_AUTH_URLS: Record<string, string> = {
 
 export async function GET(req: NextRequest) {
   try {
-    // Auth check
     const user = await getAuthUser(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -27,41 +24,33 @@ export async function GET(req: NextRequest) {
 
     const searchParams = req.nextUrl.searchParams
     const exchange = searchParams.get('exchange')
-    const userId = user.id // Use authenticated user ID
+    const userId = user.id
 
     if (!exchange) {
       return NextResponse.json(
-        { error: '缺少参数：exchange' },
+        { error: 'Missing parameter: exchange' },
         { status: 400 }
       )
     }
 
-    // 获取授权URL
     const authUrl = EXCHANGE_AUTH_URLS[exchange.toLowerCase()]
 
     if (!authUrl) {
       return NextResponse.json(
-        { error: `不支持的交易所: ${exchange}` },
+        { error: `Unsupported exchange: ${exchange}` },
         { status: 400 }
       )
     }
 
-    // 生成state参数（用于防止CSRF攻击）
     const state = Buffer.from(JSON.stringify({
       exchange,
       userId,
       timestamp: Date.now(),
     })).toString('base64')
 
-    // 将state存储到cookie或session中（这里简化处理，实际应该存储到数据库）
-    // 重定向到授权页面
     const redirectUrl = new URL('/exchange/authorize/callback', req.nextUrl.origin)
     redirectUrl.searchParams.set('state', state)
     redirectUrl.searchParams.set('exchange', exchange)
-
-    // 对于Binance，我们跳转到API管理页面，用户在那里创建API Key
-    // 然后用户需要手动输入API Key和Secret
-    // 但我们可以提供一个更好的流程：在新窗口中打开，然后引导用户
 
     return NextResponse.json({
       authUrl,
@@ -70,8 +59,8 @@ export async function GET(req: NextRequest) {
       instructions: getInstructions(exchange),
     })
   } catch (error: unknown) {
-    logger.error('[exchange/authorize] 错误:', error)
-    const message = error instanceof Error ? error.message : '生成授权URL失败'
+    logger.error('[exchange/authorize] error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to generate authorization URL'
     return NextResponse.json(
       { error: message },
       { status: 500 }
@@ -82,58 +71,57 @@ export async function GET(req: NextRequest) {
 function getInstructions(exchange: string): string[] {
   const instructions: Record<string, string[]> = {
     binance: [
-      '1. 在新打开的页面中登录您的Binance账号',
-      '2. 进入API管理页面，点击"创建API"',
-      '3. 选择"系统生成API密钥"',
-      '4. 设置API标签（如：Arena）',
-      '5. 完成安全验证',
-      '6. 创建成功后，复制API Key和Secret',
-      '7. 返回此页面，粘贴API Key和Secret',
-      '8. 点击"确认连接"完成绑定',
+      '1. Log in to your Binance account on the new page',
+      '2. Go to API Management and click "Create API"',
+      '3. Select "System generated API key"',
+      '4. Set an API label (e.g., Arena)',
+      '5. Complete security verification',
+      '6. After creation, copy the API Key and Secret',
+      '7. Return to this page and paste the API Key and Secret',
+      '8. Click "Confirm Connection" to complete',
     ],
     bybit: [
-      '1. 在新打开的页面中登录您的Bybit账号',
-      '2. 进入API管理页面，创建新的API Key',
-      '3. 设置API权限（仅读取权限）',
-      '4. 完成安全验证',
-      '5. 复制API Key和Secret',
-      '6. 返回此页面，粘贴API Key和Secret',
-      '7. 点击"确认连接"完成绑定',
+      '1. Log in to your Bybit account on the new page',
+      '2. Go to API Management and create a new API Key',
+      '3. Set API permissions (read-only)',
+      '4. Complete security verification',
+      '5. Copy the API Key and Secret',
+      '6. Return to this page and paste the API Key and Secret',
+      '7. Click "Confirm Connection" to complete',
     ],
     bitget: [
-      '1. 在新打开的页面中登录您的Bitget账号',
-      '2. 进入API管理页面，创建新的API Key',
-      '3. 设置API权限（仅读取权限）',
-      '4. 完成安全验证',
-      '5. 复制API Key和Secret',
-      '6. 返回此页面，粘贴API Key和Secret',
-      '7. 点击"确认连接"完成绑定',
+      '1. Log in to your Bitget account on the new page',
+      '2. Go to API Management and create a new API Key',
+      '3. Set API permissions (read-only)',
+      '4. Complete security verification',
+      '5. Copy the API Key and Secret',
+      '6. Return to this page and paste the API Key and Secret',
+      '7. Click "Confirm Connection" to complete',
     ],
     mexc: [
-      '1. 在新打开的页面中登录您的MEXC账号',
-      '2. 进入API管理页面，创建新的API Key',
-      '3. 设置API权限（仅读取权限）',
-      '4. 完成安全验证',
-      '5. 复制API Key和Secret',
-      '6. 返回此页面，粘贴API Key和Secret',
-      '7. 点击"确认连接"完成绑定',
+      '1. Log in to your MEXC account on the new page',
+      '2. Go to API Management and create a new API Key',
+      '3. Set API permissions (read-only)',
+      '4. Complete security verification',
+      '5. Copy the API Key and Secret',
+      '6. Return to this page and paste the API Key and Secret',
+      '7. Click "Confirm Connection" to complete',
     ],
     coinex: [
-      '1. 在新打开的页面中登录您的CoinEx账号',
-      '2. 进入API管理页面，创建新的API Key',
-      '3. 设置API权限（仅读取权限）',
-      '4. 完成安全验证',
-      '5. 复制API Key和Secret',
-      '6. 返回此页面，粘贴API Key和Secret',
-      '7. 点击"确认连接"完成绑定',
+      '1. Log in to your CoinEx account on the new page',
+      '2. Go to API Management and create a new API Key',
+      '3. Set API permissions (read-only)',
+      '4. Complete security verification',
+      '5. Copy the API Key and Secret',
+      '6. Return to this page and paste the API Key and Secret',
+      '7. Click "Confirm Connection" to complete',
     ],
   }
 
   return instructions[exchange.toLowerCase()] || [
-    '1. 登录您的交易所账号',
-    '2. 创建API Key',
-    '3. 复制API Key和Secret',
-    '4. 返回此页面完成绑定',
+    '1. Log in to your exchange account',
+    '2. Create an API Key',
+    '3. Copy the API Key and Secret',
+    '4. Return to this page to complete the connection',
   ]
 }
-

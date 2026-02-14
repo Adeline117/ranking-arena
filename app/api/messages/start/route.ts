@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json(
-        { error: '请先登录', error_code: 'NOT_AUTHENTICATED' },
+        { error: 'Please log in first', error_code: 'NOT_AUTHENTICATED' },
         { status: 401 }
       )
     }
@@ -36,14 +36,14 @@ export async function POST(request: NextRequest) {
 
     if (!receiverId) {
       return NextResponse.json(
-        { error: '缺少接收者', error_code: 'VALIDATION_ERROR' },
+        { error: 'Missing recipient', error_code: 'VALIDATION_ERROR' },
         { status: 400 }
       )
     }
 
     if (senderId === receiverId) {
       return NextResponse.json(
-        { error: '不能给自己发私信', error_code: 'VALIDATION_ERROR' },
+        { error: 'Cannot send message to yourself', error_code: 'VALIDATION_ERROR' },
         { status: 400 }
       )
     }
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (profileError || !receiverProfile) {
-      return NextResponse.json({ error: '用户不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // 检查接收者的私信权限设置
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     if (dmPermission === 'none') {
       return NextResponse.json(
-        { error: '该用户已关闭私信功能', error_code: 'PERMISSION_DENIED' },
+        { error: 'This user has disabled direct messages', error_code: 'PERMISSION_DENIED' },
         { status: 403 }
       )
     }
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
           conversation = existingConv
         } else {
           logger.error('[Start Message API] 创建会话错误:', convError)
-          return NextResponse.json({ error: '创建会话失败' }, { status: 500 })
+          return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 })
         }
       } else {
         conversation = newConv
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!conversation) {
-      return NextResponse.json({ error: '无法创建会话' }, { status: 500 })
+      return NextResponse.json({ error: 'Unable to create conversation' }, { status: 500 })
     }
 
     // 追踪会话创建/获取

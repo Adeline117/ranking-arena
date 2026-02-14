@@ -98,7 +98,7 @@ export const GET = withPublic(
     const fallbackQueries = [
       'BTC', 'ETH', 'SOL', 'PEPE', 'WIF',
       'Binance', 'Bybit', 'OKX', 'Bitget',
-      '合约', '现货', '期权', 'NFT', 'DeFi'
+      'Futures', 'Spot', 'Options', 'NFT', 'DeFi'
     ]
     
     const result: TrendingSearchResponse = {

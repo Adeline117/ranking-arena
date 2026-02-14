@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json(
-        { error: '请先登录', error_code: 'NOT_AUTHENTICATED' },
+        { error: 'Please log in first', error_code: 'NOT_AUTHENTICATED' },
         { status: 401 }
       )
     }
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json(
-        { error: '请先登录', error_code: 'NOT_AUTHENTICATED' },
+        { error: 'Please log in first', error_code: 'NOT_AUTHENTICATED' },
         { status: 401 }
       )
     }
@@ -188,28 +188,28 @@ export async function POST(request: NextRequest) {
 
     if (!receiverId || !content) {
       return NextResponse.json(
-        { error: '缺少接收者或消息内容', error_code: 'VALIDATION_ERROR' },
+        { error: 'Missing recipient or message content', error_code: 'VALIDATION_ERROR' },
         { status: 400 }
       )
     }
 
     if (senderId === receiverId) {
       return NextResponse.json(
-        { error: '不能给自己发私信', error_code: 'VALIDATION_ERROR' },
+        { error: 'Cannot send message to yourself', error_code: 'VALIDATION_ERROR' },
         { status: 400 }
       )
     }
 
     if (content.trim().length === 0) {
       return NextResponse.json(
-        { error: '消息内容不能为空', error_code: 'VALIDATION_ERROR' },
+        { error: 'Message content cannot be empty', error_code: 'VALIDATION_ERROR' },
         { status: 400 }
       )
     }
 
     if (content.length > 2000) {
       return NextResponse.json(
-        { error: '消息内容过长，最多2000字符', error_code: 'VALIDATION_ERROR' },
+        { error: 'Message too long, max 2000 characters', error_code: 'VALIDATION_ERROR' },
         { status: 400 }
       )
     }
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (profileError || !receiverProfile) {
-      return NextResponse.json({ error: '用户不存在' }, { status: 404 })
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // 检查接收者的私信权限设置
@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
         error: 'DM permission denied: recipient disabled DMs',
       })
       return NextResponse.json(
-        { error: '该用户已关闭私信功能', error_code: 'PERMISSION_DENIED' },
+        { error: 'This user has disabled direct messages', error_code: 'PERMISSION_DENIED' },
         { status: 403 }
       )
     }
@@ -295,7 +295,7 @@ export async function POST(request: NextRequest) {
             error: `Non-mutual message limit reached: ${currentCount}/${NON_MUTUAL_MESSAGE_LIMIT}`,
           })
           return NextResponse.json({
-            error: `你们还不是互相关注，在对方回复前你最多只能发送${NON_MUTUAL_MESSAGE_LIMIT}条消息`,
+            error: `You are not mutual followers. You can only send ${NON_MUTUAL_MESSAGE_LIMIT} messages before they reply.`,
             error_code: 'PERMISSION_DENIED',
             limit_reached: true,
             sent_count: currentCount
@@ -333,7 +333,7 @@ export async function POST(request: NextRequest) {
           conversation = existingConv
         } else {
           logger.error('Create conversation error', { error: convError.message })
-          return NextResponse.json({ error: '创建会话失败' }, { status: 500 })
+          return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 })
         }
       } else {
         conversation = newConv
@@ -341,7 +341,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!conversation) {
-      return NextResponse.json({ error: '无法创建会话' }, { status: 500 })
+      return NextResponse.json({ error: 'Unable to create conversation' }, { status: 500 })
     }
 
     // 发送消息
@@ -383,7 +383,7 @@ export async function POST(request: NextRequest) {
         error: msgError.message,
       })
       return NextResponse.json(
-        { error: '服务异常，请稍后重试', error_code: 'SERVER_ERROR' },
+        { error: 'Service error, please try again later', error_code: 'SERVER_ERROR' },
         { status: 500 }
       )
     }
@@ -404,7 +404,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     logger.error('POST error', { error: String(error) })
     return NextResponse.json(
-      { error: '服务异常，请稍后重试', error_code: 'SERVER_ERROR' },
+      { error: 'Service error, please try again later', error_code: 'SERVER_ERROR' },
       { status: 500 }
     )
   }

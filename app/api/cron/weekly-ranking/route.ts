@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       .limit(10) as { data: any[] | null }
 
     if (!snapshots || snapshots.length === 0) {
-      return new Response(JSON.stringify({ message: '无足够数据生成周榜' }))
+      return new Response(JSON.stringify({ message: 'Insufficient data to generate weekly ranking' }))
     }
 
     // 获取上周排名（用于计算黑马）
@@ -71,13 +71,13 @@ export async function GET(request: NextRequest) {
       const name = s.nickname || s.trader_id.slice(0, 8)
       const roi = s.roi_7d != null ? `${s.roi_7d > 0 ? '+' : ''}${s.roi_7d.toFixed(2)}%` : 'N/A'
       const winRate = s.win_rate != null ? `胜率${(s.win_rate * 100).toFixed(0)}%` : ''
-      return `${rank}. ${name} -- 7D收益率: ${roi} ${winRate}`
+      return `${rank}. ${name} -- 7D ROI: ${roi} ${winRate}`
     })
 
     const content = [
       `${weekStr} 交易员排行榜`,
       '',
-      '--- 7D收益率 Top10 ---',
+      '--- 7D ROI Top10 ---',
       '',
       ...rankingLines,
       '',
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
     })
 
     return new Response(
-      JSON.stringify({ message: '周榜帖子已创建', title }),
+      JSON.stringify({ message: 'Weekly ranking post created', title }),
       { headers: { 'Content-Type': 'application/json' } }
     )
   } catch (error: unknown) {

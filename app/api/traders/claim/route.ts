@@ -71,19 +71,19 @@ export async function POST(request: NextRequest) {
     )
 
     if (!trader_id || !source || !verification_method) {
-      return handleError(new Error('缺少必填参数'), 'trader claim POST')
+      return handleError(new Error('Missing required parameters'), 'trader claim POST')
     }
 
     // 检查是否已被认领
     const isClaimed = await isTraderClaimed(supabase, trader_id, source)
     if (isClaimed) {
-      return handleError(new Error('该交易员账号已被认领或正在审核中'), 'trader claim POST')
+      return handleError(new Error('This trader account has been claimed or is under review'), 'trader claim POST')
     }
 
     // 检查用户是否已有认领
     const existingVerified = await getUserVerifiedTrader(supabase, user.id)
     if (existingVerified) {
-      return handleError(new Error('您已认证了一个交易员账号'), 'trader claim POST')
+      return handleError(new Error('You have already claimed a trader account'), 'trader claim POST')
     }
 
     const claim = await createClaim(supabase, user.id, {
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
     return success({
       claim,
-      message: '认领申请已提交，我们将尽快审核',
+      message: 'Claim request submitted, we will review it shortly',
     })
   } catch (error: unknown) {
     return handleError(error, 'trader claim POST')

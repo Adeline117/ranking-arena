@@ -51,24 +51,24 @@ export async function POST(request: NextRequest) {
 
     // 验证必填字段
     if (!user_id || typeof user_id !== 'string') {
-      return NextResponse.json({ error: '缺少 user_id' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
     }
     if (!type || !VALID_TYPES.includes(type)) {
       return NextResponse.json(
-        { error: `无效的通知类型，支持: ${VALID_TYPES.join(', ')}` },
+        { error: `Invalid notification type, supported: ${VALID_TYPES.join(', ')}` },
         { status: 400 }
       )
     }
     if (!title || typeof title !== 'string') {
-      return NextResponse.json({ error: '缺少 title' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing title' }, { status: 400 })
     }
     if (!message || typeof message !== 'string') {
-      return NextResponse.json({ error: '缺少 message' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing message' }, { status: 400 })
     }
 
     // 防止给自己发通知
     if (actor_id && actor_id === user_id) {
-      return NextResponse.json({ success: true, message: '跳过自我通知', skipped: true })
+      return NextResponse.json({ success: true, message: 'Skipped self-notification', skipped: true })
     }
 
     const supabase = getSupabaseAdmin()
@@ -89,8 +89,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      logger.error('[notifications/send] 创建通知失败:', error)
-      return NextResponse.json({ error: '创建通知失败' }, { status: 500 })
+      logger.error('[notifications/send] 创建通知Failed:', error)
+      return NextResponse.json({ error: 'Failed to create notification' }, { status: 500 })
     }
 
     return NextResponse.json({

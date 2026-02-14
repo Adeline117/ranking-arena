@@ -14,7 +14,7 @@ export async function GET(
   const chainId = parseInt(searchParams.get('chainId') || '1', 10)
 
   if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
-    return NextResponse.json({ error: '无效的以太坊地址' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid Ethereum address' }, { status: 400 })
   }
 
   try {
@@ -35,7 +35,7 @@ export async function GET(
         currentBalance: parseFloat(balance.nativeBalance),
         ...analytics,
         tokenDistribution,
-        note: 'PnL 为近似值，基于近期链上交易数据分析。',
+        note: 'PnL is approximate, based on recent on-chain transaction analysis.',
       },
       {
         headers: {
@@ -46,7 +46,7 @@ export async function GET(
   } catch (error) {
     logger.error('PnL API error:', error)
     return NextResponse.json(
-      { error: '计算 PnL 失败' },
+      { error: 'Failed to calculate PnL' },
       { status: 500 }
     )
   }
