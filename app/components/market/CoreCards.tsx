@@ -211,27 +211,35 @@ export default function CoreCards() {
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
 
   useEffect(() => {
+    let alive = true
+    const controller = new AbortController()
+
     const fetchMarketData = () => {
-      fetch('/api/market')
+      fetch('/api/market', { signal: controller.signal })
         .then(r => r.json())
         .then(json => {
+          if (!alive) return
           const rows: CoinRow[] = json.rows ?? []
           const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
           setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
           setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
           setMarketLoaded(true)
         })
-        .catch(() => { setMarketLoaded(true) })
+        .catch(() => { if (alive) setMarketLoaded(true) })
 
-      fetch('/api/market/exchanges')
+      fetch('/api/market/exchanges', { signal: controller.signal })
         .then(r => r.json())
-        .then(json => { if (Array.isArray(json)) setExchanges(json.slice(0, 5)) })
+        .then(json => { if (alive && Array.isArray(json)) setExchanges(json.slice(0, 5)) })
         .catch(() => {})
     }
     fetchMarketData()
     // Refresh market data every 60 seconds
     const interval = setInterval(fetchMarketData, 60000)
-    return () => clearInterval(interval)
+    return () => {
+      alive = false
+      controller.abort()
+      clearInterval(interval)
+    }
   }, [])
 
   const maxVol = exchanges.length > 0 ? Math.max(...exchanges.map(e => e.trade_volume_24h_btc)) : 0
