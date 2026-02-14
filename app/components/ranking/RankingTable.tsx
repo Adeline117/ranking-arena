@@ -467,6 +467,10 @@ function RankingTableInner(props: {
   // Wrap parseSourceInfo with translation function
   const parseSourceInfoWithT = useCallback((src: string) => parseSourceInfoUtil(src, t), [t])
 
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedRowId(prev => prev === id ? null : id)
+  }, [])
+
   const handlePaginationChange = useCallback((page: number) => {
     setCurrentPage(page)
   }, [setCurrentPage])
@@ -910,7 +914,7 @@ function RankingTableInner(props: {
                         searchQuery={debouncedSearch}
                         getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
                         isExpanded={expandedRowId === trader.id}
-                        onToggleExpand={(id) => setExpandedRowId(prev => prev === id ? null : id)} />
+                        onToggleExpand={handleToggleExpand} />
                     </div>
                   )
                 })}
@@ -924,7 +928,7 @@ function RankingTableInner(props: {
                     searchQuery={debouncedSearch}
                     getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
                     isExpanded={expandedRowId === trader.id}
-                    onToggleExpand={(id) => setExpandedRowId(prev => prev === id ? null : id)} />
+                    onToggleExpand={handleToggleExpand} />
                 )
               })
             )}

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { CommentIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -1229,6 +1229,16 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
      
   }, [language, posts, translateListPosts, comments, openPost, translateComments])
 
+  // Memoized sorted posts for author pages (pinned first)
+  const sortedPosts = useMemo(() => {
+    if (!props.authorHandle) return posts
+    return [...posts].sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1
+      if (!a.is_pinned && b.is_pinned) return 1
+      return 0
+    })
+  }, [posts, props.authorHandle])
+
   // 打开帖子详情
   const handleOpenPost = useCallback((post: Post) => {
     setOpenPost(post)
@@ -1428,12 +1438,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       )}
       <div style={props.layout === 'masonry' ? { columnGap: 12 } : undefined} className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''} ${props.layout === 'masonry' ? `mobile-view-${mobileViewMode}` : ''}`}>
         {/* 只在个人主页（有 authorHandle）时才将置顶帖子排在最上面 */}
-        {(props.authorHandle ? [...posts].sort((a, b) => {
-          // 置顶帖子优先（仅在个人主页生效）
-          if (a.is_pinned && !b.is_pinned) return -1
-          if (!a.is_pinned && b.is_pinned) return 1
-          return 0
-        }) : posts).map((p) => (
+        {sortedPosts.map((p) => (
           <PostListItem
             key={p.id}
             post={p}
