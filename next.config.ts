@@ -490,6 +490,15 @@ const nextConfig: NextConfig = {
   },
   
   // Next.js 16 默认启用 SWC 压缩，无需配置
+
+  async redirects() {
+    return [
+      { source: '/legal/terms', destination: '/terms', permanent: true },
+      { source: '/legal/privacy', destination: '/privacy', permanent: true },
+      { source: '/legal/disclaimer', destination: '/disclaimer', permanent: true },
+      { source: '/legal/dmca', destination: '/dmca', permanent: true },
+    ];
+  },
 };
 
 // 导出配置（Sentry + Bundle Analyzer）

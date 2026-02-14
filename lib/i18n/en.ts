@@ -3168,6 +3168,31 @@ const en = {
     loginTermsAnd: 'and',
     stickers: 'Stickers',
 
+    // DMCA
+    dmcaTitle: 'Copyright / DMCA Policy',
+    dmcaLastUpdated: 'Last updated: February 8, 2026',
+    dmcaOverviewTitle: '1. Overview',
+    dmcaOverviewDesc: 'Arena respects intellectual property rights and expects our users to do the same. If you believe content on this platform infringes your copyright, please follow the process below to submit a notice.',
+    dmcaNoticeTitle: '2. Notice and Takedown',
+    dmcaNoticeDesc: 'If you are a copyright owner or an authorized agent, and believe content on this platform infringes your copyright, please send us a written notice including the following information:',
+    dmcaNotice1: 'Your contact information (name, address, phone, email)',
+    dmcaNotice2: 'A description of the copyrighted work',
+    dmcaNotice3: 'The location (URL) of the allegedly infringing content on this platform',
+    dmcaNotice4: 'A statement that you believe in good faith that the use is not authorized by the copyright owner, its agent, or the law',
+    dmcaNotice5: 'A statement that the information in the notice is accurate, and that you are the copyright owner or authorized to act on their behalf',
+    dmcaNotice6: 'Your signature (electronic signature is acceptable)',
+    dmcaCounterTitle: '3. Counter-Notice',
+    dmcaCounterDesc: 'If you believe the removed content does not constitute infringement, you may submit a counter-notice including the following information:',
+    dmcaCounter1: 'Your contact information',
+    dmcaCounter2: 'A description of the removed content and its original location',
+    dmcaCounter3: 'A statement that you believe in good faith the content was removed in error',
+    dmcaCounter4: 'Consent to the jurisdiction of Singapore courts',
+    dmcaCounter5: 'Your signature',
+    dmcaCounterProcess: 'Upon receiving a valid counter-notice, we will forward it to the original complainant. If the complainant does not file a legal action within 10 business days, we may restore the removed content.',
+    dmcaContactTitle: '4. Contact',
+    dmcaContactDesc: 'For copyright-related matters, please contact:',
+    dmcaContactEmail: 'Email: copyright@arenafi.org -- Please include "Copyright Notice" or "DMCA Notice" in the subject line. We will process valid notices as soon as possible (typically within 5 business days).',
+
 } as const
 
 export default en
