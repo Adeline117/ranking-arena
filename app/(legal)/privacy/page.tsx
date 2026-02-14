@@ -1,7 +1,5 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'

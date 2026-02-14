@@ -271,6 +271,105 @@
       ]
     },
     {
+      "source": "/api/notifications/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/portfolio/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/messages/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/subscription/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/bookmark-folders/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/settings/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/follow/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/user/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/saved-filters/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/alerts/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/presence/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {
