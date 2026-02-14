@@ -33,6 +33,7 @@ export interface PostWithAuthor extends Post {
   author_avatar_url?: string | null
   author_is_pro?: boolean
   author_show_pro_badge?: boolean
+  author_exp?: number
   group_name?: string | null
   group_name_en?: string | null
   // 原始帖子信息（如果是转发）

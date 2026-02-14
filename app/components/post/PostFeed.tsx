@@ -1561,7 +1561,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             ) : (
               <span>user</span>
             )}
-            <LevelBadge exp={(openPost as any).author_exp || 0} size="sm" />
+            <LevelBadge exp={openPost.author_exp || 0} size="sm" />
             <span>·</span>
             <span>{formatTimeAgo(openPost.created_at, language)}</span>
             <span>·</span>
