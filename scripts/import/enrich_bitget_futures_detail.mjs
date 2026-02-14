@@ -118,11 +118,11 @@ async function main() {
     .select('source_trader_id').eq('source', SOURCE).in('source_trader_id', ids.slice(0, 500))
   const hasStats = new Set(existingStats?.map(e => e.source_trader_id) || [])
 
-  // Filter to valid hex trader IDs (skip synthetic ones like @BGUSER-xxx)
-  const valid = traders.filter(t => /^[a-f0-9]{10,}$/.test(t.source_trader_id) && !hasStats.has(t.source_trader_id))
+  // Filter to traders without stats yet
+  const valid = traders.filter(t => !hasStats.has(t.source_trader_id))
   const toProcess = valid.slice(OFFSET, OFFSET + LIMIT)
 
-  console.log(`Total: ${traders.length}, valid hex IDs: ${valid.length}, has stats: ${hasStats.size}, to process: ${toProcess.length}`)
+  console.log(`Total: ${traders.length}, without stats: ${valid.length}, has stats: ${hasStats.size}, to process: ${toProcess.length}`)
 
   if (toProcess.length === 0) { console.log('Nothing to do!'); return }
 
@@ -157,10 +157,70 @@ async function main() {
 
     console.log('✅ Browser ready, starting enrichment...')
 
+    // Helper: resolve handle to numeric triggerUserId by visiting profile page
+    async function resolveUid(page, handle) {
+      const profileUrl = `https://www.bitget.com/copy-trading/trader/${encodeURIComponent(handle)}`
+      
+      // Intercept API calls to capture triggerUserId
+      let uid = null
+      const reqHandler = (req) => {
+        try {
+          const postData = req.postData()
+          if (postData && postData.includes('triggerUserId')) {
+            const parsed = JSON.parse(postData)
+            if (parsed.triggerUserId) uid = parsed.triggerUserId
+          }
+        } catch {}
+      }
+      page.on('request', reqHandler)
+      
+      try {
+        await page.goto(profileUrl, { waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {})
+        await sleep(3000)
+        
+        // Also try extracting from page script/data
+        if (!uid) {
+          uid = await page.evaluate(() => {
+            // Check window.__NEXT_DATA__ or similar
+            try {
+              const nd = window.__NEXT_DATA__
+              if (nd?.props?.pageProps?.traderInfo?.uid) return nd.props.pageProps.traderInfo.uid
+              if (nd?.props?.pageProps?.traderInfo?.triggerUserId) return nd.props.pageProps.traderInfo.triggerUserId
+            } catch {}
+            // Check for uid in any script tag
+            const scripts = document.querySelectorAll('script')
+            for (const s of scripts) {
+              const m = s.textContent?.match(/"triggerUserId"\s*:\s*"(\d+)"/)
+              if (m) return m[1]
+            }
+            return null
+          }).catch(() => null)
+        }
+      } finally {
+        page.off('request', reqHandler)
+      }
+      
+      return uid
+    }
+
     for (let i = 0; i < toProcess.length; i++) {
       const tid = toProcess[i].source_trader_id
       
       try {
+        // Resolve handle to numeric UID
+        let uid = tid
+        // If tid doesn't look like a numeric/hex UID, resolve it
+        if (!/^\d+$/.test(tid) && !/^[a-f0-9]{10,}$/.test(tid)) {
+          const resolved = await resolveUid(page, tid)
+          if (!resolved) {
+            console.log(`  ⚠ [${i+1}] Could not resolve UID for ${tid}, skipping`)
+            errors++
+            continue
+          }
+          uid = resolved
+          console.log(`  🔑 [${i+1}] ${tid} → UID ${uid}`)
+        }
+
         // Fetch cycleData for each period
         for (const [period, cycleTime] of Object.entries(CYCLE_MAP)) {
           const cycleResult = await page.evaluate(async (uid, ct) => {

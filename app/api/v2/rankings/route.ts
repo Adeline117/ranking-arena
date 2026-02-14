@@ -87,8 +87,7 @@ export async function GET(request: NextRequest) {
     .from('trader_snapshots')
     .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, rank, sortino_ratio, calmar_ratio, profit_factor, alpha, volatility_pct, avg_holding_hours, trading_style, profitability_score, risk_control_score, execution_score, score_completeness, aum, sharpe_ratio', { count: 'exact' })
     .eq('source', platform)
-    .eq('market_type', marketType)
-    .eq('window', window)
+    .eq('season_id', window.toUpperCase())
     .not('arena_score', 'is', null)
 
   // V3 Filters
@@ -149,7 +148,6 @@ export async function GET(request: NextRequest) {
       .from('trader_profiles')
       .select('trader_key, display_name, avatar_url')
       .eq('platform', platform)
-      .eq('market_type', marketType)
       .in('trader_key', traderKeys)
 
     if (profileData) {
@@ -165,7 +163,6 @@ export async function GET(request: NextRequest) {
       .from('trader_sources')
       .select('source_trader_id, handle, display_name')
       .eq('source', platform)
-      .eq('market_type', marketType)
       .in('source_trader_id', traderKeys)
 
     if (sourceData) {
@@ -190,11 +187,11 @@ export async function GET(request: NextRequest) {
   const traders: RankingEntry[] = (snapshots || []).map(s => {
     const baseEntry = {
       platform: s.source as LeaderboardPlatform,
-      market_type: s.market_type,
+      market_type: marketType,
       trader_key: s.source_trader_id,
       display_name: profiles[s.source_trader_id]?.display_name || null,
       avatar_url: profiles[s.source_trader_id]?.avatar_url || null,
-      window: s.window as Window,
+      window: window as Window,
       metrics: s.metrics || {
         roi: s.roi ? parseFloat(s.roi) : null,
         pnl: s.pnl ? parseFloat(s.pnl) : null,
