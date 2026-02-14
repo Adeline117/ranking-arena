@@ -1,7 +1,7 @@
 'use client'
  
 
-import { useEffect, useState, useCallback } from 'react'
+import { Suspense, useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -39,6 +39,18 @@ const LoadingSpinner = ({ size = 24 }: { size?: number }) => (
 )
 
 export default function PaymentSuccessPage() {
+  return (
+    <Suspense fallback={
+      <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <LoadingSpinner size={48} />
+      </Box>
+    }>
+      <PaymentSuccessContent />
+    </Suspense>
+  )
+}
+
+function PaymentSuccessContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { language: _language, t } = useLanguage()

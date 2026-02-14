@@ -35,7 +35,7 @@ export default function PaywallOverlay({ feature, compact = false, style }: Payw
   const featureText = feature
     ? (isZh ? `${feature} 为 Pro 专属功能` : `${feature} is a Pro-only feature`)
     : undefined
-  const priceText = isZh ? '低至 $8.3/月' : 'Starting at $8.3/mo'
+  const priceText = isZh ? '低至 $8.25/月' : 'Starting at $8.25/mo'
   const buttonText = isZh ? '查看方案' : 'View Plans'
 
   if (compact) {
