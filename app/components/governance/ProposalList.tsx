@@ -27,7 +27,7 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
   const [filter, setFilter] = useState<'all' | 'active' | 'closed'>(state as 'active' | 'closed' || 'all')
   const spaceId = spaceIdProp || getArenaSpaceId()
 
-  const { data: proposals, error, isLoading } = useSWR<SnapshotProposal[]>(
+  const { data: proposals, error, isLoading, mutate } = useSWR<SnapshotProposal[]>(
     spaceId ? ['snapshot-proposals', spaceId, filter, limit] : null,
     () => getProposals(spaceId!, {
       state: filter === 'all' ? undefined : filter as 'active' | 'closed' | 'pending',
@@ -47,12 +47,12 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
   return (
     <div>
       {showHeader && (
-        <div className="flex justify-between items-center mb-5">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
           <h2 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
             Governance
           </h2>
 
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             {/* Filter tabs */}
             {(['all', 'active', 'closed'] as const).map((tab) => (
               <button
@@ -99,11 +99,20 @@ export function ProposalList({ spaceId: spaceIdProp, state, limit = 10, showHead
         </div>
       ) : error ? (
         <div className="p-8 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
-          Failed to load proposals. Please try again later.
+          <p>Failed to load proposals.</p>
+          <button
+            onClick={() => mutate()}
+            className="mt-3 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors"
+            style={{ border: '1px solid var(--color-border-primary)', background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}
+          >
+            Try Again
+          </button>
         </div>
       ) : !proposals?.length ? (
         <div className="p-8 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
-          No proposals found.
+          {filter === 'all'
+            ? 'No proposals yet. Check back soon or visit Snapshot to create one.'
+            : `No ${filter} proposals found.`}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
