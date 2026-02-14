@@ -13,6 +13,7 @@ import {
 } from '@/lib/utils/arena-score'
 import { SOURCE_TYPE_MAP, PRIORITY_SOURCES } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
+import { getCachedLeaderboard } from '@/lib/cache/leaderboard-cache'
 
 // Minimal trader type for initial render
 export interface InitialTrader {
@@ -31,6 +32,26 @@ export interface InitialTrader {
 }
 
 export async function getInitialTraders(
+  timeRange: Period = '90D',
+  limit: number = 50
+): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
+  // 1. Try Redis cache first (pre-computed by cron)
+  const cached = await getCachedLeaderboard(timeRange, limit)
+  if (cached) {
+    logger.info(`[getInitialTraders] Cache HIT for ${timeRange}, returning ${cached.traders.length} traders`)
+    return cached
+  }
+  logger.info(`[getInitialTraders] Cache MISS for ${timeRange}, querying Supabase`)
+
+  // 2. Cache miss — fall back to direct DB query
+  return fetchLeaderboardFromDB(timeRange, limit)
+}
+
+/**
+ * Direct Supabase fetch — used by cron to populate cache and as fallback.
+ * Exported so the cron refresh route can call it without triggering cache reads.
+ */
+export async function fetchLeaderboardFromDB(
   timeRange: Period = '90D',
   limit: number = 50
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
