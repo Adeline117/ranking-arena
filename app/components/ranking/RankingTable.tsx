@@ -447,18 +447,14 @@ function RankingTableInner(props: {
   const endIndex = startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
 
-  // Virtual scrolling for large lists
-  const VIRTUAL_THRESHOLD = 30
-  const useVirtual = paginatedTraders.length > VIRTUAL_THRESHOLD
+  // Virtual scrolling disabled — 100 items/page renders fine without it
+  const useVirtual = false
   const tableScrollRef = useRef<HTMLDivElement>(null)
-  const [scrollMounted, setScrollMounted] = useState(false)
-  useEffect(() => { setScrollMounted(true) }, [])
   const tableVirtualizer = useVirtualizer({
-    count: useVirtual && scrollMounted ? paginatedTraders.length : 0,
+    count: 0,
     getScrollElement: () => tableScrollRef.current,
-    estimateSize: () => 56, // minHeight of TraderRow
+    estimateSize: () => 56,
     overscan: 5,
-    enabled: scrollMounted,
   })
 
   // Reset virtualizer scroll position on page/sort/filter changes
