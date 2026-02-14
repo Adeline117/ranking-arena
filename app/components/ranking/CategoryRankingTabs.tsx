@@ -67,6 +67,8 @@ export default function CategoryRankingTabs({
 
   return (
     <Box
+      role="tablist"
+      aria-label={language === 'zh' ? '排行榜分类' : 'Ranking categories'}
       className="category-tabs swipe-container"
       style={{
         display: 'flex',
@@ -90,6 +92,9 @@ export default function CategoryRankingTabs({
         return (
           <button
             key={cat.value}
+            role="tab"
+            aria-selected={isActive}
+            aria-disabled={isLocked}
             onClick={() => handleTabClick(cat.value)}
             onMouseEnter={() => setHoveredTab(cat.value)}
             onMouseLeave={() => setHoveredTab(null)}

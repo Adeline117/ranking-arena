@@ -32,6 +32,7 @@ export default function RankingsSubNav() {
           <Link
             key={tab.href}
             href={tab.href}
+            aria-current={isActive ? 'page' : undefined}
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
               fontSize: tokens.typography.fontSize.sm,

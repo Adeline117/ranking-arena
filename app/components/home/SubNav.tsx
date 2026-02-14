@@ -21,7 +21,10 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
   const isZh = language === 'zh'
 
   return (
-    <div style={{
+    <div
+      role="tablist"
+      aria-label={isZh ? '内容分类' : 'Content categories'}
+      style={{
       display: 'flex',
       gap: 4,
       marginBottom: 16,
@@ -33,6 +36,8 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
         return (
           <button
             key={tab.key}
+            role="tab"
+            aria-selected={isActive}
             onClick={() => onTabChange(tab.key)}
             className="btn-press"
             style={{

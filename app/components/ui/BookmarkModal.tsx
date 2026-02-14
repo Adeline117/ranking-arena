@@ -308,7 +308,16 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
             {folders.filter(folder => folder && folder.id && folder.name).map((folder) => (
               <Box
                 key={folder.id}
+                role="button"
+                tabIndex={0}
+                aria-label={folder.name}
                 onClick={() => handleSelectFolder(folder.id)}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleSelectFolder(folder.id)
+                  }
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
