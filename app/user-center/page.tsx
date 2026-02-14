@@ -380,7 +380,7 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
                   fontSize: tokens.typography.fontSize.xs,
                   fontWeight: tokens.typography.fontWeight.bold,
                   background: 'var(--color-accent-success)',
-                  color: '#fff',
+                  color: tokens.colors.white,
                 }}>
                   +{action.exp}
                 </span>
@@ -471,7 +471,7 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
                       fontSize: tokens.typography.fontSize.xs,
                       fontWeight: tokens.typography.fontWeight.bold,
                       background: lvl.colorHex,
-                      color: '#fff',
+                      color: tokens.colors.white,
                     }}>
                       {isZh ? '当前' : 'Current'}
                     </span>
