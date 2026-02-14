@@ -43,41 +43,22 @@ interface TraderSourceResult {
   source_trader_id: string
 }
 
-// 查找交易员来源
+// 查找交易员来源 - single query instead of looping 9 sources × 2 queries
 async function findTraderSource(
-   
-   
   supabase: ReturnType<typeof createClient<any>>,
   handle: string
 ): Promise<{ traderId: string; source: SourceType } | null> {
   const decodedHandle = decodeURIComponent(handle)
   
-  for (const sourceType of TRADER_SOURCES) {
-    // 先尝试 handle
-    const { data: byHandle } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', sourceType)
-      .eq('handle', decodedHandle)
-      .limit(1)
-      .maybeSingle() as { data: TraderSourceResult | null }
-    
-    if (byHandle) {
-      return { traderId: byHandle.source_trader_id, source: sourceType }
-    }
-    
-    // 再尝试 source_trader_id
-    const { data: byId } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id')
-      .eq('source', sourceType)
-      .eq('source_trader_id', decodedHandle)
-      .limit(1)
-      .maybeSingle() as { data: TraderSourceResult | null }
-    
-    if (byId) {
-      return { traderId: byId.source_trader_id, source: sourceType }
-    }
+  const { data } = await supabase
+    .from('trader_sources')
+    .select('source_trader_id, source')
+    .or(`handle.eq.${decodedHandle},source_trader_id.eq.${decodedHandle}`)
+    .limit(1)
+    .maybeSingle()
+  
+  if (data) {
+    return { traderId: data.source_trader_id, source: data.source as SourceType }
   }
   
   return null
