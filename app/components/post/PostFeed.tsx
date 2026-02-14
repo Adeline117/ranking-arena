@@ -1764,6 +1764,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
           <PostDetailActions
             postId={openPost.id}
+            postTitle={openPost.title}
             authorId={openPost.author_id}
             currentUserId={currentUserId}
             userReaction={openPost.user_reaction}

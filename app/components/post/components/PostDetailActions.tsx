@@ -6,6 +6,7 @@ import { Action } from './Action'
 
 interface PostDetailActionsProps {
   postId: string
+  postTitle?: string
   authorId: string
   currentUserId: string | null
   userReaction: 'up' | 'down' | null | undefined
@@ -24,6 +25,7 @@ interface PostDetailActionsProps {
 
 export function PostDetailActions({
   postId,
+  postTitle,
   authorId,
   currentUserId,
   userReaction,
@@ -150,6 +152,36 @@ export function PostDetailActions({
             return
           }
           onRepost(postId)
+        }}
+        active={false}
+        count={0}
+        showCount={false}
+      />
+      {/* Share */}
+      <Action
+        icon={
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+          </svg>
+        }
+        text={t('share')}
+        onClick={async (e) => {
+          if (e) {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+          const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/post/${postId}`
+          try {
+            if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && /Mobi|Android/i.test(navigator.userAgent)) {
+              await navigator.share({ text: postTitle || '', url: shareUrl })
+            } else {
+              await navigator.clipboard.writeText(shareUrl)
+              showToast(t('linkCopied'), 'success')
+            }
+          } catch {
+            // user cancelled or clipboard failed
+          }
         }}
         active={false}
         count={0}

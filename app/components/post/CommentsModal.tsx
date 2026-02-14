@@ -609,7 +609,7 @@ export default function CommentsModal({
                     input.accept = 'image/*'
                     input.onchange = () => {
                       // Future: upload and attach image
-                      showToast(language === 'zh' ? '评论图片功能即将上线' : 'Comment images coming soon', 'info' as 'success')
+                      showToast(language === 'zh' ? '评论图片功能即将上线' : 'Comment images coming soon', 'warning')
                     }
                     input.click()
                   }
