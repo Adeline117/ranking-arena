@@ -1,7 +1,7 @@
 /**
- * POST /api/cron/auto-news-post
+ * GET|POST /api/cron/auto-news-post
  * Fetches crypto news from RSS feeds and auto-posts as official Arena account.
- * Runs every 30 minutes.
+ * Runs every 30 minutes via Vercel Cron (sends GET).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -73,7 +73,16 @@ function formatPostContent(item: NewsItem): { title: string; content: string } {
   return { title, content: content.trim() }
 }
 
+// Vercel Cron sends GET requests
+export async function GET(req: NextRequest) {
+  return handleCron(req)
+}
+
 export async function POST(req: NextRequest) {
+  return handleCron(req)
+}
+
+async function handleCron(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   if (!CRON_SECRET) {
     if (process.env.NODE_ENV !== 'development') {
@@ -129,6 +138,9 @@ export async function POST(req: NextRequest) {
 
     for (const item of toPost) {
       const { title, content } = formatPostContent(item)
+      // Give new posts an initial hot_score so they appear on /hot immediately
+      // The refresh-hot-scores cron will recalculate based on engagement later
+      const initialHotScore = 1.0
       const { error } = await supabase.from('posts').insert({
         author_id: OFFICIAL_USER_ID,
         author_handle: 'Arena',
@@ -136,6 +148,7 @@ export async function POST(req: NextRequest) {
         title,
         content,
         status: 'active',
+        hot_score: initialHotScore,
       })
       if (error) {
         errors.push(`${title.slice(0, 40)}: ${error.message}`)
