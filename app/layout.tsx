@@ -149,7 +149,7 @@ export default function RootLayout({
         ))}
 
         {/* Preload critical above-fold resources for LCP */}
-        <link rel="preload" href="/logo-symbol.svg" as="image" type="image/svg+xml" />
+        <link rel="preload" href="/logo-symbol.png" as="image" type="image/png" />
         <link rel="preconnect" href="https://assets.coingecko.com" />
         <link rel="preconnect" href="https://iknktzifjdyujdccyhsv.supabase.co" />
         <link rel="dns-prefetch" href="https://iknktzifjdyujdccyhsv.supabase.co" />

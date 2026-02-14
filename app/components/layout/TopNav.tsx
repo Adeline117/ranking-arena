@@ -324,6 +324,8 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 alt="arena"
                 width={28}
                 height={28}
+                fetchPriority="high"
+                decoding="sync"
                 style={{ flexShrink: 0, borderRadius: 4 }}
               />
               {/* 文字：arena - 首字母变色 */}

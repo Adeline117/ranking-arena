@@ -5,7 +5,7 @@ import { Suspense, lazy } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import TopNav from '../layout/TopNav'
-const MobileBottomNav = lazy(() => import('../layout/MobileBottomNav'))
+// MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
 import { JsonLd } from '../Providers/JsonLd'
@@ -13,7 +13,7 @@ import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } fro
 import HomeSubNav from './HomeSubNav'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
-import HomePageClient from './HomePageClient'
+import HomePageClient from './HomePageClientOptimized'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 // HomePageWithSubNav removed from homepage - only used in groups page
 import type { InitialTrader } from '@/lib/getInitialTraders'
@@ -70,7 +70,7 @@ export default function HomePage({
         }}
       >
         <HomeSubNav />
-        <ExchangePartners />
+        <Suspense fallback={null}><ExchangePartners /></Suspense>
         <div style={{ height: 16 }} />
         <ThreeColumnLayout
           leftSidebar={
@@ -115,8 +115,8 @@ export default function HomePage({
       </Box>
 
       <Suspense fallback={null}><Footer /></Suspense>
-      <MobileBottomNav />
-      <GuestSignupPrompt />
+      {/* MobileBottomNav rendered in root layout.tsx */}
+      <Suspense fallback={null}><GuestSignupPrompt /></Suspense>
     </Box>
   )
 }
