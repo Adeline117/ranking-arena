@@ -105,45 +105,24 @@ async function fetchLeaderboardData(period) {
           const traderId = String(item.leaderMark || item.leaderId || '')
           if (!traderId || allTraders.has(traderId)) continue
 
-          // Parse ROI from leaderDetails - check various metric fields
-          let roi = 0
-          let pnl = 0
-          let winRate = 0
-          let maxDrawdown = 0
-          let followers = 0
-
-          // leaderDetails has metricDetails array with different metrics
-          if (item.metricDetails) {
-            for (const m of item.metricDetails) {
-              const val = parseFloat(m.value || 0)
-              const key = (m.metricKey || m.key || '').toLowerCase()
-              if (key.includes('roi') || key.includes('roe') || key.includes('yield')) roi = val
-              else if (key.includes('pnl') || key.includes('profit')) pnl = val
-              else if (key.includes('win')) winRate = val
-              else if (key.includes('draw') || key.includes('mdd')) maxDrawdown = val
-              else if (key.includes('follower') || key.includes('copier')) followers = parseInt(val)
-            }
-          }
-
-          // Fallback: direct fields
-          if (roi === 0) roi = parseFloat(item.roi || item.roiRate || item.roe || 0)
-          if (pnl === 0) pnl = parseFloat(item.pnl || item.totalPnl || 0)
-          if (winRate === 0) winRate = parseFloat(item.winRate || 0)
-          if (maxDrawdown === 0) maxDrawdown = parseFloat(item.mdd || item.maxDrawdown || 0)
-          if (followers === 0) followers = parseInt(item.followerCount || item.copierNum || 0)
-
-          // ROI normalization: if < 10, it's probably decimal form
-          if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
-
-          // metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
+          // metricValues: [ROI, MDD, followerPnl, WinRate, PLRatio, SharpeRatio]
+          // All values are strings like "+83.22%", "+52.36%", "+90,825.63", etc.
           const mv = item.metricValues || []
+          const parseMetric = (v) => v ? parseFloat(String(v).replace(/[^0-9.\-+]/g, '')) : 0
+
+          let roi = parseMetric(mv[0])
+          let maxDrawdown = parseMetric(mv[1])
+          let pnl = parseMetric(mv[2])
+          let winRate = parseMetric(mv[3])
+          let followers = parseInt(item.currentFollowerCount || item.followerCount || item.copierNum || 0)
+
           const profitLossRatio = mv[4] ? parseFloat(String(mv[4]).replace(/[^0-9.\-+]/g, '')) : null
           const sharpeRatio = mv[5] ? parseFloat(String(mv[5]).replace(/[^0-9.\-+]/g, '')) : null
 
           allTraders.set(traderId, {
             traderId,
             nickname: item.nickName || item.leaderName || null,
-            avatar: item.avatar || item.avatarUrl || null,
+            avatar: item.profilePhoto || item.avatar || item.avatarUrl || null,
             roi,
             pnl,
             winRate,
@@ -201,19 +180,19 @@ async function fetchLeaderboardData(period) {
           for (const item of result.traders) {
             const traderId = String(item.leaderMark || item.leaderId || '')
             if (!traderId || allTraders.has(traderId)) continue
-            let roi = parseFloat(item.roi || item.roiRate || 0)
-            if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
             const mvFb = item.metricValues || []
+            const parseMFb = (v) => v ? parseFloat(String(v).replace(/[^0-9.\-+]/g, '')) : 0
             const plrFb = mvFb[4] ? parseFloat(String(mvFb[4]).replace(/[^0-9.\-+]/g, '')) : null
             const srFb = mvFb[5] ? parseFloat(String(mvFb[5]).replace(/[^0-9.\-+]/g, '')) : null
             allTraders.set(traderId, {
               traderId,
               nickname: item.nickName || item.leaderName || null,
-              avatar: item.avatar || null,
-              roi, pnl: parseFloat(item.pnl || 0),
-              winRate: parseFloat(item.winRate || 0),
-              maxDrawdown: parseFloat(item.mdd || 0),
-              followers: parseInt(item.followerCount || 0),
+              avatar: item.profilePhoto || item.avatar || null,
+              roi: parseMFb(mvFb[0]),
+              pnl: parseMFb(mvFb[2]),
+              winRate: parseMFb(mvFb[3]),
+              maxDrawdown: parseMFb(mvFb[1]),
+              followers: parseInt(item.currentFollowerCount || item.followerCount || 0),
               profitLossRatio: isNaN(plrFb) ? null : plrFb,
               sharpeRatio: isNaN(srFb) ? null : srFb,
             })
