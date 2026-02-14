@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
             siteName: 'Arena',
             images: book.cover_url
               ? [{ url: book.cover_url, alt: book.title }]
-              : [{ url: `${baseUrl}/og.png`, alt: 'Arena' }],
+              : [{ url: `${baseUrl}/og-image.png`, alt: 'Arena' }],
           },
           twitter: {
             card: 'summary',

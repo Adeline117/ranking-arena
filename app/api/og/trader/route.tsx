@@ -9,7 +9,6 @@ import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
-import { tokens } from '@/lib/design-tokens'
 
 export const runtime = 'edge'
 
@@ -102,7 +101,7 @@ export async function GET(request: NextRequest) {
               flexDirection: 'column',
               alignItems: 'center',
               padding: '48px 64px',
-              borderRadius: tokens.radius['3xl'],
+              borderRadius: '24px',
               background: colors.card,
               border: `1px solid rgba(139,111,168,0.3)`,
               boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
