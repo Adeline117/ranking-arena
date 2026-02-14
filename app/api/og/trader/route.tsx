@@ -46,7 +46,7 @@ async function fetchTrader(handle: string) {
     .select('roi, pnl, win_rate, max_drawdown, arena_score, rank')
     .eq('trader_key', source.trader_key)
     .eq('platform', source.platform)
-    .eq('window', '90d')
+    .eq('season_id', '90D')
     .maybeSingle()
 
   return { ...source, ...(snapshot || {}) }
