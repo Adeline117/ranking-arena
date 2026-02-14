@@ -1570,6 +1570,20 @@ export default function LoginPage() {
           {isRegister ? t('loginSwitchToLogin') : t('loginSwitchToRegister')}
         </button>
 
+        {/* Terms of service note */}
+        <p style={{
+          textAlign: 'center',
+          fontSize: 11,
+          color: 'var(--color-text-tertiary)',
+          marginTop: 16,
+          lineHeight: 1.6,
+        }}>
+          {t('loginTermsNote')}{' '}
+          <a href="/terms" style={{ color: 'var(--color-brand)', textDecoration: 'none' }}>{t('termsOfService')}</a>
+          {' '}{t('loginTermsAnd')}{' '}
+          <a href="/privacy" style={{ color: 'var(--color-brand)', textDecoration: 'none' }}>{t('privacyPolicy')}</a>
+        </p>
+
         {/* Error message */}
         {error && (
           <div 

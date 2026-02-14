@@ -125,13 +125,33 @@ export default function GuestSignupPrompt() {
         <p style={{
           fontSize: 14,
           color: tokens.colors.text.secondary,
-          margin: '0 0 24px',
+          margin: '0 0 16px',
           lineHeight: 1.6,
         }}>
           {isZh
-            ? '免费注册，追踪全网交易员表现，加入社区讨论'
-            : 'Sign up free to track top traders across all exchanges and join the community'}
+            ? '免费注册，解锁更多功能'
+            : 'Sign up free to unlock more features'}
         </p>
+
+        <div style={{
+          textAlign: 'left',
+          margin: '0 0 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}>
+          {(isZh
+            ? ['关注交易员，追踪实时动态', '加入社区，与高手交流策略', '自定义排行榜筛选条件']
+            : ['Follow traders and track their moves', 'Join communities to discuss strategies', 'Customize ranking filters']
+          ).map((item, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: tokens.colors.text.secondary }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              {item}
+            </div>
+          ))}
+        </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Link
