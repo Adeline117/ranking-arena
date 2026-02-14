@@ -211,21 +211,27 @@ export default function CoreCards() {
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
 
   useEffect(() => {
-    fetch('/api/market')
-      .then(r => r.json())
-      .then(json => {
-        const rows: CoinRow[] = json.rows ?? []
-        const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
-        setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
-        setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
-        setMarketLoaded(true)
-      })
-      .catch(() => { setMarketLoaded(true) })
+    const fetchMarketData = () => {
+      fetch('/api/market')
+        .then(r => r.json())
+        .then(json => {
+          const rows: CoinRow[] = json.rows ?? []
+          const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
+          setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
+          setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
+          setMarketLoaded(true)
+        })
+        .catch(() => { setMarketLoaded(true) })
 
-    fetch('/api/market/exchanges')
-      .then(r => r.json())
-      .then(json => { if (Array.isArray(json)) setExchanges(json.slice(0, 5)) })
-      .catch(() => {})
+      fetch('/api/market/exchanges')
+        .then(r => r.json())
+        .then(json => { if (Array.isArray(json)) setExchanges(json.slice(0, 5)) })
+        .catch(() => {})
+    }
+    fetchMarketData()
+    // Refresh market data every 60 seconds
+    const interval = setInterval(fetchMarketData, 60000)
+    return () => clearInterval(interval)
   }, [])
 
   const maxVol = exchanges.length > 0 ? Math.max(...exchanges.map(e => e.trade_volume_24h_btc)) : 0

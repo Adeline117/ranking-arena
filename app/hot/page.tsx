@@ -274,6 +274,9 @@ function HotContent() {
 
   useEffect(() => {
     loadPosts()
+    // Refresh hot posts every 3 minutes
+    const interval = setInterval(loadPosts, 180000)
+    return () => clearInterval(interval)
   }, [loadPosts])
 
   // Load groups when groups tab is active (merged with polling)

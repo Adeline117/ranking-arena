@@ -120,6 +120,7 @@ export default function FlashNewsPage() {
       }
       setPagination(pag)
       setHasMore(pag.hasNext)
+      if (!append) setLastUpdated(new Date())
     } catch {
       showToast(language === 'zh' ? '获取快讯失败' : 'Failed to load news', 'error')
     } finally {
@@ -128,12 +129,22 @@ export default function FlashNewsPage() {
     }
   }, [showToast, language])
 
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
   // Initial load + category change
   useEffect(() => {
     setCurrentPage(1)
     setNews([])
     setHasMore(true)
     fetchNews(1, selectedCategory)
+  }, [fetchNews, selectedCategory])
+
+  // Auto-refresh: poll for new news every 2 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNews(1, selectedCategory)
+    }, 120000)
+    return () => clearInterval(interval)
   }, [fetchNews, selectedCategory])
 
   // Infinite scroll via IntersectionObserver
@@ -266,6 +277,12 @@ export default function FlashNewsPage() {
               ? '实时跟踪加密货币与金融市场快讯'
               : 'Real-time updates on crypto, macro, and financial markets'}
           </Text>
+          {lastUpdated && (
+            <Text style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, marginTop: tokens.spacing[1] }}>
+              {language === 'zh' ? '最后更新: ' : 'Last updated: '}
+              {lastUpdated.toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </Text>
+          )}
         </Box>
 
         {/* Category Filter */}
