@@ -71,7 +71,7 @@ const en = {
     downvote: 'Downvote',
     hotDiscussion: 'Hot Discussion',
     more: 'More',
-    loadFailed: 'Load failed',
+    loadFailed: 'Failed to load, tap to retry',
     secondsAgo: 'seconds ago',
     minutesAgo: 'minutes ago',
     bullish: 'Bullish',
@@ -812,7 +812,7 @@ const en = {
     twoFADisabled: '2FA disabled',
     sessionRevoked: 'Session revoked',
     logoutAllDevices: 'Logout All Devices',
-    logoutAllDevicesConfirm: 'Logout from all other devices?',
+    logoutAllDevicesConfirm: 'Log out from all other devices? They will need to sign in again.',
     logoutAllSuccess: 'Logged out from all other devices',
     unblocked: 'Unblocked',
     emailDigestSaved: 'Email digest settings saved',
@@ -1425,7 +1425,7 @@ const en = {
     // My Posts
     loadPostsFailed: 'Failed to load posts',
     deletePostTitle: 'Delete Post',
-    deletePostMessage: 'Are you sure you want to delete this post?',
+    deletePostMessage: 'Are you sure you want to delete this post? This cannot be undone.',
 
     // TraderAboutCard
     addBioHint: 'Click below to add a bio',
