@@ -18,7 +18,7 @@ export default function NotFound() {
         Channel Not Found
       </h1>
       <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
-        This channel doesn't exist or you don't have access.
+        This channel does not exist or you do not have access.
       </p>
       <Link
         href="/"

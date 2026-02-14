@@ -18,7 +18,7 @@ export default function NotFound() {
         Bot Not Found
       </h1>
       <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
-        The bot you're looking for doesn't exist or has been removed.
+        The bot you are looking for does not exist or has been removed.
       </p>
       <Link
         href="/rankings/bots"
