@@ -15,6 +15,8 @@ export const runtime = 'edge'
 
 const startTime = Date.now()
 const version = process.env.npm_package_version || '0.1.0'
+// Deploy timestamp from env (set at build time), fallback to module load time
+const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME ? parseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, 10) : startTime
 
 let supabaseInstance: ReturnType<typeof createClient> | null = null
 function getSupabase() {
@@ -61,23 +63,33 @@ async function checkRedis(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency
 export async function GET() {
   const t0 = Date.now()
 
-  // Only DB + Redis connectivity - run in parallel
+  // DB + Redis + API connectivity - run in parallel
   const [database, redis] = await Promise.all([
     checkDatabase(),
     checkRedis(),
   ])
 
+  // API check (self-check: if we got here, the API layer is working)
+  const api: { status: 'pass' | 'fail'; latency?: number; message?: string } = {
+    status: 'pass',
+    latency: Date.now() - t0,
+    message: 'Responding',
+  }
+
   let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy'
   if (database.status === 'fail') status = 'unhealthy'
   else if (redis.status === 'fail') status = 'degraded'
+
+  // Use deploy time for more stable uptime calculation
+  const uptimeSeconds = Math.max(1, Math.round((Date.now() - deployTime) / 1000))
 
   return NextResponse.json({
     status,
     timestamp: new Date().toISOString(),
     version,
-    uptime: Math.round((Date.now() - startTime) / 1000),
+    uptime: uptimeSeconds,
     responseTimeMs: Date.now() - t0,
-    checks: { database, redis },
+    checks: { api, database, redis },
     _detail: '/api/health/detailed',
   }, {
     status: status === 'unhealthy' ? 503 : 200,

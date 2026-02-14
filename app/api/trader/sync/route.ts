@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
         if (result.success) {
           // Store synced data
-          await storeSyncedData(supabase, auth, result.data)
+          await storeSyncedData(supabase, auth, result.data!)
 
           // Log success
           await supabase.from('authorization_sync_logs').insert({

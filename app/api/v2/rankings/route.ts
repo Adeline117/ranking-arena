@@ -129,7 +129,8 @@ export async function GET(request: NextRequest) {
   query = query.range(offset, offset + limit - 1)
 
    
-  const { data: snapshots, count, error } = await query as { data: Record<string, unknown>[] | null; count: number | null; error: { message: string } | null }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: snapshots, count, error } = await query as { data: Record<string, any>[] | null; count: number | null; error: { message: string } | null }
 
   if (error) {
     logger.error('[Rankings API] Query error:', error)
