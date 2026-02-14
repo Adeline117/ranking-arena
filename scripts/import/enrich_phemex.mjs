@@ -7,15 +7,16 @@ import { chromium } from 'playwright'
 import { getSupabaseClient, calculateArenaScore, sleep } from './lib/shared.mjs'
 
 const supabase = getSupabaseClient()
-const PROXY = 'http://127.0.0.1:7890'
+const PROXY = process.env.PROXY_URL || ''
 
 async function fetchAllTraders() {
   console.log('Launching browser...')
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
-  const context = await browser.newContext({
-    proxy: { server: PROXY },
+  const ctxOpts = {
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  })
+  }
+  if (PROXY) ctxOpts.proxy = { server: PROXY }
+  const context = await browser.newContext(ctxOpts)
   const page = await context.newPage()
 
   // Intercept recommend API to capture cookies/headers that work
