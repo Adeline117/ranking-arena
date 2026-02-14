@@ -177,9 +177,9 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
             )}
           </Box>
 
-          <Box style={{ flex: 1 }}>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <Text size="xl" weight="bold" style={{ color: 'var(--color-text-primary)' }}>{displayName}</Text>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], minWidth: 0 }}>
+              <Text size="xl" weight="bold" style={{ color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</Text>
               <button
                 onClick={copyHandle}
                 title={copied ? 'Copied!' : `Copy: ${data.handle}`}
