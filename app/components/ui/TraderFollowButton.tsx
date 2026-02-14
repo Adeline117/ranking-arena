@@ -132,7 +132,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
       }
 
       if (!response.ok) {
-        throw new Error(data.error || '操作失败')
+        throw new Error(data.error || t('operationFailed'))
       }
 
       setFollowing(data.following)
