@@ -108,12 +108,12 @@ export default function ReportModal({
     }
 
     if (!description.trim() || description.trim().length < MIN_DESC_LENGTH) {
-      showToast(t('reportMinDescription') || `举报理由至少${MIN_DESC_LENGTH}个字符`, 'warning')
+      showToast(t('reportMinDescription'), 'warning')
       return
     }
 
     if (images.length === 0) {
-      showToast(t('reportNeedImage') || '请至少上传一张截图作为证据', 'warning')
+      showToast(t('reportNeedImage'), 'warning')
       return
     }
 
@@ -348,14 +348,14 @@ export default function ReportModal({
                 }}
               />
               <Text size="xs" style={{ marginTop: 4, textAlign: 'right', color: description.trim().length < MIN_DESC_LENGTH ? 'var(--color-accent-error)' : tokens.colors.text.tertiary }}>
-                {description.trim().length}/{MIN_DESC_LENGTH} {t('reportMinChars') || '字符最少'} · {description.length}/1000
+                {description.trim().length}/{MIN_DESC_LENGTH} {t('reportMinChars')} · {description.length}/1000
               </Text>
             </Box>
 
             {/* Image Upload */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('reportScreenshot') || '截图证据'} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
+                {t('reportScreenshot')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
                 <span style={{ fontWeight: 400, color: tokens.colors.text.tertiary, marginLeft: 4, fontSize: 12 }}>
                   ({images.length}/{MAX_IMAGES})
                 </span>
@@ -391,7 +391,7 @@ export default function ReportModal({
                       <circle cx="8.5" cy="8.5" r="1.5"/>
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
-                    <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{uploading ? '...' : t('upload') || '上传'}</span>
+                    <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{uploading ? '...' : t('upload')}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -401,7 +401,7 @@ export default function ReportModal({
                         const file = e.target.files?.[0]
                         if (!file) return
                         if (file.size > 5 * 1024 * 1024) {
-                          showToast(t('fileTooLarge') || '图片不超过5MB', 'warning')
+                          showToast(t('fileTooLarge'), 'warning')
                           return
                         }
                         setUploading(true)

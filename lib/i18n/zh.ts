@@ -278,6 +278,7 @@ const zh = {
     pollDescription: '让读者投票：看涨 / 看跌 / 观望',
     imagesOptional: '图片（可选，最多9张）',
     addImage: '添加图片',
+    upload: '上传',
     uploadingImage: '上传中...',
     imageSupport: '支持 JPG、PNG、GIF、WebP 格式，单张最大 5MB',
     mentionTip: '提示：使用 @用户名 可以提及其他用户，链接会自动变为可点击',
