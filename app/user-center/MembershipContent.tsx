@@ -140,6 +140,30 @@ export default function MembershipContent() {
           )}
         </div>
 
+        {/* Expiry Warning */}
+        {info?.subscription?.currentPeriodEnd && (() => {
+          const daysUntilExpiry = Math.ceil((new Date(info.subscription!.currentPeriodEnd!).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+          if (daysUntilExpiry <= 7 && daysUntilExpiry > 0 && info.subscription!.cancelAtPeriodEnd) {
+            return (
+              <div style={{
+                padding: '12px 16px',
+                background: `${tokens.colors.accent.warning}15`,
+                border: `1px solid ${tokens.colors.accent.warning}40`,
+                borderRadius: tokens.radius.lg,
+                marginBottom: 16,
+                fontSize: 14,
+                color: tokens.colors.accent.warning,
+                fontWeight: 600,
+              }}>
+                {isZh
+                  ? `Pro 会员将在 ${daysUntilExpiry} 天后到期，届时将降级为 Free 方案。`
+                  : `Your Pro membership expires in ${daysUntilExpiry} day${daysUntilExpiry > 1 ? 's' : ''}. You will be downgraded to Free.`}
+              </div>
+            )
+          }
+          return null
+        })()}
+
         {/* Subscription Details */}
         {info?.subscription && (
           <div style={{
