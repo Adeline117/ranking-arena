@@ -11,6 +11,16 @@ import type { PostWithUserState } from '@/lib/types'
 import { logger } from '@/lib/logger'
 import { useToast } from '@/app/components/ui/Toast'
 
+/** Score posts by freshness (10h half-life) + engagement */
+function calculateFeedScore(post: PostWithUserState): number {
+  const ageHours = (Date.now() - new Date(post.created_at).getTime()) / 3600000
+  const freshness = Math.exp(-0.1 * ageHours)
+  const engagement = (post.like_count || 0) * 2
+    + (post.comment_count || 0) * 3
+    + (post.repost_count || 0) * 4
+  return freshness * 100 + engagement
+}
+
 export default function FollowingFeed() {
   const { user, loading: authLoading } = useAuthSession()
   const { language } = useLanguage()
@@ -47,7 +57,10 @@ export default function FollowingFeed() {
           .order('created_at', { ascending: false })
           .limit(30)
 
-        setPosts((postsData as PostWithUserState[]) || [])
+        // Score and sort by relevance (freshness + engagement)
+        const scoredPosts = ((postsData as PostWithUserState[]) || [])
+          .sort((a, b) => calculateFeedScore(b) - calculateFeedScore(a))
+        setPosts(scoredPosts)
       } catch (e) {
         logger.error('Failed to fetch following feed:', e)
         showToast(isZh ? '加载关注动态失败' : 'Failed to load feed', 'error')
