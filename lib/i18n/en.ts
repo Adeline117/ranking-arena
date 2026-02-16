@@ -3490,6 +3490,16 @@ const en = {
     bookAnonymous: 'Anonymous',
 typing: 'typing...',
 
+// Filter
+grade: 'Grade',
+
+// Profile activity
+activityOverview: 'Activity Overview',
+totalActivities: 'Total',
+currentStreak: 'Current Streak',
+longestStreak: 'Longest Streak',
+totalActiveDays: 'Total Active Days',
+
 } as const
 
 export default en

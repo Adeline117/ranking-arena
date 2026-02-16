@@ -3497,6 +3497,16 @@ const zh = {
     bookAnonymous: '匿名用户',
     typing: '正在输入...',
 
+// Filter
+grade: '等级',
+
+// Profile activity
+activityOverview: '活动概览',
+totalActivities: '共',
+currentStreak: '当前连续',
+longestStreak: '最长连续',
+totalActiveDays: '总活跃天数',
+
 } as const
 
 export default zh
