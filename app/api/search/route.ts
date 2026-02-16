@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 
 export interface UnifiedSearchResult {
   id: string
-  type: 'trader' | 'post' | 'library' | 'user'
+  type: 'trader' | 'post' | 'library' | 'user' | 'group'
   title: string
   subtitle?: string
   href: string
@@ -26,6 +26,7 @@ export interface UnifiedSearchResponse {
     posts: UnifiedSearchResult[]
     library: UnifiedSearchResult[]
     users: UnifiedSearchResult[]
+    groups: UnifiedSearchResult[]
   }
   total: number
 }
@@ -42,7 +43,7 @@ export const GET = withPublic(
     if (!query || query.length < 1) {
       return success({
         query: '',
-        results: { traders: [], posts: [], library: [], users: [] },
+        results: { traders: [], posts: [], library: [], users: [], groups: [] },
         total: 0,
       } satisfies UnifiedSearchResponse)
     }
@@ -66,7 +67,7 @@ export const GET = withPublic(
     if (!sanitizedQuery) {
       return success({
         query,
-        results: { traders: [], posts: [], library: [], users: [] },
+        results: { traders: [], posts: [], library: [], users: [], groups: [] },
         total: 0,
       } satisfies UnifiedSearchResponse)
     }
@@ -83,7 +84,7 @@ export const GET = withPublic(
       }
     }
 
-    const [tradersData, postsData, libraryData, usersData] = await Promise.all([
+    const [tradersData, postsData, libraryData, usersData, groupsData] = await Promise.all([
       safeQuery(supabase
         .from('trader_sources')
         .select('source_trader_id, handle, source')
@@ -114,6 +115,12 @@ export const GET = withPublic(
           `handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%,bio.ilike.%${sanitizedQuery}%`
         )
         .limit(limitPerCategory)),
+
+      safeQuery(supabase
+        .from('groups')
+        .select('id, name, member_count, description')
+        .ilike('name', `%${sanitizedQuery}%`)
+        .limit(limitPerCategory)),
     ])
 
     const sourceLabels: Record<string, string> = {
@@ -135,6 +142,7 @@ export const GET = withPublic(
     interface PostRow { id: string; title: string | null; author_handle: string | null; created_at: string; view_count: number | null }
     interface LibraryRow { id: string; title: string; author: string | null; slug: string | null; category: string | null }
     interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
+    interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
 
     const traders: UnifiedSearchResult[] = (tradersData as TraderSourceRow[]).map((t) => ({
       id: `${t.source}:${t.source_trader_id}`,
@@ -175,10 +183,19 @@ export const GET = withPublic(
       avatar: u.avatar_url,
     }))
 
+    const groups: UnifiedSearchResult[] = (groupsData as GroupRow[]).map((g) => ({
+      id: g.id,
+      type: 'group' as const,
+      title: g.name,
+      subtitle: g.description || undefined,
+      href: `/groups/${g.id}`,
+      meta: { member_count: g.member_count },
+    }))
+
     const result: UnifiedSearchResponse = {
       query,
-      results: { traders, posts, library, users },
-      total: traders.length + posts.length + library.length + users.length,
+      results: { traders, posts, library, users, groups },
+      total: traders.length + posts.length + library.length + users.length + groups.length,
     }
 
     // 缓存 5 分钟（pg_trgm索引加速后可以更长TTL）

@@ -10,13 +10,16 @@ import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 
-const CoreCards = lazy(() => import('@/app/components/market/CoreCards'))
+// Core above-fold components: direct import for faster LCP
+import CoreCards from '@/app/components/market/CoreCards'
+import PriceTicker from '@/app/components/market/PriceTicker'
+import FearGreedGauge from '@/app/components/market/FearGreedGauge'
+
+// Below-fold components: lazy-loaded
 const SectorTreemap = lazy(() => import('@/app/components/market/SectorTreemap'))
 const SpotMarket = lazy(() => import('@/app/components/market/SpotMarket'))
 const TokenSidePanel = lazy(() => import('@/app/components/market/TokenSidePanel'))
 const MobileMarketTabs = lazy(() => import('@/app/components/market/MobileMarketTabs'))
-const PriceTicker = lazy(() => import('@/app/components/market/PriceTicker'))
-const FearGreedGauge = lazy(() => import('@/app/components/market/FearGreedGauge'))
 const ArbitrageOpportunities = lazy(() => import('@/app/components/market/ArbitrageOpportunities'))
 const LiveTradesFeed = lazy(() => import('@/app/components/market/LiveTradesFeed'))
 

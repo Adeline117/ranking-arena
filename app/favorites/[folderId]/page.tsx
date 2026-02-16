@@ -3,7 +3,6 @@
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -18,6 +17,7 @@ import { useDialog } from '@/app/components/ui/Dialog'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import PostDetailModal from './components/PostDetailModal'
 
 interface BookmarkFolder {
   id: string
@@ -320,129 +320,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     }
   }
 
-  // 帖子详情弹窗组件
-  const PostDetailModal = () => {
-    if (!selectedPost) return null
-    
-    const modalContent = (
-      <div
-        onClick={handleClosePost}
-        role="dialog"
-        aria-modal="true"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'var(--color-backdrop-medium)',
-          display: 'grid',
-          placeItems: 'center',
-          padding: 16,
-          zIndex: tokens.zIndex.modal,
-          overflowY: 'auto',
-        }}
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            width: 'min(760px, 100%)',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: tokens.radius.xl,
-            background: tokens.colors.bg.secondary,
-            padding: 24,
-          }}
-        >
-          {/* 关闭按钮 */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-            <button
-              onClick={handleClosePost}
-              aria-label={t('close')}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: tokens.colors.text.secondary,
-                cursor: 'pointer',
-                fontSize: 24,
-                width: 36,
-                height: 36,
-                borderRadius: tokens.radius.md,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              ×
-            </button>
-          </div>
-          
-          {/* 帖子标题 */}
-          <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-            {selectedPost.title}
-          </Text>
-          
-          {/* 帖子元信息 */}
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
-            {selectedPost.author_handle && (
-              <Link
-                href={`/u/${encodeURIComponent(selectedPost.author_handle)}`}
-                style={{ color: tokens.colors.accent?.primary, textDecoration: 'none', fontSize: 14 }}
-              >
-                @{selectedPost.author_handle}
-              </Link>
-            )}
-            <Text size="sm" color="tertiary">
-              {formatTimeAgo(selectedPost.created_at)}
-            </Text>
-          </Box>
-          
-          {/* 帖子内容 */}
-          {postDetailLoading ? (
-            <Text size="sm" color="tertiary">{t('loading')}</Text>
-          ) : (
-            <Text 
-              size="base" 
-              style={{ 
-                lineHeight: 1.8, 
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {fullPostContent || selectedPost.content || ''}
-            </Text>
-          )}
-          
-          {/* 互动数据 */}
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], marginTop: tokens.spacing[6], paddingTop: tokens.spacing[4], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
-            <Text size="sm" color="tertiary">
-              {t('likesCount').replace('{n}', String(selectedPost.like_count || 0))}
-            </Text>
-            <Text size="sm" color="tertiary">
-              {t('commentsCount').replace('{n}', String(selectedPost.comment_count || 0))}
-            </Text>
-            <Text size="sm" color="tertiary">
-              {t('bookmarksCount').replace('{n}', String(selectedPost.bookmark_count || 0))}
-            </Text>
-          </Box>
-          
-          {/* 查看完整帖子链接 */}
-          <Box style={{ marginTop: tokens.spacing[4], textAlign: 'center' }}>
-            <Link
-              href={`/post/${selectedPost.id}`}
-              style={{
-                color: tokens.colors.accent?.primary,
-                textDecoration: 'none',
-                fontSize: 14,
-              }}
-            >
-              {t('viewFullPost')} →
-            </Link>
-          </Box>
-        </div>
-      </div>
-    )
-    
-    return createPortal(modalContent, document.body)
-  }
+  // PostDetailModal is now extracted to components/PostDetailModal.tsx
 
   if (loading) {
     return (
@@ -823,7 +701,13 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       </Box>
       
       {/* 帖子详情弹窗 */}
-      <PostDetailModal />
+      <PostDetailModal
+        post={selectedPost}
+        fullContent={fullPostContent}
+        loading={postDetailLoading}
+        t={t}
+        onClose={handleClosePost}
+      />
       <MobileBottomNav />
     </Box>
   )

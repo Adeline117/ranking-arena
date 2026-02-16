@@ -164,22 +164,15 @@ function SearchContent() {
       try {
         // Use unified search API instead of direct Supabase queries
         // This leverages server-side caching and consistent search logic
-        const [apiRes, groupRes] = await Promise.allSettled([
-          fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=${SECTION_LIMIT}`, {
-            signal: controller.signal,
-          }),
-          // Groups are not in the unified API, query separately
-          supabase.from('groups')
-            .select('id, name, member_count, description', { count: 'exact' })
-            .ilike('name', `%${query.trim().slice(0, 100).replace(/[\\%_]/g, c => `\\${c}`)}%`)
-            .limit(SECTION_LIMIT),
-        ])
+        const apiRes = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=${SECTION_LIMIT}`, {
+          signal: controller.signal,
+        })
 
         if (controller.signal.aborted) return
 
-        // Process unified API results
-        if (apiRes.status === 'fulfilled' && apiRes.value.ok) {
-          const json = await apiRes.value.json()
+        // Process unified API results (including groups)
+        if (apiRes.ok) {
+          const json = await apiRes.json()
           const data: UnifiedSearchResponse = json.data || json
 
           // Library
@@ -209,26 +202,26 @@ function SearchContent() {
             title: t.title,
             subtitle: t.subtitle || undefined,
           })))
+
+          // Groups
+          const groupsResults = data.results.groups || []
+          setGroupTotal(groupsResults.length)
+          setGroupResults(groupsResults.map(g => ({
+            type: 'group' as const,
+            id: g.id,
+            title: g.title,
+            subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString()} ${isZh ? '成员' : 'members'}` : undefined,
+            meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
+          })))
         } else {
           setLibraryResults([])
           setPostResults([])
           setTraderResults([])
+          setGroupResults([])
           setLibTotal(0)
           setPostTotal(0)
           setTraderTotal(0)
-        }
-
-        // Groups (separate query)
-        if (groupRes.status === 'fulfilled') {
-          const { data, count } = groupRes.value
-          setGroupTotal(count || 0)
-          setGroupResults((data || []).map((g: Record<string, unknown>) => ({
-            type: 'group' as const,
-            id: g.id as string,
-            title: (g.name as string) || '',
-            subtitle: g.member_count ? `${(g.member_count as number).toLocaleString()} ${isZh ? '成员' : 'members'}` : undefined,
-            meta: g.description ? ((g.description as string).slice(0, 60)) : undefined,
-          })))
+          setGroupTotal(0)
         }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return
