@@ -3488,6 +3488,7 @@ const en = {
     bookLoadMore: 'Load more',
     bookSimilar: 'You might also like',
     bookAnonymous: 'Anonymous',
+typing: 'typing...',
 
 } as const
 

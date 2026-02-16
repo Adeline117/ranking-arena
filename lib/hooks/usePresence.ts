@@ -145,7 +145,25 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
     return presenceMap[userId] || { userId, isOnline: false, lastSeenAt: null }
   }, [presenceMap])
 
-  return { presenceMap, getUserPresence }
+  const setTyping = useCallback((conversationId: string, isTyping: boolean) => {
+    if (!currentUserId || !channelRef.current) return
+    channelRef.current.track({
+      user_id: currentUserId,
+      online_at: new Date().toISOString(),
+      typing_in: isTyping ? conversationId : null,
+    })
+  }, [currentUserId])
+
+  const isUserTyping = useCallback((userId: string, conversationId: string): boolean => {
+    const channel = channelRef.current
+    if (!channel) return false
+    const state = channel.presenceState()
+    const presences = state[userId]
+    if (!presences || presences.length === 0) return false
+    return presences.some((p: Record<string, unknown>) => p.typing_in === conversationId)
+  }, [])
+
+  return { presenceMap, getUserPresence, setTyping, isUserTyping }
 }
 
 /**

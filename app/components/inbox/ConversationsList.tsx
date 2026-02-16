@@ -206,8 +206,19 @@ export default function ConversationsList(): React.ReactElement {
       <CreateGroupModal isOpen={showCreateGroup} onClose={() => setShowCreateGroup(false)} />
 
       {loading ? (
-        <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {t('loading')}
+        <div style={{ padding: tokens.spacing[3], display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: tokens.colors.bg.tertiary, flexShrink: 0, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ width: '40%', height: 14, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                  <div style={{ width: 40, height: 10, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                </div>
+                <div style={{ width: '65%', height: 12, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+              </div>
+            </div>
+          ))}
         </div>
       ) : error ? (
         <div style={{ padding: tokens.spacing[4], textAlign: 'center' }}>

@@ -3495,6 +3495,7 @@ const zh = {
     bookLoadMore: '加载更多',
     bookSimilar: '相似推荐',
     bookAnonymous: '匿名用户',
+    typing: '正在输入...',
 
 } as const
 

@@ -59,11 +59,37 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
   const [previewOpen, setPreviewOpen] = useState<{ type: 'image' | 'video' | 'file'; url: string; fileName?: string } | null>(null)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Online presence
   const watchIds = otherUser ? [otherUser.id] : []
-  const { getUserPresence } = usePresence(userId, watchIds)
+  const { getUserPresence, setTyping, isUserTyping } = usePresence(userId, watchIds)
   const otherPresence = otherUser ? getUserPresence(otherUser.id) : null
+  const otherIsTyping = otherUser && conversationId ? isUserTyping(otherUser.id, conversationId) : false
+
+  // Typing indicator: emit typing state on input change
+  const handleTypingChange = useCallback((text: string) => {
+    setNewMessage(text)
+    if (!conversationId) return
+    if (text.trim()) {
+      setTyping(conversationId, true)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => {
+        setTyping(conversationId, false)
+      }, 3000)
+    } else {
+      setTyping(conversationId, false)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    }
+  }, [conversationId, setTyping])
+
+  // Clear typing on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      if (conversationId) setTyping(conversationId, false)
+    }
+  }, [conversationId, setTyping])
 
   // Mark messages as read when conversation opens
   useEffect(() => {
@@ -234,6 +260,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       _attachment: pendingAttachment || undefined, media_url: pendingAttachment?.url, media_type: pendingAttachment?.type, media_name: pendingAttachment?.originalName,
     }
     setMessages(prev => [...prev, optimisticMessage]); setNewMessage(''); setPendingAttachment(null); inputRef.current?.focus()
+    if (conversationId) { setTyping(conversationId, false); if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current) }
 
     setSending(true)
     try {
@@ -299,7 +326,13 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
 
   // Auth / loading states
   if (!authChecked || (authChecked && !userId && loading)) {
-    return (<Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}><TopNav email={email} /><Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}><Text size="lg">{t('loading')}</Text></Box></Box>)
+    return (<Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}><TopNav email={email} /><Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6], display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+      {[1, 2, 3, 4, 5].map(i => (
+        <Box key={i} style={{ display: 'flex', alignItems: i % 2 === 0 ? 'flex-end' : 'flex-start', flexDirection: 'column', gap: 4 }}>
+          <Box style={{ width: `${30 + Math.random() * 40}%`, height: 40, borderRadius: 16, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+        </Box>
+      ))}
+    </Box></Box>)
   }
   if (authChecked && !userId) {
     return (
@@ -319,7 +352,13 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
     )
   }
   if (loading) {
-    return (<Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}><TopNav email={email} /><Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}><Text size="lg">{t('loading')}</Text></Box></Box>)
+    return (<Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}><TopNav email={email} /><Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6], display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+      {[1, 2, 3, 4, 5, 6].map(i => (
+        <Box key={i} style={{ display: 'flex', alignItems: i % 2 === 0 ? 'flex-end' : 'flex-start', flexDirection: 'column', gap: 4 }}>
+          <Box style={{ width: `${25 + (i * 7) % 35}%`, height: 36 + (i % 3) * 8, borderRadius: 16, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+        </Box>
+      ))}
+    </Box></Box>)
   }
 
   const visibleMessages = clearedBefore ? messages.filter(msg => new Date(msg.created_at) > new Date(clearedBefore)) : messages
@@ -450,8 +489,26 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
 
       <style>{`.msg-bubble:hover + .msg-timestamp, .msg-timestamp:hover { opacity: 1 !important; } div:hover > .msg-timestamp { opacity: 1 !important; } .msg-bubble { position: relative; }`}</style>
 
+      {/* Typing indicator */}
+      {otherIsTyping && (
+        <Box style={{
+          padding: `${tokens.spacing[1]} ${tokens.spacing[4]}`,
+          maxWidth: 800, margin: '0 auto', width: '100%',
+        }}>
+          <Text size="xs" color="tertiary" style={{ fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: tokens.colors.text.tertiary, animation: 'typingDot 1.4s infinite', animationDelay: '0s' }} />
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: tokens.colors.text.tertiary, animation: 'typingDot 1.4s infinite', animationDelay: '0.2s' }} />
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: tokens.colors.text.tertiary, animation: 'typingDot 1.4s infinite', animationDelay: '0.4s' }} />
+            </span>
+            {t('typing')}
+          </Text>
+        </Box>
+      )}
+      <style>{`@keyframes typingDot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }`}</style>
+
       <MessageInput
-        newMessage={newMessage} setNewMessage={setNewMessage}
+        newMessage={newMessage} setNewMessage={handleTypingChange}
         pendingAttachment={pendingAttachment} setPendingAttachment={setPendingAttachment}
         sending={sending} uploading={uploading} setUploading={setUploading}
         userId={userId} conversationId={conversationId}
