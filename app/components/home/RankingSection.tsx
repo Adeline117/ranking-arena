@@ -15,6 +15,7 @@ import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
+import { getScoreGradeLetter } from '@/lib/utils/score-explain'
 import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -374,6 +375,10 @@ export default function RankingSection({
       if (config.min_score != null && (trader.arena_score == null || trader.arena_score < config.min_score)) return false
       // 最小胜率
       if (config.min_win_rate != null && (trader.win_rate == null || trader.win_rate < config.min_win_rate)) return false
+      // 等级筛选
+      if (config.grade && trader.arena_score != null) {
+        if (getScoreGradeLetter(trader.arena_score) !== config.grade) return false
+      }
       return true
     })
   }
@@ -611,7 +616,7 @@ export default function RankingSection({
       {/* Exchange filter removed - use advanced filter only */}
 
       {/* 高级筛选面板 */}
-      {showAdvancedFilter && isPro && (
+      {showAdvancedFilter && (
         <Box style={{ marginBottom: tokens.spacing[2] }}>
           <AdvancedFilter
             currentFilter={filterConfig}

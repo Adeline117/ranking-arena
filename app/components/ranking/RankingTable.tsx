@@ -30,7 +30,6 @@ import {
 } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
 import { classifyStyle, getFilterableStyles, type TradingStyle } from '@/lib/utils/trading-style'
-import { getScoreGradeLetter } from '@/lib/utils/score-explain'
 
 // CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)
 // Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
@@ -296,9 +295,8 @@ function RankingTableInner(props: {
   const columnSettingsRef = useRef<HTMLDivElement>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('table')
 
-  // Trading style & score grade filters
+  // Trading style filter
   const [styleFilter, setStyleFilter] = useState<TradingStyle | 'all'>('all')
-  const [gradeFilter, setGradeFilter] = useState<string>('all') // 'all' | 'S' | 'A' | 'B' | 'C' | 'D'
   // Expanded row for score breakdown
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
 
@@ -420,13 +418,6 @@ function RankingTableInner(props: {
         return style === styleFilter
       })
     }
-    // Apply grade filter
-    if (gradeFilter !== 'all') {
-      data = data.filter(t => {
-        if (t.arena_score == null) return false
-        return getScoreGradeLetter(t.arena_score) === gradeFilter
-      })
-    }
     return [...data].sort((a, b) => {
       let aVal = 0, bVal = 0
       switch (sortColumn) {
@@ -439,7 +430,7 @@ function RankingTableInner(props: {
       }
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
-  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter, gradeFilter])
+  }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter])
 
 
   const totalPages = Math.ceil(sortedTraders.length / itemsPerPage)
@@ -458,7 +449,7 @@ function RankingTableInner(props: {
   })
 
   // Reset virtualizer scroll position on page/sort/filter changes
-  const resetKey = useMemo(() => `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}-${gradeFilter}`, [currentPage, sortColumn, sortDir, debouncedSearch, styleFilter, gradeFilter])
+  const resetKey = useMemo(() => `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}`, [currentPage, sortColumn, sortDir, debouncedSearch, styleFilter])
   useEffect(() => {
     if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
   }, [resetKey])
@@ -627,7 +618,8 @@ function RankingTableInner(props: {
 
       {/* Search removed - use top nav search instead */}
 
-      {/* Inline Style & Grade Filters (compact row) */}
+      {/* Inline Style Filter (compact row) — only shown when style data available */}
+      {traders.some(t => t.trading_style && t.trading_style !== 'unknown') && (
       <Box style={{
         display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
         padding: `${tokens.spacing[1]} ${tokens.spacing[4]}`,
@@ -636,8 +628,7 @@ function RankingTableInner(props: {
         background: tokens.glass.bg.light,
         minHeight: 32,
       }}>
-        {/* Trading Style Filter — hidden when no style data available */}
-        {traders.some(t => t.trading_style && t.trading_style !== 'unknown') && (
+        {(
           <>
             <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
               {language === 'zh' ? '风格' : 'Style'}:
@@ -671,36 +662,8 @@ function RankingTableInner(props: {
           </>
         )}
 
-        {/* Score Grade Filter */}
-        <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
-          {language === 'zh' ? '等级' : 'Grade'}:
-        </Text>
-        {['all', 'S', 'A', 'B', 'C', 'D'].map(g => (
-          <button
-            key={g}
-            onClick={() => { setGradeFilter(g); setCurrentPage(1) }}
-            style={{
-              padding: '2px 8px',
-              borderRadius: tokens.radius.lg,
-              border: gradeFilter === g
-                ? `1px solid ${tokens.colors.accent.primary}80`
-                : `1px solid ${tokens.colors.border.primary}`,
-              background: gradeFilter === g
-                ? `${tokens.colors.accent.primary}20`
-                : 'transparent',
-              color: gradeFilter === g
-                ? tokens.colors.accent.primary
-                : tokens.colors.text.secondary,
-              fontSize: 12,
-              fontWeight: gradeFilter === g ? 700 : 500,
-              cursor: 'pointer',
-              transition: `all ${tokens.transition.fast}`,
-            }}
-          >
-            {g === 'all' ? (language === 'zh' ? '全部' : 'All') : g}
-          </button>
-        ))}
       </Box>
+      )}
 
       {/* Table Header (only in table view) - sticky */}
       {viewMode === 'table' && (

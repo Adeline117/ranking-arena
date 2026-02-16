@@ -18,6 +18,7 @@ export interface FilterConfig {
   min_pnl?: number         // 最小 PnL
   min_score?: number       // 最小 Arena Score
   min_win_rate?: number    // 最小胜率
+  grade?: string           // 等级：S, A, B, C, D
 }
 
 export interface SavedFilter {
@@ -73,7 +74,7 @@ export default function AdvancedFilter({
   onDeleteFilter,
   isPro,
 }: AdvancedFilterProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [isExpanded, setIsExpanded] = useState(true)
   // Save filter states removed - filters are session-only
 
@@ -103,24 +104,70 @@ export default function AdvancedFilter({
     return value != null
   })
 
+  // Grade filter section — available to ALL users
+  const gradeSection = (
+    <Box style={{ marginBottom: tokens.spacing[4] }}>
+      <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
+        {t('grade') || (language === 'zh' ? '等级' : 'Grade')}
+      </Text>
+      <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
+        {['S', 'A', 'B', 'C', 'D'].map(g => {
+          const isSelected = currentFilter.grade === g
+          return (
+            <button
+              key={g}
+              onClick={() => onFilterChange({ ...currentFilter, grade: isSelected ? undefined : g })}
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${isSelected ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                background: isSelected ? `${tokens.colors.accent.primary}20` : 'transparent',
+                color: isSelected ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: isSelected ? 700 : 500,
+                transition: 'all 0.2s',
+                minWidth: 36,
+              }}
+            >
+              {g}
+            </button>
+          )
+        })}
+      </Box>
+    </Box>
+  )
+
   if (!isPro) {
     return (
       <Box
         style={{
-          padding: tokens.spacing[4],
-          background: `linear-gradient(135deg, ${tokens.colors.accent.primary}10 0%, ${tokens.colors.accent.brand}08 100%)`,
-          borderRadius: tokens.radius.lg,
-          border: `1px solid ${tokens.colors.accent.primary}20`,
+          background: tokens.colors.bg.secondary,
+          borderRadius: tokens.radius.xl,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          overflow: 'hidden',
         }}
       >
-        <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Text size="sm" weight="bold">{t('advancedFilterLocked')}</Text>
-            <Text size="xs" color="tertiary">{t('unlockAdvancedFilter')}</Text>
+        <Box style={{ padding: tokens.spacing[4] }}>
+          {gradeSection}
+          <Box
+            style={{
+              padding: tokens.spacing[3],
+              background: `linear-gradient(135deg, ${tokens.colors.accent.primary}10 0%, ${tokens.colors.accent.brand}08 100%)`,
+              borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.accent.primary}20`,
+            }}
+          >
+            <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box>
+                <Text size="sm" weight="bold">{t('advancedFilterLocked')}</Text>
+                <Text size="xs" color="tertiary">{t('unlockAdvancedFilter')}</Text>
+              </Box>
+              <Button variant="secondary" size="sm" onClick={() => window.location.href = '/settings'}>
+                {t('upgrade')}
+              </Button>
+            </Box>
           </Box>
-          <Button variant="secondary" size="sm" onClick={() => window.location.href = '/settings'}>
-            {t('upgrade')}
-          </Button>
         </Box>
       </Box>
     )
@@ -227,6 +274,9 @@ export default function AdvancedFilter({
               </Box>
             </Box>
           )}
+
+          {/* 等级筛选 — available to all */}
+          {gradeSection}
 
           {/* 类型筛选 */}
           <Box style={{ marginBottom: tokens.spacing[4] }}>
