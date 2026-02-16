@@ -346,7 +346,6 @@ const nextConfig: NextConfig = {
       'wagmi',
       'stripe',
       '@coinbase/wallet-sdk',
-      '@metamask/sdk',
       'epubjs',
       '@walletconnect/web3wallet',
       '@walletconnect/core',

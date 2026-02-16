@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { CommentIcon } from '../../ui/icons'
@@ -131,7 +132,7 @@ export default function PostDetailView({
             <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {openPost.original_post.images.slice(0, 4).map((imgUrl, idx) => (
                 <div key={idx} style={{ width: 80, height: 80, borderRadius: tokens.radius.md, overflow: 'hidden', flexShrink: 0 }}>
-                  <img src={imgUrl} alt="Post image" width={80} height={80} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  <Image src={imgUrl} alt="Post image" width={80} height={80} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                 </div>
               ))}
               {openPost.original_post.images.length > 4 && <span style={{ fontSize: 12, color: tokens.colors.text.tertiary, alignSelf: 'center' }}>+{openPost.original_post.images.length - 4}</span>}

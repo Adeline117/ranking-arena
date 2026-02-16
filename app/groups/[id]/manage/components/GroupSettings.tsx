@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Card from '@/app/components/ui/Card'
@@ -139,7 +140,7 @@ export default function GroupSettings({
           <Box>
             <label style={labelStyle}>{t('groupAvatarUrl')}</label>
             <input type="url" value={editAvatarUrl} onChange={(e) => setEditAvatarUrl(e.target.value)} placeholder="https://example.com/avatar.png" style={inputStyle} />
-            {editAvatarUrl && <Box style={{ marginTop: tokens.spacing[2] }}><img src={editAvatarUrl} alt="Preview" width={60} height={60} style={{ width: 60, height: 60, borderRadius: tokens.radius.lg, objectFit: 'cover', border: `1px solid ${tokens.colors.border.primary}` }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} /></Box>}
+            {editAvatarUrl && <Box style={{ marginTop: tokens.spacing[2] }}><Image src={editAvatarUrl} alt="Preview" width={60} height={60} style={{ width: 60, height: 60, borderRadius: tokens.radius.lg, objectFit: 'cover', border: `1px solid ${tokens.colors.border.primary}` }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} /></Box>}
           </Box>
         )}
 

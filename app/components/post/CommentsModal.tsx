@@ -602,7 +602,6 @@ export default function CommentsModal({
               <button
                 type="button"
                 onClick={() => {
-                  // TODO: implement image upload in comments
                   if (typeof window !== 'undefined') {
                     const input = document.createElement('input')
                     input.type = 'file'

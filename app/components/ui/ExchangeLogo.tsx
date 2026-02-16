@@ -64,9 +64,21 @@ const CDN_FALLBACK: Record<string, string> = {
   cryptocom: 'https://assets.coingecko.com/markets/images/589/small/crypto_com.jpg',
 }
 
-// SVG fallback for when both local and CDN fail
-const EXCHANGE_SVG: Record<string, string> = {
-  binance: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="4" fill="var(--color-chart-amber)"/><path d="M12 2L7.5 6.5L9 8L12 5L15 8L16.5 6.5L12 2Z" fill="white"/><path d="M2 12L6.5 7.5L8 9L5 12L8 15L6.5 16.5L2 12Z" fill="white"/><path d="M22 12L17.5 16.5L16 15L19 12L16 9L17.5 7.5L22 12Z" fill="white"/><path d="M12 19L9 16L7.5 17.5L12 22L16.5 17.5L15 16L12 19Z" fill="white"/></svg>`,
+// React SVG fallback components for when both local and CDN fail
+function BinanceSvg({ size }: { size: number }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={size} height={size}>
+      <rect width="24" height="24" rx="4" fill="var(--color-chart-amber)" />
+      <path d="M12 2L7.5 6.5L9 8L12 5L15 8L16.5 6.5L12 2Z" fill="white" />
+      <path d="M2 12L6.5 7.5L8 9L5 12L8 15L6.5 16.5L2 12Z" fill="white" />
+      <path d="M22 12L17.5 16.5L16 15L19 12L16 9L17.5 7.5L22 12Z" fill="white" />
+      <path d="M12 19L9 16L7.5 17.5L12 22L16.5 17.5L15 16L12 19Z" fill="white" />
+    </svg>
+  )
+}
+
+const EXCHANGE_SVG_COMPONENTS: Record<string, React.FC<{ size: number }>> = {
+  binance: BinanceSvg,
 }
 
 export default function ExchangeLogo({ exchange, size = 24, className }: ExchangeLogoProps) {
@@ -113,8 +125,8 @@ export default function ExchangeLogo({ exchange, size = 24, className }: Exchang
   }
 
   // SVG fallback
-  const svg = EXCHANGE_SVG[exchange]
-  if (svg) {
+  const SvgComponent = EXCHANGE_SVG_COMPONENTS[exchange]
+  if (SvgComponent) {
     return (
       <Box
         style={{
@@ -125,8 +137,9 @@ export default function ExchangeLogo({ exchange, size = 24, className }: Exchang
           justifyContent: 'center',
         }}
         className={className}
-        dangerouslySetInnerHTML={{ __html: svg }}
-      />
+      >
+        <SvgComponent size={size} />
+      </Box>
     )
   }
 

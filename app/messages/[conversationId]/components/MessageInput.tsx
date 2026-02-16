@@ -133,7 +133,7 @@ export default function MessageInput({
             <Text size="sm" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendingAttachment.originalName}</Text>
             <Text size="xs" color="tertiary">{pendingAttachment.fileSize ? formatFileSize(pendingAttachment.fileSize) : ''} • {getMediaTypeLabel(pendingAttachment.type, t)}</Text>
           </Box>
-          <button onClick={() => setPendingAttachment(null)} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'var(--color-accent-error-15)', color: tokens.colors.accent.error, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <button onClick={() => setPendingAttachment(null)} aria-label="Remove attachment" style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'var(--color-accent-error-15)', color: tokens.colors.accent.error, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </Box>

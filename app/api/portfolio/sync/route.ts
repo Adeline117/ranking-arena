@@ -43,9 +43,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
     }
 
-    // TODO: Implement actual exchange API calls using connectors
-    // For now, return a placeholder response indicating sync is not yet implemented
-    // Future: use connectors/[exchange] to fetch real positions
+    // Sync via exchange connectors is not yet implemented; return current data
     logger.info(`[portfolio/sync] Sync requested for portfolio ${portfolio_id}, exchange: ${portfolio.exchange}`)
 
     // Placeholder: In production, this would:

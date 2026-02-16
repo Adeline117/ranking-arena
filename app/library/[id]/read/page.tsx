@@ -986,7 +986,7 @@ export default function ReadPage() {
 
           {/* Page controls */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <button onClick={goPrev} disabled={currentPage <= 1} style={{
+            <button onClick={goPrev} disabled={currentPage <= 1} aria-label="Previous page" style={{
               background: 'none', border: 'none',
               color: currentPage <= 1 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
               cursor: currentPage <= 1 ? 'default' : 'pointer',
@@ -1013,7 +1013,7 @@ export default function ReadPage() {
               <span style={{ marginLeft: 8, opacity: 0.5 }}>{progressPercent}%</span>
             </div>
 
-            <button onClick={goNext} disabled={currentPage >= totalPages} style={{
+            <button onClick={goNext} disabled={currentPage >= totalPages} aria-label="Next page" style={{
               background: 'none', border: 'none',
               color: currentPage >= totalPages ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
               cursor: currentPage >= totalPages ? 'default' : 'pointer',
@@ -1044,7 +1044,7 @@ export default function ReadPage() {
               <span style={{ fontSize: 16, fontWeight: 700, color: theme === 'dark' ? 'var(--color-on-accent)' : 'var(--color-text-primary)' }}>
                 {t('readerContents')}
               </span>
-              <button onClick={() => setShowToc(false)} style={{ background: 'none', border: 'none', color: theme === 'dark' ? 'var(--glass-border-heavy)' : 'var(--color-backdrop-light)', cursor: 'pointer', padding: 4 }}>
+              <button onClick={() => setShowToc(false)} aria-label="Close table of contents" style={{ background: 'none', border: 'none', color: theme === 'dark' ? 'var(--glass-border-heavy)' : 'var(--color-backdrop-light)', cursor: 'pointer', padding: 4 }}>
                 <IconClose />
               </button>
             </div>
