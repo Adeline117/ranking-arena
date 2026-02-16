@@ -502,40 +502,9 @@ export async function proxy(request: NextRequest) {
     }
   }
   
-  // Supabase auth refresh for protected page routes
-  const isAuthProtectedPage = !pathname.startsWith('/api/') && AUTH_PROTECTED_PAGES.some(route => pathname.startsWith(route))
-  if (isAuthProtectedPage) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (supabaseUrl && supabaseAnonKey) {
-      let supabaseResponse = NextResponse.next({ request })
-      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-        cookies: {
-          getAll() { return request.cookies.getAll() },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-            supabaseResponse = NextResponse.next({ request })
-            cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options)
-            )
-          },
-        },
-      })
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        url.searchParams.set('redirect', pathname)
-        return NextResponse.redirect(url)
-      }
-      // Add security headers to supabase response and return it (preserves cookie changes)
-      supabaseResponse.headers.set('X-Request-ID', requestId)
-      const acceptHeader2 = request.headers.get('accept') || ''
-      const isHtml2 = acceptHeader2.includes('text/html')
-      addSecurityHeaders(supabaseResponse, isHtml2)
-      return supabaseResponse
-    }
-  }
+  // Auth-protected page routes: handled client-side via useAuthSession hook.
+  // Server-side redirect disabled because auth uses localStorage (not cookies),
+  // so proxy cannot validate session. Each protected page does its own client redirect.
 
   // 继续处理请求
   const response = NextResponse.next()
