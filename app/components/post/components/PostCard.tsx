@@ -9,7 +9,7 @@ import { type PollChoice, type PostWithUserState, getPollWinner } from '@/lib/ty
 import { ReactButton } from './PostActions'
 import { AvatarLink } from './AvatarLink'
 import LevelBadge from '@/app/components/user/LevelBadge'
-import { memo } from 'react'
+import { memo, useRef, useEffect } from 'react'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
 type Post = PostWithUserState
@@ -47,6 +47,28 @@ export const PostCard = memo(function PostCard({
   translatedContent,
 }: PostCardProps) {
   const { t, language } = useLanguage()
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  // Track impression when post enters viewport
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          navigator.sendBeacon('/api/track', JSON.stringify({
+            type: 'impression',
+            post_id: post.id,
+          }))
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.5 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [post.id])
+
   const isCompact = variant === 'compact'
 
   // 显示的标题和内容
@@ -64,6 +86,7 @@ export const PostCard = memo(function PostCard({
   if (isCompact) {
     return (
       <div
+        ref={cardRef}
         onClick={onClick}
         className="list-item-hover"
         style={{
@@ -145,6 +168,7 @@ export const PostCard = memo(function PostCard({
   // 完整模式
   return (
     <div
+      ref={cardRef}
       onClick={onClick}
       className="glass-card-hover"
       style={{

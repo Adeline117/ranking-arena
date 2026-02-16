@@ -216,92 +216,48 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
+    // Permission check via single RPC call (replaces 5-7 separate queries)
+    const { data: permCheck, error: permError } = await supabase
+      .rpc('check_dm_permission', { p_sender_id: senderId, p_receiver_id: receiverId })
 
-    // 获取接收者的隐私设置
-    const { data: receiverProfile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('dm_permission')
-      .eq('id', receiverId)
-      .maybeSingle()
-
-    if (profileError || !receiverProfile) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    if (permError) {
+      logger.error('check_dm_permission RPC error', { error: permError.message })
+      return NextResponse.json({ error: 'Failed to check permissions' }, { status: 500 })
     }
 
-    // 检查接收者的私信权限设置
-    const dmPermission = receiverProfile.dm_permission || 'mutual'
-
-    if (dmPermission === 'none') {
+    if (!permCheck?.allowed) {
+      const reason = permCheck?.reason
       traceMessage({
         event: 'failed',
         senderId,
         receiverId,
-        error: 'DM permission denied: recipient disabled DMs',
+        error: `DM permission denied: ${reason}`,
       })
+
+      if (reason === 'USER_NOT_FOUND') {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      }
+
+      if (reason === 'DM_DISABLED') {
+        return NextResponse.json(
+          { error: 'This user has disabled direct messages', error_code: 'PERMISSION_DENIED' },
+          { status: 403 }
+        )
+      }
+
+      if (reason === 'LIMIT_REACHED') {
+        return NextResponse.json({
+          error: `You are not mutual followers. You can only send ${NON_MUTUAL_MESSAGE_LIMIT} messages before they reply.`,
+          error_code: 'PERMISSION_DENIED',
+          limit_reached: true,
+          sent_count: permCheck?.sent_count
+        }, { status: 403 })
+      }
+
       return NextResponse.json(
-        { error: 'This user has disabled direct messages', error_code: 'PERMISSION_DENIED' },
+        { error: 'Permission denied', error_code: 'PERMISSION_DENIED' },
         { status: 403 }
       )
-    }
-
-    // 检查是否互相关注
-    const { data: senderFollows } = await supabase
-      .from('user_follows')
-      .select('*')
-      .eq('follower_id', senderId)
-      .eq('following_id', receiverId)
-      .maybeSingle()
-
-    const { data: receiverFollows } = await supabase
-      .from('user_follows')
-      .select('*')
-      .eq('follower_id', receiverId)
-      .eq('following_id', senderId)
-      .maybeSingle()
-
-    const isMutualFollow = !!senderFollows && !!receiverFollows
-
-    // 如果设置为仅互相关注可以私信，且不是互关
-    if (dmPermission === 'mutual' && !isMutualFollow) {
-      const { data: receiverReplied, error: replyError } = await supabase
-        .from('direct_messages')
-        .select('id')
-        .eq('sender_id', receiverId)
-        .eq('receiver_id', senderId)
-        .limit(1)
-        .maybeSingle()
-
-      if (replyError && !replyError.message?.includes('Could not find')) {
-        logger.warn('Query reply error', { error: replyError.message })
-      }
-
-      if (!receiverReplied) {
-        const { count: sentCount, error: countError } = await supabase
-          .from('direct_messages')
-          .select('id', { count: 'exact', head: true })
-          .eq('sender_id', senderId)
-          .eq('receiver_id', receiverId)
-
-        if (countError && !countError.message?.includes('Could not find')) {
-          logger.warn('Count messages error', { error: countError.message })
-        }
-
-        const currentCount = sentCount || 0
-        if (currentCount >= NON_MUTUAL_MESSAGE_LIMIT) {
-          traceMessage({
-            event: 'failed',
-            senderId,
-            receiverId,
-            error: `Non-mutual message limit reached: ${currentCount}/${NON_MUTUAL_MESSAGE_LIMIT}`,
-          })
-          return NextResponse.json({
-            error: `You are not mutual followers. You can only send ${NON_MUTUAL_MESSAGE_LIMIT} messages before they reply.`,
-            error_code: 'PERMISSION_DENIED',
-            limit_reached: true,
-            sent_count: currentCount
-          }, { status: 403 })
-        }
-      }
     }
 
     // 获取或创建会话

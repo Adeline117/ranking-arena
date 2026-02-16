@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { supabase } from '@/lib/supabase/client'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import Avatar from '@/app/components/ui/Avatar'
@@ -70,7 +71,7 @@ export default function ConversationsList(): React.ReactElement {
   const [chatFilter, setChatFilter] = useState<'all' | 'direct' | 'group'>('all')
   const setUnreadMessages = useInboxStore((s) => s.setUnreadMessages)
   const { language, t } = useLanguage()
-  const { accessToken, getAuthHeadersAsync } = useAuthSession()
+  const { user, accessToken, getAuthHeadersAsync } = useAuthSession()
   const { showToast } = useToast()
 
   const loadConversations = useCallback(async (abortSignal?: AbortSignal) => {
@@ -135,6 +136,23 @@ export default function ConversationsList(): React.ReactElement {
       abortController.abort()
     }
   }, [accessToken, loadConversations])
+
+  // Realtime: auto-refresh when new DMs arrive for this user
+  useEffect(() => {
+    if (!user?.id) return
+    const channel = supabase
+      .channel(`inbox:${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: `receiver_id=eq.${user.id}`,
+      }, () => {
+        loadConversations()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user?.id, loadConversations])
 
   function formatTime(dateString: string): string {
     const date = new Date(dateString)
