@@ -2,6 +2,9 @@ import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 
+// Allow non-pre-rendered trader pages to be dynamically generated at runtime
+export const dynamicParams = true
+
 // Pre-render top 50 trader pages at build time for instant TTFB
 export async function generateStaticParams() {
   try {
