@@ -130,7 +130,7 @@ export default function TopTraders() {
             return (
               <Link prefetch={false}
                 key={`${t.source}-${t.source_trader_id}`}
-                href={`/trader/${encodeURIComponent(t.handle || t.source_trader_id)}?platform=${t.source}`}
+                href={`/trader/${encodeURIComponent(t.source_trader_id)}?platform=${t.source}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',

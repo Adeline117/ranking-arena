@@ -105,7 +105,7 @@ export const TraderRow = memo(function TraderRow({
   onToggleExpand,
 }: TraderRowProps) {
   const traderHandle = trader.handle || trader.id
-  const href = `/trader/${encodeURIComponent(traderHandle)}`
+  const href = `/trader/${encodeURIComponent(trader.id)}`
   // Show original platform ID as primary display name
   // Prefer handle (original exchange nickname) over id
   const displayName = trader.display_name || formatDisplayName(trader.handle || trader.id, trader.source || source)

@@ -69,7 +69,7 @@ export default function RankingTableCompact(props: {
           {sortedTraders.map((t, idx) => {
             const rank = idx + 1
             const traderHandle = t.handle || t.id
-            const href = `/trader/${encodeURIComponent(traderHandle)}`
+            const href = `/trader/${encodeURIComponent(t.id)}`
 
             return (
               <Link

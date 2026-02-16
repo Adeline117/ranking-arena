@@ -148,7 +148,7 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
       <TopNav />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[4]}` }}>
         <Breadcrumb items={[
-          { label: '排行榜', href: '/ranking' },
+          { label: '排行榜', href: '/' },
           { label: displayName },
         ]} />
 
