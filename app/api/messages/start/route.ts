@@ -50,106 +50,43 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    // 获取接收者的隐私设置
-    const { data: receiverProfile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('dm_permission, handle')
-      .eq('id', receiverId)
-      .maybeSingle()
+    // Permission check via single RPC call (replaces multiple queries)
+    const { data: permCheck, error: permError } = await supabase
+      .rpc('check_dm_permission', { p_sender_id: senderId, p_receiver_id: receiverId })
 
-    if (profileError || !receiverProfile) {
+    if (permError) {
+      logger.error('[Start Message API] check_dm_permission RPC error:', permError)
+      return NextResponse.json({ error: 'Failed to check permissions' }, { status: 500 })
+    }
+
+    if (!permCheck) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // 检查接收者的私信权限设置
-    const dmPermission = receiverProfile.dm_permission || 'mutual'
+    const canMessage = permCheck.allowed !== false
+    const isMutualFollow = permCheck.is_mutual || false
 
-    if (dmPermission === 'none') {
+    let messageLimit = null
+    if (permCheck.reason === 'LIMIT_REACHED') {
+      messageLimit = { reached: true, sent: permCheck.sent_count || 3, max: 3 }
+    } else if (permCheck.reason === 'DM_DISABLED') {
       return NextResponse.json(
         { error: 'This user has disabled direct messages', error_code: 'PERMISSION_DENIED' },
         { status: 403 }
       )
+    } else if (permCheck.reason === 'USER_NOT_FOUND') {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    } else if (!canMessage && !permCheck.is_mutual) {
+      // Non-mutual, under limit
+      messageLimit = { reached: false, sent: permCheck.sent_count || 0, max: 3 }
     }
 
-    // 检查是否互相关注
-    let isMutualFollow = false
-
-    const { data: senderFollows } = await supabase
-      .from('user_follows')
-      .select('*')
-      .eq('follower_id', senderId)
-      .eq('following_id', receiverId)
+    // Get receiver handle for response
+    const { data: receiverProfile } = await supabase
+      .from('user_profiles')
+      .select('handle')
+      .eq('id', receiverId)
       .maybeSingle()
-
-    const { data: receiverFollows } = await supabase
-      .from('user_follows')
-      .select('*')
-      .eq('follower_id', receiverId)
-      .eq('following_id', senderId)
-      .maybeSingle()
-
-    isMutualFollow = !!senderFollows && !!receiverFollows
-
-    // 如果设置为仅互相关注可以私信，且不是互关
-    // 检查是否已经有对话（对方已回复）
-    let canMessage = true
-    let messageLimit = null
-
-    if (dmPermission === 'mutual' && !isMutualFollow) {
-      // 检查是否已有会话
-      const orderedUser1 = senderId < receiverId ? senderId : receiverId
-      const orderedUser2 = senderId < receiverId ? receiverId : senderId
-
-      const { data: existingConv } = await supabase
-        .from('conversations')
-        .select('id')
-        .eq('user1_id', orderedUser1)
-        .eq('user2_id', orderedUser2)
-        .maybeSingle()
-
-      if (existingConv) {
-        // 检查接收者是否已回复过
-        const { data: receiverReplied } = await supabase
-          .from('direct_messages')
-          .select('id')
-          .eq('sender_id', receiverId)
-          .eq('receiver_id', senderId)
-          .limit(1)
-          .maybeSingle()
-
-        if (!receiverReplied) {
-          // 检查发送者已发送的消息数量
-          const { count: sentCount } = await supabase
-            .from('direct_messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('sender_id', senderId)
-            .eq('receiver_id', receiverId)
-
-          const currentCount = sentCount || 0
-          if (currentCount >= 3) {
-            canMessage = false
-            messageLimit = {
-              reached: true,
-              sent: currentCount,
-              max: 3
-            }
-          } else {
-            messageLimit = {
-              reached: false,
-              sent: currentCount,
-              max: 3
-            }
-          }
-        }
-      } else {
-        // 新会话，限制3条
-        messageLimit = {
-          reached: false,
-          sent: 0,
-          max: 3
-        }
-      }
-    }
 
     // 获取或创建会话
     const orderedUser1 = senderId < receiverId ? senderId : receiverId
@@ -207,7 +144,7 @@ export async function POST(request: NextRequest) {
       can_message: canMessage,
       is_mutual_follow: isMutualFollow,
       message_limit: messageLimit,
-      receiver_handle: receiverProfile.handle
+      receiver_handle: receiverProfile?.handle || null
     })
   } catch (error: unknown) {
     logger.error('[Start Message API] 错误:', error)

@@ -145,12 +145,13 @@ export default function FollowingPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
-  const { authChecked, email, getAuthHeadersAsync } = useAuthSession()
-  const [userId, setUserId] = useState<string | null>(null)
+  const { authChecked, email, userId, getAuthHeadersAsync } = useAuthSession()
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
   const [sortMode, setSortMode] = useState<SortMode>('recent')
   const [unfollowingId, setUnfollowingId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [platformFilter, setPlatformFilter] = useState<string>('all')
 
   // Inline unfollow with optimistic UI
   const handleUnfollow = useCallback(async (item: FollowItem, e: React.MouseEvent) => {
@@ -189,12 +190,7 @@ export default function FollowingPage() {
     }
   }, [items, unfollowingId, getAuthHeadersAsync, showToast, t, language])
 
-  useEffect(() => {
-    if (!authChecked) return
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-    })
-  }, [authChecked])
+  // userId now comes from useAuthSession directly
 
   useEffect(() => {
     if (!userId) {
@@ -229,9 +225,26 @@ export default function FollowingPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
+  // 可用平台列表
+  const availablePlatforms = useMemo(() => {
+    const platforms = new Set<string>()
+    items.forEach(i => { if (i.source) platforms.add(i.source) })
+    return Array.from(platforms).sort()
+  }, [items])
+
   // 排序后的列表
   const sortedItems = useMemo(() => {
-    const sorted = [...items]
+    let filtered = [...items]
+    // 搜索筛选
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      filtered = filtered.filter(i => (i.handle || '').toLowerCase().includes(q))
+    }
+    // 平台筛选
+    if (platformFilter !== 'all') {
+      filtered = filtered.filter(i => i.source === platformFilter || (platformFilter === 'user' && i.type === 'user'))
+    }
+    const sorted = filtered
     switch (sortMode) {
       case 'roi':
         sorted.sort((a, b) => (b.roi || 0) - (a.roi || 0))
@@ -428,6 +441,52 @@ export default function FollowingPage() {
               />
             </Box>
 
+            {/* ============= 搜索 + 平台筛选 ============= */}
+            <Box style={{
+              display: 'flex',
+              gap: tokens.spacing[3],
+              marginBottom: tokens.spacing[3],
+              flexWrap: 'wrap',
+            }}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={language === 'zh' ? '搜索关注...' : 'Search following...'}
+                style={{
+                  flex: '1 1 200px',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.lg,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.secondary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  outline: 'none',
+                  minHeight: 40,
+                }}
+              />
+              <select
+                value={platformFilter}
+                onChange={(e) => setPlatformFilter(e.target.value)}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.lg,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.secondary,
+                  color: tokens.colors.text.primary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  cursor: 'pointer',
+                  minHeight: 40,
+                }}
+              >
+                <option value="all">{language === 'zh' ? '全部平台' : 'All Platforms'}</option>
+                <option value="user">{language === 'zh' ? '用户' : 'Users'}</option>
+                {availablePlatforms.map(p => (
+                  <option key={p} value={p}>{getSourceDisplayName(p, language)}</option>
+                ))}
+              </select>
+            </Box>
+
             {/* ============= 排序控制 ============= */}
             <Box style={{
               display: 'flex',
@@ -480,12 +539,7 @@ export default function FollowingPage() {
                     transition: `background ${tokens.transition.base}`,
                     background: 'transparent',
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.tertiary
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
-                  }}
+                  className="hover-bg-tertiary"
                 >
                   {/* 头像 */}
                   <Avatar
@@ -607,14 +661,7 @@ export default function FollowingPage() {
                         transition: `all ${tokens.transition.base}`,
                         whiteSpace: 'nowrap',
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = tokens.colors.accent.error
-                        e.currentTarget.style.color = tokens.colors.accent.error
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = tokens.colors.border.primary
-                        e.currentTarget.style.color = tokens.colors.text.tertiary
-                      }}
+                      className="hover-unfollow"
                     >
                       {unfollowingId === item.id
                         ? (language === 'zh' ? '取消中...' : 'Removing...')

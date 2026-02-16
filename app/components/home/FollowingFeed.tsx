@@ -37,7 +37,7 @@ export default function FollowingFeed() {
     async function fetchFollowingPosts() {
       setLoading(true)
       try {
-        // Get following list
+        // Get following list (needed for empty state check)
         const { data: follows } = await supabase
           .from('user_follows')
           .select('following_id')
@@ -48,14 +48,14 @@ export default function FollowingFeed() {
 
         if (ids.length === 0) { setLoading(false); return }
 
-        // Get posts from followed users
-        const { data: postsData } = await supabase
-          .from('posts')
-          .select('id, title, content, author_id, author_handle, group_id, poll_enabled, poll_bull, poll_bear, poll_wait, like_count, dislike_count, comment_count, bookmark_count, repost_count, view_count, hot_score, is_pinned, images, created_at, updated_at, original_post_id')
-          .in('author_id', ids)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(30)
+        // Get posts from followed users via RPC
+        const { data: postsData, error: rpcError } = await supabase
+          .rpc('get_following_feed', { p_user_id: user!.id, p_limit: 30 })
+
+        if (rpcError) {
+          logger.error('get_following_feed RPC error:', rpcError)
+          throw rpcError
+        }
 
         // Score and sort by relevance (freshness + engagement)
         const scoredPosts = ((postsData as PostWithUserState[]) || [])

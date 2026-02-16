@@ -12,6 +12,9 @@ import LevelBadge from '@/app/components/user/LevelBadge'
 import { memo, useRef, useEffect } from 'react'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
+// Module-level Set to prevent duplicate impression reports
+const reportedImpressions = new Set<string>()
+
 type Post = PostWithUserState
 
 interface PostCardProps {
@@ -49,13 +52,14 @@ export const PostCard = memo(function PostCard({
   const { t, language } = useLanguage()
   const cardRef = useRef<HTMLDivElement>(null)
 
-  // Track impression when post enters viewport
+  // Track impression when post enters viewport (deduplicated)
   useEffect(() => {
     const el = cardRef.current
-    if (!el) return
+    if (!el || reportedImpressions.has(post.id)) return
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
+        if (entry.isIntersecting && !reportedImpressions.has(post.id)) {
+          reportedImpressions.add(post.id)
           navigator.sendBeacon('/api/track', JSON.stringify({
             type: 'impression',
             post_id: post.id,

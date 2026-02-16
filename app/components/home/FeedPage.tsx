@@ -11,9 +11,10 @@ import DesktopSidebar from '@/app/components/layout/DesktopSidebar'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import dynamic from 'next/dynamic'
 const MobileBottomNav = dynamic(() => import('@/app/components/layout/MobileBottomNav'), { ssr: false })
+import FollowingFeed from '@/app/components/home/FollowingFeed'
 import { Box } from '@/app/components/base'
 
-type FeedTab = 'hot' | 'latest'
+type FeedTab = 'hot' | 'latest' | 'following'
 
 export default function FeedPage() {
   const { language } = useLanguage()
@@ -27,7 +28,7 @@ export default function FeedPage() {
     })
   }, [])
 
-  const sortBy = activeTab === 'hot' ? 'hot_score' : 'created_at'
+  const sortBy = activeTab === 'following' ? 'created_at' : (activeTab === 'hot' ? 'hot_score' : 'created_at')
 
   const [refreshKey, setRefreshKey] = useState(0)
   const handleRefresh = useCallback(async () => {
@@ -71,6 +72,7 @@ export default function FeedPage() {
           {([
             { key: 'hot' as FeedTab, label: language === 'zh' ? '推荐' : 'Recommended' },
             { key: 'latest' as FeedTab, label: language === 'zh' ? '最新' : 'Latest' },
+            { key: 'following' as FeedTab, label: language === 'zh' ? '关注' : 'Following' },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -87,30 +89,23 @@ export default function FeedPage() {
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.base}`,
               }}
-              onMouseEnter={(e) => {
-                if (activeTab !== tab.key) {
-                  e.currentTarget.style.background = tokens.colors.bg.secondary
-                  e.currentTarget.style.color = tokens.colors.text.primary
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== tab.key) {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = tokens.colors.text.secondary
-                }
-              }}
+              className={activeTab !== tab.key ? 'hover-bg-secondary' : ''}
             >
               {tab.label}
             </button>
           ))}
         </Box>
 
-        {/* Post feed - no groupId filter shows all posts */}
-        <PostFeed
-          key={`${activeTab}-${refreshKey}`}
-          layout="masonry"
-          sortBy={sortBy}
-        />
+        {/* Post feed */}
+        {activeTab === 'following' ? (
+          <FollowingFeed key={`following-${refreshKey}`} />
+        ) : (
+          <PostFeed
+            key={`${activeTab}-${refreshKey}`}
+            layout="masonry"
+            sortBy={sortBy}
+          />
+        )}
       </Box>
 
       <FloatingActionButton />

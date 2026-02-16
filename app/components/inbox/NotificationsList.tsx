@@ -18,7 +18,11 @@ type Notification = NotificationWithActor
 export default function NotificationsList() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [typeFilter, setTypeFilter] = useState<'all' | 'follow' | 'like' | 'comment' | 'mention'>('all')
   const [collapsed, setCollapsed] = useState(false)
+  const PAGE_SIZE = 20
   const { accessToken } = useAuthSession()
   const setUnreadNotifications = useInboxStore((s) => s.setUnreadNotifications)
   const unreadNotifications = useInboxStore((s) => s.unreadNotifications)
@@ -47,8 +51,10 @@ export default function NotificationsList() {
 
       const result = await response.json()
       const data = result.data || result
-      setNotifications(data.notifications || [])
+      const notifs = data.notifications || []
+      setNotifications(notifs)
       setUnreadNotifications(data.unread_count || 0)
+      setHasMore(notifs.length >= PAGE_SIZE)
     } catch (err) {
       if (abortSignal?.aborted) return
 
@@ -60,6 +66,26 @@ export default function NotificationsList() {
       }
     }
   }, [accessToken, setUnreadNotifications, showToast, t])
+
+  const loadMoreNotifications = useCallback(async () => {
+    if (!accessToken || loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const response = await fetch(`/api/notifications?offset=${notifications.length}&limit=${PAGE_SIZE}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      })
+      if (!response.ok) return
+      const result = await response.json()
+      const data = result.data || result
+      const moreNotifs = data.notifications || []
+      setNotifications(prev => [...prev, ...moreNotifs])
+      setHasMore(moreNotifs.length >= PAGE_SIZE)
+    } catch (err) {
+      logger.error('Failed to load more notifications:', err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [accessToken, loadingMore, hasMore, notifications.length])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -230,6 +256,27 @@ export default function NotificationsList() {
         )}
       </div>
 
+      {/* Filter tabs */}
+      {!collapsed && (
+        <div style={{
+          display: 'flex', gap: 4,
+          padding: `0 ${tokens.spacing[4]} ${tokens.spacing[2]}`,
+          overflowX: 'auto',
+        }}>
+          {(['all', 'follow', 'like', 'comment', 'mention'] as const).map(f => (
+            <button key={f} onClick={() => setTypeFilter(f)} style={{
+              padding: '3px 10px', borderRadius: tokens.radius.lg, border: 'none',
+              background: typeFilter === f ? tokens.colors.accent.brand : 'transparent',
+              color: typeFilter === f ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
+              fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+              minHeight: 24,
+            }}>
+              {f === 'all' ? t('all') : t(`notifType_${f}`) || f}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Notifications list */}
       {!collapsed && (
         <div style={{ maxHeight: 'min(400px, 60vh)', overflowY: 'auto' }}>
@@ -253,7 +300,7 @@ export default function NotificationsList() {
               </p>
             </div>
           ) : (
-            notifications.slice(0, 20).map((notif) => {
+            notifications.filter(n => typeFilter === 'all' || n.type === typeFilter).map((notif) => {
               const content = (
                 <div
                   key={notif.id}
@@ -313,6 +360,27 @@ export default function NotificationsList() {
                 <div key={notif.id}>{content}</div>
               )
             })
+          )}
+          {!loading && hasMore && notifications.length > 0 && (
+            <div style={{ textAlign: 'center', padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}>
+              <button
+                onClick={loadMoreNotifications}
+                disabled={loadingMore}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: tokens.radius.md,
+                  background: 'transparent',
+                  color: tokens.colors.text.secondary,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: loadingMore ? 'not-allowed' : 'pointer',
+                  opacity: loadingMore ? 0.6 : 1,
+                }}
+              >
+                {loadingMore ? t('loading') : t('loadMore')}
+              </button>
+            </div>
           )}
         </div>
       )}

@@ -1,137 +1,53 @@
-'use client'
+import type { Metadata } from 'next'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import PostDetailClient from './PostDetailClient'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/layout/TopNav'
-import Breadcrumb from '@/app/components/ui/Breadcrumb'
-import PostFeed from '@/app/components/post/PostFeed'
-import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { JsonLd } from '@/app/components/Providers/JsonLd'
-import { generatePostArticleSchema, generateBreadcrumbSchema, combineSchemas } from '@/lib/seo'
-import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import ShareButton from '@/app/components/common/ShareButton'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-interface PostData {
-  id: string
-  title: string
-  content: string
-  author_handle: string
-  created_at: string
-  updated_at?: string
-  like_count?: number
-  comment_count?: number
-  view_count?: number
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params
+
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data } = await supabase
+      .from('posts')
+      .select('title, content, author_handle, created_at')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (!data) {
+      return { title: 'Post Not Found | Arena' }
+    }
+
+    const title = `${data.title} - @${data.author_handle} | Arena`
+    const description = data.content?.slice(0, 160) || data.title
+
+    return {
+      title,
+      description,
+      openGraph: {
+        title: data.title,
+        description,
+        url: `${APP_URL}/post/${id}`,
+        type: 'article',
+        publishedTime: data.created_at,
+        authors: [`@${data.author_handle}`],
+        siteName: 'Arena',
+        images: [`${APP_URL}/og-default.png`],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: data.title,
+        description,
+        images: [`${APP_URL}/og-default.png`],
+      },
+    }
+  } catch {
+    return { title: 'Post | Arena' }
+  }
 }
 
-export default function PostDetailPage(props: { params: Promise<{ id: string }> }) {
-  const _router = useRouter()
-  const { email } = useAuthSession()
-  const { language, t } = useLanguage()
-  const [postId, setPostId] = useState<string | null>(null)
-  const [postData, setPostData] = useState<PostData | null>(null)
-
-  // 解析 params
-  useEffect(() => {
-    props.params.then((resolved) => {
-      setPostId(resolved.id)
-    })
-  }, [props.params])
-
-  // 获取帖子数据用于 SEO
-  useEffect(() => {
-    if (!postId) return
-
-    supabase
-      .from('posts')
-      .select('id, title, content, author_handle, created_at, updated_at, like_count, comment_count, view_count')
-      .eq('id', postId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setPostData(data as PostData)
-        }
-      })
-  }, [postId])
-
-  if (!postId) {
-    return (
-      <div style={{ 
-        minHeight: '100vh', 
-        background: tokens.colors.bg.primary, 
-        color: tokens.colors.text.primary 
-      }}>
-        <TopNav email={email} />
-        <div style={{
-          maxWidth: 800,
-          margin: '0 auto',
-          padding: tokens.spacing[6],
-          textAlign: 'center',
-        }}>
-          {t('loading')}
-        </div>
-      </div>
-    )
-  }
-
-  // 生成结构化数据
-  const structuredData = postData ? combineSchemas(
-    generatePostArticleSchema({
-      id: postData.id,
-      title: postData.title,
-      content: postData.content,
-      authorHandle: postData.author_handle,
-      createdAt: postData.created_at,
-      updatedAt: postData.updated_at,
-      likeCount: postData.like_count,
-      commentCount: postData.comment_count,
-      viewCount: postData.view_count,
-    }),
-    generateBreadcrumbSchema([
-      { name: t('home'), url: process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org' },
-      { name: t('posts') },
-      { name: postData.title.slice(0, 30) },
-    ])
-  ) : null
-
-  return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: tokens.colors.bg.primary, 
-      color: tokens.colors.text.primary 
-    }}>
-      {/* JSON-LD 结构化数据 */}
-      {structuredData && <JsonLd data={structuredData} />}
-      
-      <TopNav email={email} />
-      <div style={{ 
-        maxWidth: 800, 
-        margin: '0 auto', 
-        padding: tokens.spacing[6],
-      }}>
-        {/* Breadcrumb + Share */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Breadcrumb items={[
-            { label: language === 'zh' ? '热榜' : 'Hot', href: '/hot' },
-            { label: postData?.title?.slice(0, 30) || '...' },
-          ]} />
-          {postData && (
-            <ShareButton
-              data={{
-                type: 'post',
-                url: typeof window !== 'undefined' ? window.location.href : '',
-                title: postData.title,
-              }}
-            />
-          )}
-        </div>
-        
-        {/* 帖子内容 - 使用 PostFeed 并设置 initialPostId 自动打开帖子详情 */}
-        <PostFeed initialPostId={postId} variant="full" />
-      </div>
-      <MobileBottomNav />
-    </div>
-  )
+export default async function PostDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  return <PostDetailClient postId={id} />
 }

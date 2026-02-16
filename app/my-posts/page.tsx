@@ -42,7 +42,6 @@ export default function MyPostsPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
-     
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
@@ -78,33 +77,37 @@ export default function MyPostsPage() {
     const load = async () => {
       setLoading(true)
       try {
-        const { data: postsData, error: postsError } = await supabase
-          .from('posts')
-          .select(`
-            id,
-            title,
-            content,
-            created_at,
-            like_count,
-            comment_count,
-            group_id,
-            group:groups (
-              name,
-              name_en
-            )
-          `)
-          .eq('author_id', userId)
-          .order('created_at', { ascending: false })
+        const { data: { session } } = await supabase.auth.getSession()
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
 
-        if (postsError) {
-          logger.error('Error fetching posts:', postsError)
+        const params = new URLSearchParams({
+          author_id: userId!,
+          sort_by: 'created_at',
+          sort_order: 'desc',
+          limit: '100',
+        })
+        const res = await fetch(`/api/posts?${params.toString()}`, { headers })
+        const data = await res.json()
+
+        if (!res.ok) {
+          logger.error('Error fetching posts:', data.error)
           setPosts([])
-          setLoading(false)
           showToast(t('loadPostsFailed'), 'error')
           return
         }
 
-        setPosts((postsData || []) as unknown as Post[])
+        const loadedPosts = data.data?.posts || []
+        setPosts(loadedPosts.map((p: Record<string, unknown>) => ({
+          id: p.id,
+          title: p.title || '',
+          content: p.content || null,
+          created_at: p.created_at as string,
+          like_count: (p.like_count as number) || 0,
+          comment_count: (p.comment_count as number) || 0,
+          group_id: p.group_id || null,
+          group: p.group_name ? { name: p.group_name as string, name_en: p.group_name_en as string | null } : null,
+        })))
       } catch (error) {
         logger.error('Error loading posts:', error)
         setPosts([])
@@ -127,13 +130,12 @@ export default function MyPostsPage() {
 
     setDeleting(postId)
     try {
-      const { error } = await supabase
-        .from('posts')
-        .delete()
-        .eq('id', postId)
-        .eq('author_id', userId)
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
 
-      if (error) {
+      const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE', headers })
+      if (!res.ok) {
         showToast(t('deleteFailedRetry'), 'error')
         return
       }

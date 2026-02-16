@@ -128,17 +128,45 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     showDangerConfirm,
   })
 
-  // Batch translate posts
+  // sessionStorage cache helpers for translations
+  const getTranslationCache = useCallback((postId: string, lang: string): { title?: string; content?: string } | null => {
+    try {
+      const key = `trans:${postId}:${lang}`
+      const cached = sessionStorage.getItem(key)
+      return cached ? JSON.parse(cached) : null
+    } catch { return null }
+  }, [])
+
+  const setTranslationCache = useCallback((postId: string, lang: string, value: { title?: string; content?: string }) => {
+    try {
+      const key = `trans:${postId}:${lang}`
+      sessionStorage.setItem(key, JSON.stringify(value))
+    } catch { /* storage full, ignore */ }
+  }, [])
+
+  // Batch translate posts (with sessionStorage cache)
   const translatePosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingPosts) return
     setTranslatingPosts(true)
 
+    // Check cache first
+    const cachedResults: Record<string, { title?: string; content?: string }> = {}
     const needsTranslation = postsToTranslate.filter(p => {
       if (translatedPosts[p.id]?.title) return false
       if (!p.title) return false
       const titleIsChinese = isChineseText(p.title)
-      return targetLang === 'en' ? titleIsChinese : !titleIsChinese
+      const needsIt = targetLang === 'en' ? titleIsChinese : !titleIsChinese
+      if (!needsIt) return false
+      // Check sessionStorage cache
+      const cached = getTranslationCache(p.id, targetLang)
+      if (cached) { cachedResults[p.id] = cached; return false }
+      return true
     })
+
+    // Apply cached results
+    if (Object.keys(cachedResults).length > 0) {
+      setTranslatedPosts(prev => ({ ...prev, ...cachedResults }))
+    }
 
     if (needsTranslation.length === 0) {
       setTranslatingPosts(false)
@@ -175,10 +203,13 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         setTranslatedPosts(prev => {
           const updated = { ...prev }
           needsTranslation.forEach(post => {
-            updated[post.id] = {
+            const translated = {
               title: results[`${post.id}-title`]?.translatedText || post.title || '',
               content: results[`${post.id}-content`]?.translatedText || post.content || '',
             }
+            updated[post.id] = translated
+            // Cache in sessionStorage
+            setTranslationCache(post.id, targetLang, translated)
           })
           return updated
         })
@@ -188,7 +219,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     } finally {
       setTranslatingPosts(false)
     }
-  }, [translatingPosts, translatedPosts])
+  }, [translatingPosts, translatedPosts, getTranslationCache, setTranslationCache])
 
   // Trigger translation when posts change
   useEffect(() => {
@@ -205,61 +236,24 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     const fetchRelatedGroups = async () => {
       setLoadingRelatedGroups(true)
 
-      const fetchHotGroupsFallback = async () => {
-        const { data } = await supabase
-          .from('groups')
-          .select('id, name, name_en, avatar_url, member_count')
-          .neq('id', groupId)
-          .order('member_count', { ascending: false, nullsFirst: false })
-          .limit(5)
-        return data || []
-      }
-
       try {
-        const { data: memberData } = await supabase
-          .from('group_members')
-          .select('user_id')
-          .eq('group_id', groupId)
-          .limit(50)
-
-        if (!memberData || memberData.length === 0) {
-          setRelatedGroups(await fetchHotGroupsFallback())
-          return
-        }
-
-        const memberIds = memberData.map(m => m.user_id)
-        const { data: otherMemberships } = await supabase
-          .from('group_members')
-          .select('group_id')
-          .in('user_id', memberIds)
-          .neq('group_id', groupId)
-
-        if (!otherMemberships || otherMemberships.length === 0) {
-          setRelatedGroups(await fetchHotGroupsFallback())
-          return
-        }
-
-        const groupCounts: Record<string, number> = {}
-        otherMemberships.forEach(m => { groupCounts[m.group_id] = (groupCounts[m.group_id] || 0) + 1 })
-        const sortedGroupIds = Object.entries(groupCounts)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, 5)
-          .map(([id]) => id)
-
-        if (sortedGroupIds.length === 0) {
-          setRelatedGroups([])
-          return
-        }
-
-        const { data: groupsData } = await supabase
-          .from('groups')
-          .select('id, name, name_en, avatar_url, member_count')
-          .in('id', sortedGroupIds)
-
-        const sortedGroups = (groupsData || []).sort((a, b) => {
-          return sortedGroupIds.indexOf(a.id) - sortedGroupIds.indexOf(b.id)
+        const { data, error } = await supabase.rpc('get_related_groups', {
+          p_group_id: groupId,
+          p_limit: 5,
         })
-        setRelatedGroups(sortedGroups)
+
+        if (error || !data || data.length === 0) {
+          // Fallback to hot groups
+          const { data: fallback } = await supabase
+            .from('groups')
+            .select('id, name, name_en, avatar_url, member_count')
+            .neq('id', groupId)
+            .order('member_count', { ascending: false, nullsFirst: false })
+            .limit(5)
+          setRelatedGroups(fallback || [])
+        } else {
+          setRelatedGroups(data)
+        }
       } catch (err) {
         logger.error('Error fetching related groups:', err)
         setRelatedGroups([])
@@ -373,7 +367,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, userId, groupId, isMember, loading])
 
-  // Join group
+  // Join group (via API)
   const handleJoin = useCallback(async (bypassPro = false) => {
     if (!userId) {
       showToast(t('pleaseLogin'), 'warning')
@@ -386,27 +380,25 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
     setJoining(true)
     try {
-      const { error } = await supabase.from('group_members').insert({ group_id: groupId, user_id: userId, role: 'member' })
-      if (error) throw error
+      const res = await fetch(`/api/groups/${groupId}/membership`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ action: 'join' }),
+      })
 
-      await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || t('joinFailed'))
+      }
+
       setGroup(prev => prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : prev)
       setIsMember(true)
       setUserRole('member')
       showToast(t('joinSuccess'), 'success')
-
-      // Notify group owner
-      if (group?.created_by && group.created_by !== userId) {
-        await supabase.from('notifications').insert({
-          user_id: group.created_by,
-          type: 'system' as const,
-          title: t('newMemberJoined'),
-          message: t('newMemberJoinedMsg'),
-          link: `/groups/${groupId}`,
-          actor_id: userId,
-          reference_id: groupId,
-        })
-      }
     } catch (err) {
       logger.error('Join error:', err)
       showToast(err instanceof Error ? err.message : t('joinFailed'), 'error')
@@ -414,17 +406,28 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setJoining(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, group, isPro, groupId, language, showToast])
+  }, [userId, group, isPro, groupId, accessToken, showToast])
 
-  // Leave group
+  // Leave group (via API)
   const handleLeave = useCallback(async () => {
     if (!userId) return
     setJoining(true)
     try {
-      const { error } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', userId)
-      if (error) throw error
+      const res = await fetch(`/api/groups/${groupId}/membership`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ action: 'leave' }),
+      })
 
-      await supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || t('leaveFailed'))
+      }
+
       setGroup(prev => prev ? { ...prev, member_count: Math.max(0, (prev.member_count || 1) - 1) } : prev)
       setIsMember(false)
       setUserRole(null)
@@ -436,7 +439,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setJoining(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, groupId, language, showToast])
+  }, [userId, groupId, accessToken, showToast])
 
   // Load members
   const loadMembers = async () => {
@@ -641,14 +644,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
                 zIndex: tokens.zIndex.sticky,
                 transition: `all ${tokens.transition.base}`,
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.1)'
-                e.currentTarget.style.boxShadow = `0 6px 24px ${tokens.colors.accent?.primary || tokens.colors.accent.brand}70`
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)'
-                e.currentTarget.style.boxShadow = `0 4px 16px ${tokens.colors.accent?.primary || tokens.colors.accent.brand}50`
-              }}
+              className="hover-scale"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 20h9" />
@@ -739,16 +735,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
                 color: tokens.colors.text.primary,
                 transition: 'all 0.2s ease',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = `${tokens.colors.accent?.primary || tokens.colors.accent.brand}1a`
-                e.currentTarget.style.borderColor = `${tokens.colors.accent?.primary || tokens.colors.accent.brand}33`
-                e.currentTarget.style.transform = 'translateX(4px)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.borderColor = 'transparent'
-                e.currentTarget.style.transform = 'translateX(0)'
-              }}
+              className="hover-slide-right"
             >
               <Box
                 style={{
