@@ -234,8 +234,16 @@ export default function NotificationsList() {
       {!collapsed && (
         <div style={{ maxHeight: 'min(400px, 60vh)', overflowY: 'auto' }}>
           {loading ? (
-            <div style={{ padding: tokens.spacing[4], textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-              {t('loading')}
+            <div style={{ padding: tokens.spacing[3], display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[3], padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: tokens.colors.bg.tertiary, flexShrink: 0, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ width: '70%', height: 14, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                    <div style={{ width: '50%', height: 12, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : notifications.length === 0 ? (
             <div style={{ padding: '24px 12px', textAlign: 'center' }}>
