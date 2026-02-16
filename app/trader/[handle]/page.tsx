@@ -17,7 +17,7 @@ export async function generateStaticParams() {
       .limit(200)
     
     return (data || [])
-      .filter((t: { handle: string | null }) => t.handle)
+      .filter((t: { handle: string | null }) => t.handle && t.handle.length < 100 && !t.handle.includes('\n'))
       .map((t: { handle: string }) => ({ handle: encodeURIComponent(t.handle) }))
   } catch {
     return []
