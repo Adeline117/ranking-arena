@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       id: string
       source: string
       source_trader_id: string
-      window: string | null
+      season_id: string | null
       roi: string | null
       pnl: string | null
       max_drawdown: string | null
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const { data: tradersResult, error: fetchError } = await supabase
       .from('trader_snapshots')
-      .select('id, source, source_trader_id, window, roi, pnl, max_drawdown, win_rate')
+      .select('id, source, source_trader_id, season_id, roi, pnl, max_drawdown, win_rate')
       .or('sortino_ratio.is.null,arena_score_v3.is.null')
       .not('roi', 'is', null)
       .order('captured_at', { ascending: false })
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         logger.warn('Advanced metric columns not found, using fallback query', {})
         const { data: fallback, error: fallbackError } = await supabase
           .from('trader_snapshots')
-          .select('id, source, source_trader_id, window, roi, pnl, max_drawdown, win_rate')
+          .select('id, source, source_trader_id, season_id, roi, pnl, max_drawdown, win_rate')
           .not('roi', 'is', null)
           .order('captured_at', { ascending: false })
           .limit(BATCH_SIZE * 3)
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
       try {
         for (const snapshot of snapshots) {
-          const window = snapshot.window?.toUpperCase() as Period
+          const window = snapshot.season_id?.toUpperCase() as Period
           if (!windows.includes(window)) continue
 
           // Calculate period days
