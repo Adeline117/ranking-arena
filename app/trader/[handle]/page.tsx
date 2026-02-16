@@ -83,14 +83,25 @@ async function fetchUnregisteredTrader(handle: string): Promise<UnregisteredTrad
     const supabase = getSupabaseAdmin()
     
     // Find trader_sources by handle (case-insensitive)
-    const { data: traderSource } = await supabase
+    let { data: traderSource } = await supabase
       .from('trader_sources')
       .select('handle, avatar_url, source, source_trader_id')
       .ilike('handle', handle)
       .limit(1)
       .maybeSingle()
     
-    if (!traderSource) return null
+    if (!traderSource) {
+      // Fallback: try matching by source_trader_id (full address)
+      const { data: fallbackSource } = await supabase
+        .from('trader_sources')
+        .select('handle, avatar_url, source, source_trader_id')
+        .eq('source_trader_id', handle)
+        .limit(1)
+        .maybeSingle()
+      
+      if (!fallbackSource) return null
+      traderSource = fallbackSource
+    }
     
     // Get leaderboard_ranks data
     const { data: rankData } = await supabase

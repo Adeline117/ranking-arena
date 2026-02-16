@@ -39,7 +39,7 @@ export const TraderCard = memo(function TraderCard({
   parseSourceInfo,
 }: TraderCardProps) {
   const traderHandle = trader.handle || trader.id
-  const href = `/trader/${encodeURIComponent(traderHandle)}`
+  const href = `/trader/${encodeURIComponent(trader.id)}`
   const displayName = trader.display_name || formatDisplayName(traderHandle, trader.source || source)
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
