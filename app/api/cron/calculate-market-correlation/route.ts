@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     // Get traders that need correlation calculation
     const { data: traders, error: fetchError } = await supabase
       .from('trader_snapshots')
-      .select('id, source, source_trader_id, window, roi')
+      .select('id, source, source_trader_id, season_id, roi')
       .eq('window', '30d')
       .or('beta_btc.is.null,alpha.is.null')
       .not('roi', 'is', null)
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     if (fetchError) throw fetchError
 
     // Process each trader
-    const traderList = traders as { id: string; source: string; source_trader_id: string; window: string; roi: string | null }[] || []
+    const traderList = traders as { id: string; source: string; source_trader_id: string; season_id: string; roi: string | null }[] || []
 
     for (const trader of traderList) {
       try {

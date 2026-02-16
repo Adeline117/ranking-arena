@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
           // Get the end-of-day snapshot (closest to 23:59:59 UTC)
           const { data: snapshots, error: snapshotError } = await supabase
             .from('trader_snapshots')
-            .select('roi, pnl, win_rate, max_drawdown, followers, trades_count, window')
+            .select('roi, pnl, win_rate, max_drawdown, followers, trades_count, season_id')
             .eq('source', trader.source)
             .eq('source_trader_id', trader.source_trader_id)
             .gte('captured_at', `${dateStr}T00:00:00Z`)
