@@ -210,7 +210,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   // Note: unique constraint on (source, source_trader_id, season_id) guarantees no duplicates
   let dbQuery = supabase
     .from('trader_snapshots')
-    .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence', { count: 'exact' })
+    .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence', { count: 'estimated' })
     .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
     .lte('roi', ROI_ANOMALY_THRESHOLD)
