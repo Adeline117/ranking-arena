@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/admin/auth'
+import { z } from 'zod'
+
+const StatusSchema = z.object({
+  status: z.enum(['want_to_read', 'reading', 'read']),
+})
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -16,11 +21,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const body = await req.json()
-    const { status } = body
-
-    if (!['want_to_read', 'reading', 'read'].includes(status)) {
-      return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
+    const parsed = StatusSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid status', details: parsed.error.flatten() }, { status: 400 })
     }
+
+    const { status } = parsed.data
 
     // Upsert - if switching to want_to_read, clear rating
     const upsertData: { user_id: string; library_item_id: string; status: string; updated_at: string; rating?: null } = {

@@ -1,0 +1,32 @@
+import type { Language } from '@/lib/i18n'
+
+export interface OnboardingTheme {
+  isDark: boolean
+  cardBg: string
+  cardBorder: string
+  textPrimary: string
+  textSecondary: string
+  optionBg: string
+  optionBorder: string
+  selectedBg: string
+  selectedBorder: string
+  brandGradient: string
+}
+
+export type Trader = {
+  source: string
+  source_trader_id: string
+  handle: string | null
+  avatar_url: string | null
+  roi: number | null
+  arena_score: number | null
+}
+
+export type Group = {
+  id: string
+  name: string
+  name_en: string | null
+  description: string | null
+  avatar_url: string | null
+  member_count: number | null
+}

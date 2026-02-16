@@ -188,12 +188,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 0.8,
     },
-    {
-      url: `${BASE_URL}/rankings`,
-      lastModified: now,
-      changeFrequency: "hourly",
-      priority: 0.9,
-    },
+    // /rankings redirects to /, excluded from sitemap
     {
       url: `${BASE_URL}/rankings/bots`,
       lastModified: now,

@@ -1,21 +1,17 @@
 import { redirect, notFound } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 
 // Pre-render top 50 trader pages at build time for instant TTFB
 export async function generateStaticParams() {
   try {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-    if (!supabaseUrl || !supabaseKey) return []
-    
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseAdmin()
     const { data } = await supabase
       .from('trader_sources')
       .select('handle')
       .not('handle', 'is', null)
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(200)
     
     return (data || [])
       .filter((t: { handle: string | null }) => t.handle)
@@ -25,56 +21,63 @@ export async function generateStaticParams() {
   }
 }
 
-// 模块级单例，避免每次请求创建新客户端
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const supabaseInstance = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
-
-function getSupabase() {
-  if (!supabaseInstance) {
-    throw new Error('Supabase not configured')
-  }
-  return supabaseInstance
-}
-
 // Find the user profile associated with this trader handle
+// Uses chained query: traders -> trader_authorizations -> user_profiles
 async function findUserProfileByTraderHandle(traderHandle: string): Promise<string | null> {
   try {
-    const supabase = getSupabase()
+    const supabase = getSupabaseAdmin()
     
+    // Single query: find trader, then get active authorization with user profile
     const { data: trader } = await supabase
       .from('traders')
-      .select('id')
+      .select('id, trader_authorizations!inner(user_id, user_profiles:user_id(handle))')
       .eq('handle', traderHandle)
+      .eq('trader_authorizations.status', 'active')
       .maybeSingle()
     
-    if (!trader?.id) return null
+    if (!trader) return null
     
-    const { data: auth } = await supabase
-      .from('trader_authorizations')
-      .select('user_id')
-      .eq('trader_id', trader.id)
-      .eq('status', 'active')
-      .maybeSingle()
-    
-    if (!auth?.user_id) return null
-    
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('handle')
-      .eq('id', auth.user_id)
-      .maybeSingle()
-    
-    return profile?.handle || null
+    const auths = trader.trader_authorizations as unknown as Array<{ user_id: string; user_profiles: { handle: string | null } | null }>
+    return auths?.[0]?.user_profiles?.handle || null
   } catch {
-    return null
+    // Fallback to serial queries if join fails (table relationship may not exist)
+    try {
+      const supabase = getSupabaseAdmin()
+      
+      const { data: traderData } = await supabase
+        .from('traders')
+        .select('id')
+        .eq('handle', traderHandle)
+        .maybeSingle()
+      
+      if (!traderData?.id) return null
+      
+      const { data: auth } = await supabase
+        .from('trader_authorizations')
+        .select('user_id')
+        .eq('trader_id', traderData.id)
+        .eq('status', 'active')
+        .maybeSingle()
+      
+      if (!auth?.user_id) return null
+      
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', auth.user_id)
+        .maybeSingle()
+      
+      return profile?.handle || null
+    } catch {
+      return null
+    }
   }
 }
 
 // Fetch unregistered trader data from trader_sources + leaderboard_ranks
 async function fetchUnregisteredTrader(handle: string): Promise<UnregisteredTraderData | null> {
   try {
-    const supabase = getSupabase()
+    const supabase = getSupabaseAdmin()
     
     // Find trader_sources by handle (case-insensitive)
     const { data: traderSource } = await supabase

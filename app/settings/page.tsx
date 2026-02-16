@@ -1,7 +1,7 @@
 'use client'
 
 import React, { Suspense, useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
@@ -21,6 +21,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { validateHandle } from './validation'
+import { useActiveSection } from './hooks/useActiveSection'
 
 import {
   SectionId,
@@ -98,15 +99,14 @@ function ExchangeBindingBanner({ userId }: { userId: string | null }) {
 
 function SettingsContent() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
+  const { activeSection, scrollToSection } = useActiveSection()
   const [email, setEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeSection, setActiveSection] = useState<SectionId>('profile')
 
   // Profile data
   const [handle, setHandle] = useState('')
@@ -288,17 +288,6 @@ function SettingsContent() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
 
-  // ===== Handle section from URL + initial auth check (merged) =====
-  useEffect(() => {
-    const section = searchParams.get('section') as SectionId | null
-    if (section && SECTION_IDS.includes(section)) {
-      setActiveSection(section)
-      setTimeout(() => {
-        document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 100)
-    }
-  }, [searchParams])
-
   useEffect(() => {
      
     supabase.auth.getUser().then(({ data }) => {
@@ -316,23 +305,6 @@ function SettingsContent() {
       return () => clearTimeout(timer)
     }
   }, [resetCountdown])
-
-  // ===== Scroll-based active section detection =====
-  useEffect(() => {
-    const handleScroll = () => {
-      const sections = SECTION_IDS.map(id => document.getElementById(id))
-      const scrollTop = window.scrollY + 120
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const section = sections[i]
-        if (section && section.offsetTop <= scrollTop) {
-          setActiveSection(SECTION_IDS[i])
-          break
-        }
-      }
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
 
   // ===== Lazy-load sessions and blocked users =====
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
@@ -879,7 +851,7 @@ function SettingsContent() {
           {SECTION_IDS.map(sectionId => (
             <button
               key={sectionId}
-              onClick={() => { setActiveSection(sectionId); document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
+              onClick={() => scrollToSection(sectionId)}
               style={{
                 display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.md, border: 'none',
@@ -913,7 +885,7 @@ function SettingsContent() {
             {SECTION_IDS.map(sectionId => (
               <button
                 key={sectionId}
-                onClick={() => { setActiveSection(sectionId); document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
+                onClick={() => scrollToSection(sectionId)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.full,

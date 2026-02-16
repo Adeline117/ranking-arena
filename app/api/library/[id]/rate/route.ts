@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/admin/auth'
+import { z } from 'zod'
+
+const RateSchema = z.object({
+  rating: z.number().int().min(1).max(5).optional().nullable(),
+  review: z.string().max(280).optional().nullable(),
+  status: z.enum(['want_to_read', 'reading', 'read']).optional(),
+})
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -16,8 +23,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const body = await req.json()
-    const { rating, review, status } = body
+    const parsed = RateSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
+    }
 
+    const { rating, review, status } = parsed.data
     const effectiveStatus = status || 'read'
 
     if (effectiveStatus === 'read') {
