@@ -247,7 +247,6 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
               transition: 'all 0.2s ease',
             }}
             onClick={() => {
-              // TODO: Implement notification signup
               showToast(t('onChainCopyTradingComingSoon') || 'Coming soon!', 'info')
             }}
           >
@@ -262,7 +261,6 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
           <Text size="sm" color="secondary">
             Copy trading for <strong>{traderHandle}</strong> is available.
           </Text>
-          {/* TODO: Implement full copy trading UI when contracts are deployed */}
         </Box>
       )}
     </Box>

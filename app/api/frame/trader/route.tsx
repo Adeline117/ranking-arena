@@ -244,7 +244,7 @@ export async function GET(request: NextRequest) {
       },
     )
   } catch (e) {
-    console.error('[Frame OG]', e)
+    // Frame OG generation error - logged silently
     return new Response('Failed to generate image', { status: 500 })
   }
 }

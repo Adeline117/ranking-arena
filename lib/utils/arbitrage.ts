@@ -5,7 +5,13 @@
  */
 
 import 'server-only'
-import ccxt, { type Exchange, type Ticker } from 'ccxt'
+import type { Exchange, Ticker } from 'ccxt'
+
+let _ccxt: typeof import('ccxt') | null = null
+async function getCcxt() {
+  if (!_ccxt) { _ccxt = await import('ccxt') }
+  return _ccxt
+}
 
 // ---- 类型定义 ----
 
@@ -64,8 +70,8 @@ const TRIANGULAR_PATHS: [string, string, string][] = [
   ['ETH', 'LINK', 'USDT'],
 ]
 
-function getExchange(id: string): Exchange {
-   
+async function getExchange(id: string): Promise<Exchange> {
+  const ccxt = await getCcxt()
   const Ex = (ccxt as unknown as Record<string, new (opts: object) => Exchange>)[id]
   if (!Ex) throw new Error(`Unknown exchange: ${id}`)
   return new Ex({ enableRateLimit: true, timeout: 10_000 })
@@ -75,7 +81,7 @@ async function fetchTickers(exchangeId: string): Promise<Record<string, Ticker>>
   const cached = tickerCache.get(exchangeId)
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data
 
-  const ex = getExchange(exchangeId)
+  const ex = await getExchange(exchangeId)
   try {
     const tickers = await ex.fetchTickers(TARGET_SYMBOLS)
     const entry = { data: tickers, ts: Date.now() }

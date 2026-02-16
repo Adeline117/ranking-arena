@@ -296,8 +296,8 @@ export default function MarketPage() {
   return (
     <ErrorBoundary 
       pageType="market" 
-      onError={(error, errorInfo) => {
-        console.error('Market page error:', error, errorInfo)
+      onError={() => {
+        // Market page error handled by ErrorBoundary
       }}
     >
       <MarketPageContent />

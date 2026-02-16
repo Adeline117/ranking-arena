@@ -220,8 +220,6 @@ async function syncPlatformData(
       }
     }
 
-    // TODO: Add other platform adapters (OKX, Bitget, etc.)
-
     return {
       success: false,
       error: `Platform ${platform} not yet supported for sync`,

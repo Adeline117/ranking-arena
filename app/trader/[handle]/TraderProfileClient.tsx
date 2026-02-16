@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
@@ -172,8 +173,7 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
             justifyContent: 'center',
           }}>
             {data.avatar_url ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt={displayName} width={72} height={72} style={{ objectFit: 'cover', width: 72, height: 72 }} />
+              <Image src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt={displayName} width={72} height={72} style={{ objectFit: 'cover', width: 72, height: 72 }} />
             ) : (
               <Text size="xl" weight="bold" style={{ color: tokens.colors.white }}>{initial}</Text>
             )}

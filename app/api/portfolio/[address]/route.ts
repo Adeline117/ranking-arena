@@ -18,32 +18,37 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ address: string }> }
 ) {
-  const { address } = await params
+  try {
+    const { address } = await params
 
-  if (!isValidEvmAddress(address)) {
-    return NextResponse.json(
-      { error: 'Invalid EVM address' },
-      { status: 400 }
-    )
-  }
+    if (!isValidEvmAddress(address)) {
+      return NextResponse.json(
+        { error: 'Invalid EVM address' },
+        { status: 400 }
+      )
+    }
 
-  const cacheKey = `portfolio:evm:${address.toLowerCase()}`
+    const cacheKey = `portfolio:evm:${address.toLowerCase()}`
 
-  // Try cache first
-  const cached = await cache.get<ReturnType<typeof getPortfolio> extends Promise<infer T> ? T : never>(cacheKey)
-  if (cached) {
-    return NextResponse.json(cached, {
-      headers: { 'X-Cache': 'HIT' },
+    // Try cache first
+    const cached = await cache.get<ReturnType<typeof getPortfolio> extends Promise<infer T> ? T : never>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached, {
+        headers: { 'X-Cache': 'HIT' },
+      })
+    }
+
+    // Fetch fresh data
+    const portfolio = await getPortfolio(address)
+
+    // Cache for 30 seconds
+    await cache.set(cacheKey, portfolio, { ttl: 30 })
+
+    return NextResponse.json(portfolio, {
+      headers: { 'X-Cache': 'MISS' },
     })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
-
-  // Fetch fresh data
-  const portfolio = await getPortfolio(address)
-
-  // Cache for 30 seconds
-  await cache.set(cacheKey, portfolio, { ttl: 30 })
-
-  return NextResponse.json(portfolio, {
-    headers: { 'X-Cache': 'MISS' },
-  })
 }

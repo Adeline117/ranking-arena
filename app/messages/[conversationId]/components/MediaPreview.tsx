@@ -26,7 +26,7 @@ export default function MediaPreview({ preview, onClose, t }: MediaPreviewProps)
         zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
       }}
     >
-      <button onClick={onClose} style={{
+      <button onClick={onClose} aria-label="Close preview" style={{
         position: 'absolute', top: 16, right: 16, width: 40, height: 40,
         borderRadius: '50%', border: 'none', background: 'var(--glass-bg-medium)',
         color: tokens.colors.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',

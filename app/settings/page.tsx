@@ -1079,7 +1079,7 @@ export default function SettingsPage() {
     <ErrorBoundary 
       pageType="profile" 
       onError={(error, errorInfo) => {
-        console.error('Settings page error:', error, errorInfo)
+        logger.error('Settings page error:', { error: String(error), componentStack: errorInfo?.componentStack })
       }}
     >
       <Suspense fallback={

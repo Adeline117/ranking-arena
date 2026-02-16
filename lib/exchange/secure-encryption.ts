@@ -377,14 +377,8 @@ export function getHSMProvider(): HSMProvider | null {
     return null
   }
 
-  // TODO: 实现实际的 HSM 集成
-  // 可以集成:
-  // - AWS CloudHSM
-  // - Azure Key Vault HSM
-  // - Google Cloud HSM
-  // - HashiCorp Vault Transit
-
-  logger.info('HSM 配置已检测，但尚未实现')
+  // HSM integration not yet implemented
+  logger.info('HSM config detected but not yet integrated')
   return null
 }
 

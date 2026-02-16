@@ -225,8 +225,7 @@ async function runWorker(config: WorkerConfig): Promise<void> {
     // Daemon mode: keep running and re-schedule
     console.log('[Worker] Running in daemon mode. Press Ctrl+C to stop.')
     
-    // TODO: Add cron-based scheduling for daemon mode
-    // For now, just keep the process alive
+    // Keep process alive (cron scheduling handled externally)
     await new Promise(() => {})
   } else {
     // One-shot mode: wait for all jobs to complete

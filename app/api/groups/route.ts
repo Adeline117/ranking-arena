@@ -35,8 +35,7 @@ export async function GET(request: NextRequest) {
         member_count
       `)
 
-    // Apply sorting - currently only member_count is supported
-    // TODO: Add created_at/updated_at sorting when columns are confirmed
+    // Sort by member_count (only supported column currently)
     query = query.order('member_count', { ascending: false, nullsFirst: false })
 
     // Apply pagination

@@ -4,7 +4,16 @@
  * Used for: ticker/OHLCV data, trading pair lists, price lookups for PnL calculation.
  * NOT used for: copy trading APIs (ccxt doesn't support those).
  */
-import ccxt, { type Exchange, type Ticker, type OHLCV } from 'ccxt'
+import type { Exchange, Ticker, OHLCV } from 'ccxt'
+
+// Lazy-load ccxt to avoid 56MB bundle impact on cold starts
+let _ccxt: typeof import('ccxt') | null = null
+async function getCcxt() {
+  if (!_ccxt) {
+    _ccxt = await import('ccxt')
+  }
+  return _ccxt
+}
 
 // All supported exchanges
 export const SUPPORTED_EXCHANGES = [
@@ -47,16 +56,17 @@ export interface CcxtClientOptions {
 /**
  * Get or create a ccxt exchange instance (cached singleton per exchange+options hash).
  */
-export function getExchange(
+export async function getExchange(
   name: SupportedExchange,
   options: CcxtClientOptions = {},
-): Exchange {
+): Promise<Exchange> {
   const cacheKey = `${name}:${options.apiKey ?? 'public'}:${options.sandbox ? 'sandbox' : 'live'}`
 
   if (exchangeInstances.has(cacheKey)) {
     return exchangeInstances.get(cacheKey)!
   }
 
+  const ccxt = await getCcxt()
   const className = CCXT_CLASS_MAP[name]
   const ExchangeClass = (ccxt as unknown as Record<string, new (config: Record<string, unknown>) => Exchange>)[className]
   if (!ExchangeClass) {
@@ -83,7 +93,7 @@ export async function fetchTicker(
   exchangeName: SupportedExchange,
   symbol: string,
 ): Promise<Ticker> {
-  const exchange = getExchange(exchangeName)
+  const exchange = await getExchange(exchangeName)
   return exchange.fetchTicker(symbol)
 }
 
@@ -97,7 +107,7 @@ export async function fetchOHLCV(
   since?: number,
   limit?: number,
 ): Promise<OHLCV[]> {
-  const exchange = getExchange(exchangeName)
+  const exchange = await getExchange(exchangeName)
   return exchange.fetchOHLCV(symbol, timeframe, since, limit)
 }
 
@@ -105,7 +115,7 @@ export async function fetchOHLCV(
  * Fetch all trading pairs (markets) for an exchange.
  */
 export async function fetchMarkets(exchangeName: SupportedExchange) {
-  const exchange = getExchange(exchangeName)
+  const exchange = await getExchange(exchangeName)
   return exchange.loadMarkets()
 }
 
@@ -116,7 +126,7 @@ export async function fetchTickers(
   exchangeName: SupportedExchange,
   symbols: string[],
 ): Promise<Record<string, Ticker>> {
-  const exchange = getExchange(exchangeName)
+  const exchange = await getExchange(exchangeName)
   try {
     return await exchange.fetchTickers(symbols)
   } catch {
@@ -140,7 +150,7 @@ export async function fetchOpenInterest(
   exchangeName: SupportedExchange,
   symbol: string,
 ) {
-  const exchange = getExchange(exchangeName)
+  const exchange = await getExchange(exchangeName)
   if (typeof exchange.fetchOpenInterest === 'function') {
     return exchange.fetchOpenInterest(symbol)
   }
