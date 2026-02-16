@@ -69,6 +69,7 @@ export async function GET(request: Request) {
       'bitmart.com',
       // XT
       'xt.com',
+      'static-global.com',
       // Pionex
       'pionex.com',
       // Weex
