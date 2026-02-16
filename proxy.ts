@@ -4,9 +4,13 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { generateRequestId } from '@/lib/utils/logger'
+
+// Page routes requiring Supabase auth redirect
+const AUTH_PROTECTED_PAGES = ['/settings', '/favorites', '/user-center', '/inbox', '/my-posts']
 
 // CSRF 配置
 const CSRF_COOKIE_NAME = 'csrf-token'
@@ -498,6 +502,41 @@ export async function proxy(request: NextRequest) {
     }
   }
   
+  // Supabase auth refresh for protected page routes
+  const isAuthProtectedPage = !pathname.startsWith('/api/') && AUTH_PROTECTED_PAGES.some(route => pathname.startsWith(route))
+  if (isAuthProtectedPage) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (supabaseUrl && supabaseAnonKey) {
+      let supabaseResponse = NextResponse.next({ request })
+      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+          getAll() { return request.cookies.getAll() },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+            supabaseResponse = NextResponse.next({ request })
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            )
+          },
+        },
+      })
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/login'
+        url.searchParams.set('redirect', pathname)
+        return NextResponse.redirect(url)
+      }
+      // Add security headers to supabase response and return it (preserves cookie changes)
+      supabaseResponse.headers.set('X-Request-ID', requestId)
+      const acceptHeader2 = request.headers.get('accept') || ''
+      const isHtml2 = acceptHeader2.includes('text/html')
+      addSecurityHeaders(supabaseResponse, isHtml2)
+      return supabaseResponse
+    }
+  }
+
   // 继续处理请求
   const response = NextResponse.next()
   
