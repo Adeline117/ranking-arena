@@ -94,7 +94,7 @@ async function fetchFromLeaderboard(
   // Build query
   let query = supabase
     .from('leaderboard_ranks')
-    .select('*', { count: 'exact' })
+    .select('*', { count: 'estimated' })
     .eq('season_id', timeRange)
 
   if (exchangeFilter) {
