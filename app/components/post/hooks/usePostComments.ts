@@ -85,7 +85,10 @@ export function usePostComments({
         'GET',
         accessToken
       )
-      setComments(ok && data?.success ? data.data?.comments || [] : [])
+      const loaded = ok && data?.success ? data.data?.comments || [] : []
+      setComments(loaded)
+      // Sync with postStore as single source of truth
+      usePostStore.getState().setComments(postId, loaded.map(toCommentData))
     } catch {
       setComments([])
     } finally {

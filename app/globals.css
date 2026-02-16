@@ -2790,3 +2790,50 @@ td[data-numeric],
 
 /* Duplicate CSS removed — definitions kept at their first occurrence above */
 
+/* ============================================
+   Hover utility classes (replaces inline onMouseEnter/Leave)
+   ============================================ */
+.hover-bg-secondary {
+  transition: background 0.15s;
+}
+.hover-bg-secondary:hover {
+  background: var(--color-bg-secondary) !important;
+}
+
+.hover-bg-tertiary {
+  transition: background var(--transition-base, 0.2s);
+}
+.hover-bg-tertiary:hover {
+  background: var(--color-bg-tertiary) !important;
+}
+
+.hover-lift {
+  transition: transform var(--transition-base, 0.2s), box-shadow var(--transition-base, 0.2s);
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.hover-scale {
+  transition: transform var(--transition-base, 0.2s), box-shadow var(--transition-base, 0.2s);
+}
+.hover-scale:hover {
+  transform: scale(1.1);
+}
+
+.hover-slide-right {
+  transition: all 0.2s ease;
+}
+.hover-slide-right:hover {
+  transform: translateX(4px);
+}
+
+.hover-unfollow {
+  transition: all var(--transition-base, 0.2s);
+}
+.hover-unfollow:hover {
+  border-color: var(--color-accent-error) !important;
+  color: var(--color-accent-error) !important;
+}
+

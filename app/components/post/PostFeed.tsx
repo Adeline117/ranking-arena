@@ -34,6 +34,25 @@ interface PostFeedProps {
   showRefreshButton?: boolean
 }
 
+/** Build URLSearchParams for post queries — shared between loadPosts and loadMorePosts */
+function buildPostQueryParams(
+  opts: { pageSize: number; offset: number; sortBy?: string; sortType: SortType; authorHandle?: string; groupId?: string; groupIds?: string[] }
+): URLSearchParams {
+  const params = new URLSearchParams()
+  params.set('limit', String(opts.pageSize))
+  params.set('offset', String(opts.offset))
+  if (opts.sortBy) params.set('sort_by', opts.sortBy)
+  else if (opts.sortType === 'likes') params.set('sort_by', 'like_count')
+  else if (opts.authorHandle) params.set('sort_by', 'created_at')
+  else if (opts.groupId || opts.groupIds) params.set('sort_by', 'created_at')
+  else params.set('sort_by', 'hot_score')
+  params.set('sort_order', 'desc')
+  if (opts.groupId) params.set('group_id', opts.groupId)
+  if (opts.groupIds && opts.groupIds.length > 0) params.set('group_ids', opts.groupIds.join(','))
+  if (opts.authorHandle) params.set('author_handle', opts.authorHandle)
+  return params
+}
+
 export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
@@ -86,17 +105,10 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     abortControllerRef.current = controller
     try {
       setLoading(true); setError(null); setOffset(0); setHasMore(true)
-      const params = new URLSearchParams()
-      params.set('limit', String(pageSize)); params.set('offset', '0')
-      if (props.sortBy) params.set('sort_by', props.sortBy)
-      else if (sortType === 'likes') params.set('sort_by', 'like_count')
-      else if (props.authorHandle) params.set('sort_by', 'created_at')
-      else if (props.groupId || props.groupIds) params.set('sort_by', 'created_at')
-      else params.set('sort_by', 'hot_score')
-      params.set('sort_order', 'desc')
-      if (props.groupId) params.set('group_id', props.groupId)
-      if (props.groupIds && props.groupIds.length > 0) params.set('group_ids', props.groupIds.join(','))
-      if (props.authorHandle) params.set('author_handle', props.authorHandle)
+      const params = buildPostQueryParams({
+        pageSize, offset: 0, sortBy: props.sortBy, sortType,
+        authorHandle: props.authorHandle, groupId: props.groupId, groupIds: props.groupIds,
+      })
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
       const response = await fetch(`/api/posts?${params.toString()}`, { headers, signal: controller.signal })
@@ -115,6 +127,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       const ibc: Record<string, number> = {}; const irc: Record<string, number> = {}
       loadedPosts.forEach((post: Post) => { ibc[post.id] = post.bookmark_count || 0; irc[post.id] = post.repost_count || 0 })
       actions.setBookmarkCounts(prev => ({ ...prev, ...ibc })); actions.setRepostCounts(prev => ({ ...prev, ...irc }))
+      // Load bookmarks/reposts in parallel with initial render
+      if (accessToken && loadedPosts.length > 0) {
+        bookmarksLoadedRef.current = true
+        actions.loadUserBookmarksAndReposts(loadedPosts.map((p: Post) => p.id))
+      }
     } catch (err) {
       if (err instanceof Error && (err.name === 'AbortError' || controller.signal.aborted)) return
       setError(err instanceof Error ? err.message : t('loadFailed'))
@@ -128,17 +145,10 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     const controller = new AbortController()
     try {
       setLoadingMore(true)
-      const params = new URLSearchParams()
-      params.set('limit', String(pageSize)); params.set('offset', String(offset))
-      if (props.sortBy) params.set('sort_by', props.sortBy)
-      else if (sortType === 'likes') params.set('sort_by', 'like_count')
-      else if (props.authorHandle) params.set('sort_by', 'created_at')
-      else if (props.groupId || props.groupIds) params.set('sort_by', 'created_at')
-      else params.set('sort_by', 'hot_score')
-      params.set('sort_order', 'desc')
-      if (props.groupId) params.set('group_id', props.groupId)
-      if (props.groupIds && props.groupIds.length > 0) params.set('group_ids', props.groupIds.join(','))
-      if (props.authorHandle) params.set('author_handle', props.authorHandle)
+      const params = buildPostQueryParams({
+        pageSize, offset, sortBy: props.sortBy, sortType,
+        authorHandle: props.authorHandle, groupId: props.groupId, groupIds: props.groupIds,
+      })
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
       const response = await fetch(`/api/posts?${params.toString()}`, { headers, signal: controller.signal })
@@ -175,8 +185,13 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     observer.observe(el); return () => observer.disconnect()
   }, [hasMore, loadingMore, loading, loadMorePosts])
 
+  // Bookmarks/reposts loaded in parallel with initial post load (see loadPosts).
+  // This effect handles subsequent post changes (e.g. after sort change).
+  const bookmarksLoadedRef = useRef(false)
   useEffect(() => {
-    if (posts.length > 0 && accessToken) actions.loadUserBookmarksAndReposts(posts.map(p => p.id))
+    if (posts.length > 0 && accessToken && bookmarksLoadedRef.current) {
+      actions.loadUserBookmarksAndReposts(posts.map(p => p.id))
+    }
   }, [posts.length, accessToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle initialPostId

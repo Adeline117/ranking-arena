@@ -147,8 +147,29 @@ export default function ConversationsList(): React.ReactElement {
         schema: 'public',
         table: 'direct_messages',
         filter: `receiver_id=eq.${user.id}`,
-      }, () => {
-        loadConversations()
+      }, (payload) => {
+        // Incremental update: update the affected conversation in-place
+        const newMsg = payload.new as { conversation_id?: string; content?: string; created_at?: string; sender_id?: string }
+        if (!newMsg.conversation_id) { loadConversations(); return }
+        setConversations(prev => {
+          const idx = prev.findIndex(c => c.id === newMsg.conversation_id)
+          if (idx === -1) {
+            // New conversation not in list yet — full refresh needed
+            loadConversations()
+            return prev
+          }
+          const updated = [...prev]
+          updated[idx] = {
+            ...updated[idx],
+            last_message_at: newMsg.created_at || new Date().toISOString(),
+            last_message_preview: newMsg.content || '',
+            unread_count: updated[idx].unread_count + 1,
+          }
+          // Re-sort by last_message_at descending
+          updated.sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime())
+          setUnreadMessages(calculateTotalUnread(updated))
+          return updated
+        })
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
@@ -238,14 +259,8 @@ export default function ConversationsList(): React.ReactElement {
               fontWeight: 600,
               transition: `all ${tokens.transition.base}`,
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-1px)'
-              e.currentTarget.style.boxShadow = tokens.shadow.sm
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
+
+            className="hover-lift"
           >
             {t('retry')}
           </button>
@@ -282,17 +297,15 @@ export default function ConversationsList(): React.ReactElement {
           </div>
         </div>
       ) : (
-        <div style={{ maxHeight: 'min(400px, 60vh)', overflowY: 'auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {/* Group channels */}
           {(chatFilter === 'all' || chatFilter === 'group') && groupChannels.map((ch) => (
             <Link key={`ch-${ch.id}`} href={`/channels/${ch.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-              <div style={{
+              <div className="hover-bg-secondary" style={{
                 display: 'flex', alignItems: 'center', gap: tokens.spacing[3],
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                transition: 'background 0.15s', cursor: 'pointer',
+                cursor: 'pointer',
               }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
               >
                 <div style={{
                   width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
@@ -337,8 +350,7 @@ export default function ConversationsList(): React.ReactElement {
                   transition: 'background 0.15s',
                   cursor: 'pointer',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = conv.unread_count > 0 ? 'var(--color-notification-unread)' : 'transparent' }}
+                className="hover-bg-secondary"
               >
                 <div style={{ flexShrink: 0 }}>
                   <Avatar

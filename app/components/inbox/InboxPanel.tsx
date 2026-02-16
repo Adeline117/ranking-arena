@@ -46,7 +46,7 @@ export default function InboxPanel(): React.ReactElement | null {
         position: 'fixed',
         top: 56,
         right: 0,
-        width: 400,
+        width: 'min(400px, 100vw)',
         maxWidth: '100vw',
         height: 'calc(100vh - 56px)',
         background: tokens.colors.bg.primary,
@@ -78,6 +78,7 @@ export default function InboxPanel(): React.ReactElement | null {
         </span>
         <button aria-label="Close"
           onClick={closePanel}
+          className="hover-bg-secondary"
           style={{
             width: 32,
             height: 32,
@@ -91,8 +92,6 @@ export default function InboxPanel(): React.ReactElement | null {
             justifyContent: 'center',
             fontSize: 18,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
           ×
         </button>

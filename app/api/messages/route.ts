@@ -104,29 +104,8 @@ export async function GET(request: NextRequest) {
     const has_more = (messages?.length || 0) > limit
     const resultMessages = (messages || []).slice(0, limit).reverse() // reverse back to ascending order
 
-    // 标记接收到的消息为已读（仅首次加载时，不在翻页时重复执行）
-    if (!before) {
-      const { data: updatedMessages, error: readUpdateError } = await supabase
-        .from('direct_messages')
-        .update({ read: true, read_at: new Date().toISOString() })
-        .eq('conversation_id', conversationId)
-        .eq('receiver_id', userId)
-        .eq('read', false)
-        .select('id')
-
-      if (readUpdateError) {
-        logger.warn('Failed to mark messages as read', { error: readUpdateError.message, conversationId, userId })
-      }
-
-      if (updatedMessages && updatedMessages.length > 0) {
-        traceMessage({
-          event: 'read',
-          conversationId,
-          receiverId: userId,
-          metadata: { count: updatedMessages.length },
-        })
-      }
-    }
+    // Mark-as-read is now handled by the dedicated POST /api/messages/read endpoint.
+    // Removing auto-mark from GET to prevent duplicate read operations and unnecessary writes.
 
     // 获取对方用户信息
     const otherUserId = conversation.user1_id === userId ? conversation.user2_id : conversation.user1_id

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useCallback, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -23,6 +24,7 @@ interface MessageBubbleProps {
   userId: string | null
   highlightedMessageId: string | null
   onRetry: (msg: Message) => void
+  onDelete?: (msgId: string) => void
   onPreviewOpen: (preview: { type: 'image' | 'video' | 'file'; url: string; fileName?: string }) => void
   formatTime: (dateString: string) => string
   t: (key: string) => string
@@ -40,17 +42,66 @@ export default function MessageBubble({
   userId,
   highlightedMessageId,
   onRetry,
+  onDelete,
   onPreviewOpen,
   formatTime,
   t,
   messageRef,
 }: MessageBubbleProps) {
   const otherProfileUrl = !isMine ? getSafeProfileUrl(otherUser, userId) : null
+  const [showContextMenu, setShowContextMenu] = useState(false)
+  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 })
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!showContextMenu) return
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowContextMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showContextMenu])
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!isMine || msg._status === 'sending') return
+    e.preventDefault()
+    setContextMenuPos({ x: e.clientX, y: e.clientY })
+    setShowContextMenu(true)
+  }, [isMine, msg._status])
+
+  const handleTouchStart = useCallback(() => {
+    if (!isMine || msg._status === 'sending') return
+    longPressTimer.current = setTimeout(() => {
+      setShowContextMenu(true)
+      setContextMenuPos({ x: 0, y: 0 }) // centered for mobile
+    }, 500)
+  }, [isMine, msg._status])
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }, [])
+
+  const handleDelete = useCallback(() => {
+    setShowContextMenu(false)
+    onDelete?.(msg.id)
+  }, [msg.id, onDelete])
 
   return (
     <div
       ref={messageRef}
+      onContextMenu={handleContextMenu}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       style={{
+        position: 'relative',
         display: 'flex', flexDirection: 'column',
         alignItems: isMine ? 'flex-end' : 'flex-start',
         marginBottom: isSameSenderAsNext ? '3px' : tokens.spacing[4],
@@ -173,6 +224,50 @@ export default function MessageBubble({
             </button>
           )}
         </Box>
+      )}
+
+      {/* Context menu for delete */}
+      {showContextMenu && isMine && onDelete && (
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: contextMenuPos.y || '50%',
+            left: contextMenuPos.x || '50%',
+            transform: contextMenuPos.x ? 'none' : 'translate(-50%, -50%)',
+            zIndex: 9999,
+            background: tokens.colors.bg.secondary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.lg,
+            boxShadow: tokens.shadow.xl,
+            overflow: 'hidden',
+            minWidth: 140,
+          }}
+        >
+          <button
+            onClick={handleDelete}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '10px 16px',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--color-accent-error)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            className="hover-bg-tertiary"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            {t('deleteMessage') || (typeof window !== 'undefined' && navigator.language.startsWith('zh') ? '删除消息' : 'Delete')}
+          </button>
+        </div>
       )}
 
       {/* Timestamp */}
