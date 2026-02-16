@@ -538,16 +538,16 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           gap: tokens.spacing[6],
         }}
       >
-        <Breadcrumb items={[
-          { label: language === 'zh' ? '小组' : 'Groups', href: '/groups' },
-          { label: (language === 'zh' ? group?.name : (group?.name_en || group?.name)) || '...' },
-        ]} />
         {/* Main Content */}
         <PullToRefreshWrapper
           onRefresh={async () => { await postsHook.loadPosts() }}
           disabled={!isMember}
         >
         <Box>
+          <Breadcrumb items={[
+            { label: language === 'zh' ? '小组' : 'Groups', href: '/groups' },
+            { label: (language === 'zh' ? group?.name : (group?.name_en || group?.name)) || '...' },
+          ]} />
           <GroupHeader
             group={group}
             groupId={groupId}
