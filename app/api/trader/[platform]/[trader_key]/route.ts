@@ -52,6 +52,15 @@ export async function GET(
 
   const supabase = getSupabaseAdmin()
 
+  // Legacy source aliases for fallback queries to old tables
+  const LEGACY_SOURCE_ALIASES: Record<string, string[]> = {
+    binance_futures: ['binance', 'binance_futures'],
+    bitget_futures: ['bitget', 'bitget_futures'],
+    htx_futures: ['htx_futures', 'htx'],
+    okx_web3: ['okx', 'okx_web3'],
+  }
+  const sourceAliases = LEGACY_SOURCE_ALIASES[platform] || [platform]
+
   // Fetch all data in parallel (pure DB reads, fast)
   const [profileResult, snapshotsResult, timeseriesResult, jobResult] = await Promise.all([
     // 1. Profile
@@ -150,6 +159,82 @@ export async function GET(
             break
         }
       }
+    }
+  }
+
+  // --- Fallback to legacy tables when V2 tables are empty ---
+
+  // Fallback: profile from trader_sources
+  if (!profileResult.data) {
+    const { data: legacySource } = await supabase
+      .from('trader_sources')
+      .select('source_trader_id, handle, avatar_url, profile_url')
+      .eq('source', platform)
+      .eq('source_trader_id', trader_key)
+      .limit(1)
+      .maybeSingle()
+
+    if (legacySource) {
+      profile.display_name = legacySource.handle || null
+      profile.avatar_url = legacySource.avatar_url || null
+    }
+  }
+
+  // Fallback: snapshots from trader_snapshots (old table)
+  const hasAnyV2Snapshot = Object.values(snapshots).some(s => s !== null)
+  if (!hasAnyV2Snapshot) {
+    const windows: SnapshotWindow[] = ['7D', '30D', '90D']
+    const legacySnapshotQueries = windows.map(w =>
+      supabase
+        .from('trader_snapshots')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at')
+        .eq('source', platform)
+        .eq('source_trader_id', trader_key)
+        .eq('season_id', w)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    )
+    const legacyResults = await Promise.all(legacySnapshotQueries)
+    for (let i = 0; i < windows.length; i++) {
+      const snap = legacyResults[i].data
+      if (snap) {
+        // Normalize win_rate: if <= 1, treat as decimal and multiply by 100
+        const winRate = snap.win_rate != null ? (snap.win_rate <= 1 ? snap.win_rate * 100 : snap.win_rate) : null
+        snapshots[windows[i]] = {
+          roi: (snap.roi ?? 0) * 100, // old table stores as decimal
+          pnl: snap.pnl ?? 0,
+          win_rate: winRate,
+          max_drawdown: snap.max_drawdown ?? null,
+          trades_count: snap.trades_count ?? null,
+          arena_score: snap.arena_score != null ? parseFloat(String(snap.arena_score)) : null,
+          followers: snap.followers ?? null,
+          aum: null,
+          return_score: null,
+          drawdown_score: null,
+          stability_score: null,
+          rank: null,
+        } as SnapshotMetrics
+      }
+    }
+  }
+
+  // Fallback: equity curve from trader_equity_curve (old table)
+  if (!timeseries.equity_curve) {
+    const { data: legacyCurve } = await supabase
+      .from('trader_equity_curve')
+      .select('data_date, roi_pct, pnl_usd')
+      .in('source', sourceAliases)
+      .eq('source_trader_id', trader_key)
+      .eq('period', '90D')
+      .order('data_date', { ascending: true })
+      .limit(90)
+
+    if (legacyCurve && legacyCurve.length > 0) {
+      timeseries.equity_curve = legacyCurve.map(p => ({
+        date: p.data_date,
+        roi: p.roi_pct ?? 0,
+      })) as EquityCurvePoint[]
     }
   }
 
