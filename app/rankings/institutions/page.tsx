@@ -26,10 +26,35 @@ interface Institution {
 
 const CATEGORY_FILTERS = [
   { key: 'all', zh: '全部', en: 'All' },
-  { key: 'fund', zh: '机构', en: 'Funds' },
-  { key: 'project', zh: '项目方', en: 'Projects' },
   { key: 'exchange', zh: '交易所', en: 'Exchanges' },
+  { key: 'cex', zh: 'CEX', en: 'CEX' },
+  { key: 'dex', zh: 'DEX', en: 'DEX' },
+  { key: 'derivatives', zh: '衍生品', en: 'Derivatives' },
+  { key: 'dex-aggregator', zh: 'DEX聚合器', en: 'DEX Aggregators' },
+  { key: 'otc', zh: 'OTC', en: 'OTC' },
+  { key: 'fund', zh: '基金', en: 'Funds' },
+  { key: 'crypto-vc', zh: '加密VC', en: 'Crypto VC' },
+  { key: 'traditional-vc', zh: '传统VC', en: 'Traditional VC' },
+  { key: 'hedge-fund', zh: '对冲基金', en: 'Hedge Funds' },
+  { key: 'family-office', zh: '家族办公室', en: 'Family Office' },
+  { key: 'trading-firm', zh: '交易公司', en: 'Trading Firms' },
+  { key: 'dao-treasury', zh: 'DAO国库', en: 'DAO Treasury' },
+  { key: 'accelerator', zh: '加速器', en: 'Accelerators' },
+  { key: 'l1', zh: 'L1', en: 'L1' },
+  { key: 'l2', zh: 'L2', en: 'L2' },
+  { key: 'project', zh: '项目方', en: 'Projects' },
+  { key: 'defi', zh: 'DeFi', en: 'DeFi', isGroup: true },
+  { key: 'infrastructure', zh: '基础设施', en: 'Infrastructure' },
+  { key: 'services', zh: '服务商', en: 'Services', isGroup: true },
+  { key: 'media', zh: '媒体', en: 'Media', isGroup: true },
 ]
+
+// Category groups for combined filters
+const CATEGORY_GROUPS: Record<string, string[]> = {
+  defi: ['defi-lending', 'defi-stablecoin', 'liquid-staking', 'restaking', 'defi-yield', 'defi-cdp', 'defi-derivatives', 'defi-insurance'],
+  services: ['custody', 'compliance', 'audit', 'market-maker', 'prime-broker', 'banking', 'legal', 'accounting', 'insurance-provider', 'payroll', 'fund-admin'],
+  media: ['media', 'podcast', 'research', 'data-provider', 'newsletter', 'education'],
+}
 
 const SORT_OPTIONS = [
   { key: 'rating', zh: '评分最高', en: 'Highest Rated' },
@@ -105,8 +130,20 @@ export default function InstitutionsPage() {
             .limit(10)
           return data || []
         }
+        const fetchTopMulti = async (cats: string[]) => {
+          const { data } = await supabase
+            .from('institutions')
+            .select('id, name, name_zh, category, logo_url, website, description, description_zh, avg_rating, rating_count, tags')
+            .eq('is_active', true)
+            .in('category', cats)
+            .order('avg_rating', { ascending: false, nullsFirst: false })
+            .limit(10)
+          return data || []
+        }
         const [funds, projects, exchanges] = await Promise.all([
-          fetchTop('fund'), fetchTop('project'), fetchTop('exchange'),
+          fetchTopMulti(['fund', 'crypto-vc', 'traditional-vc', 'hedge-fund', 'trading-firm', 'family-office', 'accelerator', 'dao-treasury']),
+          fetchTopMulti(['project', 'l1', 'l2', ...CATEGORY_GROUPS.defi]),
+          fetchTopMulti(['exchange', 'cex', 'dex', 'derivatives', 'dex-aggregator', 'otc']),
         ])
         setTopFunds(funds)
         setTopProjects(projects)
@@ -130,7 +167,12 @@ export default function InstitutionsPage() {
         .eq('is_active', true)
 
       if (category !== 'all') {
-        query = query.eq('category', category)
+        const groupCats = CATEGORY_GROUPS[category]
+        if (groupCats) {
+          query = query.in('category', groupCats)
+        } else {
+          query = query.eq('category', category)
+        }
       }
 
       if (debouncedSearch.trim()) {

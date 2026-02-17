@@ -59,7 +59,7 @@ async function getDownloadUrl(md5) {
 
 async function downloadFile(url) {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 120000)
+  const timeout = setTimeout(() => controller.abort(), 300000)
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh)' },
