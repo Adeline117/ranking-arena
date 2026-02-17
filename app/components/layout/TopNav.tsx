@@ -728,32 +728,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     </svg>
                     <span>{t('userCenter') || '用户中心'}</span>
                   </Link>
-                  <Link
-                    href="/portfolio"
-                    role="menuitem"
-                    className="top-nav-menu-link"
-                    style={MENU_LINK_STYLE}
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-                      <path d="M22 12A10 10 0 0 0 12 2v10z" />
-                    </svg>
-                    <span>{t('portfolio') || '投资组合'}</span>
-                  </Link>
-                  <Link
-                    href="/multi-chain"
-                    role="menuitem"
-                    className="top-nav-menu-link"
-                    style={MENU_LINK_STYLE}
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                    </svg>
-                    <span>{t('multiChain') || '多链资产'}</span>
-                  </Link>
+                  {/* 持仓和多链资产已移到个人主页 tabs */}
                   <Link
                     href="/inbox"
                     role="menuitem"
@@ -788,18 +763,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                     </Box>
                     <span>{t('inbox')}</span>
                   </Link>
-                  <Link
-                    href="/membership"
-                    role="menuitem"
-                    className="top-nav-menu-link"
-                    style={{ ...MENU_LINK_STYLE, cursor: 'pointer' }}
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--color-verified-web3)' }}>
-                      <path d="M5 16L3 5L8.5 10L12 4L15.5 10L21 5L19 16H5ZM19 19C19 19.6 18.6 20 18 20H6C5.4 20 5 19.6 5 19V18H19V19Z" />
-                    </svg>
-                    <span style={{ color: 'var(--color-verified-web3)', fontWeight: 700 }}>{t('loginProUpgradeCta')}</span>
-                  </Link>
+                  {/* 升级Pro已合并到用户中心 */}
                   <Link
                     href="/settings"
                     role="menuitem"
