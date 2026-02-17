@@ -94,9 +94,13 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
     router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
   }, [searchParams, pathname, router])
 
-  // SWR for full trader data from API
+  // SWR for full trader data from API — pass platform if available for disambiguation
+  const platform = searchParams?.get('platform') || data.source || ''
+  const traderApiUrl = platform
+    ? `/api/traders/${encodeURIComponent(data.source_trader_id || data.handle)}?source=${encodeURIComponent(platform)}`
+    : `/api/traders/${encodeURIComponent(data.source_trader_id || data.handle)}`
   const { data: traderData } = useSWR<TraderPageData>(
-    `/api/traders/${encodeURIComponent(data.handle)}`,
+    traderApiUrl,
     fetcher,
     {
       revalidateOnFocus: false,
