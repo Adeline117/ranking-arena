@@ -13,7 +13,6 @@
  * - https://api.btse.com/futures/api/copy-trading (404)
  * - https://api.btse.com/spot/api/leaderboard (404)
  *
- * TODO: Implement via stealth browser scraping of copy-trading page.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'

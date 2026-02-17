@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import useSWR from 'swr'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -58,49 +58,45 @@ function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: 
   )
 }
 
+async function fetchRecommendedGroups(accessToken: string | null): Promise<{ groups: Group[]; personalized: boolean }> {
+  if (accessToken) {
+    try {
+      const res = await fetch('/api/recommendations/groups?limit=8', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && json.data?.groups?.length > 0) {
+          return { groups: json.data.groups as Group[], personalized: json.data.personalized === true }
+        }
+      }
+    } catch { /* fall through to default */ }
+  }
+
+  const { data } = await supabase
+    .from('groups')
+    .select('id, name, name_en, description, description_en, avatar_url, member_count')
+    .order('member_count', { ascending: false })
+    .limit(8)
+  return { groups: (data as Group[]) || [], personalized: false }
+}
+
 export default function RecommendedGroups() {
   const { language, t } = useLanguage()
   const isZh = language === 'zh'
-  const [groups, setGroups] = useState<Group[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [isPersonalized, setIsPersonalized] = useState(false)
   const auth = useUnifiedAuth()
 
-  useEffect(() => {
-    async function load() {
-      try {
-        // Try personalized recommendations if logged in
-        if (auth.accessToken) {
-          const res = await fetch('/api/recommendations/groups?limit=8', {
-            headers: { Authorization: `Bearer ${auth.accessToken}` },
-          })
-          if (res.ok) {
-            const json = await res.json()
-            if (json.success && json.data?.groups?.length > 0) {
-              setGroups(json.data.groups as Group[])
-              setIsPersonalized(json.data.personalized === true)
-              setLoading(false)
-              return
-            }
-          }
-        }
-
-        // Fallback: fetch by member_count
-        const { data } = await supabase
-          .from('groups')
-          .select('id, name, name_en, description, description_en, avatar_url, member_count')
-          .order('member_count', { ascending: false })
-          .limit(8)
-        setGroups((data as Group[]) || [])
-      } catch {
-        setError(true)
-      } finally {
-        setLoading(false)
-      }
+  const { data, error, isLoading: loading } = useSWR(
+    ['recommended-groups', auth.accessToken],
+    ([, token]) => fetchRecommendedGroups(token),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 300000,
     }
-    load()
-  }, [auth.accessToken])
+  )
+
+  const groups = data?.groups || []
+  const isPersonalized = data?.personalized || false
 
   return (
     <SidebarCard title={t('sidebarRecommendedGroups')}>

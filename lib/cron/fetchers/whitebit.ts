@@ -9,7 +9,6 @@
  * Their API documentation at https://docs.whitebit.com/ confirms only market,
  * trading, and account endpoints exist.
  *
- * TODO: Monitor if WhiteBit launches copy-trading features.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
