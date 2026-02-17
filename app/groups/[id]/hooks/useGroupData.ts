@@ -80,7 +80,9 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
       }
 
       if (groupErr) {
-        setError(groupErr.message)
+        // Sanitize DB error messages — don't show raw SQL errors to users
+        const isInvalidId = groupErr.code === '22P02' || groupErr.message?.includes('invalid input syntax')
+        setError(isInvalidId ? (language === 'zh' ? '群组不存在' : 'Group not found') : (language === 'zh' ? '加载失败' : 'Failed to load'))
         setLoading(false)
         return
       }
