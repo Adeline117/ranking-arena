@@ -23,7 +23,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
     banUser,
     unbanUser,
   } = useUsers(accessToken)
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'banned' | 'active'>('all')
@@ -221,7 +221,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     </td>
                     <td style={{ padding: tokens.spacing[3] }}>
                       <Text size="xs" color="tertiary">
-                        {new Date(user.created_at).toLocaleDateString()}
+                        {new Date(user.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
