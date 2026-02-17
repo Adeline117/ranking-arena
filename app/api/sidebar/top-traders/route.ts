@@ -20,8 +20,8 @@ export const GET = withPublic(
           .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score')
           .eq('season_id', '90D')
           .not('arena_score', 'is', null)
-          .gt('arena_score', 0)
-          .order('rank', { ascending: true })
+          .gt('arena_score', 50)
+          .order('arena_score', { ascending: false })
           .limit(10)
 
         if (snapErr || !snapData || snapData.length === 0) {
