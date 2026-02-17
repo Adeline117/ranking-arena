@@ -31,7 +31,7 @@ import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],  // Only load weights used by design-tokens.ts (saves ~180KB)
-  display: "swap",
+  display: "optional",
   variable: "--font-inter",
   preload: true,
   adjustFontFallback: true,

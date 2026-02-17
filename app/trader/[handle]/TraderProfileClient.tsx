@@ -2,12 +2,21 @@
 
 import { useState, useCallback } from 'react'
 import Image from 'next/image'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import dynamic from 'next/dynamic'
+import useSWR from 'swr'
+import { fetcher } from '@/lib/hooks/useSWR'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import TraderHeader from '@/app/components/trader/TraderHeader'
+import TraderTabs from '@/app/components/trader/TraderTabs'
+import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
@@ -16,6 +25,16 @@ import {
   generateBreadcrumbSchema,
   combineSchemas,
 } from '@/lib/seo'
+
+const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), { ssr: false })
+const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
+const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
+const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
+  loading: () => <RankingSkeleton />,
+})
+const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
+  loading: () => <RankingSkeleton />,
+})
 
 export interface UnregisteredTraderData {
   handle: string
@@ -39,91 +58,66 @@ export interface UnregisteredTraderData {
   execution_score?: number | null
 }
 
-function formatNumber(val: number | null | undefined, decimals = 2): string {
-  if (val == null || isNaN(val)) return '--'
-  return val.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+type TraderTabKey = 'overview' | 'stats' | 'portfolio'
+type TraderPageData = any
+
+interface TraderProfileClientProps {
+  data: UnregisteredTraderData
+  serverTraderData?: TraderPageData | null
 }
 
-function formatPercent(val: number | null | undefined): string {
-  if (val == null || isNaN(val)) return '--'
-  return `${val.toFixed(2)}%`
-}
+export default function TraderProfileClient({ data, serverTraderData }: TraderProfileClientProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const { t, language } = useLanguage()
+  const { isPro } = useSubscription()
 
-function formatUsd(val: number | null | undefined): string {
-  if (val == null || isNaN(val)) return '--'
-  const abs = Math.abs(val)
-  if (abs >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`
-  if (abs >= 1_000) return `$${(val / 1_000).toFixed(2)}K`
-  return `$${val.toFixed(2)}`
-}
-
-function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <Box style={{
-      background: 'var(--color-bg-secondary)',
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[4],
-      flex: '1 1 140px',
-      minWidth: 140,
-    }}>
-      <Text size="xs" style={{ color: 'var(--color-text-tertiary)', marginBottom: 4 }}>{label}</Text>
-      <Text size="lg" weight="bold" style={{ color: color || 'var(--color-text-primary)' }}>{value}</Text>
-    </Box>
-  )
-}
-
-function ScoreBar({ label, score }: { label: string; score: number | null | undefined }) {
-  const val = score != null ? Math.min(100, Math.max(0, score)) : 0
-  return (
-    <Box style={{ marginBottom: 12 }}>
-      <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <Text size="sm" style={{ color: 'var(--color-text-secondary)' }}>{label}</Text>
-        <Text size="sm" weight="semibold" style={{ color: 'var(--color-text-primary)' }}>{score != null ? score.toFixed(1) : '--'}</Text>
-      </Box>
-      <Box style={{
-        height: 6,
-        background: 'var(--color-bg-tertiary)',
-        borderRadius: 3,
-        overflow: 'hidden',
-      }}>
-        <Box style={{
-          height: '100%',
-          width: `${val}%`,
-          background: val >= 70 ? 'var(--color-success)' : val >= 40 ? 'var(--color-warning, #f59e0b)' : 'var(--color-danger)',
-          borderRadius: 3,
-          transition: 'width 0.3s ease',
-        }} />
-      </Box>
-    </Box>
-  )
-}
-
-const TRADING_STYLE_MAP: Record<string, string> = {
-  scalper: '超短线',
-  day_trader: '日内交易',
-  swing_trader: '波段交易',
-  position_trader: '趋势交易',
-  unknown: '未知',
-}
-
-export default function TraderProfileClient({ data }: { data: UnregisteredTraderData }) {
-  const { t } = useLanguage()
-  const [copied, setCopied] = useState(false)
-  const exchangeName = EXCHANGE_NAMES[data.source] || data.source
   const displayName = formatDisplayName(data.handle, data.source)
-  const gradient = getAvatarGradient(data.handle)
-  const initial = getAvatarInitial(data.handle)
-  const roiColor = (data.roi ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'
-  const pnlColor = (data.pnl ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'
-  const tradingStyle = data.trading_style ? (TRADING_STYLE_MAP[data.trading_style] || data.trading_style) : '--'
+  const exchangeName = EXCHANGE_NAMES[data.source] || data.source
 
-  const copyHandle = useCallback(() => {
-    navigator.clipboard.writeText(data.handle).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }).catch(() => { /* fallback */ })
-  }, [data.handle])
+  // Tabs
+  const urlTab = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState<TraderTabKey>(
+    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as TraderTabKey : 'overview'
+  )
 
+  const handleTabChange = useCallback((tab: TraderTabKey) => {
+    setActiveTab(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'overview') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const qs = params.toString()
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+  }, [searchParams, pathname, router])
+
+  // SWR for full trader data from API
+  const { data: traderData } = useSWR<TraderPageData>(
+    `/api/traders/${encodeURIComponent(data.handle)}`,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      refreshInterval: 60_000,
+      dedupingInterval: 5000,
+      errorRetryCount: 2,
+      fallbackData: serverTraderData ?? undefined,
+    }
+  )
+
+  const traderProfile = traderData?.profile ?? null
+  const traderPerformance = traderData?.performance ?? null
+  const traderStats = traderData?.stats ?? null
+  const traderPortfolio = traderData?.portfolio ?? []
+  const traderPositionHistory = traderData?.positionHistory ?? []
+  const traderEquityCurve = traderData?.equityCurve
+  const traderAssetBreakdown = traderData?.assetBreakdown
+  const traderFeed = traderData?.feed ?? []
+  const traderSimilar = traderData?.similarTraders ?? []
+
+  // Structured data for SEO
   const structuredData = combineSchemas(
     generateTraderProfilePageSchema({
       handle: data.handle,
@@ -143,154 +137,161 @@ export default function TraderProfileClient({ data }: { data: UnregisteredTrader
   )
 
   return (
-    <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
+    <Box
+      className="trader-page-container"
+      style={{
+        minHeight: '100vh',
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <JsonLd data={structuredData} />
       <TopNav />
-      <Box style={{ maxWidth: 800, margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[4]}` }}>
+
+      <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
         <Breadcrumb items={[
-          { label: '排行榜', href: '/' },
+          { label: language === 'zh' ? '排行榜' : 'Leaderboard', href: '/rankings' },
           { label: displayName },
         ]} />
 
-        {/* Header */}
-        <Box style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[4],
-          marginTop: tokens.spacing[4],
-          marginBottom: tokens.spacing[6],
-        }}>
-          {/* Avatar */}
-          <Box style={{
-            width: 72,
-            height: 72,
-            borderRadius: '50%',
-            overflow: 'hidden',
-            flexShrink: 0,
-            background: data.avatar_url ? undefined : gradient,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            {data.avatar_url ? (
-              <Image src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt={displayName} width={72} height={72} style={{ objectFit: 'cover', width: 72, height: 72 }} />
-            ) : (
-              <Text size="xl" weight="bold" style={{ color: tokens.colors.white }}>{initial}</Text>
-            )}
-          </Box>
+        {/* Trader Header */}
+        <TraderHeader
+          handle={traderProfile?.handle || data.handle}
+          displayName={displayName}
+          traderId={traderProfile?.id || data.source_trader_id}
+          avatarUrl={traderProfile?.avatar_url || data.avatar_url || undefined}
+          isRegistered={false}
+          followers={traderProfile?.followers ?? 0}
+          copiers={traderProfile?.copiers}
+          source={traderProfile?.source || data.source}
+          isPro={isPro}
+          roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi * 100 : undefined)}
+          maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
+          winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
+          currentUserId={null}
+        />
 
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], minWidth: 0 }}>
-              <Text size="xl" weight="bold" style={{ color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</Text>
-              <button
-                onClick={copyHandle}
-                title={copied ? 'Copied!' : `Copy: ${data.handle}`}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 4,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  color: copied ? 'var(--color-success)' : 'var(--color-text-tertiary)',
-                  transition: 'color 0.2s ease',
-                  flexShrink: 0,
-                }}
-              >
-                {copied ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+        {/* Tabs */}
+        <TraderTabs
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          isPro={isPro}
+          onProRequired={() => router.push('/pricing')}
+        />
+
+        {/* Tab Content */}
+        <Box
+          key={activeTab}
+          style={{
+            animation: 'fadeInUp 0.4s ease-out forwards',
+          }}
+        >
+          {activeTab === 'overview' && (
+            <Box
+              className="profile-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: traderSimilar.length > 0 ? '1fr 300px' : '1fr',
+                gap: tokens.spacing[8],
+              }}
+            >
+              <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                {traderPerformance ? (
+                  <OverviewPerformanceCard
+                    performance={traderPerformance as ExtendedPerformance}
+                    equityCurve={traderEquityCurve?.['90D']}
+                    source={traderProfile?.source || data.source}
+                  />
                 ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
+                  <Box style={{
+                    padding: tokens.spacing[6],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: tokens.radius.xl,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    textAlign: 'center',
+                  }}>
+                    <Text size="sm" color="tertiary">
+                      {t('noPerformanceData')}
+                    </Text>
+                  </Box>
                 )}
-              </button>
-            </Box>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginTop: 4 }}>
-              <Text size="sm" style={{
-                color: 'var(--color-text-tertiary)',
-                background: 'var(--color-bg-tertiary)',
-                padding: `2px ${tokens.spacing[2]}`,
-                borderRadius: tokens.radius.sm,
-              }}>{exchangeName}</Text>
-              {data.rank && (
-                <Text size="sm" style={{ color: 'var(--color-text-secondary)' }}>#{data.rank}</Text>
-              )}
-            </Box>
-            <Text size="xs" style={{ color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-              {tradingStyle} | 平均持仓 {data.avg_holding_hours != null ? `${data.avg_holding_hours.toFixed(1)}h` : '--'}
-            </Text>
-          </Box>
-        </Box>
 
-        {/* Core Stats */}
-        <Box style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: tokens.spacing[3],
-          marginBottom: tokens.spacing[6],
-        }}>
-          <StatCard label={t('arenaScoreLabel')} value={data.arena_score != null ? formatNumber(data.arena_score, 1) : '--'} />
-          <StatCard label="ROI" value={formatPercent(data.roi)} color={roiColor} />
-          <StatCard label="PnL" value={formatUsd(data.pnl)} color={pnlColor} />
-          <StatCard label={t('winRate')} value={formatPercent(data.win_rate)} />
-          <StatCard label={t('maxDrawdown')} value={formatPercent(data.max_drawdown)} color="var(--color-danger)" />
-        </Box>
+                {/* Equity Curve Chart */}
+                {traderEquityCurve && (
+                  <EquityCurveSection
+                    equityCurve={traderEquityCurve}
+                    traderHandle={traderProfile?.handle || data.handle}
+                    delay={0}
+                  />
+                )}
 
-        {/* Dimension Scores */}
-        <Box style={{
-          background: 'var(--color-bg-secondary)',
-          borderRadius: tokens.radius.lg,
-          padding: tokens.spacing[5],
-          marginBottom: tokens.spacing[6],
-        }}>
-          <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)', marginBottom: tokens.spacing[4], display: 'block' }}>
-            {t('dimensionScores')}
-          </Text>
-          <ScoreBar label={t('profitability')} score={data.profitability_score} />
-          <ScoreBar label={t('riskControl')} score={data.risk_control_score} />
-          <ScoreBar label={t('execution')} score={data.execution_score} />
-        </Box>
-
-        {/* Advanced Metrics */}
-        <Box style={{
-          background: 'var(--color-bg-secondary)',
-          borderRadius: tokens.radius.lg,
-          padding: tokens.spacing[5],
-          marginBottom: tokens.spacing[6],
-        }}>
-          <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)', marginBottom: tokens.spacing[4], display: 'block' }}>
-            高级指标
-          </Text>
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: tokens.spacing[4] }}>
-            {[
-              { label: 'Sharpe Ratio', value: formatNumber(data.sharpe_ratio) },
-              { label: 'Sortino Ratio', value: formatNumber(data.sortino_ratio) },
-              { label: 'Profit Factor', value: formatNumber(data.profit_factor) },
-              { label: 'Calmar Ratio', value: formatNumber(data.calmar_ratio) },
-            ].map(m => (
-              <Box key={m.label}>
-                <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>{m.label}</Text>
-                <Text size="md" weight="semibold" style={{ color: 'var(--color-text-primary)', marginTop: 2, display: 'block' }}>{m.value}</Text>
+                <TraderFeed
+                  items={traderFeed.filter((f: { type: string }) => f.type !== 'group_post')}
+                  title={t('activities')}
+                  isRegistered={false}
+                  traderId={traderProfile?.id || data.source_trader_id}
+                  traderHandle={traderProfile?.handle || data.handle}
+                  source={traderProfile?.source || data.source}
+                />
               </Box>
-            ))}
-          </Box>
+
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                {traderSimilar.length > 0 && <SimilarTraders traders={traderSimilar} />}
+              </Box>
+            </Box>
+          )}
+
+          {activeTab === 'stats' && (
+            traderStats ? (
+              <StatsPage
+                stats={traderStats}
+                traderHandle={traderProfile?.handle || data.handle}
+                assetBreakdown={traderAssetBreakdown}
+                equityCurve={traderEquityCurve}
+                positionHistory={traderPositionHistory}
+                isPro={isPro}
+                onUnlock={() => router.push('/pricing')}
+              />
+            ) : (
+              <Box style={{
+                padding: tokens.spacing[6],
+                background: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.xl,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                textAlign: 'center',
+              }}>
+                <Text size="sm" color="tertiary">
+                  {t('noStatsData')}
+                </Text>
+              </Box>
+            )
+          )}
+
+          {activeTab === 'portfolio' && (
+            <PortfolioTable
+              items={traderPortfolio}
+              history={traderPositionHistory}
+              isPro={isPro}
+              onUnlock={() => router.push('/pricing')}
+            />
+          )}
         </Box>
 
-        {/* Notice */}
-        <Box style={{
-          background: 'var(--color-bg-tertiary)',
-          borderRadius: tokens.radius.md,
-          padding: tokens.spacing[4],
-          textAlign: 'center',
-        }}>
-          <Text size="sm" style={{ color: 'var(--color-text-tertiary)' }}>
-            该交易员尚未在 Arena 平台注册。数据来自 {exchangeName} 公开排行榜。
-          </Text>
-        </Box>
+        <style>{`
+          .profile-tabs::-webkit-scrollbar { display: none; }
+          @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @media (max-width: 768px) {
+            .page-container {
+              padding: ${tokens.spacing[3]} !important;
+            }
+            .profile-grid {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
       </Box>
     </Box>
   )
