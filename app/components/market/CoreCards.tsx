@@ -222,12 +222,34 @@ export default function CoreCards() {
         .then(json => {
           if (!alive) return
           const rows: CoinRow[] = json.rows ?? []
+          if (rows.length === 0) throw new Error('empty')
           const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
           setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
           setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
           setMarketLoaded(true)
         })
-        .catch(() => { if (alive) setMarketLoaded(true) })
+        .catch(() => {
+          // Fallback: use spot market data for gainers/losers
+          if (!alive) return
+          fetch('/api/market/spot', { signal: controller.signal })
+            .then(r => r.json())
+            .then((spots: Array<{ symbol: string; current_price: number; price_change_percentage_24h: number }>) => {
+              if (!alive || !Array.isArray(spots)) return
+              const rows: CoinRow[] = spots
+                .filter(s => s.price_change_percentage_24h != null)
+                .map(s => ({
+                  symbol: `${s.symbol.toUpperCase()}-USD`,
+                  price: s.current_price?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '0',
+                  changePct: `${s.price_change_percentage_24h >= 0 ? '+' : ''}${s.price_change_percentage_24h.toFixed(2)}%`,
+                  direction: s.price_change_percentage_24h >= 0 ? 'up' as const : 'down' as const,
+                }))
+              const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
+              setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
+              setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
+              setMarketLoaded(true)
+            })
+            .catch(() => { if (alive) setMarketLoaded(true) })
+        })
 
       fetch('/api/market/exchanges', { signal: controller.signal })
         .then(r => r.json())
