@@ -256,11 +256,13 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                       {post.author_handle}
                     </span>
                   )}
-                  <span style={{ flexShrink: 0 }}>
-                    {post.comment_count} {t('comments')}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12"/><path d="M15 5.88L14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88z"/></svg>
+                    {post.like_count || 0}
                   </span>
-                  <span style={{ marginLeft: 'auto', opacity: 0.7, flexShrink: 0 }}>
-                    {timeAgo(post.created_at)}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    {post.comment_count}
                   </span>
                 </div>
               </Link>
