@@ -459,9 +459,9 @@ export default function OverviewPerformanceCard({
             />
             <MetricBadge
               label={t('maxDrawdownShort')}
-              value={maxDrawdown !== undefined ? `${Math.abs(maxDrawdown).toFixed(1)}%` : '—'}
+              value={maxDrawdown !== undefined && Math.abs(maxDrawdown) <= 100 ? `${Math.abs(maxDrawdown).toFixed(1)}%` : '—'}
               negative
-              tooltip={maxDrawdown === undefined ? t('drawdownNotAvailable') : undefined}
+              tooltip={maxDrawdown === undefined ? t('drawdownNotAvailable') : maxDrawdown !== undefined && Math.abs(maxDrawdown) > 100 ? t('drawdownNotAvailable') : undefined}
             />
             <MetricBadge
               label={t('winRateShort')}
