@@ -348,21 +348,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Social logins */}
-        <SocialLogin
-          lang={lang}
-          searchParams={searchParams}
-          isAddAccount={isAddAccount}
-          onError={(msg) => setError(msg || null)}
-          onWalletSuccess={(result) => {
-            showToast(t('loginWalletSignInSuccess'), 'success')
-            router.push(getRedirectUrl(result.handle))
-          }}
-          t={t}
-        />
-
         {/* Title */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <h1 style={{ 
             fontSize: tokens.typography.fontSize['2xl'], 
             fontWeight: tokens.typography.fontWeight.extrabold, 
@@ -373,19 +360,9 @@ export default function LoginPage() {
           }}>
             {isRegister ? t('loginCreateAccount') : t('loginWelcomeBack')}
           </h1>
-          <p style={{ fontSize: 14, color: tokens.colors.text.secondary, fontWeight: 500, marginBottom: 16 }}>
+          <p style={{ fontSize: 14, color: tokens.colors.text.secondary, fontWeight: 500 }}>
             {t('loginSubtitle')}
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left', maxWidth: 320, margin: '0 auto' }}>
-            {['loginValueProp1', 'loginValueProp2', 'loginValueProp3'].map((key) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-verified-web3)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                {t(key)}
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Email input */}
@@ -466,22 +443,6 @@ export default function LoginPage() {
           />
         )}
 
-        {/* Divider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '20px 0' }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
-          <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{t('loginOrDivider')}</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
-        </div>
-
-        {/* Wallet Login */}
-        <WalletLogin
-          onSuccess={(result) => {
-            showToast(t('loginWalletSignInSuccess'), 'success')
-            router.push(getRedirectUrl(result.handle))
-          }}
-          t={t}
-        />
-
         {/* Switch login/register */}
         <button
           onClick={() => { setIsRegister(!isRegister); resetForm() }}
@@ -496,6 +457,36 @@ export default function LoginPage() {
         >
           {isRegister ? t('loginSwitchToLogin') : t('loginSwitchToRegister')}
         </button>
+
+        {/* Divider + Social logins */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 16px' }}>
+          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
+          <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{t('loginOrDivider')}</span>
+          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
+        </div>
+
+        <SocialLogin
+          lang={lang}
+          searchParams={searchParams}
+          isAddAccount={isAddAccount}
+          onError={(msg) => setError(msg || null)}
+          onWalletSuccess={(result) => {
+            showToast(t('loginWalletSignInSuccess'), 'success')
+            router.push(getRedirectUrl(result.handle))
+          }}
+          t={t}
+        />
+
+        {/* Wallet Login */}
+        <div style={{ marginTop: 8 }}>
+          <WalletLogin
+            onSuccess={(result) => {
+              showToast(t('loginWalletSignInSuccess'), 'success')
+              router.push(getRedirectUrl(result.handle))
+            }}
+            t={t}
+          />
+        </div>
 
         {/* Terms */}
         <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 16, lineHeight: 1.6 }}>
