@@ -368,6 +368,22 @@ async function computeSeason(
     }
   }
 
+  // Clean up stale rows not updated in this run (e.g., old checksum-case 0x duplicates)
+  const cutoff = new Date(Date.now() - 120_000).toISOString() // 2 min ago
+  const { data: staleRows, error: staleErr } = await supabase
+    .from('leaderboard_ranks')
+    .select('id')
+    .eq('season_id', season)
+    .lt('updated_at', cutoff)
+    .limit(5000)
+  if (!staleErr && staleRows && staleRows.length > 0) {
+    const staleIds = staleRows.map((r: { id: string }) => r.id)
+    for (let i = 0; i < staleIds.length; i += 500) {
+      await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
+    }
+    logger.info(`${season}: cleaned ${staleIds.length} stale rows`)
+  }
+
   logger.info(`${season}: ranked ${scored.length} traders`)
   return scored.length
 }
