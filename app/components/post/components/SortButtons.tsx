@@ -4,7 +4,7 @@ import { tokens } from '@/lib/design-tokens'
 
 const ARENA_PURPLE = tokens.colors.accent.brand
 
-export type SortType = 'time' | 'likes'
+export type SortType = 'time' | 'likes' | 'personalized'
 
 interface SortButtonsProps {
   sortType: SortType
@@ -35,6 +35,9 @@ export function SortButtons({ sortType, setSortType, t }: SortButtonsProps): Rea
       </button>
       <button onClick={() => setSortType('likes')} style={getSortButtonStyle(sortType === 'likes')}>
         {t('hot')}
+      </button>
+      <button onClick={() => setSortType('personalized')} style={getSortButtonStyle(sortType === 'personalized')}>
+        {t('recommended')}
       </button>
     </div>
   )

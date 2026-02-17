@@ -42,6 +42,7 @@ function buildPostQueryParams(
   params.set('limit', String(opts.pageSize))
   params.set('offset', String(opts.offset))
   if (opts.sortBy) params.set('sort_by', opts.sortBy)
+  else if (opts.sortType === 'personalized') params.set('sort_by', 'personalized')
   else if (opts.sortType === 'likes') params.set('sort_by', 'like_count')
   else if (opts.authorHandle) params.set('sort_by', 'created_at')
   else if (opts.groupId || opts.groupIds) params.set('sort_by', 'created_at')
