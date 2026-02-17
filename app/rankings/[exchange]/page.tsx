@@ -92,6 +92,9 @@ interface TraderData {
 }
 
 async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
+  // Skip during build — ISR fills on first request
+  if (process.env.NEXT_PHASE === 'phase-production-build') return []
+
   const supabase = getSupabase()
   if (!supabase) return []
 
