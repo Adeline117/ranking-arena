@@ -49,21 +49,7 @@ async function initSentry() {
       'ResizeObserver loop completed with undelivered notifications',
       'Hydration failed',
       'Text content does not match',
-      // User-friendly error messages — not real bugs
-      /服务器繁忙/,
-      /网络连接异常/,
-      /请求超时/,
-      /Server is busy/,
-      /请稍后再试/,
-      /请稍后重试/,
-      /请检查网络/,
-      /An unknown error occurred/,
-      /Could not query the database for the schema cache/,
-      /dependency .* not found/,
-      /Network connection issue/,
-      /Request timed out/,
-      /Rendered more hooks than during the previous render/,
-      /Page changed from static to dynamic at runtime/,
+      // Keep monitoring — root causes being fixed
     ],
 
     // 按路由采样
