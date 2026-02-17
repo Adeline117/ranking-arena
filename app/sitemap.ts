@@ -166,6 +166,9 @@ async function getAllGroups(): Promise<Array<{ id: string; updated_at: string }>
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // Skip DB queries during build — sitemap regenerates via ISR
+  if (process.env.NEXT_PHASE === 'phase-production-build') return []
+
   const now = new Date().toISOString()
   
   // 静态页面
