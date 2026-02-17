@@ -36,8 +36,9 @@ export default async function Page() {
         />
       </Suspense>
 
-      {/* Seamless swap: hide SSR table once client ranking section renders */}
-      <script dangerouslySetInnerHTML={{ __html: `(function(){var s=document.getElementById('ssr-ranking');if(!s)return;function h(){s.style.display='none'}if(document.querySelector('.home-ranking-section')){h();return}var o=new MutationObserver(function(){if(document.querySelector('.home-ranking-section')){h();o.disconnect()}});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(function(){h();o.disconnect()},8000)})()` }} />
+      {/* Seamless swap: hide SSR table once client ranking section renders.
+          Uses a class on <html> so React hydration can't reset it. */}
+      <script dangerouslySetInnerHTML={{ __html: `(function(){function h(){document.documentElement.classList.add('ssr-hidden')}if(document.querySelector('.home-ranking-section')){h();return}var o=new MutationObserver(function(){if(document.querySelector('.home-ranking-section')){h();o.disconnect()}});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(function(){h();o.disconnect()},8000)})()` }} />
     </>
   )
 }
