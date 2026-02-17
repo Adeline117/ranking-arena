@@ -1,24 +1,30 @@
 // Internationalization - split by language for code splitting
-// zh is loaded synchronously (default), en is loaded on-demand
-import zh from './i18n/zh'
+// en is loaded synchronously (default), zh is loaded on-demand
+import en from './i18n/en'
 
 export type Language = 'zh' | 'en'
 
-export type TranslationKey = keyof typeof zh
+export type TranslationKey = keyof typeof en
 
-// Translation dictionaries - zh always available, en loaded lazily
+// Translation dictionaries - en always available, zh loaded lazily
 const translationCache: Record<Language, Record<string, string>> = {
-  zh: zh as Record<string, string>,
-  en: zh as Record<string, string>, // Fallback to zh until en is loaded
+  en: en as Record<string, string>,
+  zh: en as Record<string, string>, // Fallback to en until zh is loaded
 }
 
-let enLoaded = false
+let zhLoaded = false
 
+export async function loadZhTranslations(): Promise<void> {
+  if (zhLoaded) return
+  const { default: zh } = await import('./i18n/zh')
+  translationCache.zh = zh as Record<string, string>
+  zhLoaded = true
+}
+
+/** @deprecated Use loadZhTranslations instead — en is now the sync default */
 export async function loadEnTranslations(): Promise<void> {
-  if (enLoaded) return
-  const { default: en } = await import('./i18n/en')
-  translationCache.en = en as Record<string, string>
-  enLoaded = true
+  // No-op: en is already loaded synchronously
+  return
 }
 
 // Keep backward compatibility: synchronous translations object
@@ -47,5 +53,5 @@ export function setLanguage(lang: Language) {
 
 export function t(key: TranslationKey): string {
   const lang = getLanguage()
-  return translationCache[lang][key as string] || translationCache.zh[key as string] || key
+  return translationCache[lang][key as string] || translationCache.en[key as string] || key
 }

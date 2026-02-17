@@ -75,7 +75,7 @@ export default function OnboardingPage() {
   const [loadingTraders, setLoadingTraders] = useState(false)
   const [loadingGroups, setLoadingGroups] = useState(false)
 
-  const tr = (key: string) => translations[language][key] || translations.zh[key] || key
+  const tr = (key: string) => translations[language][key] || translations.en[key] || key
 
   useEffect(() => {
     injectStyles()
