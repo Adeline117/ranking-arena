@@ -655,7 +655,7 @@ export default function PricingPage() {
                     fontWeight: 600,
                     width: 100,
                   }}>
-                    Free
+                    {t('free')}
                   </th>
                   <th style={{ 
                     textAlign: 'center', 
@@ -666,7 +666,7 @@ export default function PricingPage() {
                     fontWeight: 700,
                     width: 100,
                   }}>
-                    Pro
+                    {t('pro')}
                   </th>
                 </tr>
               </thead>
