@@ -108,7 +108,10 @@ export class FeedManager extends EventEmitter {
       feed.on('reconnecting', (info) => this.emit('reconnecting', info))
       feed.on('error', (info) => {
         console.warn(`[ws] Feed error for ${exchangeId}:`, info)
-        this.emit('error', info)
+        // Only emit if there are listeners — unhandled 'error' events crash Node.js
+        if (this.listenerCount('error') > 0) {
+          this.emit('error', info)
+        }
       })
 
       this.feeds.set(exchangeId, feed)
