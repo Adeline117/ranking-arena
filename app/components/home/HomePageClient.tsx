@@ -3,8 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '../base'
-import dynamic from 'next/dynamic'
-const RankingSection = dynamic(() => import('./RankingSection'), { ssr: true })
+import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
 import { useTraderData, useAuth } from './hooks'
 import { useLanguage } from '../Providers/LanguageProvider'

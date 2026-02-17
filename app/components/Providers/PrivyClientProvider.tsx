@@ -23,15 +23,18 @@ export default function PrivyClientProvider({ children }: Props) {
   useEffect(() => {
     if (!PRIVY_APP_ID) return;
 
-    // Load Privy after initial render + a short delay to not block LCP
-    // Use requestIdleCallback if available, otherwise setTimeout
-    if ('requestIdleCallback' in window) {
-      const id = requestIdleCallback(() => setShouldLoad(true), { timeout: 3000 });
-      return () => cancelIdleCallback(id);
-    } else {
-      const timer = setTimeout(() => setShouldLoad(true), 2000);
-      return () => clearTimeout(timer);
-    }
+    // Only load Privy when user interacts (click/touch/key).
+    // This avoids downloading ~956KB of wallet SDK on initial page load,
+    // drastically improving PageSpeed scores for first-time visitors.
+    const events = ['click', 'touchstart', 'keydown'] as const;
+    const handler = () => {
+      setShouldLoad(true);
+      events.forEach(e => document.removeEventListener(e, handler));
+    };
+    events.forEach(e => document.addEventListener(e, handler, { once: true, passive: true }));
+    return () => {
+      events.forEach(e => document.removeEventListener(e, handler));
+    };
   }, []);
 
   if (!PRIVY_APP_ID || !shouldLoad) {

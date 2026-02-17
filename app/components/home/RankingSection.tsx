@@ -518,6 +518,7 @@ export default function RankingSection({
       className="home-ranking-section"
       style={{
         minWidth: 0,
+        contain: 'layout style',
       }}
     >
       {/* 紧凑工具栏 - 所有筛选器整合在一行 */}

@@ -164,7 +164,21 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
   // 2. 展示未注册交易员数据
   if (traderData) {
-    return <TraderProfileClient data={traderData} />
+    // Fetch full trader data from API (performance, stats, portfolio, equity curve, etc.)
+    let serverTraderData = null
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      const res = await fetch(
+        `${baseUrl}/api/traders/${encodeURIComponent(traderData.handle)}`,
+        { next: { revalidate: 60 } }
+      )
+      if (res.ok) {
+        serverTraderData = await res.json()
+      }
+    } catch {
+      // API fetch failed — client will retry via SWR
+    }
+    return <TraderProfileClient data={traderData} serverTraderData={serverTraderData} />
   }
 
   // 3. Not found
