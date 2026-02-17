@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -9,6 +10,70 @@ import { usePremium, FEATURE_LIMITS } from '@/lib/premium/hooks'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
+import { Box, Text, Button } from '@/app/components/base'
+import { supabase } from '@/lib/supabase/client'
+import { getCsrfHeaders } from '@/lib/api/client'
+
+// Icons
+const CheckIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 6L9 17L4 12" />
+  </svg>
+)
+
+const CrownIcon = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M5 16L3 5L8.5 10L12 4L15.5 10L21 5L19 16H5ZM19 19C19 19.6 18.6 20 18 20H6C5.4 20 5 19.6 5 19V18H19V19Z" />
+  </svg>
+)
+
+const CloseIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M18 6L6 18M6 6L18 18" />
+  </svg>
+)
+
+// Pricing config
+const PRICING = {
+  monthly: { price: 12.99, original: 15 },
+  yearly: { price: 99, original: 155.88 },
+}
+
+// Pro features list
+const getProFeatures = (t: (key: string) => string) => [
+  { key: 'category_ranking', title: t('featureCategoryRanking'), desc: t('featureCategoryRankingDesc') },
+  { key: 'trader_alerts', title: t('featureTraderAlerts'), desc: t('featureTraderAlertsDesc') },
+  { key: 'score_breakdown', title: t('featureScoreBreakdown'), desc: t('featureScoreBreakdownDesc') },
+  { key: 'pro_badge', title: t('featureProBadge'), desc: t('featureProBadgeDesc') },
+  { key: 'advanced_filter', title: t('featureAdvancedFilter'), desc: t('featureAdvancedFilterDesc') },
+  { key: 'trader_compare', title: t('featureTraderCompare'), desc: t('featureTraderCompareDesc') },
+  { key: 'pro_groups', title: t('featureProGroups'), desc: t('featureProGroupsDesc') },
+  { key: 'historical_data', title: t('featureHistoricalData'), desc: t('featureHistoricalDataDesc') },
+]
+
+// Comparison data
+const getComparisonData = (t: (key: string) => string) => [
+  { feature: t('compFeatureLeaderboard'), free: t('compFreeTop50'), pro: t('compProFullLeaderboard') },
+  { feature: t('compFeatureBasicFilters'), free: true, pro: true },
+  { feature: t('compFeatureTraderDetails'), free: true, pro: true },
+  { feature: t('compFeatureAdvancedFilters'), free: false, pro: t('compProMultiFilter') },
+  { feature: t('compFeatureCsvExport'), free: false, pro: t('compProUnlimited') },
+  { feature: t('compFeatureRealtimeData'), free: t('compFreeHourlyRefresh'), pro: t('compProRealtimePush') },
+  { feature: t('compFeatureSmartMoney'), free: false, pro: t('compProAnomalyDetection') },
+  { feature: t('compFeatureTraderCompare'), free: false, pro: t('compProUpTo10Traders') },
+  { feature: t('compFeatureTraderAlerts'), free: false, pro: t('compProInAppEmailPush') },
+  { feature: t('compFeatureArenaScore'), free: t('compFreeTotalScore'), pro: t('compProBreakdownPercentile') },
+  { feature: t('compFeatureHistoricalData'), free: t('compFree7Days'), pro: t('compPro1Year') },
+  { feature: t('compFeatureProBadgeGroups'), free: false, pro: true },
+]
+
+// FAQ data
+const getFaqData = (t: (key: string) => string) => [
+  { q: t('faqCancelQ'), a: t('faqCancelA') },
+  { q: t('faqPaymentQ'), a: t('faqPaymentA') },
+  { q: t('faqRefundQ'), a: t('faqRefundA') },
+  { q: t('faqSwitchPlanQ'), a: t('faqSwitchPlanA') },
+]
 
 interface MembershipInfo {
   subscription: {
@@ -40,6 +105,8 @@ export default function MembershipContent() {
 
   const [info, setInfo] = useState<MembershipInfo | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly')
+  const [subscribing, setSubscribing] = useState(false)
 
   useEffect(() => {
     fetchMembershipInfo()
@@ -72,6 +139,61 @@ export default function MembershipContent() {
     }
   }
 
+  const handleSubscribe = async () => {
+    setSubscribing(true)
+    try {
+      let { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        const { data: refreshed } = await supabase.auth.refreshSession()
+        session = refreshed.session
+      }
+      if (!session?.access_token) {
+        showToast(t('pleaseLoginAgain'), 'error')
+        router.push('/login?redirect=/user-center?tab=membership')
+        return
+      }
+
+      const response = await fetch('/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          ...getCsrfHeaders()
+        },
+        body: JSON.stringify({
+          plan: selectedPlan,
+          successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancelUrl: `${window.location.origin}/user-center?tab=membership`,
+        }),
+      })
+
+      if (!response.ok) {
+        let errorMsg = t('createCheckoutFailed')
+        try {
+          const errorData = await response.json()
+          errorMsg = errorData.error || errorMsg
+        } catch {
+          errorMsg = `${errorMsg} (${response.status})`
+        }
+        showToast(errorMsg, 'error')
+        return
+      }
+
+      const data = await response.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else if (data.error) {
+        showToast(data.error, 'error')
+      } else {
+        showToast(t('getPaymentLinkFailed'), 'error')
+      }
+    } catch {
+      showToast(t('subscriptionFailed'), 'error')
+    } finally {
+      setSubscribing(false)
+    }
+  }
+
   if (loading) {
     return (
       <div style={{
@@ -87,6 +209,7 @@ export default function MembershipContent() {
 
   const tierLabel = isPro ? 'Pro' : 'Free'
   const tierColor = isPro ? tokens.colors.accent.brand : tokens.colors.text.tertiary
+  const yearlySavings = Math.round((1 - (PRICING.yearly.price / 12) / PRICING.monthly.price) * 100)
 
   const cardStyle: React.CSSProperties = {
     background: tokens.colors.bg.tertiary,
@@ -120,24 +243,6 @@ export default function MembershipContent() {
               {tierLabel}
             </div>
           </div>
-
-          {!isPro && (
-            <button
-              onClick={() => router.push('/pricing')}
-              style={{
-                padding: '12px 28px',
-                background: tokens.colors.accent.brand,
-                color: tokens.colors.white,
-                border: 'none',
-                borderRadius: tokens.radius.lg,
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: 'pointer',
-              }}
-            >
-              {t('upgradePro')}
-            </button>
-          )}
         </div>
 
         {/* Expiry Warning */}
@@ -207,6 +312,191 @@ export default function MembershipContent() {
         )}
       </div>
 
+      {/* Upgrade to Pro — only shown for free users */}
+      {!isPro && (
+        <div style={{
+          ...cardStyle,
+          border: '1px solid var(--color-pro-glow)',
+          background: `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.bg.secondary} 100%)`,
+        }}>
+          {/* Header */}
+          <Box style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: tokens.spacing[5],
+          }}>
+            <Box style={{ color: 'var(--color-pro-gradient-start)' }}>
+              <CrownIcon size={20} />
+            </Box>
+            <Text size="lg" weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
+              {t('pricingTitle')}
+            </Text>
+          </Box>
+
+          <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[5], lineHeight: 1.6 }}>
+            {t('pricingDescription')}
+          </Text>
+
+          {/* Plan Selector */}
+          <Box style={{ marginBottom: tokens.spacing[5] }}>
+            {/* Monthly */}
+            <Box
+              onClick={() => setSelectedPlan('monthly')}
+              style={{
+                padding: tokens.spacing[4],
+                borderRadius: tokens.radius.lg,
+                border: `2px solid ${selectedPlan === 'monthly' ? 'var(--color-pro-gradient-start)' : 'var(--color-border-primary)'}`,
+                background: selectedPlan === 'monthly' ? 'var(--color-pro-glow)' : 'transparent',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                marginBottom: tokens.spacing[3],
+              }}
+            >
+              <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Text size="sm" weight="bold">{t('monthlyPlan')}</Text>
+                  <Text size="xs" color="tertiary">{t('monthlySubscription')}</Text>
+                </Box>
+                <Box style={{ textAlign: 'right' }}>
+                  <Box style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    <Text size="xs" style={{ textDecoration: 'line-through', color: 'var(--color-text-tertiary)' }}>
+                      ${PRICING.monthly.original}
+                    </Text>
+                    <Text size="xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                      ${PRICING.monthly.price}
+                    </Text>
+                  </Box>
+                  <Text size="xs" color="tertiary">{t('perMonth')}</Text>
+                </Box>
+              </Box>
+            </Box>
+
+            {/* Yearly */}
+            <Box
+              onClick={() => setSelectedPlan('yearly')}
+              style={{
+                padding: tokens.spacing[4],
+                borderRadius: tokens.radius.lg,
+                border: `2px solid ${selectedPlan === 'yearly' ? 'var(--color-pro-gradient-start)' : 'var(--color-border-primary)'}`,
+                background: selectedPlan === 'yearly' ? 'var(--color-pro-glow)' : 'transparent',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                position: 'relative',
+              }}
+            >
+              <Box
+                style={{
+                  position: 'absolute',
+                  top: -8,
+                  right: 12,
+                  padding: '2px 8px',
+                  background: 'var(--color-accent-success)',
+                  borderRadius: tokens.radius.full,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: tokens.colors.white,
+                }}
+              >
+                {t('savePercent').replace('{percent}', String(yearlySavings))}
+              </Box>
+
+              <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Text size="sm" weight="bold">{t('yearlyPlan')}</Text>
+                  <Text size="xs" color="tertiary">{t('bestValue')}</Text>
+                </Box>
+                <Box style={{ textAlign: 'right' }}>
+                  <Box style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    <Text size="xs" style={{ textDecoration: 'line-through', color: 'var(--color-text-tertiary)' }}>
+                      ${PRICING.yearly.original}
+                    </Text>
+                    <Text size="xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                      ${PRICING.yearly.price}
+                    </Text>
+                  </Box>
+                  <Text size="xs" color="tertiary">
+                    {t('approxPerMonth').replace('{price}', (PRICING.yearly.price / 12).toFixed(1))}
+                  </Text>
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Subscribe Button */}
+          <Button
+            variant="primary"
+            onClick={handleSubscribe}
+            disabled={subscribing}
+            style={{
+              width: '100%',
+              padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+              background: 'var(--color-pro-badge-bg)',
+              border: 'none',
+              boxShadow: '0 4px 16px var(--color-pro-badge-shadow)',
+              fontSize: tokens.typography.fontSize.md,
+              fontWeight: 700,
+            }}
+          >
+            {subscribing ? t('processing') : `${t('startSubscription')} - $${selectedPlan === 'yearly' ? PRICING.yearly.price : PRICING.monthly.price}`}
+          </Button>
+
+          <Box style={{ marginTop: tokens.spacing[3], textAlign: 'center' }}>
+            <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
+              {t('cancelAnytime')} · {t('securePayment')}
+            </Text>
+          </Box>
+        </div>
+      )}
+
+      {/* Pro Features (for free users) */}
+      {!isPro && (
+        <div style={cardStyle}>
+          <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[4], color: tokens.colors.text.primary }}>
+            {t('proExclusiveFeatures')}
+          </Text>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            {getProFeatures(t).map((feature, index) => (
+              <Box
+                key={index}
+                style={{
+                  display: 'flex',
+                  gap: tokens.spacing[3],
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.lg,
+                  background: tokens.colors.bg.secondary,
+                  border: `1px solid ${tokens.colors.border.secondary}`,
+                }}
+              >
+                <Box
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: tokens.radius.md,
+                    background: 'var(--color-pro-glow)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--color-pro-gradient-start)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <CheckIcon size={14} />
+                </Box>
+                <Box>
+                  <Text size="sm" weight="bold" style={{ marginBottom: 2 }}>
+                    {feature.title}
+                  </Text>
+                  <Text size="xs" color="tertiary">
+                    {feature.desc}
+                  </Text>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </div>
+      )}
+
       {/* NFT Membership */}
       {(info?.nft?.hasNft || isPro) && (
         <div style={cardStyle}>
@@ -274,10 +564,10 @@ export default function MembershipContent() {
         </div>
       )}
 
-      {/* Benefits Comparison */}
+      {/* Free vs Pro Comparison */}
       <div style={cardStyle}>
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: tokens.colors.text.primary }}>
-          {t('benefitsComparison')}
+          {t('freeVsProComparison')}
         </h3>
 
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -289,36 +579,86 @@ export default function MembershipContent() {
           }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '12px 8px', borderBottom: `1px solid ${tokens.colors.border.primary}`, color: tokens.colors.text.secondary, fontWeight: 600 }}>
-                  {t('featureLabel')}
-                </th>
-                <th style={{ textAlign: 'center', padding: '12px 8px', borderBottom: `1px solid ${tokens.colors.border.primary}`, color: tokens.colors.text.tertiary, fontWeight: 600 }}>
-                  Free
+                <th style={{
+                  textAlign: 'left',
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                  borderBottom: `2px solid ${tokens.colors.border.primary}`,
+                  color: tokens.colors.text.secondary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: 600,
+                }}>
+                  {t('feature')}
                 </th>
                 <th style={{
                   textAlign: 'center',
-                  padding: '12px 8px',
-                  borderBottom: `1px solid ${tokens.colors.border.primary}`,
-                  color: tokens.colors.accent.brand,
-                  fontWeight: 700,
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                  borderBottom: `2px solid ${tokens.colors.border.primary}`,
+                  color: tokens.colors.text.tertiary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: 600,
+                  width: 100,
                 }}>
-                  Pro
+                  {t('free')}
+                </th>
+                <th style={{
+                  textAlign: 'center',
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                  borderBottom: `2px solid ${tokens.colors.border.primary}`,
+                  color: 'var(--color-pro-gradient-start)',
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: 700,
+                  width: 100,
+                }}>
+                  {t('pro')}
                 </th>
               </tr>
             </thead>
             <tbody>
-              <BenefitRow feature={t('followTradersLabel')} free={`${FEATURE_LIMITS.free.maxFollows}`} pro={`${FEATURE_LIMITS.pro.maxFollows}`} />
-              <BenefitRow feature={t('historicalDataLabel')} free={`${FEATURE_LIMITS.free.historicalDays} ${t('days')}`} pro={`${FEATURE_LIMITS.pro.historicalDays} ${t('days')}`} />
-              <BenefitRow feature={t('rankingsBrowse')} free={t('basicSort')} pro={t('allSortsFilters')} highlight />
-              <BenefitRow feature={t('traderAlerts')} free="--" pro={t('supportedYes')} highlight />
-              <BenefitRow feature={t('traderCompare')} free={t('traderComparePeople').replace('{n}', '2')} pro={t('traderComparePeople').replace('{n}', '5')} highlight />
-              <BenefitRow feature={t('scoreBreakdown')} free="--" pro={t('supportedYes')} highlight />
-              <BenefitRow feature={t('exchangeFilterLabel')} free="--" pro={t('supportedYes')} highlight />
-              <BenefitRow feature={t('dataExportLabel')} free="--" pro="Top 10/50/100" highlight />
-              <BenefitRow feature={t('apiAccessLabel')} free="--" pro={`${FEATURE_LIMITS.pro.apiCallsPerDay}${t('callsPerDay')}`} highlight />
-              <BenefitRow feature={t('directMessagesLabel')} free={t('basicLabel')} pro={t('unlimitedLabel')} highlight />
-              <BenefitRow feature={t('proGroups')} free="--" pro={t('supportedYes')} highlight />
-              <BenefitRow feature={t('nftMembershipLabel')} free="--" pro={t('supportedYes')} highlight />
+              {getComparisonData(t).map((row, index) => (
+                <tr key={index}>
+                  <td style={{
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: `1px solid ${tokens.colors.border.secondary}`,
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: tokens.colors.text.secondary,
+                  }}>
+                    {row.feature}
+                  </td>
+                  <td style={{
+                    textAlign: 'center',
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: `1px solid ${tokens.colors.border.secondary}`,
+                  }}>
+                    {row.free === true ? (
+                      <Box style={{ color: 'var(--color-accent-success)', display: 'inline-flex' }}>
+                        <CheckIcon size={18} />
+                      </Box>
+                    ) : row.free === false ? (
+                      <Box style={{ color: 'var(--color-text-tertiary)', display: 'inline-flex' }}>
+                        <CloseIcon size={18} />
+                      </Box>
+                    ) : (
+                      <Text size="sm" color="secondary">{row.free}</Text>
+                    )}
+                  </td>
+                  <td style={{
+                    textAlign: 'center',
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    borderBottom: `1px solid ${tokens.colors.border.secondary}`,
+                    background: 'var(--color-pro-glow)',
+                  }}>
+                    {row.pro === true ? (
+                      <Box style={{ color: 'var(--color-pro-gradient-start)', display: 'inline-flex' }}>
+                        <CheckIcon size={18} />
+                      </Box>
+                    ) : (
+                      <Text size="sm" weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                        {row.pro}
+                      </Text>
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -349,6 +689,51 @@ export default function MembershipContent() {
           )}
         </div>
       </div>
+
+      {/* FAQ (for free users) */}
+      {!isPro && (
+        <div style={cardStyle}>
+          <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[4], color: tokens.colors.text.primary }}>
+            {t('faq')}
+          </Text>
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            {getFaqData(t).map((faq, index) => (
+              <Box
+                key={index}
+                style={{
+                  padding: tokens.spacing[4],
+                  borderRadius: tokens.radius.lg,
+                  background: tokens.colors.bg.secondary,
+                  border: `1px solid ${tokens.colors.border.secondary}`,
+                }}
+              >
+                <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+                  {faq.q}
+                </Text>
+                <Text size="xs" color="secondary" style={{ lineHeight: 1.6 }}>
+                  {faq.a}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+
+          <Box style={{ marginTop: tokens.spacing[4], textAlign: 'center' }}>
+            <Text size="xs" color="tertiary">
+              {t('haveMoreQuestions')}
+              <Link
+                href="/help"
+                style={{
+                  color: 'var(--color-pro-gradient-start)',
+                  marginLeft: 4,
+                  textDecoration: 'none',
+                }}
+              >
+                {t('contactUs')}
+              </Link>
+            </Text>
+          </Box>
+        </div>
+      )}
 
       {/* Subscription Management */}
       {isPro && (
@@ -455,40 +840,6 @@ export default function MembershipContent() {
         </div>
       )}
     </div>
-  )
-}
-
-function BenefitRow({ feature, free, pro, highlight = false }: {
-  feature: string
-  free: string
-  pro: string
-  highlight?: boolean
-}) {
-  return (
-    <tr>
-      <td style={{ padding: '10px 8px', borderBottom: `1px solid ${tokens.colors.border.primary}`, color: tokens.colors.text.secondary, fontSize: 13 }}>
-        {feature}
-      </td>
-      <td style={{
-        textAlign: 'center',
-        padding: '10px 8px',
-        borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        color: tokens.colors.text.tertiary,
-        fontSize: 13,
-      }}>
-        {free}
-      </td>
-      <td style={{
-        textAlign: 'center',
-        padding: '10px 8px',
-        borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        color: highlight ? tokens.colors.accent.success : tokens.colors.text.primary,
-        fontWeight: highlight ? 600 : 400,
-        fontSize: 13,
-      }}>
-        {pro}
-      </td>
-    </tr>
   )
 }
 
