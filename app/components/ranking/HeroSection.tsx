@@ -49,7 +49,7 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
   const isAddress = handle.startsWith('0x') && handle.length > 20
   const roi = trader.roi || 0
   const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
-  const href = `/trader/${encodeURIComponent(trader.id)}`
+  const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ""}`
   const medalColor = MEDAL_COLORS[rank - 1] || tokens.colors.text.tertiary
 
   return (
