@@ -25,39 +25,11 @@ const CrownIcon = ({ size = 20 }: { size?: number }) => (
   </svg>
 )
 
-const QuoteIcon = ({ size = 20 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" opacity={0.3}>
-    <path d="M6 17H9L11 13V7H5V13H8L6 17ZM14 17H17L19 13V7H13V13H16L14 17Z" />
-  </svg>
-)
-
 const CloseIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <path d="M18 6L6 18M6 6L18 18" />
   </svg>
 )
-
-// 用户评价数据
-const TESTIMONIALS = [
-  {
-    name: 'Alex T.',
-    avatar: 'D',
-    roleKey: 'testimonialRole1',
-    contentKey: 'testimonialContent1',
-  },
-  {
-    name: 'Michael K.',
-    avatar: 'P',
-    roleKey: 'testimonialRole2',
-    contentKey: 'testimonialContent2',
-  },
-  {
-    name: 'Sarah L.',
-    avatar: 'T',
-    roleKey: 'testimonialRole3',
-    contentKey: 'testimonialContent3',
-  },
-]
 
 // Free vs Pro 对比数据
 const getComparisonData = (t: (key: string) => string) => [
@@ -556,66 +528,6 @@ export default function PricingPage() {
             </Box>
           </Box>
 
-          {/* 用户评价 */}
-          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-            {t('userTestimonials')}
-          </Text>
-          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[5] }}>
-            {t('sampleTestimonialLabel')}
-          </Text>
-          
-          <Box
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: tokens.spacing[4],
-              maxWidth: 900,
-              margin: '0 auto',
-            }}
-          >
-            {TESTIMONIALS.map((testimonial, index) => (
-              <Box
-                key={index}
-                style={{
-                  background: 'var(--color-bg-secondary)',
-                  borderRadius: tokens.radius.lg,
-                  padding: tokens.spacing[5],
-                  border: '1px solid var(--color-border-primary)',
-                  textAlign: 'left',
-                  position: 'relative',
-                }}
-              >
-                <Box style={{ position: 'absolute', top: 12, right: 16 }}>
-                  <QuoteIcon size={24} />
-                </Box>
-                <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4], lineHeight: 1.6 }}>
-                  &ldquo;{t(testimonial.contentKey)}&rdquo;
-                </Text>
-                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                  <Box
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: tokens.radius.full,
-                      background: 'var(--color-bg-tertiary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 18,
-                    }}
-                  >
-                    {testimonial.avatar}
-                  </Box>
-                  <Box>
-                    <Text size="sm" weight="bold">{testimonial.name}</Text>
-                    <Text size="xs" color="tertiary">
-                      {t(testimonial.roleKey)}
-                    </Text>
-                  </Box>
-                </Box>
-              </Box>
-            ))}
-          </Box>
         </Box>
 
         {/* Free vs Pro 功能对比表 */}
