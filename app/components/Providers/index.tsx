@@ -10,7 +10,7 @@ import { ErrorBoundary } from '../utils/ErrorBoundary'
 import { SWRConfigProvider } from '@/lib/hooks/SWRConfig'
 import { initializeErrorInterceptors } from '@/lib/middleware/error-interceptor'
 import dynamic from 'next/dynamic'
-const PrivyClientProvider = dynamic(() => import('./PrivyClientProvider'), { ssr: false })
+const PrivyClientProvider = dynamic(() => import('./PrivyClientProvider'))
 
 // Web3Provider is NO LONGER loaded at root level.
 // It's lazy-loaded only when wallet features are needed.
