@@ -2564,6 +2564,7 @@ const en = {
     totalEquity: 'Total Equity',
     openPositions: 'Open Positions',
     noOpenPositions: 'No open positions',
+    favorites: 'Favorites',
 
     // Common UI text (reduce hardcoding)
     viewLiveLeaderboard: 'View Live Leaderboard',
