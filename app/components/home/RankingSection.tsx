@@ -105,6 +105,16 @@ export default function RankingSection({
   const { isPro, isLoading: premiumLoading } = useSubscription()
   const { getAuthHeaders } = useAuthSession()
 
+  // Hide SSR ranking table once this client component mounts
+  useEffect(() => {
+    if (!document.getElementById('ssr-hide-style')) {
+      const s = document.createElement('style')
+      s.id = 'ssr-hide-style'
+      s.textContent = '#ssr-ranking{display:none!important}'
+      document.head.appendChild(s)
+    }
+  }, [])
+
   // 分类状态
   const [category, setCategory] = useState<CategoryType>('all')
 
