@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -83,6 +83,16 @@ export default function ToolsPage() {
   const [category, setCategory] = useState('all')
   const [sort, setSort] = useState('rating')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // Debounce search input
+  useEffect(() => {
+    clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(searchTimerRef.current)
+  }, [search])
 
   // Leaderboard data
   const [topTrading, setTopTrading] = useState<Tool[]>([])
@@ -131,6 +141,7 @@ export default function ToolsPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       let query = supabase
         .from('tools')
@@ -141,8 +152,8 @@ export default function ToolsPage() {
         query = query.eq('category', category)
       }
 
-      if (search.trim()) {
-        query = query.or(`name.ilike.%${search.trim()}%,name_zh.ilike.%${search.trim()}%`)
+      if (debouncedSearch.trim()) {
+        query = query.or(`name.ilike.%${debouncedSearch.trim()}%,name_zh.ilike.%${debouncedSearch.trim()}%`)
       }
 
       if (sort === 'rating') {
@@ -155,14 +166,15 @@ export default function ToolsPage() {
 
       query = query.limit(100)
 
-      const { data } = await query
+      const { data, error: queryError } = await query
+      if (queryError) throw queryError
       setTools(data || [])
     } catch {
-      // ignore
+      setError(isZh ? '加载失败，请重试' : 'Failed to load, please retry')
     } finally {
       setLoading(false)
     }
-  }, [category, sort, search])
+  }, [category, sort, debouncedSearch, isZh])
 
   useEffect(() => {
     fetchData()
@@ -289,7 +301,22 @@ export default function ToolsPage() {
         </div>
 
         {/* List */}
-        {loading ? (
+        {error ? (
+          <div style={{ textAlign: 'center', padding: '60px 24px' }}>
+            <p style={{ color: 'var(--color-accent-error)', fontSize: tokens.typography.fontSize.base, marginBottom: 16 }}>{error}</p>
+            <button
+              onClick={fetchData}
+              style={{
+                padding: '8px 20px', borderRadius: tokens.radius.full,
+                background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
+                border: '1px solid var(--color-border-primary)', cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
+              {isZh ? '重试' : 'Retry'}
+            </button>
+          </div>
+        ) : loading ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: 20 }}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="skeleton" style={{ height: 140, borderRadius: tokens.radius.xl }} />

@@ -353,10 +353,38 @@ export default function ReadPage() {
 
     fetch(`/api/library/${id}`)
       .then(r => r.json())
-      .then(data => {
+      .then(async (data) => {
         if (!data.item) { setError(t('readerBookNotFound')); return }
         const item = data.item as BookInfo
-        const mode = detectContentMode(item)
+        let mode = detectContentMode(item)
+        
+        // If no local file, try finding external sources
+        if (mode === 'none') {
+          try {
+            const srcRes = await fetch(`/api/library/find-source?id=${id}`)
+            const srcData = await srcRes.json()
+            if (srcData.available && srcData.sources?.length > 0) {
+              const best = srcData.sources[0]
+              if (best.format === 'epub') {
+                item.epub_url = best.url
+                mode = 'epub'
+              } else if (best.format === 'pdf') {
+                item.pdf_url = best.url
+                mode = 'pdf'
+              } else if (best.format === 'html') {
+                item.content_url = best.url
+                mode = 'html'
+              } else if (best.format === 'read_online') {
+                // Open in iframe or redirect
+                item.content_url = best.url
+                mode = 'html'
+              }
+            }
+          } catch {
+            // Source search failed, fall through to error
+          }
+        }
+        
         if (mode === 'none') {
           setError(t('readerNoResource'))
           return
