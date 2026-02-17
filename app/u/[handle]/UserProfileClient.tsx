@@ -299,7 +299,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') || (isZh ? '概览' : 'Overview') },
-    { key: 'activity', label: isZh ? '动态' : 'Activity' },
+    // Activity tab removed
     { key: 'bookshelf', label: isZh ? '书架' : 'Bookshelf' },
     { key: 'followers', label: `${t('followers') || (isZh ? '粉丝' : 'Followers')} (${followersCount})` },
     { key: 'groups', label: t('groups') || (isZh ? '群组' : 'Groups') },
@@ -512,7 +512,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           { label: isZh ? '社区' : 'Community', href: '/' },
           { label: `@${profile.handle}` },
         ]} />
-        {/* Profile Header */}
+        {/* Profile Header with gradient extending to tabs */}
         {(() => {
           const hasCover = Boolean(profile.cover_url)
           const containerBackground = hasCover
@@ -528,11 +528,13 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
-            marginBottom: tokens.spacing[6],
+            marginBottom: 0,
             padding: tokens.spacing[6],
+            paddingBottom: tokens.spacing[3],
             background: containerBackground,
-            borderRadius: tokens.radius.xl,
+            borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
             border: `1px solid ${tokens.colors.border.primary}50`,
+            borderBottom: 'none',
             boxShadow: '0 8px 32px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
             position: 'relative',
             overflow: 'visible',
@@ -740,7 +742,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           )
         })()}
 
-        {/* Tabs */}
+        {/* Tabs - continues header background */}
         <Box
           className="profile-tabs"
           role="tablist"
@@ -749,11 +751,15 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             gap: tokens.spacing[2],
             marginBottom: tokens.spacing[4],
             position: 'relative',
-            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
             paddingBottom: tokens.spacing[3],
             overflowX: 'auto',
             WebkitOverflowScrolling: 'touch',
             scrollbarWidth: 'none',
+            background: `linear-gradient(to bottom, ${tokens.colors.bg.secondary}40 0%, transparent 100%)`,
+            borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
+            border: `1px solid ${tokens.colors.border.primary}50`,
+            borderTop: 'none',
           }}
         >
           {profileTabs.map((tab) => {
@@ -822,53 +828,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             >
               {/* Main column */}
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                {/* Guidance cards for own profile */}
-                {isOwnProfile && (
-                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                    {[
-                      {
-                        iconSvg: <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="10" width="4" height="8" rx="1" fill="var(--color-accent-primary)"/><rect x="8" y="6" width="4" height="12" rx="1" fill="var(--color-accent-primary)" opacity="0.7"/><rect x="14" y="2" width="4" height="16" rx="1" fill="var(--color-accent-primary)" opacity="0.4"/></svg>,
-                        text: t('guidanceBindExchange'),
-                        action: () => router.push('/exchange/auth/api-key'),
-                        actionLabel: t('guidanceGo'),
-                      },
-                      {
-                        iconSvg: <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 14l4-4 3 3 7-7" stroke="var(--color-accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 3h3v3" stroke="var(--color-accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-                        text: t('guidanceFirstPost'),
-                        action: () => router.push(`/u/${handle}/new`),
-                        actionLabel: t('newPost'),
-                      },
-                      {
-                        iconSvg: <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="var(--color-accent-primary)" strokeWidth="2"/><circle cx="10" cy="10" r="3" fill="var(--color-accent-primary)"/></svg>,
-                        text: t('guidanceFollowTraders'),
-                        action: () => router.push('/rankings'),
-                        actionLabel: t('guidanceBrowse'),
-                      },
-                    ].map((card, i) => (
-                      <Box key={i} style={{
-                        display: 'flex', alignItems: 'center', gap: tokens.spacing[3],
-                        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                        borderRadius: tokens.radius.lg,
-                        background: `${tokens.colors.accent.primary}08`,
-                        border: `1px solid ${tokens.colors.accent.primary}20`,
-                      }}>
-                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32 }}>{card.iconSvg}</span>
-                        <Text size="sm" style={{ flex: 1, color: tokens.colors.text.secondary }}>{card.text}</Text>
-                        <button onClick={card.action} style={{
-                          padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                          borderRadius: tokens.radius.md,
-                          border: `1px solid ${tokens.colors.accent.primary}40`,
-                          background: `${tokens.colors.accent.primary}10`,
-                          color: tokens.colors.accent.primary,
-                          fontSize: tokens.typography.fontSize.xs,
-                          fontWeight: 600, cursor: 'pointer',
-                        }}>
-                          {card.actionLabel}
-                        </button>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
+                {/* Guidance cards removed */}
 
                 {/* Recent activity feed */}
                 <ProfileActivityFeed handle={profile.handle} />
@@ -898,18 +858,9 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
               {/* Sidebar column */}
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                <Box bg="secondary" p={4} radius="lg" border="primary">
-                  <UserStreaks userId={profile.id} />
-                </Box>
-                <Box bg="secondary" p={4} radius="lg" border="primary">
-                  <ActivityHeatmap userId={profile.id} />
-                </Box>
                 <ProfileBookshelf handle={profile.handle} />
                 <JoinedGroups userId={profile.id} />
                 <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
-                <Box style={{ marginTop: tokens.spacing[4] }}>
-                  <UserCollections userHandle={profile.handle} isOwnProfile={isOwnProfile} />
-                </Box>
               </Box>
             </Box>
           )}
