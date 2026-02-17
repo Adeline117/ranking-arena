@@ -361,7 +361,7 @@ function SearchContent() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary, isolation: 'isolate', position: 'relative' }}>
       <div style={{
         position: 'fixed', inset: 0,
         background: tokens.gradient.mesh, opacity: 0.5,
