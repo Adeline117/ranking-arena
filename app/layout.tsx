@@ -18,7 +18,7 @@ const ServiceWorkerRegistration = dynamic(() => import("./components/Providers/S
 // WelcomeGuide removed
 const CompareFloatingBar = dynamic(() => import("./components/trader/CompareFloatingBar"));
 const ScrollToTop = dynamic(() => import("./components/ui/ScrollToTop"));
-const MobileBottomNav = dynamic(() => import("./components/layout/MobileBottomNav"));
+import MobileBottomNav from "./components/layout/MobileBottomNav";
 // InstallPrompt removed
 const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(m => ({ default: m.WebVitals })));
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
