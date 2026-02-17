@@ -3,7 +3,7 @@
  * This reduces LCP by eliminating client-side data fetching waterfall
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import {
   calculateArenaScore,
   debouncedConfidence,
@@ -60,6 +60,25 @@ export async function fetchLeaderboardFromDB(
 
   const supabase = createClient(supabaseUrl, supabaseKey)
 
+  // 30s timeout — prevents build-time static generation from hanging (Vercel kills at 60s)
+  const TIMEOUT_MS = 30_000
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('getInitialTraders timeout')), TIMEOUT_MS)
+  )
+
+  try {
+    return await Promise.race([timeoutPromise, fetchLeaderboardFromDBInner(supabase, timeRange, limit)])
+  } catch (err) {
+    logger.error('[getInitialTraders] Timeout or error:', err)
+    return { traders: [], lastUpdated: null }
+  }
+}
+
+async function fetchLeaderboardFromDBInner(
+  supabase: SupabaseClient,
+  timeRange: Period,
+  limit: number
+): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   try {
     // Data quality: cap extreme ROI values in the query
     // ROI > 10000% (100x) is almost certainly data anomaly (e.g. Hyperliquid reporting lifetime ROI)
