@@ -159,7 +159,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
       
       <Box className="similar-traders-grid" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
         {traders.slice(0, 6).map((trader, index) => (
-          <Link key={trader.handle} href={`/trader/${trader.handle}`} style={{ textDecoration: 'none' }}>
+          <Link key={trader.handle} href={`/trader/${encodeURIComponent(trader.id || trader.handle)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`} style={{ textDecoration: 'none' }}>
             <Box
               className="similar-trader-item"
               style={{
