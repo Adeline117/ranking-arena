@@ -36,7 +36,34 @@ interface BatchTranslateRequest {
   targetLang: 'zh' | 'en'
 }
 
-// 调用 OpenAI 翻译
+// Fast translation via Google Translate (free, no API key, ~100ms)
+async function translateWithGoogle(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
+  const sourceLang = targetLang === 'zh' ? 'en' : 'zh-CN'
+  const target = targetLang === 'zh' ? 'zh-CN' : 'en'
+  
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${target}&dt=t&q=${encodeURIComponent(text)}`
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    
+    if (!response.ok) return null
+    
+    const data = await response.json()
+    if (!Array.isArray(data) || !Array.isArray(data[0])) return null
+    
+    // Concatenate all translated segments
+    const translated = data[0]
+      .filter((segment: unknown[]) => Array.isArray(segment) && segment[0])
+      .map((segment: unknown[]) => segment[0])
+      .join('')
+    
+    return translated || null
+  } catch (error: unknown) {
+    logger.warn('Google Translate failed, falling back to GPT', { error: String(error) })
+    return null
+  }
+}
+
+// 调用 OpenAI 翻译 (fallback, slower but higher quality)
 async function translateWithGPT(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY
   
@@ -89,6 +116,13 @@ Rules:
     logger.error('OpenAI request failed', { error: String(error) })
     return null
   }
+}
+
+// Try Google first (fast), fallback to GPT (quality)
+async function translate(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
+  const googleResult = await translateWithGoogle(text, targetLang)
+  if (googleResult) return googleResult
+  return translateWithGPT(text, targetLang)
 }
 
 // 检测源语言
@@ -183,7 +217,7 @@ async function handleSingleTranslate(
 
   // 2. 调用 GPT 翻译
   logger.info(`Calling GPT for: ${contentType || 'unknown'}/${contentId || 'none'}`)
-  const translatedText = await translateWithGPT(text, targetLang)
+  const translatedText = await translate(text, targetLang)
 
   if (!translatedText) {
     return NextResponse.json(
@@ -308,7 +342,7 @@ async function handleBatchTranslate(
         return { id: item.id, translatedText: item.text, cached: true }
       }
 
-      const translatedText = await translateWithGPT(item.text, targetLang)
+      const translatedText = await translate(item.text, targetLang)
 
       if (translatedText) {
         // 保存到缓存（不阻塞返回）
