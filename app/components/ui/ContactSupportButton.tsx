@@ -139,6 +139,7 @@ export default function ContactSupportButton({
     return (
       <button
         onClick={handleClick}
+        aria-label="Contact support"
         disabled={loading}
         className={className}
         style={{

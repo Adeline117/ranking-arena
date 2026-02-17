@@ -130,6 +130,7 @@ export default function MessageButton({
   return (
     <button
       onClick={handleClick}
+            aria-label="Send message"
       disabled={isLoading}
       style={{
         ...sizeStyles[size],

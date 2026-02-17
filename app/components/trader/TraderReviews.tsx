@@ -225,6 +225,7 @@ function TranslateButton({ reviewId, content, onTranslated }: {
   return (
     <button
       onClick={handleTranslate}
+            aria-label="Translate review"
       disabled={loading}
       style={{
         background: 'none',
