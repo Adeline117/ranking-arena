@@ -2565,6 +2565,7 @@ const zh = {
     totalEquity: '总权益',
     openPositions: '当前持仓',
     noOpenPositions: '暂无持仓',
+    favorites: '收藏',
 
     // 通用 UI 文本（减少硬编码）
     viewLiveLeaderboard: '查看实时排行榜',
