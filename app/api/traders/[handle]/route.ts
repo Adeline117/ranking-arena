@@ -458,9 +458,43 @@ async function getTraderDetails(
       .maybeSingle(),
   ]), 10000) // 10s timeout
 
-  const snapshot = snapshotResult.data as SnapshotData | null
-  const snapshot7d = snapshot7dResult.data as SnapshotData | null
-  const snapshot30d = snapshot30dResult.data as SnapshotData | null
+  let snapshot = snapshotResult.data as SnapshotData | null
+  let snapshot7d = snapshot7dResult.data as SnapshotData | null
+  let snapshot30d = snapshot30dResult.data as SnapshotData | null
+  
+  // Fallback to leaderboard_ranks when trader_snapshots has no/empty data
+  if (!snapshot || (snapshot.roi === 0 && snapshot.win_rate === 0 && !snapshot.pnl)) {
+    const { data: lrRows } = await supabase
+      .from('leaderboard_ranks')
+      .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, profitability_score, risk_control_score, execution_score')
+      .eq('source', sourceType)
+      .eq('source_trader_id', traderId)
+    
+    if (lrRows && lrRows.length > 0) {
+      const lr90 = lrRows.find((r: Record<string, unknown>) => r.season_id === '90D')
+      const lr30 = lrRows.find((r: Record<string, unknown>) => r.season_id === '30D')
+      const lr7 = lrRows.find((r: Record<string, unknown>) => r.season_id === '7D')
+      const best = lr90 || lr30 || lr7 || lrRows[0]
+      
+      const mapLR = (lr: Record<string, unknown>): SnapshotData => ({
+        roi: lr.roi as number | null,
+        pnl: lr.pnl as number | null,
+        win_rate: lr.win_rate as number | null,
+        max_drawdown: lr.max_drawdown as number | null,
+        trades_count: lr.trades_count as number | null,
+        followers: lr.followers as number | null,
+        arena_score: lr.arena_score as number | null,
+        profitability_score: lr.profitability_score as number | null,
+        risk_control_score: lr.risk_control_score as number | null,
+        execution_score: lr.execution_score as number | null,
+      })
+      
+      if (best) snapshot = mapLR(best)
+      if (lr7) snapshot7d = mapLR(lr7)
+      if (lr30) snapshot30d = mapLR(lr30)
+    }
+  }
+  
   const arenaFollowers = arenaFollowersResult.count || 0
   const userProfile = userProfileResult.data
   // 使用 safeQuery 返回的结果（可能是 null 或数据数组）
