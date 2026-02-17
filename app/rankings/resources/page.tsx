@@ -8,6 +8,7 @@ import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 export const revalidate = 300
 
 async function fetchLibraryItems(): Promise<{ items: LibraryItem[]; total: number }> {
+  if (process.env.NEXT_PHASE === 'phase-production-build') return { items: [], total: 0 }
   try {
     const supabase = getSupabaseAdmin()
     const { data, count } = await supabase
@@ -24,6 +25,7 @@ async function fetchLibraryItems(): Promise<{ items: LibraryItem[]; total: numbe
 }
 
 async function fetchFeatured(): Promise<LibraryItem[]> {
+  if (process.env.NEXT_PHASE === 'phase-production-build') return []
   try {
     const supabase = getSupabaseAdmin()
     const { data } = await supabase
@@ -44,6 +46,7 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
 const TOP_FIELDS = 'id,title,title_en,title_zh,author,category,cover_url,rating,rating_count,view_count,language'
 
 async function fetchTopByCategory(category: string): Promise<LibraryItem[]> {
+  if (process.env.NEXT_PHASE === 'phase-production-build') return []
   try {
     const supabase = getSupabaseAdmin()
     // Try rated items first
