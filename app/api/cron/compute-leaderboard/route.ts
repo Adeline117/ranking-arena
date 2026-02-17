@@ -39,7 +39,7 @@ function getFreshnessHours(source: string): number {
   return sourceType === 'web3' ? DATA_FRESHNESS_HOURS_DEX : DATA_FRESHNESS_HOURS_CEX
 }
 const MIN_TRADES_COUNT = 5
-const DEGRADATION_THRESHOLD = 0.30 // 30% drop triggers protection
+const DEGRADATION_THRESHOLD = 0.50 // 50% drop triggers protection (raised from 30% after 0x address dedup cleanup)
 
 // P1-3: ROI anomaly thresholds per period
 const ROI_ANOMALY_THRESHOLDS: Record<Period, number> = {
