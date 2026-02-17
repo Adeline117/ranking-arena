@@ -15,6 +15,7 @@ import {
   validateString,
   validateNumber,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import {
   getUserNotifications,
   getUnreadNotificationCount,
@@ -48,6 +49,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
@@ -71,6 +75,9 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()

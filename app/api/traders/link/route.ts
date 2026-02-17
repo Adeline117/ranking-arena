@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -32,6 +33,9 @@ async function getUser(req: NextRequest) {
  * POST - 关联交易员账号
  */
 export async function POST(req: NextRequest) {
+  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await getUser(req)
     if (!user) {
@@ -141,6 +145,9 @@ export async function GET(req: NextRequest) {
  * DELETE - 取消关联交易员账号
  */
 export async function DELETE(req: NextRequest) {
+  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await getUser(req)
     if (!user) {

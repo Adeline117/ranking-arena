@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { logger } from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -93,6 +94,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // POST: Generate invite link
 export async function POST(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id: groupId } = await context.params
 

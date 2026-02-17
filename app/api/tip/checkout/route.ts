@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,9 @@ function getSupabase() {
 const _TIP_AMOUNTS = [100, 300, 500, 1000, 2000, 5000] // $1, $3, $5, $10, $20, $50
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const supabase = getSupabase()
     

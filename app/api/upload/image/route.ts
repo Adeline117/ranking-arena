@@ -21,10 +21,14 @@ import {
   type BucketName,
 } from '@/lib/media/constants';
 import logger from '@/lib/logger';
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const VALID_BUCKETS = new Set<string>(Object.values(BUCKETS));
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // Auth
     const user = await getAuthUser(request);

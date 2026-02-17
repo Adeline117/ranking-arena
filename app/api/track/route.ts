@@ -7,12 +7,16 @@
 import { NextRequest } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('track-api')
 
 const VALID_ACTIONS = ['impression', 'click', 'dwell'] as const
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await getAuthUser(request)
     if (!user) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -8,6 +9,9 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 type RouteContext = { params: Promise<{ id: string; userId: string }> }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id: groupId, userId: targetUserId } = await context.params
 

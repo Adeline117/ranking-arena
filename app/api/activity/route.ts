@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const VALID_ACTIONS = new Set([
   'page_view', 'search', 'follow', 'unfollow',
@@ -9,6 +10,9 @@ const VALID_ACTIONS = new Set([
 ])
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await getAuthUser(request)
     if (!user) {

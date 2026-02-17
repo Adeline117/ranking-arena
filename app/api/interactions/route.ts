@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,9 @@ async function getUserFromCookieOrHeader(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await getUserFromCookieOrHeader(request)
     if (!user) {

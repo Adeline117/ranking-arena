@@ -13,6 +13,7 @@ import {
   success,
   handleError,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -54,6 +55,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // 订阅收藏夹
 export async function POST(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id: folderId } = await context.params
     const user = await requireAuth(request)
@@ -128,6 +132,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
 // 取消订阅
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id: folderId } = await context.params
     const user = await requireAuth(request)

@@ -15,6 +15,7 @@ import {
   handleError,
   validateString,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getPostById, updatePost, deletePost, getUserPostReaction, getUserPostVote } from '@/lib/data/posts'
 import logger from '@/lib/logger'
 
@@ -76,6 +77,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 export async function PUT(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id } = await context.params
     const user = await requireAuth(request)
@@ -99,6 +103,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id } = await context.params
     const user = await requireAuth(request)

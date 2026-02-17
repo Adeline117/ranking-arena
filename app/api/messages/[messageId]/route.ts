@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ messageId: string }> }
 ) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await getAuthUser(request)
     if (!user) {

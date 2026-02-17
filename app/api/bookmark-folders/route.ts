@@ -13,6 +13,7 @@ import {
   validateString,
   validateBoolean,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export async function GET(request: NextRequest) {
   try {
@@ -50,6 +51,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()

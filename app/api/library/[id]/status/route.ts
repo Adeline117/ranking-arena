@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/admin/auth'
 import { z } from 'zod'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const StatusSchema = z.object({
   status: z.enum(['want_to_read', 'reading', 'read']),
 })
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id } = await params
     const authHeader = req.headers.get('authorization')

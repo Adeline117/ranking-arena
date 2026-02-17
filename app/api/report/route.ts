@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +14,10 @@ function getSupabase() {
 const VALID_TYPES = ['post', 'comment', 'profile']
 const VALID_REASONS = ['spam', 'scam', 'harassment', 'misinformation', 'nsfw', 'other']
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const supabase = getSupabase()
     const authHeader = req.headers.get('authorization')

@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { verifyAuth } from '@/lib/api/auth'
 import { hasFeatureAccess } from '@/lib/premium'
 import { createLogger } from '@/lib/utils/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 // 服务端 Supabase 客户端（延迟初始化以避免构建时错误）
 function getSupabase() {
@@ -71,6 +72,9 @@ export async function GET(request: NextRequest) {
  * POST - 加入官方群（成为 Pro 会员时调用）
  */
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // 验证用户
     const authResult = await verifyAuth(request)
@@ -126,6 +130,9 @@ export async function POST(request: NextRequest) {
  * DELETE - 离开官方群（取消订阅时调用）
  */
 export async function DELETE(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // 验证用户
     const authResult = await verifyAuth(request)

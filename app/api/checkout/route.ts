@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,9 @@ const PLANS: Record<string, { priceId: string; name: string }> = {
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // 获取请求体
     const body = await request.json()
