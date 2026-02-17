@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useTransition } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -100,7 +100,6 @@ export default function RankingSection({
   availableSources,
 }: RankingSectionProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
   const { isPro, isLoading: premiumLoading } = useSubscription()
@@ -135,7 +134,9 @@ export default function RankingSection({
 
   // 从 URL 恢复筛选状态 + Feature 8: sort/page/search/preset
   // URL params take priority over localStorage preferences
+  // Use window.location.search instead of useSearchParams to keep page ISR-cacheable
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
     const config: FilterConfig = {}
     const roiMin = searchParams.get('roi_min')
     const roiMax = searchParams.get('roi_max')

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 
 // 进度条颜色
@@ -13,7 +13,6 @@ const PROGRESS_COLOR = tokens.colors.accent.primary || tokens.colors.accent.bran
  */
 export function GlobalProgress() {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const [progress, setProgress] = useState(0)
   const [isVisible, setIsVisible] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
@@ -62,7 +61,7 @@ export function GlobalProgress() {
   useEffect(() => {
     // 路由变化时触发完成
     complete()
-  }, [pathname, searchParams, complete])
+  }, [pathname, complete])
 
   // 监听页面切换开始
   useEffect(() => {
