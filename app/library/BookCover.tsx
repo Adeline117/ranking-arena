@@ -92,6 +92,7 @@ const BookCover = memo(function BookCover({
           priority={priority}
           style={{ objectFit: 'cover' }}
           sizes="(max-width: 768px) 50vw, 200px"
+          unoptimized={coverUrl.startsWith('http://') || !coverUrl.startsWith('/')}
           onError={() => setImgError(true)}
         />
       </div>
