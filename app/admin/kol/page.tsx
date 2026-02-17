@@ -34,7 +34,7 @@ const STATUS_KEYS: Record<string, { key: string; color: string }> = {
 }
 
 export default function AdminKolPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { accessToken, isAdmin, authChecking } = useAdminAuth()
   const [applications, setApplications] = useState<KolApplication[]>([])
   const [filter, setFilter] = useState('pending')
@@ -150,7 +150,7 @@ export default function AdminKolPage() {
                   {app.platform && <div>{t('kolPlatform')}: {app.platform}</div>}
                   {app.platform_handle && <div>{t('kolAccount')}: {app.platform_handle}</div>}
                   {app.follower_count && <div>{t('kolFollowerCount')}: {app.follower_count.toLocaleString()}</div>}
-                  <div>{t('kolApplyTime')}: {new Date(app.created_at).toLocaleDateString()}</div>
+                  <div>{t('kolApplyTime')}: {new Date(app.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</div>
                 </div>
 
                 {app.description && (

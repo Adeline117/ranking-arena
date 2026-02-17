@@ -1,8 +1,8 @@
-export function formatNumber(num: number | string, decimals = 0): string {
+export function formatNumber(num: number | string, decimals = 0, locale?: string): string {
   const n = typeof num === 'string' ? parseFloat(num) : num
   if (isNaN(n)) return '0'
 
-  return n.toLocaleString('en-US', {
+  return n.toLocaleString(locale || 'en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
@@ -25,12 +25,13 @@ export function formatPercent(value: number | string, decimals = 2, multiply = t
 export function formatCurrency(
   amount: number | string,
   currency = '$',
-  decimals = 2
+  decimals = 2,
+  locale?: string
 ): string {
   const n = typeof amount === 'string' ? parseFloat(amount) : amount
   if (isNaN(n)) return `${currency}0`
 
-  return `${currency}${formatNumber(n, decimals)}`
+  return `${currency}${formatNumber(n, decimals, locale)}`
 }
 
 /** Format large numbers compactly (e.g. 1200 -> "1.2K", 3400000 -> "3.4M"). */
@@ -46,6 +47,33 @@ export function formatCompact(num: number | string, decimals = 1): string {
   if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(decimals)}K`
 
   return `${sign}${Math.round(abs)}`
+}
+
+/**
+ * Get the locale string for formatting based on the app language.
+ * Use with formatNumber/formatCurrency for locale-aware number formatting.
+ */
+export function getLocaleFromLanguage(language: string): string {
+  return language === 'zh' ? 'zh-CN' : 'en-US'
+}
+
+/**
+ * Format a date string for display, respecting the user's language.
+ */
+export function formatDateLocalized(
+  dateStr: string | Date,
+  language: string,
+  options?: Intl.DateTimeFormatOptions
+): string {
+  const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr
+  if (isNaN(date.getTime())) return ''
+  const locale = getLocaleFromLanguage(language)
+  const defaultOptions: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }
+  return date.toLocaleDateString(locale, options || defaultOptions)
 }
 
 export function truncate(text: string, maxLength: number, suffix = '...'): string {
