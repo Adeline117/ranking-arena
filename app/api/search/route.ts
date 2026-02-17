@@ -144,13 +144,32 @@ export const GET = withPublic(
     interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
     interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
 
-    const traders: UnifiedSearchResult[] = (tradersData as TraderSourceRow[]).map((t) => ({
-      id: `${t.source}:${t.source_trader_id}`,
-      type: 'trader' as const,
-      title: `@${t.handle || t.source_trader_id}`,
-      subtitle: sourceLabels[t.source] || t.source,
-      href: `/trader/${encodeURIComponent(t.handle || t.source_trader_id)}`,
-    }))
+    // Enrich traders with display_name from leaderboard_ranks when handle is missing
+    const tradersTyped = tradersData as TraderSourceRow[]
+    const missingHandleTraderIds = tradersTyped.filter(t => !t.handle).map(t => t.source_trader_id)
+    const lrNameMap = new Map<string, string>()
+    if (missingHandleTraderIds.length > 0) {
+      const { data: lrRows } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, display_name')
+        .in('source_trader_id', missingHandleTraderIds)
+        .not('display_name', 'is', null)
+        .limit(missingHandleTraderIds.length)
+      for (const lr of (lrRows || [])) {
+        if (lr.display_name) lrNameMap.set(lr.source_trader_id, lr.display_name)
+      }
+    }
+
+    const traders: UnifiedSearchResult[] = tradersTyped.map((t) => {
+      const name = t.handle || lrNameMap.get(t.source_trader_id) || t.source_trader_id
+      return {
+        id: `${t.source}:${t.source_trader_id}`,
+        type: 'trader' as const,
+        title: `@${name}`,
+        subtitle: sourceLabels[t.source] || t.source,
+        href: `/trader/${encodeURIComponent(t.source_trader_id)}?platform=${t.source}`,
+      }
+    })
 
      
     const posts: UnifiedSearchResult[] = (postsData as PostRow[]).map((p) => ({

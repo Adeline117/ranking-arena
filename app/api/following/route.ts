@@ -146,6 +146,34 @@ export async function GET(request: NextRequest) {
         })
       })
 
+      // Fallback: query leaderboard_ranks for display_name when trader_sources has no handle
+      const missingHandleIds = traderIds.filter(id => !sourcesMap.has(id) || !sourcesMap.get(id)!.handle || sourcesMap.get(id)!.handle === id)
+      if (missingHandleIds.length > 0) {
+        const { data: lrRows } = await supabase
+          .from('leaderboard_ranks')
+          .select('source_trader_id, display_name, source, avatar_url')
+          .in('source_trader_id', missingHandleIds)
+          .not('display_name', 'is', null)
+          .limit(missingHandleIds.length)
+        for (const lr of (lrRows || [])) {
+          if (!sourcesMap.has(lr.source_trader_id)) {
+            sourcesMap.set(lr.source_trader_id, {
+              handle: lr.display_name,
+              source: lr.source,
+              avatar_url: lr.avatar_url || undefined,
+            })
+          } else {
+            const existing = sourcesMap.get(lr.source_trader_id)!
+            if (existing.handle === lr.source_trader_id && lr.display_name) {
+              existing.handle = lr.display_name
+            }
+            if (!existing.avatar_url && lr.avatar_url) {
+              existing.avatar_url = lr.avatar_url
+            }
+          }
+        }
+      }
+
       // Build map: one snapshot per trader (unique by source+trader+season_id)
       const latestSnapshotsMap = new Map<string, typeof allSnapshots[0]>()
       for (const snapshot of allSnapshots) {
