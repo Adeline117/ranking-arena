@@ -5,24 +5,14 @@ import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfil
 // Allow non-pre-rendered trader pages to be dynamically generated at runtime
 export const dynamicParams = true
 
-// Pre-render top 50 trader pages at build time for instant TTFB
+// Skip static pre-rendering — Upstash Redis calls in layout tree use
+// fetch({cache:'no-store'}) which breaks static generation.
+// Pages are generated on-demand with ISR instead (revalidate=300).
 export async function generateStaticParams() {
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data } = await supabase
-      .from('trader_sources')
-      .select('handle')
-      .not('handle', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(200)
-    
-    return (data || [])
-      .filter((t: { handle: string | null }) => t.handle && t.handle.length < 100 && !t.handle.includes('\n'))
-      .map((t: { handle: string }) => ({ handle: encodeURIComponent(t.handle) }))
-  } catch {
-    return []
-  }
+  return []
 }
+
+export const revalidate = 300
 
 // Find the user profile associated with this trader handle
 // Uses chained query: traders -> trader_authorizations -> user_profiles
