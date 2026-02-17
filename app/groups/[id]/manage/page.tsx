@@ -156,7 +156,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           setIsPremiumOnly(groupData.is_premium_only || false)
           if (groupData.name_en || groupData.description_en) setShowMultiLang(true)
         }
-        const { data: memberData } = await supabase.from('group_members').select('role').eq('group_id', groupId).eq('user_id', userId).single()
+        const { data: memberData } = await supabase.from('group_members').select('role').eq('group_id', groupId).eq('user_id', userId).maybeSingle()
         if (memberData) setUserRole(memberData.role as 'owner' | 'admin' | 'member')
         const { data: membersData } = await supabase.from('group_members').select('user_id, role, joined_at, muted_until, mute_reason').eq('group_id', groupId).order('role', { ascending: true })
         if (membersData && membersData.length > 0) {
