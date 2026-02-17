@@ -14,8 +14,8 @@ interface BreadcrumbProps {
 }
 
 export default function Breadcrumb({ items }: BreadcrumbProps) {
-  const { language } = useLanguage()
-  const homeLabel = language === 'zh' ? '首页' : 'Home'
+  const { t } = useLanguage()
+  const homeLabel = t('home')
 
   const allItems: BreadcrumbItem[] = [
     { label: homeLabel, href: '/' },
