@@ -12,6 +12,7 @@ import {
   handleError,
   validateEnum,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { decrypt } from '@/lib/exchange/encryption'
 import { type Exchange, SUPPORTED_EXCHANGES } from '@/lib/exchange'
 import { createLogger } from '@/lib/utils/logger'
@@ -46,6 +47,9 @@ import {
 const logger = createLogger('exchange-sync')
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()

@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -57,6 +58,9 @@ function decrypt(encryptedText: string, key: string): string {
  * 参数：grant_type=refresh_token&refresh_token=xxx&client_id=xxx&client_secret=xxx
  */
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // Auth check - use authenticated user's ID instead of trusting request body
     const user = await getAuthUser(request)

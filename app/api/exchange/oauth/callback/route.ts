@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('exchange-oauth-callback')
 
@@ -60,6 +61,9 @@ function _decrypt(encryptedText: string, key: string): string {
  * POST: 用授权码交换 Access Token
  */
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // Auth check - use authenticated user's ID
     const user = await getAuthUser(request)

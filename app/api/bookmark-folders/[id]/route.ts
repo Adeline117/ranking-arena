@@ -16,6 +16,7 @@ import {
   validateBoolean,
   validateNumber,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -173,6 +174,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // 更新收藏夹信息
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id } = await context.params
     const user = await requireAuth(request)
@@ -250,6 +254,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 // 删除收藏夹
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id } = await context.params
     const user = await requireAuth(request)

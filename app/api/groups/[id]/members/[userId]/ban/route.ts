@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getGroupRole, canManageMembers } from '@/lib/services/group-permissions'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -10,6 +11,9 @@ type RouteContext = { params: Promise<{ id: string; userId: string }> }
 
 // Ban a user from the group
 export async function POST(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id: groupId, userId: targetUserId } = await context.params
 
@@ -114,6 +118,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
 // Unban a user from the group
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { id: groupId, userId: targetUserId } = await context.params
 

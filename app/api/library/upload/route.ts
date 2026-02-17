@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isR2Configured, uploadFile, libraryPdfKey } from '@/lib/r2'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
@@ -27,6 +28,9 @@ const ALLOWED_TYPES = [
 const MAX_SIZE = 100 * 1024 * 1024 // 100 MB
 
 export async function POST(req: NextRequest) {
+  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.sensitive)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // Check R2 is configured
     if (!isR2Configured()) {

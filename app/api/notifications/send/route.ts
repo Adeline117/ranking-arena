@@ -23,6 +23,7 @@ import {
   requireAuth,
   handleError,
 } from '@/lib/api'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +35,9 @@ const VALID_TYPES = [
 ]
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // 支持两种认证方式：
     // 1. 普通用户 Bearer token（用于用户触发的通知如关注、点赞）

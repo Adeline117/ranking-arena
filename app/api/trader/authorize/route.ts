@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import { encrypt } from '@/lib/crypto/encryption'
 import { validateExchangeApiKey } from '@/lib/validators/api-key-validator'
 import { logger } from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,9 @@ interface AuthorizeRequest {
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // Get user from auth
     const authHeader = request.headers.get('authorization')
@@ -301,6 +305,9 @@ export async function GET(request: NextRequest) {
  * Revoke authorization
  */
 export async function DELETE(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // Get user from auth
     const authHeader = request.headers.get('authorization')

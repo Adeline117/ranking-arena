@@ -17,6 +17,7 @@ import type { BinanceConfig } from '@/lib/exchange/binance'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import logger from '@/lib/logger'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -54,6 +55,9 @@ async function _getBinanceAccountId(config: BinanceConfig): Promise<string | nul
  * 通过对比用户绑定的账号与交易员ID是否匹配
  */
 export async function POST(req: NextRequest) {
+  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     // 1. Auth check
     const user = await getAuthUser(req)

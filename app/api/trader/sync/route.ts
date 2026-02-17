@@ -14,6 +14,7 @@ import { calculateArenaScore } from '@/lib/utils/arena-score'
 import type { Period } from '@/lib/utils/arena-score'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderData } from '@/lib/adapters/types'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -24,6 +25,9 @@ interface SyncRequest {
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
+  if (rateLimitResp) return rateLimitResp
+
   // Verify cron secret or admin auth
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
