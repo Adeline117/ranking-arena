@@ -58,14 +58,20 @@ async function getDownloadUrl(md5) {
 }
 
 async function downloadFile(url) {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh)' },
-    signal: AbortSignal.timeout(60000),
-    redirect: 'follow',
-  })
-  if (!res.ok) throw new Error(`Download ${res.status}`)
-  const buf = Buffer.from(await res.arrayBuffer())
-  return buf
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120000)
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh)' },
+      signal: controller.signal,
+      redirect: 'follow',
+    })
+    if (!res.ok) throw new Error(`Download ${res.status}`)
+    const buf = Buffer.from(await res.arrayBuffer())
+    return buf
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 async function uploadToStorage(buffer, libraryItemId, ext = 'epub') {
