@@ -22,15 +22,12 @@ export function trackInteraction(event: InteractionEvent): void {
 
   const body = JSON.stringify(event)
 
-  if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-    const blob = new Blob([body], { type: 'application/json' })
-    navigator.sendBeacon('/api/interactions', blob)
-  } else {
-    fetch('/api/interactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      keepalive: true,
-    }).catch(() => {})
-  }
+  // sendBeacon doesn't send auth headers, so use fetch with keepalive
+  // Auth token is read from supabase session cookie by the API
+  fetch('/api/interactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+    keepalive: true,
+  }).catch(() => {})
 }
