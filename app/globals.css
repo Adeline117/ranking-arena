@@ -1,4 +1,7 @@
 @import "tailwindcss";
+
+/* SSR ranking table: hidden once client component renders */
+html.ssr-hidden #ssr-ranking { display: none !important; }
 /*
  * Performance Optimization: CSS files moved to async loading
  * - responsive.css: Critical styles inlined in critical-css.ts, rest loaded async
