@@ -7,6 +7,9 @@ export const revalidate = 60
 
 // Pre-render top user profiles at build time for instant TTFB
 export async function generateStaticParams() {
+  // Skip during build — Supabase queries hang from Vercel build servers
+  if (process.env.NEXT_PHASE === 'phase-production-build') return []
+
   try {
     const supabase = getSupabaseAdmin()
     const { data } = await supabase
