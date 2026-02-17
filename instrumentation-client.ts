@@ -60,6 +60,10 @@ async function initSentry() {
       /An unknown error occurred/,
       /Could not query the database for the schema cache/,
       /dependency .* not found/,
+      /Network connection issue/,
+      /Request timed out/,
+      /Rendered more hooks than during the previous render/,
+      /Page changed from static to dynamic at runtime/,
     ],
 
     // 按路由采样
