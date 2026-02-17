@@ -241,11 +241,7 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.bb-os.com',
       },
-      // BingX static-global CDN
-      {
-        protocol: 'https',
-        hostname: '**.static-global.com',
-      },
+      // BingX static-global CDN — handled via unoptimized prop in Avatar
       // GMX
       {
         protocol: 'https',
