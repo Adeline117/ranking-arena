@@ -1039,12 +1039,41 @@ select:focus-visible {
 
 @media (max-width: 767px) {
   .ranking-table-grid {
-    grid-template-columns: 36px 1fr 72px 72px;
+    grid-template-columns: 32px 1fr 52px 56px 44px 44px;
   }
-  .ranking-table-grid .col-pnl,
-  .ranking-table-grid .col-winrate,
-  .ranking-table-grid .col-mdd {
+  .ranking-table-grid .col-pnl {
     display: none !important;
+  }
+  /* Compact text for mobile columns */
+  .ranking-table-grid .col-winrate,
+  .ranking-table-grid .col-mdd,
+  .ranking-table-grid .col-score {
+    font-size: 11px !important;
+  }
+  .ranking-table-grid .roi-cell .roi-value {
+    font-size: 13px !important;
+  }
+  .ranking-table-grid .roi-cell .pnl-value {
+    display: none !important;
+  }
+  /* Tighter padding on mobile */
+  .ranking-table-grid {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    gap: 4px !important;
+  }
+  /* Hide mobile score badge in trader name since score column is visible */
+  .ranking-table-grid .mobile-score-badge {
+    display: none !important;
+  }
+  /* Hide source tag on mobile to save space */
+  .ranking-table-grid .source-tag {
+    display: none !important;
+  }
+  /* Smaller avatar on mobile */
+  .ranking-table-grid .avatar-container {
+    width: 28px !important;
+    height: 28px !important;
   }
 }
 
@@ -1280,6 +1309,17 @@ select:focus-visible {
   .footer-columns {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 24px !important;
+  }
+  /* Increase footer text size for mobile readability */
+  footer {
+    padding: 32px 12px 24px !important;
+  }
+  footer p,
+  footer .footer-link {
+    font-size: 13px !important;
+  }
+  footer ul {
+    gap: 10px !important;
   }
 }
 
@@ -2158,6 +2198,21 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 
   .view-toggle-btn {
     padding: 4px 6px !important;
+  }
+
+  /* Hero Top 3 cards: tighter on small screens */
+  .hero-top3-grid {
+    gap: 4px !important;
+  }
+  .hero-top3-card {
+    padding: 8px 4px !important;
+  }
+  .hero-top3-card .hero-card-name {
+    max-width: 70px !important;
+    font-size: 11px !important;
+  }
+  .hero-top3-card .hero-card-roi {
+    font-size: 13px !important;
   }
 }
 

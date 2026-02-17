@@ -16,6 +16,23 @@ interface ExchangeFilterProps {
 export default function ExchangeFilter({ availableSources, selectedExchange, onExchangeChange, isPro = true, onProRequired }: ExchangeFilterProps) {
   const { language } = useLanguage()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [showLeftFade, setShowLeftFade] = React.useState(false)
+  const [showRightFade, setShowRightFade] = React.useState(false)
+
+  // Check scroll position for fade indicators
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const checkScroll = () => {
+      setShowLeftFade(el.scrollLeft > 8)
+      setShowRightFade(el.scrollLeft < el.scrollWidth - el.clientWidth - 8)
+    }
+    checkScroll()
+    el.addEventListener('scroll', checkScroll, { passive: true })
+    const ro = new ResizeObserver(checkScroll)
+    ro.observe(el)
+    return () => { el.removeEventListener('scroll', checkScroll); ro.disconnect() }
+  }, [availableSources])
 
   if (!availableSources.length) return null
 
@@ -37,8 +54,20 @@ export default function ExchangeFilter({ availableSources, selectedExchange, onE
         paddingBottom: 4,
         scrollbarWidth: 'none',
         WebkitOverflowScrolling: 'touch',
-        maskImage: 'linear-gradient(to right, black 95%, transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to right, black 95%, transparent 100%)',
+        maskImage: showLeftFade && showRightFade
+          ? 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)'
+          : showRightFade
+          ? 'linear-gradient(to right, black 92%, transparent 100%)'
+          : showLeftFade
+          ? 'linear-gradient(to right, transparent 0%, black 8%)'
+          : 'none',
+        WebkitMaskImage: showLeftFade && showRightFade
+          ? 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)'
+          : showRightFade
+          ? 'linear-gradient(to right, black 92%, transparent 100%)'
+          : showLeftFade
+          ? 'linear-gradient(to right, transparent 0%, black 8%)'
+          : 'none',
       }}
     >
       {/* All button */}

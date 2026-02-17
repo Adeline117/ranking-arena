@@ -55,6 +55,7 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
   return (
     <Link href={href} style={{ textDecoration: 'none', flex: 1, minWidth: 0 }}>
       <div
+        className="hero-top3-card"
         style={{
           borderRadius: tokens.radius.lg,
           border: `1.5px solid ${medalColor}`,
@@ -65,6 +66,7 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
           alignItems: 'center',
           gap: 6,
           transition: `transform ${tokens.transition.fast}`,
+          overflow: 'hidden',
         }}
         onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
         onMouseLeave={e => e.currentTarget.style.transform = 'none'}
@@ -82,8 +84,8 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
         </div>
 
         {/* Name */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, maxWidth: '100%' }}>
-          <span style={{
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, maxWidth: '100%', minWidth: 0 }}>
+          <span className="hero-card-name" style={{
             fontSize: 12, fontWeight: 700,
             color: tokens.colors.text.primary,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -95,7 +97,7 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
         </div>
 
         {/* ROI */}
-        <span style={{ fontSize: 16, fontWeight: 900, color: roiColor, lineHeight: 1 }}>
+        <span className="hero-card-roi" style={{ fontSize: 16, fontWeight: 900, color: roiColor, lineHeight: 1 }}>
           {formatROI(roi)}
         </span>
       </div>
@@ -109,7 +111,7 @@ export default function HeroSection({ traders }: { traders: Trader[] }) {
   const top3 = traders.slice(0, 3)
 
   return (
-    <div style={{
+    <div className="hero-top3-grid" style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(3, 1fr)',
       gap: 8,
