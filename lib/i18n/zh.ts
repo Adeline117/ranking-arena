@@ -3207,7 +3207,7 @@ const zh = {
     dmcaCounterProcess: '收到有效的反通知后，我们将把反通知转发给原投诉人。如原投诉人未在10个工作日内提起法律诉讼，我们可能会恢复被移除的内容。',
     dmcaContactTitle: '4. 联系方式 (Contact)',
     dmcaContactDesc: '版权相关事宜请联系：',
-    dmcaContactEmail: '邮箱: copyright@arenafi.org -- 请在邮件主题中注明"版权通知"或"DMCA Notice"。我们将在收到有效通知后尽快处理（通常在5个工作日内）。',
+    dmcaContactEmail: '请通过站内私信联系管理员 @Arena，在消息中注明"版权通知"或"DMCA Notice"。我们将在收到有效通知后尽快处理（通常在5个工作日内）。',
 
     // 市场面板
     fundamentalData: '基本面数据',
