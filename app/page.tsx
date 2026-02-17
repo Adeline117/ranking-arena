@@ -3,8 +3,9 @@ import { HomePage } from './components/home'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import SSRRankingTable from './components/home/SSRRankingTable'
 
-// ISR: Revalidate every 60 seconds
-export const revalidate = 60
+// ISR: Revalidate every 5 minutes (300s)
+// CDN serves stale content while revalidating in background
+export const revalidate = 300
 
 /**
  * 首页 - Two-phase rendering for LCP:
