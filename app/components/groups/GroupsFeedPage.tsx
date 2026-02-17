@@ -43,13 +43,24 @@ function BookshelfTab() {
   useEffect(() => {
     let alive = true
     async function load() {
-      const { data } = await supabase
-        .from('library_items')
-        .select('id, title, author, cover_url, category')
-        .order('created_at', { ascending: false })
+      // Only show books the user added to their shelf (want_to_read or read)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        if (alive) { setBooks([]); setLoading(false) }
+        return
+      }
+      const { data: ratings } = await supabase
+        .from('book_ratings')
+        .select('library_item_id, library_items(id, title, author, cover_url, category)')
+        .eq('user_id', session.user.id)
+        .in('status', ['want_to_read', 'read'])
+        .order('updated_at', { ascending: false })
         .limit(20)
       if (alive) {
-        setBooks(data || [])
+        const mapped = (ratings || [])
+          .filter((r: Record<string, unknown>) => r.library_items)
+          .map((r: Record<string, unknown>) => r.library_items as BookItem)
+        setBooks(mapped)
         setLoading(false)
       }
     }
