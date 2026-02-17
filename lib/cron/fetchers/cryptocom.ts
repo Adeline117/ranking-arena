@@ -6,7 +6,6 @@
  * The page is rendered client-side behind Cloudflare protection.
  * Internal API calls (e.g. /fe-ex-api/copy/...) require session cookies.
  *
- * TODO: Implement via stealth browser scraping or reverse-engineer auth flow.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'

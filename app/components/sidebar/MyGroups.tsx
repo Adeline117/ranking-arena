@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import useSWR from 'swr'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -68,28 +68,31 @@ function formatRelativeTime(dateStr: string, isZh: boolean): string {
   return isZh ? '很久以前' : 'long ago'
 }
 
+async function fetchMyGroups(userId: string): Promise<Group[]> {
+  const { data } = await supabase
+    .from('group_members')
+    .select('group_id, groups(id, name, name_en, avatar_url, updated_at)')
+    .eq('user_id', userId)
+    .limit(10)
+
+  return (data || []).map((d: any) => d.groups as Group).filter(Boolean)
+}
+
 export default function MyGroups() {
   const { language, t } = useLanguage()
   const isZh = language === 'zh'
   const { user } = useAuthSession()
-  const [groups, setGroups] = useState<Group[]>([])
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!user) { setLoading(false); return }
-    async function load() {
-      const { data } = await supabase
-        .from('group_members')
-        .select('group_id, groups(id, name, name_en, avatar_url, updated_at)')
-        .eq('user_id', user!.id)
-        .limit(10)
-       
-      const gs = (data || []).map((d: any) => d.groups as Group).filter(Boolean)
-      setGroups(gs)
-      setLoading(false)
+  const { data: groups = [], isLoading } = useSWR(
+    user ? ['my-groups', user.id] : null,
+    ([, userId]) => fetchMyGroups(userId),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 300000,
     }
-    load()
-  }, [user])
+  )
+
+  const loading = !user ? false : isLoading
 
   return (
     <SidebarCard title={t('sidebarMyGroups')}>

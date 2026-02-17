@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import useSWR from 'swr'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -61,43 +61,41 @@ function HotTag({ score, isZh }: { score: number; isZh: boolean }) {
   )
 }
 
+async function fetchHotPosts(_key: string, limit: number): Promise<HotPost[]> {
+  const { data } = await supabase
+    .from('posts')
+    .select('id, title, content, hot_score, like_count, comment_count, created_at, author_handle, author_avatar_url')
+    .gt('hot_score', 0)
+    .eq('status', 'active')
+    .order('hot_score', { ascending: false })
+    .limit(limit)
+
+  if (!data) return []
+  return data.map(p => ({
+    id: p.id,
+    title: p.title,
+    content: p.content,
+    hot_score: p.hot_score,
+    like_count: p.like_count,
+    comment_count: p.comment_count,
+    created_at: p.created_at,
+    author_handle: p.author_handle || null,
+    author_avatar_url: p.author_avatar_url || null,
+  }))
+}
+
 export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
   const isZh = language === 'zh'
-  const [posts, setPosts] = useState<HotPost[]>([])
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let alive = true
-    async function fetchData() {
-      const { data } = await supabase
-        .from('posts')
-        .select('id, title, content, hot_score, like_count, comment_count, created_at, author_handle, author_avatar_url')
-        .gt('hot_score', 0)
-        .eq('status', 'active')
-        .order('hot_score', { ascending: false })
-        .limit(limit)
-
-      if (!alive || !data) return
-
-      setPosts(data.map(p => ({
-        id: p.id,
-        title: p.title,
-        content: p.content,
-        hot_score: p.hot_score,
-        like_count: p.like_count,
-        comment_count: p.comment_count,
-        created_at: p.created_at,
-        author_handle: p.author_handle || null,
-        author_avatar_url: p.author_avatar_url || null,
-      })))
-      setLoading(false)
+  const { data: posts = [], isLoading: loading } = useSWR(
+    ['hot-discussions', limit],
+    ([key, lim]) => fetchHotPosts(key, lim),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 180000,
     }
-    fetchData()
-    // Refresh every 3 minutes
-    const interval = setInterval(fetchData, 180000)
-    return () => { alive = false; clearInterval(interval) }
-  }, [limit])
+  )
 
   function getTitle(post: HotPost): string {
     const text = (post.title || post.content || '').replace(/\[sticker:\w+\]/g, '').trim()

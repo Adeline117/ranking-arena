@@ -13,7 +13,6 @@
  * Bitfinex Derivatives (previously known as Bitfinex Borrow) has no public
  * copy-trading feature as of 2025.
  *
- * TODO: Monitor if Bitfinex launches a public leaderboard API.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
