@@ -294,7 +294,7 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
             <span className="text-sm" style={{ color: tokens.colors.text.primary }}>{metrics.win_rate.toFixed(1)}%</span>
           </div>
         )}
-        {metrics.max_drawdown != null && (
+        {metrics.max_drawdown != null && Math.abs(metrics.max_drawdown) <= 100 && (
           <div className="flex justify-between">
             <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('mddLabel')}</span>
             <span className="text-sm" style={{ color: tokens.colors.accent.error }}>-{metrics.max_drawdown.toFixed(1)}%</span>
