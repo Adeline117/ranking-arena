@@ -37,7 +37,7 @@ export default async function Page() {
       </Suspense>
 
       {/* Seamless swap: hide SSR table once client ranking section renders */}
-      <script dangerouslySetInnerHTML={{ __html: `(function(){var s=document.getElementById('ssr-ranking');if(!s)return;var o=new MutationObserver(function(){if(document.querySelector('.home-ranking-section')){s.style.display='none';o.disconnect()}});o.observe(document.body,{childList:true,subtree:true});setTimeout(function(){s.style.display='none';o.disconnect()},12000)})()` }} />
+      <script dangerouslySetInnerHTML={{ __html: `(function(){var s=document.getElementById('ssr-ranking');if(!s)return;function h(){s.style.display='none'}if(document.querySelector('.home-ranking-section')){h();return}var o=new MutationObserver(function(){if(document.querySelector('.home-ranking-section')){h();o.disconnect()}});o.observe(document.documentElement,{childList:true,subtree:true});setTimeout(function(){h();o.disconnect()},8000)})()` }} />
     </>
   )
 }
