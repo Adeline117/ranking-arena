@@ -1019,7 +1019,10 @@ export async function GET(
     }
 
     const decodedHandle = decodeURIComponent(handle)
-    const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}`
+    
+    // Accept optional ?source= param to disambiguate traders with same handle across exchanges
+    const sourceParam = request.nextUrl.searchParams.get('source') || ''
+    const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
     
     // 检查缓存
     const cached = getServerCache<ReturnType<typeof getTraderDetails>>(cacheKey)
@@ -1029,8 +1032,35 @@ export async function GET(
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
     
-    // 查找交易员
-    const found = await findTraderSource(supabase, handle)
+    // 查找交易员 — if source is specified, try that source first
+    let found: Awaited<ReturnType<typeof findTraderSource>> = null
+    if (sourceParam && TRADER_SOURCES.includes(sourceParam as SourceType)) {
+      // Direct lookup by source + source_trader_id or handle
+      const { data: byId } = await supabase
+        .from('trader_sources')
+        .select('source_trader_id, handle, profile_url, avatar_url, market_type')
+        .eq('source', sourceParam)
+        .eq('source_trader_id', decodedHandle)
+        .limit(1)
+        .maybeSingle()
+      if (byId) {
+        found = { source: byId as TraderSource, sourceType: sourceParam as SourceType }
+      } else {
+        const { data: byHandle } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id, handle, profile_url, avatar_url, market_type')
+          .eq('source', sourceParam)
+          .eq('handle', decodedHandle)
+          .limit(1)
+          .maybeSingle()
+        if (byHandle) {
+          found = { source: byHandle as TraderSource, sourceType: sourceParam as SourceType }
+        }
+      }
+    }
+    if (!found) {
+      found = await findTraderSource(supabase, handle)
+    }
     
     if (found) {
       // 从 trader_sources 找到了，获取详细数据

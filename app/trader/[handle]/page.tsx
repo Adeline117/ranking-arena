@@ -168,8 +168,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     let serverTraderData = null
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      const sourceParam = traderData.source ? `?source=${encodeURIComponent(traderData.source)}` : ''
       const res = await fetch(
-        `${baseUrl}/api/traders/${encodeURIComponent(traderData.handle)}`,
+        `${baseUrl}/api/traders/${encodeURIComponent(traderData.source_trader_id || traderData.handle)}${sourceParam}`,
         { next: { revalidate: 60 } }
       )
       if (res.ok) {
