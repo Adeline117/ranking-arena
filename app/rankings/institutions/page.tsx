@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -73,6 +73,16 @@ export default function InstitutionsPage() {
   const [category, setCategory] = useState('all')
   const [sort, setSort] = useState('rating')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // Debounce search input
+  useEffect(() => {
+    clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(searchTimerRef.current)
+  }, [search])
 
   // Leaderboard data
   const [topFunds, setTopFunds] = useState<Institution[]>([])
