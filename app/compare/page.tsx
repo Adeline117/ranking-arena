@@ -66,9 +66,14 @@ function CompareContent() {
     }
   }, [authChecked, accessToken, router])
 
-  // Init
+  // Init — stop loading once auth check completes (even if not logged in)
   useEffect(() => {
-    if (!accessToken) return
+    if (!authChecked) return
+
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
 
     const init = async () => {
       try {
@@ -94,7 +99,15 @@ function CompareContent() {
 
     init()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, searchParams])
+  }, [authChecked, accessToken, searchParams])
+
+  // Fallback: if Privy SDK hasn't loaded after 3s, stop loading anyway
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (loading) setLoading(false)
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [loading])
 
   // Fetch followed traders
   useEffect(() => {
