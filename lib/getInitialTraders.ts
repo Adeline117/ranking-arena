@@ -60,16 +60,22 @@ export async function fetchLeaderboardFromDB(
 
   const supabase = createClient(supabaseUrl, supabaseKey)
 
-  // 30s timeout — prevents build-time static generation from hanging (Vercel kills at 60s)
-  const TIMEOUT_MS = 30_000
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('getInitialTraders timeout')), TIMEOUT_MS)
-  )
+  // 15s timeout — prevents build-time static generation from hanging (Vercel kills at 60s)
+  // Uses AbortController so the actual fetch is cancelled, not just the promise
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 15_000)
 
   try {
-    return await Promise.race([timeoutPromise, fetchLeaderboardFromDBInner(supabase, timeRange, limit)])
-  } catch (err) {
-    logger.error('[getInitialTraders] Timeout or error:', err)
+    const result = await fetchLeaderboardFromDBInner(supabase, timeRange, limit, controller.signal)
+    clearTimeout(timer)
+    return result
+  } catch (err: any) {
+    clearTimeout(timer)
+    if (err?.name === 'AbortError' || err?.message?.includes('timeout')) {
+      logger.warn('[getInitialTraders] Timed out — returning empty (ISR will fill on next request)')
+    } else {
+      logger.error('[getInitialTraders] Error:', err)
+    }
     return { traders: [], lastUpdated: null }
   }
 }
@@ -77,7 +83,8 @@ export async function fetchLeaderboardFromDB(
 async function fetchLeaderboardFromDBInner(
   supabase: SupabaseClient,
   timeRange: Period,
-  limit: number
+  limit: number,
+  signal?: AbortSignal
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
   try {
     // Data quality: cap extreme ROI values in the query
@@ -106,13 +113,15 @@ async function fetchLeaderboardFromDBInner(
         .gt('arena_score', 0)
         .lte('roi', ROI_FILTER_CAP) // Filter out extreme ROI values
         .order('arena_score', { ascending: false, nullsFirst: false })
-        .limit(limit * 2), // Fetch 2x to account for dedup
+        .limit(limit * 2)
+        .abortSignal(signal!), // Cancel if build timeout
 
       supabase
         .from('trader_snapshots')
         .select('captured_at')
         .order('captured_at', { ascending: false })
         .limit(1)
+        .abortSignal(signal!)
         .maybeSingle()
     ])
 
@@ -146,6 +155,7 @@ async function fetchLeaderboardFromDBInner(
           .from('trader_sources')
           .select('source_trader_id, source, handle, avatar_url')
           .in('source_trader_id', chunk.map(s => s.source_trader_id))
+          .abortSignal(signal!)
       )
     )
     const sources = sourceResults.flatMap(r => r.data || [])
