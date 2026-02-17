@@ -67,7 +67,7 @@ export default function LoginPage() {
         {/* Logo + Language */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="/logo-symbol.svg" alt="arena" width={32} height={32} style={{ flexShrink: 0 }} />
+            <img src="/logo-symbol.png" alt="arena" width={32} height={32} style={{ flexShrink: 0, borderRadius: 4, objectFit: 'contain' }} />
             <span style={{ fontSize: 24, fontWeight: 700, color: tokens.colors.text.primary, letterSpacing: '-0.3px' }}>
               <span style={{ color: 'var(--color-verified-web3)', fontWeight: 800 }}>a</span>rena
             </span>
