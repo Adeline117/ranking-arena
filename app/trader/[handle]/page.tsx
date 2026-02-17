@@ -1,6 +1,23 @@
+import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
+
+export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
+  const { handle } = await params
+  const decoded = decodeURIComponent(handle)
+  return {
+    title: `Trader ${decoded} — Arena`,
+    description: `View ${decoded}'s trading performance, PnL, and ranking on Arena.`,
+    openGraph: {
+      title: `Trader ${decoded} — Arena`,
+      description: `View ${decoded}'s trading performance, PnL, and ranking on Arena.`,
+      url: `https://www.arenafi.org/trader/${encodeURIComponent(decoded)}`,
+      siteName: 'Arena',
+      type: 'profile',
+    },
+  }
+}
 
 // Allow non-pre-rendered trader pages to be dynamically generated at runtime
 export const dynamicParams = true

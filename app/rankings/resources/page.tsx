@@ -1,9 +1,22 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { LibraryItem } from '@/lib/types/library'
 import ResourcesClient from './ResourcesClient'
 import { logger } from '@/lib/logger'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
+
+export const metadata: Metadata = {
+  title: 'Trading Resources — Arena',
+  description: 'Curated trading resources, guides, and tools for crypto traders.',
+  openGraph: {
+    title: 'Trading Resources — Arena',
+    description: 'Curated trading resources, guides, and tools for crypto traders.',
+    url: 'https://www.arenafi.org/rankings/resources',
+    siteName: 'Arena',
+    type: 'website',
+  },
+}
 
 export const revalidate = 300
 
