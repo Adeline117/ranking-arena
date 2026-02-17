@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { formatTimeAgo } from '@/lib/utils/date'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -250,14 +251,7 @@ export default function FlashNewsPage() {
   }
 
   const formatPublishedTime = (timestamp: string) => {
-    const date = new Date(timestamp)
-    const diff = Date.now() - date.getTime()
-    if (diff < 24 * 60 * 60 * 1000) {
-      return date.toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })
-    }
-    return date.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
+    return formatTimeAgo(timestamp, language === 'zh' ? 'zh' : 'en')
   }
 
   const handleCategoryChange = (category: string) => {
