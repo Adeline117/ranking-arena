@@ -12,7 +12,9 @@ export async function generateStaticParams() {
   return []
 }
 
-export const revalidate = 300
+// Force dynamic — layout sidebar components call Upstash Redis (no-store fetch)
+// which is incompatible with ISR. Dynamic rendering is fine since TTFB is ~0.16s.
+export const dynamic = 'force-dynamic'
 
 // Find the user profile associated with this trader handle
 // Uses chained query: traders -> trader_authorizations -> user_profiles
