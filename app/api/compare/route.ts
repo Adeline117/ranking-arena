@@ -127,6 +127,38 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fallback: query leaderboard_ranks for display_name when trader_sources has no handle
+    const missingHandleIds = traderIds.filter(id => {
+      const src = sourceMap.get(id)
+      return !src?.handle
+    })
+    if (missingHandleIds.length > 0) {
+      const { data: lrRows } = await supabase
+        .from('leaderboard_ranks')
+        .select('source_trader_id, display_name, source, avatar_url')
+        .in('source_trader_id', missingHandleIds)
+        .not('display_name', 'is', null)
+        .limit(missingHandleIds.length)
+      for (const lr of (lrRows || [])) {
+        if (!sourceMap.has(lr.source_trader_id)) {
+          sourceMap.set(lr.source_trader_id, {
+            source_trader_id: lr.source_trader_id,
+            source: lr.source,
+            handle: lr.display_name,
+            avatar_url: lr.avatar_url,
+          })
+        } else {
+          const existing = sourceMap.get(lr.source_trader_id)!
+          if (!existing.handle && lr.display_name) {
+            existing.handle = lr.display_name
+          }
+          if (!existing.avatar_url && lr.avatar_url) {
+            existing.avatar_url = lr.avatar_url
+          }
+        }
+      }
+    }
+
     // 获取关注数 — per-trader count queries in parallel (max 5 traders)
     const followerMap = new Map<string, number>()
     const countResults = await Promise.all(
