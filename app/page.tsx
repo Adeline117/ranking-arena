@@ -1,42 +1,25 @@
 import { Suspense } from 'react'
 import { HomePage } from './components/home'
 import { getInitialTraders } from '@/lib/getInitialTraders'
-import SSRRankingTable from './components/home/SSRRankingTable'
 
 // ISR: Revalidate every 60 seconds
 export const revalidate = 60
-export const experimental_ppr = true
 
 /**
- * 首页 - Two-phase rendering for perfect LCP + zero CLS:
- * 
- * Phase 1: SSRRankingTable renders real trader data as static HTML.
- *          Browser paints this instantly without any JavaScript.
- *          This is the LCP element — achieves sub-second LCP.
- * 
- * Phase 2: HomePage (client component) hydrates with full interactivity.
- *          Once .home-ranking-section exists in DOM, SSR table is hidden.
- *          Same data = zero CLS during the swap.
+ * 首页 - SSR data passed to client component for instant render.
+ * No separate SSR table (was causing CLS 1.0+ from show/hide transition).
+ * initialTraders provides data for immediate rendering without client fetch.
  */
 export default async function Page() {
   const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 25)
 
   return (
-    <>
-      {/* Static HTML ranking table — LCP element, no JS required */}
-      <div className="ssr-only" id="ssr-ranking">
-        <SSRRankingTable traders={initialTraders} />
-      </div>
-
-      {/* Interactive client app — streams in via RSC */}
-      <Suspense fallback={null}>
-        <HomePage
-          initialTraders={initialTraders}
-          initialLastUpdated={lastUpdated}
-        />
-      </Suspense>
-
-      {/* SSR table hidden via useEffect in RankingSection client component */}
-    </>
+    <Suspense fallback={null}>
+      <HomePage
+        initialTraders={initialTraders}
+        initialLastUpdated={lastUpdated}
+      />
+    </Suspense>
   )
+}
 }
