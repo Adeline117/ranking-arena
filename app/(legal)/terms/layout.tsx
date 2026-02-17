@@ -3,10 +3,17 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: '服务条款',
+  title: '服务条款 — Arena',
   description: 'Arena 服务条款 -- 平台使用规则、指南和用户协议。',
   alternates: {
     canonical: `${baseUrl}/terms`,
+  },
+  openGraph: {
+    title: 'Terms of Service — Arena',
+    description: 'Arena terms of service — platform usage rules, guidelines, and user agreement.',
+    url: `${baseUrl}/terms`,
+    siteName: 'Arena',
+    type: 'website',
   },
 }
 

@@ -1,9 +1,26 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import UserProfileClient from './UserProfileClient'
 import { logger } from '@/lib/logger'
 
 export const revalidate = 60
+
+export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
+  const { handle } = await params
+  const decoded = decodeURIComponent(handle)
+  return {
+    title: `@${decoded} — Arena`,
+    description: `View @${decoded}'s profile, trading stats, and activity on Arena.`,
+    openGraph: {
+      title: `@${decoded} — Arena`,
+      description: `View @${decoded}'s profile, trading stats, and activity on Arena.`,
+      url: `https://www.arenafi.org/u/${encodeURIComponent(decoded)}`,
+      siteName: 'Arena',
+      type: 'profile',
+    },
+  }
+}
 
 // Pre-render top user profiles at build time for instant TTFB
 export async function generateStaticParams() {

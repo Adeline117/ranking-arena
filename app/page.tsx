@@ -1,7 +1,20 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { HomePage } from './components/home'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import SSRRankingTable from './components/home/SSRRankingTable'
+
+export const metadata: Metadata = {
+  title: 'Arena — Crypto Trader Rankings & Community',
+  description: 'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+  openGraph: {
+    title: 'Arena — Crypto Trader Rankings & Community',
+    description: 'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+    url: 'https://www.arenafi.org/',
+    siteName: 'Arena',
+    type: 'website',
+  },
+}
 
 // ISR: Revalidate every 5 minutes (300s)
 // CDN serves stale content while revalidating in background
