@@ -3200,7 +3200,7 @@ const en = {
     dmcaCounterProcess: 'Upon receiving a valid counter-notice, we will forward it to the original complainant. If the complainant does not file a legal action within 10 business days, we may restore the removed content.',
     dmcaContactTitle: '4. Contact',
     dmcaContactDesc: 'For copyright-related matters, please contact:',
-    dmcaContactEmail: 'Email: copyright@arenafi.org -- Please include "Copyright Notice" or "DMCA Notice" in the subject line. We will process valid notices as soon as possible (typically within 5 business days).',
+    dmcaContactEmail: 'Please send a direct message to @Arena on the platform with "Copyright Notice" or "DMCA Notice" in the message. We will process valid notices as soon as possible (typically within 5 business days).',
 
     // Market panel
     fundamentalData: 'Fundamentals',
