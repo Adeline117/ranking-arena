@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -15,6 +16,7 @@ type HotPost = {
   like_count: number
   comment_count: number
   author_handle: string | null
+  author_avatar_url: string | null
   created_at: string
 }
 
@@ -70,7 +72,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
     async function fetchData() {
       const { data } = await supabase
         .from('posts')
-        .select('id, title, content, hot_score, like_count, comment_count, created_at, author_handle')
+        .select('id, title, content, hot_score, like_count, comment_count, created_at, author_handle, author_avatar_url')
         .gt('hot_score', 0)
         .eq('status', 'active')
         .order('hot_score', { ascending: false })
@@ -87,6 +89,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
         comment_count: p.comment_count,
         created_at: p.created_at,
         author_handle: p.author_handle || null,
+        author_avatar_url: p.author_avatar_url || null,
       })))
       setLoading(false)
     }
@@ -210,16 +213,34 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   </p>
                 )}
 
-                {/* Meta: author + comments + time */}
+                {/* Meta: avatar + author + comments + time */}
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
+                  gap: 6,
                   fontSize: tokens.typography.fontSize.xs,
                   color: 'var(--color-text-tertiary)',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                 }}>
+                  {post.author_avatar_url ? (
+                    <Image
+                      src={post.author_avatar_url}
+                      alt={post.author_handle || ''}
+                      width={18}
+                      height={18}
+                      style={{ borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                    />
+                  ) : post.author_handle ? (
+                    <div style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                      background: 'var(--glass-bg-medium)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, fontWeight: 600, color: 'var(--color-text-secondary)',
+                    }}>
+                      {(post.author_handle[0] || '?').toUpperCase()}
+                    </div>
+                  ) : null}
                   {post.author_handle && (
                     <span style={{
                       fontWeight: tokens.typography.fontWeight.medium,

@@ -30,7 +30,7 @@ function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: 
         width={size}
         height={size}
         style={{
-          borderRadius: tokens.radius.md,
+          borderRadius: tokens.radius.full,
           objectFit: 'cover',
           minWidth: size,
         }}
@@ -43,7 +43,7 @@ function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: 
         width: size,
         height: size,
         minWidth: size,
-        borderRadius: tokens.radius.md,
+        borderRadius: tokens.radius.full,
         background: 'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
         display: 'flex',
         alignItems: 'center',
