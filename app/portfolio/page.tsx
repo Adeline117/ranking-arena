@@ -44,7 +44,7 @@ export default function PortfolioPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
@@ -221,7 +221,7 @@ export default function PortfolioPage() {
 
           {/* Positions */}
           <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>Open Positions</h2>
+            <h2 style={styles.sectionTitle}>{t('openPositions') || 'Open Positions'}</h2>
             <PositionList positions={positions} isLoading={loading} />
           </div>
         </div>

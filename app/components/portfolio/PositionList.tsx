@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface Position {
   id: string
@@ -25,6 +26,7 @@ interface PositionListProps {
 }
 
 export default function PositionList({ positions, isLoading }: PositionListProps) {
+  const { t } = useLanguage()
   const [sortKey, setSortKey] = useState<SortKey>('pnl')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
@@ -66,7 +68,7 @@ export default function PositionList({ positions, isLoading }: PositionListProps
   if (!positions.length) {
     return (
       <div style={styles.empty}>
-        <span style={styles.emptyText}>No open positions</span>
+        <span style={styles.emptyText}>{t('noOpenPositions') || 'No open positions'}</span>
       </div>
     )
   }

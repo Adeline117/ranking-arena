@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface SnapshotData {
   total_equity: number
@@ -24,6 +25,7 @@ export default function PortfolioOverview({
   snapshots,
   isLoading,
 }: PortfolioOverviewProps) {
+  const { t } = useLanguage()
   const pnlColor = totalPnl >= 0 ? 'var(--color-success)' : 'var(--color-error)'
   const pnlSign = totalPnl >= 0 ? '+' : ''
 
@@ -39,11 +41,11 @@ export default function PortfolioOverview({
     <div style={styles.container}>
       <div style={styles.grid}>
         <div style={styles.card}>
-          <span style={styles.label}>Total Equity</span>
+          <span style={styles.label}>{t('totalEquity') || 'Total Equity'}</span>
           <span style={styles.value}>${totalEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
         <div style={styles.card}>
-          <span style={styles.label}>Unrealized PnL</span>
+          <span style={styles.label}>{t('unrealizedPnl') || 'Unrealized PnL'}</span>
           <span style={{ ...styles.value, color: pnlColor }}>
             {pnlSign}${totalPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
