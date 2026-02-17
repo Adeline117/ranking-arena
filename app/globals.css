@@ -1006,9 +1006,13 @@ select:focus-visible {
    ============================================ */
 
 /* Optimize off-screen content rendering */
-.ranking-row, .post-card, .trader-card {
+.post-card, .trader-card {
   content-visibility: auto;
   contain-intrinsic-size: auto 72px; /* Estimated height */
+  contain: layout style;
+}
+/* ranking-row: no content-visibility (only 100/page, causes gray placeholder appearance) */
+.ranking-row {
   contain: layout style;
 }
 
