@@ -383,12 +383,18 @@ function InstitutionCard({ institution, isZh }: { institution: Institution; isZh
         </div>
       )}
 
-      <StarRating
-        rating={institution.avg_rating || 0}
-        ratingCount={institution.rating_count}
-        size={14}
-        readonly
-      />
+      {institution.avg_rating != null && institution.avg_rating > 0 ? (
+        <StarRating
+          rating={institution.avg_rating}
+          ratingCount={institution.rating_count}
+          size={14}
+          readonly
+        />
+      ) : (
+        <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+          {isZh ? '暂无评分' : 'No ratings yet'}
+        </span>
+      )}
     </a>
   )
 }

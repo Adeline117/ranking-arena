@@ -38,7 +38,7 @@ const CHAIN_COLORS: Record<string, string> = {
 }
 
 function formatLargeNumber(n: number | null): string {
-  if (n == null) return '--'
+  if (n == null) return 'N/A'
   if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`
@@ -46,7 +46,7 @@ function formatLargeNumber(n: number | null): string {
 }
 
 function formatUsers(n: number | null): string {
-  if (n == null) return '--'
+  if (n == null) return 'N/A'
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
   if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`
   return n.toString()
@@ -204,12 +204,12 @@ function BotRow({ bot }: { bot: BotEntry }) {
       </div>
 
       {/* TVL */}
-      <div className="text-right text-sm tabular-nums" style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>
+      <div className="text-right text-sm tabular-nums" style={{ color: m.tvl != null ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)', fontWeight: 500 }} title={m.tvl == null ? 'Data not yet available' : undefined}>
         {formatLargeNumber(m.tvl)}
       </div>
 
       {/* Users */}
-      <div className="text-right text-sm tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>
+      <div className="text-right text-sm tabular-nums" style={{ color: m.unique_users != null ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)' }} title={m.unique_users == null ? 'Data not yet available' : undefined}>
         {formatUsers(m.unique_users)}
       </div>
 
