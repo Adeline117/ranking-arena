@@ -204,8 +204,12 @@ async function computeSeason(
   }
 
   // Dedupe: keep latest per source+source_trader_id
+  // Normalize 0x addresses to lowercase to prevent case-sensitive duplicates
   const traderMap = new Map<string, TraderRow>()
   for (const snap of allSnapshots) {
+    if (snap.source_trader_id.startsWith('0x')) {
+      snap.source_trader_id = snap.source_trader_id.toLowerCase()
+    }
     const key = `${snap.source}:${snap.source_trader_id}`
     if (!traderMap.has(key)) {
       traderMap.set(key, snap)
