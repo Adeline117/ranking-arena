@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { t } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
 // Using tokens.colors.accent.brand instead of hardcoded color
@@ -166,6 +166,7 @@ const injectStyles = () => {
 
 export default function NotFoundPage() {
   const [mounted, setMounted] = useState(false)
+  const { t } = useLanguage()
   
   useEffect(() => {
     injectStyles()
