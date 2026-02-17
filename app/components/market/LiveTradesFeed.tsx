@@ -225,7 +225,7 @@ export default function LiveTradesFeed() {
               borderRadius: 3,
               background: tokens.colors.bg.tertiary,
             }}>
-              {filteredTrades.length}笔
+              {filteredTrades.length}{isZh ? '笔' : ''}
             </span>
           )}
         </div>

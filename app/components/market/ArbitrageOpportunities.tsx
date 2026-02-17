@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { t } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface CrossExchangeOpp {
   type: 'cross-exchange'
@@ -30,6 +30,8 @@ interface PriceCompare {
 }
 
 export default function ArbitrageOpportunities() {
+  const { t, language } = useLanguage()
+  const isZh = language === 'zh'
   const [opps, setOpps] = useState<ArbOpp[]>([])
   const [priceComparisons, setPriceComparisons] = useState<PriceCompare[]>([])
   const [loading, setLoading] = useState(true)
@@ -122,7 +124,7 @@ export default function ArbitrageOpportunities() {
           color: tokens.colors.text.primary,
           letterSpacing: '0.3px',
         }}>
-          {t('arbitrageOpportunities') || '套利机会'}
+          {t('arbitrageOpportunities') || (isZh ? '套利机会' : 'Arbitrage Opportunities')}
         </span>
         <span style={{
           fontSize: tokens.typography.fontSize.xs,
@@ -132,7 +134,7 @@ export default function ArbitrageOpportunities() {
           borderRadius: tokens.radius.sm,
           background: hasOpps ? 'var(--color-accent-success-10)' : tokens.colors.bg.tertiary,
         }}>
-          {hasOpps ? `${opps.length}个机会` : showComparisons ? `${priceComparisons.length}个币种` : '0个机会'}
+          {hasOpps ? `${opps.length}${isZh ? '个机会' : ' opps'}` : showComparisons ? `${priceComparisons.length}${isZh ? '个币种' : ' coins'}` : isZh ? '0个机会' : '0 opps'}
         </span>
       </div>
 
@@ -266,7 +268,7 @@ export default function ArbitrageOpportunities() {
             textAlign: 'center',
             lineHeight: 1.5,
           }}>
-            市场均衡中
+            {isZh ? '市场均衡中' : 'Market in Equilibrium'}
           </div>
           <div style={{
             fontSize: tokens.typography.fontSize.xs,
@@ -274,7 +276,7 @@ export default function ArbitrageOpportunities() {
             opacity: 0.6,
             textAlign: 'center',
           }}>
-            暂无显著套利机会
+            {isZh ? '暂无显著套利机会' : 'No significant arbitrage opportunities'}
           </div>
         </div>
       )}
