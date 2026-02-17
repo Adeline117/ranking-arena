@@ -299,7 +299,8 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') || (isZh ? '概览' : 'Overview') },
-    // Activity tab removed
+    { key: 'stats', label: t('stats') || (isZh ? '统计' : 'Stats') },
+    { key: 'portfolio', label: t('portfolio') || (isZh ? '持仓' : 'Portfolio') },
     { key: 'bookshelf', label: isZh ? '书架' : 'Bookshelf' },
     { key: 'followers', label: `${t('followers') || (isZh ? '粉丝' : 'Followers')} (${followersCount})` },
     { key: 'groups', label: t('groups') || (isZh ? '群组' : 'Groups') },
@@ -868,6 +869,32 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           {activeProfileTab === 'activity' && (
             <Box style={{ maxWidth: 700 }}>
               <UserActivityFeed handle={profile.handle} />
+            </Box>
+          )}
+
+          {activeProfileTab === 'stats' && (
+            <Box style={{ maxWidth: 900 }}>
+              {traderStats ? (
+                <StatsPage
+                  stats={traderStats}
+                  traderHandle={traderProfile?.handle || profile.handle || ''}
+                  assetBreakdown={traderAssetBreakdown}
+                  equityCurve={traderEquityCurve}
+                  positionHistory={traderPositionHistory}
+                  isPro={true}
+                  onUnlock={() => router.push('/pricing')}
+                />
+              ) : (
+                <Box style={{ padding: tokens.spacing[6], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.xl, border: `1px solid ${tokens.colors.border.primary}`, textAlign: 'center' }}>
+                  <Text size="sm" color="tertiary">{isZh ? '暂无统计数据，绑定交易所后可查看' : 'No stats data yet. Link an exchange to view.'}</Text>
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {activeProfileTab === 'portfolio' && (
+            <Box style={{ maxWidth: 900 }}>
+              <PortfolioTable items={traderPortfolio} history={traderPositionHistory} isPro={true} onUnlock={() => router.push('/pricing')} />
             </Box>
           )}
 
