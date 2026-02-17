@@ -11,7 +11,6 @@ import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
   getAuthUser,
-  success,
   successWithPagination,
   handleError,
   validateNumber,
