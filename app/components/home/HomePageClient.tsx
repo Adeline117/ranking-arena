@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Box } from '../base'
 import dynamic from 'next/dynamic'
 const RankingSection = dynamic(() => import('./RankingSection'), { ssr: true })
@@ -27,7 +27,6 @@ export default function HomePageClient({
 }: HomePageClientProps) {
   const { isLoggedIn } = useAuth()
   const { t } = useLanguage()
-  const searchParams = useSearchParams()
   const router = useRouter()
 
   // 交易者数据管理 - 传入服务端预获取的数据
@@ -48,9 +47,10 @@ export default function HomePageClient({
     initialLastUpdated,
   })
 
-  // Sync time range with URL on initial load
+  // Sync time range with URL on initial load (avoid useSearchParams to keep page static/ISR)
   useEffect(() => {
-    const urlTimeRange = searchParams.get('range') as TimeRange | null
+    const params = new URLSearchParams(window.location.search)
+    const urlTimeRange = params.get('range') as TimeRange | null
     if (urlTimeRange && ['90D', '30D', '7D'].includes(urlTimeRange) && urlTimeRange !== activeTimeRange) {
       changeTimeRange(urlTimeRange)
     }
@@ -60,8 +60,7 @@ export default function HomePageClient({
   // Custom handler to update both state and URL
   const handleTimeRangeChange = (range: TimeRange) => {
     changeTimeRange(range)
-    // Update URL without full navigation
-    const params = new URLSearchParams(searchParams.toString())
+    const params = new URLSearchParams(window.location.search)
     params.set('range', range)
     router.replace(`?${params.toString()}`, { scroll: false })
   }
