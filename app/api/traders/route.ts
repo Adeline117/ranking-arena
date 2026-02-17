@@ -104,6 +104,9 @@ async function fetchFromLeaderboard(
   // Filter out outlier data (ROI > 5000% etc.)
   query = query.or('is_outlier.is.null,is_outlier.eq.false')
 
+  // Filter out low-quality entries (incomplete score data renders as empty rows)
+  query = query.gt('arena_score', 10)
+
   // Cursor-based: filter by rank
   if (cursor != null) {
     if (sortBy === 'arena_score' && order === 'desc') {
