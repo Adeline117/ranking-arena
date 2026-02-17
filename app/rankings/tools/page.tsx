@@ -29,10 +29,27 @@ interface Tool {
 const CATEGORY_FILTERS = [
   { key: 'all', zh: '全部', en: 'All' },
   { key: 'trading_tool', zh: '交易工具', en: 'Trading Tools' },
+  { key: 'trading-bot', zh: '交易机器人', en: 'Trading Bots' },
+  { key: 'copytrading', zh: '跟单', en: 'Copy Trading' },
   { key: 'quant_platform', zh: '量化平台', en: 'Quant Platforms' },
+  { key: 'analytics', zh: '分析工具', en: 'Analytics', isGroup: true },
+  { key: 'wallets', zh: '钱包', en: 'Wallets', isGroup: true },
+  { key: 'dev-tools', zh: '开发工具', en: 'Dev Tools', isGroup: true },
+  { key: 'compliance-tax', zh: '合规/税务', en: 'Compliance & Tax', isGroup: true },
+  { key: 'info', zh: '资讯', en: 'News & Info', isGroup: true },
   { key: 'strategy', zh: '策略', en: 'Strategies' },
   { key: 'script', zh: '脚本', en: 'Scripts' },
+  { key: 'charting', zh: '图表', en: 'Charting' },
+  { key: 'signal', zh: '信号', en: 'Signals' },
 ]
+
+const TOOL_CATEGORY_GROUPS: Record<string, string[]> = {
+  analytics: ['on-chain-analytics', 'defi-analytics', 'portfolio-tracker', 'whale-tracking', 'sentiment'],
+  wallets: ['hot-wallet', 'hardware-wallet', 'multisig', 'mpc-wallet', 'smart-wallet', 'wallet-infra'],
+  'dev-tools': ['rpc-node', 'indexer', 'api', 'testing', 'deployment', 'sdk', 'security-tool'],
+  'compliance-tax': ['tax', 'compliance-tool', 'accounting'],
+  info: ['news-aggregator', 'calendar', 'alert'],
+}
 
 const SORT_OPTIONS = [
   { key: 'rating', zh: '评分最高', en: 'Highest Rated' },
@@ -124,8 +141,20 @@ export default function ToolsPage() {
             .limit(10)
           return data || []
         }
+        const fetchTopMulti = async (cats: string[]) => {
+          const { data } = await supabase
+            .from('tools')
+            .select('id, name, name_zh, category, logo_url, website, github_url, description, description_zh, pricing, avg_rating, rating_count, tags')
+            .eq('is_active', true)
+            .in('category', cats)
+            .order('avg_rating', { ascending: false, nullsFirst: false })
+            .limit(10)
+          return data || []
+        }
         const [trading, quant, scripts] = await Promise.all([
-          fetchTop('trading_tool'), fetchTop('quant_platform'), fetchScripts(),
+          fetchTopMulti(['trading_tool', 'trading-bot', 'copytrading', 'charting', 'signal']),
+          fetchTopMulti(['quant_platform', 'quant-framework']),
+          fetchScripts(),
         ])
         setTopTrading(trading)
         setTopQuant(quant)
@@ -149,7 +178,12 @@ export default function ToolsPage() {
         .eq('is_active', true)
 
       if (category !== 'all') {
-        query = query.eq('category', category)
+        const groupCats = TOOL_CATEGORY_GROUPS[category]
+        if (groupCats) {
+          query = query.in('category', groupCats)
+        } else {
+          query = query.eq('category', category)
+        }
       }
 
       if (debouncedSearch.trim()) {
