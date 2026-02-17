@@ -94,6 +94,11 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
     {
       revalidateOnFocus: false,
       dedupingInterval: 180000,
+      errorRetryCount: 3,
+      onErrorRetry: (err, _key, _config, revalidate, { retryCount }) => {
+        if (retryCount >= 3) return
+        setTimeout(() => revalidate({ retryCount }), 1000 * Math.pow(2, retryCount))
+      },
     }
   )
 

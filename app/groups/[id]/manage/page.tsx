@@ -165,7 +165,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           const profileMap = new Map(); profilesData?.forEach(p => profileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url }))
           setMembers(membersData.map(m => ({ ...m, handle: profileMap.get(m.user_id)?.handle, avatar_url: profileMap.get(m.user_id)?.avatar_url })).sort((a, b) => { const o: Record<string, number> = { owner: 0, admin: 1, member: 2 }; return (o[a.role] || 2) - (o[b.role] || 2) }) as GroupMember[])
         } else if (groupData?.created_by) {
-          const { data: ownerProfile } = await supabase.from('user_profiles').select('id, handle, avatar_url').eq('id', groupData.created_by).single()
+          const { data: ownerProfile } = await supabase.from('user_profiles').select('id, handle, avatar_url').eq('id', groupData.created_by).maybeSingle()
           if (ownerProfile) setMembers([{ user_id: groupData.created_by, role: 'owner', handle: ownerProfile.handle, avatar_url: ownerProfile.avatar_url, joined_at: groupData.created_at || null }])
         }
         const { data: postsData } = await supabase.from('posts').select('id, title, content, author_handle, created_at, is_pinned').eq('group_id', groupId).order('is_pinned', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).limit(POSTS_PER_PAGE)
