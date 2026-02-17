@@ -3507,6 +3507,92 @@ currentStreak: '当前连续',
 longestStreak: '最长连续',
 totalActiveDays: '总活跃天数',
 
+// 缺失的 i18n 键 - 交易员指标与提示
+advancedMetrics: '高级指标',
+alphaTooltip: 'Alpha：相对于市场基准的超额收益',
+calmarRatio: 'Calmar 比率',
+calmarTooltip: '年化收益率 / 最大回撤，越高越好',
+sortinoRatio: 'Sortino 比率',
+sortinoTooltip: '仅使用下行波动率计算的风险调整收益，越高越好',
+copiersPnl: '跟单者盈亏',
+tradingStyle: '风格',
+profitFactor: '盈亏比',
+profitFactorTooltip: '总盈利 / 总亏损，大于 1 说明整体盈利',
+recoveryFactor: '恢复因子',
+recoveryFactorTooltip: '净利润 / 最大回撤，越高说明回撤恢复越快',
+downsideVol: '下行波动率',
+volatility: '波动率',
+maxConsecWins: '最大连胜',
+maxConsecLosses: '最大连亏',
+avgHolding: '平均持仓',
+preferredAssets: '偏好资产',
+performanceByCondition: '不同市况表现',
+bullMarket: '牛市',
+bearMarket: '熊市',
+sidewaysMarket: '震荡市',
+excessReturns: '超额收益',
+underperforming: '低于基准',
+styleNotClassified: '未分类',
+
+// 市场相关性
+marketCorrelation: '市场相关性',
+betaNeutral: '市场中性',
+betaModerate: '中等相关',
+betaAboveMarket: '高于市场',
+betaHighVolatile: '高波动',
+betaInverse: '反向相关',
+betaDefensive: '防御型',
+
+// 登录 & Pro
+loginProUpgradeCta: '升级 Pro',
+walletLoading: '加载钱包中...',
+
+// 搜索与导航
+clearSearchHistory: '清除历史',
+showMore: '展开更多',
+previousResult: '上一条结果',
+nextResult: '下一条结果',
+
+// 操作与状态
+followTrader: '关注交易员',
+unfollowTrader: '取消关注交易员',
+followUser: '关注用户',
+unfollowUser: '取消关注用户',
+selectAll: '全选',
+deleteMessage: '删除消息',
+postDetail: '帖子详情',
+linkedAt: '关联于',
+noFollowers: '暂无关注者',
+noMessagesHint: '暂无消息',
+noAlertsDesc: '暂无提醒配置',
+
+// 错误提示
+invalidResponse: '无效响应',
+loadConnectionsFailed: '加载连接失败',
+loadReviewsFailed: '加载评价失败',
+openLinkFailed: '打开链接失败',
+popupBlocked: '弹窗被浏览器拦截',
+serviceTemporarilyUnavailable: '服务暂时不可用',
+translateFailed: '翻译失败',
+clickToPreview: '点击预览',
+previewNotSupported: '暂不支持预览',
+returnUrl: '返回链接',
+
+// 小组
+pleaseEnterGroupName: '请输入小组名称',
+bookmarkSelectFolder: '选择收藏夹',
+batchKick: '批量踢出',
+
+// 管理
+adminExportCSV: '导出 CSV',
+adminLibraryStats: '书库统计',
+adminLibraryTotal: '总书籍数',
+adminLibraryWithPdf: '有 PDF 的',
+adminPlatformCount: '平台数',
+adminTotalTraders: '交易员总数',
+adminTraderStats: '交易员统计',
+enterEvmOrSolanaAddress: '请输入 EVM 或 Solana 地址',
+
 } as const
 
 export default zh

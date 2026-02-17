@@ -3500,6 +3500,92 @@ currentStreak: 'Current Streak',
 longestStreak: 'Longest Streak',
 totalActiveDays: 'Total Active Days',
 
+// Missing i18n keys - Trader metrics & tooltips
+advancedMetrics: 'Advanced Metrics',
+alphaTooltip: 'Alpha: Excess return vs market benchmark',
+calmarRatio: 'Calmar Ratio',
+calmarTooltip: 'Annualized return divided by max drawdown. Higher is better.',
+sortinoRatio: 'Sortino Ratio',
+sortinoTooltip: 'Risk-adjusted return using downside volatility. Higher is better.',
+copiersPnl: 'Copiers PnL',
+tradingStyle: 'Style',
+profitFactor: 'Profit Factor',
+profitFactorTooltip: 'Gross profit / gross loss. Above 1 means profitable overall.',
+recoveryFactor: 'Recovery Factor',
+recoveryFactorTooltip: 'Net profit / max drawdown. Higher means faster recovery from losses.',
+downsideVol: 'Downside Vol',
+volatility: 'Volatility',
+maxConsecWins: 'Max Consec. Wins',
+maxConsecLosses: 'Max Consec. Losses',
+avgHolding: 'Avg Holding',
+preferredAssets: 'Preferred Assets',
+performanceByCondition: 'Performance by Condition',
+bullMarket: 'Bull Market',
+bearMarket: 'Bear Market',
+sidewaysMarket: 'Sideways',
+excessReturns: 'Excess returns',
+underperforming: 'Below benchmark',
+styleNotClassified: 'Not classified',
+
+// Market correlation
+marketCorrelation: 'Market Correlation',
+betaNeutral: 'Market neutral',
+betaModerate: 'Moderate correlation',
+betaAboveMarket: 'Above market',
+betaHighVolatile: 'Highly volatile',
+betaInverse: 'Inverse correlation',
+betaDefensive: 'Defensive',
+
+// Login & Pro
+loginProUpgradeCta: 'Upgrade to Pro',
+walletLoading: 'Loading wallet...',
+
+// Search & navigation
+clearSearchHistory: 'Clear history',
+showMore: 'Show More',
+previousResult: 'Previous result',
+nextResult: 'Next result',
+
+// Actions & states
+followTrader: 'Follow Trader',
+unfollowTrader: 'Unfollow Trader',
+followUser: 'Follow User',
+unfollowUser: 'Unfollow User',
+selectAll: 'Select All',
+deleteMessage: 'Delete Message',
+postDetail: 'Post Detail',
+linkedAt: 'Linked',
+noFollowers: 'No followers yet',
+noMessagesHint: 'No messages yet',
+noAlertsDesc: 'No alerts configured',
+
+// Errors
+invalidResponse: 'Invalid response',
+loadConnectionsFailed: 'Failed to load connections',
+loadReviewsFailed: 'Failed to load reviews',
+openLinkFailed: 'Failed to open link',
+popupBlocked: 'Popup blocked by browser',
+serviceTemporarilyUnavailable: 'Service temporarily unavailable',
+translateFailed: 'Translation failed',
+clickToPreview: 'Click to preview',
+previewNotSupported: 'Preview not supported',
+returnUrl: 'Return URL',
+
+// Groups
+pleaseEnterGroupName: 'Please enter group name',
+bookmarkSelectFolder: 'Select folder',
+batchKick: 'Batch Kick',
+
+// Admin
+adminExportCSV: 'Export CSV',
+adminLibraryStats: 'Library Stats',
+adminLibraryTotal: 'Total Books',
+adminLibraryWithPdf: 'With PDF',
+adminPlatformCount: 'Platform Count',
+adminTotalTraders: 'Total Traders',
+adminTraderStats: 'Trader Stats',
+enterEvmOrSolanaAddress: 'Enter EVM or Solana address',
+
 } as const
 
 export default en
