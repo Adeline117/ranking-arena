@@ -11,6 +11,8 @@
  * 包含：布局、字体、颜色、响应式网格、基础动画
  */
 export const criticalCss = `
+/* SSR-only fallback: visible before client app renders */
+.ssr-only { display: block; }
 /* 基础重置和布局 */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%;tab-size:4;scroll-behavior:smooth}
