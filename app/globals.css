@@ -1392,9 +1392,8 @@ select:focus-visible {
     transform: translateY(-2px);
   }
 }
-.glass-card:active {
-  transform: scale(0.98);
-}
+/* Removed: .glass-card:active scale(0.98) — caused entire ranking table
+   to shrink when clicking any button inside it */
 
 /* ============================================
    Touch Targets & Mobile Utilities
@@ -2021,9 +2020,7 @@ input[type="search"]::-webkit-search-cancel-button:hover {
     transform: scale(0.97) !important;
   }
 
-  .glass-card:active {
-    transform: scale(0.98) !important;
-  }
+  /* Removed glass-card:active scale — causes ranking table to shrink on any click */
 }
 
 /* ============================================
