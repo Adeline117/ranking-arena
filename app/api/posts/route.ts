@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     const author_handle = validateString(searchParams.get('author_handle')) ?? undefined
     const sort_by = validateEnum(
       searchParams.get('sort_by'),
-      ['created_at', 'hot_score', 'like_count'] as const
+      ['created_at', 'hot_score', 'like_count', 'personalized'] as const
     ) ?? 'created_at'
     const sort_order = validateEnum(
       searchParams.get('sort_order'),
@@ -94,6 +94,59 @@ export async function GET(request: NextRequest) {
     const HOT_POSTS_REDIS_KEY = 'hot_posts:top50'
 
     let posts: Awaited<ReturnType<typeof getPosts>> | null = null
+
+    // Personalized feed: call RPC and return early
+    if (sort_by === 'personalized') {
+      if (user) {
+        const { data: feedData } = await supabase.rpc(
+          'get_personalized_feed',
+          { p_user_id: user.id, p_limit: limit, p_offset: offset }
+        )
+
+        if (feedData && Array.isArray(feedData) && feedData.length > 0) {
+          const postIds = feedData.map((r: { post_id: string }) => r.post_id)
+          const { data: fullPosts } = await supabase
+            .from('posts')
+            .select('*, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
+            .in('id', postIds)
+
+          const postMap = new Map((fullPosts || []).map((p: { id: string }) => [p.id, p]))
+          posts = postIds
+            .map((id: string) => postMap.get(id))
+            .filter(Boolean) as Awaited<ReturnType<typeof getPosts>>
+        }
+      }
+
+      // Fallback to hot_score if not logged in or RPC returned empty
+      if (!posts || posts.length === 0) {
+        posts = await getPosts(supabase, {
+          limit, offset, group_id, group_ids, author_handle,
+          sort_by: 'hot_score', sort_order: 'desc',
+        })
+      }
+
+      // Attach user state
+      let userReactions: Map<string, 'up' | 'down'> = new Map()
+      let userVotes: Map<string, 'bull' | 'bear' | 'wait'> = new Map()
+      if (user && posts.length > 0) {
+        const postIds = posts.map(p => p.id)
+        const [reactions, votes] = await Promise.all([
+          getUserPostReactions(supabase, postIds, user.id),
+          getUserPostVotes(supabase, postIds, user.id),
+        ])
+        userReactions = reactions
+        userVotes = votes
+      }
+      const postsWithUserState = posts.map(post => ({
+        ...post,
+        user_reaction: userReactions.get(post.id) || null,
+        user_vote: userVotes.get(post.id) || null,
+      }))
+      return successWithPagination(
+        { posts: postsWithUserState },
+        { limit, offset, has_more: posts.length === limit }
+      )
+    }
 
     if (isHotQuery) {
       try {

@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
 import SidebarCard from './SidebarCard'
 
 type Group = {
@@ -16,6 +17,7 @@ type Group = {
   description_en: string | null
   avatar_url: string | null
   member_count: number | null
+  recommendation_reason?: string | null
 }
 
 function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: string | null; size?: number }) {
@@ -62,10 +64,29 @@ export default function RecommendedGroups() {
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [isPersonalized, setIsPersonalized] = useState(false)
+  const auth = useUnifiedAuth()
 
   useEffect(() => {
     async function load() {
       try {
+        // Try personalized recommendations if logged in
+        if (auth.accessToken) {
+          const res = await fetch('/api/recommendations/groups?limit=8', {
+            headers: { Authorization: `Bearer ${auth.accessToken}` },
+          })
+          if (res.ok) {
+            const json = await res.json()
+            if (json.success && json.data?.groups?.length > 0) {
+              setGroups(json.data.groups as Group[])
+              setIsPersonalized(json.data.personalized === true)
+              setLoading(false)
+              return
+            }
+          }
+        }
+
+        // Fallback: fetch by member_count
         const { data } = await supabase
           .from('groups')
           .select('id, name, name_en, description, description_en, avatar_url, member_count')
@@ -79,7 +100,7 @@ export default function RecommendedGroups() {
       }
     }
     load()
-  }, [])
+  }, [auth.accessToken])
 
   return (
     <SidebarCard title={t('sidebarRecommendedGroups')}>
@@ -146,9 +167,14 @@ export default function RecommendedGroups() {
                     }}
                   >
                     {(g.member_count || 0).toLocaleString()} {t('members')}
-                    {desc && (
+                    {!g.recommendation_reason && desc && (
                       <span style={{ marginLeft: 6, color: tokens.colors.text.secondary }}>
                         {desc.length > 20 ? desc.slice(0, 20) + '...' : desc}
+                      </span>
+                    )}
+                    {isPersonalized && g.recommendation_reason && (
+                      <span style={{ marginLeft: 6, color: tokens.colors.accent.primary, fontStyle: 'italic' }}>
+                        {g.recommendation_reason}
                       </span>
                     )}
                   </div>
