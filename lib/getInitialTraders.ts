@@ -35,6 +35,13 @@ export async function getInitialTraders(
   timeRange: Period = '90D',
   limit: number = 50
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
+  // During Vercel build, Supabase queries can hang (iad1 → Supabase timeout).
+  // Return empty — ISR (revalidate=60) will populate on the first real request.
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    logger.info('[getInitialTraders] Build phase — skipping DB call, ISR will fill')
+    return { traders: [], lastUpdated: null }
+  }
+
   // Skip Redis cache for SSR — Upstash fetch uses cache:'no-store' which
   // forces the entire page into dynamic rendering, breaking ISR.
   // ISR (revalidate=60) handles page-level caching instead.
