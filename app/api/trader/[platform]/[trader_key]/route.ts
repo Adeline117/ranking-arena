@@ -226,7 +226,7 @@ export async function GET(
       .select('data_date, roi_pct, pnl_usd')
       .in('source', sourceAliases)
       .eq('source_trader_id', trader_key)
-      .eq('period', '90D')
+      .in('period', ['90D', '30D', '7D'])
       .order('data_date', { ascending: true })
       .limit(90)
 
