@@ -243,12 +243,13 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     throw new Error(`Supabase fallback failed: ${error.message}`);
   }
 
-  // Deduplicate by source:source_trader_id (keep first = highest ranked)
-  const seenKeys = new Set<string>();
+  // Deduplicate by source:source_trader_id (case-insensitive for 0x addresses, keep first = highest ranked)
+  const seenRowKeys = new Set<string>();
   const paginatedRows = (rows || []).filter(r => {
-    const key = `${r.source}:${r.source_trader_id}`;
-    if (seenKeys.has(key)) return false;
-    seenKeys.add(key);
+    const tid = r.source_trader_id?.startsWith('0x') ? r.source_trader_id.toLowerCase() : r.source_trader_id;
+    const key = `${r.source}:${tid}`;
+    if (seenRowKeys.has(key)) return false;
+    seenRowKeys.add(key);
     return true;
   });
 
@@ -574,13 +575,22 @@ async function getCompositeRankings(params: {
   // Note: no longer filtering out traders without display_name.
   // The frontend getTraderDisplayName() handles fallback to trader_key.
 
+  // Deduplicate 0x addresses (case-insensitive)
+  const seenComposite = new Set<string>()
+  const dedupedCompositeTraders = traders.filter((t: { trader_key: string; platform: string }) => {
+    const key = (t.trader_key.startsWith('0x') ? t.trader_key.toLowerCase() : t.trader_key) + '|' + t.platform
+    if (seenComposite.has(key)) return false
+    seenComposite.add(key)
+    return true
+  })
+
   // Collect all unique sources across all windows for UI filter
   const allSources = new Set<string>();
   [map7d, map30d, map90d].forEach(m => m.forEach(r => allSources.add(r.source)));
   const availableSources = [...allSources].sort();
 
   return {
-    traders,
+    traders: dedupedCompositeTraders,
     window: 'COMPOSITE' as const,
     totalcount: total,
     total_count: total,

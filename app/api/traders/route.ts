@@ -172,8 +172,17 @@ async function fetchFromLeaderboard(
     style_confidence: row.style_confidence != null ? Number(row.style_confidence) : null,
   }))
 
+  // Deduplicate 0x addresses (case-insensitive) — VPS imports may write checksum-case
+  const seen = new Set<string>()
+  const dedupedTraders = traders.filter((t: { id: string; source: string }) => {
+    const key = (t.id.startsWith('0x') ? t.id.toLowerCase() : t.id) + '|' + t.source
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
   // Next cursor
-  const lastTrader = traders[traders.length - 1]
+  const lastTrader = dedupedTraders[dedupedTraders.length - 1]
   const nextCursor = lastTrader ? lastTrader.rank : null
   const hasMore = useLegacyPaging
     ? (page + 1) * limit < totalCount
@@ -204,7 +213,7 @@ async function fetchFromLeaderboard(
   const computedAt = data?.[0]?.computed_at || new Date().toISOString()
 
   return {
-    traders,
+    traders: dedupedTraders,
     timeRange,
     totalCount,
     rankingMode: 'arena_score',
