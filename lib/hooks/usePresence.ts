@@ -4,6 +4,15 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
+function getPresenceShard(userId: string): string {
+  let hash = 0
+  for (let i = 0; i < userId.length; i++) {
+    hash = ((hash << 5) - hash) + userId.charCodeAt(i)
+    hash |= 0
+  }
+  return `presence:${Math.abs(hash) % 100}`
+}
+
 type PresenceState = {
   userId: string
   isOnline: boolean
@@ -22,7 +31,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
   useEffect(() => {
     if (!currentUserId) return
 
-    const channel = supabase.channel('presence:global', {
+    const channel = supabase.channel(getPresenceShard(currentUserId), {
       config: { presence: { key: currentUserId } },
     })
 
@@ -97,7 +106,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
       } catch {
         // Silent fail
       }
-    }, 60000)
+    }, 300000)
 
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)

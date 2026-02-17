@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
@@ -17,6 +17,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
+import { trackInteraction } from '@/lib/tracking'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -296,6 +297,7 @@ export default function FollowingPage() {
   }, [items])
 
   const handleItemClick = (item: FollowItem) => {
+    trackInteraction({ action: 'click', target_type: item.type, target_id: item.id })
     if (item.type === 'trader') {
       router.push(`/trader/${encodeURIComponent(item.handle)}?source=${item.source || 'binance'}`)
     } else {

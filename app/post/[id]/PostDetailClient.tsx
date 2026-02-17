@@ -12,6 +12,7 @@ import { generatePostArticleSchema, generateBreadcrumbSchema, combineSchemas } f
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import ShareButton from '@/app/components/common/ShareButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+import { trackInteraction } from '@/lib/tracking'
 
 interface PostData {
   id: string
@@ -29,6 +30,10 @@ export default function PostDetailClient({ postId }: { postId: string }) {
   const { email } = useAuthSession()
   const { language, t } = useLanguage()
   const [postData, setPostData] = useState<PostData | null>(null)
+
+  useEffect(() => {
+    trackInteraction({ action: 'view', target_type: 'post', target_id: postId })
+  }, [postId])
 
   useEffect(() => {
     supabase
