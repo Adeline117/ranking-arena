@@ -297,7 +297,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         }
 
         if (groupErr) {
-          setError(groupErr.message)
+          const isInvalidId = groupErr.code === '22P02' || groupErr.message?.includes('invalid input syntax')
+          setError(isInvalidId ? t('groupNotFound') : t('loadFailed'))
           setLoading(false)
           return
         }
