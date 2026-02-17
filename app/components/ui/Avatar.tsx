@@ -91,7 +91,7 @@ export default function Avatar({
             width={size}
             height={size}
             sizes={`${size}px`}
-            unoptimized={finalAvatarUrl.includes('bgstatic.com') || finalAvatarUrl.endsWith('.svg')}
+            unoptimized={finalAvatarUrl.includes('bgstatic.com') || finalAvatarUrl.includes('static-global.com') || finalAvatarUrl.endsWith('.svg')}
             style={{
               width: '100%',
               height: '100%',
