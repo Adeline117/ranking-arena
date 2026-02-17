@@ -27,7 +27,7 @@ export default function UserStreaks({ userId }: Props) {
         .from('user_streaks')
         .select('current_streak, longest_streak, total_active_days, last_active_date')
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
 
       if (error || !row) {
         setData(null)
