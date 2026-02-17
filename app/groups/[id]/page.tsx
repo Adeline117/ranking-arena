@@ -22,6 +22,7 @@ import { useGroupPosts, Post } from './hooks/useGroupPosts'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
+import { trackInteraction } from '@/lib/tracking'
 
 interface Group {
   id: string
@@ -86,6 +87,12 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setGroupId(String((params as { id: string })?.id ?? ''))
     }
   }, [params])
+
+  useEffect(() => {
+    if (groupId && groupId !== 'loading') {
+      trackInteraction({ action: 'view', target_type: 'group', target_id: groupId })
+    }
+  }, [groupId])
 
   const { language, t } = useLanguage()
   const { showToast } = useToast()
@@ -447,31 +454,26 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     if (loadingMembers || !groupId) return
     setLoadingMembers(true)
     try {
+      // Single JOIN query: group_members + user_profiles
       const { data: membersData } = await supabase
         .from('group_members')
-        .select('user_id, role, joined_at')
+        .select('user_id, role, joined_at, user_profiles(handle, avatar_url)')
         .eq('group_id', groupId)
         .order('role', { ascending: true })
         .order('joined_at', { ascending: true })
 
       if (membersData && membersData.length > 0) {
-        const userIds = membersData.map(m => m.user_id)
-        const { data: profilesData } = await supabase
-          .from('user_profiles')
-          .select('id, handle, avatar_url')
-          .in('id', userIds)
-
-        const profileMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
-        profilesData?.forEach(p => {
-          profileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
-        })
-
         const sortedMembers = membersData
-          .map(m => ({
-            ...m,
-            handle: profileMap.get(m.user_id)?.handle,
-            avatar_url: profileMap.get(m.user_id)?.avatar_url,
-          }))
+          .map(m => {
+            const profile = Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles
+            return {
+              user_id: m.user_id,
+              role: m.role,
+              joined_at: m.joined_at,
+              handle: (profile as { handle?: string | null } | null)?.handle,
+              avatar_url: (profile as { avatar_url?: string | null } | null)?.avatar_url,
+            }
+          })
           .sort((a, b) => {
             const roleOrder: Record<string, number> = { owner: 0, admin: 1, member: 2 }
             return (roleOrder[a.role] || 2) - (roleOrder[b.role] || 2)
