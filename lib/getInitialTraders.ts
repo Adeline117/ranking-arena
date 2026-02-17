@@ -35,10 +35,10 @@ export async function getInitialTraders(
   timeRange: Period = '90D',
   limit: number = 50
 ): Promise<{ traders: InitialTrader[]; lastUpdated: string | null }> {
-  // During Vercel build, Supabase queries can hang (iad1 → Supabase timeout).
-  // Return empty — ISR (revalidate=60) will populate on the first real request.
+  // During Vercel build, Supabase queries hang (iad1 build server → timeout).
+  // Skip DB call entirely — ISR (revalidate=60) fills on first real request.
+  // NEXT_PHASE is set by Next.js build process before static page generation.
   if (process.env.NEXT_PHASE === 'phase-production-build') {
-    logger.info('[getInitialTraders] Build phase — skipping DB call, ISR will fill')
     return { traders: [], lastUpdated: null }
   }
 
