@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
@@ -126,7 +126,7 @@ export default function BookDetailClient({
   const { isPremium } = usePremium()
 
   // Load session and user-specific data client-side
-  useState(() => {
+  useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       if (data.session?.access_token) {
@@ -143,7 +143,8 @@ export default function BookDetailClient({
           .catch(() => {})
       }
     })
-  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const getAuthHeaders = useCallback((): Record<string, string> => {
     if (!session?.access_token) return {}
@@ -163,7 +164,8 @@ export default function BookDetailClient({
       .catch(() => {})
   }, [id])
 
-  useState(() => { fetchReviews(1) })
+  // Fetch reviews on mount and when page changes
+  useEffect(() => { fetchReviews(reviewPage) }, [fetchReviews, reviewPage])
 
   const [showRatingPrompt, setShowRatingPrompt] = useState(false)
   const [shortReview, setShortReview] = useState('')

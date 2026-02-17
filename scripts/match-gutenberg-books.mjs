@@ -10,7 +10,7 @@ import path from 'path'
 import { pipeline } from 'stream/promises'
 
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || 'REDACTED_SUPABASE_JWT'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 const BATCH_SIZE = 50

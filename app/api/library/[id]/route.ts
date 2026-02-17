@@ -59,11 +59,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    // Increment view count
-    await supabase
-      .from('library_items')
-      .update({ view_count: (item.view_count || 0) + 1 })
-      .eq('id', id)
+    // Increment view count atomically (fire-and-forget)
+    Promise.resolve(supabase.rpc('increment_view_count', { item_id: id })).catch(() => {
+      // Fallback to non-atomic if RPC doesn't exist
+      supabase
+        .from('library_items')
+        .update({ view_count: (item.view_count || 0) + 1 })
+        .eq('id', id)
+    })
 
     return NextResponse.json({
       item,
