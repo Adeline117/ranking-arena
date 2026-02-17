@@ -1,8 +1,21 @@
 'use client'
 
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
+
+/** Returns true once we know the viewport is ≥ breakpoint px. SSR returns false. */
+function useIsDesktop(breakpoint = 1024): boolean {
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${breakpoint}px)`)
+    setIsDesktop(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [breakpoint])
+  return isDesktop
+}
 
 interface ThreeColumnLayoutProps {
   leftSidebar?: ReactNode
@@ -25,12 +38,14 @@ export default function ThreeColumnLayout({
 }: ThreeColumnLayoutProps) {
   const { t } = useLanguage()
   const [widgetsExpanded, setWidgetsExpanded] = useState(false)
+  const isDesktop = useIsDesktop(1024)
+  const isTablet = useIsDesktop(768)
   const hasSidebarContent = !!(leftSidebar || rightSidebar)
 
   return (
     <div className="three-col-layout">
-      {/* Left sidebar — hidden on mobile */}
-      {leftSidebar && (
+      {/* Left sidebar — only mount on desktop (≥1024px) to save mobile JS/network */}
+      {leftSidebar && isDesktop && (
         <aside className="three-col-left hide-tablet">
           {leftSidebar}
         </aside>
@@ -40,8 +55,8 @@ export default function ThreeColumnLayout({
       <main className="three-col-center" style={{ minWidth: 0 }}>
         {children}
 
-        {/* Mobile: collapsible sidebar widgets */}
-        {hasSidebarContent && (
+        {/* Mobile: collapsible sidebar widgets — only show button on mobile */}
+        {hasSidebarContent && !isDesktop && (
           <div className="mobile-sidebar-widgets">
             <button
               onClick={() => setWidgetsExpanded(!widgetsExpanded)}
@@ -123,8 +138,8 @@ export default function ThreeColumnLayout({
         )}
       </main>
 
-      {/* Right sidebar — hidden on mobile */}
-      {rightSidebar && (
+      {/* Right sidebar — only mount on tablet+ (≥768px) to save mobile JS/network */}
+      {rightSidebar && isTablet && (
         <aside className="three-col-right hide-mobile">
           {rightSidebar}
         </aside>
