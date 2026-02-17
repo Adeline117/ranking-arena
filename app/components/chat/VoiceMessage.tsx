@@ -92,6 +92,7 @@ export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
       {/* Play/Pause button */}
       <button
         onClick={togglePlay}
+            aria-label={playing ? "Pause" : "Play"}
         style={{
           width: 32,
           height: 32,

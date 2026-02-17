@@ -167,6 +167,7 @@ export default function ChatSettingsDrawer({
       {/* Overlay */}
       <Box
         onClick={onClose}
+            aria-label="Close settings"
         style={{
           position: 'fixed',
           inset: 0,

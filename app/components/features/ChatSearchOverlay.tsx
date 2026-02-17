@@ -196,6 +196,7 @@ export default function ChatSearchOverlay({
       >
         <button
           onClick={onClose}
+            aria-label="Close search"
           style={{
             width: 36,
             height: 36,

@@ -579,6 +579,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           />
           <button
             onClick={handleSend}
+            aria-label="Send message"
             disabled={(!newMessage.trim() && !pendingAttachment) || sending}
             style={{
               width: 42, height: 42, borderRadius: '50%', border: 'none',

@@ -281,6 +281,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
           </Box>
           <button
             onClick={handleCopyLink}
+            aria-label="Copy link"
             style={{
               display: 'flex',
               alignItems: 'center',

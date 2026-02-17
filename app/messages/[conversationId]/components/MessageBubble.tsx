@@ -246,6 +246,7 @@ export default function MessageBubble({
         >
           <button
             onClick={handleDelete}
+            aria-label="Delete message"
             style={{
               display: 'flex',
               alignItems: 'center',

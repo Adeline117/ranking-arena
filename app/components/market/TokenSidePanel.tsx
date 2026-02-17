@@ -207,6 +207,7 @@ export default function TokenSidePanel({ token, onClose }: {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
+            aria-label="Close panel"
             style={{
               position: 'fixed',
               inset: 0,
