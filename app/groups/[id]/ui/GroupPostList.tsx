@@ -109,30 +109,8 @@ export default function GroupPostList(props: GroupPostListProps) {
   // Report modal state
   const [reportingPost, setReportingPost] = useState<{ id: string; title: string } | null>(null)
 
-  // Non-member banner (show posts read-only below)
-  const nonMemberBanner = !isMember ? (
-    <Box style={{
-      padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-      textAlign: 'center',
-      background: tokens.colors.bg.secondary,
-      borderRadius: tokens.radius.xl,
-      border: `1px solid ${tokens.colors.border.primary}`,
-      marginBottom: tokens.spacing[4],
-    }}>
-      <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-        {t('joinToViewPostsDesc')}
-      </Text>
-      {userId ? (
-        <Button variant="primary" size="sm" onClick={onJoin} disabled={joining}>
-          {joining ? t('joiningGroup') : t('joinGroup')}
-        </Button>
-      ) : (
-        <Link href="/login">
-          <Button variant="primary" size="sm">{t('loginToJoin')}</Button>
-        </Link>
-      )}
-    </Box>
-  ) : null;
+  // Non-member banner removed per Adeline's request
+  const nonMemberBanner = null;
 
   return (
     <Box style={{ position: 'relative' }}>
