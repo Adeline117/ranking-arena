@@ -13,7 +13,7 @@ export const privyConfig: Record<string, unknown> = {
   appearance: {
     theme: 'dark',
     accentColor: '#7C3AED',
-    logo: '/logo.svg',
+    logo: 'https://www.arenafi.org/logo-symbol.svg',
   },
   embeddedWallets: {
     createOnLogin: 'users-without-wallets',
