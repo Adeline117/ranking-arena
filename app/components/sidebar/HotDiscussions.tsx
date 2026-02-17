@@ -217,19 +217,25 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   gap: 10,
                   fontSize: tokens.typography.fontSize.xs,
                   color: 'var(--color-text-tertiary)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
                 }}>
                   {post.author_handle && (
                     <span style={{
                       fontWeight: tokens.typography.fontWeight.medium,
                       color: 'var(--color-text-secondary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      minWidth: 0,
+                      flexShrink: 1,
                     }}>
                       {post.author_handle}
                     </span>
                   )}
-                  <span>
+                  <span style={{ flexShrink: 0 }}>
                     {post.comment_count} {t('comments')}
                   </span>
-                  <span style={{ marginLeft: 'auto', opacity: 0.7 }}>
+                  <span style={{ marginLeft: 'auto', opacity: 0.7, flexShrink: 0 }}>
                     {timeAgo(post.created_at)}
                   </span>
                 </div>
