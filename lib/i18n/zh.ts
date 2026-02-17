@@ -2562,6 +2562,9 @@ const zh = {
     leverage: '杠杆倍数',
     currentStatus: '当前状态',
     unrealizedPnl: '未实现盈亏',
+    totalEquity: '总权益',
+    openPositions: '当前持仓',
+    noOpenPositions: '暂无持仓',
 
     // 通用 UI 文本（减少硬编码）
     viewLiveLeaderboard: '查看实时排行榜',

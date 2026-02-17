@@ -2561,6 +2561,9 @@ const en = {
     leverage: 'Leverage',
     currentStatus: 'Current Status',
     unrealizedPnl: 'Unrealized PnL',
+    totalEquity: 'Total Equity',
+    openPositions: 'Open Positions',
+    noOpenPositions: 'No open positions',
 
     // Common UI text (reduce hardcoding)
     viewLiveLeaderboard: 'View Live Leaderboard',
