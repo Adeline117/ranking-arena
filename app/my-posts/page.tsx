@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -39,7 +39,11 @@ export default function MyPostsPage() {
   const [userHandle, setUserHandle] = useState<string | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const PAGE_SIZE = 20
+  const offsetRef = useRef(0)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -68,6 +72,62 @@ export default function MyPostsPage() {
     }
   }
 
+  const fetchPosts = useCallback(async (offset: number, append: boolean) => {
+    if (!userId) return
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
+
+      const params = new URLSearchParams({
+        author_id: userId,
+        sort_by: 'created_at',
+        sort_order: 'desc',
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+      })
+      const res = await fetch(`/api/posts?${params.toString()}`, { headers })
+      const data = await res.json()
+
+      if (!res.ok) {
+        logger.error('Error fetching posts:', data.error)
+        if (!append) setPosts([])
+        showToast(t('loadPostsFailed'), 'error')
+        return
+      }
+
+      const loadedPosts = (data.data?.posts || []).map((p: Record<string, unknown>) => ({
+        id: p.id,
+        title: p.title || '',
+        content: p.content || null,
+        created_at: p.created_at as string,
+        like_count: (p.like_count as number) || 0,
+        comment_count: (p.comment_count as number) || 0,
+        group_id: p.group_id || null,
+        group: p.group_name ? { name: p.group_name as string, name_en: p.group_name_en as string | null } : null,
+      })) as Post[]
+
+      if (append) {
+        setPosts(prev => [...prev, ...loadedPosts])
+      } else {
+        setPosts(loadedPosts)
+      }
+      offsetRef.current = offset + loadedPosts.length
+      setHasMore(loadedPosts.length >= PAGE_SIZE)
+    } catch (error) {
+      logger.error('Error loading posts:', error)
+      if (!append) setPosts([])
+      showToast(t('loadPostsFailed'), 'error')
+    }
+  }, [userId, showToast, t])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    await fetchPosts(offsetRef.current, true)
+    setLoadingMore(false)
+  }, [loadingMore, hasMore, fetchPosts])
+
   useEffect(() => {
     if (!userId) {
       setLoading(false)
@@ -76,49 +136,13 @@ export default function MyPostsPage() {
 
     const load = async () => {
       setLoading(true)
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
-
-        const params = new URLSearchParams({
-          author_id: userId!,
-          sort_by: 'created_at',
-          sort_order: 'desc',
-          limit: '100',
-        })
-        const res = await fetch(`/api/posts?${params.toString()}`, { headers })
-        const data = await res.json()
-
-        if (!res.ok) {
-          logger.error('Error fetching posts:', data.error)
-          setPosts([])
-          showToast(t('loadPostsFailed'), 'error')
-          return
-        }
-
-        const loadedPosts = data.data?.posts || []
-        setPosts(loadedPosts.map((p: Record<string, unknown>) => ({
-          id: p.id,
-          title: p.title || '',
-          content: p.content || null,
-          created_at: p.created_at as string,
-          like_count: (p.like_count as number) || 0,
-          comment_count: (p.comment_count as number) || 0,
-          group_id: p.group_id || null,
-          group: p.group_name ? { name: p.group_name as string, name_en: p.group_name_en as string | null } : null,
-        })))
-      } catch (error) {
-        logger.error('Error loading posts:', error)
-        setPosts([])
-        showToast(t('loadPostsFailed'), 'error')
-      } finally {
-        setLoading(false)
-      }
+      offsetRef.current = 0
+      await fetchPosts(0, false)
+      setLoading(false)
     }
 
     load()
-  }, [userId, showToast, t])
+  }, [userId, fetchPosts])
 
   const handleDelete = async (postId: string) => {
     const confirmed = await showDangerConfirm(
@@ -308,6 +332,20 @@ export default function MyPostsPage() {
                 </Box>
               </Box>
             ))}
+            {hasMore && (
+              <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore
+                    ? (language === 'zh' ? '加载中...' : 'Loading...')
+                    : (language === 'zh' ? '加载更多' : 'Load More')}
+                </Button>
+              </Box>
+            )}
           </Box>
         )}
       </Box>

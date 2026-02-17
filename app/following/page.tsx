@@ -149,10 +149,14 @@ export default function FollowingPage() {
   const { authChecked, email, userId, getAuthHeadersAsync } = useAuthSession()
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('recent')
   const [unfollowingId, setUnfollowingId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [platformFilter, setPlatformFilter] = useState<string>('all')
+  const PAGE_SIZE = 50
+  const offsetRef = useRef(0)
 
   // Inline unfollow with optimistic UI
   const handleUnfollow = useCallback(async (item: FollowItem, e: React.MouseEvent) => {
@@ -193,6 +197,41 @@ export default function FollowingPage() {
 
   // userId now comes from useAuthSession directly
 
+  const fetchFollowing = useCallback(async (offset: number, append: boolean) => {
+    if (!userId) return
+    try {
+      const response = await fetch(`/api/following?userId=${userId}&limit=${PAGE_SIZE}&offset=${offset}`)
+      const data = await response.json()
+      
+      if (!response.ok) {
+        logger.error('Error fetching following:', data.error)
+        if (!append) setItems([])
+        showToast(t('loadFollowingFailed'), 'error')
+        return
+      }
+
+      const newItems: FollowItem[] = data.items || []
+      if (append) {
+        setItems(prev => [...prev, ...newItems])
+      } else {
+        setItems(newItems)
+      }
+      offsetRef.current = offset + newItems.length
+      setHasMore(data.hasMore === true)
+    } catch (error) {
+      logger.error('Error loading following:', error)
+      if (!append) setItems([])
+      showToast(t('loadFollowingFailed'), 'error')
+    }
+  }, [userId, showToast, t])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    await fetchFollowing(offsetRef.current, true)
+    setLoadingMore(false)
+  }, [loadingMore, hasMore, fetchFollowing])
+
   useEffect(() => {
     if (!userId) {
       setLoading(false)
@@ -201,25 +240,9 @@ export default function FollowingPage() {
 
     const load = async () => {
       setLoading(true)
-      try {
-        const response = await fetch(`/api/following?userId=${userId}`)
-        const data = await response.json()
-        
-        if (!response.ok) {
-          logger.error('Error fetching following:', data.error)
-          setItems([])
-          showToast(t('loadFollowingFailed'), 'error')
-          return
-        }
-
-        setItems(data.items || [])
-      } catch (error) {
-        logger.error('Error loading following:', error)
-        setItems([])
-        showToast(t('loadFollowingFailed'), 'error')
-      } finally {
-        setLoading(false)
-      }
+      offsetRef.current = 0
+      await fetchFollowing(0, false)
+      setLoading(false)
     }
 
     load()
@@ -679,6 +702,30 @@ export default function FollowingPage() {
                 </Box>
               ))}
             </Box>
+
+            {/* ============= 加载更多 ============= */}
+            {hasMore && (
+              <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  style={{
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                    borderRadius: tokens.radius.lg,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.secondary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    cursor: loadingMore ? 'not-allowed' : 'pointer',
+                    opacity: loadingMore ? 0.6 : 1,
+                  }}
+                >
+                  {loadingMore
+                    ? (language === 'zh' ? '加载中...' : 'Loading...')
+                    : (language === 'zh' ? '加载更多' : 'Load More')}
+                </button>
+              </Box>
+            )}
 
             {/* ============= 发现更多交易员 ============= */}
             <Box style={{
