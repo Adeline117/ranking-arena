@@ -39,8 +39,7 @@ const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTrad
 const ActivityHeatmap = dynamic(() => import('@/app/components/profile/ActivityHeatmap'), { ssr: false })
 const UserStreaks = dynamic(() => import('@/app/components/profile/UserStreaks'), { ssr: false })
 const UserActivityFeed = dynamic(() => import('@/app/components/profile/UserActivityFeed'), { ssr: false })
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ProfileTradingCard = dynamic(() => import('@/app/components/profile/ProfileTradingCard'), { ssr: false })
+// ProfileTradingCard removed — unused (was placeholder for future feature)
 const ProfileBookshelf = dynamic(() => import('@/app/components/profile/ProfileBookshelf'), { ssr: false })
 const ProfileActivityFeed = dynamic(() => import('@/app/components/profile/ProfileActivityFeed'), { ssr: false })
 

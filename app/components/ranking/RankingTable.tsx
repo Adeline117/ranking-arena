@@ -17,8 +17,7 @@ const _ScoreBreakdownTooltip = dynamic(
   () => import('./ScoreBreakdownTooltip').then(m => ({ default: m.ScoreBreakdownTooltip })),
   { ssr: false }
 )
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const RankingSearch = dynamic(() => import('./RankingSearch'), { ssr: false })
+// RankingSearch removed — unused in this file (used inline via TraderCard/TraderRow)
 
 // Extracted components — keep TraderRow/TraderCard static (LCP-critical)
 import { TraderRow } from './TraderRow'
