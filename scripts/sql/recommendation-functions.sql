@@ -105,31 +105,31 @@ RETURNS TABLE(
 BEGIN
   RETURN QUERY
   WITH my_groups AS (
-    SELECT gm.group_id FROM group_members gm WHERE gm.user_id = p_user_id
+    SELECT gm.group_id AS gid FROM group_members gm WHERE gm.user_id = p_user_id
   ),
   follow_based AS (
-    SELECT gm.group_id, COUNT(*) * 10 as score, 'followed_users_joined' as reason
+    SELECT gm.group_id AS gid, COUNT(*) * 10 as score, 'followed_users_joined' as reason
     FROM group_members gm
     JOIN user_follows uf ON gm.user_id = uf.following_id
     WHERE uf.follower_id = p_user_id
-      AND gm.group_id NOT IN (SELECT group_id FROM my_groups)
+      AND gm.group_id NOT IN (SELECT mg.gid FROM my_groups mg)
     GROUP BY gm.group_id
   ),
   overlap_based AS (
-    SELECT gm2.group_id, COUNT(DISTINCT gm2.user_id) * 5 as score, 'members_overlap' as reason
+    SELECT gm2.group_id AS gid, COUNT(DISTINCT gm2.user_id) * 5 as score, 'members_overlap' as reason
     FROM group_members gm1
     JOIN group_members gm2 ON gm1.user_id = gm2.user_id
-    WHERE gm1.group_id IN (SELECT group_id FROM my_groups)
-      AND gm2.group_id NOT IN (SELECT group_id FROM my_groups)
+    WHERE gm1.group_id IN (SELECT mg.gid FROM my_groups mg)
+      AND gm2.group_id NOT IN (SELECT mg.gid FROM my_groups mg)
       AND gm1.user_id != p_user_id
     GROUP BY gm2.group_id
   ),
   combined AS (
-    SELECT COALESCE(f.group_id, o.group_id) as gid,
+    SELECT COALESCE(f.gid, o.gid) as gid,
            COALESCE(f.score, 0) + COALESCE(o.score, 0) as total_score,
            COALESCE(f.reason, o.reason) as top_reason
     FROM follow_based f
-    FULL OUTER JOIN overlap_based o ON f.group_id = o.group_id
+    FULL OUTER JOIN overlap_based o ON f.gid = o.gid
   )
   SELECT c.gid, g.name, c.total_score, c.top_reason
   FROM combined c
