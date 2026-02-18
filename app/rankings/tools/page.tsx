@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -90,6 +91,11 @@ function toolToEntry(tool: Tool, isZh: boolean): LeaderboardEntry {
     logoUrl: tool.logo_url,
     href: tool.website || tool.github_url,
   }
+}
+
+export const metadata: Metadata = {
+  title: '工具排行 - Arena',
+  description: '最佳加密交易工具和服务排行，助你提升交易效率。',
 }
 
 export default function ToolsPage() {

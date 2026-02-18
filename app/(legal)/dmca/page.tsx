@@ -1,9 +1,15 @@
+import type { Metadata } from 'next'
 'use client'
 
 import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import ContactSupportButton from '@/app/components/ui/ContactSupportButton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+
+export const metadata: Metadata = {
+  title: 'DMCA - Arena',
+  description: 'Arena DMCA 版权投诉流程。',
+}
 
 export default function DmcaPage() {
   const { t } = useLanguage()

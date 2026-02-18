@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import { Suspense } from 'react'
@@ -6,6 +7,11 @@ import TopNav from '@/app/components/layout/TopNav'
 import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import GroupsFeedPage from '@/app/components/groups/GroupsFeedPage'
+
+export const metadata: Metadata = {
+  title: '小组 - Arena',
+  description: '浏览和加入 Arena 交易小组，与志同道合的交易者交流策略。',
+}
 
 export default function GroupsPage() {
   return (

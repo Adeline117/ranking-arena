@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import React, { useEffect, useState, useCallback } from 'react'
@@ -38,6 +39,11 @@ interface Snapshot {
   total_pnl: number
   total_pnl_pct: number
   snapshot_at: string
+}
+
+export const metadata: Metadata = {
+  title: '资产组合 - Arena',
+  description: '查看和管理你的加密资产组合。',
 }
 
 export default function PortfolioPage() {

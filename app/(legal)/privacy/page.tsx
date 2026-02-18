@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import React from 'react'
@@ -5,6 +6,11 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import ContactSupportButton from '@/app/components/ui/ContactSupportButton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+
+export const metadata: Metadata = {
+  title: '隐私政策 - Arena',
+  description: 'Arena 隐私政策，了解我们如何保护你的个人信息。',
+}
 
 export default function PrivacyPolicyPage() {
   const { t } = useLanguage()

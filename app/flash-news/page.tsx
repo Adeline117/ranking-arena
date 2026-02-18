@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
@@ -80,6 +81,11 @@ const CATEGORY_DISPLAY_MAP: Record<string, string> = {
   defi: 'defi',
   macro: 'macro',
   exchange: 'exchange',
+}
+
+export const metadata: Metadata = {
+  title: '快讯 - Arena',
+  description: '实时加密货币与金融市场快讯，来自全球顶级媒体。',
 }
 
 export default function FlashNewsPage() {
