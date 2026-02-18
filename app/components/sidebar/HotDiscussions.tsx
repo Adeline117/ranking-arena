@@ -18,6 +18,7 @@ type HotPost = {
   author_handle: string | null
   author_avatar_url: string | null
   created_at: string
+  translated?: boolean
 }
 
 function HotTag({ score, isZh }: { score: number; isZh: boolean }) {
@@ -82,6 +83,7 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
     created_at: p.created_at,
     author_handle: p.author_handle || null,
     author_avatar_url: p.author_avatar_url || null,
+    translated: false,
   }))
 
   // If viewing in non-source language, fetch translations from cache
@@ -106,16 +108,20 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
     // Apply cached translations
     const needsTranslation: Array<{ id: string; text: string; contentType: string; contentId: string }> = []
     for (const p of posts) {
+      let wasTranslated = false
       if (titleMap.has(p.id)) {
         p.title = titleMap.get(p.id)!
+        wasTranslated = true
       } else if (p.title) {
         needsTranslation.push({ id: `t-${p.id}`, text: p.title, contentType: 'post_title', contentId: p.id })
       }
       if (contentMap.has(p.id)) {
         p.content = contentMap.get(p.id)!
+        wasTranslated = true
       } else if (p.content) {
         needsTranslation.push({ id: `c-${p.id}`, text: p.content, contentType: 'post_content', contentId: p.id })
       }
+      if (wasTranslated) p.translated = true
     }
 
     // Fire-and-forget: translate uncached posts in background
@@ -235,6 +241,19 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   }}>
                     {getTitle(post)}
                   </span>
+                  {post.translated && (
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: 'var(--color-accent-brand)',
+                      background: 'var(--color-accent-brand-08, rgba(139,92,246,0.08))',
+                      border: '1px solid var(--color-accent-brand-20, rgba(139,92,246,0.2))',
+                      padding: '1px 5px',
+                      borderRadius: tokens.radius.full,
+                      lineHeight: 1.6,
+                      flexShrink: 0,
+                    }}>译</span>
+                  )}
                   <HotTag score={post.hot_score} isZh={isZh} />
                 </div>
 
