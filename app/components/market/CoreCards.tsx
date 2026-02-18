@@ -233,15 +233,15 @@ export default function CoreCards() {
           if (!alive) return
           fetch('/api/market/spot', { signal: controller.signal })
             .then(r => r.json())
-            .then((spots: Array<{ symbol: string; current_price: number; price_change_percentage_24h: number }>) => {
+            .then((spots: Array<{ symbol: string; price: number; change24h: number }>) => {
               if (!alive || !Array.isArray(spots)) return
               const rows: CoinRow[] = spots
-                .filter(s => s.price_change_percentage_24h != null)
+                .filter(s => s.change24h != null && s.price != null)
                 .map(s => ({
                   symbol: `${s.symbol.toUpperCase()}-USD`,
-                  price: s.current_price?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '0',
-                  changePct: `${s.price_change_percentage_24h >= 0 ? '+' : ''}${s.price_change_percentage_24h.toFixed(2)}%`,
-                  direction: s.price_change_percentage_24h >= 0 ? 'up' as const : 'down' as const,
+                  price: s.price?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '0',
+                  changePct: `${s.change24h >= 0 ? '+' : ''}${s.change24h.toFixed(2)}%`,
+                  direction: s.change24h >= 0 ? 'up' as const : 'down' as const,
                 }))
               const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
               setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
