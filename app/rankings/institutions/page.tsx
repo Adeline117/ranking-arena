@@ -120,16 +120,6 @@ export default function InstitutionsPage() {
     async function fetchLeaderboards() {
       setLeaderboardLoading(true)
       try {
-        const fetchTop = async (cat: string) => {
-          const { data } = await supabase
-            .from('institutions')
-            .select('id, name, name_zh, category, logo_url, website, description, description_zh, avg_rating, rating_count, tags')
-            .eq('is_active', true)
-            .eq('category', cat)
-            .order('avg_rating', { ascending: false, nullsFirst: false })
-            .limit(10)
-          return data || []
-        }
         const fetchTopMulti = async (cats: string[]) => {
           const { data } = await supabase
             .from('institutions')

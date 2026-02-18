@@ -1,6 +1,5 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import dynamic from 'next/dynamic'
 
@@ -17,7 +16,7 @@ interface SocialLoginProps {
   t: (key: string) => string
 }
 
-export default function SocialLogin({ lang, searchParams, isAddAccount, onError, onWalletSuccess, t }: SocialLoginProps) {
+export default function SocialLogin({ lang, searchParams, isAddAccount, onError, onWalletSuccess: _onWalletSuccess, t: _t }: SocialLoginProps) {
   const getOAuthHandler = (provider: 'google' | 'twitter' | 'discord', providerLabel: string) => async () => {
     onError('')
     const returnUrl = searchParams.get('returnUrl') || searchParams.get('redirect') || ''
@@ -142,7 +141,7 @@ export default function SocialLogin({ lang, searchParams, isAddAccount, onError,
   )
 }
 
-export function WalletLogin({ onSuccess, t }: { onSuccess: (result: { handle?: string | null }) => void; t: (key: string) => string }) {
+export function WalletLogin({ onSuccess, t: _t }: { onSuccess: (result: { handle?: string | null }) => void; t: (key: string) => string }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <LazyWeb3Boundary>

@@ -6,11 +6,11 @@
  * Does NOT replace error messages — Sentry gets original errors.
  */
 
-// Global Toast function reference
-let globalToast: ((message: string, type?: 'success' | 'error' | 'warning' | 'info') => void) | null = null
+// Global Toast function reference (kept for backward compat)
+type ToastFn = ((message: string, type?: 'success' | 'error' | 'warning' | 'info') => void) | null
 
-export function setGlobalErrorHandler(toastFn: typeof globalToast) {
-  globalToast = toastFn
+export function setGlobalErrorHandler(_toastFn: ToastFn) {
+  // No-op — toast handling moved to individual components
 }
 
 // Removed: interceptFetch — was replacing all fetch error messages with friendly text,
@@ -73,7 +73,7 @@ export function interceptGlobalErrors() {
 /**
  * Initialize error interceptors
  */
-export function initializeErrorInterceptors(toastFn?: typeof globalToast) {
+export function initializeErrorInterceptors(toastFn?: ToastFn) {
   if (toastFn) {
     setGlobalErrorHandler(toastFn)
   }
@@ -87,7 +87,7 @@ export function initializeErrorInterceptors(toastFn?: typeof globalToast) {
 }
 
 export function cleanupErrorInterceptors() {
-  globalToast = null
+  // No-op — kept for backward compat
 }
 
 // Keep exports for backward compat

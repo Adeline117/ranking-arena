@@ -24,7 +24,6 @@ import { validateHandle } from './validation'
 import { useActiveSection } from './hooks/useActiveSection'
 
 import {
-  SectionId,
   SECTION_IDS,
   SECTION_ICONS,
   SECTION_KEYS,

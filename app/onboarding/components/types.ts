@@ -1,5 +1,3 @@
-import type { Language } from '@/lib/i18n'
-
 export interface OnboardingTheme {
   isDark: boolean
   cardBg: string

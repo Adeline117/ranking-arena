@@ -121,16 +121,6 @@ export default function ToolsPage() {
     async function fetchLeaderboards() {
       setLeaderboardLoading(true)
       try {
-        const fetchTop = async (cat: string) => {
-          const { data } = await supabase
-            .from('tools')
-            .select('id, name, name_zh, category, logo_url, website, github_url, description, description_zh, pricing, avg_rating, rating_count, tags')
-            .eq('is_active', true)
-            .eq('category', cat)
-            .order('avg_rating', { ascending: false, nullsFirst: false })
-            .limit(10)
-          return data || []
-        }
         const fetchScripts = async () => {
           const { data } = await supabase
             .from('tools')

@@ -13,7 +13,6 @@ import {
 } from '@/lib/utils/arena-score'
 import { SOURCE_TYPE_MAP, PRIORITY_SOURCES } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
-import { getCachedLeaderboard } from '@/lib/cache/leaderboard-cache'
 
 // Minimal trader type for initial render
 export interface InitialTrader {

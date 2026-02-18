@@ -23,7 +23,7 @@ const PLATFORMS = [
 ]
 
 export default function TraderAuthorizePage() {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const router = useRouter()
 
   const [user, setUser] = useState<any>(null)

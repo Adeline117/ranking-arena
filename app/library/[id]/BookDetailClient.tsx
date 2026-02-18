@@ -18,20 +18,7 @@ import BookRatingOverview from './components/BookRatingOverview'
 import BookReviews from './components/BookReviews'
 import SimilarBooks from './components/SimilarBooks'
 
-function formatRelativeTime(dateStr: string, isZh: boolean): string {
-  const now = Date.now()
-  const diff = now - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return isZh ? '刚刚' : 'just now'
-  if (mins < 60) return isZh ? `${mins}分钟前` : `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return isZh ? `${hours}小时前` : `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return isZh ? `${days}天前` : `${days}d ago`
-  const months = Math.floor(days / 30)
-  if (months < 12) return isZh ? `${months}个月前` : `${months}mo ago`
-  return new Date(dateStr).toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-}
+// formatRelativeTime removed - unused
 
 export type BookDetail = {
   id: string
@@ -246,7 +233,7 @@ export default function BookDetailClient({
   const avg = overview?.average || 0
   const count = overview?.count || 0
   const dist = overview?.distribution || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
-  const maxDist = Math.max(...Object.values(dist), 1)
+  const _maxDist = Math.max(...Object.values(dist), 1)
   const hasReadableContent = !!book.file_key || !!book.pdf_url || !!book.epub_url || (!!book.content_url && (book.content_url.endsWith('.pdf') || book.content_url.includes('cdn.arenafi.org/papers/')))
   const descLong = (book.description?.length || 0) > 300
 

@@ -21,7 +21,7 @@ export default function OTPVerification({
   setCode,
   countdown,
   loading,
-  sendingCode,
+  sendingCode: _sendingCode,
   email,
   onVerify,
   onResend,
