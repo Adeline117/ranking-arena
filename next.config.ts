@@ -72,6 +72,15 @@ const nextConfig: NextConfig = {
       {
         pathname: '/api/avatar/**',
       },
+      {
+        pathname: '/stickers/**',
+      },
+      {
+        pathname: '/icons/**',
+      },
+      {
+        pathname: '/logo-symbol.png',
+      },
     ],
 
     // 远程图片域名白名单
