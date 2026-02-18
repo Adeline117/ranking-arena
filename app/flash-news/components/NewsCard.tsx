@@ -122,7 +122,7 @@ export default function NewsCard({
 
             {content && (
               <Text style={{
-                color: translatedContent[item.id] ? tokens.colors.accent?.translated || tokens.colors.text.secondary : tokens.colors.text.secondary,
+                color: translatedContent[item.id] ? 'var(--color-translated)' : tokens.colors.text.secondary,
                 lineHeight: '1.5', marginBottom: tokens.spacing[2], fontSize: '14px',
               }}>
                 {content}
@@ -130,8 +130,8 @@ export default function NewsCard({
                   <span style={{
                     fontSize: 10, fontWeight: 500, marginLeft: 6,
                     padding: '1px 6px', borderRadius: tokens.radius.sm,
-                    background: `${tokens.colors.accent?.translated || 'var(--color-score-low)'}15`,
-                    color: tokens.colors.accent?.translated || 'var(--color-score-low)',
+                    background: 'var(--color-translated-08)',
+                    color: 'var(--color-translated)',
                     verticalAlign: 'middle',
                   }}>
                     {language === 'zh' ? '自动翻译' : 'Auto-translated'}
