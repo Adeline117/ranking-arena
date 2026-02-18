@@ -135,7 +135,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
   const isZh = language === 'zh'
 
-  const targetLang = isZh ? undefined : 'en'
+  const targetLang = isZh ? 'zh' : 'en'
   const { data: posts = [], isLoading: loading } = useSWR(
     ['hot-discussions', limit, language],
     ([key, lim, _lang]) => fetchHotPosts(key, lim, targetLang),
