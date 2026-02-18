@@ -90,7 +90,7 @@ export default function GroupPostList(props: GroupPostListProps) {
   const { t } = useLanguage()
   const {
     groupId, language, userId, accessToken, userRole,
-    isMember, joining, onJoin,
+    isMember, joining: _joining, onJoin: _onJoin,
     sortedPosts, sortMode, setSortMode, viewMode, setViewMode,
     hasMorePosts, loadingMore, sentinelRef,
     editingPost, setEditingPost, editTitle, setEditTitle, editContent, setEditContent,

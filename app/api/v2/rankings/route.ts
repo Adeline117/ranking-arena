@@ -128,7 +128,6 @@ export async function GET(request: NextRequest) {
   query = query.range(offset, offset + limit - 1)
 
    
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: snapshots, count, error } = await query as { data: Record<string, any>[] | null; count: number | null; error: { message: string } | null }
 
   if (error) {

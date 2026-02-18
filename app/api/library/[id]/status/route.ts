@@ -74,8 +74,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           read: { zh: '读过', en: 'has read' },
         }
         const label = statusLabel[status] || statusLabel.want_to_read
-        const displayName = profile.nickname || profile.handle || 'User'
-
         const content = `${label.zh}《${bookTitle}》${item.author ? ` — ${item.author}` : ''}`
 
         // Check if already posted for this book+status combo (avoid duplicates)

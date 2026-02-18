@@ -61,7 +61,7 @@ function HotTag({ score, isZh }: { score: number; isZh: boolean }) {
   )
 }
 
-async function fetchHotPosts(_key: string, limit: number): Promise<HotPost[]> {
+async function fetchHotPosts(_key: string, limit: number, targetLang?: string): Promise<HotPost[]> {
   const { data } = await supabase
     .from('posts')
     .select('id, title, content, hot_score, like_count, comment_count, created_at, author_handle, author_avatar_url')
@@ -71,7 +71,8 @@ async function fetchHotPosts(_key: string, limit: number): Promise<HotPost[]> {
     .limit(limit)
 
   if (!data) return []
-  return data.map(p => ({
+
+  const posts = data.map(p => ({
     id: p.id,
     title: p.title,
     content: p.content,
@@ -82,15 +83,62 @@ async function fetchHotPosts(_key: string, limit: number): Promise<HotPost[]> {
     author_handle: p.author_handle || null,
     author_avatar_url: p.author_avatar_url || null,
   }))
+
+  // If viewing in non-source language, fetch translations from cache
+  if (targetLang) {
+    const postIds = posts.map(p => p.id)
+    const { data: titleCache } = await supabase
+      .from('translation_cache')
+      .select('content_id, translated_text')
+      .eq('content_type', 'post_title')
+      .eq('target_lang', targetLang)
+      .in('content_id', postIds)
+    const { data: contentCache } = await supabase
+      .from('translation_cache')
+      .select('content_id, translated_text')
+      .eq('content_type', 'post_content')
+      .eq('target_lang', targetLang)
+      .in('content_id', postIds)
+
+    const titleMap = new Map((titleCache || []).map(t => [t.content_id, t.translated_text]))
+    const contentMap = new Map((contentCache || []).map(t => [t.content_id, t.translated_text]))
+
+    // Apply cached translations
+    const needsTranslation: Array<{ id: string; text: string; contentType: string; contentId: string }> = []
+    for (const p of posts) {
+      if (titleMap.has(p.id)) {
+        p.title = titleMap.get(p.id)!
+      } else if (p.title) {
+        needsTranslation.push({ id: `t-${p.id}`, text: p.title, contentType: 'post_title', contentId: p.id })
+      }
+      if (contentMap.has(p.id)) {
+        p.content = contentMap.get(p.id)!
+      } else if (p.content) {
+        needsTranslation.push({ id: `c-${p.id}`, text: p.content, contentType: 'post_content', contentId: p.id })
+      }
+    }
+
+    // Fire-and-forget: translate uncached posts in background
+    if (needsTranslation.length > 0) {
+      fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: needsTranslation.slice(0, 20), targetLang }),
+      }).catch(() => {})
+    }
+  }
+
+  return posts
 }
 
 export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
   const isZh = language === 'zh'
 
+  const targetLang = isZh ? undefined : 'en'
   const { data: posts = [], isLoading: loading } = useSWR(
-    ['hot-discussions', limit],
-    ([key, lim]) => fetchHotPosts(key, lim),
+    ['hot-discussions', limit, language],
+    ([key, lim, _lang]) => fetchHotPosts(key, lim, targetLang),
     {
       revalidateOnFocus: false,
       dedupingInterval: 180000,
@@ -116,16 +164,6 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
     // No title: content already shown as title, show more
     const remaining = raw.slice(60).trim()
     return remaining.length > 80 ? remaining.slice(0, 80) + '...' : remaining
-  }
-
-  function timeAgo(dateStr: string): string {
-    const diff = Date.now() - new Date(dateStr).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 60) return isZh ? `${mins}分钟前` : `${mins}m ago`
-    const hours = Math.floor(mins / 60)
-    if (hours < 24) return isZh ? `${hours}小时前` : `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return isZh ? `${days}天前` : `${days}d ago`
   }
 
   return (

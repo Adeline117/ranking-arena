@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+// Language context available via parent
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 

@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -146,7 +145,7 @@ export default function FollowingPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
-  const { authChecked, email, userId, getAuthHeadersAsync } = useAuthSession()
+  const { email, userId, getAuthHeadersAsync } = useAuthSession()
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
