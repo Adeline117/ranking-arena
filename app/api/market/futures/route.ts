@@ -14,7 +14,9 @@ const CACHE_TTL = 120_000
 export async function GET() {
   const now = Date.now()
   if (cache && now - cache.ts < CACHE_TTL) {
-    return NextResponse.json(cache.data)
+    const cached = NextResponse.json(cache.data)
+    cached.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+    return cached
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -109,7 +111,9 @@ export async function GET() {
     result.sort((a, b) => (b.openInterest || 0) - (a.openInterest || 0))
 
     cache = { data: result, ts: now }
-    return NextResponse.json(result)
+    const response = NextResponse.json(result)
+    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+    return response
   } catch (e: unknown) {
     return NextResponse.json({ error: (e instanceof Error ? e.message : String(e)) }, { status: 500 })
   }
