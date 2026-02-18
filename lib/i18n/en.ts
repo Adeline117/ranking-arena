@@ -1891,7 +1891,7 @@ const en = {
 
     // Not Found
     notFoundTitle: 'Page Not Found',
-    notFoundDesc: 'The page you are looking for may have been moved, deleted, or the link may be incorrect',
+    notFoundDesc: 'Enter. Outperform. — This page may have been moved or deleted',
     notFoundViewHot: 'View Hot List',
     notFoundExplore: 'Or explore these',
     notFoundBrowseGroups: 'Browse Groups',
@@ -2099,7 +2099,7 @@ const en = {
 
     // Onboarding page
     onboardingTitle: 'Welcome to Arena',
-    onboardingSubtitle: 'Crypto Trader Leaderboard & Community',
+    onboardingSubtitle: 'Enter. Outperform.',
     selectLanguage: 'Select Language',
     selectTheme: 'Select Theme',
     continueButton: 'Continue',

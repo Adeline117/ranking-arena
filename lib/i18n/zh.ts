@@ -1940,7 +1940,7 @@ const zh = {
 
     // 404 页面
     notFoundTitle: '页面不存在',
-    notFoundDesc: '您访问的页面可能已被移动、删除，或者链接有误',
+    notFoundDesc: '入场，超越。— 这个页面可能已被移动或删除',
     notFoundViewHot: '查看热榜',
     notFoundExplore: '或者探索这些内容',
     notFoundBrowseGroups: '浏览小组',
@@ -2100,7 +2100,7 @@ const zh = {
 
     // Onboarding page
     onboardingTitle: '欢迎来到 Arena',
-    onboardingSubtitle: '加密交易员排行榜与社区',
+    onboardingSubtitle: '入场，超越。',
     selectLanguage: '选择语言',
     selectTheme: '选择主题',
     continueButton: '继续',
