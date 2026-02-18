@@ -52,6 +52,62 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
+    // Auto-generate a post (豆瓣式) when marking a book
+    try {
+      const { data: item } = await supabase
+        .from('library_items')
+        .select('title, title_zh, author, cover_url, category')
+        .eq('id', id)
+        .maybeSingle()
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('handle, nickname')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (item && profile) {
+        const bookTitle = item.title_zh || item.title || ''
+        const statusLabel: Record<string, { zh: string; en: string }> = {
+          want_to_read: { zh: '想读', en: 'wants to read' },
+          reading: { zh: '在读', en: 'is reading' },
+          read: { zh: '读过', en: 'has read' },
+        }
+        const label = statusLabel[status] || statusLabel.want_to_read
+        const displayName = profile.nickname || profile.handle || 'User'
+
+        const content = `${label.zh}《${bookTitle}》${item.author ? ` — ${item.author}` : ''}`
+
+        // Check if already posted for this book+status combo (avoid duplicates)
+        const { data: existing } = await supabase
+          .from('posts')
+          .select('id')
+          .eq('author_id', user.id)
+          .eq('metadata->>library_item_id', id)
+          .eq('metadata->>status_type', status)
+          .limit(1)
+
+        if (!existing?.length) {
+          await supabase.from('posts').insert({
+            author_id: user.id,
+            author_handle: profile.handle,
+            content,
+            category: 'activity',
+            metadata: {
+              type: 'book_status',
+              library_item_id: id,
+              status_type: status,
+              book_title: bookTitle,
+              book_author: item.author,
+              cover_url: item.cover_url,
+            },
+          })
+        }
+      }
+    } catch {
+      // Non-critical: don't fail the status update if post creation fails
+    }
+
     return NextResponse.json({ success: true, status })
   } catch (e: unknown) {
     return NextResponse.json({ error: (e instanceof Error ? e.message : String(e)) }, { status: 500 })
