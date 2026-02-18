@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .select(`
         id, rating, review, status, created_at, updated_at,
         user_id,
-        users!book_ratings_user_id_fkey ( id, nickname, avatar_url, created_at )
+        users!book_ratings_user_id_fkey ( id, nickname, created_at )
       `)
       .eq('library_item_id', id)
       .order('created_at', { ascending: false })
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       created_at: string
       updated_at: string | null
       user_id: string
-      users: { id: string; nickname: string | null; avatar_url: string | null; created_at: string } | null
+      users: { id: string; nickname: string | null; created_at: string } | null
     }
 
     const typedRatings = (ratings || []) as unknown as RatingRow[]
@@ -111,7 +111,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({
       ratings: typedRatings.map((r) => ({
         ...r,
-        users: r.users ? { id: r.users.id, nickname: r.users.nickname, avatar_url: r.users.avatar_url } : null,
+        users: r.users ? { id: r.users.id, nickname: r.users.nickname } : null,
       })),
       average: Math.round(average * 100) / 100,
       weighted_score: Math.round(weighted_score * 100) / 100,

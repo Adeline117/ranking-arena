@@ -108,7 +108,16 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
     setMounted(true)
   }, [])
 
-  if (traders.length === 0) return null
+  // Deduplicate traders by id
+  const seen = new Set<string>()
+  const uniqueTraders = traders.filter(t => {
+    const key = t.id || t.handle
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  if (uniqueTraders.length === 0) return null
 
   return (
     <Box 
@@ -152,13 +161,13 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
           }}
         >
           <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-            {traders.length}
+            {uniqueTraders.length}
           </Text>
         </Box>
       </Box>
       
       <Box className="similar-traders-grid" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-        {traders.slice(0, 6).map((trader, index) => (
+        {uniqueTraders.slice(0, 6).map((trader, index) => (
           <Link key={trader.handle} href={`/trader/${encodeURIComponent(trader.id || trader.handle)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`} style={{ textDecoration: 'none' }}>
             <Box
               className="similar-trader-item"

@@ -328,7 +328,19 @@ export default function EpubReader({
       const ePub = (await import('epubjs')).default
       if (cancelled || !containerRef.current) return
 
-      const book = ePub(url)
+      // Fetch EPUB as ArrayBuffer to avoid CORS issues with epubjs zip extraction
+      let bookInput: string | ArrayBuffer = url
+      try {
+        const resp = await fetch(url)
+        if (resp.ok) {
+          bookInput = await resp.arrayBuffer()
+        }
+      } catch {
+        // Fall back to URL if fetch fails
+      }
+      if (cancelled) return
+
+      const book = ePub(bookInput)
       bookRef.current = book
 
       const rendition = book.renderTo(containerRef.current, {
