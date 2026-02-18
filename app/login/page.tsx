@@ -251,6 +251,10 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
     try {
+      // When adding a second account, sign out current session first
+      if (isAddAccount) {
+        await supabase.auth.signOut()
+      }
       const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
       if (loginError) {
         const msg = loginError.message
