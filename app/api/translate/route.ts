@@ -63,6 +63,37 @@ async function translateWithGoogle(text: string, targetLang: 'zh' | 'en'): Promi
   }
 }
 
+// Post-process: fix common Google Translate errors for crypto/trading terms
+function fixCryptoTerms(text: string, targetLang: 'zh' | 'en'): string {
+  if (targetLang === 'zh') {
+    return text
+      .replace(/合同/g, '合约')
+      .replace(/杠杆化/g, '杠杆')
+      .replace(/长仓/g, '多仓')
+      .replace(/空仓/g, '做空')
+      .replace(/钱包地址/g, '钱包地址')
+      .replace(/货币/g, '代币')
+      .replace(/牛市/g, '牛市')
+      .replace(/投资回报率/g, 'ROI')
+      .replace(/最大跌幅/g, '最大回撤')
+      .replace(/最大回落/g, '最大回撤')
+      .replace(/最大降幅/g, '最大回撤')
+      .replace(/胜率百分比/g, '胜率')
+      .replace(/交易计数/g, '交易次数')
+      .replace(/利润和损失/g, '盈亏')
+      .replace(/损益/g, '盈亏')
+      .replace(/清算/g, '爆仓')
+      .replace(/现货交易/g, '现货')
+      .replace(/期货交易/g, '合约')
+      .replace(/去中心化交易所/g, 'DEX')
+      .replace(/中心化交易所/g, 'CEX')
+      .replace(/交易机器人/g, '交易Bot')
+      .replace(/复制交易/g, '跟单')
+      .replace(/跟随交易/g, '跟单')
+  }
+  return text
+}
+
 // 调用 OpenAI 翻译 (fallback, slower but higher quality)
 async function translateWithGPT(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY
@@ -86,13 +117,17 @@ async function translateWithGPT(text: string, targetLang: 'zh' | 'en'): Promise<
         messages: [
           {
             role: 'system',
-            content: `You are a professional translator. Translate the following text to ${targetLanguage}. 
+            content: `You are an expert translator for a crypto trading community platform. Translate to ${targetLanguage}.
+
+Domain: cryptocurrency, trading, DeFi, blockchain.
+
+Key terms (EN→ZH): copy trading=跟单, futures=合约, spot=现货, leverage=杠杆, liquidation=爆仓, ROI=ROI, MDD/max drawdown=最大回撤, win rate=胜率, PnL=盈亏, long=做多, short=做空, whale=巨鲸, degen=Degen, alpha=Alpha, CEX=CEX, DEX=DEX, TVL=TVL, APY=APY, staking=质押, yield=收益, airdrop=空投, rug pull=Rug Pull, HODL=HODL, moon=暴涨, dump=暴跌, FUD=FUD, DYOR=DYOR, NFA=NFA.
+
 Rules:
-1. Keep the original meaning and tone
-2. Keep all Arabic numerals (0-9) unchanged - do not convert to other numeral systems
-3. Keep all punctuation marks unchanged
-4. Keep all emoji and emoticons unchanged
-5. Only output the translated text without any explanation or additional text`
+1. Keep original meaning, tone, and slang
+2. Keep numbers, punctuation, emoji unchanged
+3. Keep crypto tickers ($BTC, $ETH) and addresses unchanged
+4. Output translated text only, no explanations`
           },
           {
             role: 'user',
@@ -118,10 +153,10 @@ Rules:
   }
 }
 
-// Try Google first (fast), fallback to GPT (quality)
+// Try Google first (fast) + crypto fix, fallback to GPT (quality)
 async function translate(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
   const googleResult = await translateWithGoogle(text, targetLang)
-  if (googleResult) return googleResult
+  if (googleResult) return fixCryptoTerms(googleResult, targetLang)
   return translateWithGPT(text, targetLang)
 }
 
