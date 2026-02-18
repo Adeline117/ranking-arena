@@ -1,11 +1,3 @@
 import type { Metadata } from 'next'
-
-export const metadata: Metadata = {
-  title: 'Inbox',
-  description: 'Your Arena inbox - notifications, mentions, and activity updates.',
-  robots: { index: false, follow: false },
-}
-
-export default function InboxLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
-}
+export const metadata: Metadata = { title: 'Inbox | Arena', description: 'Your notifications and updates on Arena.' }
+export default function Layout({ children }: { children: React.ReactNode }) { return children }

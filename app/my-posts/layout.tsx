@@ -1,11 +1,3 @@
 import type { Metadata } from 'next'
-
-export const metadata: Metadata = {
-  title: 'My Posts',
-  description: 'Manage your posts and trade ideas shared on Arena.',
-  robots: { index: false, follow: false },
-}
-
-export default function MyPostsLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
-}
+export const metadata: Metadata = { title: 'My Posts | Arena', description: 'View and manage your posts on Arena.' }
+export default function Layout({ children }: { children: React.ReactNode }) { return children }
