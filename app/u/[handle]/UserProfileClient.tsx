@@ -14,8 +14,7 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 // Trader components for stats/portfolio tabs
-const JoinedGroups = dynamic(() => import('@/app/components/trader/JoinedGroups'), { ssr: false })
-const UserBookmarkFolders = dynamic(() => import('@/app/components/trader/UserBookmarkFolders'), { ssr: false })
+// JoinedGroups, UserBookmarkFolders removed from profile
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -28,17 +27,14 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 import LevelBadge from '@/app/components/user/LevelBadge'
 import { logger } from '@/lib/logger'
-import FollowersList from './components/FollowersList'
+// FollowersList removed from profile
 
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), { ssr: false })
 const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 
-const UserActivityFeed = dynamic(() => import('@/app/components/profile/UserActivityFeed'), { ssr: false })
-// ProfileTradingCard removed — unused (was placeholder for future feature)
-const ProfileBookshelf = dynamic(() => import('@/app/components/profile/ProfileBookshelf'), { ssr: false })
-const ProfileActivityFeed = dynamic(() => import('@/app/components/profile/ProfileActivityFeed'), { ssr: false })
+// UserActivityFeed, ProfileBookshelf, ProfileActivityFeed removed from profile
 
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,

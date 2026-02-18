@@ -757,7 +757,6 @@ function ScoreBar({
   label,
   score,
   maxScore,
-  isVisible = false,
   delay = 0,
 }: {
   label: string
