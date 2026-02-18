@@ -61,12 +61,74 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: upsertError.message }, { status: 500 })
     }
 
-    // Get updated rating
+    // Get updated rating + book info
     const { data: item } = await supabase
       .from('library_items')
-      .select('rating, rating_count')
+      .select('title, title_zh, author, cover_url, rating, rating_count')
       .eq('id', id)
       .single()
+
+    // Auto-generate post for "read" with rating (豆瓣式)
+    if (effectiveStatus === 'read' && rating && item) {
+      try {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('handle, nickname')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        if (profile) {
+          const bookTitle = item.title_zh || item.title || ''
+          const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating)
+          const content = `读过《${bookTitle}》${item.author ? ` — ${item.author}` : ''}\n${stars} ${rating}/5${review ? `\n\n${review}` : ''}`
+
+          // Update existing post or create new one
+          const { data: existing } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('author_id', user.id)
+            .eq('metadata->>library_item_id', id)
+            .eq('metadata->>status_type', 'read')
+            .limit(1)
+
+          if (existing?.length) {
+            await supabase.from('posts').update({
+              content,
+              metadata: {
+                type: 'book_status',
+                library_item_id: id,
+                status_type: 'read',
+                book_title: bookTitle,
+                book_author: item.author,
+                cover_url: item.cover_url,
+                rating,
+                review: review || null,
+              },
+              updated_at: new Date().toISOString(),
+            }).eq('id', existing[0].id)
+          } else {
+            await supabase.from('posts').insert({
+              author_id: user.id,
+              author_handle: profile.handle,
+              content,
+              category: 'activity',
+              metadata: {
+                type: 'book_status',
+                library_item_id: id,
+                status_type: 'read',
+                book_title: bookTitle,
+                book_author: item.author,
+                cover_url: item.cover_url,
+                rating,
+                review: review || null,
+              },
+            })
+          }
+        }
+      } catch {
+        // Non-critical
+      }
+    }
 
     return NextResponse.json({
       success: true,
