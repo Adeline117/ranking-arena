@@ -108,10 +108,10 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
     setMounted(true)
   }, [])
 
-  // Deduplicate traders by id
+  // Deduplicate traders by source_trader_id (stored in .id) + source, case-insensitive for addresses
   const seen = new Set<string>()
   const uniqueTraders = traders.filter(t => {
-    const key = t.id || t.handle
+    const key = `${(t.id || t.handle).toLowerCase()}:${(t.source || '').toLowerCase()}`
     if (seen.has(key)) return false
     seen.add(key)
     return true

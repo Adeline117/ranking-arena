@@ -57,7 +57,8 @@ export default function TopNav({ email = null }: { email?: string | null }) {
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
 
-  const totalUnread = unreadCount + unreadMessageCount
+  // Badge shows only notification count (not messages) to match /inbox notifications tab
+  const totalUnread = unreadCount
 
   // Sync auth state from global hook immediately (prevents login flicker on navigation)
   useEffect(() => {
