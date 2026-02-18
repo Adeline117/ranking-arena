@@ -9,21 +9,21 @@ import { logger } from '@/lib/logger'
 
 export const revalidate = 3600 // ISR: 1 hour
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-// 模块级单例，避免重复创建客户端
-const supabaseInstance = supabaseUrl && supabaseKey
-  ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
-  : null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _supabaseInstance: any = null
 
 function getSupabase() {
-  return supabaseInstance
+  if (_supabaseInstance) return _supabaseInstance
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  if (!url || !key) return null
+  _supabaseInstance = createClient(url, key, { auth: { persistSession: false } })
+  return _supabaseInstance
 }
 
-export async function generateStaticParams() {
-  return SOURCES_WITH_DATA.map((exchange) => ({ exchange }))
-}
+// No generateStaticParams — pages are ISR-rendered on first request
+// This avoids empty cached pages from build time
+export const dynamicParams = true
 
 export async function generateMetadata({
   params,
@@ -92,11 +92,11 @@ interface TraderData {
 }
 
 async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
-  // Skip during build — ISR fills on first request
-  if (process.env.NEXT_PHASE === 'phase-production-build') return []
-
   const supabase = getSupabase()
-  if (!supabase) return []
+  if (!supabase) {
+    logger.error(`[ExchangeRanking] No Supabase client for ${exchange} — env vars missing`)
+    return []
+  }
 
   try {
     // Use leaderboard_ranks (the primary ranking table) instead of trader_snapshots_v2
@@ -116,7 +116,7 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
     }
 
     // Map to TraderData shape — use handle as trader_key for correct routing to /trader/[handle]
-    return (data || []).map(row => ({
+    return (data || []).map((row: Record<string, unknown>) => ({
       trader_key: row.handle || row.source_trader_id,
       display_name: row.handle || row.source_trader_id,
       avatar_url: row.avatar_url,
