@@ -45,7 +45,7 @@ function ExchangeBindingBanner({ userId }: { userId: string | null }) {
   useEffect(() => {
     if (!userId) return
     supabase
-      .from('exchange_connections')
+      .from('user_exchange_connections')
       .select('id')
       .eq('user_id', userId)
       .limit(1)
