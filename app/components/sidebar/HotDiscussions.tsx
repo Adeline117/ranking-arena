@@ -230,7 +230,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   <span style={{
                     fontSize: tokens.typography.fontSize.sm,
                     fontWeight: tokens.typography.fontWeight.semibold,
-                    color: 'var(--color-text-primary)',
+                    color: post.translated ? 'var(--color-accent-brand, #7c3aed)' : 'var(--color-text-primary)',
                     lineHeight: 1.4,
                     flex: 1,
                     minWidth: 0,
@@ -261,7 +261,8 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                 {contentPreview && (
                   <p style={{
                     fontSize: tokens.typography.fontSize.xs,
-                    color: 'var(--color-text-secondary)',
+                    color: post.translated ? 'var(--color-accent-brand, #7c3aed)' : 'var(--color-text-secondary)',
+                    opacity: post.translated ? 0.8 : 1,
                     lineHeight: 1.5,
                     margin: 0,
                     display: '-webkit-box',

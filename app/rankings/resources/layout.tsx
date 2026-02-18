@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: '交易书库',
+  title: 'Library - Arena',
   description:
     'Free crypto trading books and educational resources — technical analysis, DeFi strategies, risk management, and market psychology.',
   alternates: {
