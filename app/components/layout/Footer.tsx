@@ -143,8 +143,7 @@ export default function Footer() {
             margin: 0,
           }}
         >
-          &copy; {new Date().getFullYear()} Arena.{' '}
-          {isZh ? '保留所有权利。' : 'All rights reserved.'}
+          &copy; {new Date().getFullYear()} Arena. {isZh ? '入场，超越。' : 'Enter. Outperform.'}
         </p>
 
         {/* X / Twitter */}

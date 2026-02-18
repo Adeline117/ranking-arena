@@ -338,6 +338,9 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               >
                 <span style={{ color: 'var(--color-brand)', fontWeight: 800 }}>a</span>rena
               </Box>
+              <Box className="hide-mobile" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 500, letterSpacing: '0.5px', marginLeft: 2, opacity: 0.7 }}>
+                Enter. Outperform.
+              </Box>
             </Box>
           </Link>
 
