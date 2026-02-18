@@ -482,12 +482,29 @@ export default function RankingSection({
     : traders.filter(t => t.source && filterByCategory(t.source, category))
 
   // 交易所筛选（所有用户可用）
-  const exchangeFiltered = selectedExchange
+  // If selectedExchange yields no results (stale localStorage), auto-fallback to all
+  const exchangeFilteredRaw = selectedExchange
     ? categoryFiltered.filter(t => t.source === selectedExchange)
     : categoryFiltered
+  const exchangeFiltered = (selectedExchange && exchangeFilteredRaw.length === 0 && categoryFiltered.length > 0)
+    ? categoryFiltered
+    : exchangeFilteredRaw
+
+  // Auto-reset stale exchange in localStorage
+  useEffect(() => {
+    if (selectedExchange && categoryFiltered.length > 0) {
+      const hasMatch = categoryFiltered.some(t => t.source === selectedExchange)
+      if (!hasMatch) {
+        setSelectedExchange(null)
+        try { localStorage.removeItem(LS_KEY_EXCHANGE) } catch { /* ignore */ }
+        syncStateToUrl({ ex: null })
+      }
+    }
+  }, [selectedExchange, categoryFiltered, syncStateToUrl])
 
   // Feature 6: Apply preset filter (now source-type based)
-  const presetFiltered = activePreset && activePreset !== 'all'
+  // If preset yields no results (stale localStorage), auto-fallback to all
+  const presetFilteredRaw = activePreset && activePreset !== 'all'
     ? (() => {
         const presetConfig = PRESETS.find(p => p.id === activePreset)
         return presetConfig
@@ -495,6 +512,24 @@ export default function RankingSection({
           : exchangeFiltered
       })()
     : exchangeFiltered
+  const presetFiltered = (activePreset && activePreset !== 'all' && presetFilteredRaw.length === 0 && exchangeFiltered.length > 0)
+    ? exchangeFiltered
+    : presetFilteredRaw
+
+  // Auto-reset stale preset in localStorage
+  useEffect(() => {
+    if (activePreset && activePreset !== 'all' && exchangeFiltered.length > 0) {
+      const presetConfig = PRESETS.find(p => p.id === activePreset)
+      if (presetConfig) {
+        const hasMatch = exchangeFiltered.some(t => presetConfig.filter({ source: t.source }))
+        if (!hasMatch) {
+          setActivePreset(null)
+          try { localStorage.removeItem(LS_KEY_PRESET) } catch { /* ignore */ }
+          syncStateToUrl({ preset: null })
+        }
+      }
+    }
+  }, [activePreset, exchangeFiltered, syncStateToUrl])
 
   const advancedFiltered = hasActiveFilters
     ? applyAdvancedFilter(presetFiltered, filterConfig)
@@ -648,6 +683,42 @@ export default function RankingSection({
           {language === 'zh'
             ? `该平台共 ${advancedFiltered.length} 名交易员`
             : `${advancedFiltered.length} traders on this exchange`}
+        </Box>
+      )}
+
+      {/* Show reset prompt when all traders filtered out by advanced filter */}
+      {!loading && advancedFiltered.length === 0 && traders.length > 0 && hasActiveFilters && (
+        <Box style={{
+          padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+          marginBottom: tokens.spacing[2],
+          textAlign: 'center',
+          background: tokens.glass.bg.light,
+          borderRadius: tokens.radius.md,
+          border: `1px solid var(--color-border-primary)`,
+        }}>
+          <Text size="sm" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[2], display: 'block' }}>
+            {language === 'zh'
+              ? '当前筛选条件过滤了所有交易员'
+              : 'All traders have been filtered out'}
+          </Text>
+          <button
+            onClick={() => {
+              handleFilterChange({})
+              setShowAdvancedFilter(false)
+            }}
+            style={{
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              background: `var(--color-accent-primary, ${tokens.colors.accent.primary})20`,
+              border: `1px solid var(--color-accent-primary, ${tokens.colors.accent.primary})40`,
+              borderRadius: tokens.radius.md,
+              color: `var(--color-accent-primary, ${tokens.colors.accent.primary})`,
+              cursor: 'pointer',
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.bold,
+            }}
+          >
+            {language === 'zh' ? '重置筛选' : 'Reset Filters'}
+          </button>
         </Box>
       )}
 
