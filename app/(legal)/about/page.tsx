@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
@@ -55,10 +54,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-export const metadata: Metadata = {
-  title: '关于 Arena',
-  description: 'Arena 是全球领先的加密交易员排名和社交平台。入场，超越。',
-}
 
 export default function AboutPage() {
   const { t } = useLanguage()

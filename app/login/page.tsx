@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -14,10 +13,6 @@ import SocialLogin, { WalletLogin } from './components/SocialLogin'
 import RegisterForm from './components/RegisterForm'
 import LoginForm from './components/LoginForm'
 
-export const metadata: Metadata = {
-  title: '登录 - Arena | Enter. Outperform.',
-  description: '登录 Arena，发现全球顶级交易员。入场，超越。',
-}
 
 export default function LoginPage() {
   const { language: lang, setLanguage: setLang, t } = useLanguage()

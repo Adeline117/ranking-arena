@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import React from 'react'
@@ -6,10 +5,6 @@ import ContactSupportButton from '@/app/components/ui/ContactSupportButton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
-export const metadata: Metadata = {
-  title: '服务条款 - Arena',
-  description: 'Arena 服务条款和使用协议。',
-}
 
 export default function TermsOfServicePage() {
   const { t } = useLanguage()

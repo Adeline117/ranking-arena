@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -91,10 +90,6 @@ function instToEntry(inst: Institution, isZh: boolean): LeaderboardEntry {
   }
 }
 
-export const metadata: Metadata = {
-  title: '机构排行 - Arena',
-  description: '全球顶级加密机构排行榜，涵盖交易所、VC、DeFi 协议等。',
-}
 
 export default function InstitutionsPage() {
   const { language } = useLanguage()
