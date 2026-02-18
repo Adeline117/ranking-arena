@@ -752,7 +752,9 @@ export default function ReadPage() {
 
   // ─── Render states ─────────────────────────────────────────────────
 
-  const isLoading = loading || pdfLoading || htmlLoading || premiumLoading || (contentMode === 'epub' && !epubReady && book !== null && !error)
+  // Note: epub loading is handled by EpubReader itself — don't block render for it
+  // or we get a deadlock (EpubReader can't mount → onReady never fires → loading forever)
+  const isLoading = loading || pdfLoading || htmlLoading || premiumLoading
 
   if (isLoading) {
     return (
