@@ -206,7 +206,7 @@ export default function RankingSection({
     } else if (storedPrefs.exchange) {
       setSelectedExchange(storedPrefs.exchange)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   // Saved filters feature removed - filters are session-only
 

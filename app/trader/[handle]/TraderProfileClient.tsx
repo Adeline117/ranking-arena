@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import Image from 'next/image'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import useSWR from 'swr'
@@ -17,7 +16,6 @@ import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
-import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import {
@@ -74,7 +72,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
   const { isPro } = useSubscription()
 
   const displayName = formatDisplayName(data.handle, data.source)
-  const exchangeName = EXCHANGE_NAMES[data.source] || data.source
+  const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
 
   // Tabs
   const urlTab = searchParams.get('tab')

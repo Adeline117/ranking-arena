@@ -16,7 +16,6 @@ import TraderTabs from '@/app/components/trader/TraderTabs'
 // Trader components for stats/portfolio tabs
 const JoinedGroups = dynamic(() => import('@/app/components/trader/JoinedGroups'), { ssr: false })
 const UserBookmarkFolders = dynamic(() => import('@/app/components/trader/UserBookmarkFolders'), { ssr: false })
-const UserCollections = dynamic(() => import('@/app/components/features/UserCollections'), { ssr: false })
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -36,8 +35,6 @@ const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/c
 const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 
-const ActivityHeatmap = dynamic(() => import('@/app/components/profile/ActivityHeatmap'), { ssr: false })
-const UserStreaks = dynamic(() => import('@/app/components/profile/UserStreaks'), { ssr: false })
 const UserActivityFeed = dynamic(() => import('@/app/components/profile/UserActivityFeed'), { ssr: false })
 // ProfileTradingCard removed — unused (was placeholder for future feature)
 const ProfileBookshelf = dynamic(() => import('@/app/components/profile/ProfileBookshelf'), { ssr: false })
@@ -132,10 +129,10 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
   const _traderSimilar = traderData?.similarTraders ?? []
 
   // Tabs: unified profile tabs (includes trading tabs when user is a trader)
-  type ProfileTabKey = 'overview' | 'activity' | 'followers' | 'groups' | 'bookmarks' | 'bookshelf' | 'stats' | 'portfolio'
+  type ProfileTabKey = 'overview' | 'stats' | 'portfolio'
   const urlTab = searchParams.get('tab')
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'activity', 'followers', 'groups', 'bookmarks', 'bookshelf', 'stats', 'portfolio'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
+    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
   )
 
   const updateUrl = useCallback((tab: string) => {
@@ -301,10 +298,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     { key: 'overview', label: t('overview') || (isZh ? '概览' : 'Overview') },
     { key: 'stats', label: t('stats') || (isZh ? '统计' : 'Stats') },
     { key: 'portfolio', label: t('portfolio') || (isZh ? '持仓' : 'Portfolio') },
-    { key: 'bookshelf', label: isZh ? '书架' : 'Bookshelf' },
-    { key: 'followers', label: `${t('followers') || (isZh ? '粉丝' : 'Followers')} (${followersCount})` },
-    { key: 'groups', label: t('groups') || (isZh ? '群组' : 'Groups') },
-    { key: 'bookmarks', label: t('bookmarks') || (isZh ? '收藏' : 'Bookmarks') },
+    /* bookshelf/followers/groups/bookmarks tabs removed per Adeline */
   ]
 
   // ============================================================
@@ -831,9 +825,6 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
                 {/* Guidance cards removed */}
 
-                {/* Recent activity feed */}
-                <ProfileActivityFeed handle={profile.handle} />
-
                 {/* Posts */}
                 <Box bg="secondary" p={4} radius="lg" border="primary">
                   <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
@@ -857,20 +848,12 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 </Box>
               </Box>
 
-              {/* Sidebar column */}
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                <ProfileBookshelf handle={profile.handle} />
-                <JoinedGroups userId={profile.id} />
-                <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} />
-              </Box>
+              {/* Sidebar column removed per Adeline */}
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }} />
             </Box>
           )}
 
-          {activeProfileTab === 'activity' && (
-            <Box style={{ maxWidth: 700 }}>
-              <UserActivityFeed handle={profile.handle} />
-            </Box>
-          )}
+          {/* activity tab removed */}
 
           {activeProfileTab === 'stats' && (
             <Box style={{ maxWidth: 900 }}>
@@ -898,29 +881,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
             </Box>
           )}
 
-          {activeProfileTab === 'bookshelf' && (
-            <Box style={{ maxWidth: 800 }}>
-              <ProfileBookshelf handle={profile.handle} expanded />
-            </Box>
-          )}
-
-          {activeProfileTab === 'followers' && (
-            <Box style={{ maxWidth: 600 }}>
-              <FollowersList profileId={profile.id} />
-            </Box>
-          )}
-
-          {activeProfileTab === 'groups' && (
-            <Box style={{ maxWidth: 800 }}>
-              <JoinedGroups userId={profile.id} expanded />
-            </Box>
-          )}
-
-          {activeProfileTab === 'bookmarks' && (
-            <Box style={{ maxWidth: 800 }}>
-              <UserBookmarkFolders userId={profile.id} isOwnProfile={isOwnProfile} expanded />
-            </Box>
-          )}
+          {/* bookshelf/followers/groups/bookmarks tabs removed */}
         </Box>
 
         {/* Followers modal */}

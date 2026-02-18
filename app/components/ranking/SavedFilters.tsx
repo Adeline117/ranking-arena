@@ -395,7 +395,7 @@ function FilterItem({
   onLoad,
   onDelete,
   onTogglePin,
-  language,
+  language: _language,
   t,
 }: {
   filter: SavedFilter
