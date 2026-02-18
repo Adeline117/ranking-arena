@@ -567,7 +567,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 {profile.avatar_url ? (
                   <Image
                     src={`/api/avatar?url=${encodeURIComponent(profile.avatar_url)}`}
-                    alt={profile.handle} width={72} height={72} priority
+                    alt={profile.handle} width={72} height={72}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'all 0.4s ease' }}
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
