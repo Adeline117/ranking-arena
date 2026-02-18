@@ -1764,7 +1764,7 @@ const en = {
     loginForgotPassword: 'Forgot password?',
     loginWelcomeBack: 'Welcome Back',
     loginCreateAccount: 'Create Account',
-    loginSubtitle: 'Explore the world of top traders',
+    loginSubtitle: 'Enter. Outperform.',
     loginValueProp1: 'Track 15,000+ traders in real-time',
     loginValueProp2: 'Compare ROI across 27 exchanges',
     loginValueProp3: 'Join trading communities',
@@ -2694,7 +2694,7 @@ const en = {
     faqNoResults: 'No matching questions found. Try different keywords.',
 
     // Hero section
-    heroSubtitle: 'Aggregate trader rankings across platforms. Discover the best traders.',
+    heroSubtitle: 'Enter. Outperform.',
     heroCTABrowse: 'Browse Rankings',
     heroCTASignUp: 'Sign Up Free',
 

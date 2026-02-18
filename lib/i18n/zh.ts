@@ -1765,7 +1765,7 @@ const zh = {
     loginForgotPassword: '忘记密码？',
     loginWelcomeBack: '欢迎回来',
     loginCreateAccount: '创建账号',
-    loginSubtitle: '探索顶级交易员的世界',
+    loginSubtitle: '入场，超越。',
     loginValueProp1: '追踪 15,000+ 交易员实时排名',
     loginValueProp2: '跨 27 个交易所对比收益与风控',
     loginValueProp3: '加入交易社区，发现投资机会',
@@ -2694,7 +2694,7 @@ const zh = {
     faqNoResults: '未找到匹配的问题，请尝试其他关键词。',
 
     // Hero section
-    heroSubtitle: '聚合全网交易员排名，发现最强交易员',
+    heroSubtitle: '入场，超越。',
     heroCTABrowse: '查看排行榜',
     heroCTASignUp: '免费注册',
 
