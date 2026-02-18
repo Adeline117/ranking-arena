@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 /**
@@ -421,10 +420,6 @@ function BotsContent() {
   )
 }
 
-export const metadata: Metadata = {
-  title: '机器人排行 - Arena',
-  description: '顶级加密交易机器人排行榜。',
-}
 
 export default function BotRankingsPage() {
   return (

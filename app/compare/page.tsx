@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 export const dynamic = 'force-dynamic'
@@ -455,10 +454,6 @@ function CompareContent() {
   )
 }
 
-export const metadata: Metadata = {
-  title: '交易员对比 - Arena',
-  description: '对比不同交易员的收益率、胜率、回撤等核心指标。',
-}
 
 export default function ComparePage() {
   const { t } = useLanguage()

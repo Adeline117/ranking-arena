@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -38,10 +37,6 @@ interface SubscribedFolder {
   subscribed_at: string
 }
 
-export const metadata: Metadata = {
-  title: '收藏 - Arena',
-  description: '你收藏的交易员、帖子和资源。',
-}
 
 export default function FavoritesPage() {
   const { t } = useLanguage()

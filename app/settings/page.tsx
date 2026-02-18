@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import React, { Suspense, useEffect, useState, useCallback, useRef } from 'react'
@@ -1074,10 +1073,6 @@ function SettingsContent() {
   )
 }
 
-export const metadata: Metadata = {
-  title: '设置 - Arena',
-  description: '管理你的 Arena 账户设置、通知偏好和安全选项。',
-}
 
 export default function SettingsPage() {
   return (

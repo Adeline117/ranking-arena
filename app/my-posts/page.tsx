@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
@@ -30,10 +29,6 @@ interface Post {
   } | null
 }
 
-export const metadata: Metadata = {
-  title: '我的动态 - Arena',
-  description: '查看和管理你在 Arena 发布的所有动态。',
-}
 
 export default function MyPostsPage() {
   const router = useRouter()

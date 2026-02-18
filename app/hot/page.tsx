@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import { useEffect, useMemo, useState, useCallback, useRef, Suspense, lazy } from 'react'
@@ -1471,10 +1470,6 @@ function HotContent() {
   )
 }
 
-export const metadata: Metadata = {
-  title: '热榜 - Arena',
-  description: '最热门的交易讨论、帖子和社区动态。',
-}
 
 export default function HotPage() {
   return (

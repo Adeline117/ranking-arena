@@ -1,4 +1,3 @@
-import type { Metadata } from 'next'
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -13,10 +12,6 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type TabKey = 'notifications' | 'messages'
 
-export const metadata: Metadata = {
-  title: '消息 - Arena',
-  description: '查看通知和私信。',
-}
 
 export default function InboxPage() {
   const router = useRouter()
