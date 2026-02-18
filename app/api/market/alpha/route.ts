@@ -13,7 +13,9 @@ const CACHE_TTL = 120_000
 export async function GET() {
   const now = Date.now()
   if (cache && now - cache.ts < CACHE_TTL) {
-    return NextResponse.json(cache.data)
+    const cached = NextResponse.json(cache.data)
+    cached.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+    return cached
   }
 
   try {
@@ -65,7 +67,9 @@ export async function GET() {
 
     const result = { trending, volumeMovers }
     cache = { data: result, ts: now }
-    return NextResponse.json(result)
+    const response = NextResponse.json(result)
+    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+    return response
   } catch (e: unknown) {
     return NextResponse.json({ error: (e instanceof Error ? e.message : String(e)) }, { status: 500 })
   }

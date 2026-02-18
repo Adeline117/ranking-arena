@@ -141,7 +141,11 @@ async function loadProgressFromServer(bookId: string): Promise<{ page: number; t
 function detectContentMode(book: BookInfo): ContentMode {
   if (book.epub_url) return 'epub'
   if (book.pdf_url) return 'pdf'
-  if (book.file_key) return 'pdf'
+  if (book.file_key) {
+    // file_key can be epub or pdf — detect by extension
+    if (book.file_key.endsWith('.epub')) return 'epub'
+    return 'pdf'
+  }
   // content_url pointing to a PDF (R2 CDN or arxiv)
   if (book.content_url?.endsWith('.pdf') || book.content_url?.includes('cdn.arenafi.org/papers/')) return 'pdf'
   return 'none'
@@ -430,7 +434,7 @@ export default function ReadPage() {
   // ─── Load PDF ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!book || contentMode !== 'pdf') return
-    const rawUrl = book.pdf_url || (book.file_key ? `https://cdn.arenafi.org/${book.file_key}` : null) || (book.content_url?.endsWith('.pdf') || book.content_url?.includes('cdn.arenafi.org/papers/') ? book.content_url : null)
+    const rawUrl = book.pdf_url || (book.file_key ? `https://iknktzifjdyujdccyhsv.supabase.co/storage/v1/object/public/library-files/${book.file_key}` : null) || (book.content_url?.endsWith('.pdf') || book.content_url?.includes('cdn.arenafi.org/papers/') ? book.content_url : null)
     // Proxy R2 CDN URLs through our API for CORS support
     const url = rawUrl?.startsWith('https://cdn.arenafi.org/') ? `/api/cdn-proxy?url=${encodeURIComponent(rawUrl)}` : rawUrl
     if (!url) return
@@ -1182,10 +1186,10 @@ export default function ReadPage() {
         )}
 
         {/* ePub Content */}
-        {contentMode === 'epub' && book?.epub_url && (
+        {contentMode === 'epub' && book && (book.epub_url || book.file_key?.endsWith('.epub')) && (
           <div ref={epubContainerRef} style={{ width: '100%', height: '100%', background: themeColors.pageBg }}>
             <EpubReader
-              url={book.epub_url}
+              url={book.epub_url || `https://iknktzifjdyujdccyhsv.supabase.co/storage/v1/object/public/library-files/${book.file_key}`}
               bookId={id}
               isZh={isZh}
               theme={theme}

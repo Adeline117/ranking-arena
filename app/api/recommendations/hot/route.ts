@@ -32,11 +32,13 @@ export async function GET(req: NextRequest) {
 
     const sliced = traders.slice(0, limit)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: sliced,
       meta: { count: sliced.length, cached: true },
     })
+    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    return response
   } catch (error) {
     logger.error('GET /api/recommendations/hot failed', { error })
     return NextResponse.json(
