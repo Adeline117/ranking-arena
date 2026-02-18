@@ -768,7 +768,7 @@ function ScoreBar({
 }) {
   const color = getScoreColor(score, maxScore)
   const width = score != null ? (score / maxScore) * 100 : 0
-  const animatedWidth = isVisible ? width : 0
+  const barId = `score-bar-${label.replace(/\s+/g, '-').toLowerCase()}`
 
   return (
     <Box>
@@ -790,14 +790,22 @@ function ScoreBar({
           position: 'relative',
         }}
       >
+        <style>{`
+          @keyframes ${barId} {
+            from { width: 0%; }
+            to { width: ${width}%; }
+          }
+          .${barId} {
+            animation: ${barId} 1s cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms both;
+          }
+        `}</style>
         <Box
+          className={barId}
           style={{
             height: '100%',
-            width: `${animatedWidth}%`,
             background: `linear-gradient(90deg, ${color}99 0%, ${color} 100%)`,
             borderRadius: tokens.radius.full,
-            transition: `width 1s cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms`,
-            boxShadow: isVisible ? `0 0 8px ${color}40` : 'none',
+            boxShadow: `0 0 8px ${color}40`,
           }}
         />
       </Box>
