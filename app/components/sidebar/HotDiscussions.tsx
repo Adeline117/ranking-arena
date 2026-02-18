@@ -230,7 +230,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   <span style={{
                     fontSize: tokens.typography.fontSize.sm,
                     fontWeight: tokens.typography.fontWeight.semibold,
-                    color: post.translated ? 'var(--color-accent-brand, #7c3aed)' : 'var(--color-text-primary)',
+                    color: post.translated ? 'var(--color-translated)' : 'var(--color-text-primary)',
                     lineHeight: 1.4,
                     flex: 1,
                     minWidth: 0,
@@ -245,9 +245,9 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                     <span style={{
                       fontSize: 10,
                       fontWeight: 600,
-                      color: 'var(--color-accent-brand)',
-                      background: 'var(--color-accent-brand-08, rgba(139,92,246,0.08))',
-                      border: '1px solid var(--color-accent-brand-20, rgba(139,92,246,0.2))',
+                      color: 'var(--color-translated)',
+                      background: 'var(--color-translated-08)',
+                      border: '1px solid var(--color-translated-20)',
                       padding: '1px 5px',
                       borderRadius: tokens.radius.full,
                       lineHeight: 1.6,
@@ -261,7 +261,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                 {contentPreview && (
                   <p style={{
                     fontSize: tokens.typography.fontSize.xs,
-                    color: post.translated ? 'var(--color-accent-brand, #7c3aed)' : 'var(--color-text-secondary)',
+                    color: post.translated ? 'var(--color-translated)' : 'var(--color-text-secondary)',
                     opacity: post.translated ? 0.8 : 1,
                     lineHeight: 1.5,
                     margin: 0,

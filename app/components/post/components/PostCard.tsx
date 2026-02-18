@@ -123,7 +123,7 @@ export const PostCard = memo(function PostCard({
         <div style={{
           fontWeight: tokens.typography.fontWeight.bold,
           fontSize: tokens.typography.fontSize.sm,
-          color: isTranslated ? 'var(--color-accent-brand, #7c3aed)' : tokens.colors.text.primary,
+          color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
           lineHeight: 1.4,
           display: '-webkit-box',
           WebkitLineClamp: 2,
@@ -131,7 +131,7 @@ export const PostCard = memo(function PostCard({
           overflow: 'hidden',
         }}>
           {displayTitle}
-          {isTranslated && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-accent-brand)', background: 'var(--color-accent-brand-08, rgba(139,92,246,0.08))', padding: '0 4px', borderRadius: tokens.radius.full, marginLeft: 4 }}>译</span>}
+          {isTranslated && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', padding: '0 4px', borderRadius: tokens.radius.full, marginLeft: 4 }}>译</span>}
         </div>
         
         {/* 底部信息 */}
@@ -239,18 +239,18 @@ export const PostCard = memo(function PostCard({
       <div style={{
         fontWeight: tokens.typography.fontWeight.bold,
         fontSize: tokens.typography.fontSize.base,
-        color: isTranslated ? 'var(--color-accent-brand, #7c3aed)' : tokens.colors.text.primary,
+        color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
         lineHeight: 1.4,
       }}>
         {displayTitle}
-        {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-accent-brand)', background: 'var(--color-accent-brand-08, rgba(139,92,246,0.08))', border: '1px solid var(--color-accent-brand-20, rgba(139,92,246,0.2))', padding: '1px 5px', borderRadius: tokens.radius.full, marginLeft: 6, verticalAlign: 'middle' }}>译</span>}
+        {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', border: '1px solid var(--color-translated-20)', padding: '1px 5px', borderRadius: tokens.radius.full, marginLeft: 6, verticalAlign: 'middle' }}>译</span>}
       </div>
       
       {/* 内容预览 */}
       {displayContent && (
         <div style={{
           fontSize: tokens.typography.fontSize.sm,
-          color: isTranslated ? 'var(--color-accent-brand, #7c3aed)' : tokens.colors.text.secondary,
+          color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.secondary,
           opacity: isTranslated ? 0.8 : 1,
           lineHeight: 1.6,
           display: '-webkit-box',
