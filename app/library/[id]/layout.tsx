@@ -59,8 +59,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
 
   return {
-    title: '书库详情',
-    description: 'Arena 交易书库 -- 精选加密货币交易书籍和教育资源。',
+    title: 'Library Detail - Arena',
+    description: 'Arena Library — curated crypto trading books and educational resources.',
   }
 }
 

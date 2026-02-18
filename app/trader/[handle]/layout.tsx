@@ -114,7 +114,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   // 默认metadata
   return {
     title: handle,
-    description: `查看 ${handle} 的交易员资料 -- Arena 加密货币交易员排行榜与社区。`,
+    description: `View ${handle}'s trader profile on Arena — crypto trader rankings and community.`,
     alternates: {
       canonical: canonicalUrl,
     },

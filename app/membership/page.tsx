@@ -6,8 +6,8 @@ import { redirect } from 'next/navigation'
  * Keeps old links functional.
  */
 export const metadata: Metadata = {
-  title: '会员 - Arena',
-  description: 'Arena Pro 会员，解锁高级功能。',
+  title: 'Membership - Arena',
+  description: 'Arena Pro membership. Unlock advanced features and premium trader analytics.',
 }
 
 export default function MembershipPage() {

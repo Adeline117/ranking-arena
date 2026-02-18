@@ -61,7 +61,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   // 默认metadata
   return {
     title: handle,
-    description: `查看 ${handle} 的个人资料和交易动态。`,
+    description: `View ${handle}'s profile and trading activity on Arena.`,
     alternates: {
       canonical: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'}/u/${encodeURIComponent(handle)}`,
     },

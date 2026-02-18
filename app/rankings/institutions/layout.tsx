@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: '机构排行榜',
+  title: 'Institutions - Arena',
   description:
     'Explore top crypto institutions — exchanges, market makers, VCs, custody providers, and research firms. Community ratings and reviews.',
   alternates: {
