@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
@@ -635,6 +636,11 @@ function SearchContent() {
       <MobileBottomNav />
     </div>
   )
+}
+
+export const metadata: Metadata = {
+  title: '搜索 - Arena',
+  description: '搜索交易员、帖子、小组和资源。',
 }
 
 export default function SearchPage() {

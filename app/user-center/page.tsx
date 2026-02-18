@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -30,6 +31,11 @@ interface UserStats {
   bookmarks: number
   likes: number
   reads: number
+}
+
+export const metadata: Metadata = {
+  title: '会员中心 - Arena',
+  description: '管理你的 Arena 会员订阅和账户信息。',
 }
 
 export default function UserCenterPage() {

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
@@ -140,6 +141,11 @@ function RoiDisplay({ value, label }: { value?: number; label?: string }) {
 // ============================================
 // 主组件
 // ============================================
+
+export const metadata: Metadata = {
+  title: '关注 - Arena',
+  description: '查看你关注的交易员的最新动态。',
+}
 
 export default function FollowingPage() {
   const router = useRouter()

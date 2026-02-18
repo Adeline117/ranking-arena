@@ -1,7 +1,13 @@
+import type { Metadata } from 'next'
 'use client'
 
 import React from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+
+export const metadata: Metadata = {
+  title: '免责声明 - Arena',
+  description: 'Arena 平台免责声明和风险提示。',
+}
 
 export default function DisclaimerPage() {
   const { language } = useLanguage()

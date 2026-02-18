@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, memo } from 'react'
@@ -290,6 +291,11 @@ function MarketPageContent() {
       <MobileBottomNav />
     </div>
   )
+}
+
+export const metadata: Metadata = {
+  title: '行情 - Arena',
+  description: '实时加密货币行情，涵盖BTC、ETH、SOL等主流币种价格。',
 }
 
 export default function MarketPage() {

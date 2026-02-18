@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -162,6 +163,11 @@ function FaqSection({ title, items }: { title: string; items: Array<{ q: string;
       </Box>
     </Box>
   )
+}
+
+export const metadata: Metadata = {
+  title: '帮助中心 - Arena',
+  description: 'Arena 帮助中心，常见问题解答。',
 }
 
 export default function HelpPage() {
