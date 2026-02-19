@@ -49,7 +49,7 @@ async function getAllFills(address, maxDays) {
   const cutoff = Date.now() - maxDays * 86400000
   const all = []
   let cursor = null
-  for (let p = 0; p < 50; p++) {
+  for (let p = 0; p < 15; p++) {
     let url = `${INDEXER}/fills?address=${address}&subaccountNumber=0&limit=100`
     if (cursor) url += `&createdBeforeOrAt=${cursor}`
     const data = await dydxFetch(url)
@@ -188,28 +188,24 @@ async function main() {
       const maxDays = Math.max(...snaps.map(s => PERIODS[s.season_id] || 90))
       process.stdout.write(`  [${idx}/${byTrader.size}] ${addr.slice(0, 20)}... `)
 
-      const [fills, pnlData] = await Promise.all([
-        getAllFills(addr, maxDays),
-        getHistoricalPnl(addr, maxDays),
-      ])
+      const fills = await getAllFills(addr, maxDays)
 
-      if (!fills.length && !pnlData.length) {
-        console.log('no data')
+      if (!fills.length) {
+        console.log('no fills')
         noData += snaps.length
         await sleep(300)
         continue
       }
 
-      console.log(`${fills.length} fills, ${pnlData.length} pnl pts`)
+      console.log(`${fills.length} fills`)
 
       for (const snap of snaps) {
         const days = PERIODS[snap.season_id] || 90
-        const metrics = fills.length ? computeFromFills(fills, days) : null
-        const pnlDD = pnlData.length ? computeDrawdownFromPnl(pnlData, days) : null
+        const metrics = computeFromFills(fills, days)
 
         const wr = metrics?.win_rate ?? null
         const tc = metrics?.trades_count ?? null
-        const mdd = metrics?.max_drawdown ?? pnlDD ?? null
+        const mdd = metrics?.max_drawdown ?? null
 
         if (wr == null && mdd == null) { noData++; continue }
 
