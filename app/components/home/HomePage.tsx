@@ -8,30 +8,18 @@ import TopNav from '../layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
-import { JsonLd } from '../Providers/JsonLd'
-import { generateWebSiteSchema, generateOrganizationSchema, combineSchemas } from '@/lib/seo'
 import HomeSubNav from './HomeSubNav'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 // HomePageWithSubNav removed from homepage - only used in groups page
-import type { InitialTrader } from '@/lib/getInitialTraders'
-
 // Lazy-load sidebar widgets
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 
-interface HomePageProps {
-  initialTraders?: InitialTrader[]
-  initialLastUpdated?: string | null
-}
-
-export default function HomePage({
-  initialTraders,
-  initialLastUpdated,
-}: HomePageProps) {
+export default function HomePage() {
   return (
     <Box
       style={{
@@ -56,7 +44,6 @@ export default function HomePage({
         }}
       />
 
-      <JsonLd data={combineSchemas(generateWebSiteSchema(), generateOrganizationSchema())} />
       <TopNav email={null} />
 
       <Box
@@ -105,10 +92,7 @@ export default function HomePage({
                 <div className="skeleton" style={{ height: 400, borderRadius: tokens.radius.lg }} />
               </Box>
             }>
-                <HomePageClient
-                initialTraders={initialTraders}
-                initialLastUpdated={initialLastUpdated}
-              />
+                <HomePageClient />
             </Suspense>
           </SectionErrorBoundary>
         </ThreeColumnLayout>

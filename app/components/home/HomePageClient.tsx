@@ -7,23 +7,14 @@ import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
 import { useTraderData, useAuth } from './hooks'
 import { useLanguage } from '../Providers/LanguageProvider'
-import type { Trader } from '../ranking/RankingTable'
 import type { TimeRange } from './hooks/useTraderData'
-import type { InitialTrader } from '@/lib/getInitialTraders'
-
-interface HomePageClientProps {
-  initialTraders?: InitialTrader[]
-  initialLastUpdated?: string | null
-}
 
 /**
  * 首页客户端组件
  * 处理交互状态和数据同步
+ * 数据通过客户端fetch获取，SSR排行榜由SSRRankingTable提供
  */
-export default function HomePageClient({
-  initialTraders,
-  initialLastUpdated,
-}: HomePageClientProps) {
+export default function HomePageClient() {
   const { isLoggedIn } = useAuth()
   const { t } = useLanguage()
   const router = useRouter()
@@ -41,10 +32,7 @@ export default function HomePageClient({
     deferredFetchFailed,
     retryDeferredFetch,
     isChangingTimeRange,
-  } = useTraderData({
-    initialTraders: initialTraders as Trader[] | undefined,
-    initialLastUpdated,
-  })
+  } = useTraderData()
 
   // Sync time range with URL on initial load (avoid useSearchParams to keep page static/ISR)
   useEffect(() => {

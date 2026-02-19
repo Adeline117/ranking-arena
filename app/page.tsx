@@ -68,7 +68,7 @@ const webSiteJsonLd = {
 }
 
 export default async function Page() {
-  const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 25)
+  const { traders: initialTraders } = await getInitialTraders('90D', 25)
 
   return (
     <>
@@ -80,10 +80,7 @@ export default async function Page() {
       </div>
 
       <Suspense fallback={null}>
-        <HomePage
-          initialTraders={initialTraders}
-          initialLastUpdated={lastUpdated}
-        />
+        <HomePage />
       </Suspense>
     </>
   )
