@@ -389,7 +389,7 @@ function InstitutionCard({ institution, isZh }: { institution: Institution; isZh
         {institution.logo_url ? (
           <img
             src={institution.logo_url}
-            alt=""
+            alt={`${institution.name} logo`}
             width={44}
             height={44}
             style={{ borderRadius: tokens.radius.xl, objectFit: 'cover', border: '1px solid var(--color-border-primary)', flexShrink: 0 }}

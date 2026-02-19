@@ -439,7 +439,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                     {trader.avatarUrl && (
                       <img
                         src={trader.avatarUrl}
-                        alt=""
+                        alt={`${trader.handle || 'Trader'} avatar`}
                         width={36}
                         height={36}
                         loading="lazy"

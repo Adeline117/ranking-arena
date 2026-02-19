@@ -133,7 +133,7 @@ export default function SSRRankingTable({ traders }: Props) {
                 {trader.avatar_url && (
                   <img
                     src={`/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`}
-                    alt=""
+                    alt={`${trader.handle || 'Trader'} avatar`}
                     width={36}
                     height={36}
                     loading={rank <= 3 ? 'eager' : 'lazy'}
