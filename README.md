@@ -104,14 +104,14 @@ Arena ranks and scores 32,000+ crypto traders across 27+ centralized and decentr
 ### Prerequisites
 
 - Node.js 20+
-- pnpm
+- npm
 
 ### Installation
 
 ```bash
 git clone https://github.com/your-org/ranking-arena.git
 cd ranking-arena
-pnpm install
+npm install
 ```
 
 ### Environment
@@ -127,7 +127,7 @@ Required variables: Supabase URL/keys, Upstash Redis credentials, exchange API k
 ### Development
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 The app will be available at `http://localhost:3000`.
@@ -135,8 +135,22 @@ The app will be available at `http://localhost:3000`.
 ### Build
 
 ```bash
-pnpm build
+npm run build
 ```
+
+## Deployment
+
+The app is deployed on **Vercel** with automatic deployments from the `main` branch.
+
+```bash
+# Production deploy (via Vercel CLI)
+vercel --prod
+
+# Or push to main for automatic deployment
+git push origin main
+```
+
+Environment variables must be configured in the Vercel dashboard.
 
 ## License
 
