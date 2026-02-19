@@ -124,8 +124,7 @@ export async function GET(request: NextRequest) {
     const stale = await get<MarketOverviewData>(STALE_KEY)
     if (stale !== null) {
       // Serve stale immediately, revalidate in background (fire-and-forget)
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      fetchMarketData()
+      void fetchMarketData()
         .then((data) => cacheResult(data))
         .catch((e) => logger.warn('Background revalidation failed', { error: String(e) }))
 
@@ -137,8 +136,7 @@ export async function GET(request: NextRequest) {
     // 3. Full cold start — no cache at all, must fetch synchronously
     const data = await fetchMarketData()
     // Don't await cache write on the hot path
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    cacheResult(data).catch((e) => logger.warn('Cache write failed', { error: String(e) }))
+    void cacheResult(data).catch((e) => logger.warn('Cache write failed', { error: String(e) }))
 
     return NextResponse.json(data, {
       headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600' },
