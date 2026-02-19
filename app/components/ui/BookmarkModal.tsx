@@ -244,7 +244,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
                 color: tokens.colors.text.tertiary,
               }}
             >
-              &times;
+              <span aria-hidden="true">&times;</span>
             </button>
           </Box>
         </Box>

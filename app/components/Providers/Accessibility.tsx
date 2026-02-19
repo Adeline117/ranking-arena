@@ -1,5 +1,7 @@
 'use client'
 
+import { useLanguage } from './LanguageProvider'
+
 interface SkipLinkProps {
   targetId?: string
 }
@@ -9,9 +11,12 @@ interface SkipLinkProps {
  * Allows keyboard users to skip navigation
  */
 export function SkipLink({ targetId = 'main-content' }: SkipLinkProps) {
+  const { t } = useLanguage()
+
   return (
     <a
       href={`#${targetId}`}
+      className="skip-link"
       style={{
         position: 'absolute',
         left: '-9999px',
@@ -31,6 +36,9 @@ export function SkipLink({ targetId = 'main-content' }: SkipLinkProps) {
         e.currentTarget.style.padding = '8px 16px'
         e.currentTarget.style.borderRadius = '4px'
         e.currentTarget.style.zIndex = '9999'
+        e.currentTarget.style.fontWeight = '600'
+        e.currentTarget.style.textDecoration = 'none'
+        e.currentTarget.style.border = '2px solid var(--color-accent-primary)'
       }}
       onBlur={(e) => {
         e.currentTarget.style.left = '-9999px'
@@ -39,7 +47,7 @@ export function SkipLink({ targetId = 'main-content' }: SkipLinkProps) {
         e.currentTarget.style.overflow = 'hidden'
       }}
     >
-      Skip to main content
+      {t('skipToContent')}
     </a>
   )
 }

@@ -232,7 +232,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               borderRadius: tokens.radius.md,
             }}
           >
-            &times;
+            <span aria-hidden="true">&times;</span>
           </button>
         </div>
 
