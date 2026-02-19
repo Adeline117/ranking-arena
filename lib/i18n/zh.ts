@@ -1969,6 +1969,7 @@ const zh = {
     maxDrawdownShort: '最大回撤',
     winRateShort: '胜率',
     sharpeNotAvailable: '该交易所未提供夏普比率数据',
+    comingSoon: '即将推出',
     drawdownNotAvailable: '该交易所未提供回撤数据',
     winRateNotAvailable: '该交易所未提供胜率数据',
     positionStatsNotAvailable: '该交易所未提供持仓统计',
