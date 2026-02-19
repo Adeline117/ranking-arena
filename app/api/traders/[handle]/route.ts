@@ -192,74 +192,62 @@ async function safeQuery<T>(
   }
 }
 
-// 查找交易员来源
+// 查找交易员来源 — single query instead of N+1 per platform
 async function findTraderSource(
   supabase: SupabaseClient,
   handle: string
 ): Promise<{ source: TraderSource; sourceType: SourceType } | null> {
   const decodedHandle = decodeURIComponent(handle)
   
-  // 并行查询所有数据源
-  const queries = TRADER_SOURCES.map(async (sourceType) => {
-    // 先尝试 handle
-    const { data: byHandle } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, profile_url, avatar_url, market_type')
-      .eq('source', sourceType)
-      .eq('handle', decodedHandle)
-      .limit(1)
-      .maybeSingle()
-    
-    if (byHandle) {
-      return { source: byHandle as TraderSource, sourceType }
-    }
-    
-    // 再尝试 source_trader_id
-    const { data: byId } = await supabase
-      .from('trader_sources')
-      .select('source_trader_id, handle, profile_url, avatar_url, market_type')
-      .eq('source', sourceType)
-      .eq('source_trader_id', decodedHandle)
-      .limit(1)
-      .maybeSingle()
-    
-    if (byId) {
-      return { source: byId as TraderSource, sourceType }
-    }
-    
-    return null
-  })
+  // Single query: try handle match first, then source_trader_id match
+  const { data: byHandle } = await supabase
+    .from('trader_sources')
+    .select('source, source_trader_id, handle, profile_url, avatar_url, market_type')
+    .eq('handle', decodedHandle)
+    .in('source', TRADER_SOURCES as unknown as string[])
+    .limit(1)
+    .maybeSingle()
   
-  const results = await Promise.all(queries)
-  return results.find(r => r !== null) || null
+  if (byHandle && TRADER_SOURCES.includes(byHandle.source as SourceType)) {
+    return { source: byHandle as TraderSource, sourceType: byHandle.source as SourceType }
+  }
+  
+  const { data: byId } = await supabase
+    .from('trader_sources')
+    .select('source, source_trader_id, handle, profile_url, avatar_url, market_type')
+    .eq('source_trader_id', decodedHandle)
+    .in('source', TRADER_SOURCES as unknown as string[])
+    .limit(1)
+    .maybeSingle()
+  
+  if (byId && TRADER_SOURCES.includes(byId.source as SourceType)) {
+    return { source: byId as TraderSource, sourceType: byId.source as SourceType }
+  }
+  
+  return null
 }
 
 // 从 trader_snapshots 直接查找交易员（当 trader_sources 没有数据时的回退方案）
+// Single query instead of N+1 per platform
 async function findTraderFromSnapshots(
   supabase: SupabaseClient,
   handle: string
 ): Promise<{ traderId: string; sourceType: SourceType } | null> {
   const decodedHandle = decodeURIComponent(handle)
   
-  // 并行查询所有数据源的快照
-  const queries = TRADER_SOURCES.map(async (sourceType) => {
-    const { data } = await supabase
-      .from('trader_snapshots')
-      .select('source_trader_id')
-      .eq('source', sourceType)
-      .eq('source_trader_id', decodedHandle)
-      .limit(1)
-      .maybeSingle()
-    
-    if (data) {
-      return { traderId: data.source_trader_id, sourceType }
-    }
-    
-    return null
-  })
+  const { data } = await supabase
+    .from('trader_snapshots')
+    .select('source, source_trader_id')
+    .eq('source_trader_id', decodedHandle)
+    .in('source', TRADER_SOURCES as unknown as string[])
+    .limit(1)
+    .maybeSingle()
   
-  const results = await Promise.all(queries)
-  return results.find(r => r !== null) || null
+  if (data && TRADER_SOURCES.includes(data.source as SourceType)) {
+    return { traderId: data.source_trader_id, sourceType: data.source as SourceType }
+  }
+  
+  return null
 }
 
 // 获取交易员详细数据
@@ -469,6 +457,7 @@ async function getTraderDetails(
       .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, profitability_score, risk_control_score, execution_score')
       .eq('source', sourceType)
       .eq('source_trader_id', traderId)
+      .limit(5)
     
     if (lrRows && lrRows.length > 0) {
       const lr90 = lrRows.find((r: Record<string, unknown>) => r.season_id === '90D')

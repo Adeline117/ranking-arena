@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
 
     const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
 
-    const limit = Math.min(parseInt(searchParams.get('limit') || '2000', 10) || 2000, 10000);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500);
     const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
@@ -182,7 +182,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     window,
     category,
     platform,
-    limit = 2000,
+    limit = 100,
     offset = 0,
     sort_by = 'arena_score',
     sort_dir = 'desc',
@@ -191,7 +191,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   } = rankingsQuery;
 
   const supabase = getSupabaseAdmin();
-  const safeLimit = Math.min(limit, 10000);
+  const safeLimit = Math.min(limit, 500);
 
   // Map sort column for trader_snapshots table
   const sortColumnMap: Record<string, string> = {
@@ -416,7 +416,7 @@ async function getCompositeRankings(params: {
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
       .or('roi.neq.0,pnl.neq.0')
       .order('arena_score', { ascending: false, nullsFirst: false })
-      .limit(2000);
+      .limit(1000);
 
     if (platform) q = q.eq('source', platform);
     else if (category) {

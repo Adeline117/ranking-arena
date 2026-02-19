@@ -20,18 +20,18 @@ export async function GET() {
 
     const { data: health } = await supabase
       .from('platform_health')
-      .select('*')
+      .select('platform, status, last_success_at, error_count, avg_response_ms')
       .order('platform');
 
-    // Get latest data timestamps per platform from leaderboard_ranks (more complete)
+    // Get latest data timestamps per platform using RPC or limited query
     const latestByPlatform = new Map<string, string>();
 
-    // Try leaderboard_ranks first (has all platforms)
+    // Try leaderboard_ranks — fetch only distinct platforms with latest timestamp
     const { data: lbFreshness } = await supabase
       .from('leaderboard_ranks')
       .select('platform, updated_at')
       .order('updated_at', { ascending: false })
-      .limit(500);
+      .limit(100);
 
     for (const row of lbFreshness || []) {
       const key = row.platform;
@@ -45,7 +45,7 @@ export async function GET() {
       .from('trader_snapshots')
       .select('source, captured_at')
       .order('captured_at', { ascending: false })
-      .limit(200);
+      .limit(100);
 
     for (const row of snapFreshness || []) {
       const key = row.source;
