@@ -348,9 +348,46 @@ export default function EpubReader({
         height: '100%',
         spread: 'none',
         flow: 'paginated',
+        allowScriptedContent: true,
       })
 
       renditionRef.current = rendition
+
+      // Fix CSP: epub.js iframes block blob: stylesheets.
+      // Inject a permissive CSP meta tag and convert blob stylesheets to inline.
+      rendition.hooks.content.register((contents: Contents) => {
+        try {
+          const doc = contents.document
+          if (!doc) return
+
+          // Inject permissive CSP meta tag into iframe head
+          const meta = doc.createElement('meta')
+          meta.httpEquiv = 'Content-Security-Policy'
+          meta.content = "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' blob:; style-src-elem * 'unsafe-inline' blob:; img-src * data: blob:; font-src * data:;"
+          const head = doc.head || doc.querySelector('head')
+          if (head) {
+            head.insertBefore(meta, head.firstChild)
+          }
+
+          // Also convert any blocked blob: stylesheets to inline <style> tags
+          const links = doc.querySelectorAll('link[rel="stylesheet"]')
+          links.forEach((link: Element) => {
+            const href = link.getAttribute('href')
+            if (href && href.startsWith('blob:')) {
+              fetch(href)
+                .then(r => r.text())
+                .then(css => {
+                  const style = doc.createElement('style')
+                  style.textContent = css
+                  link.parentNode?.replaceChild(style, link)
+                })
+                .catch(() => {})
+            }
+          })
+        } catch (e) {
+          // Silently handle - don't break reader
+        }
+      })
 
       // Apply theme
       applyTheme(rendition, theme, fontSize, fontFamily, localLineHeight, localPageMargin)
