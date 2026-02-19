@@ -348,7 +348,6 @@ export default function EpubReader({
         height: '100%',
         spread: 'none',
         flow: 'paginated',
-        allowScriptedContent: true,
       })
 
       renditionRef.current = rendition
