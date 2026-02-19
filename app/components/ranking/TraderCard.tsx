@@ -197,7 +197,7 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label="MDD"
-            value={trader.max_drawdown ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : '—'}
+            value={trader.max_drawdown ? (Math.abs(trader.max_drawdown) < 0.5 ? '< 1%' : `-${Math.abs(trader.max_drawdown).toFixed(0)}%`) : '—'}
             color={trader.max_drawdown ? TRADER_ACCENT_ERROR : undefined}
           />
         </Box>

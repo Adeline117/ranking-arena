@@ -297,7 +297,7 @@ function SnapshotCard({ window, metrics }: { window: SnapshotWindow; metrics: Sn
         {metrics.max_drawdown != null && Math.abs(metrics.max_drawdown) <= 100 && (
           <div className="flex justify-between">
             <span className="text-xs" style={{ color: tokens.colors.text.secondary }}>{t('mddLabel')}</span>
-            <span className="text-sm" style={{ color: tokens.colors.accent.error }}>-{metrics.max_drawdown.toFixed(1)}%</span>
+            <span className="text-sm" style={{ color: tokens.colors.accent.error }}>{Math.abs(metrics.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(metrics.max_drawdown).toFixed(1)}%`}</span>
           </div>
         )}
         {metrics.trades_count != null && (

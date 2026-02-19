@@ -203,7 +203,7 @@ export default function SSRRankingTable({ traders }: Props) {
               fontSize: 12,
               color: 'var(--color-danger)',
             }}>
-              {trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(1)}%` : '--'}
+              {trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`) : '--'}
             </span>
           </a>
         )
