@@ -131,7 +131,6 @@ export default function SSRRankingTable({ traders }: Props) {
               }}>
                 {initial}
                 {trader.avatar_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={`/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`}
                     alt=""

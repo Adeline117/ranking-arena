@@ -295,7 +295,7 @@ export default function ReadPage() {
   // ePub state
   const [epubToc, setEpubToc] = useState<EpubTocEntry[]>([])
   const [epubGoToHref, setEpubGoToHref] = useState<string | null>(null)
-  const [epubReady, setEpubReady] = useState(false)
+  const [_epubReady, setEpubReady] = useState(false)
   const epubContainerRef = useRef<HTMLDivElement>(null)
 
   // Reading preferences (persisted)

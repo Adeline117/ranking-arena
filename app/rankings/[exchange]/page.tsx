@@ -1,6 +1,6 @@
 import { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import { EXCHANGE_NAMES, SOURCES_WITH_DATA, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { Box } from '@/app/components/base'
@@ -9,7 +9,6 @@ import { logger } from '@/lib/logger'
 
 export const revalidate = 3600 // ISR: 1 hour
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _supabaseInstance: any = null
 
 function getSupabase() {
