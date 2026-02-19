@@ -2,7 +2,7 @@
 /**
  * Enrich Bybit PNL + Equity Curves via direct API
  */
-import { readFileSync } from 'fs'
+const { readFileSync } = require('fs')
 try {
   for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
     const m = line.match(/^([^#=]+)=["']?(.+?)["']?$/)
@@ -10,11 +10,11 @@ try {
   }
 } catch {}
 
-import { createClient } from '@supabase/supabase-js'
-import pg from 'pg'
+const { createClient } = require('@supabase/supabase-js')
+const { Pool } = require('pg')
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 })
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 })
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'

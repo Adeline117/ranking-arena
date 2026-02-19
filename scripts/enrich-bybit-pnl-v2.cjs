@@ -1,20 +1,17 @@
 #!/usr/bin/env node
 /**
  * Enrich Bybit PNL + Equity Curves via direct API
+ * Uses pg Pool (not Client) to avoid connection hanging
  */
-import { readFileSync } from 'fs'
-try {
-  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-    const m = line.match(/^([^#=]+)=["']?(.+?)["']?$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
-  }
-} catch {}
+process.env.DATABASE_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+process.env.SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlrbmt0emlmamR5dWpkY2N5aHN2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjU1MTU1MywiZXhwIjoyMDgyMTI3NTUzfQ.dBTyJ6tPY-eelVj4khLq31RuUg59Opcy5B48zOLLuGE'
 
-import { createClient } from '@supabase/supabase-js'
-import pg from 'pg'
+const { createClient } = require('@supabase/supabase-js')
+const { Pool } = require('pg')
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 })
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2, idleTimeoutMillis: 5000 })
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -23,13 +20,19 @@ const LIMIT = parseInt(process.argv.find(a => a.startsWith('--limit='))?.split('
 async function fetchJSON(url) {
   for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) })
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 30000)
+      const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: ctrl.signal })
+      clearTimeout(timer)
       if (res.status === 429) { await sleep(5000 * (i + 1)); continue }
       if (!res.ok) return null
       const text = await res.text()
       if (text.startsWith('<')) return null
       return JSON.parse(text)
-    } catch { if (i < 2) await sleep(1000) }
+    } catch (e) { 
+      console.log(`    fetch err (attempt ${i+1}): ${e.message}`)
+      if (i < 2) await sleep(1000) 
+    }
   }
   return null
 }
@@ -38,41 +41,48 @@ const INCOME_URL = 'https://api2.bybit.com/fapi/beehive/public/v1/common/leader-
 const YIELD_URL = 'https://api2.bybit.com/fapi/beehive/public/v2/leader/yield-trend'
 const PERIODS = { '7D': 'DAY_CYCLE_TYPE_SEVEN_DAY', '30D': 'DAY_CYCLE_TYPE_THIRTY_DAY', '90D': 'DAY_CYCLE_TYPE_NINETY_DAY' }
 
-async function main() {
+;(async () => {
+  console.log(`📊 Bybit PNL+Equity enrichment (limit=${LIMIT})`)
+  
   const { rows } = await pool.query(`
     SELECT DISTINCT source_trader_id 
     FROM trader_snapshots 
     WHERE source = 'bybit' AND pnl IS NULL 
       AND (source_trader_id LIKE '%==%' OR source_trader_id ~ '^\\d{9,}$')
+    ORDER BY source_trader_id
     LIMIT $1
   `, [LIMIT])
   
-  console.log(`📊 Bybit: ${rows.length} traders with null PNL`)
-  if (!rows.length) { await pool.end(); return }
+  console.log(`Found ${rows.length} traders`)
+  if (!rows.length) { await pool.end(); process.exit(0) }
+
   let pnlN = 0, equityN = 0, errors = 0, skipped = 0
   const now = new Date().toISOString()
+  const startTime = Date.now()
 
   for (let i = 0; i < rows.length; i++) {
     const tid = rows[i].source_trader_id
     const enc = encodeURIComponent(tid)
 
     try {
+      // Fetch income
       const json = await fetchJSON(`${INCOME_URL}?leaderMark=${enc}`)
       if (!json || json.retCode !== 0 || !json.result) { skipped++; await sleep(300); continue }
       
       const r = json.result
       const cumPnl = parseInt(r.cumYieldE8 || '0') / 1e8
       
+      // Update PNL
       if (cumPnl !== 0) {
         const res = await pool.query(
-          `UPDATE trader_snapshots SET pnl = $1 WHERE source = 'bybit' AND source_trader_id = $2 AND pnl IS NULL`,
-          [cumPnl, tid]
+          'UPDATE trader_snapshots SET pnl = $1 WHERE source = $2 AND source_trader_id = $3 AND pnl IS NULL',
+          [cumPnl, 'bybit', tid]
         )
         if (res.rowCount > 0) pnlN++
       }
-      await sleep(500)
+      await sleep(400)
 
-      // Equity curves
+      // Fetch equity curves for each period
       for (const [period, cycleType] of Object.entries(PERIODS)) {
         const yJson = await fetchJSON(`${YIELD_URL}?dayCycleType=${cycleType}&period=PERIOD_DAY&leaderMark=${enc}`)
         const trend = yJson?.result?.yieldTrend
@@ -84,25 +94,29 @@ async function main() {
             pnl_usd: parseInt(p.cumResetPnlE8 || p.yieldE8 || '0') / 1e8,
             captured_at: now,
           }))
-          const { error } = await sb.from('trader_equity_curve')
-            .upsert(points, { onConflict: 'source,source_trader_id,period,data_date' })
-          if (!error) equityN++
-          else console.log(`  ⚠ eq: ${error.message}`)
+          // Batch upsert via supabase
+          for (let j = 0; j < points.length; j += 50) {
+            const batch = points.slice(j, j + 50)
+            const { error } = await sb.from('trader_equity_curve')
+              .upsert(batch, { onConflict: 'source,source_trader_id,period,data_date' })
+            if (error) { console.log(`  ⚠ eq: ${error.message}`); break }
+          }
+          equityN++
         }
-        await sleep(400)
+        await sleep(350)
       }
     } catch (e) {
       errors++
-      if (errors <= 3) console.log(`  ⚠ ${tid}: ${e.message}`)
+      if (errors <= 5) console.log(`  ⚠ [${i+1}] ${tid}: ${e.message}`)
     }
 
-    if ((i + 1) % 20 === 0 || i === rows.length - 1) {
-      console.log(`  [${i+1}/${rows.length}] pnl=${pnlN} equity=${equityN} skip=${skipped} err=${errors}`)
+    if ((i + 1) % 10 === 0 || i === rows.length - 1) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(0)
+      console.log(`  [${i+1}/${rows.length}] pnl=${pnlN} eq=${equityN} skip=${skipped} err=${errors} (${elapsed}s)`)
     }
   }
 
-  console.log(`\n✅ Bybit done: PNL=${pnlN} equity=${equityN}`)
+  console.log(`\n✅ Bybit done: PNL=${pnlN} equity=${equityN} skip=${skipped} err=${errors}`)
   await pool.end()
-}
-
-main().catch(e => { console.error(e); process.exit(1) })
+  process.exit(0)
+})().catch(e => { console.error(e); process.exit(1) })

@@ -73,7 +73,6 @@ interface ServerProfile {
   exp?: number
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TraderPageData = Record<string, any>
 
 interface UserProfileClientProps {
