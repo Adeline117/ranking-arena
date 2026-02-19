@@ -918,6 +918,11 @@ function HotContent() {
                               lineHeight: 1.4,
                               fontSize: '14px',
                               cursor: 'pointer',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
                             }}>
                               {translatedListPosts[p.id]?.title || p.title}
                               {translatedListPosts[p.id]?.title && (
