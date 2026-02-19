@@ -54,7 +54,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
               >
                 {data.profile.avatar_url ? (
                   <img
-                    src={data.profile.avatar_url}
+                    src={data.profile.avatar_url?.startsWith("/") ? data.profile.avatar_url : `/api/avatar?url=${encodeURIComponent(data.profile.avatar_url || "")}`}
                     alt={data.profile.display_name || traderKey}
                     width={64}
                     height={64}
