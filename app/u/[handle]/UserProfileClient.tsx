@@ -729,6 +729,23 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 <MessageButton targetUserId={profile.id} currentUserId={currentUserId} size="sm" />
               </>
             )}
+
+            {!isOwnProfile && profile.isRegistered && !currentUserId && mounted && (
+              <Link
+                href={`/login?returnUrl=${encodeURIComponent(`/u/${handle}`)}`}
+                style={{
+                  color: tokens.colors.accent.primary, fontSize: tokens.typography.fontSize.sm,
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.lg,
+                  background: `${tokens.colors.accent.primary}15`, border: `1px solid ${tokens.colors.accent.primary}40`,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
+                  fontWeight: tokens.typography.fontWeight.medium,
+                  textDecoration: 'none',
+                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+              >
+                {isZh ? 'Login to Follow' : 'Login to Follow'}
+              </Link>
+            )}
           </Box>
         </Box>
           )

@@ -903,11 +903,21 @@ function HotContent() {
                               )}
                             </Box>
 
-                            {/* Title */}
+                            {/* Title - clickable link to post detail */}
+                            <Link
+                              href={`/post/${p.id}`}
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleOpenPost(p)
+                              }}
+                              style={{ textDecoration: 'none', color: 'inherit' }}
+                            >
                             <Text className="hot-post-title" size="base" weight="bold" style={{
                               marginBottom: tokens.spacing[1],
                               lineHeight: 1.4,
                               fontSize: '14px',
+                              cursor: 'pointer',
                             }}>
                               {translatedListPosts[p.id]?.title || p.title}
                               {translatedListPosts[p.id]?.title && (
@@ -922,6 +932,7 @@ function HotContent() {
                                 </span>
                               )}
                             </Text>
+                            </Link>
 
                             {/* Body preview */}
                             {(() => {
