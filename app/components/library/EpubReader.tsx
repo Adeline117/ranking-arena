@@ -328,6 +328,16 @@ export default function EpubReader({
       const ePub = (await import('epubjs')).default
       if (cancelled || !containerRef.current) return
 
+      // Wait for container to have non-zero dimensions (flex layout may not be settled yet)
+      let waitAttempts = 0
+      while (containerRef.current && waitAttempts < 20) {
+        const r = containerRef.current.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) break
+        await new Promise(resolve => setTimeout(resolve, 50))
+        waitAttempts++
+      }
+      if (cancelled || !containerRef.current) return
+
       // Fetch EPUB as ArrayBuffer to avoid CORS issues with epubjs zip extraction
       let bookInput: string | ArrayBuffer = url
       try {
@@ -343,9 +353,17 @@ export default function EpubReader({
       const book = ePub(bookInput)
       bookRef.current = book
 
-      const rendition = book.renderTo(containerRef.current, {
-        width: '100%',
-        height: '100%',
+      // Use explicit pixel dimensions to avoid epub.js measuring 0 height
+      // when the container hasn't fully laid out yet (flex/percentage sizing).
+      // Fall back to window dimensions if container reports 0.
+      const containerEl = containerRef.current
+      const rect = containerEl.getBoundingClientRect()
+      const initWidth = Math.round(rect.width) || window.innerWidth
+      const initHeight = Math.round(rect.height) || window.innerHeight
+
+      const rendition = book.renderTo(containerEl, {
+        width: initWidth,
+        height: initHeight,
         spread: 'none',
         flow: 'paginated',
       })
@@ -497,8 +515,29 @@ export default function EpubReader({
 
     init()
 
+    // ResizeObserver to keep rendition dimensions in sync with container
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
+    const observer = new ResizeObserver((entries) => {
+      if (cancelled) return
+      const entry = entries[0]
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0 && renditionRef.current) {
+        // Debounce resize to avoid excessive reflows
+        if (resizeTimer) clearTimeout(resizeTimer)
+        resizeTimer = setTimeout(() => {
+          renditionRef.current?.resize(Math.round(width), Math.round(height))
+        }, 150)
+      }
+    })
+    if (containerRef.current) {
+      observer.observe(containerRef.current)
+    }
+
     return () => {
       cancelled = true
+      observer.disconnect()
+      if (resizeTimer) clearTimeout(resizeTimer)
       if (bookRef.current) {
         bookRef.current.destroy()
         bookRef.current = null
