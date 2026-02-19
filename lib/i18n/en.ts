@@ -3014,6 +3014,8 @@ const en = {
     shareToTelegram: 'Share to Telegram',
     shareToWhatsApp: 'Share to WhatsApp',
     scrollToTop: 'Back to top',
+    skipToContent: 'Skip to main content',
+    goToPage: 'Go to page {page}',
 
     // LiveTradesFeed
     liveTradesFeed: 'Live Trades Feed',

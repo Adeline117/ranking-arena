@@ -16,7 +16,7 @@ export interface PaginationProps {
  * Uses CSS classes for hover effects instead of JS onMouseEnter/Leave.
  */
 export default function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   if (totalPages <= 1) return null
 
@@ -43,7 +43,8 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
   }
 
   return (
-    <Box
+    <nav
+      aria-label={language === 'zh' ? '分页导航' : 'Pagination'}
       className="pagination-container"
       style={{
         padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
@@ -57,6 +58,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
       }}
     >
       <button
+        aria-label={t('prevPage')}
         className={`pagination-btn pagination-nav ${currentPage === 1 ? 'pagination-disabled' : ''}`}
         onClick={() => onPageChange(Math.max(1, currentPage - 1))}
         disabled={currentPage === 1}
@@ -93,6 +95,8 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
           return (
             <button
               key={pageNum}
+              aria-label={t('goToPage').replace('{page}', String(pageNum))}
+              aria-current={isActive ? 'page' : undefined}
               className={`pagination-btn pagination-page ${isActive ? 'pagination-active' : ''}`}
               onClick={() => onPageChange(pageNum)}
               style={{
@@ -116,6 +120,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
       </Box>
 
       <button
+        aria-label={t('nextPage')}
         className={`pagination-btn pagination-nav ${currentPage === totalPages ? 'pagination-disabled' : ''}`}
         onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
         disabled={currentPage === totalPages}
@@ -134,6 +139,6 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
       >
         {t('nextPage')}
       </button>
-    </Box>
+    </nav>
   )
 }

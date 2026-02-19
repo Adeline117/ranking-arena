@@ -3017,6 +3017,8 @@ const zh = {
     shareToTelegram: '分享到 Telegram',
     shareToWhatsApp: '分享到 WhatsApp',
     scrollToTop: '返回顶部',
+    skipToContent: '跳转到主要内容',
+    goToPage: '跳转到第 {page} 页',
 
     // LiveTradesFeed
     liveTradesFeed: '实时交易流',
