@@ -75,6 +75,7 @@ async function fetchMyGroups(userId: string): Promise<Group[]> {
     .eq('user_id', userId)
     .limit(10)
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data || []).map((d: any) => d.groups as Group).filter(Boolean)
 }
 

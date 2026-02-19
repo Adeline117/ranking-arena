@@ -89,7 +89,7 @@ function SearchContent() {
           const fallback = data.fallback || ['BTC', 'ETH', 'Binance', 'Bitget', 'SOL']
           
           if (trending.length >= 3) {
-            setTrendingSearches(trending.slice(0, 6).map((item: any) => item.query))
+            setTrendingSearches(trending.slice(0, 6).map((item: { query: string }) => item.query))
           } else {
             setTrendingSearches(fallback.slice(0, 6))
           }
