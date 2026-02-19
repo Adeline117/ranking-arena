@@ -84,7 +84,7 @@ export async function GET(
       .eq('source', traderInfo.source)
       .not('roi', 'is', null)
       .order('captured_at', { ascending: true })
-      .limit(1000) as { data: SnapshotRow[] | null; error: any }
+      .limit(1000) as { data: SnapshotRow[] | null; error: { message: string } | null }
 
     if (error) {
       return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 })

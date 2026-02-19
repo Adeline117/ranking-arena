@@ -442,7 +442,7 @@ export default function EpubReader({
       })
 
       // Track location changes
-      rendition.on('relocated', (location: any) => {
+      rendition.on('relocated', (location: { start?: { cfi: string; displayed?: { page: number; total: number } }; end?: { cfi: string } }) => {
         if (cancelled) return
         const cfi = location.start?.cfi
         if (cfi) {
@@ -450,8 +450,8 @@ export default function EpubReader({
 
           const percent = book.locations?.percentageFromCfi?.(cfi)
           const p = typeof percent === 'number' ? Math.round(percent * 100) : 0
-          const page = location.start.displayed?.page || 1
-          const total = location.start.displayed?.total || 1
+          const page = location.start?.displayed?.page || 1
+          const total = location.start?.displayed?.total || 1
 
           setProgressPercent(p)
           setCurrentPage(page)

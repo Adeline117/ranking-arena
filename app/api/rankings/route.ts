@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
     const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${offset}:${minPnl || ''}:${minTrades || ''}`
 
      
-    let result: any;
+    let result: unknown;
 
     if (normalizedWindow === 'composite') {
       // Composite: fetch all three windows and merge

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       .select('trader_id, roi_7d, roi_30d, nickname, win_rate')
       .not('roi_7d', 'is', null)
       .order('roi_7d', { ascending: false })
-      .limit(10) as { data: any[] | null }
+      .limit(10) as { data: { trader_id: string; roi_7d: number; roi_30d: number; nickname: string; win_rate: number }[] | null }
 
     if (!snapshots || snapshots.length === 0) {
       return new Response(JSON.stringify({ message: 'Insufficient data to generate weekly ranking' }))

@@ -70,9 +70,11 @@ interface ServerProfile {
   proBadgeTier: 'pro' | null
   role?: string
   traderHandle?: string
+  exp?: number
 }
 
-type TraderPageData = any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TraderPageData = Record<string, any>
 
 interface UserProfileClientProps {
   handle: string
@@ -592,7 +594,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                   {profile.handle}
                 </Text>
 
-                <LevelBadge exp={(profile as any).exp || 0} size="md" />
+                <LevelBadge exp={profile.exp || 0} size="md" />
 
                 {profile.isVerifiedTrader && (
                   <Box
