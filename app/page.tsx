@@ -3,16 +3,30 @@ import { Suspense } from 'react'
 import { HomePage } from './components/home'
 import { getInitialTraders } from '@/lib/getInitialTraders'
 import SSRRankingTable from './components/home/SSRRankingTable'
+import { JsonLd } from './components/Providers/JsonLd'
+
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
   title: 'Arena — Crypto Trader Rankings & Community',
   description: 'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+  alternates: {
+    canonical: baseUrl,
+  },
   openGraph: {
     title: 'Arena — Crypto Trader Rankings & Community',
     description: 'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
-    url: 'https://www.arenafi.org/',
+    url: baseUrl,
     siteName: 'Arena',
     type: 'website',
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena - Crypto Trader Rankings' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Arena — Crypto Trader Rankings & Community',
+    description: 'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+    images: [`${baseUrl}/og-image.png`],
+    creator: '@arenafi',
   },
 }
 
@@ -27,11 +41,39 @@ export const revalidate = 300
  * Phase 2: HomePage client component hydrates. CSS :has() hides SSR table
  *          the moment .home-ranking-section appears in DOM. Zero CLS.
  */
+// Site-level JSON-LD structured data
+const organizationJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Arena',
+  url: baseUrl,
+  logo: `${baseUrl}/logo-symbol.png`,
+  sameAs: ['https://twitter.com/arenafi'],
+  description: 'Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.',
+}
+
+const webSiteJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'Arena',
+  url: baseUrl,
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: `${baseUrl}/search?q={search_term_string}`,
+    },
+    'query-input': 'required name=search_term_string',
+  },
+}
+
 export default async function Page() {
   const { traders: initialTraders, lastUpdated } = await getInitialTraders('90D', 25)
 
   return (
     <>
+      <JsonLd data={organizationJsonLd} />
+      <JsonLd data={webSiteJsonLd} />
       {/* SSR ranking table — LCP element, hidden by CSS :has() when client renders */}
       <div id="ssr-ranking">
         <SSRRankingTable traders={initialTraders} />
