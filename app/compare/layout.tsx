@@ -18,9 +18,11 @@ export const metadata: Metadata = {
     images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena 交易员对比' }],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: 'Compare Traders | Arena',
     description: 'Compare traders side-by-side across exchanges.',
+    images: [`${baseUrl}/og-image.png`],
+    creator: '@arenafi',
   },
 }
 
