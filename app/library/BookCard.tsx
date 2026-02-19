@@ -1,6 +1,7 @@
 'use client'
 
 import React, { memo } from 'react'
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import type { LibraryItem } from '@/lib/types/library'
 import BookCover from './BookCover'
@@ -25,7 +26,7 @@ interface BookCardProps {
 
 const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCardProps) {
   return (
-    <a
+    <Link
       href={`/library/${item.id}`}
       className="card-hover book-card-hover"
       style={{
@@ -145,7 +146,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           )}
         </div>
       </div>
-    </a>
+    </Link>
   )
 })
 
