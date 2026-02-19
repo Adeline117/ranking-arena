@@ -15,7 +15,7 @@ const zh = {
     followingStatus: '关注中',
     recommended: '推荐',
     bookshelf: '书架',
-    followers: '被关注',
+    followers: '粉丝',
     bio: '个人简介',
     performance: '表现',
     stats: '数据统计',
@@ -3027,7 +3027,7 @@ const zh = {
 
     // PWA 安装提示
     pwaInstallBanner: '安装应用提示',
-    pwaInstallTitle: '安装竞技场',
+    pwaInstallTitle: '安装 Arena',
     pwaInstallDesc: '添加到主屏幕，获得更快的访问体验',
     pwaInstallButton: '安装',
 

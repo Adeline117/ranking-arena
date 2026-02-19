@@ -329,7 +329,7 @@ export default function BookDetailClient({
               } as Record<string, string>)[book.category] || book.category : book.category} />}
               {book.publisher && <MetaPill label={book.publisher} />}
               {book.publish_date && <MetaPill label={book.publish_date} />}
-              {book.language && <MetaPill label={book.language === 'zh' ? 'Chinese' : book.language === 'en' ? 'English' : book.language} />}
+              {book.language && <MetaPill label={book.language === 'zh' ? (isZh ? '中文' : 'Chinese') : book.language === 'en' ? (isZh ? '英文' : 'English') : book.language} />}
               {book.page_count && <MetaPill label={`${book.page_count} ${isZh ? '页' : 'pages'}`} />}
               {book.isbn && <MetaPill label={`ISBN: ${book.isbn}`} />}
             </div>
@@ -634,7 +634,7 @@ export default function BookDetailClient({
                   fontSize: 13, fontWeight: 500,
                 }}
               >
-                {descExpanded ? 'Show less' : 'Show more'}
+                {descExpanded ? (isZh ? '收起' : 'Show less') : (isZh ? '展开全文' : 'Show more')}
               </button>
             )}
           </Section>
