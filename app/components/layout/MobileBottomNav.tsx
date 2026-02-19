@@ -224,7 +224,7 @@ export default function MobileBottomNav(): React.ReactElement {
     { href: '/', labelKey: 'home', Icon: HomeIcon },
     { href: '/hot', labelKey: 'hot', Icon: FireIcon },
     { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
-    { href: '/', labelKey: 'rankings', Icon: LibraryIcon },
+    { href: '/rankings', labelKey: 'rankings', Icon: LibraryIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
   ], [userHandle])
 

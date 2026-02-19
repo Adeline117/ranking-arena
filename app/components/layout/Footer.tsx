@@ -17,7 +17,7 @@ export default function Footer() {
     {
       title: isZh ? '产品' : 'Product',
       links: [
-        { href: '/', label: isZh ? '排行榜' : 'Rankings' },
+        { href: '/rankings', label: isZh ? '排行榜' : 'Rankings' },
         { href: '/market', label: isZh ? '市场' : 'Market' },
         { href: '/library', label: isZh ? '知识库' : 'Library' },
       ],
