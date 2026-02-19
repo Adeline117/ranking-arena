@@ -331,7 +331,7 @@ export const TraderRow = memo(function TraderRow({
         <Box className="col-mdd" style={{ textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }}>
           {trader.max_drawdown ? (
             <Text size="sm" weight="semibold" style={{ color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
-              -{Math.abs(trader.max_drawdown).toFixed(1)}%
+              {Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1' : `-${Math.abs(trader.max_drawdown).toFixed(1)}`}%
             </Text>
           ) : (
             <NaIndicator source={trader.source || source} metricType="drawdown" />
