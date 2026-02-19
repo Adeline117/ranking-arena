@@ -12,7 +12,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 export interface TraderData {
   source: string
   source_trader_id: string
-  handle: string
+  handle: string | null
   profile_url?: string | null
   season_id: string
   rank?: number | null

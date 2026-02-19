@@ -116,9 +116,9 @@ export default function TopTraders() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {traders.map((t, idx) => {
             const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
-            const isLongNumeric = (s: string) => /^\d{10,}$/.test(s)
+            const isLongNumeric = (s: string) => /^\d{7,}$/.test(s)
             const formatAddr = (s: string) => `${s.slice(0, 6)}...${s.slice(-4)}`
-            const formatId = (s: string) => isAddress(s) ? formatAddr(s) : isLongNumeric(s) ? `ID ${s.slice(-6)}` : s
+            const formatId = (s: string) => isAddress(s) ? formatAddr(s) : isLongNumeric(s) ? `Trader ${s.slice(-6)}` : s
             const displayName = t.handle && !isAddress(t.handle) && !isLongNumeric(t.handle)
               ? t.handle
               : t.handle

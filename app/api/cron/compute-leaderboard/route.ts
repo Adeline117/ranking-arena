@@ -296,7 +296,10 @@ async function computeSeason(
     ) / 100
 
     const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || { handle: null, avatar_url: null }
-    const displayHandle = (info.handle && info.handle.trim()) || t.source_trader_id
+    // Only use handle if it's a real nickname, not a numeric UID
+    const rawHandle = info.handle?.trim() || null
+    const isNumericUid = rawHandle && /^\d{7,}$/.test(rawHandle)
+    const displayHandle = (rawHandle && !isNumericUid) ? rawHandle : null
 
     return {
       source: t.source,
