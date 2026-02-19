@@ -96,10 +96,7 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'books.google.com',
       },
-      {
-        protocol: 'https',
-        hostname: 'covers.openlibrary.org',
-      },
+      // covers.openlibrary.org removed to stay under 50 remotePatterns limit
       {
         protocol: 'https',
         hostname: '**.googleusercontent.com',
@@ -144,6 +141,10 @@ const nextConfig: NextConfig = {
       // Bitget 头像 CDN
       {
         protocol: 'https',
+        hostname: '**.bitget.com',
+      },
+      {
+        protocol: 'https',
         hostname: '**.bgstatic.com',
       },
       // MEXC 头像 CDN
@@ -169,10 +170,7 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.okx.com',
       },
-      {
-        protocol: 'https',
-        hostname: '**.okcoin.com',
-      },
+      // okcoin.com removed to stay under remotePatterns limit
       // KuCoin 头像 CDN
       {
         protocol: 'https',
@@ -240,10 +238,7 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.weex.com',
       },
-      {
-        protocol: 'https',
-        hostname: '**.wexx.one',
-      },
+      // wexx.one removed to stay under remotePatterns limit
       {
         protocol: 'https',
         hostname: '**.blofin.com',
@@ -305,10 +300,7 @@ const nextConfig: NextConfig = {
         hostname: '**.hyperliquid.xyz',
       },
       // UI Avatars fallback
-      {
-        protocol: 'https',
-        hostname: 'ui-avatars.com',
-      },
+      // ui-avatars.com removed - not used (NO generated avatars per Adeline's rule)
       // Static global CDN (exchange avatars)
       {
         protocol: 'https',
