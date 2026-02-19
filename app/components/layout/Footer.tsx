@@ -148,7 +148,7 @@ export default function Footer() {
 
         {/* X / Twitter */}
         <a
-          href="https://x.com/Arena_com"
+          href="https://x.com/Arena_English"
           target="_blank"
           rel="noopener noreferrer"
           aria-label="X / Twitter"
