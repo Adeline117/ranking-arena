@@ -15,7 +15,7 @@ export async function GET(
     const supabase = getSupabaseAdmin()
 
     // Fetch bot source - try by slug first, then by UUID
-    let botQuery = supabase.from('bot_sources').select('*')
+    let botQuery = supabase.from('bot_sources').select('id, slug, name, description, avatar_url, exchange, strategy_type, status, created_at, updated_at')
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
     botQuery = isUuid ? botQuery.eq('id', id) : botQuery.eq('slug', id)
 
@@ -24,19 +24,20 @@ export async function GET(
       return NextResponse.json({ error: 'Bot not found' }, { status: 404 })
     }
 
-    // Fetch all snapshots
-    const { data: snapshots } = await supabase
-      .from('bot_snapshots')
-      .select('*')
-      .eq('bot_id', bot.id)
-      .order('season_id')
-
-    // Fetch equity curve
-    const { data: equityCurve } = await supabase
-      .from('bot_equity_curve')
-      .select('*')
-      .eq('bot_id', bot.id)
-      .order('timestamp', { ascending: true })
+    // Fetch all snapshots and equity curve in parallel
+    const [{ data: snapshots }, { data: equityCurve }] = await Promise.all([
+      supabase
+        .from('bot_snapshots')
+        .select('id, bot_id, season_id, roi, pnl, win_rate, max_drawdown, trades_count, arena_score, captured_at')
+        .eq('bot_id', bot.id)
+        .order('season_id'),
+      supabase
+        .from('bot_equity_curve')
+        .select('timestamp, roi_pct, pnl_usd')
+        .eq('bot_id', bot.id)
+        .order('timestamp', { ascending: true })
+        .limit(365),
+    ])
 
     return NextResponse.json({
       bot,

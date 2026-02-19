@@ -68,10 +68,11 @@ export async function GET(request: NextRequest) {
     // 获取筛选配置列表
     const { data: filters, error: queryError } = await supabase
       .from('saved_filters')
-      .select('*')
+      .select('id, name, description, filter_config, is_default, use_count, last_used_at, updated_at')
       .eq('user_id', user.id)
       .order('is_default', { ascending: false })
       .order('updated_at', { ascending: false })
+      .limit(MAX_SAVED_FILTERS)
 
     if (queryError) {
       logger.error('[saved-filters] 查询Failed:', queryError)

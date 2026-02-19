@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('*')
+      .select('id, user1_id, user2_id')
       .eq('id', conversationId)
       .maybeSingle()
 
