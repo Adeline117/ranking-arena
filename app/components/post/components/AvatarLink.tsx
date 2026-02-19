@@ -30,6 +30,9 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
         gap: 6,
         textDecoration: 'none',
         color: tokens.colors.text.primary,
+        overflow: 'hidden',
+        minWidth: 0,
+        flexShrink: 1,
       }}
       title={t('goToTraderProfile')}
     >
@@ -64,7 +67,7 @@ export function AvatarLink({ handle, avatarUrl, isPro, showProBadge = true }: Av
         </span>
         {shouldShowBadge && <ProBadgeOverlay position="bottom-right" />}
       </span>
-      <span style={{ fontWeight: 700, fontSize: 12, color: tokens.colors.text.secondary, letterSpacing: '-0.01em' }}>
+      <span style={{ fontWeight: 700, fontSize: 12, color: tokens.colors.text.secondary, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
         {handle}
       </span>
     </Link>
