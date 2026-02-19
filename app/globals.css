@@ -121,6 +121,11 @@ html.theme-transition *::after {
   --color-accent-error-20: rgba(255, 124, 124, 0.2);
   --color-accent-warning: #ffc107;
   
+  /* Sentiment (bull/bear) */
+  --color-sentiment-bull: #4DFF9A;
+  --color-sentiment-bear: #FF4D4D;
+  --color-sentiment-neutral: #898998;
+  
   /* Overlay/backdrop */
   --color-backdrop: rgba(0, 0, 0, 0.6);
   --color-backdrop-heavy: rgba(0, 0, 0, 0.8);
@@ -318,6 +323,11 @@ html.theme-transition *::after {
   --color-accent-error-10: rgba(239, 68, 68, 0.1);
   --color-accent-error-12: rgba(239, 68, 68, 0.12);
   --color-accent-error-15: rgba(239, 68, 68, 0.15);
+  
+  /* Sentiment (bull/bear) */
+  --color-sentiment-bull: #00C853;
+  --color-sentiment-bear: #F44336;
+  --color-sentiment-neutral: #9E9E9E;
   
   /* Overlay/backdrop */
   --color-backdrop: rgba(0, 0, 0, 0.4);
