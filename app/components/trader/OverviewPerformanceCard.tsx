@@ -524,7 +524,7 @@ export default function OverviewPerformanceCard({
           </Box>
 
           {/* 评分详情 - 免费展示 (period-specific) */}
-          {(periodArenaScore !== undefined || periodReturnScore !== undefined || periodDrawdownScore !== undefined || periodStabilityScore !== undefined) && (
+          {(periodArenaScore !== undefined || periodReturnScore !== undefined || periodDrawdownScore !== undefined || periodStabilityScore !== undefined || arenaScoreV3 !== undefined || performance.profitability_score !== undefined) && (
             <Box
               style={{
                 marginTop: tokens.spacing[5],
