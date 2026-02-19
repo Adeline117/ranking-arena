@@ -16,9 +16,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { getOrSetWithLock } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 60 // 1分钟缓存
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -38,6 +38,32 @@ export async function GET(
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
     }
 
+    const cacheKey = `trader:full:${handle}`
+    const data = await getOrSetWithLock(
+      cacheKey,
+      async () => {
+        return await fetchTraderFull(handle)
+      },
+      { ttl: 60, lockTtl: 10 }
+    )
+
+    if (!data) {
+      return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
+    }
+
+    const response = NextResponse.json({ success: true, data })
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    return response
+  } catch (error: unknown) {
+    logger.error('[API] 交易员聚合数据获取Failed:', error)
+    return NextResponse.json(
+      { error: 'Server error' },
+      { status: 500 }
+    )
+  }
+}
+
+async function fetchTraderFull(handle: string) {
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
     // 1. 获取交易员基本信息
@@ -49,7 +75,7 @@ export async function GET(
       .single()
 
     if (traderError || !trader) {
-      return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
+      return null
     }
 
     const { source, source_trader_id } = trader
@@ -151,9 +177,7 @@ export async function GET(
     }
 
     // 5. 返回聚合数据
-    const response = NextResponse.json({
-      success: true,
-      data: {
+    return {
         trader: {
           id: trader.id,
           handle: trader.handle,
@@ -172,15 +196,5 @@ export async function GET(
         positions: positionsResult.data || [],
         equityCurve: equityCurveResult.data || [],
         assetBreakdown: assetBreakdownResult.data || [],
-      },
-    })
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-    return response
-  } catch (error: unknown) {
-    logger.error('[API] 交易员聚合数据获取Failed:', error)
-    return NextResponse.json(
-      { error: 'Server error' },
-      { status: 500 }
-    )
-  }
+    }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { getOrSetWithLock } from '@/lib/cache'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -21,53 +22,46 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const cacheKey = `api:groups:${_sortBy}:${limit}:${offset}`
 
-    // Build query - use only known columns from the groups table
-    let query = supabase
-      .from('groups')
-      .select(`
-        id,
-        name,
-        name_en,
-        description,
-        avatar_url,
-        member_count
-      `)
+    const result = await getOrSetWithLock(
+      cacheKey,
+      async () => {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Sort by member_count (only supported column currently)
-    query = query.order('member_count', { ascending: false, nullsFirst: false })
+        // Run data + count queries in parallel
+        const [dataResult, countResult] = await Promise.all([
+          supabase
+            .from('groups')
+            .select(`id, name, name_en, description, avatar_url, member_count`)
+            .order('member_count', { ascending: false, nullsFirst: false })
+            .range(offset, offset + limit - 1),
+          supabase
+            .from('groups')
+            .select('id', { count: 'exact', head: true }),
+        ])
 
-    // Apply pagination
-    query = query.range(offset, offset + limit - 1)
+        if (dataResult.error) {
+          throw dataResult.error
+        }
 
-    const { data: groups, error } = await query
-
-    if (error) {
-      logger.dbError('fetch-groups', error, {})
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch groups' },
-        { status: 500 }
-      )
-    }
-
-    // Check if there are more results
-    const { count } = await supabase
-      .from('groups')
-      .select('id', { count: 'exact', head: true })
-
-    const response = NextResponse.json({
-      success: true,
-      data: {
-        groups: groups || [],
-        pagination: {
-          limit,
-          offset,
-          total: count || 0,
-          has_more: (offset + limit) < (count || 0),
-        },
+        return {
+          success: true,
+          data: {
+            groups: dataResult.data || [],
+            pagination: {
+              limit,
+              offset,
+              total: countResult.count || 0,
+              has_more: (offset + limit) < (countResult.count || 0),
+            },
+          },
+        }
       },
-    })
+      { ttl: 120, lockTtl: 10 }
+    )
+
+    const response = NextResponse.json(result)
     response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
     return response
   } catch (error: unknown) {
