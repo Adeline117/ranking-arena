@@ -404,7 +404,7 @@ const nextConfig: NextConfig = {
       "style-src-elem 'self' 'unsafe-inline' blob: https://fonts.googleapis.com",
       "img-src 'self' data: blob: https: http:",
       "font-src 'self' https://fonts.gstatic.com",
-      "connect-src 'self' https://*.supabase.co https://*.stripe.com https://*.sentry.io https://*.ingest.us.sentry.io wss://*.supabase.co https://api.coingecko.com",
+      "connect-src 'self' blob: https://*.supabase.co https://*.stripe.com https://*.sentry.io https://*.ingest.us.sentry.io wss://*.supabase.co https://api.coingecko.com",
       "frame-src 'self' https://js.stripe.com https://challenges.cloudflare.com",
       "frame-ancestors 'none'",
       "form-action 'self'",
