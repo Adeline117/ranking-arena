@@ -108,12 +108,17 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
     setMounted(true)
   }, [])
 
-  // Deduplicate traders by source_trader_id (stored in .id) + source, case-insensitive for addresses
-  const seen = new Set<string>()
+  // Deduplicate traders by both id+source AND handle (display name)
+  // Some traders have multiple source_trader_ids on the same exchange
+  const seenIds = new Set<string>()
+  const seenHandles = new Set<string>()
   const uniqueTraders = traders.filter(t => {
-    const key = `${(t.id || t.handle).toLowerCase()}:${(t.source || '').toLowerCase()}`
-    if (seen.has(key)) return false
-    seen.add(key)
+    const idKey = `${(t.id || t.handle).toLowerCase()}:${(t.source || '').toLowerCase()}`
+    const handleKey = t.handle ? t.handle.toLowerCase() : ''
+    if (seenIds.has(idKey)) return false
+    if (handleKey && seenHandles.has(handleKey)) return false
+    seenIds.add(idKey)
+    if (handleKey) seenHandles.add(handleKey)
     return true
   })
 
