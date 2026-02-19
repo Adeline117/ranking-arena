@@ -10,16 +10,18 @@ export const metadata: Metadata = {
     canonical: `${baseUrl}/help`,
   },
   openGraph: {
-    title: '帮助中心',
+    title: '帮助中心 | Arena',
     description: 'FAQs and support for Arena platform.',
     url: `${baseUrl}/help`,
     siteName: 'Arena',
     type: 'website',
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Help Center' }],
   },
   twitter: {
-    card: 'summary',
-    title: '帮助中心',
+    card: 'summary_large_image',
+    title: '帮助中心 | Arena',
     description: 'FAQs and support for Arena platform.',
+    images: [`${baseUrl}/og-image.png`],
   },
 }
 
