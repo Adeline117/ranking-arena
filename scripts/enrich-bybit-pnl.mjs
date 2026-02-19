@@ -14,8 +14,7 @@ import { createClient } from '@supabase/supabase-js'
 import pg from 'pg'
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-const db = new pg.Client({ connectionString: process.env.DATABASE_URL })
-await db.connect()
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 })
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -40,7 +39,7 @@ const YIELD_URL = 'https://api2.bybit.com/fapi/beehive/public/v2/leader/yield-tr
 const PERIODS = { '7D': 'DAY_CYCLE_TYPE_SEVEN_DAY', '30D': 'DAY_CYCLE_TYPE_THIRTY_DAY', '90D': 'DAY_CYCLE_TYPE_NINETY_DAY' }
 
 async function main() {
-  const { rows } = await db.query(`
+  const { rows } = await pool.query(`
     SELECT DISTINCT source_trader_id 
     FROM trader_snapshots 
     WHERE source = 'bybit' AND pnl IS NULL 
@@ -49,27 +48,23 @@ async function main() {
   `, [LIMIT])
   
   console.log(`📊 Bybit: ${rows.length} traders with null PNL`)
-  if (!rows.length) { await db.end(); return }
+  if (!rows.length) { await pool.end(); return }
   let pnlN = 0, equityN = 0, errors = 0, skipped = 0
   const now = new Date().toISOString()
 
   for (let i = 0; i < rows.length; i++) {
     const tid = rows[i].source_trader_id
     const enc = encodeURIComponent(tid)
-    console.log(`  → [${i+1}] ${tid}`)
 
     try {
-      // Fetch income stats
-      console.log(`    fetching income...`)
       const json = await fetchJSON(`${INCOME_URL}?leaderMark=${enc}`)
-      console.log(`    got:`, json?.retCode)
       if (!json || json.retCode !== 0 || !json.result) { skipped++; await sleep(300); continue }
       
       const r = json.result
       const cumPnl = parseInt(r.cumYieldE8 || '0') / 1e8
       
       if (cumPnl !== 0) {
-        const res = await db.query(
+        const res = await pool.query(
           `UPDATE trader_snapshots SET pnl = $1 WHERE source = 'bybit' AND source_trader_id = $2 AND pnl IS NULL`,
           [cumPnl, tid]
         )
@@ -77,7 +72,7 @@ async function main() {
       }
       await sleep(500)
 
-      // Fetch equity curves
+      // Equity curves
       for (const [period, cycleType] of Object.entries(PERIODS)) {
         const yJson = await fetchJSON(`${YIELD_URL}?dayCycleType=${cycleType}&period=PERIOD_DAY&leaderMark=${enc}`)
         const trend = yJson?.result?.yieldTrend
@@ -107,7 +102,7 @@ async function main() {
   }
 
   console.log(`\n✅ Bybit done: PNL=${pnlN} equity=${equityN}`)
-  await db.end()
+  await pool.end()
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

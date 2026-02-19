@@ -81,6 +81,9 @@ const nextConfig: NextConfig = {
       {
         pathname: '/logo-symbol.png',
       },
+      {
+        pathname: '/logo-symbol-56.png',
+      },
     ],
 
     // 远程图片域名白名单
