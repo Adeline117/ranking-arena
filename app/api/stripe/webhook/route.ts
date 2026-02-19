@@ -316,7 +316,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
 
   // 判断订阅计划
   const priceId = subscription.items.data[0]?.price.id
-  const plan = priceId === process.env.STRIPE_PRICE_YEARLY_ID ? 'yearly' : 'monthly'
+  const plan = priceId === process.env.STRIPE_PRO_YEARLY_PRICE_ID ? 'yearly' : 'monthly'
 
   await updateUserSubscription(profile.id, subscription, plan)
 }
