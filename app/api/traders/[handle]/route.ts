@@ -550,7 +550,9 @@ async function getTraderDetails(
       .limit(10)
     
     if (similarSnapshots && similarSnapshots.length > 0) {
-      const similarIds = similarSnapshots.map(s => s.source_trader_id)
+      // Deduplicate snapshots by source_trader_id (keep first/highest scored)
+      const dedupedSnapshots = [...new Map(similarSnapshots.map(s => [s.source_trader_id, s])).values()]
+      const similarIds = dedupedSnapshots.map(s => s.source_trader_id)
       const { data: similarSources } = await supabase
         .from('trader_sources')
         .select('source_trader_id, handle, profile_url, avatar_url')
@@ -559,7 +561,8 @@ async function getTraderDetails(
       
       if (similarSources) {
         const sourceMap = new Map(similarSources.map(s => [s.source_trader_id, s]))
-        similarTraders = similarSnapshots
+        const seenHandles = new Set<string>()
+        similarTraders = dedupedSnapshots
           .filter(snap => sourceMap.has(snap.source_trader_id))
           .map(snap => {
             const src = sourceMap.get(snap.source_trader_id)!
@@ -572,6 +575,14 @@ async function getTraderDetails(
               roi_90d: snap.roi != null ? parseFloat(snap.roi as string) : undefined,
               arena_score: snap.arena_score != null ? parseFloat(snap.arena_score as string) : undefined,
             }
+          })
+          .filter(t => {
+            // Exclude the current trader (by handle match) and dedup by handle
+            const h = t.handle.toLowerCase()
+            if (h === traderHandle.toLowerCase()) return false
+            if (seenHandles.has(h)) return false
+            seenHandles.add(h)
+            return true
           })
       }
     }
@@ -592,7 +603,9 @@ async function getTraderDetails(
       .limit(10)
     
     if (similarSnapshots && similarSnapshots.length > 0) {
-      const similarIds = similarSnapshots.map(s => s.source_trader_id)
+      // Deduplicate snapshots by source_trader_id (keep first/highest scored)
+      const dedupedSnapshots = [...new Map(similarSnapshots.map(s => [s.source_trader_id, s])).values()]
+      const similarIds = dedupedSnapshots.map(s => s.source_trader_id)
       const { data: similarSources } = await supabase
         .from('trader_sources')
         .select('source_trader_id, handle, profile_url, avatar_url')
@@ -601,7 +614,8 @@ async function getTraderDetails(
       
       if (similarSources) {
         const sourceMap = new Map(similarSources.map(s => [s.source_trader_id, s]))
-        similarTraders = similarSnapshots
+        const seenHandles = new Set<string>()
+        similarTraders = dedupedSnapshots
           .filter(snap => sourceMap.has(snap.source_trader_id))
           .map(snap => {
             const src = sourceMap.get(snap.source_trader_id)!
@@ -614,6 +628,13 @@ async function getTraderDetails(
               roi_90d: snap.roi != null ? parseFloat(snap.roi as string) : undefined,
               arena_score: snap.arena_score != null ? parseFloat(snap.arena_score as string) : undefined,
             }
+          })
+          .filter(t => {
+            const h = t.handle.toLowerCase()
+            if (h === traderHandle.toLowerCase()) return false
+            if (seenHandles.has(h)) return false
+            seenHandles.add(h)
+            return true
           })
       }
     }
