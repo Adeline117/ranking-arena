@@ -81,6 +81,9 @@ secrets/
 # Cloudflare Worker
 cloudflare-worker/node_modules/
 
+# Worker
+worker/node_modules/
+
 # Local scripts (may contain sensitive data)
 scripts/local-scrape.mjs
 .env*.local
