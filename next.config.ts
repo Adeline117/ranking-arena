@@ -526,6 +526,11 @@ export default withSentryConfig(withBundleAnalyzer(nextConfig), {
   webpack: {
     treeshake: {
       removeDebugLogging: true,
+      // Strip Session Replay sub-features from client bundle
+      // Replay is lazy-loaded via instrumentation-client.ts
+      excludeReplayIframe: true,
+      excludeReplayShadowDOM: true,
+      excludeReplayCompressionWorker: true,
     },
     automaticVercelMonitors: true,
   },
