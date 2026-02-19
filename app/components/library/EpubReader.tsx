@@ -370,23 +370,33 @@ export default function EpubReader({
 
       renditionRef.current = rendition
 
-      // Fix CSP: epub.js iframes block blob: stylesheets.
-      // Inject a permissive CSP meta tag and convert blob stylesheets to inline.
+      // Fix: epub.js sets iframe sandbox="allow-same-origin" which blocks
+      // blob: fetches needed for chapter loading. We observe the container
+      // and add "allow-scripts" to any epub iframe's sandbox attribute.
+      // This is safe because EPUB content is trusted (we host the files).
+      const iframeObserver = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          for (const node of Array.from(mutation.addedNodes)) {
+            if (node instanceof HTMLIFrameElement && node.sandbox) {
+              const sb = node.sandbox.toString()
+              if (!sb.includes('allow-scripts')) {
+                node.sandbox.add('allow-scripts')
+              }
+            }
+          }
+        }
+      })
+      if (containerEl) {
+        iframeObserver.observe(containerEl, { childList: true, subtree: true })
+      }
+
+      // Fix CSP: convert blob: stylesheets to inline <style> in epub iframe
       rendition.hooks.content.register((contents: Contents) => {
         try {
           const doc = contents.document
           if (!doc) return
 
-          // Inject permissive CSP meta tag into iframe head
-          const meta = doc.createElement('meta')
-          meta.httpEquiv = 'Content-Security-Policy'
-          meta.content = "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' blob:; style-src-elem * 'unsafe-inline' blob:; img-src * data: blob:; font-src * data:;"
-          const head = doc.head || doc.querySelector('head')
-          if (head) {
-            head.insertBefore(meta, head.firstChild)
-          }
-
-          // Also convert any blocked blob: stylesheets to inline <style> tags
+          // Convert any blocked blob: stylesheets to inline <style> tags
           const links = doc.querySelectorAll('link[rel="stylesheet"]')
           links.forEach((link: Element) => {
             const href = link.getAttribute('href')

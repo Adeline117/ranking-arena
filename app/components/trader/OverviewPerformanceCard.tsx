@@ -393,9 +393,10 @@ export default function OverviewPerformanceCard({
                 >
                   {roi !== undefined ? `${roi >= 0 ? '+' : ''}${roi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : '—'}
                 </Text>
-                {sparklineData.length > 2 && (
+                {(sparklineData.length > 2 || roi !== undefined) && (
                   <Sparkline
-                    data={sparklineData}
+                    data={sparklineData.length > 2 ? sparklineData : undefined}
+                    roi={roi}
                     width={80}
                     height={28}
                     color={roi !== undefined && roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error}
@@ -453,7 +454,7 @@ export default function OverviewPerformanceCard({
           >
             <MetricBadge
               label={t('sharpe')}
-              value={sharpeRatio !== undefined ? sharpeRatio.toFixed(2) : '—'}
+              value={sharpeRatio !== undefined ? sharpeRatio.toFixed(2) : t('comingSoon') || 'Coming soon'}
               highlight={sharpeRatio !== undefined && sharpeRatio > 1}
               tooltip={sharpeRatio === undefined ? t('sharpeNotAvailable') : undefined}
             />

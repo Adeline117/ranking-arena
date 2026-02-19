@@ -1920,6 +1920,7 @@ const en = {
     maxDrawdownShort: 'MDD',
     winRateShort: 'Win',
     sharpeNotAvailable: 'Sharpe ratio not available from this exchange',
+    comingSoon: 'Coming soon',
     drawdownNotAvailable: 'Drawdown data not available from this exchange',
     winRateNotAvailable: 'Win rate not available from this exchange',
     positionStatsNotAvailable: 'Position stats not available from this exchange',
