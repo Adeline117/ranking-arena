@@ -13,7 +13,7 @@ type MarketRow = {
   direction: 'up' | 'down'
 }
 
-const TTL_MS = 60_000
+const TTL_MS = 120_000
 
 // Coins to display（你可以随时加）
 type Pair = {
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
             return { rows, source: 'coinbase' }
           }
         },
-        { ttl: 30, lockTtl: 10 }
+        { ttl: 120, lockTtl: 10 }
       )
 
       // 回填内存缓存
@@ -162,8 +162,6 @@ export async function GET(request: NextRequest) {
 
 // 为特定pairs获取数据（如果有自定义pairs则用ids过滤，否则拉top 100）
 async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
-  const isDefault = pairs === PAIRS
-
   interface CoinGeckoMarketData {
     id: string
     symbol?: string
@@ -195,18 +193,9 @@ async function fetchFromCoinGeckoForPairs(pairs: Pair[]): Promise<MarketRow[]> {
   }
 
   try {
-    let data: CoinGeckoMarketData[]
-    if (isDefault) {
-      // Fetch top 500 coins (2 pages of 250)
-      const [page1, page2] = await Promise.all([
-        fetchPage('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&price_change_percentage=24h'),
-        fetchPage('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&price_change_percentage=24h'),
-      ])
-      data = [...page1, ...page2]
-    } else {
-      const ids = pairs.map(p => p.cgId).join(',')
-      data = await fetchPage(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(ids)}&price_change_percentage=24h`)
-    }
+    // Always use ids= parameter to fetch only the coins we need (much faster than top-N pages)
+    const ids = pairs.map(p => p.cgId).join(',')
+    const data = await fetchPage(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(ids)}&price_change_percentage=24h`)
     const rows: MarketRow[] = []
     for (const c of data) {
       const price = Number(c.current_price ?? NaN)
