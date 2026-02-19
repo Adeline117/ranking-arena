@@ -118,7 +118,7 @@ export default function RecommendedGroups() {
         </div>
       ) : groups.length === 0 ? (
         <div style={{ padding: '24px 12px', textAlign: 'center' }}>
-          <Image src="/stickers/confused.png" alt="No groups found" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
+          <Image src="/stickers/confused.webp" alt="No groups found" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
           <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
             {t('sidebarNoGroups')}
           </p>
