@@ -1,4 +1,5 @@
 import { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { EXCHANGE_NAMES, SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
@@ -140,7 +141,13 @@ export default async function ExchangeRankingPage({
   params: Promise<{ exchange: string }>
 }) {
   const { exchange } = await params
-  const displayName = EXCHANGE_NAMES[exchange] || exchange
+
+  // Validate exchange slug — return 404 for unknown exchanges
+  if (!EXCHANGE_NAMES[exchange]) {
+    notFound()
+  }
+
+  const displayName = EXCHANGE_NAMES[exchange]
   const traders = await fetchExchangeTraders(exchange)
   const sourceType = SOURCE_TYPE_MAP[exchange] || 'futures'
   const typeLabel = sourceType === 'futures' ? '合约' : sourceType === 'spot' ? '现货' : '链上'

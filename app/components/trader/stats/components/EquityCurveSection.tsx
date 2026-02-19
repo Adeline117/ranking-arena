@@ -22,7 +22,7 @@ export function EquityCurveSection({
   traderHandle: _traderHandle,
   delay
 }: EquityCurveSectionProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
   const [chartType, setChartType] = useState<'roi' | 'pnl'>('roi')
   const [mounted, setMounted] = useState(false)
@@ -135,7 +135,27 @@ export function EquityCurveSection({
         <PeriodSelector value={period} onChange={setPeriod} t={t} />
       </Box>
 
-      {hasData ? (
+      {hasData && currentData.length <= 3 ? (
+        <Box style={{
+          height: 280,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: tokens.spacing[3],
+          background: `${tokens.colors.bg.tertiary}40`,
+          borderRadius: tokens.radius.xl,
+        }}>
+          <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
+            {t('insufficientDataForChart') || (language === 'zh'
+              ? `数据点不足（仅 ${currentData.length} 个），图表需要更多数据才能有效展示趋势。`
+              : `Not enough data points (only ${currentData.length}). More data is needed to display a meaningful chart.`)}
+          </Text>
+          <Text size="xs" color="tertiary" style={{ textAlign: 'center', fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+            {currentData.map(d => `${new Date(d.date).toLocaleDateString()}: ${chartType === 'roi' ? d.roi.toFixed(2) + '%' : '$' + d.pnl.toLocaleString()}`).join('  |  ')}
+          </Text>
+        </Box>
+      ) : hasData ? (
         <Box className="chart-container" style={{ height: 280 }}>
           <SimpleLineChart
             data={currentData}
