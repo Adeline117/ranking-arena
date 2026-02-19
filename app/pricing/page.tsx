@@ -1,9 +1,11 @@
-import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
+import PricingPageClient from './PricingPageClient'
 
-/**
- * Redirects /pricing to /user-center?tab=membership
- * Pricing plans are now integrated into the membership tab.
- */
+export const metadata: Metadata = {
+  title: 'Pricing | Arena',
+  description: 'Arena Pro membership plans - unlock advanced trading analytics, alerts, and exclusive features.',
+}
+
 export default function PricingPage() {
-  redirect('/user-center?tab=membership')
+  return <PricingPageClient />
 }

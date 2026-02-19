@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import PostDetailClient from './PostDetailClient'
 
@@ -49,5 +50,27 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function PostDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  // Validate id is a valid number and check existence
+  const numId = Number(id)
+  if (!Number.isFinite(numId) || numId < 1) {
+    notFound()
+  }
+
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data } = await supabase
+      .from('posts')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (!data) {
+      notFound()
+    }
+  } catch {
+    notFound()
+  }
+
   return <PostDetailClient postId={id} />
 }
