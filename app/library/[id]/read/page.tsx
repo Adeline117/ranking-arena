@@ -1141,7 +1141,7 @@ export default function ReadPage() {
               style={{
                 maxWidth: '100%', maxHeight: '100%',
                 boxShadow: theme !== 'dark' ? '0 2px 20px var(--color-overlay-light)' : '0 2px 20px var(--color-backdrop-light)',
-                borderRadius: 2, background: themeColors.pageBg,
+                borderRadius: 2, background: '#ffffff',
                 animation: flipDirection ? `page-flip-${flipDirection} 0.3s ease` : 'none',
               }}
             />
