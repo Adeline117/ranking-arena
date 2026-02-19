@@ -320,11 +320,12 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                 transition: `all ${tokens.transition.base}`,
               }}
             >
-              <img
-                src="/logo-symbol.png"
+              <Image
+                src="/logo-symbol-56.png"
                 alt="arena"
                 width={28}
                 height={28}
+                priority
                 style={{ flexShrink: 0, borderRadius: 4, objectFit: 'contain' }}
               />
               {/* 文字：arena - 首字母变色 */}
