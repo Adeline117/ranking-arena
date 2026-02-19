@@ -73,7 +73,7 @@ function AnimatedAvatar({
       {/* 头像图片 */}
       {avatarUrl && !imageError && (
         <Image 
-          src={avatarUrl} 
+          src={avatarUrl.startsWith("/") ? avatarUrl : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`} 
           alt={handle} 
           fill
           sizes="64px"

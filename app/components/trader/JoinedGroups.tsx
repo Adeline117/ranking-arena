@@ -152,7 +152,7 @@ export default function JoinedGroups({ userId }: JoinedGroupsProps) {
               >
                 {group.avatar_url ? (
                   <img
-                    src={group.avatar_url}
+                    src={group.avatar_url?.startsWith("/") ? group.avatar_url : `/api/avatar?url=${encodeURIComponent(group.avatar_url || "")}`}
                     alt={group.name}
                     width={32}
                     height={32}

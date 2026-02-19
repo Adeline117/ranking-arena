@@ -42,7 +42,7 @@ function TraderAvatarImg({ avatarUrl, traderKey: _traderKey, name, size = 32 }: 
   // Trader avatars come from many CDNs that can't all be whitelisted
   return (
     <img
-      src={avatarUrl}
+      src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
       alt=""
       width={size}
       height={size}
