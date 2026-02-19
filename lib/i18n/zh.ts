@@ -3602,6 +3602,12 @@ adminTotalTraders: '交易员总数',
 adminTraderStats: '交易员统计',
 enterEvmOrSolanaAddress: '请输入 EVM 或 Solana 地址',
 
+// Pricing
+freeFeatureRankings: '基础排行榜',
+freeFeaturePosts: '社区帖子',
+freeFeatureGroups: '公开群组',
+freeFeatureLibrary: '图书馆访问',
+
 } as const
 
 export default zh

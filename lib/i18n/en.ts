@@ -3595,6 +3595,12 @@ adminTotalTraders: 'Total Traders',
 adminTraderStats: 'Trader Stats',
 enterEvmOrSolanaAddress: 'Enter EVM or Solana address',
 
+// Pricing
+freeFeatureRankings: 'Basic Rankings',
+freeFeaturePosts: 'Community Posts',
+freeFeatureGroups: 'Public Groups',
+freeFeatureLibrary: 'Library Access',
+
 } as const
 
 export default en
