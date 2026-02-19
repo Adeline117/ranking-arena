@@ -51,27 +51,31 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
   if (lang && !search) {
     // Preferred language items first, then others, sorted by creation date
     const preferredLang = lang === 'zh' ? 'zh' : 'en'
-    const { data, error } = await supabase.rpc('library_items_by_lang', {
-      p_category: category && category !== 'all' ? category : null,
-      p_preferred_lang: preferredLang,
-      p_limit: limit,
-      p_offset: offset,
-    })
+    // Run data fetch and count query in parallel
+    let countQuery = supabase.from('library_items').select('id', { count: 'exact', head: true })
+    if (category && category !== 'all') countQuery = countQuery.eq('category', category)
 
-    if (!error && data) {
-      // Get total count in parallel - use head:true with minimal select for speed
-      let countQuery = supabase.from('library_items').select('id', { count: 'exact', head: true })
-      if (category && category !== 'all') countQuery = countQuery.eq('category', category)
-      const { count: total } = await countQuery
+    const [rpcResult, countResult] = await Promise.all([
+      supabase.rpc('library_items_by_lang', {
+        p_category: category && category !== 'all' ? category : null,
+        p_preferred_lang: preferredLang,
+        p_limit: limit,
+        p_offset: offset,
+      }),
+      countQuery,
+    ])
+
+    if (!rpcResult.error && rpcResult.data) {
+      const total = countResult.count || 0
       return {
-        items: data,
-        total: total || 0,
+        items: rpcResult.data,
+        total,
         page,
-        totalPages: Math.ceil((total || 0) / limit),
+        totalPages: Math.ceil(total / limit),
       }
     }
     // Fallback to simple query if RPC doesn't exist
-    logger.warn('RPC fallback:', error?.message)
+    logger.warn('RPC fallback:', rpcResult.error?.message)
   }
 
   let query = supabase
