@@ -66,6 +66,13 @@ interface FreshnessResult {
 }
 
 export async function GET(request: NextRequest) {
+  // Security: Verify CRON_SECRET or ADMIN_SECRET
+  const authHeader = request.headers.get('authorization')
+  const validSecret = process.env.ADMIN_SECRET || process.env.CRON_SECRET
+  if (validSecret && authHeader !== `Bearer ${validSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
   const url = new URL(request.url)
   const threshold = parseInt(url.searchParams.get('threshold') || '24') || 24
