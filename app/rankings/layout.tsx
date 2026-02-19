@@ -5,7 +5,7 @@ import TopNavWrapper from './TopNavWrapper'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Rankings - Arena',
+  title: 'Rankings',
   description:
     'Real-time crypto trader leaderboard across Binance, Bybit, Bitget, OKX, MEXC, KuCoin, GMX, Hyperliquid and more. Compare 90-day ROI, win rate, drawdown and Arena Score.',
   alternates: {

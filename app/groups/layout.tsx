@@ -3,8 +3,8 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Groups | Arena',
-  description: 'Enter. Outperform. Join trading discussion groups on Arena.',
+  title: 'Groups',
+  description: 'Join trading discussion groups on Arena. Share strategies, market analysis, and connect with fellow traders.',
   alternates: {
     canonical: `${baseUrl}/groups`,
   },

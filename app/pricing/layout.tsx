@@ -27,9 +27,10 @@ export const metadata: Metadata = {
     images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Pro' }],
   },
   twitter: {
-    card: 'summary',
-    title: 'Pro 会员',
+    card: 'summary_large_image',
+    title: 'Pro 会员 | Arena',
     description: 'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $8.25/month.',
+    images: [`${baseUrl}/og-image.png`],
     creator: '@arenafi',
   },
 }
