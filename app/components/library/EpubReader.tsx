@@ -447,7 +447,7 @@ export default function EpubReader({
         }
       })
 
-      // Restore existing highlights
+      // Restore existing highlights + fix CSP for epub iframe
       rendition.on('rendered', () => {
         const stored = lsGet<EpubHighlight[]>(`epub_highlights_${bookId}`, [])
         stored.forEach((h) => {
