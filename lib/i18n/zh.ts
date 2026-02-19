@@ -1290,7 +1290,7 @@ const zh = {
     dataSourcesLabel: '数据来源',
 
     // LanguageToggle
-    switchToEnglish: 'Switch to English',
+    switchToEnglish: '切换到英文',
     switchToChinese: '切换到中文',
 
     // Validation (settings)
