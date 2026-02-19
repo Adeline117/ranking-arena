@@ -149,7 +149,7 @@ async function fetchFromLeaderboard(
   // Map to trader response format (compatible with existing frontend)
   const traders = (data || []).map((row: Record<string, unknown>) => ({
     id: row.source_trader_id as string,
-    handle: (row.handle as string) || (row.source_trader_id as string),
+    handle: (row.handle as string) || null,
     roi: Number(row.roi) || 0,
     pnl: Number(row.pnl) || 0,
     win_rate: row.win_rate != null ? Number(row.win_rate) : null,

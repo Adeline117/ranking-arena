@@ -182,7 +182,7 @@ async function fetchPeriod(
     traders.push({
       source: SOURCE,
       source_trader_id: id,
-      handle: t.nickname || t.nickName || id,
+      handle: t.nickname || t.nickName || null,
       profile_url: `https://www.binance.com/en/copy-trading/lead-details/${id}`,
       season_id: period,
       roi,
