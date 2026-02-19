@@ -100,3 +100,15 @@ lib/cron/fetchers/*.d.ts.map
 /contracts/out/
 foundry.lock
 backups/
+
+# Temporary/generated files
+*.bak
+debug_*.png
+lighthouse-report.*
+screenshots/
+.archived/
+
+# One-off scripts
+check_gaps.mjs
+convert-img-to-image.sh
+install.sh
