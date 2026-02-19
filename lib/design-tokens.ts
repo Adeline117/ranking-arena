@@ -62,7 +62,11 @@ function getCssVarColors() {
       translated: fallback.accent.translated,
     },
 
-    sentiment: fallback.sentiment,
+    sentiment: {
+      bull: 'var(--color-sentiment-bull)',
+      bear: 'var(--color-sentiment-bear)',
+      neutral: 'var(--color-sentiment-neutral)',
+    },
     medal: fallback.medal,
     interactive: fallback.interactive,
     rating: fallback.rating,

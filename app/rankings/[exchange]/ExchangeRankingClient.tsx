@@ -247,7 +247,7 @@ export default function ExchangeRankingClient({
       {viewMode === 'card' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: tokens.spacing[3] }}>
           {traders.map((t, i) => (
-            <TraderCardItem key={`${t.platform}:${t.trader_key}`} trader={t} rank={i + 1} />
+            <TraderCardItem key={`${t.platform}:${t.trader_key}:${i}`} trader={t} rank={i + 1} />
           ))}
         </div>
       ) : (
@@ -286,7 +286,7 @@ export default function ExchangeRankingClient({
             const roiColor = t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
             return (
               <Link
-                key={`${t.platform}:${t.trader_key}`}
+                key={`${t.platform}:${t.trader_key}:${i}`}
                 href={`/trader/${encodeURIComponent(t.trader_key)}?platform=${t.platform}`}
                 style={{
                   display: 'grid',
