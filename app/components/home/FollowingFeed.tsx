@@ -34,6 +34,8 @@ export default function FollowingFeed() {
     if (authLoading) return
     if (!user) { setLoading(false); return }
 
+    let stale = false
+
     async function fetchFollowingPosts() {
       setLoading(true)
       try {
@@ -43,6 +45,8 @@ export default function FollowingFeed() {
           .select('following_id')
           .eq('follower_id', user!.id)
 
+        if (stale) return
+
         const ids = follows?.map(f => f.following_id) || []
         setFollowingIds(ids)
 
@@ -51,6 +55,8 @@ export default function FollowingFeed() {
         // Get posts from followed users via RPC
         const { data: postsData, error: rpcError } = await supabase
           .rpc('get_following_feed', { p_user_id: user!.id, p_limit: 30 })
+
+        if (stale) return
 
         if (rpcError) {
           logger.error('get_following_feed RPC error:', rpcError)
@@ -62,14 +68,16 @@ export default function FollowingFeed() {
           .sort((a, b) => calculateFeedScore(b) - calculateFeedScore(a))
         setPosts(scoredPosts)
       } catch (e) {
+        if (stale) return
         logger.error('Failed to fetch following feed:', e)
         showToast(isZh ? '加载关注动态失败' : 'Failed to load feed', 'error')
       } finally {
-        setLoading(false)
+        if (!stale) setLoading(false)
       }
     }
 
     fetchFollowingPosts()
+    return () => { stale = true }
   }, [user, authLoading, isZh, showToast])
 
   // Not logged in
