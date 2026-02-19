@@ -67,7 +67,7 @@ export default function BookReviews({ reviews, bookId, bookTitle, isZh, hasSessi
               {r.users?.avatar_url ? (
                 <img
                   src={r.users.avatar_url}
-                  alt=""
+                  alt={`${(r.users as Record<string, unknown> | null)?.nickname || 'User'} avatar`}
                   style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                 />
               ) : (

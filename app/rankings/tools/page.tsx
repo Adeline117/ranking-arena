@@ -399,7 +399,7 @@ function ToolCard({ tool, isZh }: { tool: Tool; isZh: boolean }) {
         {tool.logo_url ? (
           <img
             src={tool.logo_url}
-            alt=""
+            alt={`${tool.name} logo`}
             width={44}
             height={44}
             style={{ borderRadius: tokens.radius.xl, objectFit: 'cover', flexShrink: 0 }}
