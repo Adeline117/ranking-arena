@@ -401,7 +401,7 @@ export default function EpubReader({
                 .catch(() => {})
             }
           })
-        } catch (e) {
+        } catch (_e) {
           // Silently handle - don't break reader
         }
       })

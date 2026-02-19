@@ -53,7 +53,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
+  const [_unreadMessageCount, setUnreadMessageCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
 

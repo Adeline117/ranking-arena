@@ -4,13 +4,13 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient as _createServerClient } from '@supabase/ssr'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { generateRequestId } from '@/lib/utils/logger'
 
 // Page routes requiring Supabase auth redirect
-const AUTH_PROTECTED_PAGES = ['/settings', '/favorites', '/user-center', '/inbox', '/my-posts']
+const _AUTH_PROTECTED_PAGES = ['/settings', '/favorites', '/user-center', '/inbox', '/my-posts']
 
 // CSRF 配置
 const CSRF_COOKIE_NAME = 'csrf-token'
