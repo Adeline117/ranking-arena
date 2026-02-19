@@ -41,7 +41,6 @@ function TraderAvatarImg({ avatarUrl, traderKey: _traderKey, name, size = 32 }: 
   // Use plain <img> to avoid next/image hostname validation crashes
   // Trader avatars come from many CDNs that can't all be whitelisted
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={avatarUrl}
       alt=""
