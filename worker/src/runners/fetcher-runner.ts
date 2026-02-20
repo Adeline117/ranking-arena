@@ -6,6 +6,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Job, JobResult, PlatformConfig } from '../types.js'
+import { logger } from '../logger.js'
 
 // Import existing fetchers (copied into worker for standalone builds)
 import { INLINE_FETCHERS } from '../lib/fetchers/index.js'
@@ -296,7 +297,7 @@ export async function executeFetcherJob(job: Job): Promise<JobResult> {
       proxyUsed: job.proxyId,
     }
   } catch (err) {
-    console.error(`[FetcherRunner] Error fetching ${platform}:`, err)
+    logger.error(`[FetcherRunner] Error fetching ${platform}`, err instanceof Error ? err : new Error(String(err)), { platform })
     throw err
   }
 }

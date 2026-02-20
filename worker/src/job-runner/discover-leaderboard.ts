@@ -19,6 +19,7 @@ import { createClient } from '@supabase/supabase-js'
 import { BinanceFuturesConnectorWorker } from './binance-connector.js'
 import { BybitFuturesConnectorWorker } from './bybit-connector.js'
 import type { SnapshotWindow } from './types.js'
+import { logger } from '../logger.js'
 
 const WINDOWS: SnapshotWindow[] = ['7D', '30D', '90D']
 
@@ -92,7 +93,7 @@ async function main(): Promise<void> {
         if (error.code === '23505') {
           snapshotsSkipped++ // Duplicate in same hourly bucket
         } else {
-          console.error(`[discover] Snapshot insert error for ${entry.trader_key}:`, error.message)
+          logger.error(`[discover] Snapshot insert error for ${entry.trader_key}`, new Error(error.message), { trader_key: entry.trader_key })
         }
       } else {
         snapshotsInserted++
@@ -184,7 +185,7 @@ async function fetchLeaderboard(
       })
 
       if (!response.ok) {
-        console.error(`[discover] API error page ${page}: ${response.status}`)
+        logger.error(`[discover] API error page ${page}: ${response.status}`, new Error(`HTTP ${response.status}`), { page })
         break
       }
 
@@ -234,7 +235,7 @@ async function fetchLeaderboard(
         })
       }
     } catch (err) {
-      console.error(`[discover] Fetch error page ${page}:`, err)
+      logger.error(`[discover] Fetch error page ${page}`, err instanceof Error ? err : new Error(String(err)), { page })
       break
     }
   }
@@ -291,6 +292,6 @@ function calculateSimpleScore(
 }
 
 main().catch(err => {
-  console.error('Fatal:', err)
+  logger.error('Fatal error in discover-leaderboard', err instanceof Error ? err : new Error(String(err)))
   process.exit(1)
 })

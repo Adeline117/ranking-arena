@@ -114,12 +114,12 @@ async function main(): Promise<void> {
 
       await scrapeSource(source, timeRanges)
     } else {
-      console.error('Error: Please specify --all or --source <source>')
+      logger.warn('Error: Please specify --all or --source <source>')
       printUsage()
       process.exit(1)
     }
   } else {
-    console.error(`Unknown command: ${command}`)
+    logger.warn(`Unknown command: ${command}`)
     printUsage()
     process.exit(1)
   }
