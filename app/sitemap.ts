@@ -32,15 +32,7 @@ async function getAllTraders(): Promise<Array<{ handle: string; updated_at: stri
       return []
     }
     
-    // 获取最新快照时间
-    const { data: latestSnapshot } = await supabase
-      .from('trader_snapshots')
-      .select('captured_at')
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    
-    const lastMod = latestSnapshot?.captured_at || new Date().toISOString()
+    const lastMod = new Date().toISOString()
     
     return (data || []).map(t => ({
       handle: t.handle || t.source_trader_id,

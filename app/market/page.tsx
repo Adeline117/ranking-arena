@@ -237,25 +237,34 @@ function MarketPageContent() {
           </section>
 
           {/* Widgets row: Fear&Greed + Arbitrage + Live Trades */}
-          <section style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, height: 280 }}>
+          <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, height: 200 }}>
             <SectionErrorBoundary fallbackMessage="恐惧贪婪指数加载失败">
-              <Suspense fallback={<LoadingCard height={200} />}>
+              <Suspense fallback={<LoadingCard height={160} />}>
                 <FearGreedGauge />
               </Suspense>
             </SectionErrorBoundary>
             <SectionErrorBoundary fallbackMessage="套利机会加载失败">
-              <Suspense fallback={<LoadingCard height={200} />}>
+              <Suspense fallback={<LoadingCard height={160} />}>
                 <ArbitrageOpportunities />
               </Suspense>
             </SectionErrorBoundary>
             <SectionErrorBoundary fallbackMessage="实时成交加载失败">
-              <Suspense fallback={<LoadingCard height={200} />}>
+              <Suspense fallback={<LoadingCard height={160} />}>
                 <LiveTradesFeed />
               </Suspense>
             </SectionErrorBoundary>
           </section>
 
-          {/* L2: Sector Treemap */}
+          {/* L2: Data Table — ranking table immediately visible after dashboard */}
+          <section style={{ marginBottom: 24 }}>
+            <SectionErrorBoundary fallbackMessage="行情数据加载失败">
+              <Suspense fallback={<LoadingCard height={400} />}>
+                <SpotMarket onTokenClick={handleTokenClick} />
+              </Suspense>
+            </SectionErrorBoundary>
+          </section>
+
+          {/* L3: Sector Treemap — below table so it doesn't push ranking down */}
           <section style={{ marginBottom: 24 }}>
             <SectionErrorBoundary fallbackMessage="板块热力图加载失败">
               <Suspense fallback={<LoadingCard height={300} />}>
@@ -293,15 +302,6 @@ function MarketPageContent() {
                 </button>
               </div>
             )}
-          </section>
-
-          {/* L3: Data Table */}
-          <section>
-            <SectionErrorBoundary fallbackMessage="行情数据加载失败">
-              <Suspense fallback={<LoadingCard height={400} />}>
-                <SpotMarket onTokenClick={handleTokenClick} />
-              </Suspense>
-            </SectionErrorBoundary>
           </section>
         </div>
       )}
