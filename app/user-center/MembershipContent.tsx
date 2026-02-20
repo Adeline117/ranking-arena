@@ -746,7 +746,11 @@ export default function MembershipContent() {
               onClick={async () => {
                 try {
                   const headers = await getAuthHeadersAsync()
-                  const res = await fetch('/api/stripe/portal', { method: 'POST', headers })
+                  const res = await fetch('/api/stripe/portal', {
+                    method: 'POST',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ returnUrl: `${window.location.origin}/user-center?tab=membership` }),
+                  })
                   if (res.ok) {
                     const { url } = await res.json()
                     window.location.href = url
@@ -774,10 +778,14 @@ export default function MembershipContent() {
               onClick={async () => {
                 try {
                   const headers = await getAuthHeadersAsync()
-                  const res = await fetch('/api/stripe/portal', { method: 'POST', headers })
+                  const res = await fetch('/api/stripe/portal', {
+                    method: 'POST',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ returnUrl: `${window.location.origin}/user-center?tab=membership` }),
+                  })
                   if (res.ok) {
                     const { url } = await res.json()
-                    window.location.href = url + '/billing'
+                    window.location.href = url
                   } else {
                     showToast(t('paymentSystemComingSoon'), 'error')
                   }
@@ -803,7 +811,11 @@ export default function MembershipContent() {
                 onClick={async () => {
                   if (!confirm(t('cancelSubscriptionConfirm'))) return
                   const headers = await getAuthHeadersAsync()
-                  const res = await fetch('/api/stripe/portal', { method: 'POST', headers })
+                  const res = await fetch('/api/stripe/portal', {
+                    method: 'POST',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ returnUrl: `${window.location.origin}/user-center?tab=membership` }),
+                  })
                   if (res.ok) {
                     const { url } = await res.json()
                     window.location.href = url
