@@ -8,8 +8,8 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
-const CheckIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
     <path d="M20 6L9 17L4 12" />
   </svg>
 )
@@ -19,26 +19,31 @@ const PRICING = {
   yearly: { price: 99, original: 155.88 },
 }
 
+/* Helper: t() returns the key itself when missing — treat that as a miss */
+function resolved(value: string, key: string, fallback: string): string {
+  return value === key ? fallback : value
+}
+
 export default function PricingPageClient() {
   const { email } = useAuthSession()
   const { t } = useLanguage()
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly')
 
   const features = [
-    t('featureCategoryRanking') || 'Category Rankings',
-    t('featureTraderAlerts') || 'Trader Alerts',
-    t('featureScoreBreakdown') || 'Score Breakdown',
-    t('featureProBadge') || 'Pro Badge',
-    t('featureAdvancedFilter') || 'Advanced Filters',
-    t('featureTraderCompare') || 'Trader Compare',
-    t('featureProGroups') || 'Pro Groups',
+    resolved(t('featureCategoryRanking'), 'featureCategoryRanking', 'Category Rankings'),
+    resolved(t('featureTraderAlerts'), 'featureTraderAlerts', 'Trader Alerts'),
+    resolved(t('featureScoreBreakdown'), 'featureScoreBreakdown', 'Arena Score Details'),
+    resolved(t('featureProBadge'), 'featureProBadge', 'Pro Badge'),
+    resolved(t('featureAdvancedFilter'), 'featureAdvancedFilter', 'Advanced Filters'),
+    resolved(t('featureTraderCompare'), 'featureTraderCompare', 'Trader Comparison'),
+    resolved(t('featureProGroups'), 'featureProGroups', 'Pro Groups'),
   ]
 
   const freeFeatures = [
-    t('freeFeatureRankings') || 'Basic Rankings',
-    t('freeFeaturePosts') || 'Community Posts',
-    t('freeFeatureGroups') || 'Public Groups',
-    t('freeFeatureLibrary') || 'Library Access',
+    resolved(t('freeFeatureRankings'), 'freeFeatureRankings', 'Basic Rankings'),
+    resolved(t('freeFeaturePosts'), 'freeFeaturePosts', 'Community Posts'),
+    resolved(t('freeFeatureGroups'), 'freeFeatureGroups', 'Public Groups'),
+    resolved(t('freeFeatureLibrary'), 'freeFeatureLibrary', 'Library Access'),
   ]
 
   const currentPrice = PRICING[billing]
@@ -48,11 +53,12 @@ export default function PricingPageClient() {
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
       <div style={{ maxWidth: 960, margin: '0 auto', padding: `${tokens.spacing[10]} ${tokens.spacing[6]}`, textAlign: 'center' }}>
-        <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: tokens.spacing[3] }}>
-          {t('pricingTitle') || 'Choose Your Plan'}
+        {/* Header */}
+        <h1 style={{ fontSize: 40, fontWeight: 800, marginBottom: tokens.spacing[3], letterSpacing: '-0.02em' }}>
+          {resolved(t('pricingTitle'), 'pricingTitle', 'Upgrade to Pro')}
         </h1>
-        <p style={{ fontSize: 16, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[8] }}>
-          {t('pricingSubtitle') || 'Unlock the full power of Arena trading analytics'}
+        <p style={{ fontSize: 17, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[8], lineHeight: 1.5 }}>
+          {resolved(t('pricingSubtitle'), 'pricingSubtitle', 'Unlock all premium features')}
         </p>
 
         {/* Billing toggle */}
@@ -62,7 +68,7 @@ export default function PricingPageClient() {
               key={b}
               onClick={() => setBilling(b)}
               style={{
-                padding: '8px 20px',
+                padding: '10px 24px',
                 borderRadius: tokens.radius.md,
                 border: 'none',
                 cursor: 'pointer',
@@ -73,30 +79,43 @@ export default function PricingPageClient() {
                 transition: 'all 0.2s',
               }}
             >
-              {b === 'monthly' ? (t('monthly') || 'Monthly') : (t('yearly') || 'Yearly')}
-              {b === 'yearly' && <span style={{ marginLeft: 6, fontSize: 12, color: billing === b ? '#ffd700' : tokens.colors.accent.brand }}>-33%</span>}
+              {b === 'monthly'
+                ? resolved(t('monthly'), 'monthly', 'Monthly')
+                : resolved(t('yearly'), 'yearly', 'Yearly')}
+              {b === 'yearly' && (
+                <span style={{
+                  marginLeft: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: billing === b ? '#ffd700' : tokens.colors.accent.brand,
+                }}>
+                  -33%
+                </span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* Plans */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: tokens.spacing[6], maxWidth: 700, margin: '0 auto' }}>
-          {/* Free */}
+        {/* Plans grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: tokens.spacing[6], maxWidth: 720, margin: '0 auto', alignItems: 'stretch' }}>
+          {/* Free Plan */}
           <div style={{
             padding: tokens.spacing[8],
             borderRadius: tokens.radius.lg,
             border: `1px solid ${tokens.colors.border.primary}`,
             background: tokens.colors.bg.secondary,
             textAlign: 'left',
+            display: 'flex',
+            flexDirection: 'column',
           }}>
-            <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: tokens.spacing[2] }}>Free</h3>
-            <p style={{ fontSize: 32, fontWeight: 800, marginBottom: tokens.spacing[6] }}>
-              $0<span style={{ fontSize: 14, fontWeight: 400, color: tokens.colors.text.secondary }}>/mo</span>
+            <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: tokens.spacing[2], color: tokens.colors.text.secondary }}>Free</h3>
+            <p style={{ fontSize: 40, fontWeight: 800, marginBottom: tokens.spacing[6], letterSpacing: '-0.02em' }}>
+              $0<span style={{ fontSize: 15, fontWeight: 400, color: tokens.colors.text.secondary }}>/mo</span>
             </p>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, marginBottom: tokens.spacing[6] }}>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1 }}>
               {freeFeatures.map(f => (
-                <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 14, color: tokens.colors.text.secondary }}>
-                  <CheckIcon size={14} /> {f}
+                <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', fontSize: 14, color: tokens.colors.text.secondary }}>
+                  <CheckIcon size={15} /> {f}
                 </li>
               ))}
             </ul>
@@ -104,76 +123,96 @@ export default function PricingPageClient() {
               href={ctaHref}
               style={{
                 display: 'block',
-                padding: '12px 0',
+                padding: '14px 0',
                 borderRadius: tokens.radius.md,
                 border: `1px solid ${tokens.colors.border.primary}`,
                 textAlign: 'center',
                 color: tokens.colors.text.primary,
                 textDecoration: 'none',
                 fontWeight: 600,
-                fontSize: 14,
+                fontSize: 15,
+                marginTop: tokens.spacing[6],
+                transition: 'all 0.2s',
               }}
             >
-              {email ? (t('currentPlan') || 'Current Plan') : (t('getStarted') || 'Get Started')}
+              {email
+                ? resolved(t('currentPlan'), 'currentPlan', 'Current Plan')
+                : resolved(t('getStarted'), 'getStarted', 'Get Started')}
             </Link>
           </div>
 
-          {/* Pro */}
+          {/* Pro Plan */}
           <div style={{
             padding: tokens.spacing[8],
+            paddingTop: tokens.spacing[10],
             borderRadius: tokens.radius.lg,
             border: `2px solid ${tokens.colors.accent.brand}`,
             background: tokens.colors.bg.secondary,
             textAlign: 'left',
             position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
           }}>
+            {/* Badge */}
             <div style={{
               position: 'absolute',
-              top: -12,
+              top: -13,
               left: '50%',
               transform: 'translateX(-50%)',
               background: tokens.colors.accent.brand,
               color: '#fff',
-              padding: '4px 16px',
+              padding: '5px 18px',
               borderRadius: tokens.radius.full,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
             }}>
-              {t('mostPopular') || 'MOST POPULAR'}
+              {resolved(t('mostPopular'), 'mostPopular', 'MOST POPULAR')}
             </div>
+
             <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: tokens.spacing[2] }}>Pro</h3>
-            <p style={{ fontSize: 32, fontWeight: 800, marginBottom: 0 }}>
+            <p style={{ fontSize: 44, fontWeight: 800, marginBottom: 0, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
               ${billing === 'yearly' ? (currentPrice.price / 12).toFixed(2) : currentPrice.price}
-              <span style={{ fontSize: 14, fontWeight: 400, color: tokens.colors.text.secondary }}>/mo</span>
+              <span style={{ fontSize: 15, fontWeight: 400, color: tokens.colors.text.secondary }}>/mo</span>
             </p>
             {billing === 'yearly' && (
-              <p style={{ fontSize: 13, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[6] }}>
-                ${currentPrice.price}/year · <s>${currentPrice.original.toFixed(2)}</s>
+              <p style={{ fontSize: 13, color: tokens.colors.text.secondary, marginTop: 6, marginBottom: tokens.spacing[6] }}>
+                ${currentPrice.price}/year{' '}
+                <s style={{ opacity: 0.6 }}>${currentPrice.original.toFixed(2)}</s>
               </p>
             )}
             {billing === 'monthly' && <div style={{ marginBottom: tokens.spacing[6] }} />}
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, marginBottom: tokens.spacing[6] }}>
+
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1 }}>
               {features.map(f => (
-                <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 14, color: tokens.colors.text.primary }}>
-                  <span style={{ color: tokens.colors.accent.brand }}><CheckIcon size={14} /></span> {f}
+                <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', fontSize: 14, color: tokens.colors.text.primary }}>
+                  <CheckIcon size={15} color={tokens.colors.accent.brand} /> {f}
                 </li>
               ))}
             </ul>
+
             <Link
               href={ctaHref}
               style={{
                 display: 'block',
-                padding: '12px 0',
+                padding: '14px 0',
                 borderRadius: tokens.radius.md,
                 background: tokens.colors.accent.brand,
                 textAlign: 'center',
                 color: '#fff',
                 textDecoration: 'none',
-                fontWeight: 600,
-                fontSize: 14,
+                fontWeight: 700,
+                fontSize: 15,
+                marginTop: tokens.spacing[6],
+                transition: 'all 0.2s',
+                boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
               }}
             >
-              {email ? (t('upgradeToPro') || 'Upgrade to Pro') : (t('signUpForPro') || 'Sign Up for Pro')}
+              {email
+                ? resolved(t('upgradeToPro'), 'upgradeToPro', 'Upgrade to Pro')
+                : resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
             </Link>
           </div>
         </div>
