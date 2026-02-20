@@ -743,7 +743,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                   transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
               >
-                {isZh ? 'Login to Follow' : 'Login to Follow'}
+                {isZh ? '登录后关注' : 'Login to Follow'}
               </Link>
             )}
           </Box>

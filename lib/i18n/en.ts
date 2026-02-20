@@ -1258,6 +1258,7 @@ const en = {
     methodLabel: 'Method',
     delayLabel: 'Delay',
     confidenceLabel: 'Confidence',
+    confidence: 'Confidence',
     viewSourceData: 'View source',
 
     // RankingTable
@@ -3615,6 +3616,7 @@ adminLibraryTotal: 'Total Books',
 adminLibraryWithPdf: 'With PDF',
 adminPlatformCount: 'Platform Count',
 adminTotalTraders: 'Total Traders',
+adminSnapshots24h: 'Snapshots (24h)',
 adminTraderStats: 'Trader Stats',
 enterEvmOrSolanaAddress: 'Enter EVM or Solana address',
 
