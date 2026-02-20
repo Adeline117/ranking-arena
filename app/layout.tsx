@@ -59,6 +59,9 @@ export const metadata: Metadata = {
   description:
     "Enter. Outperform. | 入场，超越。Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
+  verification: {
+    google: 'nnTiBxpNMeCgo9rCLyUbZV9Z-OE8Nr-BLh7E-o2T1R8',
+  },
   applicationName: "Arena",
   keywords: [
     "crypto trader ranking",

@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 /**
- * Fix bybit leaderboard_ranks max_drawdown (null rows)
- *
- * Root cause: previous enrich scripts skipped DrawDownE4=0,
- * treating it as "no data". But 0 IS valid (trader had no drawdown
- * in that period). This script sets max_drawdown=0 when API returns 0.
- *
- * Direct API works without Puppeteer (api2.bybit.com not WAF-blocked).
+ * Fix bybit_spot leaderboard_ranks max_drawdown - Pass 2
+ * 
+ * Handles the remaining rows not resolved by fix-bybit-spot-mdd.mjs.
+ * Uses leader-income?leaderUserId=<uid> directly (no Puppeteer needed).
+ * The leaderUserId parameter works with numeric UIDs for spot traders.
  */
 import 'dotenv/config'
 import { createClient } from '@supabase/supabase-js'
@@ -18,6 +16,7 @@ const sb = createClient(
 )
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const sleep = ms => new Promise(r => setTimeout(r, ms))
+const PERIOD_PREFIX = { '7D': 'sevenDay', '30D': 'thirtyDay', '90D': 'ninetyDay' }
 
 /** Use Node.js https module directly to avoid undici pool conflict with Supabase */
 function httpsGet(url, timeoutMs = 8000) {
@@ -41,56 +40,46 @@ function httpsGet(url, timeoutMs = 8000) {
   })
 }
 
-const PERIOD_PREFIX = { '7D': 'sevenDay', '30D': 'thirtyDay', '90D': 'ninetyDay' }
-
-async function fetchLeaderIncome(leaderMark) {
+async function fetchLeaderIncomeByUID(uid) {
   const delays = [500, 1500]
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const { status, body } = await httpsGet(
-        `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income?leaderMark=${encodeURIComponent(leaderMark)}`
+        `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income?leaderUserId=${encodeURIComponent(uid)}`
       )
-      if (status === 403) { console.log(`  WAF 403 for ${leaderMark.substring(0, 10)}`); return null }
-      if (status === 429) { await sleep(3000 * (attempt + 1)); continue }
+      if (status === 403) return null
+      if (status === 429) { await sleep(3000); continue }
       if (status !== 200) return null
-      if (body.startsWith('<')) return null
       const json = JSON.parse(body)
       if (json.retCode !== 0) return null
       return json.result
     } catch (e) {
-      if (attempt < 2) { await sleep(delays[attempt]); }
-      else console.log(`  https err ${leaderMark.substring(0, 10)}: ${e.message?.substring(0, 60)}`)
+      if (attempt < 2) await sleep(delays[attempt])
+      else console.log(`  https err ${uid}: ${e.message?.substring(0, 60)}`)
     }
   }
   return null
 }
 
-/**
- * Extract max_drawdown for a specific season from the leader-income result.
- * KEY FIX: DrawDownE4=0 is treated as 0.0 (not null).
- * Previous scripts did `ddE4 > 0 ? ... : null` which skipped legit 0% drawdown.
- */
 function extractMDD(result, seasonId) {
   const pfx = PERIOD_PREFIX[seasonId]
   if (!pfx) return null
-
   const ddRaw = result[pfx + 'DrawDownE4']
-  if (ddRaw == null || ddRaw === '') return null  // truly missing
+  if (ddRaw == null || ddRaw === '') return null
   const ddE4 = parseInt(ddRaw)
   if (isNaN(ddE4)) return null
-  return ddE4 / 100  // convert E4 (× 10^-4 of 100%) → percent (e.g. 9964 → 99.64%)
+  return ddE4 / 100
 }
 
 async function main() {
-  console.log('=== Fix bybit max_drawdown (null rows) ===')
+  console.log('=== Fix bybit_spot max_drawdown - Pass 2 (leaderUserId API) ===')
 
-  // Get all rows with null max_drawdown
   let allRows = []
   let from = 0
   while (true) {
     const { data, error } = await sb.from('leaderboard_ranks')
       .select('id, source_trader_id, season_id, max_drawdown')
-      .eq('source', 'bybit')
+      .eq('source', 'bybit_spot')
       .is('max_drawdown', null)
       .range(from, from + 999)
     if (error) { console.error('DB error:', error.message); break }
@@ -100,7 +89,7 @@ async function main() {
     from += 1000
   }
 
-  console.log(`Total bybit rows with null max_drawdown: ${allRows.length}`)
+  console.log(`Total bybit_spot null MDD rows: ${allRows.length}`)
 
   // Group by trader
   const byTrader = new Map()
@@ -111,39 +100,27 @@ async function main() {
   const traders = [...byTrader.keys()]
   console.log(`Unique traders: ${traders.length}`)
 
-  // Skip username-format IDs (not base64 leaderMarks) — handled by fix-bybit-username-mdd.mjs
-  const isBase64Mark = id => id.includes('=') || id.includes('+') || id.includes('/') || /^[A-Za-z0-9+/]{16,}$/.test(id)
-  const base64Traders = traders.filter(t => isBase64Mark(t))
-  const skippedUsernames = traders.filter(t => !isBase64Mark(t))
-  console.log(`Base64 leaderMark traders: ${base64Traders.length} (will process)`)
-  console.log(`Username-format traders: ${skippedUsernames.length} (skipped - use fix-bybit-username-mdd.mjs)`)
-
-  let updated = 0, noData = 0, apiErr = 0, apiReturns0 = 0
+  let updated = 0, noData = 0, apiErr = 0, zeroMDD = 0
   const startTime = Date.now()
 
-  for (let i = 0; i < base64Traders.length; i++) {
-    const traderId = base64Traders[i]
-    const rows = byTrader.get(traderId)
+  for (let i = 0; i < traders.length; i++) {
+    const uid = traders[i]
+    const rows = byTrader.get(uid)
 
-    const result = await fetchLeaderIncome(traderId)
+    const result = await fetchLeaderIncomeByUID(uid)
     if (!result) {
       apiErr++
-      await sleep(800)
-      if (apiErr > 60 && apiErr > (i + 1) * 0.8) {
-        console.log('Too many API errors — likely WAF. Stopping.')
-        break
-      }
+      await sleep(600)
       continue
     }
 
-    let rowUpdated = false
     for (const row of rows) {
       const mdd = extractMDD(result, row.season_id)
       if (mdd === null) {
         noData++
         continue
       }
-      if (mdd === 0) apiReturns0++
+      if (mdd === 0) zeroMDD++
 
       const { error } = await sb.from('leaderboard_ranks')
         .update({ max_drawdown: mdd })
@@ -152,30 +129,28 @@ async function main() {
         console.log(`  ⚠ update id=${row.id}: ${error.message}`)
       } else {
         updated++
-        rowUpdated = true
       }
     }
 
-    await sleep(400)
+    await sleep(350)
 
-    if ((i + 1) % 20 === 0 || i === base64Traders.length - 1) {
+    if ((i + 1) % 25 === 0 || i === traders.length - 1) {
       const mins = ((Date.now() - startTime) / 60000).toFixed(1)
-      console.log(`  [${i + 1}/${traders.length}] updated=${updated} noData=${noData} apiErr=${apiErr} zeroMDD=${apiReturns0} | ${mins}m`)
+      console.log(`  [${i + 1}/${traders.length}] updated=${updated} noData=${noData} apiErr=${apiErr} zeroMDD=${zeroMDD} | ${mins}m`)
     }
   }
 
   console.log('\n=== Done ===')
   console.log(`Updated: ${updated}`)
-  console.log(`No data (API null/missing): ${noData}`)
+  console.log(`No data (API returned null): ${noData}`)
   console.log(`API errors: ${apiErr}`)
-  console.log(`Rows set to 0% drawdown: ${apiReturns0}`)
+  console.log(`Rows set to 0% drawdown: ${zeroMDD}`)
 
-  // Verify
   const { count } = await sb.from('leaderboard_ranks')
     .select('*', { count: 'exact', head: true })
-    .eq('source', 'bybit')
+    .eq('source', 'bybit_spot')
     .is('max_drawdown', null)
-  console.log(`\nRemaining bybit null MDD rows: ${count}`)
+  console.log(`\nRemaining bybit_spot null MDD rows: ${count}`)
 }
 
-main().catch(console.error)
+main().catch(e => { console.error(e); process.exit(1) })

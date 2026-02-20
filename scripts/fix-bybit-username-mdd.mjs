@@ -14,6 +14,7 @@ import 'dotenv/config'
 import { createClient } from '@supabase/supabase-js'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import https from 'https'
 
 puppeteer.use(StealthPlugin())
 
@@ -23,6 +24,28 @@ const sb = createClient(
 )
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+/** Use Node.js https module directly to avoid undici pool conflict with Supabase */
+function httpsGet(url, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url)
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'GET',
+      headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Connection': 'close' },
+      timeout: timeoutMs,
+    }
+    const req = https.request(options, (res) => {
+      let body = ''
+      res.on('data', chunk => { body += chunk })
+      res.on('end', () => resolve({ status: res.statusCode, body }))
+    })
+    req.on('timeout', () => { req.destroy(new Error('Request timed out')) })
+    req.on('error', reject)
+    req.end()
+  })
+}
 
 const PERIOD_PREFIX = { '7D': 'sevenDay', '30D': 'thirtyDay', '90D': 'ninetyDay' }
 
@@ -40,20 +63,19 @@ function extractMDD(result, seasonId) {
   return ddE4 / 100
 }
 
-async function fetchLeaderIncome(leaderMark, page) {
-  // Try direct first (faster), fall back to browser fetch
+async function fetchLeaderIncome(leaderMark) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const res = await fetch(
-        `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income?leaderMark=${encodeURIComponent(leaderMark)}`,
-        { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(5000) }
+      const { status, body } = await httpsGet(
+        `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income?leaderMark=${encodeURIComponent(leaderMark)}`
       )
-      if (!res.ok) break
-      const json = await res.json()
+      if (status !== 200) return null
+      if (body.startsWith('<')) return null
+      const json = JSON.parse(body)
       if (json.retCode !== 0) return null
       return json.result
     } catch (e) {
-      if (attempt === 0) await sleep(300)
+      if (attempt === 0) await sleep(500)
     }
   }
   return null
