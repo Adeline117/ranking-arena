@@ -103,6 +103,7 @@ export default function ToolsPage() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Debounce search input
@@ -157,6 +158,32 @@ export default function ToolsPage() {
       }
     }
     fetchLeaderboards()
+  }, [])
+
+  // Fetch counts per category for filter badges
+  useEffect(() => {
+    async function fetchCounts() {
+      try {
+        const { data } = await supabase
+          .from('tools')
+          .select('category')
+          .eq('is_active', true)
+        if (!data) return
+        const counts: Record<string, number> = { all: data.length }
+        data.forEach(row => {
+          const cat = row.category as string
+          counts[cat] = (counts[cat] || 0) + 1
+        })
+        // Compute group counts
+        Object.entries(TOOL_CATEGORY_GROUPS).forEach(([groupKey, cats]) => {
+          counts[groupKey] = cats.reduce((sum, c) => sum + (counts[c] || 0), 0)
+        })
+        setCategoryCounts(counts)
+      } catch {
+        // ignore — counts are optional UI decoration
+      }
+    }
+    fetchCounts()
   }, [])
 
   const fetchData = useCallback(async () => {
@@ -234,41 +261,73 @@ export default function ToolsPage() {
           },
         ]} />
 
-        <h1 style={{
-          fontSize: tokens.typography.fontSize['2xl'],
-          fontWeight: tokens.typography.fontWeight.extrabold,
-          color: 'var(--color-text-primary)',
-          marginBottom: 24,
-          letterSpacing: '-0.02em',
-        }}>
-          {isZh ? '工具' : 'Tools'}
-        </h1>
+        {/* Tools page header — teal accent differentiates from Institutions (purple) */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: tokens.radius.lg,
+              background: 'var(--color-tools-accent-muted)',
+              border: '1px solid var(--color-tools-accent)',
+              color: 'var(--color-tools-accent)',
+              flexShrink: 0,
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+              </svg>
+            </span>
+            <h1 style={{
+              fontSize: tokens.typography.fontSize['3xl'],
+              fontWeight: 800,
+              background: 'var(--color-tools-gradient)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              margin: 0,
+              letterSpacing: '-0.02em',
+            }}>
+              {isZh ? '工具' : 'Tools'}
+            </h1>
+          </div>
+          <p style={{ fontSize: tokens.typography.fontSize.base, color: 'var(--color-text-tertiary)', marginBottom: 24, lineHeight: tokens.typography.lineHeight.normal }}>
+            {isZh ? '发现并评价加密行业中的顶级工具' : 'Discover and rate top tools in crypto'}
+          </p>
+        </div>
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
           {CATEGORY_FILTERS.map(f => {
             const active = category === f.key
+            const count = categoryCounts[f.key]
             return (
               <button
                 key={f.key}
                 onClick={() => setCategory(f.key)}
                 style={{
-                  padding: '8px 20px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '9px 18px',
                   borderRadius: tokens.radius.full,
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: active ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontWeight: active ? 700 : 500,
                   border: active ? '1px solid transparent' : '1px solid var(--color-border-primary)',
-                  background: active ? tokens.gradient.purpleGold : 'var(--color-bg-secondary)',
+                  background: active ? 'var(--color-tools-gradient)' : 'var(--color-bg-secondary)',
                   color: active ? '#fff' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
                   transition: `all ${tokens.transition.base}`,
-                  boxShadow: active ? tokens.shadow.sm : tokens.shadow.none,
+                  boxShadow: active ? `0 2px 12px var(--color-tools-accent-muted)` : 'none',
+                  letterSpacing: '0.01em',
                 }}
                 onMouseEnter={e => {
                   if (!active) {
-                    e.currentTarget.style.borderColor = 'var(--color-brand-muted)'
+                    e.currentTarget.style.borderColor = 'var(--color-tools-accent)'
                     e.currentTarget.style.color = 'var(--color-text-primary)'
-                    e.currentTarget.style.background = 'var(--color-bg-hover)'
+                    e.currentTarget.style.background = 'var(--color-tools-accent-muted)'
                   }
                 }}
                 onMouseLeave={e => {
@@ -280,6 +339,21 @@ export default function ToolsPage() {
                 }}
               >
                 {isZh ? f.zh : f.en}
+                {count != null && count > 0 && (
+                  <span style={{
+                    fontSize: tokens.typography.fontSize.xs,
+                    fontWeight: 600,
+                    padding: '1px 7px',
+                    borderRadius: tokens.radius.full,
+                    background: active ? 'rgba(255,255,255,0.22)' : 'var(--color-tools-accent-muted)',
+                    color: active ? '#fff' : 'var(--color-tools-accent)',
+                    lineHeight: '1.5',
+                    minWidth: 20,
+                    textAlign: 'center' as const,
+                  }}>
+                    {count}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -287,7 +361,7 @@ export default function ToolsPage() {
             value={sort}
             onChange={e => setSort(e.target.value)}
             style={{
-              padding: '8px 14px', borderRadius: tokens.radius.full,
+              padding: '9px 14px', borderRadius: tokens.radius.full,
               border: '1px solid var(--color-border-primary)',
               background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
               fontSize: tokens.typography.fontSize.sm, cursor: 'pointer', outline: 'none', marginLeft: 'auto',
@@ -468,12 +542,24 @@ function ToolCard({ tool, isZh }: { tool: Tool; isZh: boolean }) {
         </div>
       )}
 
-      <StarRating
-        rating={tool.avg_rating || 0}
-        ratingCount={tool.rating_count}
-        size={14}
-        readonly
-      />
+      {/* Prominent star rating with score highlight */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 10px',
+        borderRadius: tokens.radius.lg,
+        background: (tool.avg_rating && tool.avg_rating > 0) ? 'var(--color-tools-accent-muted)' : 'transparent',
+        border: (tool.avg_rating && tool.avg_rating > 0) ? '1px solid var(--color-tools-accent)' : 'none',
+        width: 'fit-content',
+      }}>
+        <StarRating
+          rating={tool.avg_rating || 0}
+          ratingCount={tool.rating_count}
+          size={16}
+          readonly
+        />
+      </div>
     </a>
   )
 }
