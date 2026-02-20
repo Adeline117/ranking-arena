@@ -380,7 +380,7 @@ export default function TokenSidePanel({ token, onClose }: {
                   color: tokens.colors.text.primary,
                   marginBottom: 8,
                 }}>
-                  价格变化
+                  {t('priceChanges')}
                 </div>
                 <PriceChangeBar label="1h" value={md.price_change_percentage_1h_in_currency?.usd} />
                 <PriceChangeBar label="24h" value={md.price_change_percentage_24h} />
@@ -491,7 +491,7 @@ export default function TokenSidePanel({ token, onClose }: {
                         <line x1="2" y1="12" x2="22" y2="12" />
                         <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
                       </svg>
-                      官网
+                      {t('officialWebsite')}
                     </a>
                   ))}
                 </div>
@@ -506,7 +506,7 @@ export default function TokenSidePanel({ token, onClose }: {
                 color: tokens.colors.text.primary,
                 marginBottom: 8,
               }}>
-                相关交易员
+                {t('relatedTraders')}
               </div>
               <div style={{
                 padding: 16,
@@ -516,7 +516,7 @@ export default function TokenSidePanel({ token, onClose }: {
                 color: tokens.colors.text.tertiary,
                 fontSize: 13,
               }}>
-                暂无数据 -- 即将推出
+                {t('noDataComingSoon')}
               </div>
             </div>
           </motion.div>

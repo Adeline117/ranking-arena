@@ -315,8 +315,8 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 <span style={{
                   fontSize: Math.max(9, fontSize * 0.7),
                   fontWeight: 700,
-                  color: 'rgba(255,255,255,0.9)',
-                  textShadow: isLight ? '0 1px 2px rgba(255,255,255,0.5)' : '0 1px 3px rgba(0,0,0,0.6)',
+                  color: isLight ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.9)',
+                  textShadow: isLight ? '0 1px 3px rgba(0,0,0,0.4)' : '0 1px 3px rgba(0,0,0,0.6)',
                   lineHeight: 1.1,
                   fontFamily: 'var(--font-mono, monospace)',
                   fontVariantNumeric: 'tabular-nums',
