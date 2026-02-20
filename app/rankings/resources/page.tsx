@@ -85,13 +85,35 @@ async function fetchTopByCategory(category: string): Promise<LibraryItem[]> {
   }
 }
 
+async function fetchCategoryCounts(): Promise<Record<string, number>> {
+  if (process.env.NEXT_PHASE === 'phase-production-build') return {}
+  try {
+    const supabase = getSupabaseAdmin()
+    const cats = ['book', 'paper', 'whitepaper', 'research', 'academic_paper']
+    const [totalResult, ...catResults] = await Promise.all([
+      supabase.from('library_items').select('id', { count: 'exact', head: true }),
+      ...cats.map(cat =>
+        supabase.from('library_items').select('id', { count: 'exact', head: true }).eq('category', cat)
+      ),
+    ])
+    const counts: Record<string, number> = { all: totalResult.count || 0 }
+    cats.forEach((cat, i) => {
+      counts[cat] = catResults[i].count || 0
+    })
+    return counts
+  } catch {
+    return {}
+  }
+}
+
 export default async function ResourcesPage() {
-  const [{ items, total }, featured, topBooks, topPapers, topWhitepapers] = await Promise.all([
+  const [{ items, total }, featured, topBooks, topPapers, topWhitepapers, categoryCounts] = await Promise.all([
     fetchLibraryItems(),
     fetchFeatured(),
     fetchTopByCategory('book'),
     fetchTopByCategory('paper'),
     fetchTopByCategory('whitepaper'),
+    fetchCategoryCounts(),
   ])
 
   return (
@@ -104,6 +126,7 @@ export default async function ResourcesPage() {
           topBooks={topBooks}
           topPapers={topPapers}
           recentItems={topWhitepapers}
+          categoryCounts={categoryCounts}
         />
       </Suspense>
     </ErrorBoundary>
