@@ -173,10 +173,16 @@ export default function FollowingPage() {
     try {
       const authHeaders = await getAuthHeadersAsync()
       const csrfHeaders = getCsrfHeaders()
-      const response = await fetch('/api/follow', {
+      // Use different API endpoint for traders vs users
+      const url = item.type === 'user' ? '/api/users/follow' : '/api/follow'
+      const reqBody = item.type === 'user'
+        ? { followingId: item.id, action: 'unfollow' }
+        : { traderId: item.id, action: 'unfollow' }
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders, ...csrfHeaders },
-        body: JSON.stringify({ traderId: item.id, action: 'unfollow' }),
+        body: JSON.stringify(reqBody),
       })
 
       if (!response.ok) {
@@ -286,7 +292,7 @@ export default function FollowingPage() {
         break
     }
     return sorted
-  }, [items, sortMode])
+  }, [items, sortMode, searchQuery, platformFilter])
 
   // 汇总统计（只计算交易员）
   const stats = useMemo(() => {
