@@ -40,8 +40,7 @@ function getStoredPreferences() {
       } catch { /* invalid JSON */ }
     }
     return {
-      sortColumn: localStorage.getItem(LS_KEY_SORT_COLUMN) as 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | null,
-      sortDir: localStorage.getItem(LS_KEY_SORT_DIR) as 'asc' | 'desc' | null,
+      // Sort column/dir intentionally NOT restored from localStorage — always default to 'score' desc
       preset: localStorage.getItem(LS_KEY_PRESET) as PresetId | null,
       exchange: localStorage.getItem(LS_KEY_EXCHANGE),
       filterConfig,
@@ -170,6 +169,12 @@ export default function RankingSection({
       setShowAdvancedFilter(true)
     }
 
+    // Clear any stale sort preferences from localStorage — sort always starts at 'score' desc
+    try {
+      localStorage.removeItem(LS_KEY_SORT_COLUMN)
+      localStorage.removeItem(LS_KEY_SORT_DIR)
+    } catch { /* ignore */ }
+
     // Feature 8: Restore sort/page/search/preset from URL (with localStorage fallback)
     const urlSort = searchParams.get('sort') as typeof sortColumn | null
     const urlOrder = searchParams.get('order') as 'asc' | 'desc' | null
@@ -297,17 +302,13 @@ export default function RankingSection({
     } catch { /* ignore */ }
   }, [syncFilterToUrl])
 
-  // Feature 8: Sort/page/search change handlers with localStorage persistence
+  // Feature 8: Sort/page/search change handlers
+  // Sort is NOT persisted to localStorage — always defaults to 'score' desc on page load
   const handleSortChange = useCallback((col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => {
     setSortColumn(col)
     setSortDir(dir)
     setCurrentPage(1)
     syncStateToUrl({ sort: col, order: dir, page: 1 })
-    // Save to localStorage
-    try {
-      localStorage.setItem(LS_KEY_SORT_COLUMN, col)
-      localStorage.setItem(LS_KEY_SORT_DIR, dir)
-    } catch { /* ignore */ }
   }, [syncStateToUrl])
 
   const handlePageChange = useCallback((page: number) => {
