@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import TopNav from '@/app/components/layout/TopNav'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
@@ -33,7 +33,19 @@ interface UserStats {
 }
 
 
-export default function UserCenterPage() {
+export default function UserCenterPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: tokens.colors.accent.brand }} />
+      </div>
+    }>
+      <UserCenterPage />
+    </Suspense>
+  )
+}
+
+function UserCenterPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { language } = useLanguage()
