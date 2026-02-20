@@ -123,29 +123,39 @@ export default function TradingViewChart({
   useEffect(() => {
     if (!containerRef.current || !data || data.length === 0) return
 
+    // Canvas API doesn't support CSS variables — resolve them to actual values
+    const resolveCssVar = (val: string): string => {
+      if (!val.startsWith('var(')) return val
+      const name = val.slice(4, -1).split(',')[0].trim()
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'
+    }
+    const c = Object.fromEntries(
+      Object.entries(colors).map(([k, v]) => [k, resolveCssVar(v)])
+    ) as typeof colors
+
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height,
       layout: {
-        background: { type: ColorType.Solid, color: colors.bg },
-        textColor: colors.text,
+        background: { type: ColorType.Solid, color: c.bg },
+        textColor: c.text,
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       },
       grid: {
-        vertLines: { color: colors.grid },
-        horzLines: { color: colors.grid },
+        vertLines: { color: c.grid },
+        horzLines: { color: c.grid },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: colors.crosshair, style: LineStyle.Dashed, width: 1, labelBackgroundColor: colors.crosshair },
-        horzLine: { color: colors.crosshair, style: LineStyle.Dashed, width: 1, labelBackgroundColor: colors.crosshair },
+        vertLine: { color: c.crosshair, style: LineStyle.Dashed, width: 1, labelBackgroundColor: c.crosshair },
+        horzLine: { color: c.crosshair, style: LineStyle.Dashed, width: 1, labelBackgroundColor: c.crosshair },
       },
       rightPriceScale: {
-        borderColor: colors.border,
+        borderColor: c.border,
         scaleMargins: { top: 0.1, bottom: showVolume ? 0.25 : 0.1 },
       },
       timeScale: {
-        borderColor: colors.border,
+        borderColor: c.border,
         timeVisible: true,
         secondsVisible: false,
       },
@@ -157,12 +167,12 @@ export default function TradingViewChart({
     // Create series
     if (type === 'candlestick') {
       const series = chart.addSeries(CandlestickSeries, {
-        upColor: colors.upColor,
-        downColor: colors.downColor,
-        borderUpColor: colors.upColor,
-        borderDownColor: colors.downColor,
-        wickUpColor: colors.upColor,
-        wickDownColor: colors.downColor,
+        upColor: c.upColor,
+        downColor: c.downColor,
+        borderUpColor: c.upColor,
+        borderDownColor: c.downColor,
+        wickUpColor: c.upColor,
+        wickDownColor: c.downColor,
       })
       series.setData(data as CandlestickData<Time>[])
       seriesRef.current = series
@@ -180,23 +190,23 @@ export default function TradingViewChart({
           .map(d => ({
             time: d.time,
             value: d.volume!,
-            color: d.close >= d.open ? colors.volumeUp : colors.volumeDown,
+            color: d.close >= d.open ? c.volumeUp : c.volumeDown,
           }))
         volumeSeries.setData(volumeData)
         volumeRef.current = volumeSeries
       }
     } else if (type === 'area') {
       const series = chart.addSeries(AreaSeries, {
-        lineColor: color || colors.lineColor,
-        topColor: topColor || colors.areaTop,
-        bottomColor: bottomColor || colors.areaBottom,
+        lineColor: color || c.lineColor,
+        topColor: topColor || c.areaTop,
+        bottomColor: bottomColor || c.areaBottom,
         lineWidth: 2,
       })
       series.setData(data as LineData<Time>[])
       seriesRef.current = series
     } else {
       const series = chart.addSeries(LineSeries, {
-        color: color || colors.lineColor,
+        color: color || c.lineColor,
         lineWidth: 2,
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
@@ -210,7 +220,7 @@ export default function TradingViewChart({
     tooltip.style.cssText = `
       position: absolute; display: none; padding: 8px 12px; z-index: 10;
       background: ${theme === 'dark' ? 'var(--glass-bg-primary)' : 'var(--glass-bg-heavy)'};
-      border: 1px solid ${colors.border}; border-radius: 6px;
+      border: 1px solid ${c.border}; border-radius: 6px;
       color: ${theme === 'dark' ? 'var(--color-border-primary)' : 'var(--color-text-primary)'}; font-size: 12px;
       pointer-events: none; font-family: monospace; line-height: 1.6;
       backdrop-filter: blur(8px); box-shadow: 0 4px 12px var(--color-overlay-medium);
@@ -232,17 +242,17 @@ export default function TradingViewChart({
         const d = mainData as CandlestickData
         const volData = volumeRef.current ? param.seriesData.get(volumeRef.current) : null
         html = `
-          <div style="margin-bottom:4px;color:${colors.text}">${String(param.time)}</div>
+          <div style="margin-bottom:4px;color:${c.text}">${String(param.time)}</div>
           <div>${labels.open}: <b>${d.open.toFixed(2)}</b></div>
           <div>${labels.high}: <b>${d.high.toFixed(2)}</b></div>
           <div>${labels.low}: <b>${d.low.toFixed(2)}</b></div>
-          <div>${labels.close}: <b style="color:${d.close >= d.open ? colors.upColor : colors.downColor}">${d.close.toFixed(2)}</b></div>
+          <div>${labels.close}: <b style="color:${d.close >= d.open ? c.upColor : c.downColor}">${d.close.toFixed(2)}</b></div>
           ${volData && 'value' in volData ? `<div>${labels.volume}: <b>${(volData as LineData).value.toLocaleString()}</b></div>` : ''}
         `
       } else if ('value' in mainData) {
         const d = mainData as LineData
         html = `
-          <div style="margin-bottom:4px;color:${colors.text}">${String(param.time)}</div>
+          <div style="margin-bottom:4px;color:${c.text}">${String(param.time)}</div>
           <div>${labels.value}: <b>${d.value.toFixed(2)}</b></div>
         `
       }

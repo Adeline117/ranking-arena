@@ -57,7 +57,7 @@ export const metadata: Metadata = {
     template: "%s | Arena",
   },
   description:
-    "Enter. Outperform. | 入场，超越。Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.",
+    "Arena — Crypto trader rankings from 30+ exchanges. Follow top traders by ROI, Arena Score, and PnL. Binance, Bybit, OKX, Hyperliquid, and more.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
   verification: {
     google: 'nnTiBxpNMeCgo9rCLyUbZV9Z-OE8Nr-BLh7E-o2T1R8',
@@ -117,10 +117,10 @@ export const metadata: Metadata = {
     locale: "zh_CN",
     images: [
       {
-        url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
+        url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=Crypto+Trader+Rankings+from+30%2B+Exchanges`,
         width: 1200,
         height: 630,
-        alt: "Arena - 加密货币交易员排行榜",
+        alt: "Arena — Crypto Trader Rankings from 30+ Exchanges",
       },
     ],
   },
@@ -130,7 +130,7 @@ export const metadata: Metadata = {
     description:
       "Enter. Outperform. Arena aggregates trader rankings from 30+ exchanges. Follow top traders and level up your trading.",
     images: [
-      `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/og-image.png`,
+      `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=Crypto+Trader+Rankings+from+30%2B+Exchanges`,
     ],
     creator: '@arenafi',
   },
