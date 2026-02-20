@@ -2987,6 +2987,10 @@ const en = {
     exportJSON: 'Export JSON',
     exportPDF: 'Export PDF',
     exportSuccess: 'Export successful',
+    exportData: 'Export Data',
+    exportDataDesc: 'Download all your data as JSON. Limited to once per 24 hours.',
+    exportRateLimited: 'Export limit reached. Try again in 24 hours.',
+    exporting: 'Exporting...',
     preparing: 'Preparing...',
 
     // Market page tabs & table

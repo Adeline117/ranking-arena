@@ -2990,6 +2990,10 @@ const zh = {
     exportJSON: '导出 JSON',
     exportPDF: '导出 PDF',
     exportSuccess: '导出成功',
+    exportData: '导出数据',
+    exportDataDesc: '下载你的所有数据为 JSON 文件，每 24 小时限一次。',
+    exportRateLimited: '导出频率受限，请 24 小时后再试。',
+    exporting: '导出中...',
     preparing: '准备中...',
 
     // Market page tabs & table
