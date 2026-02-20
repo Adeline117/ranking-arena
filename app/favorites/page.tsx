@@ -417,7 +417,7 @@ export default function FavoritesPage() {
 
                   {/* 收藏夹信息 */}
                   <Box style={{ flex: 1 }}>
-                    <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[1] }}>
+                    <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap' }}>
                       <Text size="base" weight="bold">
                         {folder.name}
                       </Text>

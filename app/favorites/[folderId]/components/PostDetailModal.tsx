@@ -61,7 +61,7 @@ export default function PostDetailModal({ post, fullContent, loading, t, onClose
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            x
+            ✕
           </button>
         </div>
 
