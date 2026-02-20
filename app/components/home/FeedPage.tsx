@@ -9,7 +9,6 @@ import PostFeed from '@/app/components/post/PostFeed'
 import TopNav from '@/app/components/layout/TopNav'
 import DesktopSidebar from '@/app/components/layout/DesktopSidebar'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
-import dynamic from 'next/dynamic'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import FollowingFeed from '@/app/components/home/FollowingFeed'
 import { Box } from '@/app/components/base'
