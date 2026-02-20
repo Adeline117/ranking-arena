@@ -217,13 +217,13 @@ export default function OnboardingPage() {
 
       <Box className="onboarding-card" style={{
         maxWidth: 560, width: '100%', background: obTheme.cardBg, border: `1px solid ${obTheme.cardBorder}`,
-        borderRadius: 28, padding: '44px 36px', position: 'relative', zIndex: 1,
+        borderRadius: 28, padding: 'clamp(24px, 5vw, 44px) clamp(20px, 4vw, 36px)', position: 'relative', zIndex: 1,
         boxShadow: isDark
           ? '0 25px 50px -12px var(--color-overlay-dark), 0 0 100px var(--color-notification-unread)'
           : '0 25px 50px -12px var(--color-overlay-subtle), 0 0 100px var(--color-accent-primary-10)',
       }}>
-        {/* Progress bar */}
-        <Box style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 36 }}>
+        {/* Progress bar - hidden on complete step */}
+        <Box style={{ display: step === 'complete' ? 'none' : 'flex', justifyContent: 'center', gap: 10, marginBottom: 36 }}>
           {STEPS.map((s, i) => (
             <Box key={s} className={`progress-dot ${stepIndex === i ? 'active' : ''}`} style={{
               width: stepIndex === i ? 28 : 10, height: 10, borderRadius: 5,
