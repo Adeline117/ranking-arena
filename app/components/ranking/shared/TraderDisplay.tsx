@@ -7,7 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import { RankingBadge } from '../../ui/icons'
 import { Box, Text } from '../../base'
 import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
-import { getScoreColorInfo } from '@/lib/utils/score-colors'
+import { getScoreColorInfo, getScoreColor } from '@/lib/utils/score-colors'
 import type { Trader } from '../RankingTable'
 
 // Shared color constants for trader display components
@@ -326,12 +326,10 @@ export function ArenaScoreCircle({
 
   if (score == null) return null
 
-  // 3-tier ring color: green 70+, yellow-orange 40-69, red <40
-  const ringColor = score >= 70
-    ? 'var(--color-score-great, #10b981)'
-    : score >= 40
-    ? 'var(--color-score-below, #f97316)'
-    : 'var(--color-score-low, #ef4444)'
+  // 5-tier color system (matches score-colors.ts standard):
+  // 90+: legendary (purple), 70-89: great (green), 50-69: average (amber),
+  // 30-49: below (orange), 0-29: low (gray-red)
+  const ringColor = getScoreColor(score)
 
   // Score breakdown calculated from raw roi% and pnl USD
   const roiScore = roi != null
