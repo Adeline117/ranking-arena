@@ -177,17 +177,29 @@ export default function TopTraders() {
                   </div>
                 </div>
 
-                {/* Score on top, ROI below */}
+                {/* Arena Score + ROI */}
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   {t.arena_score != null && (
-                    <div style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: getScoreColor(t.arena_score!),
-                      lineHeight: 1.3,
-                      ...(t.arena_score >= 90 ? { textShadow: '0 0 8px var(--color-accent-primary-60)' } : {}),
-                    }}>
-                      {t.arena_score.toFixed(0)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+                      <span style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: 'var(--color-text-tertiary)',
+                        letterSpacing: '0.04em',
+                        textTransform: 'uppercase',
+                        lineHeight: 1.3,
+                      }}>
+                        Score
+                      </span>
+                      <span style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: getScoreColor(t.arena_score!),
+                        lineHeight: 1.3,
+                        ...(t.arena_score >= 90 ? { textShadow: '0 0 8px var(--color-accent-primary-60)' } : {}),
+                      }}>
+                        {t.arena_score.toFixed(0)}
+                      </span>
                     </div>
                   )}
                   {roiStr && (

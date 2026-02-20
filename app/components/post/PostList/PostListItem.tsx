@@ -63,6 +63,9 @@ export const PostListItem = memo(function PostListItem({
         cursor: 'pointer',
         color: tokens.colors.text.primary,
         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        minHeight: 160,
+        display: 'flex',
+        flexDirection: 'column',
       } : {
         width: '100%',
         textAlign: 'left',
@@ -117,8 +120,17 @@ export const PostListItem = memo(function PostListItem({
       </div>
 
       {/* Title + Tags */}
-      <div style={{ marginTop: 6, fontWeight: 900, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ color: translatedListPosts[p.id]?.title ? tokens.colors.accent.translated : tokens.colors.text.primary }}>
+      <div style={{ marginTop: 6, fontWeight: 900, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: isMasonry ? 'nowrap' : 'wrap', minWidth: 0 }}>
+        <span style={{
+          color: translatedListPosts[p.id]?.title ? tokens.colors.accent.translated : tokens.colors.text.primary,
+          ...(isMasonry ? {
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          } : {}),
+        }}>
           {translatedListPosts[p.id]?.title || p.title}
         </span>
         {/* Poll tag */}
