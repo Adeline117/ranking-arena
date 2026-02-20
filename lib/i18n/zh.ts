@@ -1771,7 +1771,7 @@ const zh = {
     loginForgotPassword: '忘记密码？',
     loginWelcomeBack: '欢迎回来',
     loginCreateAccount: '创建账号',
-    loginSubtitle: '入场，超越。',
+    loginSubtitle: '加密货币全排名',
     loginValueProp1: '追踪 15,000+ 交易员实时排名',
     loginValueProp2: '跨 27 个交易所对比收益与风控',
     loginValueProp3: '加入交易社区，发现投资机会',
@@ -1946,7 +1946,7 @@ const zh = {
 
     // 404 页面
     notFoundTitle: '页面不存在',
-    notFoundDesc: '入场，超越。— 这个页面可能已被移动或删除',
+    notFoundDesc: '加密货币全排名 — 这个页面可能已被移动或删除',
     notFoundViewHot: '查看热榜',
     notFoundExplore: '或者探索这些内容',
     notFoundBrowseGroups: '浏览小组',
@@ -2108,7 +2108,7 @@ const zh = {
 
     // Onboarding page
     onboardingTitle: '欢迎来到 Arena',
-    onboardingSubtitle: '入场，超越。',
+    onboardingSubtitle: '加密货币全排名',
     selectLanguage: '选择语言',
     selectTheme: '选择主题',
     continueButton: '继续',
@@ -2708,7 +2708,7 @@ const zh = {
     faqNoResults: '未找到匹配的问题，请尝试其他关键词。',
 
     // Hero section
-    heroSubtitle: '入场，超越。',
+    heroSubtitle: '加密货币全排名',
     heroCTABrowse: '查看排行榜',
     heroCTASignUp: '免费注册',
 

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 
 export const metadata: Metadata = {
   title: 'Rankings',
-  description: 'Multi-dimensional crypto trader rankings across 20+ exchanges. Real-time ROI, win rate, and Arena Score. Enter. Outperform.',
+  description: 'All rankings in crypto. Multi-dimensional trader rankings across 30+ exchanges — ROI, win rate, Arena Score, and more.',
 }
 
 export default function RankingsPage() {

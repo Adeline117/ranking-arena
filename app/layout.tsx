@@ -53,11 +53,11 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Arena",
+    default: "Arena — All Rankings in Crypto",
     template: "%s | Arena",
   },
   description:
-    "Arena — Crypto trader rankings from 30+ exchanges. Follow top traders by ROI, Arena Score, and PnL. Binance, Bybit, OKX, Hyperliquid, and more.",
+    "All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 30+ exchanges — ranked by ROI, Arena Score, and PnL.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
   verification: {
     google: 'nnTiBxpNMeCgo9rCLyUbZV9Z-OE8Nr-BLh7E-o2T1R8',
@@ -109,28 +109,28 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    title: "Arena — Enter. Outperform.",
+    title: "Arena ranks everything in crypto",
     description:
-      "Enter. Outperform. Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.",
+      "All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 30+ exchanges — ranked by ROI, Arena Score, and PnL.",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org",
     siteName: "Arena",
     locale: "zh_CN",
     images: [
       {
-        url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=Crypto+Trader+Rankings+from+30%2B+Exchanges`,
+        url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=All+rankings+in+crypto`,
         width: 1200,
         height: 630,
-        alt: "Arena — Crypto Trader Rankings from 30+ Exchanges",
+        alt: "Arena — All Rankings in Crypto",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Arena — Enter. Outperform.",
+    title: "Arena ranks everything in crypto",
     description:
-      "Enter. Outperform. Arena aggregates trader rankings from 30+ exchanges. Follow top traders and level up your trading.",
+      "All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 30+ exchanges — ranked by ROI, Arena Score, and PnL.",
     images: [
-      `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=Crypto+Trader+Rankings+from+30%2B+Exchanges`,
+      `${process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"}/api/og?title=Arena&subtitle=All+rankings+in+crypto`,
     ],
     creator: '@arenafi',
   },
