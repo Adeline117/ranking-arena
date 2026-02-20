@@ -182,17 +182,13 @@ export default function RankingSection({
     const urlPreset = searchParams.get('preset') as PresetId | null
     const urlEx = searchParams.get('ex')
 
-    // URL takes priority, then localStorage
+    // URL takes priority; default is always 'score' (don't restore from localStorage)
     if (urlSort && ['score', 'roi', 'pnl', 'winrate', 'mdd'].includes(urlSort)) {
       setSortColumn(urlSort)
-    } else if (storedPrefs.sortColumn && ['score', 'roi', 'pnl', 'winrate', 'mdd'].includes(storedPrefs.sortColumn)) {
-      setSortColumn(storedPrefs.sortColumn)
     }
-
+    // Sort direction: URL takes priority, otherwise default desc
     if (urlOrder && ['asc', 'desc'].includes(urlOrder)) {
       setSortDir(urlOrder)
-    } else if (storedPrefs.sortDir && ['asc', 'desc'].includes(storedPrefs.sortDir)) {
-      setSortDir(storedPrefs.sortDir)
     }
 
     if (urlPage) setCurrentPage(Math.max(1, parseInt(urlPage, 10) || 1))
@@ -866,49 +862,26 @@ export default function RankingSection({
         </Box>
       )}
 
-      {/* Data source and update time info */}
-      {!loading && traders.length > 0 && (
+      {/* Last updated timestamp — exchange sources shown in chip bar above */}
+      {!loading && lastUpdated && (
         <Box
+          suppressHydrationWarning
           style={{
-            marginTop: tokens.spacing[3],
-            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            background: tokens.glass.bg.light,
-            borderRadius: tokens.radius.md,
-            border: `1px solid var(--color-border-secondary)`,
+            marginTop: tokens.spacing[2],
             display: 'flex',
-            flexWrap: 'wrap',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: tokens.spacing[2],
+            justifyContent: 'flex-end',
+            gap: 4,
             fontSize: tokens.typography.fontSize.xs,
             color: 'var(--color-text-tertiary)',
+            paddingRight: tokens.spacing[3],
           }}
         >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
-            <span>{t('sourcesLabel')}</span>
-            {dataSources.map((src) => (
-              <span
-                key={src}
-                style={{
-                  padding: '2px 6px',
-                  background: 'var(--color-bg-secondary)',
-                  borderRadius: tokens.radius.sm,
-                  fontWeight: tokens.typography.fontWeight.semibold,
-                }}
-              >
-                {EXCHANGE_NAMES[src] || src.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-              </span>
-            ))}
-          </Box>
-          {lastUpdated && (
-            <Box suppressHydrationWarning style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 6v6l4 2" />
-              </svg>
-              <span suppressHydrationWarning>{formatLastUpdated(lastUpdated)}</span>
-            </Box>
-          )}
+          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+          <span suppressHydrationWarning>{formatLastUpdated(lastUpdated)}</span>
         </Box>
       )}
 
