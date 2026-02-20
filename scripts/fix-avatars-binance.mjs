@@ -31,9 +31,8 @@ function isRealAvatar(url) {
   if (!url || typeof url !== 'string' || url.length < 10) return false
   if (!url.startsWith('http')) return false
   const lower = url.toLowerCase()
-  // Binance uses their own default-avatar.png for traders without custom pics — that's OK
-  // Only filter out truly fabricated/generated ones
-  const fakes = ['boringavatars', 'dicebear', 'identicon']
+  // Filter out default placeholders and fabricated/generated avatars
+  const fakes = ['boringavatars', 'dicebear', 'identicon', 'default-avatar']
   return !fakes.some(f => lower.includes(f))
 }
 
