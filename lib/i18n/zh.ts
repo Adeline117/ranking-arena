@@ -1,7 +1,7 @@
 // Chinese translations
 const zh = {
     home: '首页',
-    rankings: '排名',
+    rankings: '市场',
     groups: '小组',
     market: '市场',
     hot: '热榜',
