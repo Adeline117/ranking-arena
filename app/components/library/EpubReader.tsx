@@ -764,7 +764,7 @@ export default function EpubReader({
         onTouchEnd={handleTouchEnd}
         style={{
           width: '100%',
-          height: '100%',
+          height: 'calc(100% - 32px)',
           transition: 'opacity 0.3s ease',
           opacity: ready ? 1 : 0.3,
         }}
@@ -1248,9 +1248,10 @@ export default function EpubReader({
                     mono: { zh: '等宽', en: 'Mono' },
                     kai: { zh: '楷体', en: 'Kai' },
                   }
+                  void css // font family is controlled by parent via props
                   return (
                     <button key={key} onClick={() => {
-                      // fontFamily is controlled by parent, but we expose via typography panel
+                      // Font family selection is informational only; controlled by parent ReaderSettings
                     }} style={{
                       padding: '10px 8px', borderRadius: tokens.radius.md,
                       background: fontFamily === key ? accent : panelSubtle,

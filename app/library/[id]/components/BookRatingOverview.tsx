@@ -2,6 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import StarRating from '@/app/components/ui/StarRating'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface BookRatingOverviewProps {
   average: number
@@ -10,6 +11,8 @@ interface BookRatingOverviewProps {
 }
 
 export default function BookRatingOverview({ average, count, distribution }: BookRatingOverviewProps) {
+  const { language } = useLanguage()
+  const isZh = language === 'zh'
   const maxDist = Math.max(...Object.values(distribution), 1)
 
   return (
@@ -22,7 +25,7 @@ export default function BookRatingOverview({ average, count, distribution }: Boo
         </div>
         <StarRating rating={average} size={20} readonly showCount={false} />
         <div style={{ fontSize: 12, color: tokens.colors.text.tertiary, marginTop: 4 }}>
-          {count} ratings
+          {count} {isZh ? '人评价' : 'ratings'}
         </div>
       </div>
 
