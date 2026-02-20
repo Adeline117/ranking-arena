@@ -39,13 +39,24 @@ export const FEATURE_LIMITS = {
 // Context
 // ============================================
 
+/**
+ * Beta mode: unlock all Pro features for everyone during early launch.
+ * Set to false when paywalls should be enforced.
+ */
+export const BETA_PRO_FEATURES_FREE = true
+
 interface PremiumContextValue {
   /** 当前订阅 */
   subscription: UserSubscription | null
   /** 是否加载中 */
   isLoading: boolean
-  /** 是否为付费用户 */
+  /** 是否为付费用户（有实际订阅） */
   isPremium: boolean
+  /**
+   * 当前是否可以访问所有 Pro 功能。
+   * Beta 期间等于 true（全员解锁），正式收费后等于 isPremium。
+   */
+  isFeaturesUnlocked: boolean
   /** 当前等级 */
   tier: SubscriptionTier
   /** 订阅来源 */
@@ -271,16 +282,20 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     await loadSubscription()
   }, [loadSubscription])
 
-  const value = useMemo<PremiumContextValue>(() => ({
-    subscription,
-    isLoading,
-    isPremium: (subscription ? premiumService.isPremiumUser() : false) || hasNFT,
-    tier: (subscription?.tier || 'free') === 'free' && hasNFT ? 'pro' : (subscription?.tier || 'free'),
-    source: hasNFT ? 'nft' : (subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free'),
-    hasNFT,
-    checkFeature,
-    refresh,
-  }), [subscription, isLoading, hasNFT, checkFeature, refresh])
+  const value = useMemo<PremiumContextValue>(() => {
+    const actualIsPremium = (subscription ? premiumService.isPremiumUser() : false) || hasNFT
+    return {
+      subscription,
+      isLoading,
+      isPremium: actualIsPremium,
+      isFeaturesUnlocked: BETA_PRO_FEATURES_FREE || actualIsPremium,
+      tier: (subscription?.tier || 'free') === 'free' && hasNFT ? 'pro' : (subscription?.tier || 'free'),
+      source: hasNFT ? 'nft' : (subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free'),
+      hasNFT,
+      checkFeature,
+      refresh,
+    }
+  }, [subscription, isLoading, hasNFT, checkFeature, refresh])
 
   return (
     <PremiumContext.Provider value={value}>

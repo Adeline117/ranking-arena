@@ -267,7 +267,7 @@ export default function ReadPage() {
   const router = useRouter()
   const { language, t } = useLanguage()
   const isZh = language === 'zh'
-  const { isPremium, isLoading: premiumLoading } = usePremium()
+  const { isFeaturesUnlocked: isPremium, isLoading: premiumLoading } = usePremium()
 
   // Book data
   const [book, setBook] = useState<BookInfo | null>(null)

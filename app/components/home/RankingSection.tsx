@@ -13,6 +13,7 @@ import TimeRangeSelector from './TimeRangeSelector'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
+import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import { getScoreGradeLetter } from '@/lib/utils/score-explain'
@@ -102,7 +103,9 @@ export default function RankingSection({
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
-  const { isPro, isLoading: premiumLoading } = useSubscription()
+  const { isFeaturesUnlocked, isLoading: premiumLoading } = useSubscription()
+  // Beta: isFeaturesUnlocked = true for all users during open beta
+  const isPro = isFeaturesUnlocked
   const { getAuthHeaders } = useAuthSession()
 
   // 分类状态
@@ -556,6 +559,26 @@ export default function RankingSection({
         contain: 'layout style',
       }}
     >
+      {/* Beta notice: Pro features free */}
+      {BETA_PRO_FEATURES_FREE && (
+        <Box style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          padding: '6px 12px',
+          marginBottom: tokens.spacing[3],
+          borderRadius: tokens.radius.md,
+          background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
+          fontSize: tokens.typography.fontSize.xs,
+          color: 'var(--color-text-secondary)',
+        }}>
+          <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)', fontSize: 11 }}>Pro</span>
+          <span>{language === 'zh' ? '全部功能开放中 · 限时免费体验' : 'All Pro features unlocked · Free during open beta'}</span>
+        </Box>
+      )}
+
       {/* 紧凑工具栏 - 所有筛选器整合在一行 */}
       <Box
         className="ranking-toolbar"

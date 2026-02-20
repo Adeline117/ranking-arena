@@ -97,7 +97,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
   const { language, t } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const { isPro } = useSubscription()
+  const { isFeaturesUnlocked: isPro } = useSubscription()
   const searchParams = useSearchParams()
   const { accessToken, email, userId } = useAuthSession()
 

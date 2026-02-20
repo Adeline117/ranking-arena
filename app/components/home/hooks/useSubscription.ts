@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
+import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 
 // 缓存配置
 const CACHE_TTL = 5 * 60 * 1000 // 5 分钟缓存
@@ -137,7 +138,8 @@ export function useSubscription() {
     }
   }, [checkSubscription])
 
-  return { isPro, isLoading, tier, refresh }
+  // isFeaturesUnlocked: beta 期间全员解锁；正式收费后等于 isPro
+  return { isPro, isLoading, tier, refresh, isFeaturesUnlocked: BETA_PRO_FEATURES_FREE || isPro }
 }
 
 // 清除缓存的工具函数（用于支付成功后）

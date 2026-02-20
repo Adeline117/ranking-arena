@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, memo, useCallback, useTransition, useMemo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { RankingSkeleton } from '../ui/Skeleton'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -546,11 +547,24 @@ function RankingTableInner(props: {
 
             {/* Filter button */}
             <Box onClick={onFilterToggle} title={t('advancedFilter')} aria-label={t('advancedFilter')} role="button" tabIndex={0} className={`toolbar-btn touch-target-sm${hasActiveFilters ? ' toolbar-btn-active' : ''}`}
-              style={{ position: 'relative' }}
+              style={{ position: 'relative', gap: 4 }}
             >
               <FilterIcon size={11} />
               <span>{t('filter')}</span>
               {!isPro && <LockIconSmall size={7} />}
+              {BETA_PRO_FEATURES_FREE && (
+                <span style={{
+                  fontSize: 8, fontWeight: 700, padding: '1px 4px',
+                  borderRadius: 4,
+                  background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 20%, transparent)',
+                  color: 'var(--color-pro-gradient-start, #a78bfa)',
+                  border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 40%, transparent)',
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1.4,
+                }}>
+                  Pro
+                </span>
+              )}
               {hasActiveFilters && (
                 <Box style={{ position: 'absolute', top: 2, right: 2, width: 4, height: 4, borderRadius: '50%', background: tokens.colors.accent.primary }} />
               )}
@@ -558,10 +572,24 @@ function RankingTableInner(props: {
 
             {/* Compare button */}
             <Link href="/compare" title={t('compareTraders')} className="toolbar-btn touch-target-sm"
+              style={{ gap: 4 }}
             >
               <CompareIcon size={11} />
               <span>{t('compare')}</span>
               {!isPro && <LockIconSmall size={7} />}
+              {BETA_PRO_FEATURES_FREE && (
+                <span style={{
+                  fontSize: 8, fontWeight: 700, padding: '1px 4px',
+                  borderRadius: 4,
+                  background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 20%, transparent)',
+                  color: 'var(--color-pro-gradient-start, #a78bfa)',
+                  border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 40%, transparent)',
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1.4,
+                }}>
+                  Pro
+                </span>
+              )}
             </Link>
 
             {/* Column settings */}
