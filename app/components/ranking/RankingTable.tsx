@@ -709,8 +709,34 @@ function RankingTableInner(props: {
             aria-expanded={showRules}
           >?</button>
         </Box>
-        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} title={t('arenaScoreTooltip')} aria-sort={sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
-          {t('score')} <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
+        <Box className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('score')} aria-sort={sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}
+        >
+          {t('score')}
+          <span
+            title={t('arenaScoreHeaderTooltip') || "Arena's composite performance score (0–100)"}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 13,
+              height: 13,
+              borderRadius: '50%',
+              border: `1px solid var(--color-text-tertiary)`,
+              fontSize: 9,
+              fontWeight: 700,
+              color: 'var(--color-text-tertiary)',
+              lineHeight: 1,
+              cursor: 'help',
+              flexShrink: 0,
+              opacity: 0.65,
+              fontStyle: 'normal',
+            }}
+            aria-label={t('arenaScoreHeaderTooltip') || "Arena's composite performance score (0–100)"}
+          >
+            i
+          </span>
+          <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
         </Box>
         <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} aria-sort={sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('roi')} <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />

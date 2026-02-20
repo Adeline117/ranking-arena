@@ -854,7 +854,12 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                     </button>
                   )}
                 </Box>
-                <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
+                <PostFeed
+                  authorHandle={profile.handle}
+                  variant="compact"
+                  showSortButtons
+                  createPostHref={isOwnProfile ? `/u/${profile.handle}/new` : undefined}
+                />
               </Box>
             </Box>
           )}

@@ -104,10 +104,27 @@ export function EquityCurveSection({
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: 200,
+          gap: tokens.spacing[3],
         }}
       >
-        <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
+        {/* CSS-art chart outline illustration */}
+        <svg width="56" height="44" viewBox="0 0 56 44" fill="none" style={{ opacity: 0.25, color: 'var(--color-text-tertiary)' }}>
+          <path d="M4 40V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M4 40h48" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M4 32l10-8 8 4 10-12 10 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 3" />
+          <circle cx="4" cy="32" r="2" fill="currentColor" />
+          <circle cx="14" cy="24" r="2" fill="currentColor" opacity="0.5" />
+          <circle cx="22" cy="28" r="2" fill="currentColor" opacity="0.5" />
+          <circle cx="32" cy="16" r="2" fill="currentColor" opacity="0.5" />
+          <circle cx="42" cy="22" r="2" fill="currentColor" opacity="0.5" />
+        </svg>
+        <Text size="sm" weight="semibold" color="tertiary" style={{ textAlign: 'center' }}>
           {t('noEquityCurveData')}
+        </Text>
+        <Text size="xs" color="tertiary" style={{ textAlign: 'center', maxWidth: 280, lineHeight: 1.6, opacity: 0.8 }}>
+          {t('chartDataAccumulatesDaily') || (language === 'zh'
+            ? '数据每天积累。首次交易后24小时内即可看到资金曲线图。'
+            : 'Data accumulates daily. Check back soon — your first chart will appear within 24 hours of first trade.')}
         </Text>
       </Box>
     )
@@ -176,13 +193,22 @@ export function EquityCurveSection({
           gap: tokens.spacing[3],
           background: `${tokens.colors.bg.tertiary}40`,
           borderRadius: tokens.radius.xl,
+          padding: tokens.spacing[6],
         }}>
-          <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
+          {/* Hourglass / accumulating data illustration */}
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" style={{ opacity: 0.3, color: 'var(--color-text-tertiary)' }}>
+            <path d="M10 6h20M10 34h20M12 6c0 8 8 12 8 14S12 26 12 34M28 6c0 8-8 12-8 14s8 6 8 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="20" cy="20" r="2" fill="currentColor" opacity="0.5" />
+          </svg>
+          <Text size="sm" weight="semibold" color="tertiary" style={{ textAlign: 'center' }}>
+            {language === 'zh' ? '数据积累中' : 'Accumulating data...'}
+          </Text>
+          <Text size="sm" color="tertiary" style={{ textAlign: 'center', maxWidth: 300, lineHeight: 1.6 }}>
             {t('insufficientDataForChart') || (language === 'zh'
               ? `数据点不足（仅 ${currentData.length} 个），图表需要更多数据才能有效展示趋势。`
               : `Not enough data points (only ${currentData.length}). More data is needed to display a meaningful chart.`)}
           </Text>
-          <Text size="xs" color="tertiary" style={{ textAlign: 'center', fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+          <Text size="xs" color="tertiary" style={{ textAlign: 'center', fontFamily: tokens.typography.fontFamily.mono.join(', '), opacity: 0.7 }}>
             {currentData.map(d => `${new Date(d.date).toLocaleDateString()}: ${chartType === 'roi' ? d.roi.toFixed(2) + '%' : '$' + d.pnl.toLocaleString()}`).join('  |  ')}
           </Text>
         </Box>

@@ -1,6 +1,7 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { RankingBadge } from '../../ui/icons'
@@ -272,5 +273,174 @@ export function MetricStat({ label, value, color }: {
         {value}
       </Text>
     </Box>
+  )
+}
+
+/**
+ * Arena Score — Circular Hero Badge (Task 1 & 2)
+ * Displays score as a color-coded circle with hover tooltip breakdown
+ * Colors: green (70+), yellow-orange (40-69), red (<40)
+ */
+export function ArenaScoreCircle({
+  score,
+  roi,
+  pnl,
+  language,
+  showConfidence,
+  trader,
+}: {
+  score: number | undefined
+  roi?: number | null
+  pnl?: number | null
+  language?: string
+  showConfidence?: boolean
+  trader?: Trader
+}) {
+  const [show, setShow] = useState(false)
+  const [positioned, setPositioned] = useState(false)
+  const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 })
+  const ref = useRef<HTMLDivElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
+
+  // Position tooltip after it renders
+  useEffect(() => {
+    if (!show) { setPositioned(false); return }
+    if (!ref.current || !tooltipRef.current) return
+    const triggerRect = ref.current.getBoundingClientRect()
+    const tooltipRect = tooltipRef.current.getBoundingClientRect()
+
+    // Prefer right of badge, fall back to left if near viewport edge
+    let left = triggerRect.right + 10
+    if (left + tooltipRect.width > window.innerWidth - 8) {
+      left = triggerRect.left - tooltipRect.width - 10
+    }
+    left = Math.max(8, left)
+
+    // Center vertically on badge
+    let top = triggerRect.top + triggerRect.height / 2 - tooltipRect.height / 2
+    top = Math.max(8, Math.min(top, window.innerHeight - tooltipRect.height - 8))
+
+    setTooltipPos({ top, left })
+    setPositioned(true)
+  }, [show])
+
+  if (score == null) return null
+
+  // 3-tier ring color: green 70+, yellow-orange 40-69, red <40
+  const ringColor = score >= 70
+    ? 'var(--color-score-great, #10b981)'
+    : score >= 40
+    ? 'var(--color-score-below, #f97316)'
+    : 'var(--color-score-low, #ef4444)'
+
+  // Score breakdown calculated from raw roi% and pnl USD
+  const roiScore = roi != null
+    ? Math.min(60, Math.max(0, Math.round((roi / 500) * 60)))
+    : null
+  const pnlScore = pnl != null
+    ? Math.min(40, Math.max(0, Math.round((pnl / 100000) * 40)))
+    : null
+  const hasBreakdown = roiScore !== null || pnlScore !== null
+  const isZh = language === 'zh'
+
+  const tooltipContent = show ? (
+    <div
+      ref={tooltipRef}
+      style={{
+        position: 'fixed',
+        top: tooltipPos.top,
+        left: tooltipPos.left,
+        visibility: positioned ? 'visible' : 'hidden',
+        padding: '8px 12px',
+        background: tokens.colors.bg.primary,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        borderRadius: tokens.radius.md,
+        boxShadow: tokens.shadow.lg,
+        zIndex: 10001,
+        whiteSpace: 'nowrap',
+        fontSize: tokens.typography.fontSize.xs,
+        lineHeight: 1.9,
+        color: tokens.colors.text.secondary,
+        pointerEvents: 'none',
+        minWidth: 148,
+      }}
+    >
+      <div style={{ fontWeight: 800, marginBottom: 4, color: ringColor, fontSize: 11, letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+        Arena Score
+      </div>
+      <div>
+        {isZh ? 'ROI 分' : 'ROI Score'}:{' '}
+        <span style={{ fontWeight: 700, color: tokens.colors.text.primary, fontVariantNumeric: 'tabular-nums' }}>{roiScore ?? '—'}</span>
+        <span style={{ color: tokens.colors.text.tertiary }}>{' '}/ 60</span>
+      </div>
+      <div>
+        {isZh ? 'PnL 分' : 'PnL Score'}:{' '}
+        <span style={{ fontWeight: 700, color: tokens.colors.text.primary, fontVariantNumeric: 'tabular-nums' }}>{pnlScore ?? '—'}</span>
+        <span style={{ color: tokens.colors.text.tertiary }}>{' '}/ 40</span>
+      </div>
+      <div style={{
+        borderTop: `1px solid ${tokens.colors.border.primary}`,
+        marginTop: 4,
+        paddingTop: 4,
+        fontWeight: 800,
+      }}>
+        {isZh ? '总分' : 'Total'}:{' '}
+        <span style={{ color: ringColor, fontVariantNumeric: 'tabular-nums' }}>{score.toFixed(0)}</span>
+        <span style={{ color: tokens.colors.text.tertiary }}>{' '}/ 100</span>
+      </div>
+    </div>
+  ) : null
+
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => { setShow(false); setPositioned(false) }}
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        cursor: hasBreakdown ? 'help' : 'default',
+      }}
+    >
+      {/* Circular badge */}
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: '50%',
+          border: `3px solid ${ringColor}`,
+          background: `color-mix(in srgb, ${ringColor} 12%, transparent)`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          transition: 'box-shadow 0.15s ease, transform 0.15s ease',
+          boxShadow: show
+            ? `0 0 0 2px color-mix(in srgb, ${ringColor} 25%, transparent), 0 4px 14px color-mix(in srgb, ${ringColor} 20%, transparent)`
+            : `0 0 8px color-mix(in srgb, ${ringColor} 15%, transparent)`,
+          transform: show ? 'scale(1.06)' : 'scale(1)',
+        }}
+      >
+        {showConfidence && trader && <ScoreConfidenceIndicator trader={trader} />}
+        <span style={{
+          fontSize: 15,
+          fontWeight: 900,
+          lineHeight: 1,
+          color: ringColor,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: '-0.5px',
+        }}>
+          {score.toFixed(0)}
+        </span>
+      </div>
+
+      {/* Hover tooltip via portal (escape overflow:hidden parent) */}
+      {hasBreakdown && typeof document !== 'undefined' && tooltipContent
+        ? createPortal(tooltipContent, document.body)
+        : null}
+    </div>
   )
 }

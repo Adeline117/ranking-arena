@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { type PostWithUserState } from '@/lib/types'
@@ -32,6 +33,8 @@ interface PostFeedProps {
   sortBy?: string
   limit?: number
   showRefreshButton?: boolean
+  /** When provided and posts are empty, shows a "Write your first post" CTA linking here */
+  createPostHref?: string
 }
 
 /** Build URLSearchParams for post queries — shared between loadPosts and loadMorePosts */
@@ -262,9 +265,35 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   if (posts.length === 0) return (
     <div>
       {props.showSortButtons && <SortButtons sortType={sortType} setSortType={setSortType} t={t} />}
-      <div style={{ padding: tokens.spacing[6], textAlign: 'center', color: tokens.colors.text.tertiary, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[2] }}>
-        <span>{t('noPostsYet')}</span>
+      <div style={{ padding: tokens.spacing[8], textAlign: 'center', color: tokens.colors.text.tertiary, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
+        {/* Minimal quill/pen SVG illustration */}
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" style={{ opacity: 0.3, color: tokens.colors.text.tertiary }}>
+          <path d="M30 6C30 6 32 8 32 12C32 18 26 22 20 26L14 30L16 24C20 18 24 12 30 6Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          <path d="M14 30L10 34" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M20 26L16 22" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeOpacity="0.5" />
+        </svg>
+        <span style={{ fontWeight: 500, fontSize: tokens.typography.fontSize.sm }}>{t('noPostsYet')}</span>
         <span style={{ fontSize: tokens.typography.fontSize.xs }}>{t('beFirstToPost')}</span>
+        {props.createPostHref && (
+          <Link
+            href={props.createPostHref}
+            style={{
+              marginTop: tokens.spacing[1],
+              padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+              borderRadius: tokens.radius.md,
+              background: `${tokens.colors.accent.primary}18`,
+              border: `1px solid ${tokens.colors.accent.primary}40`,
+              color: tokens.colors.accent.primary,
+              textDecoration: 'none',
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              transition: 'all 0.15s ease',
+              display: 'inline-block',
+            }}
+          >
+            {t('writeYourFirstPost') || (language === 'zh' ? '写下你的第一条帖子' : 'Write your first post')}
+          </Link>
+        )}
       </div>
     </div>
   )

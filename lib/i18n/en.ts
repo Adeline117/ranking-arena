@@ -172,6 +172,8 @@ const en = {
     similarTraders: 'Similar Traders',
     traderNotRegistered: 'Trader Not Registered',
     traderNotRegisteredDesc: 'This trader has not claimed this account',
+    unclaimedBadge: 'Unclaimed',
+    claimThisProfile: 'Claim this profile',
     jumpToExchange: 'Go to Exchange',
     unlockToJumpExchange: 'Unlock to copy trade',
     copyTradePro: 'Copy Pro',
@@ -2298,6 +2300,12 @@ const en = {
     loadFailedRetryMsg: 'Failed to load, please try again',
     noPerformanceData: 'No performance data available',
     noStatsData: 'No statistics available',
+    leaderboardBreadcrumb: 'Leaderboard',
+    chartDataAccumulatesDaily: 'Data accumulates daily. Check back soon — your first chart will appear within 24 hours of first trade.',
+    arenaScoreHeaderTooltip: "Arena's composite performance score (0–100)",
+    foundingMemberBannerText: 'Founding Member — Lifetime access at $49.99',
+    foundingMemberBannerCta: 'Get it now',
+    writeYourFirstPost: 'Write your first post',
 
     // Search page
     searchResults: 'Search Results',
