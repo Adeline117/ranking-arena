@@ -3235,6 +3235,10 @@ const en = {
     fearGreed: 'Fear & Greed',
     liquidation24h: '24h Liquidation',
     watchlistComingSoon: 'Watchlist coming soon',
+    priceChanges: 'Price Changes',
+    relatedTraders: 'Related Traders',
+    noDataComingSoon: 'No data -- Coming soon',
+    officialWebsite: 'Website',
 
     // Trader profile
     arenaScoreLabel: 'Arena Score',
