@@ -134,16 +134,19 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           {(item.rating != null && item.rating > 0) && (
             <StarRating rating={item.rating} ratingCount={item.rating_count || 0} size={13} readonly />
           )}
-          {(item.pdf_url || item.file_key) && (
-            <span style={{
-              fontSize: 10, color: tokens.colors.accent.brand,
-              marginLeft: 'auto', fontWeight: 600,
-              padding: '1px 6px', borderRadius: tokens.radius.sm,
-              background: tokens.colors.accent.brandMuted,
-            }}>
-              PDF
-            </span>
-          )}
+          {(item.pdf_url || item.file_key) && (() => {
+            const isEpub = item.file_key?.endsWith('.epub')
+            return (
+              <span style={{
+                fontSize: 10, color: tokens.colors.accent.brand,
+                marginLeft: 'auto', fontWeight: 600,
+                padding: '1px 6px', borderRadius: tokens.radius.sm,
+                background: tokens.colors.accent.brandMuted,
+              }}>
+                {isEpub ? 'ePub' : 'PDF'}
+              </span>
+            )
+          })()}
         </div>
       </div>
     </Link>

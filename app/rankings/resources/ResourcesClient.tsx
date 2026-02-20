@@ -55,10 +55,10 @@ const PaperIcon = () => (
   </svg>
 )
 
-function libItemToEntry(item: LibraryItem) {
+function libItemToEntry(item: LibraryItem, isZh: boolean) {
   return {
     id: item.id,
-    name: item.title,
+    name: isZh ? (item.title_zh || item.title) : (item.title_en || item.title),
     rating: item.rating ?? null,
     logoUrl: item.cover_url,
     href: `/library/${item.id}`,
@@ -98,6 +98,10 @@ export default function ResourcesClient({
   const isInitialRender = useRef(initialItems.length > 0)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  // pageRef keeps the latest page without adding it to fetchItems' deps,
+  // preventing a double-fetch when infinite scroll / load-more increments the page.
+  const pageRef = useRef(page)
+  useEffect(() => { pageRef.current = page }, [page])
   const isZh = language === 'zh'
 
   // Detect mobile
@@ -113,7 +117,13 @@ export default function ResourcesClient({
 
   const fetchItems = useCallback(async (opts?: { append?: boolean; targetPage?: number }) => {
     const append = opts?.append ?? false
-    const targetPage = opts?.targetPage ?? page
+    // Use explicit targetPage when provided (infinite scroll / load-more / pagination),
+    // otherwise fall back to the ref so this function does not need `page` in its deps.
+    // Keeping `page` out of deps prevents a double-fetch: if infinite scroll increments
+    // page and calls fetchItems({append,targetPage}) directly, the useEffect below
+    // (which fires on `fetchItems` identity change) would otherwise also trigger a
+    // non-appending fetch that replaces items.
+    const targetPage = opts?.targetPage ?? pageRef.current
     if (append) setLoadingMore(true)
     else setLoading(true)
     try {
@@ -139,7 +149,7 @@ export default function ResourcesClient({
       if (append) setLoadingMore(false)
       else setLoading(false)
     }
-  }, [category, sort, search, page, language])
+  }, [category, sort, search, language])  // Note: `page` intentionally omitted — use pageRef instead
 
   useEffect(() => {
     if (isInitialRender.current) {
@@ -205,19 +215,19 @@ export default function ResourcesClient({
           {
             title: isZh ? '热门书籍 Top 10' : 'Top 10 Books',
             icon: <BookIcon />,
-            entries: topBooks.map(libItemToEntry),
+            entries: topBooks.map(item => libItemToEntry(item, isZh)),
             emptyText: isZh ? '即将上线' : 'Coming soon',
           },
           {
             title: isZh ? '热门论文 Top 10' : 'Top 10 Papers',
             icon: <PaperIcon />,
-            entries: topPapers.map(libItemToEntry),
+            entries: topPapers.map(item => libItemToEntry(item, isZh)),
             emptyText: isZh ? '即将上线' : 'Coming soon',
           },
           {
             title: isZh ? '热门白皮书 Top 10' : 'Top 10 Whitepapers',
             icon: <PaperIcon />,
-            entries: recentItems.map(libItemToEntry),
+            entries: recentItems.map(item => libItemToEntry(item, isZh)),
             emptyText: isZh ? '即将上线' : 'Coming soon',
           },
         ]} />
@@ -358,7 +368,7 @@ export default function ResourcesClient({
                       />
                     </div>
                     <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', lineHeight: 1.35, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
-                      {item.title}
+                      {isZh ? (item.title_zh || item.title) : (item.title_en || item.title)}
                     </p>
                     {item.author && <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', margin: '4px 0 0' }}>{item.author}</p>}
                     {(item.rating != null && item.rating > 0) && (
@@ -432,7 +442,7 @@ export default function ResourcesClient({
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 40, flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               disabled={page <= 1}
-              onClick={() => setPage(p => p - 1)}
+              onClick={() => { const p = page - 1; setPage(p); fetchItems({ targetPage: p }) }}
               style={{ padding: '8px 18px', borderRadius: tokens.radius.full, border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.35 : 1, fontSize: 13, fontWeight: 500, transition: `all ${tokens.transition.fast}` }}
             >
               {isZh ? '上一页' : 'Prev'}
@@ -442,7 +452,7 @@ export default function ResourcesClient({
             </span>
             <button
               disabled={page >= totalPages}
-              onClick={() => setPage(p => p + 1)}
+              onClick={() => { const p = page + 1; setPage(p); fetchItems({ targetPage: p }) }}
               style={{ padding: '8px 18px', borderRadius: tokens.radius.full, border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.35 : 1, fontSize: 13, fontWeight: 500, transition: `all ${tokens.transition.fast}` }}
             >
               {isZh ? '下一页' : 'Next'}
