@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 
 interface PaywallOverlayProps {
   /** 功能描述，如 "完整排行榜"、"高级筛选" */
@@ -35,8 +36,31 @@ export default function PaywallOverlay({ feature, compact = false, style }: Payw
   const featureText = feature
     ? (isZh ? `${feature} 为 Pro 专属功能` : `${feature} is a Pro-only feature`)
     : undefined
-  const priceText = isZh ? '低至 $8.25/月' : 'Starting at $8.25/mo'
+  const priceText = isZh ? '低至 $4.99/月' : 'Starting at $4.99/mo'
   const buttonText = isZh ? '查看方案' : 'View Plans'
+
+  // Beta: all Pro features are free — show a small badge instead of the paywall
+  if (BETA_PRO_FEATURES_FREE) {
+    if (compact) {
+      return (
+        <Box style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...style }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '2px 8px', borderRadius: tokens.radius.full,
+            background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 15%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 35%, transparent)',
+            fontSize: 11, fontWeight: 700,
+            color: 'var(--color-pro-gradient-start, #a78bfa)',
+            whiteSpace: 'nowrap',
+          }}>
+            Pro · {isZh ? '限时免费' : 'Free Now'}
+          </span>
+        </Box>
+      )
+    }
+    // Non-compact: render children passthrough (nothing to block)
+    return null
+  }
 
   if (compact) {
     return (
