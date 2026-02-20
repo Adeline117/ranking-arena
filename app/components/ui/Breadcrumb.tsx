@@ -23,17 +23,23 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
   ]
 
   return (
-    <nav aria-label="Breadcrumb" style={{ padding: '8px 0', fontSize: tokens.typography.fontSize.xs }}>
+    <nav
+      aria-label="Breadcrumb"
+      style={{
+        padding: '8px 0',
+        fontSize: tokens.typography.fontSize.xs,
+        lineHeight: '1.5',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}
+    >
       <ol
         style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 0,
           listStyle: 'none',
           margin: 0,
           padding: 0,
-          flexWrap: 'nowrap',
-          overflow: 'hidden',
+          display: 'inline',
         }}
       >
         {allItems.map((item, idx) => {
@@ -42,8 +48,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
             <li
               key={idx}
               style={{
-                display: 'flex',
-                alignItems: 'center',
+                display: 'inline',
                 color: isLast
                   ? 'var(--color-text-primary, #EDEDED)'
                   : 'var(--color-text-tertiary, #8E8E9E)',
@@ -66,10 +71,6 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
                 <span
                   style={{
                     fontWeight: isLast ? 600 : 400,
-                    maxWidth: 200,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
                   }}
                   aria-current={isLast ? 'page' : undefined}
                 >
