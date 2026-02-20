@@ -36,7 +36,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-modules.outputs.cache-hit != 'true'
-        run: npm ci
+        run: npm ci --ignore-scripts || npm install --legacy-peer-deps
 
       - name: Lint
         run: npm run lint
@@ -69,7 +69,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-modules.outputs.cache-hit != 'true'
-        run: npm ci
+        run: npm ci --ignore-scripts || npm install --legacy-peer-deps
 
       - name: Run Jest tests
         run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci
@@ -107,7 +107,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-modules.outputs.cache-hit != 'true'
-        run: npm ci
+        run: npm ci --ignore-scripts || npm install --legacy-peer-deps
 
       - name: Build Next.js
         run: npm run build
@@ -144,7 +144,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-modules.outputs.cache-hit != 'true'
-        run: npm ci
+        run: npm ci --ignore-scripts || npm install --legacy-peer-deps
 
       - name: Restore .next build
         uses: actions/cache@v4
