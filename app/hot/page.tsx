@@ -210,7 +210,11 @@ function HotContent() {
   const loadPosts = useCallback(async () => {
     setLoadingPosts(true)
     try {
-      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=30`)
+      const headers: Record<string, string> = {}
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`
+      }
+      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=30`, { headers })
       const json = await res.json()
       const data = json.posts || json.data?.posts || []
 
@@ -244,9 +248,11 @@ function HotContent() {
             body: (post.content as string) || '',
             comments: (post.comment_count as number) || 0,
             likes: (post.like_count as number) || 0,
+            dislikes: (post.dislike_count as number) || 0,
             hotScore,
             views: (post.view_count as number) || 0,
             created_at: post.created_at as string,
+            user_reaction: (post.user_reaction as 'up' | 'down' | null) || null,
           }
         })
         setPosts(postsData)
@@ -266,7 +272,7 @@ function HotContent() {
       setLoadingPosts(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showToast, language])
+  }, [showToast, language, accessToken])
 
   useEffect(() => {
     loadPosts()
@@ -1341,7 +1347,7 @@ function HotContent() {
                   fontWeight: 600,
                 }}
               >
-                <ThumbsDownIcon size={14} />
+                <ThumbsDownIcon size={14} /> {(openPost.dislikes ?? 0) > 0 ? openPost.dislikes : ''}
               </button>
             </div>
 
