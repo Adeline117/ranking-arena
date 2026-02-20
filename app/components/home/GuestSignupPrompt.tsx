@@ -141,8 +141,8 @@ export default function GuestSignupPrompt() {
           gap: 8,
         }}>
           {(isZh
-            ? ['关注交易员，追踪实时动态', '加入社区，与高手交流策略', '自定义排行榜筛选条件']
-            : ['Follow traders and track their moves', 'Join communities to discuss strategies', 'Customize ranking filters']
+            ? ['关注交易员，追踪实时动态', '加入社区，与高手交流策略', '访问专属图书馆和学习资源']
+            : ['Follow traders and track their moves', 'Join communities to discuss strategies', 'Access the Library and learning resources']
           ).map((item, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: tokens.colors.text.secondary }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

@@ -61,7 +61,7 @@ const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTra
   const isBuy = trade.side === 'buy'
   const sideColor = isBuy ? tokens.colors.accent.success : tokens.colors.accent.error
   const isEven = index % 2 === 0
-  const sym = trade.pair.replace('/USDT', '').replace('USDT', '')
+  const sym = trade.pair.replace('/USDT', '').replace('-USDT', '').replace('/USDC', '').replace('-USDC', '').replace('USDT', '').replace('USDC', '')
   const exchColor = EXCHANGE_COLORS[trade.exchange] || tokens.colors.text.tertiary
   const exchBg = EXCHANGE_BG[trade.exchange] || 'transparent'
 

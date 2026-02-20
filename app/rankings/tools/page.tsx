@@ -8,7 +8,7 @@ import StarRating from '@/app/components/ui/StarRating'
 import TopLeaderboards, { type LeaderboardEntry } from '@/app/components/ui/TopLeaderboards'
 import dynamic from 'next/dynamic'
 
-const MobileBottomNav = dynamic(() => import('@/app/components/layout/MobileBottomNav'), { ssr: false })
+// MobileBottomNav is rendered by root layout — do not duplicate here
 
 interface Tool {
   id: string
@@ -359,7 +359,6 @@ export default function ToolsPage() {
           </div>
         )}
       </main>
-      <MobileBottomNav />
     </div>
   )
 }

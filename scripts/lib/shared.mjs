@@ -39,17 +39,18 @@ const ARENA_CONFIG = {
     '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
     '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
   },
+  // V3: 基于真实数据分布标定（中位数≈13分，p90≈35分）
   PNL_PARAMS: {
-    '7D': { base: 500, coeff: 0.40 },
-    '30D': { base: 2000, coeff: 0.35 },
-    '90D': { base: 5000, coeff: 0.30 },
+    '7D':  { base: 300,  coeff: 0.42 },
+    '30D': { base: 600,  coeff: 0.30 },
+    '90D': { base: 650,  coeff: 0.27 },
   },
-  MAX_RETURN_SCORE: 70,
-  MAX_PNL_SCORE: 15,
-  MAX_DRAWDOWN_SCORE: 8,
-  MAX_STABILITY_SCORE: 7,
+  // V3: 只保留 ROI + PnL，总分 100
+  MAX_RETURN_SCORE: 60,
+  MAX_PNL_SCORE: 40,
+  MAX_DRAWDOWN_SCORE: 0,
+  MAX_STABILITY_SCORE: 0,
   WIN_RATE_BASELINE: 45,
-  // 排行榜稳定性参数
   CONFIDENCE_DEBOUNCE_HOURS: 8,
 }
 
@@ -111,39 +112,29 @@ export function calculateArenaScore(roi, pnl, maxDrawdown, winRate, period) {
   const params = ARENA_CONFIG.PARAMS[period] || ARENA_CONFIG.PARAMS['90D']
   const days = getPeriodDays(period)
 
-  // 标准化胜率
-  const wr = normalizeWinRate(winRate)
+  // V3: 只计算 ROI 和 PnL，移除回撤分和稳定分
 
-  // 计算收益强度
-  const intensity = (365 / days) * safeLog1p(roi / 100)
+  // 收益强度
+  const cappedRoi = Math.min(roi || 0, 10000)
+  const intensity = (365 / days) * safeLog1p(cappedRoi / 100)
 
-  // 收益分 (0-70)
+  // 收益分 (0-60)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
   const returnScore = r0 > 0
     ? clip(ARENA_CONFIG.MAX_RETURN_SCORE * Math.pow(r0, params.roiExponent), 0, ARENA_CONFIG.MAX_RETURN_SCORE)
     : 0
 
-  // PnL分 (0-15)
+  // PnL分 (0-40)
   const pnlScore = calculatePnlScore(pnl, period)
 
-  // 回撤分 (0-8)
-  const drawdownScore = maxDrawdown !== null && maxDrawdown !== undefined
-    ? clip(ARENA_CONFIG.MAX_DRAWDOWN_SCORE * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, 8)
-    : 4  // 无数据时给中等分
-
-  // 稳定分 (0-7)
-  const stabilityScore = wr !== null
-    ? clip(ARENA_CONFIG.MAX_STABILITY_SCORE * clip((wr - ARENA_CONFIG.WIN_RATE_BASELINE) / (params.winRateCap - ARENA_CONFIG.WIN_RATE_BASELINE), 0, 1), 0, 7)
-    : 3.5  // 无数据时给中等分
-
-  const totalScore = Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
+  const totalScore = Math.round(clip(returnScore + pnlScore, 0, 100) * 100) / 100
 
   return {
     totalScore,
     returnScore: Math.round(returnScore * 100) / 100,
     pnlScore: Math.round(pnlScore * 100) / 100,
-    drawdownScore: Math.round(drawdownScore * 100) / 100,
-    stabilityScore: Math.round(stabilityScore * 100) / 100,
+    drawdownScore: 0,
+    stabilityScore: 0,
   }
 }
 

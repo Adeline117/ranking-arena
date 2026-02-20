@@ -10,7 +10,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import DesktopSidebar from '@/app/components/layout/DesktopSidebar'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import dynamic from 'next/dynamic'
-const MobileBottomNav = dynamic(() => import('@/app/components/layout/MobileBottomNav'), { ssr: false })
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import FollowingFeed from '@/app/components/home/FollowingFeed'
 import { Box } from '@/app/components/base'
 
@@ -109,7 +109,6 @@ export default function FeedPage() {
       </Box>
 
       <FloatingActionButton />
-      <MobileBottomNav />
     </Box>
   )
 }

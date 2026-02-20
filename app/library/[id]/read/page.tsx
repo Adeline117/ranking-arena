@@ -434,9 +434,16 @@ export default function ReadPage() {
   // ─── Load PDF ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!book || contentMode !== 'pdf') return
-    const rawUrl = book.pdf_url || (book.file_key ? `https://iknktzifjdyujdccyhsv.supabase.co/storage/v1/object/public/library-files/${book.file_key}` : null) || (book.content_url?.endsWith('.pdf') || book.content_url?.includes('cdn.arenafi.org/papers/') ? book.content_url : null)
-    // Proxy R2 CDN URLs through our API for CORS support
-    const url = rawUrl?.startsWith('https://cdn.arenafi.org/') ? `/api/cdn-proxy?url=${encodeURIComponent(rawUrl)}` : rawUrl
+    // Prefer CDN content_url when available for reliable proxied delivery
+    const cdnContentUrl = book.content_url?.includes('cdn.arenafi.org/') ? book.content_url : null
+    const rawUrl = cdnContentUrl
+      || book.pdf_url
+      || (book.file_key ? `https://iknktzifjdyujdccyhsv.supabase.co/storage/v1/object/public/library-files/${book.file_key}` : null)
+      || (book.content_url?.endsWith('.pdf') ? book.content_url : null)
+    // Proxy CDN and arxiv URLs through our API to handle browser CSP/CORS restrictions
+    const url = rawUrl && (rawUrl.startsWith('https://cdn.arenafi.org/') || rawUrl.startsWith('https://arxiv.org/'))
+      ? `/api/cdn-proxy?url=${encodeURIComponent(rawUrl)}`
+      : rawUrl
     if (!url) return
 
     setPdfLoading(true)

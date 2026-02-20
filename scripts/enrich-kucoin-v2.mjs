@@ -20,27 +20,35 @@ const HEADERS = {
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 async function fetchPositionHistory(traderId) {
-  try {
-    const r = await fetch(
-      `https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/leadShow/positionHistory?leadConfigId=${traderId}&period=90d&lang=en_US&pageSize=100&currentPage=1`,
-      { headers: HEADERS, signal: AbortSignal.timeout(15000) }
-    )
-    const data = await r.json()
-    if (!data.success || !Array.isArray(data.data)) return null
-    return data.data
-  } catch { return null }
+  // Try multiple periods in case 90d returns null (traders with older positions)
+  for (const period of ['90d', '180d', '365d']) {
+    try {
+      const r = await fetch(
+        `https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/leadShow/positionHistory?leadConfigId=${traderId}&period=${period}&lang=en_US&pageSize=100&currentPage=1`,
+        { headers: HEADERS, signal: AbortSignal.timeout(15000) }
+      )
+      const data = await r.json()
+      if (data.success && Array.isArray(data.data) && data.data.length > 0) return data.data
+      await sleep(200)
+    } catch { /* continue */ }
+  }
+  return null
 }
 
 async function fetchPnlHistory(traderId) {
-  try {
-    const r = await fetch(
-      `https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/leadShow/pnl/history?leadConfigId=${traderId}&period=90d&lang=en_US`,
-      { headers: HEADERS, signal: AbortSignal.timeout(15000) }
-    )
-    const data = await r.json()
-    if (!data.success || !Array.isArray(data.data)) return null
-    return data.data
-  } catch { return null }
+  // Try multiple periods in case 90d returns null
+  for (const period of ['90d', '180d', '365d']) {
+    try {
+      const r = await fetch(
+        `https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/leadShow/pnl/history?leadConfigId=${traderId}&period=${period}&lang=en_US`,
+        { headers: HEADERS, signal: AbortSignal.timeout(15000) }
+      )
+      const data = await r.json()
+      if (data.success && Array.isArray(data.data) && data.data.length > 0) return data.data
+      await sleep(200)
+    } catch { /* continue */ }
+  }
+  return null
 }
 
 function calcWrAndTc(positions) {

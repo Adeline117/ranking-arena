@@ -39,11 +39,12 @@ export const stripe = {
   get webhooks() { return getStripe().webhooks },
 }
 
-// 价格 ID 配置 - Pro 会员的月付/年付价格
+// 价格 ID 配置 - Pro 会员的月付/年付/终身价格
 // Falls back to STRIPE_PRO_PRICE_ID for both if specific monthly/yearly IDs not set
 export const STRIPE_PRICE_IDS = {
   monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRICE_MONTHLY_ID || process.env.STRIPE_PRO_PRICE_ID || '',
   yearly: process.env.STRIPE_PRO_YEARLY_PRICE_ID || process.env.STRIPE_PRICE_YEARLY_ID || process.env.STRIPE_ELITE_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID || '',
+  lifetime: process.env.STRIPE_PRO_LIFETIME_PRICE_ID || '',
 }
 
 // 订阅计划配置 - 与 Stripe 价格保持一致
@@ -51,8 +52,8 @@ export const SUBSCRIPTION_PLANS = {
   monthly: {
     name: 'Pro Monthly',
     nameCn: 'Pro 月付会员',
-    price: 12.99,
-    originalPrice: 15,
+    price: 4.99,
+    originalPrice: null,
     interval: 'month' as const,
     features: [
       'Category ranking',
@@ -68,13 +69,27 @@ export const SUBSCRIPTION_PLANS = {
   yearly: {
     name: 'Pro Yearly',
     nameCn: 'Pro 年付会员',
-    price: 99,
-    originalPrice: 155.88,
+    price: 29.99,
+    originalPrice: 59.88,
     interval: 'year' as const,
     features: [
       'All monthly features',
-      'Save 17%',
+      'Save 50%',
       'Priority support',
+    ],
+  },
+  lifetime: {
+    name: 'Founding Member Lifetime',
+    nameCn: '创始会员终身',
+    price: 49.99,
+    originalPrice: null,
+    interval: 'once' as const,
+    spotsTotal: 200,
+    features: [
+      'All Pro features forever',
+      'Founding member badge',
+      'Priority support',
+      'Future features included',
     ],
   },
 }

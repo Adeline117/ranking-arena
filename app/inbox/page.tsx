@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import NotificationsList from '@/app/components/inbox/NotificationsList'
 import ConversationsList from '@/app/components/inbox/ConversationsList'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -85,8 +85,6 @@ export default function InboxPage() {
         {activeTab === 'notifications' && <NotificationsList />}
         {activeTab === 'messages' && <ConversationsList />}
       </main>
-
-      <MobileBottomNav />
     </div>
   )
 }

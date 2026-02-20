@@ -297,6 +297,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           @media (max-width: 768px) {
             .page-container {
               padding: ${tokens.spacing[3]} !important;
+              padding-bottom: 100px !important;
             }
             .profile-grid {
               grid-template-columns: 1fr !important;

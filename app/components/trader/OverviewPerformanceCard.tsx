@@ -218,8 +218,10 @@ export default function OverviewPerformanceCard({
     return `${sign}$${absValue.toFixed(2)}`
   }
 
-  // 生成 sparkline 数据
-  const sparklineData = equityCurve?.map(d => d.roi) || []
+  // 生成 sparkline 数据 — 若 ROI 数据全为 0 则不显示 sparkline（避免平线误导）
+  const sparklineRawData = equityCurve?.map(d => d.roi) || []
+  const hasNonZeroSparkline = sparklineRawData.some(v => v !== 0 && v != null)
+  const sparklineData = hasNonZeroSparkline ? sparklineRawData : []
 
   return (
     <div ref={cardRef}>
@@ -454,9 +456,9 @@ export default function OverviewPerformanceCard({
           >
             <MetricBadge
               label={t('sharpe')}
-              value={sharpeRatio !== undefined ? sharpeRatio.toFixed(2) : t('comingSoon') || 'Coming soon'}
-              highlight={sharpeRatio !== undefined && sharpeRatio > 1}
-              tooltip={sharpeRatio === undefined ? t('sharpeNotAvailable') : undefined}
+              value={sharpeRatio !== undefined && sharpeRatio < 9000 ? sharpeRatio.toFixed(2) : '—'}
+              highlight={sharpeRatio !== undefined && sharpeRatio > 1 && sharpeRatio < 9000}
+              tooltip={sharpeRatio === undefined ? t('sharpeNotAvailable') : sharpeRatio >= 9000 ? t('sharpeNotAvailable') : undefined}
             />
             <MetricBadge
               label={t('maxDrawdownShort')}

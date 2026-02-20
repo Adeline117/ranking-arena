@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import {
   STRIPE_PRICE_IDS,
   getOrCreateStripeCustomer,
-  createCheckoutSession
+  createCheckoutSession,
+  getStripe,
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证计划类型
-    if (!['monthly', 'yearly'].includes(plan)) {
+    if (!['monthly', 'yearly', 'lifetime'].includes(plan)) {
       return NextResponse.json(
         { error: 'Invalid plan type' },
         { status: 400 }
@@ -121,27 +122,53 @@ export async function POST(request: NextRequest) {
       })
 
     // 获取价格 ID
-    const priceId = STRIPE_PRICE_IDS[plan as 'monthly' | 'yearly']
+    const priceId = STRIPE_PRICE_IDS[plan as 'monthly' | 'yearly' | 'lifetime']
 
-    // 创建 Checkout Session
-    const checkoutOptions: Parameters<typeof createCheckoutSession>[0] = {
-      customerId,
-      priceId,
-      successUrl: successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/pricing`,
-      metadata: {
-        supabase_user_id: user.id,
-        userId: user.id,
-        plan: plan,
-      },
+    const meta = {
+      supabase_user_id: user.id,
+      userId: user.id,
+      plan: plan,
     }
+    const sUrl = successUrl || `${process.env.NEXT_PUBLIC_APP_URL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`
+    const cUrl = cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL}/pricing`
 
-    // Add promotion code if provided
-    if (promotionCode) {
-      checkoutOptions.promotionCode = promotionCode
+    let checkoutSession
+
+    if (plan === 'lifetime') {
+      // 终身会员 — 一次性付款 (mode: 'payment')
+      if (!priceId || !priceId.startsWith('price_')) {
+        throw new Error(`Invalid Stripe price ID for lifetime: "${priceId}". Please configure STRIPE_PRO_LIFETIME_PRICE_ID.`)
+      }
+      checkoutSession = await getStripe().checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card', 'link'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: 'payment',
+        success_url: sUrl,
+        cancel_url: cUrl,
+        metadata: meta,
+        allow_promotion_codes: !promotionCode,
+        billing_address_collection: 'auto',
+        locale: 'auto',
+        ...(promotionCode ? { discounts: [{ promotion_code: promotionCode }] } : {}),
+      })
+    } else {
+      // 月付 / 年付订阅
+      const checkoutOptions: Parameters<typeof createCheckoutSession>[0] = {
+        customerId,
+        priceId,
+        successUrl: sUrl,
+        cancelUrl: cUrl,
+        metadata: meta,
+      }
+
+      // Add promotion code if provided
+      if (promotionCode) {
+        checkoutOptions.promotionCode = promotionCode
+      }
+
+      checkoutSession = await createCheckoutSession(checkoutOptions)
     }
-
-    const checkoutSession = await createCheckoutSession(checkoutOptions)
 
     return NextResponse.json({
       url: checkoutSession.url,
