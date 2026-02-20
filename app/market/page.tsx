@@ -91,7 +91,7 @@ function MobileSectorsTab() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const CAT_MAP: Record<string, string> = {
+    const CATEGORY_MAP: Record<string, string> = {
       BTC: 'L1', ETH: 'L1', SOL: 'L1', BNB: 'L1', ADA: 'L1', AVAX: 'L1', DOT: 'L1', NEAR: 'L1', ATOM: 'L1', SUI: 'L1', APT: 'L1', TRX: 'L1', TON: 'L1', XRP: 'L1',
       LINK: 'DeFi', UNI: 'DeFi', AAVE: 'DeFi', MKR: 'DeFi', CRV: 'DeFi', SNX: 'DeFi',
       ARB: 'L2', OP: 'L2', MATIC: 'L2', STRK: 'L2', IMX: 'L2',
@@ -105,21 +105,22 @@ function MobileSectorsTab() {
         if (!Array.isArray(data)) return
         const grouped: Record<string, { totalCap: number; weightedChange: number }> = {}
         for (const c of data) {
-          const cat = CAT_MAP[c.symbol]
+          const cat = CATEGORY_MAP[c.symbol]
           if (!cat || c.change24h == null || c.marketCap <= 0) continue
           if (!grouped[cat]) grouped[cat] = { totalCap: 0, weightedChange: 0 }
           grouped[cat].totalCap += c.marketCap
           grouped[cat].weightedChange += c.change24h * c.marketCap
         }
-        setSectors(Object.entries(grouped)
+        const result = Object.entries(grouped)
           .map(([name, v]) => ({ name, change: v.weightedChange / v.totalCap }))
-          .sort((a, b) => b.change - a.change))
+          .sort((a, b) => b.change - a.change)
+        setSectors(result)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>...</div>
+  if (loading) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>加载中...</div>
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>

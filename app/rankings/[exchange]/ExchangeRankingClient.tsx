@@ -22,6 +22,8 @@ interface TraderData {
 }
 
 type ViewMode = 'table' | 'card'
+type SortKey = 'rank' | 'roi' | 'win_rate' | 'max_drawdown' | 'arena_score'
+type SortDir = 'asc' | 'desc'
 
 function getDisplayName(t: TraderData): string {
   if (t.display_name && !(t.display_name.length > 10 && /^\d+$/.test(t.display_name))) {
@@ -155,8 +157,8 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
 
         {/* Bottom stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[2] }}>
-          <StatBlock label="Win%" value={trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : 'N/A'} color={trader.win_rate && trader.win_rate > 50 ? tokens.colors.accent.success : undefined} />
-          <StatBlock label="MDD" value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(0)}%` : 'N/A'} color={trader.max_drawdown ? tokens.colors.accent.error + 'cc' : undefined} />
+          <StatBlock label="Win%" value={trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : 'N/A'} color={trader.win_rate != null ? (trader.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error) : undefined} />
+          <StatBlock label="MDD" value={trader.max_drawdown != null ? `-${Math.abs(trader.max_drawdown).toFixed(1)}%` : 'N/A'} color={trader.max_drawdown != null ? tokens.colors.accent.error + 'cc' : undefined} />
           <StatBlock label="Arena Score" value={trader.arena_score != null ? trader.arena_score.toFixed(0) : '--'} color={trader.arena_score ? tokens.colors.accent.brand : undefined} />
         </div>
       </div>
@@ -173,6 +175,69 @@ function StatBlock({ label, value, color }: { label: string; value: string; colo
   )
 }
 
+function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        marginLeft: 4,
+        opacity: active ? 1 : 0.3,
+        transition: 'opacity 0.15s',
+      }}
+    >
+      <svg width="8" height="5" viewBox="0 0 8 5" style={{ marginBottom: 1 }}>
+        <path
+          d="M4 0L8 5H0z"
+          fill={active && dir === 'asc' ? tokens.colors.accent.brand : tokens.colors.text.tertiary}
+        />
+      </svg>
+      <svg width="8" height="5" viewBox="0 0 8 5">
+        <path
+          d="M4 5L0 0h8z"
+          fill={active && dir === 'desc' ? tokens.colors.accent.brand : tokens.colors.text.tertiary}
+        />
+      </svg>
+    </span>
+  )
+}
+
+function SortHeader({
+  label,
+  sortKey,
+  currentKey,
+  currentDir,
+  onSort,
+  align = 'right',
+}: {
+  label: string
+  sortKey: SortKey
+  currentKey: SortKey
+  currentDir: SortDir
+  onSort: (key: SortKey) => void
+  align?: 'left' | 'right' | 'center'
+}) {
+  const active = currentKey === sortKey
+  return (
+    <div
+      onClick={() => onSort(sortKey)}
+      style={{
+        textAlign: align,
+        cursor: 'pointer',
+        userSelect: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
+        color: active ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+        transition: 'color 0.15s',
+      }}
+    >
+      {label}
+      <SortArrow active={active} dir={currentDir} />
+    </div>
+  )
+}
+
 export default function ExchangeRankingClient({
   traders,
 }: {
@@ -180,6 +245,28 @@ export default function ExchangeRankingClient({
   exchange?: string
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [sortKey, setSortKey] = useState<SortKey>('rank')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(key === 'rank' ? 'asc' : 'desc')
+    }
+  }
+
+  const sortedTraders = React.useMemo(() => {
+    if (sortKey === 'rank') {
+      return sortDir === 'asc' ? traders : [...traders].reverse()
+    }
+    return [...traders].sort((a, b) => {
+      const av = a[sortKey] ?? -Infinity
+      const bv = b[sortKey] ?? -Infinity
+      return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number)
+    })
+  }, [traders, sortKey, sortDir])
 
   // Auto-detect mobile
   useEffect(() => {
@@ -272,18 +359,23 @@ export default function ExchangeRankingClient({
               borderBottom: '1px solid var(--glass-border-light)',
             }}
           >
-            <div>#</div>
+            <SortHeader label="#" sortKey="rank" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="left" />
             <div>Trader</div>
-            <div style={{ textAlign: 'right' }}>ROI</div>
+            <SortHeader label="ROI" sortKey="roi" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
             <div style={{ textAlign: 'center' }}>Trend</div>
-            <div style={{ textAlign: 'right' }}>Win%</div>
-            <div style={{ textAlign: 'right' }}>MDD</div>
-            <div style={{ textAlign: 'right' }}>Score</div>
+            <SortHeader label="Win%" sortKey="win_rate" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortHeader label="MDD" sortKey="max_drawdown" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+            <SortHeader label="Score" sortKey="arena_score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
           </div>
           {/* Rows */}
-          {traders.map((t, i) => {
+          {sortedTraders.map((t, i) => {
             const name = getDisplayName(t)
             const roiColor = t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+            const wrColor = t.win_rate != null
+              ? t.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error
+              : tokens.colors.text.tertiary
+            // Determine original rank (index in unsorted array + 1)
+            const originalRank = traders.indexOf(t) + 1
             return (
               <Link
                 key={`${t.platform}:${t.trader_key}:${i}`}
@@ -299,7 +391,7 @@ export default function ExchangeRankingClient({
                   transition: 'background 0.15s',
                 }}
               >
-                <div><RankBadge rank={i + 1} /></div>
+                <div><RankBadge rank={originalRank} /></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                   <div
                     style={{
@@ -326,11 +418,11 @@ export default function ExchangeRankingClient({
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <Sparkline roi={t.roi} width={72} height={20} />
                 </div>
-                <div style={{ textAlign: 'right', fontSize: 13, color: tokens.colors.text.secondary }}>
-                  {t.win_rate != null ? `${t.win_rate.toFixed(0)}%` : 'N/A'}
+                <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: wrColor }}>
+                  {t.win_rate != null ? `${t.win_rate.toFixed(1)}%` : 'N/A'}
                 </div>
-                <div style={{ textAlign: 'right', fontSize: 13, color: t.max_drawdown ? tokens.colors.accent.error + 'cc' : tokens.colors.text.tertiary }}>
-                  {t.max_drawdown != null ? `-${Math.abs(t.max_drawdown).toFixed(0)}%` : 'N/A'}
+                <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: t.max_drawdown != null ? tokens.colors.accent.error + 'cc' : tokens.colors.text.tertiary }}>
+                  {t.max_drawdown != null ? `-${Math.abs(t.max_drawdown).toFixed(1)}%` : 'N/A'}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   {t.arena_score != null ? (

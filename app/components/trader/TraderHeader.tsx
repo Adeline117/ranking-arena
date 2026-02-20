@@ -18,7 +18,6 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
 import ShareButton from '../common/ShareButton'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
 const AddToCollectionButton = dynamic(() => import('../features/AddToCollectionButton'), { ssr: false })
@@ -697,6 +696,19 @@ export default function TraderHeader({
         {!isOwnProfile && !isRegistered && userId && (
           <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
         )}
+
+        <ShareButton
+          data={{
+            type: 'trader',
+            url: typeof window !== 'undefined' ? window.location.href : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
+            traderName: displayNameProp || formatDisplayName(handle, source),
+            roi: roi90d,
+            period: '90D',
+          }}
+          size="sm"
+          variant="ghost"
+          showLabel={false}
+        />
       </Box>
 
     </Box>
