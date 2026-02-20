@@ -96,6 +96,39 @@ function UserCenterPage() {
           }))
         }
 
+        // Fetch post count
+        try {
+          const { count: postCount } = await supabase
+            .from('posts')
+            .select('id', { count: 'exact', head: true })
+            .eq('author_id', user.id)
+          if (postCount !== null) {
+            setStats(prev => ({ ...prev, posts: postCount }))
+          }
+        } catch { /* ignore */ }
+
+        // Fetch bookmark count
+        try {
+          const { count: bookmarkCount } = await supabase
+            .from('bookmarks')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+          if (bookmarkCount !== null) {
+            setStats(prev => ({ ...prev, bookmarks: bookmarkCount }))
+          }
+        } catch { /* ignore */ }
+
+        // Fetch likes received count
+        try {
+          const { count: likeCount } = await supabase
+            .from('post_likes')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+          if (likeCount !== null) {
+            setStats(prev => ({ ...prev, likes: likeCount }))
+          }
+        } catch { /* ignore */ }
+
         // Fetch exp data
         const res = await fetch('/api/user/exp')
         if (res.ok) {

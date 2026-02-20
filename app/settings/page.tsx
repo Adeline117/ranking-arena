@@ -1067,6 +1067,9 @@ function SettingsContent() {
           .settings-mobile-nav { display: flex !important; }
           .settings-mobile-nav::-webkit-scrollbar { display: none; }
         }
+        @media (max-width: 400px) {
+          .settings-mobile-nav { gap: ${tokens.spacing[1]} !important; }
+        }
       `}</style>
       <MobileBottomNav />
     </Box>
