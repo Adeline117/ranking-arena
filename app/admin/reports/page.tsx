@@ -46,16 +46,6 @@ export default function AdminReportsPage() {
     if (!accessToken) return
     setLoading(true)
     try {
-      const _res = await fetch(`/api/admin/kol/review?status=${filter}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      // Use admin supabase directly for reports
-      const { createClient } = await import('@supabase/supabase-js')
-      const _supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-      )
-      // Fetch via API instead
       const response = await fetch('/api/admin/reports?' + new URLSearchParams({ status: filter }), {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
