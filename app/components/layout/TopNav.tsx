@@ -352,7 +352,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
             ].map((item) => {
               const label = t(item.labelKey)
-              const isActive = item.href === '/' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname === item.href
+              const isActive = item.href === '/' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname.startsWith(item.href)
               return (
                 <Link
                   key={item.href}
