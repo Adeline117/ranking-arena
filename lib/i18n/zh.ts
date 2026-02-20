@@ -3242,6 +3242,10 @@ const zh = {
     fearGreed: '恐惧贪婪',
     liquidation24h: '24h清算',
     watchlistComingSoon: '自选列表即将推出',
+    priceChanges: '价格变化',
+    relatedTraders: '相关交易员',
+    noDataComingSoon: '暂无数据 -- 即将推出',
+    officialWebsite: '官网',
 
     // 交易员资料
     arenaScoreLabel: 'Arena 评分',
