@@ -1770,7 +1770,7 @@ const en = {
     loginForgotPassword: 'Forgot password?',
     loginWelcomeBack: 'Welcome Back',
     loginCreateAccount: 'Create Account',
-    loginSubtitle: 'Enter. Outperform.',
+    loginSubtitle: 'Arena ranks everything in crypto',
     loginValueProp1: 'Track 15,000+ traders in real-time',
     loginValueProp2: 'Compare ROI across 27 exchanges',
     loginValueProp3: 'Join trading communities',
@@ -1897,7 +1897,7 @@ const en = {
 
     // Not Found
     notFoundTitle: 'Page Not Found',
-    notFoundDesc: 'Enter. Outperform. — This page may have been moved or deleted',
+    notFoundDesc: 'All rankings in crypto — This page may have been moved or deleted',
     notFoundViewHot: 'View Hot List',
     notFoundExplore: 'Or explore these',
     notFoundBrowseGroups: 'Browse Groups',
@@ -2107,7 +2107,7 @@ const en = {
 
     // Onboarding page
     onboardingTitle: 'Welcome to Arena',
-    onboardingSubtitle: 'Enter. Outperform.',
+    onboardingSubtitle: 'Arena ranks everything in crypto',
     selectLanguage: 'Select Language',
     selectTheme: 'Select Theme',
     continueButton: 'Continue',
@@ -2708,7 +2708,7 @@ const en = {
     faqNoResults: 'No matching questions found. Try different keywords.',
 
     // Hero section
-    heroSubtitle: 'Enter. Outperform.',
+    heroSubtitle: 'Arena ranks everything in crypto',
     heroCTABrowse: 'Browse Rankings',
     heroCTASignUp: 'Sign Up Free',
 
