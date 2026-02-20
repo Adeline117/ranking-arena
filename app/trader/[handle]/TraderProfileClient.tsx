@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import useSWR from 'swr'
@@ -8,6 +8,7 @@ import { fetcher } from '@/lib/hooks/useSWR'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
+import { supabase } from '@/lib/supabase/client'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import TopNav from '@/app/components/layout/TopNav'
@@ -70,6 +71,14 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
   const pathname = usePathname()
   const { t, language } = useLanguage()
   const { isPro } = useSubscription()
+
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: userData }) => {
+      setCurrentUserId(userData.user?.id ?? null)
+    })
+  }, [])
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
@@ -170,7 +179,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi * 100 : undefined)}
           maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
           winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
-          currentUserId={null}
+          currentUserId={currentUserId}
         />
 
         {/* Tabs */}
