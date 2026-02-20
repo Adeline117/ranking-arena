@@ -26,7 +26,7 @@ function resolved(value: string, key: string, fallback: string): string {
 
 export default function PricingPageClient() {
   const { email } = useAuthSession()
-  const { t } = useLanguage()
+  const { t, language: locale } = useLanguage()
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly')
 
   const features = [
@@ -215,6 +215,21 @@ export default function PricingPageClient() {
                 ? resolved(t('upgradeToPro'), 'upgradeToPro', 'Upgrade to Pro')
                 : resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
             </Link>
+
+            <div style={{
+              marginTop: tokens.spacing[4],
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              background: 'color-mix(in srgb, var(--color-warning, #f59e0b) 12%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent)',
+              borderRadius: 8,
+              fontSize: 13,
+              color: 'var(--color-text-secondary)',
+              textAlign: 'center' as const,
+            }}>
+              {locale === 'zh'
+                ? '当前为测试环境（Sandbox），支付功能尚未正式上线，请勿使用真实信用卡。'
+                : 'Currently in Sandbox mode. Payment is not live yet — do not use real credit cards.'}
+            </div>
           </div>
         </div>
       </div>
