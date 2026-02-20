@@ -31,13 +31,21 @@ function getBestChartType(equityCurve: EquityCurveData | undefined): 'roi' | 'pn
   return 'roi'
 }
 
+// Auto-select the best period that has data (prefers 90D → 30D → 7D)
+function getBestInitialPeriod(equityCurve: EquityCurveData | undefined): '7D' | '30D' | '90D' {
+  if (equityCurve?.['90D']?.length) return '90D'
+  if (equityCurve?.['30D']?.length) return '30D'
+  if (equityCurve?.['7D']?.length) return '7D'
+  return '90D'
+}
+
 export function EquityCurveSection({
   equityCurve,
   traderHandle: _traderHandle,
   delay
 }: EquityCurveSectionProps) {
   const { t, language } = useLanguage()
-  const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
+  const [period, setPeriod] = useState<'7D' | '30D' | '90D'>(() => getBestInitialPeriod(equityCurve))
   const [chartType, setChartType] = useState<'roi' | 'pnl'>(() => getBestChartType(equityCurve))
   const [mounted, setMounted] = useState(false)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)

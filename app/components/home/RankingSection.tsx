@@ -40,7 +40,7 @@ function getStoredPreferences() {
       } catch { /* invalid JSON */ }
     }
     return {
-      sortColumn: localStorage.getItem(LS_KEY_SORT_COLUMN) as 'score' | 'roi' | 'winrate' | 'mdd' | null,
+      sortColumn: localStorage.getItem(LS_KEY_SORT_COLUMN) as 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | null,
       sortDir: localStorage.getItem(LS_KEY_SORT_DIR) as 'asc' | 'desc' | null,
       preset: localStorage.getItem(LS_KEY_PRESET) as PresetId | null,
       exchange: localStorage.getItem(LS_KEY_EXCHANGE),
@@ -120,7 +120,7 @@ export default function RankingSection({
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
 
   // Feature 8: Lifted sort/page/search state for URL sync
-  const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
+  const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
@@ -183,9 +183,9 @@ export default function RankingSection({
     const urlEx = searchParams.get('ex')
 
     // URL takes priority, then localStorage
-    if (urlSort && ['score', 'roi', 'winrate', 'mdd'].includes(urlSort)) {
+    if (urlSort && ['score', 'roi', 'pnl', 'winrate', 'mdd'].includes(urlSort)) {
       setSortColumn(urlSort)
-    } else if (storedPrefs.sortColumn && ['score', 'roi', 'winrate', 'mdd'].includes(storedPrefs.sortColumn)) {
+    } else if (storedPrefs.sortColumn && ['score', 'roi', 'pnl', 'winrate', 'mdd'].includes(storedPrefs.sortColumn)) {
       setSortColumn(storedPrefs.sortColumn)
     }
 
@@ -306,7 +306,7 @@ export default function RankingSection({
   }, [syncFilterToUrl])
 
   // Feature 8: Sort/page/search change handlers with localStorage persistence
-  const handleSortChange = useCallback((col: 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => {
+  const handleSortChange = useCallback((col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => {
     setSortColumn(col)
     setSortDir(dir)
     setCurrentPage(1)
@@ -744,6 +744,59 @@ export default function RankingSection({
           </button>
         </Box>
       )}
+
+      {/* Exchange coverage strip */}
+      {!loading && traders.length > 0 && (() => {
+        // Count traders per exchange (merge _futures/_spot/_web3 variants)
+        const counts: Record<string, number> = {}
+        for (const t of traders) {
+          if (!t.source) continue
+          counts[t.source] = (counts[t.source] || 0) + 1
+        }
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
+        const totalEx = sorted.length
+        const topEx = sorted.slice(0, 8)
+        return (
+          <Box style={{
+            display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+            padding: `6px ${tokens.spacing[4]}`,
+            borderBottom: '1px solid var(--color-border-primary)',
+            background: 'var(--color-bg-secondary)',
+          }}>
+            <Text size="xs" color="tertiary" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+              {totalEx} {language === 'zh' ? '个平台' : 'exchanges'}
+            </Text>
+            {topEx.map(([src, count]) => {
+              const label = EXCHANGE_NAMES[src] || src.split('_')[0].charAt(0).toUpperCase() + src.split('_')[0].slice(1)
+              const isActive = selectedExchange === src
+              return (
+                <button
+                  key={src}
+                  onClick={() => {
+                    setSelectedExchange(isActive ? null : src)
+                    syncStateToUrl({ ex: isActive ? null : src, page: 1 })
+                  }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '2px 8px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                    fontSize: '11px', fontWeight: 600, lineHeight: 1.4,
+                    background: isActive ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary, var(--color-bg-secondary))',
+                    color: isActive ? '#fff' : 'var(--color-text-secondary)',
+                    transition: 'all 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {label}
+                  <span style={{ opacity: 0.65, fontWeight: 400 }}>{count}</span>
+                </button>
+              )
+            })}
+            {sorted.length > 8 && (
+              <Text size="xs" color="tertiary">+{sorted.length - 8}</Text>
+            )}
+          </Box>
+        )
+      })()}
 
       <RankingTable
         traders={filteredTraders}

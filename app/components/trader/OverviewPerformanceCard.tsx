@@ -601,13 +601,14 @@ export default function OverviewPerformanceCard({
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: tokens.spacing[2],
+                        gap: tokens.spacing[1],
                         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                         background: `${tokens.colors.accent.success}15`,
                         borderRadius: tokens.radius.full,
                         border: `1px solid ${tokens.colors.accent.success}30`,
                       }}
                     >
+                      <Text size="xs" color="secondary" weight="bold">V3</Text>
                       <Text
                         size="sm"
                         weight="black"
@@ -769,8 +770,21 @@ function ScoreBar({
   delay?: number
 }) {
   const color = getScoreColor(score, maxScore)
-  const width = score != null ? (score / maxScore) * 100 : 0
-  const barId = `score-bar-${label.replace(/\s+/g, '-').toLowerCase()}`
+  // Cap display width at 100% but show indicator when over max
+  const rawWidth = score != null ? (score / maxScore) * 100 : 0
+  const clampedWidth = Math.min(rawWidth, 100)
+  const isOverMax = score != null && score > maxScore
+
+  // Use state-driven width with transition (avoids CSS animation class name collision
+  // when switching periods — CSS @keyframes with same name don't re-run on value change)
+  const [animatedWidth, setAnimatedWidth] = useState(0)
+  useEffect(() => {
+    // Reset to 0 first so the bar re-animates from scratch on every score change
+    setAnimatedWidth(0)
+    const timer = setTimeout(() => setAnimatedWidth(clampedWidth), Math.max(delay, 16))
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clampedWidth])
 
   return (
     <Box>
@@ -778,7 +792,7 @@ function ScoreBar({
         <Text size="sm" color="secondary" weight="bold">{label}</Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="sm" weight="black" style={{ color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-            {score != null ? score.toFixed(1) : '—'}
+            {score != null ? (isOverMax ? `>${maxScore}` : score.toFixed(1)) : '—'}
           </Text>
           <Text size="xs" color="tertiary">/ {maxScore}</Text>
         </Box>
@@ -786,28 +800,20 @@ function ScoreBar({
       <Box
         style={{
           height: 6,
-          background: 'var(--color-bg-hover, #E8E8EC)',
+          background: 'var(--color-bg-hover, #2a2a3a)',
           borderRadius: tokens.radius.full,
           overflow: 'hidden',
           position: 'relative',
         }}
       >
-        <style>{`
-          @keyframes ${barId} {
-            from { width: 0%; }
-            to { width: ${width}%; }
-          }
-          .${barId} {
-            animation: ${barId} 1s cubic-bezier(0.4, 0, 0.2, 1) ${delay}ms both;
-          }
-        `}</style>
         <Box
-          className={barId}
           style={{
             height: '100%',
+            width: `${animatedWidth}%`,
             background: `linear-gradient(90deg, ${color}99 0%, ${color} 100%)`,
             borderRadius: tokens.radius.full,
             boxShadow: `0 0 8px ${color}40`,
+            transition: `width 0.9s cubic-bezier(0.4, 0, 0.2, 1)`,
           }}
         />
       </Box>
