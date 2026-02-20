@@ -19,6 +19,7 @@ import {
   RankDisplay,
   TraderAvatar,
   ArenaScoreBadge,
+  ArenaScoreCircle,
   areTraderPropsEqual,
 } from './shared/TraderDisplay'
 import { getScoreColor } from '@/lib/utils/score-colors'
@@ -281,9 +282,16 @@ export const TraderRow = memo(function TraderRow({
           </Box>
         </Box>
 
-        {/* Arena Score */}
+        {/* Arena Score — circular hero badge with hover breakdown tooltip */}
         <Box className="col-score" style={{ textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-          <ArenaScoreBadge score={trader.arena_score} showConfidence trader={trader} />
+          <ArenaScoreCircle
+            score={trader.arena_score}
+            roi={trader.roi}
+            pnl={trader.pnl}
+            language={language}
+            showConfidence
+            trader={trader}
+          />
           <ScoreBreakdownTooltip trader={trader} language={language} />
         </Box>
 

@@ -172,6 +172,8 @@ const zh = {
     similarTraders: '相似交易员',
     traderNotRegistered: '交易员未入驻',
     traderNotRegisteredDesc: '该交易员尚未认领此账号',
+    unclaimedBadge: '未认领',
+    claimThisProfile: '认领此主页',
     jumpToExchange: '跳转至交易所跟单',
     unlockToJumpExchange: '解锁后跳转交易所跟单',
     copyTradePro: '跟单 Pro',
@@ -2299,6 +2301,12 @@ const zh = {
     loadFailedRetryMsg: '加载失败，请稍后重试',
     noPerformanceData: '暂无绩效数据',
     noStatsData: '暂无统计数据',
+    leaderboardBreadcrumb: '排行榜',
+    chartDataAccumulatesDaily: '数据每天积累。首次交易后24小时内即可看到资金曲线图。',
+    arenaScoreHeaderTooltip: 'Arena 综合绩效评分（0–100）',
+    foundingMemberBannerText: '创始会员 — 终身访问仅 $49.99',
+    foundingMemberBannerCta: '立即获取',
+    writeYourFirstPost: '写下你的第一条帖子',
 
     // 搜索页
     searchResults: '搜索结果',

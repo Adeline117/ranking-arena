@@ -268,7 +268,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
         <Breadcrumb items={[
-          { label: language === 'zh' ? '排行榜' : 'Leaderboard', href: '/rankings' },
+          { label: t('leaderboardBreadcrumb'), href: '/rankings' },
           { label: profile.handle || handle },
         ]} />
         {/* Header */}
