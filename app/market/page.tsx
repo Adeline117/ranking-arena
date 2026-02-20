@@ -87,27 +87,51 @@ function MobileMoversTab() {
 }
 
 function MobileSectorsTab() {
-  // On mobile: simple card layout instead of treemap
-  const SECTORS = [
-    { name: 'DeFi', change: '+3.2%', color: tokens.colors.accent.success },
-    { name: 'L1', change: '+1.8%', color: tokens.colors.accent.success },
-    { name: 'L2', change: '-0.5%', color: tokens.colors.accent.error },
-    { name: 'Meme', change: '+8.1%', color: tokens.colors.accent.success },
-    { name: 'AI', change: '+5.2%', color: tokens.colors.accent.success },
-    { name: 'GameFi', change: '-1.3%', color: tokens.colors.accent.error },
-    { name: 'NFT', change: '-2.8%', color: tokens.colors.accent.error },
-  ]
+  const [sectors, setSectors] = useState<{ name: string; change: number }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const CAT_MAP: Record<string, string> = {
+      BTC: 'L1', ETH: 'L1', SOL: 'L1', BNB: 'L1', ADA: 'L1', AVAX: 'L1', DOT: 'L1', NEAR: 'L1', ATOM: 'L1', SUI: 'L1', APT: 'L1', TRX: 'L1', TON: 'L1', XRP: 'L1',
+      LINK: 'DeFi', UNI: 'DeFi', AAVE: 'DeFi', MKR: 'DeFi', CRV: 'DeFi', SNX: 'DeFi',
+      ARB: 'L2', OP: 'L2', MATIC: 'L2', STRK: 'L2', IMX: 'L2',
+      DOGE: 'Meme', SHIB: 'Meme', PEPE: 'Meme', WIF: 'Meme', FLOKI: 'Meme', BONK: 'Meme',
+      RNDR: 'AI', FET: 'AI', TAO: 'AI', WLD: 'AI',
+      AXS: 'GameFi', GALA: 'GameFi', SAND: 'GameFi', MANA: 'GameFi',
+    }
+    fetch('/api/market/spot')
+      .then(r => r.json())
+      .then((data: { symbol: string; change24h: number | null; marketCap: number }[]) => {
+        if (!Array.isArray(data)) return
+        const grouped: Record<string, { totalCap: number; weightedChange: number }> = {}
+        for (const c of data) {
+          const cat = CAT_MAP[c.symbol]
+          if (!cat || c.change24h == null || c.marketCap <= 0) continue
+          if (!grouped[cat]) grouped[cat] = { totalCap: 0, weightedChange: 0 }
+          grouped[cat].totalCap += c.marketCap
+          grouped[cat].weightedChange += c.change24h * c.marketCap
+        }
+        setSectors(Object.entries(grouped)
+          .map(([name, v]) => ({ name, change: v.weightedChange / v.totalCap }))
+          .sort((a, b) => b.change - a.change))
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>...</div>
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>
-      {SECTORS.map(s => {
+      {sectors.map(s => {
+        const color = s.change >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
         return (
           <div key={s.name} style={{
             padding: '14px 16px',
             background: tokens.glass.bg.secondary,
             borderRadius: tokens.radius.lg,
             border: tokens.glass.border.light,
-            borderLeft: `3px solid ${s.color}`,
+            borderLeft: `3px solid ${color}`,
           }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: tokens.colors.text.tertiary, marginBottom: 6, letterSpacing: '0.3px', textTransform: 'uppercase' }}>
               {s.name}
@@ -115,12 +139,12 @@ function MobileSectorsTab() {
             <div style={{
               fontSize: 18,
               fontWeight: 800,
-              color: s.color,
+              color,
               fontFamily: 'var(--font-mono, monospace)',
               fontVariantNumeric: 'tabular-nums',
               letterSpacing: '-0.5px',
             } as React.CSSProperties}>
-              {s.change}
+              {s.change >= 0 ? '+' : ''}{s.change.toFixed(2)}%
             </div>
           </div>
         )
