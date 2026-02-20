@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRealtimePrices, type PriceFlashInfo } from '@/lib/hooks/useRealtimePrices'
 import MarketTable, { Column } from './MarketTable'
+import Sparkline from './Sparkline'
 
 interface SpotCoin {
   id: string
@@ -19,6 +20,12 @@ interface SpotCoin {
   volume24h: number
   marketCap: number
   rank: number
+}
+
+interface SparklineEntry {
+  id: string
+  prices: number[]
+  change7d: number | null
 }
 
 function formatNum(n: number | null, decimals = 2): string {
@@ -91,6 +98,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
   const [search, setSearch] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [showFavOnly, setShowFavOnly] = useState(false)
+  const [sparklines, setSparklines] = useState<Map<string, SparklineEntry>>(new Map())
   const { prices: realtimePrices, flashes } = useRealtimePrices({ enabled: true })
 
   useEffect(() => {
@@ -99,6 +107,21 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
       .then((d) => { if (Array.isArray(d)) setData(d) })
       .catch(() => {})
       .finally(() => setLoading(false))
+  }, [])
+
+  // Fetch 7-day sparkline data for top 50 coins (cached 4h on server, stale-while-revalidate)
+  useEffect(() => {
+    fetch('/api/market/sparklines')
+      .then((r) => r.json())
+      .then((d: unknown) => {
+        if (!Array.isArray(d)) return
+        const map = new Map<string, SparklineEntry>()
+        ;(d as SparklineEntry[]).forEach((entry) => {
+          if (entry && typeof entry.id === 'string') map.set(entry.id, entry)
+        })
+        setSparklines(map)
+      })
+      .catch(() => {/* sparklines are non-critical; fail silently */})
   }, [])
 
   useEffect(() => {
@@ -144,7 +167,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
       key: 'rank',
       label: '#',
       align: 'center',
-      width: '6%',
+      width: '5%',
       sortable: true,
       render: (r) => <span style={{ color: tokens.colors.text.tertiary, fontWeight: 600 }}>{r.rank}</span>,
     },
@@ -152,7 +175,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
       key: 'symbol',
       label: t('tradingPair') || '交易对',
       align: 'left',
-      width: '22%',
+      width: '20%',
       sortable: true,
       render: (r) => (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
@@ -192,23 +215,44 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
       getValue: (r) => r.symbol,
     },
     {
+      key: 'sparkline',
+      label: '7D',
+      align: 'center',
+      width: '10%',
+      sortable: false,
+      render: (r) => {
+        const entry = sparklines.get(r.id)
+        if (!entry || entry.prices.length < 2) {
+          return <span style={{ display: 'inline-block', width: 88, height: 34 }} />
+        }
+        return (
+          <Sparkline
+            prices={entry.prices}
+            width={88}
+            height={34}
+            positive={entry.change7d !== null ? entry.change7d >= 0 : undefined}
+          />
+        )
+      },
+    },
+    {
       key: 'price',
       label: t('lastPrice') || '最新价',
-      width: '18%',
+      width: '16%',
       sortable: true,
       render: (r) => <FlashPrice value={formatPrice(r.price)} flash={flashes[r.symbol.toUpperCase()]} />,
     },
     {
       key: 'change24h',
       label: t('change24h') || '24h涨跌',
-      width: '14%',
+      width: '13%',
       sortable: true,
       render: (r) => <ChangeCell value={r.change24h} />,
     },
     {
       key: 'volume24h',
       label: t('volume24h') || '成交量',
-      width: '18%',
+      width: '16%',
       sortable: true,
       render: (r) => (
         <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: tokens.typography.fontSize.sm }}>
@@ -219,7 +263,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
     {
       key: 'marketCap',
       label: t('marketCapShort') || '市值',
-      width: '16%',
+      width: '14%',
       sortable: true,
       render: (r) => (
         <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: tokens.typography.fontSize.sm }}>
