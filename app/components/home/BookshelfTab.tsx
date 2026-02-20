@@ -202,7 +202,7 @@ export default function BookshelfTab() {
             >
               {/* Cover */}
               <div style={{
-                aspectRatio: '2/3', borderRadius: tokens.radius.lg,
+                aspectRatio: '2/3', position: 'relative', borderRadius: tokens.radius.lg,
                 overflow: 'hidden', boxShadow: tokens.shadow.md, marginBottom: 8,
               }}>
                 <BookCover

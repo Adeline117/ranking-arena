@@ -76,11 +76,11 @@ const BookCover = memo(function BookCover({
     return { palette, hueShift, patternType, decoX, decoY }
   }, [title, category])
 
-  // Real cover image
+  // Real cover image — uses position:absolute to reliably fill the positioned parent container
   if (coverUrl && !imgError) {
     return (
       <div style={{
-        width, height, position: 'relative', overflow: 'hidden',
+        position: 'absolute', inset: 0, overflow: 'hidden',
         borderRadius: 'inherit',
         ...style,
       }}>
@@ -90,7 +90,7 @@ const BookCover = memo(function BookCover({
           fill
           loading={priority ? 'eager' : 'lazy'}
           priority={priority}
-          style={{ objectFit: 'cover' }}
+          style={{ objectFit: 'cover', width: '100%', height: '100%' }}
           sizes="(max-width: 768px) 50vw, 200px"
           unoptimized={coverUrl.startsWith('http://') || !coverUrl.startsWith('/')}
           onError={() => setImgError(true)}
@@ -121,9 +121,9 @@ const BookCover = memo(function BookCover({
 
   return (
     <div style={{
-      width, height,
+      position: 'absolute', inset: 0,
       background: `linear-gradient(160deg, ${palette.primary} 0%, ${palette.secondary} 60%, ${palette.primary} 100%)`,
-      position: 'relative', overflow: 'hidden',
+      overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
       borderRadius: 'inherit',
       ...style,

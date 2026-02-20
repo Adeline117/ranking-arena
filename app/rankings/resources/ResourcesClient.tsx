@@ -15,10 +15,11 @@ import { logger } from '@/lib/logger'
 
 const MobileBottomNav = dynamic(() => import('@/app/components/layout/MobileBottomNav'), { ssr: false })
 
+// Filter tabs aligned with Top 10 sections (Books, Papers, Whitepapers) + additional categories
 const CATEGORIES = [
   { key: 'all', en: 'All', zh: '全部' },
-  { key: 'paper', en: 'Papers', zh: '论文' },
   { key: 'book', en: 'Books', zh: '书籍' },
+  { key: 'paper', en: 'Papers', zh: '论文' },
   { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书' },
   { key: 'research', en: 'Research', zh: '研报' },
   { key: 'academic_paper', en: 'Academic', zh: '学术论文' },
@@ -39,6 +40,7 @@ interface ResourcesClientProps {
   topBooks: LibraryItem[]
   topPapers: LibraryItem[]
   recentItems: LibraryItem[]
+  categoryCounts?: Record<string, number>
 }
 
 const BookIcon = () => (
@@ -63,7 +65,20 @@ function libItemToEntry(item: LibraryItem) {
   }
 }
 
-export default function ResourcesClient({ initialItems, initialFeatured, initialTotal, topBooks, topPapers, recentItems }: ResourcesClientProps) {
+function formatCount(n: number): string {
+  if (n >= 1000) return n.toLocaleString()
+  return String(n)
+}
+
+export default function ResourcesClient({
+  initialItems,
+  initialFeatured,
+  initialTotal,
+  topBooks,
+  topPapers,
+  recentItems,
+  categoryCounts = {},
+}: ResourcesClientProps) {
   const { language } = useLanguage()
   const searchParams = useSearchParams()
 
@@ -71,36 +86,58 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
   const [featured] = useState<LibraryItem[]>(initialFeatured)
   const [total, setTotal] = useState(initialTotal)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [category, setCategory] = useState(searchParams.get('category') || 'all')
   const [sort, setSort] = useState('recent')
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
+  const [isMobile, setIsMobile] = useState(false)
+
   // Skip the initial client-side fetch only when SSR already provided data.
-  // If initialItems is empty (e.g. stale ISR cache), fetch immediately on mount.
   const isInitialRender = useRef(initialItems.length > 0)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const isZh = language === 'zh'
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true)
+  // Detect mobile
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const hasMore = page < totalPages
+
+  const fetchItems = useCallback(async (opts?: { append?: boolean; targetPage?: number }) => {
+    const append = opts?.append ?? false
+    const targetPage = opts?.targetPage ?? page
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     try {
       const params = new URLSearchParams()
       if (category !== 'all') params.set('category', category)
       if (sort !== 'recent') params.set('sort', sort)
       if (search) params.set('search', search)
-      params.set('page', String(page))
+      params.set('page', String(targetPage))
       params.set('limit', String(PAGE_SIZE))
       params.set('language', language)
 
       const res = await fetch(`/api/library?${params}`)
       const data = await res.json()
-      setItems(data.items || [])
+      if (append) {
+        setItems(prev => [...prev, ...(data.items || [])])
+      } else {
+        setItems(data.items || [])
+      }
       setTotal(data.total || 0)
     } catch (e) {
       logger.error('Failed to fetch resources:', e)
     } finally {
-      setLoading(false)
+      if (append) setLoadingMore(false)
+      else setLoading(false)
     }
   }, [category, sort, search, page, language])
 
@@ -112,22 +149,58 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
     fetchItems()
   }, [fetchItems])
 
+  // Infinite scroll sentinel (mobile only)
+  useEffect(() => {
+    if (!isMobile) return
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && !loading && !loadingMore && hasMore) {
+          const nextPage = page + 1
+          setPage(nextPage)
+          fetchItems({ append: true, targetPage: nextPage })
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    )
+    const sentinel = sentinelRef.current
+    if (sentinel) observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [isMobile, loading, loadingMore, hasMore, page, fetchItems])
+
+  const handleCategoryChange = useCallback((cat: string) => {
+    setItems([])
+    setCategory(cat)
+    setPage(1)
+  }, [])
+
+  const handleSortChange = useCallback((s: string) => {
+    setItems([])
+    setSort(s)
+    setPage(1)
+  }, [])
+
   const handleSearchInput = useCallback((value: string) => {
     setSearchInput(value)
     clearTimeout(searchTimeoutRef.current)
     searchTimeoutRef.current = setTimeout(() => {
+      setItems([])
       setSearch(value.trim())
       setPage(1)
     }, 400)
   }, [])
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const handleLoadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    fetchItems({ append: true, targetPage: nextPage })
+  }, [loadingMore, hasMore, page, fetchItems])
 
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 100px' }}>
 
-        {/* Top Leaderboards */}
+        {/* Top Leaderboards — aligned with filter tabs: Books / Papers / Whitepapers */}
         <TopLeaderboards columns={[
           {
             title: isZh ? '热门书籍 Top 10' : 'Top 10 Books',
@@ -196,14 +269,19 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
           )}
         </div>
 
-        {/* Category + Sort */}
+        {/* Category tabs + Sort — tabs aligned with Top 10 leaderboard columns */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
           {CATEGORIES.map(cat => {
             const active = category === cat.key
+            const count = categoryCounts[cat.key]
+            const label = isZh ? cat.zh : cat.en
+            const displayLabel = count != null && count > 0
+              ? `${label} (${formatCount(count)})`
+              : label
             return (
               <button
                 key={cat.key}
-                onClick={() => { setCategory(cat.key); setPage(1) }}
+                onClick={() => handleCategoryChange(cat.key)}
                 style={{
                   padding: '8px 18px',
                   borderRadius: tokens.radius.full,
@@ -216,15 +294,16 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
                   cursor: 'pointer',
                   boxShadow: active ? '0 2px 8px rgba(139, 92, 246, 0.3)' : 'none',
                   transition: `all ${tokens.transition.base}`,
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {isZh ? cat.zh : cat.en}
+                {displayLabel}
               </button>
             )
           })}
           <select
             value={sort}
-            onChange={e => { setSort(e.target.value); setPage(1) }}
+            onChange={e => handleSortChange(e.target.value)}
             style={{
               padding: '8px 28px 8px 14px',
               borderRadius: tokens.radius.full,
@@ -249,7 +328,7 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
           </select>
         </div>
 
-        {/* Featured */}
+        {/* Featured — covers use fixed 2:3 aspect ratio with position:relative for fill images */}
         {featured.length > 0 && !search && category === 'all' && (
           <section style={{ marginBottom: 40 }}>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 20, letterSpacing: '-0.01em' }}>
@@ -259,8 +338,24 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
               {featured.slice(0, 6).map(item => (
                 <Link key={item.id} href={`/library/${item.id}`} style={{ textDecoration: 'none' }}>
                   <div>
-                    <div style={{ width: '100%', aspectRatio: '2/3', borderRadius: tokens.radius.lg, overflow: 'hidden', marginBottom: 12, boxShadow: tokens.shadow.md, transition: `transform ${tokens.transition.base}, box-shadow ${tokens.transition.base}` }}>
-                      <BookCover title={item.title} author={item.author} category={item.category} coverUrl={item.cover_url} fontSize="sm" />
+                    {/* Fixed 2:3 aspect ratio cover — position:relative needed for Next.js Image fill */}
+                    <div style={{
+                      width: '100%',
+                      aspectRatio: '2/3',
+                      position: 'relative',
+                      borderRadius: tokens.radius.lg,
+                      overflow: 'hidden',
+                      marginBottom: 12,
+                      boxShadow: tokens.shadow.md,
+                      transition: `transform ${tokens.transition.base}, box-shadow ${tokens.transition.base}`,
+                    }}>
+                      <BookCover
+                        title={item.title}
+                        author={item.author}
+                        category={item.category}
+                        coverUrl={item.cover_url}
+                        fontSize="sm"
+                      />
                     </div>
                     <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', lineHeight: 1.35, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
                       {item.title}
@@ -315,9 +410,26 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 40, flexWrap: 'wrap' }}>
+        {/* Loading more skeletons (infinite scroll append) */}
+        {loadingMore && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(180px, 45%), 1fr))', gap: 20, marginTop: 20 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="skeleton" style={{ aspectRatio: '2/3', borderRadius: tokens.radius.lg }} />
+                <div className="skeleton" style={{ height: 14, width: '80%', borderRadius: 6 }} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Mobile: IntersectionObserver sentinel for infinite scroll */}
+        {isMobile && hasMore && !loading && (
+          <div ref={sentinelRef} style={{ height: 1, marginTop: 20 }} aria-hidden="true" />
+        )}
+
+        {/* Pagination (desktop) */}
+        {!isMobile && totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 40, flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               disabled={page <= 1}
               onClick={() => setPage(p => p - 1)}
@@ -335,7 +447,37 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
             >
               {isZh ? '下一页' : 'Next'}
             </button>
+
+            {/* Desktop: Load more button as alternative to pagination */}
+            {hasMore && (
+              <button
+                disabled={loadingMore}
+                onClick={handleLoadMore}
+                style={{
+                  padding: '8px 24px',
+                  borderRadius: tokens.radius.full,
+                  border: '1px solid var(--color-accent-primary)',
+                  background: 'transparent',
+                  color: 'var(--color-accent-primary)',
+                  cursor: loadingMore ? 'default' : 'pointer',
+                  opacity: loadingMore ? 0.6 : 1,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  transition: `all ${tokens.transition.fast}`,
+                  marginLeft: 8,
+                }}
+              >
+                {loadingMore ? (isZh ? '加载中...' : 'Loading...') : (isZh ? '加载更多' : 'Load more')}
+              </button>
+            )}
           </div>
+        )}
+
+        {/* Mobile pagination fallback when no more items to scroll-load */}
+        {isMobile && !hasMore && items.length > 0 && (
+          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--color-text-tertiary)', marginTop: 32, paddingBottom: 8 }}>
+            {isZh ? '已加载全部内容' : 'All items loaded'}
+          </p>
         )}
       </main>
       <MobileBottomNav />

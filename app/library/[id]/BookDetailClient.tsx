@@ -256,6 +256,7 @@ export default function BookDetailClient({
           }}>
             <div style={{
               width: '100%', aspectRatio: '2/3',
+              position: 'relative',
               borderRadius: tokens.radius.xl,
               overflow: 'hidden',
               boxShadow: '0 8px 30px var(--color-overlay-medium), 0 20px 60px var(--color-overlay-light), 0 0 0 1px var(--glass-border-light)',
