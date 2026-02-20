@@ -32,7 +32,8 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
           listStyle: 'none',
           margin: 0,
           padding: 0,
-          flexWrap: 'wrap',
+          flexWrap: 'nowrap',
+          overflow: 'hidden',
         }}
       >
         {allItems.map((item, idx) => {

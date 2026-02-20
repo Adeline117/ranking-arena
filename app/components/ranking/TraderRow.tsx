@@ -291,20 +291,25 @@ export const TraderRow = memo(function TraderRow({
         {(() => {
           const roi = trader.roi || 0
           const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
+          return (
+            <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+              <AnimatedROI roi={roi} roiColor={roiColor} />
+            </Box>
+          )
+        })()}
+
+        {/* PnL */}
+        {(() => {
           const pnl = trader.pnl
           const hasPnl = pnl != null
           const pnlColor = hasPnl
             ? (pnl >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR)
             : TRADER_TEXT_TERTIARY
-          const pnlText = hasPnl
-            ? formatPnL(pnl)
-            : '—'
-
+          const pnlText = hasPnl ? formatPnL(pnl) : '—'
           return (
-            <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-              <AnimatedROI roi={roi} roiColor={roiColor} />
+            <Box className="col-pnl" style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <Text
-                size="xs"
+                size="sm"
                 weight="semibold"
                 className="pnl-value"
                 style={{ color: pnlColor, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, opacity: hasPnl ? 0.85 : 0.5, cursor: hasPnl ? 'help' : 'default', fontVariantNumeric: 'tabular-nums' }}

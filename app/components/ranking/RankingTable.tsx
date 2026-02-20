@@ -38,14 +38,15 @@ import { useRankingTableStyles } from './useRankingTableStyles'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 // Column customization types
-export type ColumnKey = 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha' | 'style'
+export type ColumnKey = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha' | 'style'
 
 // sortino, alpha, style removed — no data in DB yet
-const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd']
-const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'winrate', 'mdd']
+const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
+const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl']
 const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
   score: { zh: 'Arena Score', en: 'Arena Score' },
   roi: { zh: 'ROI', en: 'ROI' },
+  pnl: { zh: 'PnL', en: 'PnL' },
   winrate: { zh: '胜率', en: 'Win Rate' },
   mdd: { zh: '最大回撤', en: 'Max Drawdown' },
   sortino: { zh: 'Sortino', en: 'Sortino' },
@@ -246,11 +247,11 @@ function RankingTableInner(props: {
   hasActiveFilters?: boolean
   error?: string | null
   onRetry?: () => void
-  controlledSortColumn?: 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
+  controlledSortColumn?: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
   controlledSortDir?: 'asc' | 'desc'
   controlledPage?: number
   controlledSearchQuery?: string
-  onSortChange?: (column: 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => void
+  onSortChange?: (column: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => void
   onPageChange?: (page: number) => void
   onSearchChange?: (query: string) => void
 }) {
@@ -268,7 +269,7 @@ function RankingTableInner(props: {
   const [internalPage, setInternalPage] = useState(1)
   const [showRules, setShowRules] = useState(false)
   const [showScoreRulesModal, setShowScoreRulesModal] = useState(false)
-  const [internalSortColumn, setInternalSortColumn] = useState<'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
+  const [internalSortColumn, setInternalSortColumn] = useState<'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [_sortAnimationKey, setSortAnimationKey] = useState(0)
@@ -371,6 +372,7 @@ function RankingTableInner(props: {
     let template = '40px minmax(140px, 1.5fr)'
     if (visibleColumns.includes('score')) template += ' 68px'
     if (visibleColumns.includes('roi')) template += ' 96px'
+    if (visibleColumns.includes('pnl')) template += ' 80px'
     if (visibleColumns.includes('winrate')) template += ' 64px'
     if (visibleColumns.includes('mdd')) template += ' 64px'
     if (visibleColumns.includes('sortino')) template += ' 70px'
@@ -380,7 +382,7 @@ function RankingTableInner(props: {
   }, [visibleColumns])
 
 
-  const handleSort = (col: 'score' | 'roi' | 'winrate' | 'mdd' | 'sortino' | 'alpha') => {
+  const handleSort = (col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha') => {
     const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
     setJustSortedColumn(col)
     setSortAnimationKey(prev => prev + 1)
@@ -423,6 +425,7 @@ function RankingTableInner(props: {
       switch (sortColumn) {
         case 'score': aVal = a.arena_score ?? 0; bVal = b.arena_score ?? 0; break
         case 'roi': aVal = a.roi ?? 0; bVal = b.roi ?? 0; break
+        case 'pnl': aVal = a.pnl ?? 0; bVal = b.pnl ?? 0; break
         case 'winrate': aVal = a.win_rate ?? 0; bVal = b.win_rate ?? 0; break
         case 'mdd': aVal = Math.abs(a.max_drawdown ?? 0); bVal = Math.abs(b.max_drawdown ?? 0); break
         case 'sortino': aVal = a.sortino_ratio ?? 0; bVal = b.sortino_ratio ?? 0; break

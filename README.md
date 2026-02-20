@@ -23,10 +23,9 @@ Arena ranks and scores 32,000+ crypto traders across 27+ centralized and decentr
 
 ### Trader Rankings
 
-- **Arena Score V3** -- Percentile-based composite scoring system:
-  - Risk Control: 40%
-  - Profitability: 35%
-  - Execution Quality: 25%
+- **Arena Score** -- Two-dimension composite scoring:
+  - ROI (Return): 60%
+  - PnL (Absolute Profit): 40%
 - Rankings across 27+ exchanges: Binance, OKX, Bybit, Bitget, MEXC, KuCoin, Gate.io, HTX, CoinEx, and DEX platforms including Hyperliquid, GMX, dYdX, Jupiter, Vertex, Drift, and more
 - Real-time trade feed with live position tracking
 
@@ -49,8 +48,8 @@ Arena ranks and scores 32,000+ crypto traders across 27+ centralized and decentr
 
 ### Pro Membership
 
-- $12.99/month or $99/year
-- Advanced analytics, extended data access, and premium features
+- $4.99/month, $29.99/year, or $49.99 lifetime (Founding Member)
+- All Pro features currently free during beta
 
 ### Localization & Theming
 
