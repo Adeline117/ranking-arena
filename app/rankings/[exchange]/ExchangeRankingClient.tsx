@@ -247,6 +247,8 @@ export default function ExchangeRankingClient({
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sortKey, setSortKey] = useState<SortKey>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const PAGE_SIZE = 50
+  const [page, setPage] = useState(1)
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -267,6 +269,12 @@ export default function ExchangeRankingClient({
       return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number)
     })
   }, [traders, sortKey, sortDir])
+
+  // Reset page when sort changes
+  useEffect(() => { setPage(1) }, [sortKey, sortDir])
+
+  const totalPages = Math.ceil(sortedTraders.length / PAGE_SIZE)
+  const pagedTraders = sortedTraders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   // Auto-detect mobile
   useEffect(() => {
@@ -333,9 +341,12 @@ export default function ExchangeRankingClient({
 
       {viewMode === 'card' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: tokens.spacing[3] }}>
-          {traders.map((t, i) => (
-            <TraderCardItem key={`${t.platform}:${t.trader_key}:${i}`} trader={t} rank={i + 1} />
-          ))}
+          {pagedTraders.map((t, i) => {
+            const originalRank = traders.indexOf(t) + 1
+            return (
+              <TraderCardItem key={`${t.platform}:${t.trader_key}:${i}`} trader={t} rank={originalRank} />
+            )
+          })}
         </div>
       ) : (
         <div
@@ -368,7 +379,7 @@ export default function ExchangeRankingClient({
             <SortHeader label="Score" sortKey="arena_score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
           </div>
           {/* Rows */}
-          {sortedTraders.map((t, i) => {
+          {pagedTraders.map((t, i) => {
             const name = getDisplayName(t)
             const roiColor = t.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
             const wrColor = t.win_rate != null
@@ -436,6 +447,49 @@ export default function ExchangeRankingClient({
               </Link>
             )
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: tokens.spacing[6] }}>
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            style={{
+              padding: '8px 16px',
+              borderRadius: tokens.radius.md,
+              border: 'none',
+              fontSize: 13,
+              fontWeight: 600,
+              background: page <= 1 ? 'var(--glass-border-light)' : tokens.colors.accent.brand + '25',
+              color: page <= 1 ? tokens.colors.text.tertiary : tokens.colors.accent.brand,
+              cursor: page <= 1 ? 'not-allowed' : 'pointer',
+              opacity: page <= 1 ? 0.5 : 1,
+            }}
+          >
+            ← 上一页
+          </button>
+          <span style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
+            {page} / {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            style={{
+              padding: '8px 16px',
+              borderRadius: tokens.radius.md,
+              border: 'none',
+              fontSize: 13,
+              fontWeight: 600,
+              background: page >= totalPages ? 'var(--glass-border-light)' : tokens.colors.accent.brand + '25',
+              color: page >= totalPages ? tokens.colors.text.tertiary : tokens.colors.accent.brand,
+              cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+              opacity: page >= totalPages ? 0.5 : 1,
+            }}
+          >
+            下一页 →
+          </button>
         </div>
       )}
     </div>
