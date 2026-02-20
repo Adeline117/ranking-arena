@@ -96,16 +96,27 @@ export default function GroupsStep({ theme, language, groups, joinedGroups, load
         )}
       </Box>
 
-      <button className="continue-btn" onClick={onComplete} disabled={saving} style={{
-        width: '100%', padding: '16px 24px', borderRadius: 14, border: 'none',
-        background: saving ? 'var(--color-accent-primary-20)' : theme.brandGradient,
-        color: tokens.colors.white, fontWeight: 700, fontSize: 16,
-        cursor: saving ? 'not-allowed' : 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-      }}>
-        {saving && <div style={{ width: 16, height: 16, border: '2px solid var(--glass-border-heavy)', borderTopColor: 'var(--foreground)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
-        {saving ? tr('saving') : tr('continueButton')}
-      </button>
+      <Box style={{ display: 'flex', gap: 14 }}>
+        <button className="continue-btn" onClick={onComplete} disabled={saving}
+          style={{
+            flex: 1, padding: '14px 20px', borderRadius: tokens.radius.lg,
+            border: `1px solid ${theme.optionBorder}`, background: 'transparent',
+            color: theme.textSecondary, fontWeight: 600, fontSize: 16,
+            cursor: saving ? 'not-allowed' : 'pointer',
+          }}>
+          {tr('skip')}
+        </button>
+        <button className="continue-btn" onClick={onComplete} disabled={saving} style={{
+          flex: 2, padding: '14px 20px', borderRadius: tokens.radius.lg, border: 'none',
+          background: saving ? 'var(--color-accent-primary-20)' : theme.brandGradient,
+          color: tokens.colors.white, fontWeight: 700, fontSize: 16,
+          cursor: saving ? 'not-allowed' : 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}>
+          {saving && <div style={{ width: 16, height: 16, border: '2px solid var(--glass-border-heavy)', borderTopColor: 'var(--foreground)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
+          {saving ? tr('saving') : tr('continueButton')}
+        </button>
+      </Box>
     </div>
   )
 }

@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const { data: newPost, error: insertError } = await supabase
       .from('posts')
       .insert({
-        title: comment ? comment.slice(0, 100) : '', // 用评论作为标题，截取前100字符
+        title: comment ? comment.slice(0, 100) : `RT: ${originalPost.title}`.slice(0, 100), // 用评论作为标题，无评论则引用原帖标题
         content: comment || '', // 用户的转发评论
         author_id: user.id,
         author_handle: userHandle,
