@@ -566,6 +566,14 @@ export default function TraderHeader({
               </Box>
             )}
 
+            {isRegistered === false && (
+              <Badge color={tokens.colors.text.tertiary} style={{ padding: '2px 8px' }}>
+                <Text size="xs" weight="semibold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.2px' }}>
+                  {t('unclaimedBadge')}
+                </Text>
+              </Badge>
+            )}
+
             {getSourceCategory(source) === 'web3' && <Web3VerifiedBadge size="md" />}
             <OnChainBadge traderHandle={handle} size="sm" />
 

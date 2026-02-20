@@ -26,8 +26,8 @@ import {
 } from '@/lib/seo'
 
 const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), { ssr: false })
-const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
+const ClaimTraderButton = dynamic(() => import('@/app/components/trader/ClaimTraderButton'), { ssr: false })
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
 })
@@ -125,7 +125,6 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
   const traderPositionHistory = traderData?.positionHistory ?? []
   const traderEquityCurve = traderData?.equityCurve
   const traderAssetBreakdown = traderData?.assetBreakdown
-  const traderFeed = traderData?.feed ?? []
   const traderSimilar = traderData?.similarTraders ?? []
 
   // Structured data for SEO
@@ -203,7 +202,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
               style={{
                 display: 'grid',
                 gridTemplateColumns: traderSimilar.length > 0 ? '1fr 300px' : '1fr',
-                gap: tokens.spacing[8],
+                gap: tokens.spacing[6],
               }}
             >
               <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
@@ -215,12 +214,20 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                   />
                 ) : (
                   <Box style={{
-                    padding: tokens.spacing[6],
+                    padding: `${tokens.spacing[8]} ${tokens.spacing[6]}`,
                     background: tokens.colors.bg.secondary,
                     borderRadius: tokens.radius.xl,
                     border: `1px solid ${tokens.colors.border.primary}`,
                     textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: tokens.spacing[3],
                   }}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--color-text-tertiary)', opacity: 0.4 }}>
+                      <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M7 16l4-8 4 4 4-6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                     <Text size="sm" color="tertiary">
                       {t('noPerformanceData')}
                     </Text>
@@ -236,19 +243,50 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                   />
                 )}
 
-                <TraderFeed
-                  items={traderFeed.filter((f: { type: string }) => f.type !== 'group_post')}
-                  title={t('activities')}
-                  isRegistered={false}
-                  traderId={traderProfile?.id || data.source_trader_id}
-                  traderHandle={traderProfile?.handle || data.handle}
-                  source={traderProfile?.source || data.source}
-                />
+                {/* Claim this profile CTA — replaces activity feed for unclaimed traders */}
+                <Box
+                  style={{
+                    padding: tokens.spacing[8],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: tokens.radius.xl,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: tokens.spacing[4],
+                  }}
+                >
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-text-tertiary)', opacity: 0.5 }}>
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                    <line x1="12" y1="11" x2="12" y2="17" />
+                    <line x1="9" y1="14" x2="15" y2="14" />
+                  </svg>
+                  <Text size="base" weight="bold" style={{ color: 'var(--color-text-secondary)' }}>
+                    {t('traderNotRegistered')}
+                  </Text>
+                  <Text size="sm" color="tertiary">
+                    {t('traderNotRegisteredDesc')}
+                  </Text>
+                  {currentUserId && (
+                    <Box style={{ marginTop: tokens.spacing[2] }}>
+                      <ClaimTraderButton
+                        traderId={traderProfile?.id || data.source_trader_id}
+                        handle={traderProfile?.handle || data.handle}
+                        userId={currentUserId}
+                        source={traderProfile?.source || data.source}
+                      />
+                    </Box>
+                  )}
+                </Box>
               </Box>
 
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                {traderSimilar.length > 0 && <SimilarTraders traders={traderSimilar} />}
-              </Box>
+              {traderSimilar.length > 0 && (
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+                  <SimilarTraders traders={traderSimilar} />
+                </Box>
+              )}
             </Box>
           )}
 
