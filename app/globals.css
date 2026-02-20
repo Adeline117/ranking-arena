@@ -223,6 +223,11 @@ html.theme-transition *::after {
   --color-chart-yellow: #FFEAA7;
   --color-chart-mint: #98D8C8;
   --color-chart-orange: #F7A600;
+  /* Tools page accent (teal) */
+  --color-tools-accent: #2ECDB4;
+  --color-tools-accent-muted: rgba(46, 205, 180, 0.18);
+  --color-tools-accent-hover: rgba(46, 205, 180, 0.28);
+  --color-tools-gradient: linear-gradient(135deg, #2ECDB4 0%, #0EA5E9 100%);
   --color-chart-amber: #F0B90B;
   --color-chart-violet: #A855F7;
   --color-chart-indigo: #6366F1;
@@ -423,6 +428,11 @@ html.theme-transition *::after {
   --color-chart-sage: #4d7c62;
   --color-chart-yellow: #ca8a04;
   --color-chart-mint: #0d9488;
+  /* Tools page accent (teal, darker for light bg) */
+  --color-tools-accent: #0d9488;
+  --color-tools-accent-muted: rgba(13, 148, 136, 0.12);
+  --color-tools-accent-hover: rgba(13, 148, 136, 0.2);
+  --color-tools-gradient: linear-gradient(135deg, #0d9488 0%, #0284c7 100%);
   --color-chart-orange: #ea580c;
   --color-chart-amber: #b45309;
   --color-chart-violet: #7c3aed;
