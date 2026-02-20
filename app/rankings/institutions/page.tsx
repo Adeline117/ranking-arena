@@ -6,7 +6,6 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import StarRating from '@/app/components/ui/StarRating'
 import TopLeaderboards, { type LeaderboardEntry } from '@/app/components/ui/TopLeaderboards'
-import dynamic from 'next/dynamic'
 
 // MobileBottomNav is rendered by root layout — do not duplicate here
 
