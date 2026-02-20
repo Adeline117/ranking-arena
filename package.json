@@ -68,7 +68,7 @@
     "@capacitor/push-notifications": "^7.0.1",
     "@capacitor/share": "^7.0.1",
     "@capacitor/splash-screen": "^7.0.1",
-    "@capacitor/status-bar": "^7.0.1",
+    "@capacitor/status-bar": "^8.0.1",
     "@coinbase/wallet-sdk": "^4.3.7",
     "@mathieuc/tradingview": "^3.5.2",
     "@privy-io/react-auth": "^3.13.1",
