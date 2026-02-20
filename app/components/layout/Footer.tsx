@@ -143,7 +143,7 @@ export default function Footer() {
             margin: 0,
           }}
         >
-          &copy; {new Date().getFullYear()} Arena. {isZh ? '加密货币全排名' : 'All rankings in crypto'}
+          &copy; {new Date().getFullYear()} Arena. {isZh ? '加密万物排行榜' : 'All rankings in crypto'}
         </p>
 
         {/* X / Twitter */}

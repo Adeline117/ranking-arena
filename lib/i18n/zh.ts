@@ -1771,7 +1771,7 @@ const zh = {
     loginForgotPassword: '忘记密码？',
     loginWelcomeBack: '欢迎回来',
     loginCreateAccount: '创建账号',
-    loginSubtitle: '加密货币全排名',
+    loginSubtitle: 'Arena ranks everything in crypto',
     loginValueProp1: '追踪 15,000+ 交易员实时排名',
     loginValueProp2: '跨 27 个交易所对比收益与风控',
     loginValueProp3: '加入交易社区，发现投资机会',
@@ -1919,7 +1919,7 @@ const zh = {
     helpProBadgeToggleA: '进入「设置」>「隐私」页面，找到「显示 Pro 徽章」选项进行开关。',
     helpGettingStartedTitle: '快速上手',
     helpWhatIsArenaQ: 'Arena 是什么？',
-    helpWhatIsArenaA: 'Arena 是一个加密货币交易员排行榜和社区平台。我们追踪 27 个交易所的 15,000+ 交易员，按收益率、风控和稳定性进行排名，帮助你发现顶级交易员。',
+    helpWhatIsArenaA: 'Arena 追踪 30+ 交易所的顶级交易员，按 ROI、Arena Score 和 PnL 排名，帮你发现最佳交易员。',
     helpHowToStartQ: '如何开始使用？',
     helpHowToStartA: '使用 Google、邮箱或加密钱包注册。注册后可以选择感兴趣的领域并关注顶级交易员。然后访问排行榜页面探索更多交易员。',
     helpArenaScoreQ: '什么是 Arena 分数？',
@@ -1946,7 +1946,7 @@ const zh = {
 
     // 404 页面
     notFoundTitle: '页面不存在',
-    notFoundDesc: '加密货币全排名 — 这个页面可能已被移动或删除',
+    notFoundDesc: '加密万物排行榜 — 这个页面可能已被移动或删除',
     notFoundViewHot: '查看热榜',
     notFoundExplore: '或者探索这些内容',
     notFoundBrowseGroups: '浏览小组',
@@ -2104,11 +2104,11 @@ const zh = {
     checkNetworkAndRetryOffline: '请检查您的网络连接后重试。部分已缓存的内容可能仍可访问。',
     retryConnection: '重试连接',
     cachedLeaderboard: '上次缓存的排行榜',
-    arenaTagline: 'Arena - 加密货币交易员排行榜',
+    arenaTagline: 'Arena — 加密万物排行榜',
 
     // Onboarding page
     onboardingTitle: '欢迎来到 Arena',
-    onboardingSubtitle: '加密货币全排名',
+    onboardingSubtitle: 'Arena ranks everything in crypto',
     selectLanguage: '选择语言',
     selectTheme: '选择主题',
     continueButton: '继续',
@@ -2207,7 +2207,7 @@ const zh = {
     termsAcceptTitle: '1. 接受条款',
     termsAcceptP1: '欢迎使用 Arena（以下简称"本平台"或"我们"）。通过访问或使用我们的服务，您同意受本服务条款（以下简称"条款"）的约束。如果您不同意这些条款的任何部分，请不要使用我们的服务。',
     termsServiceTitle: '2. 服务描述',
-    termsServiceP1: 'Arena 是一个加密货币交易员排行榜与社区平台，提供以下服务：',
+    termsServiceP1: 'Arena 提供以下服务：',
     termsService1: '聚合多个交易所的交易员排行数据',
     termsService2: '提供交易员绩效分析和统计',
     termsService3: '社区讨论和内容分享功能',
@@ -2708,7 +2708,7 @@ const zh = {
     faqNoResults: '未找到匹配的问题，请尝试其他关键词。',
 
     // Hero section
-    heroSubtitle: '加密货币全排名',
+    heroSubtitle: 'Arena ranks everything in crypto',
     heroCTABrowse: '查看排行榜',
     heroCTASignUp: '免费注册',
 

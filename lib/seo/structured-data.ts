@@ -7,7 +7,7 @@
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 const SITE_NAME = 'Arena'
-const SITE_DESCRIPTION = '加密货币交易员排行榜与社区平台'
+const SITE_DESCRIPTION = '加密万物排行榜'
 
 // ============================================
 // 类型定义
