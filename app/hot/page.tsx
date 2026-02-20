@@ -24,7 +24,6 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 // CreatePostFAB removed per Adeline's request
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 
 // Use design token for brand color
@@ -1484,7 +1483,6 @@ function HotContent() {
         document.body
       )}
       <FloatingActionButton />
-      <MobileBottomNav />
     </Box>
   )
 }
