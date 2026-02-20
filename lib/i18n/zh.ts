@@ -1259,6 +1259,7 @@ const zh = {
     methodLabel: '计算方式',
     delayLabel: '延迟说明',
     confidenceLabel: '可信度',
+    confidence: '可信度',
     viewSourceData: '查看原始数据',
 
     // RankingTable
@@ -3622,6 +3623,7 @@ adminLibraryTotal: '总书籍数',
 adminLibraryWithPdf: '有 PDF 的',
 adminPlatformCount: '平台数',
 adminTotalTraders: '交易员总数',
+adminSnapshots24h: '24小时快照',
 adminTraderStats: '交易员统计',
 enterEvmOrSolanaAddress: '请输入 EVM 或 Solana 地址',
 
