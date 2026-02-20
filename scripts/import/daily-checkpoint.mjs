@@ -225,7 +225,7 @@ async function checkpointSource(source) {
   for (let i = 0; i < snapshots.length; i += BATCH) {
     const batch = snapshots.slice(i, i + BATCH)
     const { error } = await supabase
-      .from('trader_snapshots')
+      .from('daily_trader_stats')
       .upsert(batch, { onConflict: 'source,source_trader_id,snapshot_date', ignoreDuplicates: false })
     if (error) {
       console.error(`  Batch ${i}-${i + BATCH} error:`, error.message)
