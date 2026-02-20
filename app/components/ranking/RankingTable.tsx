@@ -42,7 +42,7 @@ export type ColumnKey = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' 
 
 // sortino, alpha, style removed — no data in DB yet
 const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
-const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl']
+const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
 const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
   score: { zh: 'Arena Score', en: 'Arena Score' },
   roi: { zh: 'ROI', en: 'ROI' },
