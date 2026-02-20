@@ -450,8 +450,19 @@ export default function EpubReader({
 
           const percent = book.locations?.percentageFromCfi?.(cfi)
           const p = typeof percent === 'number' ? Math.round(percent * 100) : 0
-          const page = location.start?.displayed?.page || 1
-          const total = location.start?.displayed?.total || 1
+
+          // Use book-wide location index if available, else fall back to chapter page
+          const bookTotal = (book.locations as unknown as { total?: number }).total || 0
+          let page: number
+          let total: number
+          if (bookTotal > 1) {
+            const locIdx = (book.locations as unknown as { locationFromCfi?: (cfi: string) => number }).locationFromCfi?.(cfi) ?? 1
+            page = Math.max(1, locIdx)
+            total = bookTotal
+          } else {
+            page = location.start?.displayed?.page || 1
+            total = location.start?.displayed?.total || 1
+          }
 
           setProgressPercent(p)
           setCurrentPage(page)
@@ -490,6 +501,18 @@ export default function EpubReader({
         return book.locations.generate(1024)
       }).then(() => {
         if (cancelled) return
+        // After locations are generated, update total pages to book-wide count
+        const bookTotal = (book.locations as unknown as { total?: number }).total || 0
+        if (bookTotal > 1) {
+          setTotalPages(bookTotal)
+          if (onProgressChange) {
+            const cfi = (renditionRef.current?.currentLocation() as unknown as { start?: { cfi: string } })?.start?.cfi
+            if (cfi) {
+              const locIdx = (book.locations as unknown as { locationFromCfi?: (cfi: string) => number }).locationFromCfi?.(cfi) ?? 1
+              onProgressChange(Math.round((locIdx / bookTotal) * 100), locIdx, bookTotal)
+            }
+          }
+        }
         setReady(true)
         // Increment session count
         setReadingStats(prev => ({

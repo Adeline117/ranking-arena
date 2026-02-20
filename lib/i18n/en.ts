@@ -1,7 +1,7 @@
 // English translations
 const en = {
     home: 'Home',
-    rankings: 'Rankings',
+    rankings: 'Market',
     groups: 'Groups',
     market: 'Market',
     hot: 'Hot',
