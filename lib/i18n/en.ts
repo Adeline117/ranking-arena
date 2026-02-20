@@ -101,7 +101,7 @@ const en = {
     groupRecommendationsComingSoon: 'Group recommendations coming soon',
     hotList: 'Hot List',
     loggedInShowAllHot: 'Logged in: Show all',
-    notLoggedInShowLimitedHot: 'Not logged in: Show first 3 only',
+    notLoggedInShowLimitedHot: 'Not logged in: Show first 20 only',
     views: 'views',
     wantToSeeAllHotList: 'Want to see all hot list?',
     loginArrow: 'Login',

@@ -101,7 +101,7 @@ const zh = {
     groupRecommendationsComingSoon: '小组推荐功能待实现',
     hotList: '热榜',
     loggedInShowAllHot: '已登录：显示全部',
-    notLoggedInShowLimitedHot: '未登录：仅显示前3条',
+    notLoggedInShowLimitedHot: '未登录：仅显示前20条',
     views: '浏览',
     wantToSeeAllHotList: '想看全部热榜？',
     loginArrow: '登录',

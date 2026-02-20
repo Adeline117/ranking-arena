@@ -8,7 +8,6 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import TopNav from '@/app/components/layout/TopNav'
 import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import RecommendedGroups from '@/app/components/sidebar/RecommendedGroups'
 import NewsFlash from '@/app/components/sidebar/NewsFlash'
 import PostFeed from '@/app/components/post/PostFeed'
@@ -365,7 +364,6 @@ export default function GroupsFeedPage() {
       </ThreeColumnLayout>
 
       <FloatingActionButton />
-      <MobileBottomNav />
     </Box>
   )
 }
