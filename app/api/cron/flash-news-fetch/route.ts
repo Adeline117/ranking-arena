@@ -35,6 +35,10 @@ const RSS_FEEDS: FeedConfig[] = [
   { url: 'https://decrypt.co/feed', platform: 'Decrypt', category: 'altcoin' },
   { url: 'https://www.theblock.co/rss.xml', platform: 'The Block', category: 'macro' },
   { url: 'https://defillama.com/rss', platform: 'DefiLlama', category: 'defi' },
+  { url: 'https://beincrypto.com/feed/', platform: 'BeInCrypto', category: 'altcoin' },
+  { url: 'https://cryptobriefing.com/feed/', platform: 'CryptoBriefing', category: 'defi' },
+  { url: 'https://cryptoslate.com/feed/', platform: 'CryptoSlate', category: 'macro' },
+  { url: 'https://www.dlnews.com/arc/outboundfeeds/rss/', platform: 'DL News', category: 'defi' },
 ]
 
 async function fetchRSSFeed(feed: FeedConfig): Promise<{

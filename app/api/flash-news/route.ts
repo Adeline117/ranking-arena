@@ -70,11 +70,11 @@ export async function GET(request: NextRequest) {
 
         // 添加筛选条件 — support new broad categories + legacy DB values
         const CATEGORY_MAP: Record<string, string[]> = {
-          btc_eth: ['crypto'],          // BTC/ETH maps to crypto in DB
-          altcoin: ['market'],          // 山寨币 maps to market in DB
+          btc_eth: ['crypto', 'btc_eth'],          // BTC/ETH: legacy 'crypto' + new 'btc_eth'
+          altcoin: ['market', 'altcoin'],           // 山寨币: legacy 'market' + new 'altcoin'
           defi: ['defi'],
-          macro: ['macro', 'regulation'], // 宏观/监管 combines both
-          exchange: ['market'],          // 交易所 — will refine when DB has this category
+          macro: ['macro', 'regulation'],           // 宏观/监管 combines both
+          exchange: ['exchange'],                   // 交易所
         }
         if (category) {
           const mapped = CATEGORY_MAP[category]

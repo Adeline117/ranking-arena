@@ -69,8 +69,9 @@ const CATEGORY_COLORS: Record<string, string> = {
   market: 'var(--color-enterprise-gradient-start)',
 }
 
-// Map legacy DB category values to display categories
+// Map DB category values to display categories
 const CATEGORY_DISPLAY_MAP: Record<string, string> = {
+  // Legacy DB values
   crypto: 'btc_eth',
   market: 'altcoin',
   regulation: 'macro',
@@ -80,6 +81,14 @@ const CATEGORY_DISPLAY_MAP: Record<string, string> = {
   defi: 'defi',
   macro: 'macro',
   exchange: 'exchange',
+}
+
+const CATEGORY_COLORS_MAPPED: Record<string, string> = {
+  ...CATEGORY_COLORS,
+  // Ensure legacy values also get colors via their mapped display category
+  crypto: CATEGORY_COLORS.btc_eth,
+  market: CATEGORY_COLORS.altcoin,
+  regulation: CATEGORY_COLORS.macro,
 }
 
 
@@ -314,7 +323,7 @@ export default function FlashNewsPage() {
                     language={language}
                     categories={CATEGORIES}
                     categoryDisplayMap={CATEGORY_DISPLAY_MAP}
-                    categoryColors={CATEGORY_COLORS}
+                    categoryColors={CATEGORY_COLORS_MAPPED}
                     importanceConfig={IMPORTANCE_CONFIG}
                     getNewsTitle={getNewsTitle}
                     getNewsContent={getNewsContent}
