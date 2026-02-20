@@ -15,6 +15,26 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABAS
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
 /**
+ * Recount and update follower_count / following_count on user_profiles.
+ * Best-effort — failures are silently ignored.
+ */
+async function updateFollowCounts(
+  supabase: ReturnType<typeof createClient<any>>,
+  followerId: string,
+  followingId: string
+): Promise<void> {
+  const [followerCountRes, followingCountRes] = await Promise.all([
+    supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('following_id', followingId),
+    supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('follower_id', followerId),
+  ])
+
+  await Promise.all([
+    supabase.from('user_profiles').update({ follower_count: followerCountRes.count ?? 0 }).eq('id', followingId),
+    supabase.from('user_profiles').update({ following_count: followingCountRes.count ?? 0 }).eq('id', followerId),
+  ])
+}
+
+/**
  * 验证用户身份并返回用户ID
  */
  
@@ -169,7 +189,6 @@ export async function POST(request: NextRequest) {
           actor_id: followerId,
           link: `/u/${followerHandle}`,
         })
-        .catch(() => {})
 
       return NextResponse.json({ 
         success: true, 
