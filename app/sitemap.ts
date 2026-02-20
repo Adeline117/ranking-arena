@@ -9,8 +9,9 @@ import { dataLogger } from "@/lib/utils/logger"
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"
 
-// 每次最多生成的 URL 数量（Google 限制 50,000）
-const MAX_URLS_PER_SITEMAP = 10000
+// Google sitemap limit: 50,000 URLs per file
+const MAX_TRADER_URLS = 49000  // reserve headroom for other pages
+const MAX_OTHER_URLS = 500
 
 /**
  * 获取所有交易员 handle
@@ -19,12 +20,12 @@ async function getAllTraders(): Promise<Array<{ handle: string; updated_at: stri
   try {
     const supabase = getSupabaseAdmin()
     
-    // 从 trader_sources 获取所有有 handle 的交易员
+    // 从 trader_sources 获取所有有 handle 的交易员（按来源权重排序，优先热门平台）
     const { data, error } = await supabase
       .from('trader_sources')
       .select('handle, source_trader_id')
       .not('handle', 'is', null)
-      .limit(MAX_URLS_PER_SITEMAP)
+      .limit(MAX_TRADER_URLS)
     
     if (error) {
       dataLogger.error('sitemap 获取交易员失败:', error)
@@ -62,7 +63,7 @@ async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string
       .from('posts')
       .select('id, updated_at, created_at')
       .order('hot_score', { ascending: false })
-      .limit(1000) // 限制热门帖子数量
+      .limit(MAX_OTHER_URLS)
     
     if (error) {
       dataLogger.error('sitemap 获取帖子失败:', error)
@@ -345,18 +346,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }))
 
-  // 合并所有页面
-  const allPages = [
+  // 合并所有页面（traders 优先，总量控制在 Google 50k 限制内）
+  return [
     ...staticPages,
-    ...traderPages,
+    ...traderPages,         // ~44,962 — SEO 核心资产
     ...postPages,
     ...groupPages,
     ...libraryPages,
     ...userPages,
   ]
-  
-  // 限制总数量
-  return allPages.slice(0, MAX_URLS_PER_SITEMAP)
 }
 
 // 配置：每 6 小时重新生成

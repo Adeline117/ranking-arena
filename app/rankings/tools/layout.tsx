@@ -3,28 +3,46 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Tools - Arena',
+  title: 'Best Crypto Trading Tools & Bots — Community Rankings | Arena',
   description:
-    'Discover top crypto trading tools — analytics platforms, portfolio trackers, on-chain explorers, and DeFi dashboards. Community ratings and reviews.',
+    'Discover and rate 190+ crypto trading tools: trading bots (3Commas, Pionex), analytics (Glassnode, Nansen, Coinglass), on-chain dashboards (Dune, DefiLlama), quant platforms, portfolio trackers, and more.',
+  keywords: 'crypto trading tools, best crypto bots, crypto analytics, glassnode, nansen, coinglass, 3commas, dune analytics, defi tools',
   alternates: {
     canonical: `${baseUrl}/rankings/tools`,
   },
   openGraph: {
-    title: 'Tool Rankings | Arena',
-    description: 'Top crypto trading tools ranked by community ratings — analytics, trackers, and DeFi dashboards.',
+    title: 'Best Crypto Trading Tools & Bots — Community Rankings | Arena',
+    description: 'Discover 190+ crypto trading tools rated by the community — bots, analytics, on-chain dashboards, quant platforms.',
     url: `${baseUrl}/rankings/tools`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Tool Rankings' }],
+    images: [{ url: `${baseUrl}/og-image.png`, width: 1200, height: 630, alt: 'Arena Trading Tools Rankings' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Tool Rankings | Arena',
-    description: 'Top crypto trading tools ranked by community ratings.',
+    title: 'Best Crypto Trading Tools | Arena',
+    description: '190+ crypto tools ranked by community — bots, analytics, quant platforms.',
     images: [`${baseUrl}/og-image.png`],
   },
 }
 
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Crypto Trading Tools Rankings',
+  description: 'Community ratings and rankings for 190+ crypto trading tools including bots, analytics platforms, on-chain dashboards, and quant platforms.',
+  url: `${baseUrl}/rankings/tools`,
+  provider: { '@type': 'Organization', name: 'Arena', url: baseUrl },
+}
+
 export default function ToolRankingsLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {children}
+    </>
+  )
 }

@@ -61,6 +61,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://www.arenafi.org"),
   applicationName: "Arena",
   keywords: [
+    "crypto trader ranking",
+    "crypto leaderboard",
+    "copy trading",
+    "best crypto traders",
+    "binance trader ranking",
+    "hyperliquid leaderboard",
+    "crypto ROI ranking",
+    "top crypto traders 2024",
     "跟单交易",
     "交易员排行榜",
     "加密货币交易员",
@@ -167,6 +175,23 @@ export default function RootLayout({
           {/* eslint-disable-next-line @next/next/no-css-tags */}
           <link rel="stylesheet" href="/styles/animations.css" />
         </noscript>
+
+        {/* WebSite structured data — helps Google understand sitelinks search box */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            name: 'Arena',
+            url: 'https://www.arenafi.org',
+            description: 'Crypto trader rankings across 30+ exchanges — Binance, Bybit, OKX, Hyperliquid and more.',
+            potentialAction: {
+              '@type': 'SearchAction',
+              target: { '@type': 'EntryPoint', urlTemplate: 'https://www.arenafi.org/?q={search_term_string}' },
+              'query-input': 'required name=search_term_string',
+            },
+          }) }}
+        />
       </head>
       <body
         className="font-sans antialiased"
