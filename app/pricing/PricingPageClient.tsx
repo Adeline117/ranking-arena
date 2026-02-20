@@ -32,7 +32,11 @@ function resolved(value: string, key: string, fallback: string): string {
   return value === key ? fallback : value
 }
 
-export default function PricingPageClient() {
+interface PricingPageClientProps {
+  lifetimeCount?: number
+}
+
+export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClientProps) {
   const { email } = useAuthSession()
   const { t, language: locale } = useLanguage()
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly')
@@ -296,6 +300,40 @@ export default function PricingPageClient() {
                 </p>
               </div>
             </div>
+
+            {/* Founding member progress bar */}
+            {(() => {
+              const TOTAL_SPOTS = 200
+              const taken = Math.min(lifetimeCount, TOTAL_SPOTS)
+              const remaining = TOTAL_SPOTS - taken
+              const pct = Math.max(2, (taken / TOTAL_SPOTS) * 100)
+              return (
+                <div style={{ marginTop: tokens.spacing[6] }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#f59e0b' }}>
+                      {taken} / {TOTAL_SPOTS} spots taken
+                    </span>
+                    <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
+                      {remaining} remaining
+                    </span>
+                  </div>
+                  <div style={{
+                    height: 6,
+                    borderRadius: 999,
+                    background: 'color-mix(in srgb, #f59e0b 18%, var(--color-bg-primary))',
+                    overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${pct}%`,
+                      borderRadius: 999,
+                      background: 'linear-gradient(90deg, #f59e0b, #fbbf24)',
+                      transition: 'width 0.6s ease',
+                    }} />
+                  </div>
+                </div>
+              )
+            })()}
 
             <Link
               href={ctaHref}
