@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter } from 'events'
+import { logger } from '../logger.js'
 import type {
   Job,
   JobResult,
@@ -362,7 +363,7 @@ export class Scheduler extends EventEmitter {
 
       // Start job execution (don't await - run in parallel)
       this.executeJob(job).catch((err) => {
-        console.error(`[Scheduler] Unexpected error executing job ${job.id}:`, err)
+        logger.error(`[Scheduler] Unexpected error executing job ${job.id}`, err instanceof Error ? err : new Error(String(err)))
       })
     }
   }
@@ -421,7 +422,7 @@ export class Scheduler extends EventEmitter {
       }
 
       const errorMsg = err instanceof Error ? err.message : String(err)
-      console.error(`[Scheduler] Job ${job.id} failed: ${errorMsg}`)
+      logger.error(`[Scheduler] Job ${job.id} failed: ${errorMsg}`, err instanceof Error ? err : new Error(String(err)))
 
       // Check if we should retry
       if (job.retryCount < job.maxRetries) {

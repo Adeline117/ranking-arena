@@ -21,6 +21,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { BinanceFuturesConnectorWorker } from './binance-connector.js'
 import { BybitFuturesConnectorWorker } from './bybit-connector.js'
 import type { ConnectorInterface, RefreshJobRow } from './types.js'
+import { logger } from '../logger.js'
 
 // Configuration
 const WORKER_ID = process.env.WORKER_ID || `worker-${Math.random().toString(36).slice(2, 8)}`
@@ -61,7 +62,7 @@ async function run(): Promise<void> {
     try {
       await pollAndExecute(db)
     } catch (error) {
-      console.error(`[${WORKER_ID}] Poll error:`, error)
+      logger.error(`[${WORKER_ID}] Poll error`, error instanceof Error ? error : new Error(String(error)))
     }
 
     // Wait before next poll
@@ -89,7 +90,7 @@ async function pollAndExecute(db: SupabaseClient): Promise<void> {
   if (error) {
     // Table might not exist yet; don't spam logs
     if (!error.message.includes('does not exist')) {
-      console.error(`[${WORKER_ID}] Failed to claim jobs:`, error.message)
+      logger.error(`[${WORKER_ID}] Failed to claim jobs`, new Error(error.message))
     }
     return
   }
@@ -150,7 +151,7 @@ async function executeJob(db: SupabaseClient, job: RefreshJobRow): Promise<void>
     console.log(`[${WORKER_ID}] Job ${job.id} completed in ${duration}ms`)
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
-    console.error(`[${WORKER_ID}] Job ${job.id} failed:`, errorMsg)
+    logger.error(`[${WORKER_ID}] Job ${job.id} failed`, error instanceof Error ? error : new Error(String(error)), { jobId: job.id })
 
     // Mark job as failed (the DB function handles retry logic)
     await db.rpc('complete_refresh_job', {
@@ -327,6 +328,6 @@ function sleep(ms: number): Promise<void> {
 // Start
 // ============================================
 run().catch(err => {
-  console.error('Fatal error:', err)
+  logger.error('Fatal error in job runner', err instanceof Error ? err : new Error(String(err)))
   process.exit(1)
 })

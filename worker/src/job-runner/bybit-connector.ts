@@ -13,6 +13,7 @@ import type {
   SnapshotWindow,
   SnapshotMetrics,
 } from './types.js'
+import { logger } from '../logger.js'
 
 const BYBIT_API_BASE = 'https://api2.bybit.com/fapi/beehive/public/v1/common'
 
@@ -240,7 +241,7 @@ export class BybitFuturesConnectorWorker implements ConnectorInterface {
           })
         }
       } catch (err) {
-        console.error(`[bybit] Fetch error page ${page}:`, err)
+        logger.error(`[bybit] Fetch error page ${page}`, err instanceof Error ? err : new Error(String(err)))
         break
       }
     }

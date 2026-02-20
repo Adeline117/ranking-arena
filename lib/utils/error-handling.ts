@@ -4,6 +4,7 @@
  */
 
 import { t } from '@/lib/i18n'
+import { logger } from '@/lib/logger'
 
 // 错误类型定义
 export interface ErrorInfo {
@@ -320,8 +321,8 @@ export function createErrorHandler(onError?: (errorInfo: ErrorInfo) => void) {
     if (onError) {
       onError(errorInfo)
     } else {
-      // 默认行为：在控制台记录错误
-      console.error('Handled error:', errorInfo)
+      // 默认行为：使用logger记录错误
+      logger.error('Handled error', { errorInfo })
     }
   }
 }

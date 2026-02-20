@@ -17,6 +17,7 @@
 
 import { Scheduler } from './scheduler/index.js'
 import { ProxyPoolManager } from './proxy-pool/index.js'
+import { logger } from './logger.js'
 import {
   executeFetcherJob,
   getEnabledPlatforms,
@@ -143,7 +144,7 @@ async function runWorker(config: WorkerConfig): Promise<void> {
   }
 
   if (platforms.length === 0) {
-    console.error('[Worker] No platforms to run')
+    logger.error('[Worker] No platforms to run', new Error('No platforms configured'))
     process.exit(1)
   }
 
@@ -257,6 +258,6 @@ function printSummary(scheduler: Scheduler): void {
 
 const config = parseArgs()
 runWorker(config).catch((err) => {
-  console.error('[Worker] Fatal error:', err)
+  logger.error('[Worker] Fatal error', err instanceof Error ? err : new Error(String(err)))
   process.exit(1)
 })

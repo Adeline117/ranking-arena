@@ -9,6 +9,7 @@
  */
 
 import type { ProxyNode, ProxyPoolConfig, ProxyStatus } from '../types.js'
+import { logger } from '../logger.js'
 
 const DEFAULT_CONFIG: ProxyPoolConfig = {
   clashApiUrl: 'http://127.0.0.1:9090',
@@ -137,7 +138,7 @@ export class ProxyPoolManager {
 
       console.log(`[ProxyPool] Refreshed proxy list: ${this.nodes.size} nodes`)
     } catch (err) {
-      console.error('[ProxyPool] Failed to refresh proxy list:', err)
+      logger.error('[ProxyPool] Failed to refresh proxy list', err instanceof Error ? err : new Error(String(err)))
     }
   }
 
@@ -299,7 +300,7 @@ export class ProxyPoolManager {
   async switchProxy(nodeId: string): Promise<boolean> {
     const node = this.nodes.get(nodeId)
     if (!node) {
-      console.error(`[ProxyPool] Node ${nodeId} not found`)
+      logger.warn(`[ProxyPool] Node ${nodeId} not found`)
       return false
     }
 
@@ -315,7 +316,7 @@ export class ProxyPoolManager {
       console.log(`[ProxyPool] Switched to proxy: ${nodeId}`)
       return true
     } catch (err) {
-      console.error(`[ProxyPool] Failed to switch to ${nodeId}:`, err)
+      logger.error(`[ProxyPool] Failed to switch to ${nodeId}`, err instanceof Error ? err : new Error(String(err)))
       return false
     }
   }
