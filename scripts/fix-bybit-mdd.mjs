@@ -10,6 +10,7 @@
  */
 import 'dotenv/config'
 import { createClient } from '@supabase/supabase-js'
+import https from 'https'
 
 const sb = createClient(
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -18,27 +19,47 @@ const sb = createClient(
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
+/** Use Node.js https module directly to avoid undici pool conflict with Supabase */
+function httpsGet(url, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url)
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'GET',
+      headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Connection': 'close' },
+      timeout: timeoutMs,
+    }
+    const req = https.request(options, (res) => {
+      let body = ''
+      res.on('data', chunk => { body += chunk })
+      res.on('end', () => resolve({ status: res.statusCode, body }))
+    })
+    req.on('timeout', () => { req.destroy(new Error('Request timed out')) })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
 const PERIOD_PREFIX = { '7D': 'sevenDay', '30D': 'thirtyDay', '90D': 'ninetyDay' }
 
 async function fetchLeaderIncome(leaderMark) {
-  const delays = [500, 1500, 3000]
+  const delays = [500, 1500]
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const res = await fetch(
-        `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income?leaderMark=${encodeURIComponent(leaderMark)}`,
-        { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) }
+      const { status, body } = await httpsGet(
+        `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income?leaderMark=${encodeURIComponent(leaderMark)}`
       )
-      if (res.status === 403) { console.log(`  WAF 403 for ${leaderMark.substring(0, 10)}`); return null }
-      if (res.status === 429) { await sleep(3000 * (attempt + 1)); continue }
-      if (!res.ok) return null
-      const text = await res.text()
-      if (text.startsWith('<')) return null  // HTML error page
-      const json = JSON.parse(text)
+      if (status === 403) { console.log(`  WAF 403 for ${leaderMark.substring(0, 10)}`); return null }
+      if (status === 429) { await sleep(3000 * (attempt + 1)); continue }
+      if (status !== 200) return null
+      if (body.startsWith('<')) return null
+      const json = JSON.parse(body)
       if (json.retCode !== 0) return null
       return json.result
     } catch (e) {
       if (attempt < 2) { await sleep(delays[attempt]); }
-      else console.log(`  fetch err ${leaderMark.substring(0, 10)}: ${e.message?.substring(0, 60)}`)
+      else console.log(`  https err ${leaderMark.substring(0, 10)}: ${e.message?.substring(0, 60)}`)
     }
   }
   return null
@@ -90,11 +111,18 @@ async function main() {
   const traders = [...byTrader.keys()]
   console.log(`Unique traders: ${traders.length}`)
 
+  // Skip username-format IDs (not base64 leaderMarks) — handled by fix-bybit-username-mdd.mjs
+  const isBase64Mark = id => id.includes('=') || id.includes('+') || id.includes('/') || /^[A-Za-z0-9+/]{16,}$/.test(id)
+  const base64Traders = traders.filter(t => isBase64Mark(t))
+  const skippedUsernames = traders.filter(t => !isBase64Mark(t))
+  console.log(`Base64 leaderMark traders: ${base64Traders.length} (will process)`)
+  console.log(`Username-format traders: ${skippedUsernames.length} (skipped - use fix-bybit-username-mdd.mjs)`)
+
   let updated = 0, noData = 0, apiErr = 0, apiReturns0 = 0
   const startTime = Date.now()
 
-  for (let i = 0; i < traders.length; i++) {
-    const traderId = traders[i]
+  for (let i = 0; i < base64Traders.length; i++) {
+    const traderId = base64Traders[i]
     const rows = byTrader.get(traderId)
 
     const result = await fetchLeaderIncome(traderId)
@@ -130,7 +158,7 @@ async function main() {
 
     await sleep(400)
 
-    if ((i + 1) % 20 === 0 || i === traders.length - 1) {
+    if ((i + 1) % 20 === 0 || i === base64Traders.length - 1) {
       const mins = ((Date.now() - startTime) / 60000).toFixed(1)
       console.log(`  [${i + 1}/${traders.length}] updated=${updated} noData=${noData} apiErr=${apiErr} zeroMDD=${apiReturns0} | ${mins}m`)
     }
