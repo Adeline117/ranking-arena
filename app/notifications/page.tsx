@@ -281,7 +281,7 @@ export default function NotificationsPage() {
         </Box>
 
         {/* 过滤标签 */}
-        <Box style={{
+        <Box className="notif-filters" style={{
           display: 'flex',
           gap: tokens.spacing[2],
           marginBottom: tokens.spacing[4],
@@ -436,6 +436,9 @@ export default function NotificationsPage() {
           </Box>
         )}
       </Box>
+      <style>{`
+        .notif-filters::-webkit-scrollbar { display: none; }
+      `}</style>
       <MobileBottomNav />
     </Box>
   )

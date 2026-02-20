@@ -218,13 +218,8 @@ function HotContent() {
         const postsData: Post[] = data.map((post: Record<string, unknown>) => {
           const createdAt = new Date(post.created_at as string)
           const diffMs = Date.now() - createdAt.getTime()
-          const diffHours = Math.floor(diffMs / 3600000)
-          const diffDays = Math.floor(diffHours / 24)
 
-          let timeStr = ''
-          if (diffDays > 0) timeStr = `${diffDays}d`
-          else if (diffHours > 0) timeStr = `${diffHours}h`
-          else timeStr = `${Math.floor(diffMs / 60000)}m`
+          const timeStr = formatTimeAgo(post.created_at as string, language as 'zh' | 'en')
 
           const groupName = (post.group_name as string) || t('generalDiscussion')
           const groupNameEn = (post.group_name_en as string) || t('generalDiscussionEn')

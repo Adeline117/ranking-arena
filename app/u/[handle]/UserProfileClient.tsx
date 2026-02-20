@@ -832,38 +832,30 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
         <Box key={activeProfileTab} style={{ animation: 'fadeInUp 0.4s ease-out forwards' }}>
           {activeProfileTab === 'overview' && (
             <Box
-              className="profile-content profile-grid"
-              style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: tokens.spacing[8] }}
+              className="profile-content"
+              style={{ maxWidth: 900 }}
             >
-              {/* Main column */}
-              <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
-                {/* Guidance cards removed */}
-
-                {/* Posts */}
-                <Box bg="secondary" p={4} radius="lg" border="primary">
-                  <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
-                    <Text size="lg" weight="black">{t('posts')}</Text>
-                    {isOwnProfile && (
-                      <button
-                        onClick={() => router.push(`/u/${handle}/new`)}
-                        style={{
-                          padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                          borderRadius: tokens.radius.md, border: 'none',
-                          background: tokens.colors.accent.brand, color: tokens.colors.white,
-                          fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.black,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {t('newPost')}
-                      </button>
-                    )}
-                  </Box>
-                  <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
+              {/* Posts */}
+              <Box bg="secondary" p={4} radius="lg" border="primary">
+                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+                  <Text size="lg" weight="black">{t('posts')}</Text>
+                  {isOwnProfile && (
+                    <button
+                      onClick={() => router.push(`/u/${handle}/new`)}
+                      style={{
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                        borderRadius: tokens.radius.md, border: 'none',
+                        background: tokens.colors.accent.brand, color: tokens.colors.white,
+                        fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.black,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {t('newPost')}
+                    </button>
+                  )}
                 </Box>
+                <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
               </Box>
-
-              {/* Sidebar column removed per Adeline */}
-              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }} />
             </Box>
           )}
 
