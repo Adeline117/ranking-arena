@@ -76,7 +76,9 @@ export default function ResourcesClient({ initialItems, initialFeatured, initial
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
-  const isInitialRender = useRef(true)
+  // Skip the initial client-side fetch only when SSR already provided data.
+  // If initialItems is empty (e.g. stale ISR cache), fetch immediately on mount.
+  const isInitialRender = useRef(initialItems.length > 0)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const isZh = language === 'zh'
 

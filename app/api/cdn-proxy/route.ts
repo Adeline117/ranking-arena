@@ -1,17 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
- * Proxy for R2 CDN files to handle CORS for pdf.js
+ * Proxy for PDF/EPUB files to handle CORS and CSP restrictions.
  * Usage: /api/cdn-proxy?url=https://cdn.arenafi.org/papers/xxx.pdf
+ *        /api/cdn-proxy?url=https://arxiv.org/pdf/1234.5678
  */
+
+// Allowlist of trusted domains that can be proxied
+const ALLOWED_PREFIXES = [
+  'https://cdn.arenafi.org/',
+  'https://arxiv.org/pdf/',
+  'https://arxiv.org/abs/',
+  'https://arxiv.org/e-print/',
+]
+
+function isAllowedUrl(url: string): boolean {
+  return ALLOWED_PREFIXES.some(prefix => url.startsWith(prefix))
+}
+
 export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams.get('url')
-  if (!url || !url.startsWith('https://cdn.arenafi.org/')) {
+  if (!url || !isAllowedUrl(url)) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
   }
 
   try {
-    const resp = await fetch(url)
+    const resp = await fetch(url, {
+      headers: {
+        // Pass a reasonable user-agent so arxiv doesn't block server-side fetches
+        'User-Agent': 'Mozilla/5.0 (compatible; Arena/1.0; +https://www.arenafi.org)',
+      },
+    })
     if (!resp.ok) {
       return NextResponse.json({ error: `Upstream ${resp.status}` }, { status: resp.status })
     }

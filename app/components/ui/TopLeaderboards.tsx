@@ -208,6 +208,10 @@ function LeaderboardCard({ column }: { column: LeaderboardColumn }) {
 }
 
 export default function TopLeaderboards({ columns }: TopLeaderboardsProps) {
+  // Don't render if all columns are empty and not loading
+  const allEmpty = columns.every(col => !col.loading && col.entries.length === 0)
+  if (allEmpty) return null
+
   return (
     <>
       <style>{`

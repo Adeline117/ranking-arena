@@ -473,6 +473,16 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // 加密图标使用较短缓存（内容可能更新），覆盖上面的通用规则
+        source: '/icons/crypto/:file*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=3600, stale-while-revalidate=86400',
+          },
+        ],
+      },
+      {
         // Apple App Site Association - serve with correct content type
         source: '/.well-known/apple-app-site-association',
         headers: [

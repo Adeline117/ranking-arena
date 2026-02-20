@@ -2,17 +2,18 @@ import { SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { round2 } from '@/lib/utils/currency'
 
 /**
- * Arena Score V2 计算模块
+ * Arena Score V3 计算模块
  *
- * 评分结构：收益分（0-70）+ PnL 分（0-15）+ 回撤分（0-8）+ 稳定分（0-7）= 总分（0-100）
+ * 评分结构：收益分（0-60）+ PnL 分（0-40）= 总分（0-100）
  *
- * V2 变更：从 Return Score 中分出 15 分给 PnL Score，
- * 综合评估交易效率（ROI）与绝对盈利能力（PnL）。
+ * V3 变更：移除回撤分和稳定分，只保留 ROI 和 PnL 两个维度。
+ * PnL 参数重新标定，基于真实数据分布（中位数对应约13分）。
  *
  * 目标分布：
- * - 大多数普通交易员：30-40 分
- * - 60 分 = 明显优秀交易员
- * - 80 分以上 = 极少数（凤毛麟角）
+ * - 中位数交易员：~30 分（7D）/ ~25 分（30D/90D）
+ * - p75：~60 分
+ * - p90：~80 分
+ * - 顶尖 p99：~95-100 分
  */
 
 // ============================================
@@ -83,18 +84,18 @@ export const ARENA_CONFIG = {
   // 稳定性计算的基线胜率
   WIN_RATE_BASELINE: 45,
   
-  // PnL 评分参数（base = 归一化基数, coeff = tanh 系数）
+  // PnL 评分参数（V3: 基于真实数据分布标定，中位数≈13分，p90≈35分）
   PNL_PARAMS: {
-    '7D': { base: 500, coeff: 0.40 },
-    '30D': { base: 2000, coeff: 0.35 },
-    '90D': { base: 5000, coeff: 0.30 },
+    '7D':  { base: 300,  coeff: 0.42 },
+    '30D': { base: 600,  coeff: 0.30 },
+    '90D': { base: 650,  coeff: 0.27 },
   },
 
-  // 分数权重
-  MAX_RETURN_SCORE: 70,
-  MAX_PNL_SCORE: 15,
-  MAX_DRAWDOWN_SCORE: 8,
-  MAX_STABILITY_SCORE: 7,
+  // 分数权重（V3：只保留 ROI + PnL，总分 100）
+  MAX_RETURN_SCORE: 60,
+  MAX_PNL_SCORE: 40,
+  MAX_DRAWDOWN_SCORE: 0,   // V3 已移除
+  MAX_STABILITY_SCORE: 0,  // V3 已移除
   
   // 总体分数权重
   OVERALL_WEIGHTS: {
@@ -340,38 +341,21 @@ export function calculateArenaScore(
   input: TraderScoreInput,
   period: Period
 ): ArenaScoreResult {
-  const { roi, pnl, maxDrawdown, winRate, source } = input
+  const { roi, pnl } = input
 
-  // 判断数据完整性
-  const scoreConfidence = getScoreConfidence(maxDrawdown, winRate)
-
-  // 计算各项分数（缺失数据使用默认中位值）
+  // V3: 只计算 ROI 和 PnL 两个维度
   const returnScore = calculateReturnScore(roi, period)
   const pnlScore = calculatePnlScore(pnl, period)
-  const drawdownScore = calculateDrawdownScore(maxDrawdown, period)
-  const stabilityScore = calculateStabilityScore(winRate, period)
 
-  // 原始总分
-  const rawTotal = returnScore + pnlScore + drawdownScore + stabilityScore
-
-  // 数据完整性惩罚：缺失 win_rate/max_drawdown 时降低总分
-  // 这确保数据更完整的交易员排名更高
-  const confidenceMultiplier = ARENA_CONFIG.CONFIDENCE_MULTIPLIER[scoreConfidence]
-
-  // 数据源信任度权重：低信任度平台的分数会被适度压缩
-  const trustWeight = source ? (SOURCE_TRUST_WEIGHT[source] ?? 0.75) : 1.0
-  // Trust weight 只在低于 1.0 时生效，且影响范围有限（最低 80% 原分）
-  const trustMultiplier = 0.8 + 0.2 * trustWeight
-
-  const totalScore = clip(rawTotal * confidenceMultiplier * trustMultiplier, 0, 100)
+  const totalScore = clip(returnScore + pnlScore, 0, 100)
 
   return {
-    totalScore: round2(totalScore),  // 保留2位小数
+    totalScore: round2(totalScore),
     returnScore: round2(returnScore),
     pnlScore: round2(pnlScore),
-    drawdownScore: round2(drawdownScore),
-    stabilityScore: round2(stabilityScore),
-    scoreConfidence,
+    drawdownScore: 0,      // V3 已移除
+    stabilityScore: 0,     // V3 已移除
+    scoreConfidence: 'full',  // V3 不再区分置信度
   }
 }
 

@@ -1643,6 +1643,13 @@ select:focus-visible {
   }
 }
 
+/* Enforce single column below the 640px breakpoint at which 2-col masonry begins */
+@media (max-width: 639px) {
+  .post-feed-masonry {
+    columns: 1 !important;
+  }
+}
+
 /* Post modal - mobile bottom sheet */
 @media (max-width: 767px) {
   .post-modal-overlay {

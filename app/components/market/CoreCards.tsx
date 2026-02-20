@@ -216,16 +216,56 @@ export default function CoreCards() {
     let alive = true
     const controller = new AbortController()
 
+    const spotRowsToCoins = (spots: Array<{ symbol: string; price: number; change24h: number }>): CoinRow[] =>
+      spots
+        .filter(s => s.change24h != null && s.price != null)
+        .map(s => ({
+          symbol: `${s.symbol.toUpperCase()}-USD`,
+          price: s.price?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '0',
+          changePct: `${s.change24h >= 0 ? '+' : ''}${s.change24h.toFixed(2)}%`,
+          direction: s.change24h >= 0 ? 'up' as const : 'down' as const,
+        }))
+
     const fetchMarketData = () => {
       fetch('/api/market', { signal: controller.signal })
         .then(r => r.json())
-        .then(json => {
+        .then(async json => {
           if (!alive) return
           const rows: CoinRow[] = json.rows ?? []
           if (rows.length === 0) throw new Error('empty')
           const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
-          setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
-          setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
+          let primaryLosers = sorted.filter(r => r.direction === 'down').slice(-5).reverse()
+          let primaryGainers = sorted.filter(r => r.direction === 'up').slice(0, 5)
+
+          // Supplement with spot data if primary market doesn't have enough gainers/losers
+          if (primaryLosers.length < 5 || primaryGainers.length < 5) {
+            try {
+              const spotRes = await fetch('/api/market/spot', { signal: controller.signal })
+              const spots: Array<{ symbol: string; price: number; change24h: number }> = await spotRes.json()
+              if (Array.isArray(spots)) {
+                const spotRows = spotRowsToCoins(spots)
+                const primarySymbols = new Set(rows.map(r => r.symbol))
+                const spotSorted = [...spotRows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
+
+                if (primaryGainers.length < 5) {
+                  const spotGainers = spotSorted.filter(r => r.direction === 'up' && !primarySymbols.has(r.symbol))
+                  primaryGainers = [...primaryGainers, ...spotGainers].slice(0, 5)
+                }
+                if (primaryLosers.length < 5) {
+                  const spotLosers = spotSorted.filter(r => r.direction === 'down' && !primarySymbols.has(r.symbol)).slice(-20).reverse()
+                  const needed = 5 - primaryLosers.length
+                  primaryLosers = [...primaryLosers, ...spotLosers.slice(0, needed)]
+                  // Re-sort by changePct ascending (most negative first)
+                  primaryLosers.sort((a, b) => parseFloat(a.changePct) - parseFloat(b.changePct))
+                }
+              }
+            } catch {
+              // Keep whatever we have from primary
+            }
+          }
+
+          setGainers(primaryGainers)
+          setLosers(primaryLosers)
           setMarketLoaded(true)
         })
         .catch(() => {
@@ -235,14 +275,7 @@ export default function CoreCards() {
             .then(r => r.json())
             .then((spots: Array<{ symbol: string; price: number; change24h: number }>) => {
               if (!alive || !Array.isArray(spots)) return
-              const rows: CoinRow[] = spots
-                .filter(s => s.change24h != null && s.price != null)
-                .map(s => ({
-                  symbol: `${s.symbol.toUpperCase()}-USD`,
-                  price: s.price?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '0',
-                  changePct: `${s.change24h >= 0 ? '+' : ''}${s.change24h.toFixed(2)}%`,
-                  direction: s.change24h >= 0 ? 'up' as const : 'down' as const,
-                }))
+              const rows = spotRowsToCoins(spots)
               const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
               setGainers(sorted.filter(r => r.direction === 'up').slice(0, 5))
               setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())

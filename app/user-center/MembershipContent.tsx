@@ -35,8 +35,9 @@ const CloseIcon = ({ size = 16 }: { size?: number }) => (
 
 // Pricing config
 const PRICING = {
-  monthly: { price: 12.99, original: 15 },
-  yearly: { price: 99, original: 155.88 },
+  monthly: { price: 4.99, original: null as number | null },
+  yearly: { price: 29.99, original: 59.88 },
+  lifetime: { price: 49.99, spots: 200 },
 }
 
 // Pro features list
@@ -57,9 +58,7 @@ const getComparisonData = (t: (key: string) => string) => [
   { feature: t('compFeatureBasicFilters'), free: true, pro: true },
   { feature: t('compFeatureTraderDetails'), free: true, pro: true },
   { feature: t('compFeatureAdvancedFilters'), free: false, pro: t('compProMultiFilter') },
-  { feature: t('compFeatureCsvExport'), free: false, pro: t('compProUnlimited') },
   { feature: t('compFeatureRealtimeData'), free: t('compFreeHourlyRefresh'), pro: t('compProRealtimePush') },
-  { feature: t('compFeatureSmartMoney'), free: false, pro: t('compProAnomalyDetection') },
   { feature: t('compFeatureTraderCompare'), free: false, pro: t('compProUpTo10Traders') },
   { feature: t('compFeatureTraderAlerts'), free: false, pro: t('compProInAppEmailPush') },
   { feature: t('compFeatureArenaScore'), free: t('compFreeTotalScore'), pro: t('compProBreakdownPercentile') },
@@ -105,7 +104,7 @@ export default function MembershipContent() {
 
   const [info, setInfo] = useState<MembershipInfo | null>(null)
   const [loading, setLoading] = useState(true)
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly')
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | 'lifetime'>('yearly')
   const [subscribing, setSubscribing] = useState(false)
 
   useEffect(() => {
@@ -359,14 +358,9 @@ export default function MembershipContent() {
                   <Text size="xs" color="tertiary">{t('monthlySubscription')}</Text>
                 </Box>
                 <Box style={{ textAlign: 'right' }}>
-                  <Box style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <Text size="xs" style={{ textDecoration: 'line-through', color: 'var(--color-text-tertiary)' }}>
-                      ${PRICING.monthly.original}
-                    </Text>
-                    <Text size="xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                      ${PRICING.monthly.price}
-                    </Text>
-                  </Box>
+                  <Text size="xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
+                    ${PRICING.monthly.price}
+                  </Text>
                   <Text size="xs" color="tertiary">{t('perMonth')}</Text>
                 </Box>
               </Box>
@@ -421,6 +415,49 @@ export default function MembershipContent() {
                 </Box>
               </Box>
             </Box>
+            {/* Lifetime */}
+            <Box
+              onClick={() => setSelectedPlan('lifetime')}
+              style={{
+                padding: tokens.spacing[4],
+                borderRadius: tokens.radius.lg,
+                border: `2px solid ${selectedPlan === 'lifetime' ? '#f59e0b' : 'var(--color-border-primary)'}`,
+                background: selectedPlan === 'lifetime' ? 'color-mix(in srgb, #f59e0b 8%, transparent)' : 'transparent',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                position: 'relative',
+                marginTop: tokens.spacing[3],
+              }}
+            >
+              <Box
+                style={{
+                  position: 'absolute',
+                  top: -8,
+                  right: 12,
+                  padding: '2px 8px',
+                  background: '#f59e0b',
+                  borderRadius: tokens.radius.full,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: '#fff',
+                }}
+              >
+                {isZh ? `前${PRICING.lifetime.spots}名` : `First ${PRICING.lifetime.spots}`}
+              </Box>
+
+              <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Text size="sm" weight="bold" style={{ color: '#f59e0b' }}>{isZh ? '创始会员终身' : 'Founding Member Lifetime'}</Text>
+                  <Text size="xs" color="tertiary">{isZh ? '一次付款 · 永久有效' : 'One-time · Forever'}</Text>
+                </Box>
+                <Box style={{ textAlign: 'right' }}>
+                  <Text size="xl" weight="black" style={{ color: '#f59e0b' }}>
+                    ${PRICING.lifetime.price}
+                  </Text>
+                  <Text size="xs" color="tertiary">{isZh ? '一次性' : 'one-time'}</Text>
+                </Box>
+              </Box>
+            </Box>
           </Box>
 
           {/* Subscribe Button */}
@@ -431,19 +468,25 @@ export default function MembershipContent() {
             style={{
               width: '100%',
               padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-              background: 'var(--color-pro-badge-bg)',
+              background: selectedPlan === 'lifetime' ? '#f59e0b' : 'var(--color-pro-badge-bg)',
               border: 'none',
-              boxShadow: '0 4px 16px var(--color-pro-badge-shadow)',
+              boxShadow: selectedPlan === 'lifetime' ? '0 4px 16px rgba(245,158,11,0.3)' : '0 4px 16px var(--color-pro-badge-shadow)',
               fontSize: tokens.typography.fontSize.md,
               fontWeight: 700,
             }}
           >
-            {subscribing ? t('processing') : `${t('startSubscription')} - $${selectedPlan === 'yearly' ? PRICING.yearly.price : PRICING.monthly.price}`}
+            {subscribing
+              ? t('processing')
+              : selectedPlan === 'lifetime'
+                ? (isZh ? `立即成为创始会员 - $${PRICING.lifetime.price}` : `Get Founding Access - $${PRICING.lifetime.price}`)
+                : `${t('startSubscription')} - $${selectedPlan === 'yearly' ? PRICING.yearly.price : PRICING.monthly.price}`}
           </Button>
 
           <Box style={{ marginTop: tokens.spacing[3], textAlign: 'center' }}>
             <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
-              {t('cancelAnytime')} · {t('securePayment')}
+              {selectedPlan === 'lifetime'
+                ? (isZh ? '一次付款，终身有效，价格以后不会再有' : 'One-time payment. Lifetime access. Price will not return.')
+                : `${t('cancelAnytime')} · ${t('securePayment')}`}
             </Text>
           </Box>
         </div>
@@ -680,13 +723,6 @@ export default function MembershipContent() {
             value={info?.usage?.followedTraders || 0}
             max={isPro ? FEATURE_LIMITS.pro.maxFollows : FEATURE_LIMITS.free.maxFollows}
           />
-          {isPro && (
-            <UsageStat
-              label={t('apiCallsTodayLabel')}
-              value={info?.usage?.apiCallsToday || 0}
-              max={FEATURE_LIMITS.pro.apiCallsPerDay}
-            />
-          )}
         </div>
       </div>
 

@@ -5,7 +5,7 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 export const metadata: Metadata = {
   title: 'Pro 会员',
   description:
-    'Upgrade to Arena Pro for trader alerts, comparison tools, advanced filters, data export, and 1-year historical data. From $8.25/month.',
+    'Upgrade to Arena Pro for trader alerts, comparison tools, advanced filters, and 1-year historical data. From $4.99/month. Founding Member Lifetime access at $49.99.',
   alternates: {
     canonical: `${baseUrl}/pricing`,
   },
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Pro 会员',
     description:
-      'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $8.25/month.',
+      'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
     url: `${baseUrl}/pricing`,
     siteName: 'Arena',
     type: 'website',
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Pro 会员 | Arena',
-    description: 'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $8.25/month.',
+    description: 'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
     images: [`${baseUrl}/og-image.png`],
     creator: '@arenafi',
   },

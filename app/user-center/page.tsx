@@ -196,7 +196,6 @@ function UserCenterPage() {
             </Button>
           </Box>
         </Box>
-        <MobileBottomNav />
       </>
     )
   }
@@ -208,7 +207,6 @@ function UserCenterPage() {
         <div className="min-h-screen flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: tokens.colors.accent.brand }} />
         </div>
-        <MobileBottomNav />
       </>
     )
   }
@@ -322,7 +320,6 @@ function UserCenterPage() {
         )}
       </div>
     </div>
-    <MobileBottomNav />
     </>
   )
 }

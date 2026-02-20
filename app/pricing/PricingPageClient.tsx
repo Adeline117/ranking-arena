@@ -15,8 +15,9 @@ const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
 )
 
 const PRICING = {
-  monthly: { price: 12.99, original: 15 },
-  yearly: { price: 99, original: 155.88 },
+  monthly: { price: 4.99, original: null },
+  yearly: { price: 29.99, original: 59.88 },
+  lifetime: { price: 49.99, spots: 200 },
 }
 
 /* Helper: t() returns the key itself when missing — treat that as a miss */
@@ -47,6 +48,7 @@ export default function PricingPageClient() {
   ]
 
   const currentPrice = PRICING[billing]
+  const yearlySavings = Math.round((1 - (PRICING.yearly.price / 12) / PRICING.monthly.price) * 100)
   const ctaHref = email ? '/user-center?tab=membership' : '/login'
 
   return (
@@ -89,7 +91,7 @@ export default function PricingPageClient() {
                   fontWeight: 700,
                   color: billing === b ? '#ffd700' : tokens.colors.accent.brand,
                 }}>
-                  -33%
+                  -{yearlySavings}%
                 </span>
               )}
             </button>
@@ -181,7 +183,7 @@ export default function PricingPageClient() {
             {billing === 'yearly' && (
               <p style={{ fontSize: 13, color: tokens.colors.text.secondary, marginTop: 6, marginBottom: tokens.spacing[6] }}>
                 ${currentPrice.price}/year{' '}
-                <s style={{ opacity: 0.6 }}>${currentPrice.original.toFixed(2)}</s>
+                {'original' in currentPrice && currentPrice.original ? <s style={{ opacity: 0.6 }}>${currentPrice.original.toFixed(2)}</s> : null}
               </p>
             )}
             {billing === 'monthly' && <div style={{ marginBottom: tokens.spacing[6] }} />}
@@ -230,6 +232,78 @@ export default function PricingPageClient() {
                 ? '当前为测试环境（Sandbox），支付功能尚未正式上线，请勿使用真实信用卡。'
                 : 'Currently in Sandbox mode. Payment is not live yet — do not use real credit cards.'}
             </div>
+          </div>
+        </div>
+
+        {/* Founding Member Lifetime Card */}
+        <div style={{ maxWidth: 720, margin: `${tokens.spacing[6]} auto 0`, padding: `0 ${tokens.spacing[0]}` }}>
+          <div style={{
+            padding: tokens.spacing[8],
+            borderRadius: tokens.radius.lg,
+            border: '2px solid #f59e0b',
+            background: 'color-mix(in srgb, #f59e0b 6%, var(--color-bg-secondary))',
+            position: 'relative',
+            textAlign: 'left',
+          }}>
+            {/* Badge */}
+            <div style={{
+              position: 'absolute',
+              top: -13,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: '#f59e0b',
+              color: '#fff',
+              padding: '5px 18px',
+              borderRadius: tokens.radius.full,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
+            }}>
+              {locale === 'zh' ? '创始会员 · 仅限前200名' : 'FOUNDING MEMBER · FIRST 200 ONLY'}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 24 }}>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6, color: '#f59e0b' }}>
+                  {locale === 'zh' ? '终身会员' : 'Lifetime Pro'}
+                </h3>
+                <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: 0, lineHeight: 1.6 }}>
+                  {locale === 'zh'
+                    ? '一次付款，永久享有所有 Pro 功能。价格以后不会再有，早期用户专属。'
+                    : 'One-time payment. All Pro features, forever. This price will never be available again.'}
+                </p>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <p style={{ fontSize: 44, fontWeight: 800, marginBottom: 0, letterSpacing: '-0.02em', color: '#f59e0b', lineHeight: 1.1 }}>
+                  ${PRICING.lifetime.price}
+                </p>
+                <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginTop: 2 }}>
+                  {locale === 'zh' ? '一次性 · 永久有效' : 'one-time · forever'}
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href={ctaHref}
+              style={{
+                display: 'block',
+                padding: '14px 0',
+                borderRadius: tokens.radius.md,
+                background: '#f59e0b',
+                textAlign: 'center',
+                color: '#fff',
+                textDecoration: 'none',
+                fontWeight: 700,
+                fontSize: 15,
+                marginTop: tokens.spacing[6],
+                transition: 'all 0.2s',
+                boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)',
+              }}
+            >
+              {locale === 'zh' ? '立即成为创始会员' : 'Get Founding Member Access'}
+            </Link>
           </div>
         </div>
       </div>

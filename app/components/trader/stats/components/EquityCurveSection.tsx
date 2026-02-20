@@ -17,6 +17,20 @@ interface EquityCurveSectionProps {
   delay: number
 }
 
+// Check if ROI data has any meaningful non-zero values
+function hasNonZeroRoi(data: Array<{ date: string; roi: number; pnl: number }>): boolean {
+  return data.some(d => d.roi !== 0 && d.roi != null)
+}
+
+// Determine the best initial chart type based on available data
+function getBestChartType(equityCurve: EquityCurveData | undefined): 'roi' | 'pnl' {
+  const data = equityCurve?.['90D'] || equityCurve?.['30D'] || equityCurve?.['7D'] || []
+  if (!hasNonZeroRoi(data) && data.length > 0) {
+    return 'pnl'
+  }
+  return 'roi'
+}
+
 export function EquityCurveSection({
   equityCurve,
   traderHandle: _traderHandle,
@@ -24,7 +38,7 @@ export function EquityCurveSection({
 }: EquityCurveSectionProps) {
   const { t, language } = useLanguage()
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
-  const [chartType, setChartType] = useState<'roi' | 'pnl'>('roi')
+  const [chartType, setChartType] = useState<'roi' | 'pnl'>(() => getBestChartType(equityCurve))
   const [mounted, setMounted] = useState(false)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
 
@@ -44,6 +58,15 @@ export function EquityCurveSection({
     const timer = setTimeout(() => setMounted(true), delay * 1000)
     return () => clearTimeout(timer)
   }, [delay, prefersReducedMotion])
+
+  // Auto-switch chart type when the selected period has no data for current type
+  useEffect(() => {
+    const periodData = equityCurve?.[period] || []
+    if (periodData.length === 0) return
+    if (chartType === 'roi' && !hasNonZeroRoi(periodData)) {
+      setChartType('pnl')
+    }
+  }, [period, equityCurve, chartType])
 
   const currentData = equityCurve?.[period] || []
   const hasData = currentData.length > 0

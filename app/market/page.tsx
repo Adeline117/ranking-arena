@@ -4,7 +4,7 @@ import { lazy, Suspense, useState, useCallback, useEffect, useMemo, memo } from 
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
-import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
+// MobileBottomNav is rendered by root layout — do not duplicate here
 import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
@@ -312,7 +312,6 @@ function MarketPageContent() {
       </Suspense>
 
       <FloatingActionButton />
-      <MobileBottomNav />
     </div>
   )
 }
