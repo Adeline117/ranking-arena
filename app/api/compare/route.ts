@@ -37,6 +37,7 @@ interface TraderCompareData {
   stability_score?: number
   avatar_url?: string
   followers?: number
+  equity_curve?: Array<{ date: string; roi: number }>
 }
 
 /**
@@ -99,23 +100,52 @@ export async function GET(request: NextRequest) {
       return error('Failed to fetch trader data', 500)
     }
 
-    // 查询交易员快照数据 (performance metrics)
-    const { data: snapshots, error: snapshotsError } = await supabase
-      .from('trader_snapshots')
-      .select('source_trader_id, source, roi, pnl, win_rate, max_drawdown, trades_count, arena_score, profitability_score, risk_control_score, execution_score, arena_score_v3')
-      .in('source_trader_id', traderIds)
-      .order('captured_at', { ascending: false })
+    // 查询交易员快照数据 (performance metrics) — 90D (default), 30D, 7D
+    const [snapshotsRes, snapshots30dRes, snapshots7dRes] = await Promise.all([
+      supabase
+        .from('trader_snapshots')
+        .select('source_trader_id, source, roi, pnl, win_rate, max_drawdown, trades_count, arena_score, profitability_score, risk_control_score, execution_score, arena_score_v3')
+        .in('source_trader_id', traderIds)
+        .not('season_id', 'in', '("7D","30D")')
+        .order('captured_at', { ascending: false }),
+      supabase
+        .from('trader_snapshots')
+        .select('source_trader_id, roi')
+        .in('source_trader_id', traderIds)
+        .eq('season_id', '30D')
+        .order('captured_at', { ascending: false }),
+      supabase
+        .from('trader_snapshots')
+        .select('source_trader_id, roi')
+        .in('source_trader_id', traderIds)
+        .eq('season_id', '7D')
+        .order('captured_at', { ascending: false }),
+    ])
 
-    if (snapshotsError) {
-      logger.error('[compare] 查询 trader_snapshots Failed:', snapshotsError)
+    if (snapshotsRes.error) {
+      logger.error('[compare] 查询 trader_snapshots Failed:', snapshotsRes.error)
       return error('Failed to fetch trader data', 500)
     }
 
     // Deduplicate snapshots - keep latest per trader
-    const snapshotMap = new Map<string, typeof snapshots[0]>()
-    for (const snap of (snapshots || [])) {
+    const snapshotMap = new Map<string, (typeof snapshotsRes.data)[0]>()
+    for (const snap of (snapshotsRes.data || [])) {
       if (!snapshotMap.has(snap.source_trader_id)) {
         snapshotMap.set(snap.source_trader_id, snap)
+      }
+    }
+
+    // Period snapshot maps
+    const roi30dMap = new Map<string, number>()
+    for (const snap of (snapshots30dRes.data || [])) {
+      if (!roi30dMap.has(snap.source_trader_id)) {
+        roi30dMap.set(snap.source_trader_id, snap.roi)
+      }
+    }
+    const roi7dMap = new Map<string, number>()
+    for (const snap of (snapshots7dRes.data || [])) {
+      if (!roi7dMap.has(snap.source_trader_id)) {
+        roi7dMap.set(snap.source_trader_id, snap.roi)
       }
     }
 
@@ -174,6 +204,30 @@ export async function GET(request: NextRequest) {
       followerMap.set(id, count)
     }
 
+    // Equity curve (optional)
+    const includeEquity = searchParams.get('include_equity') === '1'
+    const equityMap = new Map<string, Array<{ date: string; roi: number }>>()
+    if (includeEquity) {
+      const { data: curves } = await supabase
+        .from('trader_equity_curve')
+        .select('source_trader_id, date, roi')
+        .in('source_trader_id', traderIds)
+        .gte('date', new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10))
+        .order('date', { ascending: true })
+      for (const row of (curves || [])) {
+        if (!equityMap.has(row.source_trader_id)) {
+          equityMap.set(row.source_trader_id, [])
+        }
+        equityMap.get(row.source_trader_id)!.push({ date: row.date, roi: row.roi })
+      }
+    }
+
+    // Helper: normalise win_rate to percentage
+    const normalizeWinRate = (wr: number | null | undefined): number | undefined => {
+      if (wr == null) return undefined
+      return wr > 0 && wr <= 1 ? wr * 100 : wr
+    }
+
     // 格式化返回数据
     const compareData: TraderCompareData[] = traderIds
       .map(id => {
@@ -185,13 +239,19 @@ export async function GET(request: NextRequest) {
           handle: src?.handle || id,
           source: src?.source || snap?.source || '',
           roi: snap?.roi || 0,
+          roi_7d: roi7dMap.get(id),
+          roi_30d: roi30dMap.get(id),
           pnl: snap?.pnl,
           max_drawdown: snap?.max_drawdown,
-          win_rate: snap?.win_rate,
+          win_rate: normalizeWinRate(snap?.win_rate),
           trades_count: snap?.trades_count,
           arena_score: snap?.arena_score_v3 || snap?.arena_score,
+          return_score: snap?.profitability_score,
+          drawdown_score: snap?.risk_control_score,
+          stability_score: snap?.execution_score,
           avatar_url: src?.avatar_url,
           followers: followerMap.get(id) || 0,
+          ...(includeEquity ? { equity_curve: equityMap.get(id) || [] } : {}),
         }
       })
       .filter(Boolean) as TraderCompareData[]

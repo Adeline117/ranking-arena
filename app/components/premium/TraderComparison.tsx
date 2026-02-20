@@ -367,7 +367,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                             <span style={{
                               position: 'absolute', top: -2, right: -16,
                               fontSize: 10, color: tokens.colors.accent.success,
-                            }}>S</span>
+                            }}>👑</span>
                           )}
                         </Text>
                       </Box>
