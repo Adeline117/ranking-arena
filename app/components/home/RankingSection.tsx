@@ -61,10 +61,6 @@ const AdvancedFilter = dynamic(() => import('../premium/AdvancedFilter'), {
   ),
 })
 
-const DataFreshnessIndicator = dynamic(() => import('../ui/DataFreshnessIndicator'), {
-  ssr: false,
-})
-
 interface RankingSectionProps {
   traders: Trader[]
   loading: boolean
@@ -658,14 +654,7 @@ export default function RankingSection({
               </svg>
             </button>
           )}
-          {!loading && (
-            <DataFreshnessIndicator
-              lastUpdated={lastUpdated}
-              updateTier="standard"
-              showDetails={false}
-              size="sm"
-            />
-          )}
+          {/* DataFreshnessIndicator removed from toolbar — bottom timestamp is less intrusive */}
         </Box>
       </Box>
 
