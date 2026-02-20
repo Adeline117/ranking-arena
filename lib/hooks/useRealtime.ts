@@ -291,7 +291,6 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     const channel = supabase.channel(channelName)
 
     channel
-      // @ts-expect-error Supabase realtime types are overly strict for postgres_changes
       .on('postgres_changes', { event, schema, table, ...(filter ? { filter } : {}) }, handleChange)
       .subscribe((subscribeStatus: string) => {
         if (subscribeStatus === 'SUBSCRIBED') {
