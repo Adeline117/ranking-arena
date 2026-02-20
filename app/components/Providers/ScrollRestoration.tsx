@@ -46,9 +46,9 @@ export default function ScrollRestoration() {
     }
 
     // On popstate (back/forward), restore scroll
-    let isPopState = false
     const handlePopState = () => {
-      isPopState = true
+      // Mark that next pathname change is from back/forward navigation
+      sessionStorage.setItem('arena_is_popstate', '1')
     }
 
     window.addEventListener('popstate', handlePopState)
