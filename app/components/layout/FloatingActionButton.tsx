@@ -33,7 +33,7 @@ export default function FloatingActionButton() {
   }, [menuOpen])
 
   // Only show on feed and groups pages, and only when authenticated
-  const showOnPages = ['/', '/groups']
+  const showOnPages = ['/', '/hot', '/groups']
   const shouldShow = isAuthenticated && showOnPages.some(p => pathname === p || pathname.startsWith('/groups/'))
 
   if (!shouldShow) return null

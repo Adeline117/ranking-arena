@@ -56,11 +56,11 @@ export async function PUT(
 
     // 内容长度验证
     if (title.length > MAX_TITLE_LENGTH) {
-      return NextResponse.json({ error: `Title cannot exceed ${MAX_TITLE_LENGTH}characters` }, { status: 400 })
+      return NextResponse.json({ error: `Title cannot exceed ${MAX_TITLE_LENGTH} characters` }, { status: 400 })
     }
 
     if (content && content.length > MAX_CONTENT_LENGTH) {
-      return NextResponse.json({ error: `Content cannot exceed ${MAX_CONTENT_LENGTH}characters` }, { status: 400 })
+      return NextResponse.json({ error: `Content cannot exceed ${MAX_CONTENT_LENGTH} characters` }, { status: 400 })
     }
 
     // 获取帖子信息，验证所有权
