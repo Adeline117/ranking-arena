@@ -101,6 +101,7 @@ export default function InstitutionsPage() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Debounce search input
@@ -146,6 +147,33 @@ export default function InstitutionsPage() {
       }
     }
     fetchLeaderboards()
+  }, [])
+
+  // Fetch counts per category for filter badges
+  useEffect(() => {
+    async function fetchCounts() {
+      try {
+        const { data } = await supabase
+          .from('institutions')
+          .select('category')
+          .eq('is_active', true)
+        if (!data) return
+        const counts: Record<string, number> = { all: data.length }
+        data.forEach(row => {
+          const cat = row.category as string
+          counts[cat] = (counts[cat] || 0) + 1
+        })
+        // Compute group counts
+        Object.entries(CATEGORY_GROUPS).forEach(([groupKey, cats]) => {
+          counts[groupKey] = cats.reduce((sum, c) => sum + (counts[c] || 0), 0)
+        })
+        // exchange group: sum cex + dex + derivatives + dex-aggregator + otc + exchange
+        setCategoryCounts(counts)
+      } catch {
+        // ignore — counts are optional UI decoration
+      }
+    }
+    fetchCounts()
   }, [])
 
   const fetchData = useCallback(async () => {
@@ -231,9 +259,10 @@ export default function InstitutionsPage() {
         </p>
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
           {CATEGORY_FILTERS.map(f => {
             const active = category === f.key
+            const count = categoryCounts[f.key]
             return (
               <button
                 key={f.key}
@@ -253,19 +282,38 @@ export default function InstitutionsPage() {
                   }
                 }}
                 style={{
-                  padding: '8px 20px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '9px 18px',
                   borderRadius: tokens.radius.full,
-                  fontSize: tokens.typography.fontSize.sm,
+                  fontSize: tokens.typography.fontSize.base,
                   fontWeight: active ? 700 : 500,
                   border: active ? '1px solid transparent' : '1px solid var(--color-border-primary)',
                   background: active ? tokens.gradient.purpleGold : 'var(--color-bg-secondary)',
                   color: active ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
                   transition: `all ${tokens.transition.base}`,
-                  boxShadow: active ? tokens.shadow.sm : 'none',
+                  boxShadow: active ? tokens.shadow.md : 'none',
+                  letterSpacing: '0.01em',
                 }}
               >
                 {isZh ? f.zh : f.en}
+                {count != null && count > 0 && (
+                  <span style={{
+                    fontSize: tokens.typography.fontSize.xs,
+                    fontWeight: 600,
+                    padding: '1px 7px',
+                    borderRadius: tokens.radius.full,
+                    background: active ? 'rgba(255,255,255,0.22)' : 'var(--color-accent-primary-12)',
+                    color: active ? '#fff' : 'var(--color-accent-primary)',
+                    lineHeight: '1.5',
+                    minWidth: 20,
+                    textAlign: 'center' as const,
+                  }}>
+                    {count}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -273,7 +321,7 @@ export default function InstitutionsPage() {
             value={sort}
             onChange={e => setSort(e.target.value)}
             style={{
-              padding: '8px 14px', borderRadius: tokens.radius.full,
+              padding: '9px 14px', borderRadius: tokens.radius.full,
               border: '1px solid var(--color-border-primary)',
               background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
               fontSize: tokens.typography.fontSize.sm, cursor: 'pointer', outline: 'none', marginLeft: 'auto',
