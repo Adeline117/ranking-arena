@@ -80,6 +80,14 @@ function LibraryIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
+function MarketIcon({ active }: IconProps): React.ReactElement {
+  return (
+    <NavIcon active={active}>
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </NavIcon>
+  )
+}
+
 interface NotificationBadgeProps {
   count: number
   ariaLabel: string
@@ -209,6 +217,9 @@ function isActivePath(href: string, pathname: string): boolean {
   return pathname.startsWith(href)
 }
 
+/** Pages where the bottom nav should be completely hidden */
+const HIDDEN_PATHS = ['/login', '/welcome', '/reset-password', '/auth/callback']
+
 export default function MobileBottomNav(): React.ReactElement {
   const pathname = usePathname()
   const { t } = useLanguage()
@@ -224,9 +235,14 @@ export default function MobileBottomNav(): React.ReactElement {
     { href: '/', labelKey: 'home', Icon: HomeIcon },
     { href: '/hot', labelKey: 'hot', Icon: FireIcon },
     { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
-    { href: '/rankings', labelKey: 'rankings', Icon: LibraryIcon },
+    { href: '/market', labelKey: 'market', Icon: MarketIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
   ], [userHandle])
+
+  // Hide nav on auth / onboarding pages
+  if (HIDDEN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
+    return <></>
+  }
 
   return (
     <>
