@@ -148,6 +148,29 @@ export async function POST(request: NextRequest) {
         .eq('following_id', followerId)
         .maybeSingle()
 
+      // Update follower/following counts (best-effort, recount from source of truth)
+      updateFollowCounts(supabase, followerId, followingId).catch(() => {})
+
+      // Send follow notification (best-effort)
+      const { data: followerProfile } = await supabase
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', followerId)
+        .maybeSingle()
+
+      const followerHandle = followerProfile?.handle || 'Someone'
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: followingId,
+          type: 'new_follower',
+          title: 'New Follower',
+          message: `${followerHandle} started following you`,
+          actor_id: followerId,
+          link: `/u/${followerHandle}`,
+        })
+        .catch(() => {})
+
       return NextResponse.json({ 
         success: true, 
         following: true,
@@ -168,6 +191,9 @@ export async function POST(request: NextRequest) {
         logger.error('[User Follow API] 取消关注错误:', error)
         return NextResponse.json({ error: 'Unfollow operation failed' }, { status: 500 })
       }
+
+      // Update follower/following counts (best-effort)
+      updateFollowCounts(supabase, followerId, followingId).catch(() => {})
 
       return NextResponse.json({ success: true, following: false, mutual: false })
     } else {
