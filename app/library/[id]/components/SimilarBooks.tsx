@@ -36,7 +36,7 @@ export default function SimilarBooks({ items }: SimilarBooksProps) {
             onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
           >
             <div style={{
-              width: '100%', aspectRatio: '2/3', borderRadius: tokens.radius.lg,
+              width: '100%', aspectRatio: '2/3', position: 'relative', borderRadius: tokens.radius.lg,
               overflow: 'hidden', boxShadow: tokens.shadow.md, marginBottom: 8,
             }}>
               <BookCover
