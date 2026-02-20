@@ -53,15 +53,25 @@ export async function GET(request: NextRequest) {
           recommendation_reason: r.reason || null,
           recommendation_score: r.score || null,
         })).filter((g: Record<string, unknown>) => g.id)
-      } else {
-        // RPC failed or empty — fallback
-        const { data: fallbackData } = await supabase
+      }
+
+      // If fewer than 3 personalized results, pad with popular groups
+      // (handles case where user has joined nearly all groups)
+      if (groups.length < Math.min(3, limit)) {
+        const existingIds = new Set(groups.map((g: Record<string, unknown>) => g.id as string))
+        const { data: popularData } = await supabase
           .from('groups')
           .select('id, name, name_en, description, description_en, avatar_url, member_count')
           .order('member_count', { ascending: false })
           .limit(limit)
 
-        groups = (fallbackData as Record<string, unknown>[]) || []
+        for (const g of (popularData as Record<string, unknown>[]) || []) {
+          if (groups.length >= limit) break
+          if (!existingIds.has(g.id as string)) {
+            groups.push({ ...g, recommendation_reason: 'popular' })
+            existingIds.add(g.id as string)
+          }
+        }
       }
     } else {
       // Unauthenticated fallback
