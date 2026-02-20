@@ -447,8 +447,8 @@ export default function RankingSection({
 
   const source = traders.length > 0 ? traders[0].source : 'all'
 
-  // Get unique data sources - prefer availableSources from API if provided
-  const dataSources: string[] = availableSources && availableSources.length > 0
+  // Get unique data sources - prefer availableSources from API if provided (reserved for future use)
+  const _dataSources: string[] = availableSources && availableSources.length > 0
     ? availableSources
     : [...new Set(traders.map(t => t.source).filter((s): s is string => !!s))]
 
