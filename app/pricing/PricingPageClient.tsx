@@ -14,6 +14,13 @@ const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
   </svg>
 )
 
+const LockIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+)
+
 const PRICING = {
   monthly: { price: 4.99, original: null },
   yearly: { price: 29.99, original: 59.88 },
@@ -120,6 +127,11 @@ export default function PricingPageClient() {
                   <CheckIcon size={15} /> {f}
                 </li>
               ))}
+              {features.map(f => (
+                <li key={`locked-${f}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', fontSize: 14, color: tokens.colors.text.tertiary, opacity: 0.55 }}>
+                  <LockIcon size={14} /> {f}
+                </li>
+              ))}
             </ul>
             <Link
               href={ctaHref}
@@ -221,8 +233,8 @@ export default function PricingPageClient() {
             <div style={{
               marginTop: tokens.spacing[4],
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              background: 'color-mix(in srgb, var(--color-warning, #f59e0b) 12%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent)',
+              background: 'color-mix(in srgb, var(--color-accent-primary) 8%, var(--color-bg-secondary))',
+              border: '1px solid color-mix(in srgb, var(--color-accent-primary) 20%, transparent)',
               borderRadius: 8,
               fontSize: 13,
               color: 'var(--color-text-secondary)',

@@ -337,7 +337,7 @@ function HotContent() {
   }, [language])
 
   const visibleHot = useMemo(() => {
-    return loggedIn ? hotPosts : hotPosts.slice(0, 20)
+    return loggedIn ? hotPosts : hotPosts.slice(0, 10)
   }, [loggedIn, hotPosts])
 
   // 加载评论（初始加载）
