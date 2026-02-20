@@ -27,7 +27,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
       <ol
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'baseline',
           gap: 0,
           listStyle: 'none',
           margin: 0,
