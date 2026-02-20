@@ -3,15 +3,16 @@ import type { Metadata } from 'next'
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
 export const metadata: Metadata = {
-  title: 'Institutions - Arena',
+  title: 'Top Crypto Institutions & Hedge Funds — Community Rankings | Arena',
   description:
-    'Explore top crypto institutions — exchanges, market makers, VCs, custody providers, and research firms. Community ratings and reviews.',
+    'Browse and rate 600+ crypto institutions: exchanges (Binance, OKX, Bybit), venture capital (a16z, Paradigm, Multicoin), hedge funds (Jump Trading, Alameda), DeFi protocols, and more. Community-rated rankings.',
+  keywords: 'crypto institutions, crypto hedge funds, crypto VC, binance, okx, a16z, paradigm, jump trading, crypto exchanges ranking',
   alternates: {
     canonical: `${baseUrl}/rankings/institutions`,
   },
   openGraph: {
-    title: 'Institution Rankings | Arena',
-    description: 'Top crypto institutions ranked by community ratings — exchanges, market makers, VCs, and more.',
+    title: 'Top Crypto Institutions & Hedge Funds — Community Rankings | Arena',
+    description: 'Browse 600+ crypto institutions rated by the community — exchanges, VCs, hedge funds, DeFi protocols, and trading firms.',
     url: `${baseUrl}/rankings/institutions`,
     siteName: 'Arena',
     type: 'website',
@@ -19,12 +20,29 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Institution Rankings | Arena',
-    description: 'Top crypto institutions ranked by community ratings.',
+    title: 'Top Crypto Institutions | Arena',
+    description: '600+ crypto institutions ranked by community — exchanges, VCs, hedge funds.',
     images: [`${baseUrl}/og-image.png`],
   },
 }
 
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Crypto Institution Rankings',
+  description: 'Community ratings and rankings for 600+ crypto institutions including exchanges, venture capital, hedge funds, and DeFi protocols.',
+  url: `${baseUrl}/rankings/institutions`,
+  provider: { '@type': 'Organization', name: 'Arena', url: baseUrl },
+}
+
 export default function InstitutionRankingsLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {children}
+    </>
+  )
 }

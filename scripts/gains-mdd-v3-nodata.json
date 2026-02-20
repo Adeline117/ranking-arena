@@ -1,0 +1,1468 @@
+{
+  "timestamp": "2026-02-20T19:50:17.154Z",
+  "noDataAddresses": [
+    {
+      "addr": "0x3e9cbdd4ff3d6e73b05baca4dd84f264ce6ff01e",
+      "rowIds": [
+        1306358
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xf57621f8fa4873b9c3f218604687adadf54fb004",
+      "rowIds": [
+        1306370
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x459a3b22a1b41a13663c89778d133a4c85826779",
+      "rowIds": [
+        1306407,
+        12680540,
+        12690149
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x9a6ff8a7a4b455b9e747cdd49ebef594429ec41e",
+      "rowIds": [
+        1306438,
+        11704576,
+        11713843
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x069272bcc30b00d7d35ab0b0378fef34738d3449",
+      "rowIds": [
+        1306722,
+        11703230
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xa2c35666bebff98749bf3949cf08fcdf1f96d22f",
+      "rowIds": [
+        1307043
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xa40f158128b6648a364fbcaa989a5c54d3d80e26",
+      "rowIds": [
+        1307137,
+        11704990,
+        12689969
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x06dbd3f65ae3b994bcffc43e29b3ca37f75ad9e5",
+      "rowIds": [
+        1308568,
+        12681071,
+        12690427
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x0a0b6975459dd21115279093a6bc835fdbe5d2a1",
+      "rowIds": [
+        1308569,
+        12681078,
+        12690434
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x196a911f9eb1277902f50b730bb1462aacefa1e3",
+      "rowIds": [
+        1308572,
+        12681017,
+        12690390
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x1dcb37a54ce9d361294a2a0cbf1eca2d33889af7",
+      "rowIds": [
+        1308575,
+        12681000,
+        12690391
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x2370997d5ad57ca33cb4a8fd18ef3972dc1fc53e",
+      "rowIds": [
+        1308577,
+        12681018,
+        12690392
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x3a01161e9f230ad8484b1727eb76535da1546f2b",
+      "rowIds": [
+        1308585,
+        12681188,
+        12690543
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x3c59211297f9e3215e60bc02b4a8ec3a78eca169",
+      "rowIds": [
+        1308586,
+        12681192,
+        12690547
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x40d296b435a40b80017dcd099ea14296a36e75f7",
+      "rowIds": [
+        1308587,
+        12681206,
+        12690562
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x493e0ec625925d863595d1aa633b9998fa1ed1f2",
+      "rowIds": [
+        1308589,
+        12681225,
+        12690581
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x64b8d7e4070e07ac0a73d71dbff9cdba762a1c68",
+      "rowIds": [
+        1308590,
+        12681274,
+        12690631
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x7b8034d60426ce987fcdfd7446be527021f3f855",
+      "rowIds": [
+        1308594,
+        12681318,
+        12690674
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x7d904d682b2096331f3349bd982c89bc974d7601",
+      "rowIds": [
+        1308595,
+        12681321,
+        12690677
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x9900965ffd918735e074e94c63ab22ef70a7e8ee",
+      "rowIds": [
+        1308601,
+        12681375,
+        12690732
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xad0bc8285700598bc410b4cdce1358ea377231bf",
+      "rowIds": [
+        1308607,
+        12681416,
+        12690773
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xaf4d50c129a00f052c0f22d2f01ab6579c9c78d2",
+      "rowIds": [
+        1308608,
+        12681421,
+        12690778
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xc4f5eb4176d2599234462966baa0a8000ac4dcab",
+      "rowIds": [
+        1308611,
+        12681469,
+        12690827
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xc75642d36c7eba884e1861e5ddeb9350170b2b39",
+      "rowIds": [
+        1308613,
+        12681476,
+        12690834
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xd5a1ab5d2cde8e1399e321251c7fd784d68fd9fc",
+      "rowIds": [
+        1308614,
+        12681506,
+        12690865
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xdbb049aac95928f9ca8771ed486b9206e9cbf7ee",
+      "rowIds": [
+        1308617,
+        12680934,
+        12690309
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x45b862e23db9e9770033a5e958cfabc6205a860d",
+      "rowIds": [
+        1322649,
+        12681218,
+        12690575
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x00ab7ca1955d0a4b8c11011a7915dbe2c2d785d7",
+      "rowIds": [
+        1335647,
+        11707754,
+        11716524
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x058b0c854d34492447941cf26da8d9cb665f016b",
+      "rowIds": [
+        1335659,
+        12681067,
+        12690424
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x17c4ad7ca16a4cf1db8be9d1da5038c3c7aa218a",
+      "rowIds": [
+        1335703,
+        11707806,
+        11716575
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x1cab2ce19ff9b27680d4a8fdd3745197004ada57",
+      "rowIds": [
+        1335713,
+        12681116,
+        12690471
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x2002cf03a393249c8f778a4671edf3c39d1e3006",
+      "rowIds": [
+        1335718,
+        11707820,
+        11716590
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x20106bfde35745f80d719c1a8b5df3a5c55c938d",
+      "rowIds": [
+        1335719,
+        11707821,
+        11716591
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x26ef415e77993301574064a762ca514f8d01e7df",
+      "rowIds": [
+        1335740,
+        11707846,
+        11716615
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x28b938a179849dff14bde29815b6e8b8b946ba56",
+      "rowIds": [
+        1335744,
+        11707850,
+        11716619
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x298674f1da88d4f9f521ecd9983a34732e1098fe",
+      "rowIds": [
+        1335748,
+        11707855,
+        11716623
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x2ce632a4e4d6e2bbee8101bbec8cb15ad313ec31",
+      "rowIds": [
+        1335751,
+        12681165,
+        12690519
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x32baff10a941a778ba4c3a0a246dfcb8453fe0b7",
+      "rowIds": [
+        1335764,
+        12681179,
+        12690533
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x338b1c08ec1b25c43f4710fc39bb73d39f5780d8",
+      "rowIds": [
+        1335765,
+        11707876,
+        11716644
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x342da132be27b8cfd2187a9567afdf65b5c9857e",
+      "rowIds": [
+        1335767,
+        11707878,
+        11716646
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x380f3c2681e106521eb3cf72530ad4a222c882f5",
+      "rowIds": [
+        1335773,
+        11707884,
+        11716653
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x3bd8336e18ecde665f93549d585f2d8694f19cec",
+      "rowIds": [
+        1335777,
+        12681190,
+        12690545
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x402eab486e254758e720fc705478e2b1185eabcc",
+      "rowIds": [
+        1335789,
+        11707900,
+        11716669
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x44ba76bce4d1575d8cf1639e67e0bd44c5bd7310",
+      "rowIds": [
+        1335798,
+        12681214,
+        12690570
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x45dc370b4d29a43d318ba9981bef5ad6643dad86",
+      "rowIds": [
+        1335802,
+        11707909,
+        11716679
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x5052152fed2594b1ef194b27c568f3121d7d9794",
+      "rowIds": [
+        1335820,
+        11707927,
+        11716696
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x58e92d23bceab02817530415407bed1c4160c168",
+      "rowIds": [
+        1335831,
+        11707939,
+        11716709
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x5ab5eeff0028ff00bc5e9066a550c0da6be945bd",
+      "rowIds": [
+        1335836,
+        11707945,
+        11716715
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x6089f53bc52b23d31f9c1600076c8dbc53be5bd3",
+      "rowIds": [
+        1335843,
+        11707955,
+        11716725
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x623e5ed9d87bce69ca01ecf2e7dc07e48a1ea6e6",
+      "rowIds": [
+        1335846,
+        11707959,
+        11716729
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x68bf6ff2a9463e8a71d7c3e54de7f063aa50376f",
+      "rowIds": [
+        1335856,
+        11707970,
+        11716740
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x691173cc32c8ffeb9e732b4415765c92b96af4bd",
+      "rowIds": [
+        1335857,
+        12681282,
+        12690639
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x704625157d8e3a3af3d30aa5400a3ecd2580fcd2",
+      "rowIds": [
+        1335870,
+        11707991,
+        11716760
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x7ed8108c6f83d696fb38750426d390f510b1d273",
+      "rowIds": [
+        1335895,
+        11708013,
+        11716782
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x8077fd226e7d42a213b7701c12e10f0915737597",
+      "rowIds": [
+        1335897,
+        11708016,
+        11716786
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x813c2eb1eb9a53b032466ca51a2677dc4e114b45",
+      "rowIds": [
+        1335899,
+        11708018,
+        11716788
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x873e3a9ccf18a51aaeff567ff5c70a4533dffe3f",
+      "rowIds": [
+        1335908,
+        11708029,
+        11716799
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x8b4d2d2a003a1b4d44e25cf26fb2d547a5353da4",
+      "rowIds": [
+        1335916
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x8db7a537d8478df3c6d95ff33b4270342862957f",
+      "rowIds": [
+        1335923,
+        12681350,
+        12690707
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x97be55c7a211c8ca221bac6e40bdfb5724d83c66",
+      "rowIds": [
+        1335940,
+        11708057,
+        11716826
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xab3af137187a290add8048d927d3543ace2d8b13",
+      "rowIds": [
+        1335978,
+        12681411,
+        12690768
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xad52a8dca5b0590da5342b2655fa9462bc6798d0",
+      "rowIds": [
+        1335982,
+        12681417,
+        12690774
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xaef18e2a30796c2f0ff583dcf492afe500345a7f",
+      "rowIds": [
+        1335984,
+        11708101,
+        12690777
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xb022df805335edadef22e56d02d837aeaed8648a",
+      "rowIds": [
+        1335988,
+        11708103,
+        12690781
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xb028522b0914e29da2dd4e58521103de8cc5de41",
+      "rowIds": [
+        1335989,
+        11708104,
+        12690782
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xb045922fc277175aef0556b05a3832c41a5a1ae0",
+      "rowIds": [
+        1335990,
+        11708105,
+        12690783
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xb2575d5d8e0bf5d4a6764d0a37572b2dffa2a83a",
+      "rowIds": [
+        1335994,
+        12681431,
+        12690788
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xb6291bd35ae7a254bc281dc18f34aa6042b7f099",
+      "rowIds": [
+        1336002,
+        11708115,
+        12690794
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xb9c0e4232317834511be59964e5259d3d4ba8926",
+      "rowIds": [
+        1336007,
+        11708121,
+        12690802
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xbc163e58d0cbc9970dc00d94390d595c8157ea9c",
+      "rowIds": [
+        1336012,
+        11708123,
+        12690804
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xbcaf9eaf425d652bc9ee3057226ce0274b840273",
+      "rowIds": [
+        1336014,
+        11708125,
+        12690807
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xc6bd46b3cd31b7c318aaa744814f27240e14960b",
+      "rowIds": [
+        1336033,
+        11708152,
+        12690831
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xcb4fe4d3654e0f9482809e47657171bfd5f8fcc4",
+      "rowIds": [
+        1336044,
+        11708162,
+        12690844
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xcec98276fd86c5b1a6109a07b314a7cc25cd3fbb",
+      "rowIds": [
+        1336050,
+        11708168,
+        12690851
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xd1903de5039afd7a98bcb93b32c01acf653a11fe",
+      "rowIds": [
+        1336053,
+        11708170,
+        12690853
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xda5a05a28bb6378f827ef81115dbc3a9001e6239",
+      "rowIds": [
+        1336071,
+        11708190,
+        12690874
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xdb2631815d6498f80509cdb0f6ad4433b0815a8b",
+      "rowIds": [
+        1336073,
+        11708191,
+        12690875
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xdcedd6ae4b264730fec1a4a96b585118f2f244ed",
+      "rowIds": [
+        1336077,
+        11708194,
+        12690879
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xde8a6d588f8067e761bac811a102e0146c721e41",
+      "rowIds": [
+        1336079,
+        11708197,
+        12690883
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xe531a917724dbb20efe8fff930f94eeef0c8e065",
+      "rowIds": [
+        1336095,
+        12681538,
+        12690897
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xec169e042282cc660a8b4794d3726d11f809cff0",
+      "rowIds": [
+        1336104,
+        11708220,
+        12690907
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xed412d4a54cfd60dd6b46e3892be0fa9a343a6a4",
+      "rowIds": [
+        1336109,
+        11708224,
+        12690911
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xf0b5c7bb85e43970bf7252c6d49a357304a3fde5",
+      "rowIds": [
+        1336114,
+        11708232,
+        12690918
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xf1d81499a5cce9d37787f80836c2d4b3d151020d",
+      "rowIds": [
+        1336117,
+        11708237,
+        12690923
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xf88d173fc76e645d16a5f864cdbe182d561da6bc",
+      "rowIds": [
+        1336128,
+        11708250,
+        12690935
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xfa69d3e4b0ab3063dbb5e6757511d95e3e8627ef",
+      "rowIds": [
+        1336136,
+        11708256,
+        12690942
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xfcaee72a4416cb4adcebba85a638a2bd48c2b4d8",
+      "rowIds": [
+        1336139,
+        11708260,
+        12690947
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xffc38670f49ed687ca75e801e1f7f41404f05c77",
+      "rowIds": [
+        1336147,
+        11708268,
+        12690954
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xecd67592545caeb8b485048d86f30b65448bd734",
+      "rowIds": [
+        1642853,
+        11701785,
+        11710280
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xc6dee412e5c93cae186717dc6c9b9f79dcfeb9f0",
+      "rowIds": [
+        1646298,
+        12681475,
+        12690833
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x5ba387ccfd03d9e59534d47941ebd23fa05fe238",
+      "rowIds": [
+        2039590,
+        12681260,
+        12690617
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xb38df3099b1cba4dd81c98b63b64017c3d252667",
+      "rowIds": [
+        2826907,
+        11708113,
+        12690791
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x2bb8ab3c2a9837de97a83c228a07e16928b4f07f",
+      "rowIds": [
+        3064328,
+        11707858,
+        11716626
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x32ae561e25aa976c765ee48b22ba5486cd31d7b9",
+      "rowIds": [
+        3064342,
+        11707875,
+        11716643
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0xd3d97bf969ce2a44358696a9107f718192422aa8",
+      "rowIds": [
+        3064619,
+        11708180,
+        12690862
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x7a16db52f39f4d49d1fb72c9899c166601283dac",
+      "rowIds": [
+        3066313,
+        11693432,
+        11711880
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x9642655f242ac34bc64f444b14fa3cac80568125",
+      "rowIds": [
+        3066919
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xd7387b7d5276ab7bc78883ba3a2fd339a689d857",
+      "rowIds": [
+        3068595
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xf050c208c0d487d62665c56c24fbb7affa149ebc",
+      "rowIds": [
+        3073934
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x18c86b1c2f57cb77c2804d973886916e4ee599ad",
+      "rowIds": [
+        3108101,
+        12681110,
+        12690464
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x4abfdb0664b7210a5fee2ea7db48bbe143616bc1",
+      "rowIds": [
+        3108230,
+        12681228,
+        12690584
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xac98704fa03db73ba021581bf5dcd07e8e6190ec",
+      "rowIds": [
+        3116395,
+        12672036,
+        12690772
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x4d5a156181b54cf78201432fa269471574422cf6",
+      "rowIds": [
+        8147341
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x07a5ee7425b198ad8c61db1075b60cb26dedb6fa",
+      "rowIds": [
+        8339368
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x0b55a62e346fd45350a44fab34fd00253f3e5a1d",
+      "rowIds": [
+        8339378,
+        12681081,
+        12690437
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x0b9bebeacc564fb2a57ae75f4f8101a54713e4b4",
+      "rowIds": [
+        8339380,
+        12681084,
+        12690440
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x0c3f84d61066d634ae76f2480e56ceac4ccf3df0",
+      "rowIds": [
+        8339383
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x0ffb53a162880f1fd6ad8c9aaf022a147e3037e1",
+      "rowIds": [
+        8339394,
+        12681095,
+        12690449
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x197e626b22a86825a7f1b7882a939102991f46c9",
+      "rowIds": [
+        8339428
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x2494b8e1de03d3c71c883b0bf0881486b8bba65a",
+      "rowIds": [
+        8339464,
+        12681143,
+        12690498
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x2811ca944182cff4b6a1ac9ded1463cb4d36573a",
+      "rowIds": [
+        8339473,
+        12681151,
+        12690505
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x2882b4d9d9379f5e52ad032211a1667f266e6e28",
+      "rowIds": [
+        8339474,
+        12681152,
+        12690506
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x341653ac9d55ef2c3ddca37f73b0206d1edfebf0",
+      "rowIds": [
+        8339510,
+        12681181,
+        12690535
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x376ad6d7b7d9a03c0fe1662950a37c62961d8256",
+      "rowIds": [
+        8339518,
+        12681185,
+        12690540
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x4890ae58845cee70b04f7b54dd2d4bbfd8b697d4",
+      "rowIds": [
+        8339552,
+        12681224,
+        12690580
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x49871c8e32f8534b0ad0ce892d78c2240024ed1b",
+      "rowIds": [
+        8339554,
+        12681226,
+        12690582
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x58efe54dad23d2818db22626abb435035ad8aca6",
+      "rowIds": [
+        8339583,
+        12681253,
+        12690610
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x59cd5156888ae3451941a9c006303e0e79ec13e7",
+      "rowIds": [
+        8339587,
+        12681255,
+        12690612
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x72aae5643056f61f2ab4fcecd391f49184fd984c",
+      "rowIds": [
+        8339634,
+        12681301,
+        12690657
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x73f2c3b0188e749731d9f78293a342733832cc30",
+      "rowIds": [
+        8339637,
+        12681304,
+        12690660
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x76f3547555ef527bff58746b2dcb0f259efeb8b5",
+      "rowIds": [
+        8339640,
+        12681307,
+        12690663
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x79d21989fc49b2c7bf8ae84c7fdab486e2a1f4d1",
+      "rowIds": [
+        8339653
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x8d8292e0b43a06db4f3921ca93e25e619179c93c",
+      "rowIds": [
+        8339697,
+        12681349,
+        12690706
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x90699f4af5b856f5976515d53a539ee748b05b59",
+      "rowIds": [
+        8339705,
+        12681357,
+        12690714
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x910ab9e8b6ebdabc50d1e9e6d13a5f1be7b961be",
+      "rowIds": [
+        8339707
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x912978d8d1d57dc9733f81f8d685be5fcccd4db4",
+      "rowIds": [
+        8339708,
+        12681361,
+        12690718
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x9511398aa9ab112d55227aa4eeb5ad4cc395195f",
+      "rowIds": [
+        8339714,
+        12681365,
+        12690722
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x9587aa44c9d9f9d6a8d5b9572074b4e005ca2cfb",
+      "rowIds": [
+        8339716,
+        12681367,
+        12690724
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xa594f845e82bf1d0be2245d892094df67b6c9a99",
+      "rowIds": [
+        8339753,
+        12681402,
+        12690759
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xa69bfd278a9edd4750d37dd3d5648b3c2aeaa059",
+      "rowIds": [
+        8339756,
+        12681405,
+        12690762
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xabb2077d38a4e1234328aa5ee1c72927775d30b1",
+      "rowIds": [
+        8339764,
+        12681412,
+        12690769
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xb1b96e824885ac66a57107aac0f23724d5ade508",
+      "rowIds": [
+        8339779,
+        12681430,
+        12690787
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xbc1c7d5e51c854f8738de11375cf8dffceb69eda",
+      "rowIds": [
+        8339797,
+        12681447,
+        12690805
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xcbcbae33e6aef60bd30beb99c816e806af96a31e",
+      "rowIds": [
+        8339838,
+        12681487,
+        12690845
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xd14ac809d6ea6fb9f46b26a023bfbacb84e9c7ad",
+      "rowIds": [
+        8339846,
+        12681494,
+        12690852
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xd25b899478cd0355de04bd74c064fbfdc7d292f9",
+      "rowIds": [
+        8339852,
+        12681500,
+        12690858
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xdcb02f0b1c13fe7423ded48f8b358e6168792cdb",
+      "rowIds": [
+        8339875,
+        12681519,
+        12690878
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xdd9bdad21a2822cffc2c2c7f0447f550885d2e1d",
+      "rowIds": [
+        8339878,
+        12681522,
+        12690881
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xde177b7f3d3b3cfae5911c670f07f616418f8af7",
+      "rowIds": [
+        8339879,
+        12681523,
+        12690882
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xe3cb4258dd62b91860cbf7eeed2f75b228154e20",
+      "rowIds": [
+        8339890,
+        12681534,
+        12690893
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xe45a511fad67f4d29cc4445f028ba7c729eb076e",
+      "rowIds": [
+        8339892,
+        12681536,
+        12690895
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xee3407a1cced75b74ea3fe85c40b762f4fde883b",
+      "rowIds": [
+        8339913,
+        12681554,
+        12690913
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xef00a763368c98c361a9a30ce44d24c8fed43844",
+      "rowIds": [
+        8339917,
+        12681557,
+        12690915
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x7c4af548d26bce1c397a839f5b1b5af90b7cefce",
+      "rowIds": [
+        9080731
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x42c93ede9997ceb9db5a0b31e73e2c8e5d4b40b8",
+      "rowIds": [
+        10838862
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x4ee914fdfd17ba22fac33f5c1ad096c6b56c8b2b",
+      "rowIds": [
+        11673983,
+        11707923,
+        11716692
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x1fddb9bd4a7456c0c9c0433130cfc3e636cc600e",
+      "rowIds": [
+        12671745,
+        12681120,
+        12690475
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x25d8ef8fd06691e1714bc7d5ffa7dd2a3399d8ff",
+      "rowIds": [
+        12671771,
+        12681146,
+        12690501
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x2f397528712f6fcefb39480f8e53db42f5dc5f1a",
+      "rowIds": [
+        12671797,
+        12681171,
+        12690525
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x38b054819abfde9b96303a89227af718294499d7",
+      "rowIds": [
+        12671814,
+        12681187,
+        12690542
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x40e993a2d501eda73bb0b5b498fc5882de51007a",
+      "rowIds": [
+        12671835,
+        12681207,
+        12690563
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x431184fcc6f08f1c886e3864085d574012ae1262",
+      "rowIds": [
+        12671840,
+        12681212,
+        12690568
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    },
+    {
+      "addr": "0x45a08c5ad27bffc526796adc704bca7cf6052fb5",
+      "rowIds": [
+        12671845,
+        12681217,
+        12690574
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x4c31905af0e6b9c640dfa7a9ebe61785527ca4c7",
+      "rowIds": [
+        12671857,
+        12681230,
+        12690586
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x5f7bfbba4d1a60d5c5f3800afd55fadf78852eaa",
+      "rowIds": [
+        12671892,
+        12681265,
+        12690622
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xa019a056b4a8cd866e2c75017123d32e3fb02d9e",
+      "rowIds": [
+        12672012,
+        12681391,
+        12690748
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xbc6ea4e89b9cabf22d50c64b789b6578b1480015",
+      "rowIds": [
+        12672069,
+        12681448,
+        12690806
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xbed88ed1da0a9e376f73e7fc0967343c35e9202c",
+      "rowIds": [
+        12672073,
+        12681452,
+        12690810
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xc8e4b4a33764f5d8057a5c27b567740328d5428b",
+      "rowIds": [
+        12672105,
+        12681484,
+        12690842
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xcbe383481cf512bd9fa73f374b8b3caed1d38e46",
+      "rowIds": [
+        12672110,
+        12681489,
+        12690847
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xdf7bd57c619eb87089a78025818f31437e74bb78",
+      "rowIds": [
+        12672147,
+        12681526,
+        12690885
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xe282d91af2d87b0f5431e3378c2b792f37218db2",
+      "rowIds": [
+        12672150,
+        12681529,
+        12690888
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xef4d8612469d8d2ed1e737e3eea25235e33f30b2",
+      "rowIds": [
+        12672178,
+        12681558,
+        12690916
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xf6679071640312218da531ef084f1a2e86043195",
+      "rowIds": [
+        12672194,
+        12681574,
+        12690932
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0xf70bd19b15e0f345fc04b80dd1d9b47fb807f139",
+      "rowIds": [
+        12672195,
+        12681575,
+        12690933
+      ],
+      "reason": "no_api_data"
+    },
+    {
+      "addr": "0x3c50cb71d259631a2a698373c1874960a5a687d6",
+      "rowIds": [
+        12780474,
+        12789728,
+        12798990
+      ],
+      "reason": "no_closed_trades_or_collateral"
+    }
+  ]
+}

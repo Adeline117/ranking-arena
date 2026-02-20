@@ -21,11 +21,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const PERIOD_PREFIX = { '7D': 'sevenDay', '30D': 'thirtyDay', '90D': 'ninetyDay' }
 
 async function fetchLeaderIncome(leaderMark) {
+  const delays = [500, 1500, 3000]
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await fetch(
         `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income?leaderMark=${encodeURIComponent(leaderMark)}`,
-        { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10000) }
+        { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) }
       )
       if (res.status === 403) { console.log(`  WAF 403 for ${leaderMark.substring(0, 10)}`); return null }
       if (res.status === 429) { await sleep(3000 * (attempt + 1)); continue }
@@ -36,7 +37,7 @@ async function fetchLeaderIncome(leaderMark) {
       if (json.retCode !== 0) return null
       return json.result
     } catch (e) {
-      if (attempt < 2) await sleep(1000)
+      if (attempt < 2) { await sleep(delays[attempt]); }
       else console.log(`  fetch err ${leaderMark.substring(0, 10)}: ${e.message?.substring(0, 60)}`)
     }
   }
@@ -99,8 +100,8 @@ async function main() {
     const result = await fetchLeaderIncome(traderId)
     if (!result) {
       apiErr++
-      await sleep(600)
-      if (apiErr > 30 && apiErr > (i + 1) * 0.6) {
+      await sleep(800)
+      if (apiErr > 60 && apiErr > (i + 1) * 0.8) {
         console.log('Too many API errors — likely WAF. Stopping.')
         break
       }
@@ -127,9 +128,9 @@ async function main() {
       }
     }
 
-    await sleep(250)
+    await sleep(400)
 
-    if ((i + 1) % 50 === 0 || i === traders.length - 1) {
+    if ((i + 1) % 20 === 0 || i === traders.length - 1) {
       const mins = ((Date.now() - startTime) / 60000).toFixed(1)
       console.log(`  [${i + 1}/${traders.length}] updated=${updated} noData=${noData} apiErr=${apiErr} zeroMDD=${apiReturns0} | ${mins}m`)
     }

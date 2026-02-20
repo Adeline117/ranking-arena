@@ -3,19 +3,87 @@ import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 
+const EXCHANGE_DISPLAY: Record<string, string> = {
+  binance_futures: 'Binance', binance_spot: 'Binance Spot', binance_web3: 'Binance Web3',
+  bybit: 'Bybit', bybit_spot: 'Bybit Spot',
+  bitget: 'Bitget', bitget_spot: 'Bitget Spot',
+  okx: 'OKX', okx_spot: 'OKX Spot', okx_web3: 'OKX Web3',
+  hyperliquid: 'Hyperliquid', gmx: 'GMX', dydx: 'dYdX', gains: 'Gains',
+  mexc: 'MEXC', kucoin: 'KuCoin', kucoin_spot: 'KuCoin Spot',
+  bingx: 'BingX', bingx_spot: 'BingX Spot', gateio: 'Gate.io',
+  htx_futures: 'HTX', weex: 'Weex', blofin: 'Blofin',
+  bitfinex: 'Bitfinex', toobit: 'Toobit', phemex: 'Phemex',
+  coinex: 'CoinEx', aevo: 'Aevo',
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params
   const decoded = decodeURIComponent(handle)
+  const BASE = 'https://www.arenafi.org'
+
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data: ts } = await supabase
+      .from('trader_sources')
+      .select('handle, source, source_trader_id, avatar_url')
+      .ilike('handle', decoded)
+      .limit(1)
+      .maybeSingle()
+
+    if (ts) {
+      const { data: lr } = await supabase
+        .from('leaderboard_ranks')
+        .select('rank, arena_score, roi, pnl')
+        .eq('source', ts.source)
+        .eq('source_trader_id', ts.source_trader_id)
+        .maybeSingle()
+
+      const name = ts.handle || decoded
+      const exchange = EXCHANGE_DISPLAY[ts.source] || ts.source || 'Crypto'
+      const roi = lr?.roi
+      const score = lr?.arena_score
+      const rank = lr?.rank
+
+      const parts = [
+        roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
+        score != null ? `Arena Score ${score.toFixed(0)}` : null,
+        rank != null ? `#${rank} ranked` : null,
+      ].filter(Boolean)
+
+      const title = `${name} (${exchange}) | Crypto Trader Rankings — Arena`
+      const description = parts.length
+        ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track their performance history on Arena.`
+        : `${name} is a ${exchange} crypto trader. View performance analytics and rankings on Arena.`
+
+      return {
+        title,
+        description,
+        openGraph: {
+          title,
+          description,
+          url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
+          siteName: 'Arena',
+          type: 'profile',
+          ...(ts.avatar_url ? { images: [{ url: ts.avatar_url, width: 200, height: 200 }] } : {}),
+        },
+        twitter: { card: 'summary', title, description },
+        alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
+      }
+    }
+  } catch { /* fall through */ }
+
+  // Fallback — no DB data
   return {
-    title: `Trader ${decoded} — Arena`,
-    description: `View ${decoded}'s trading performance, PnL, and ranking on Arena.`,
+    title: `${decoded} | Crypto Trader — Arena`,
+    description: `View ${decoded}'s crypto trading performance, PnL, and rank on Arena.`,
     openGraph: {
-      title: `Trader ${decoded} — Arena`,
-      description: `View ${decoded}'s trading performance, PnL, and ranking on Arena.`,
+      title: `${decoded} | Crypto Trader — Arena`,
+      description: `View ${decoded}'s crypto trading performance on Arena.`,
       url: `https://www.arenafi.org/trader/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
       type: 'profile',
     },
+    alternates: { canonical: `https://www.arenafi.org/trader/${encodeURIComponent(decoded)}` },
   }
 }
 
@@ -196,7 +264,40 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     } catch {
       // API fetch failed — client will retry via SWR
     }
-    return <TraderProfileClient data={traderData} serverTraderData={serverTraderData} />
+
+    // JSON-LD structured data for this trader
+    const exchange = EXCHANGE_DISPLAY[traderData.source || ''] || traderData.source || 'Crypto Exchange'
+    const roi = traderData.roi ?? null
+    const score = traderData.arena_score ?? null
+    const rank = traderData.rank ?? null
+    const jsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'Person',
+      name: traderData.handle,
+      url: `https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`,
+      ...(traderData.avatar_url ? { image: traderData.avatar_url } : {}),
+      description: [
+        `${exchange} crypto trader`,
+        roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
+        score != null ? `Arena Score ${score.toFixed(0)}` : null,
+        rank != null ? `Ranked #${rank} on Arena` : null,
+      ].filter(Boolean).join('. '),
+      memberOf: {
+        '@type': 'Organization',
+        name: exchange,
+      },
+      sameAs: [`https://www.arenafi.org/trader/${encodeURIComponent(traderData.handle)}`],
+    }
+
+    return (
+      <>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        <TraderProfileClient data={traderData} serverTraderData={serverTraderData} />
+      </>
+    )
   }
 
   // 3. Not found
