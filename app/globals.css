@@ -1497,6 +1497,11 @@ select:focus-visible {
   .show-mobile-flex { display: flex !important; }
 }
 
+/* Hide footer on mobile when bottom nav is present */
+@media (max-width: 767px) {
+  .hide-mobile-nav { display: none !important; }
+}
+
 /* Mobile overflow safety */
 @media (max-width: 767px) {
   html, body {
