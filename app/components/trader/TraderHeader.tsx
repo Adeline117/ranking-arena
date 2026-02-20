@@ -469,7 +469,7 @@ export default function TraderHeader({
 
         {/* Info */}
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[2] }}>
+          <Box className="trader-name-badges-row" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2], flexWrap: 'wrap' }}>
             <Text
               size="2xl"
               weight="black"
