@@ -614,7 +614,7 @@ export default function BookDetailClient({
 
         {/* ===== Description ===== */}
         {book.description && (
-          <Section title="">
+          <Section title={isZh ? '简介' : 'Description'}>
             <p style={{
               fontSize: tokens.typography.fontSize.base,
               lineHeight: tokens.typography.lineHeight.relaxed,
@@ -642,14 +642,14 @@ export default function BookDetailClient({
 
         {/* ===== Rating Overview ===== */}
         {count > 0 && (
-          <Section title="">
+          <Section title={isZh ? '评分概览' : 'Rating Overview'}>
             <BookRatingOverview average={avg} count={count} distribution={dist} />
           </Section>
         )}
 
         {/* ===== Reviews ===== */}
         {reviews.length > 0 && (
-          <Section title="">
+          <Section title={isZh ? '书评' : 'Reviews'}>
             <BookReviews
               reviews={reviews}
               bookId={id}
@@ -664,7 +664,7 @@ export default function BookDetailClient({
 
         {/* ===== Similar Books ===== */}
         {similar.length > 0 && (
-          <Section title="">
+          <Section title={isZh ? '相关推荐' : 'Similar Books'}>
             <SimilarBooks items={similar} />
           </Section>
         )}

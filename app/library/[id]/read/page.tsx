@@ -941,18 +941,22 @@ export default function ReadPage() {
               }} title={t('readerNotes')}>
                 <IconNotes />
               </ToolbarBtn>
-              <ToolbarBtn onClick={() => {
-                const ctrl = getEpubControls(epubContainerRef.current)
-                ctrl?.toggleStats()
-              }} title={t('readerStats')}>
-                <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="8" width="4" height="13"/><rect x="17" y="3" width="4" height="18"/></svg>
-              </ToolbarBtn>
-              <ToolbarBtn onClick={() => {
-                const ctrl = getEpubControls(epubContainerRef.current)
-                ctrl?.toggleTypography()
-              }} title={t('readerTypography')}>
-                <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-              </ToolbarBtn>
+              <span className="reader-hide-narrow">
+                <ToolbarBtn onClick={() => {
+                  const ctrl = getEpubControls(epubContainerRef.current)
+                  ctrl?.toggleStats()
+                }} title={t('readerStats')}>
+                  <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="8" width="4" height="13"/><rect x="17" y="3" width="4" height="18"/></svg>
+                </ToolbarBtn>
+              </span>
+              <span className="reader-hide-narrow">
+                <ToolbarBtn onClick={() => {
+                  const ctrl = getEpubControls(epubContainerRef.current)
+                  ctrl?.toggleTypography()
+                }} title={t('readerTypography')}>
+                  <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                </ToolbarBtn>
+              </span>
             </>
           )}
           <ToolbarBtn onClick={() => { setShowSettings(p => !p); setShowToc(false) }} active={showSettings} title={t('readerSettings')}>
@@ -1259,8 +1263,12 @@ export default function ReadPage() {
         .reader-nav-hint { pointer-events: none; }
         div:hover > .reader-nav-hint { opacity: 0.3 !important; }
         .reader-hide-mobile { display: inline; }
+        .reader-hide-narrow { display: inline; }
         @media (max-width: 640px) {
           .reader-hide-mobile { display: none; }
+        }
+        @media (max-width: 400px) {
+          .reader-hide-narrow { display: none; }
         }
         input[type=number]::-webkit-inner-spin-button,
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
