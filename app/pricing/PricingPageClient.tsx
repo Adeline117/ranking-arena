@@ -97,7 +97,7 @@ export default function PricingPageClient() {
         </div>
 
         {/* Plans grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: tokens.spacing[6], maxWidth: 720, margin: '0 auto', alignItems: 'stretch' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: tokens.spacing[8], maxWidth: 720, margin: '0 auto', alignItems: 'stretch', overflow: 'visible' }}>
           {/* Free Plan */}
           <div style={{
             padding: tokens.spacing[8],
@@ -152,6 +152,7 @@ export default function PricingPageClient() {
             position: 'relative',
             display: 'flex',
             flexDirection: 'column',
+            marginTop: 4,
           }}>
             {/* Badge */}
             <div style={{
