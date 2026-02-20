@@ -392,6 +392,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           style={{
             display: 'flex',
             alignItems: 'flex-start',
+            flexWrap: 'wrap',
             gap: tokens.spacing[4],
             marginBottom: tokens.spacing[6],
             padding: tokens.spacing[4],
@@ -580,12 +581,12 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 t('processing')
               ) : isSubscribed ? (
                 <>
-                  <span style={{ fontSize: 14 }}>OK</span>
+                  <span style={{ fontSize: 14 }}>✓</span>
                   {t('bookmarked')}
                 </>
               ) : (
                 <>
-                  <span style={{ fontSize: 14, color: 'var(--accent)' }}>Default</span>
+                  <span style={{ fontSize: 14 }}>☆</span>
                   {t('bookmark')}
                 </>
               )}
@@ -646,8 +647,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   </Text>
                 )}
                 
-                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: tokens.spacing[4] }}>
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
+                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
+                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap', minWidth: 0 }}>
                     {post.author_handle && (
                       <Text size="xs" color="tertiary">
                         @{post.author_handle}
