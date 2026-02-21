@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arena — 功能模块全景</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a202c;
+    --bg3: #2d3748;
+    --border: #2d3748;
+    --border2: #4a5568;
+    --text: #e2e8f0;
+    --text2: #cbd5e0;
+    --text3: #94a3b8;
+    --text4: #718096;
+    --purple: #a78bfa;
+    --green: #68d391;
+    --blue: #63b3ed;
+    --orange: #f6ad55;
+    --pink: #f687b3;
+    --teal: #4fd1c7;
+    --yellow: #f6e05e;
+    --red: #fc8181;
+  }
+  [data-theme="light"] {
+    --bg: #f7fafc;
+    --bg2: #edf2f7;
+    --bg3: #e2e8f0;
+    --border: #e2e8f0;
+    --border2: #cbd5e0;
+    --text: #1a202c;
+    --text2: #2d3748;
+    --text3: #4a5568;
+    --text4: #718096;
+    --purple: #6b46c1;
+    --green: #276749;
+    --blue: #2b6cb0;
+    --orange: #c05621;
+    --pink: #b83280;
+    --teal: #2c7a7b;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 20px 28px; line-height: 1.65; margin: 0; }
+  h1 { font-size: 20px; color: var(--purple); margin-bottom: 3px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .subtitle { font-size: 12.5px; color: var(--text4); margin-bottom: 14px; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+  .controls input { background: var(--bg2); border: 1px solid var(--border2); color: var(--text); padding: 5px 12px; border-radius: 5px; font-size: 13px; width: 220px; outline: none; }
+  .controls input::placeholder { color: var(--text4); }
+  .controls input:focus { border-color: var(--purple); }
+  .btn { background: var(--bg2); border: 1px solid var(--border2); color: var(--text3); padding: 5px 14px; border-radius: 5px; cursor: pointer; font-size: 12.5px; }
+  .btn:hover { background: var(--bg3); }
+
+  /* Summary bar */
+  .summary-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .sbar-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; font-size: 13px; color: var(--text3); }
+  .sbar-item strong { color: var(--text); }
+
+  /* Module grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+
+  .module-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .module-header { padding: 12px 16px 10px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; }
+  .module-header:hover { background: var(--bg3); }
+  .cat-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .module-title { font-size: 14px; font-weight: 700; color: var(--text); flex: 1; }
+  .module-subtitle { font-size: 12px; color: var(--text4); }
+  .chevron { font-size: 11px; color: var(--text4); transition: transform 0.2s; }
+  .module-card.open .chevron { transform: rotate(90deg); }
+  .module-body { display: none; padding: 12px 16px 14px; }
+  .module-card.open .module-body { display: block; }
+
+  /* Feature list inside card */
+  .feat { margin-bottom: 10px; }
+  .feat-name { font-size: 13px; font-weight: 600; color: var(--text2); margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+  .feat-desc { font-size: 12.5px; color: var(--text3); line-height: 1.6; }
+  .feat-route { font-size: 11px; font-family: monospace; background: var(--bg3); color: var(--text4); border-radius: 3px; padding: 1px 7px; }
+  .feat-status { font-size: 11px; border-radius: 3px; padding: 1px 7px; }
+  .feat-status.live { background: #1a3a1a; color: var(--green); }
+  .feat-status.pro { background: #2a1a3a; color: var(--purple); }
+  .feat-status.wip { background: #3a2a00; color: var(--yellow); }
+  .feat-status.defer { background: #3a1a1a; color: var(--red); }
+  hr.div { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+
+  /* Legend */
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text4); margin-bottom: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+</style>
+</head>
+<body>
+
+<h1>Arena — 功能模块全景</h1>
+<div class="subtitle">生产地址 arenafi.org | Next.js 16 + Supabase + Vercel | 最后更新 2026-02-21</div>
+
+<div class="controls">
+  <input type="text" placeholder="搜索功能模块..." oninput="doSearch(this.value)">
+  <button class="btn" onclick="setAll(true)">全部展开</button>
+  <button class="btn" onclick="setAll(false)">全部折叠</button>
+  <button class="btn" onclick="toggleTheme()">亮色 / 暗色</button>
+</div>
+
+<div class="summary-bar">
+  <div class="sbar-item"><strong>30+</strong> 交易所来源</div>
+  <div class="sbar-item"><strong>60,644</strong> Library 条目</div>
+  <div class="sbar-item"><strong>606</strong> 机构覆盖</div>
+  <div class="sbar-item"><strong>196</strong> 工具收录</div>
+  <div class="sbar-item"><strong>21</strong> 自定义 Orca 贴纸</div>
+  <div class="sbar-item">堆栈: Next.js 16 / Supabase / Vercel / Upstash Redis</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#68d391"></div>核心发现/数据</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>社交</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#63b3ed"></div>内容库</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f6ad55"></div>市场/行情</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f687b3"></div>用户/会员</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4fd1c7"></div>平台基础</div>
+</div>
+
+<div class="grid" id="grid">
+
+<!-- ===== 1. 排行榜 & 交易员发现 ===== -->
+<div class="module-card open" data-cat="ranking">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#68d391"></div>
+    <div>
+      <div class="module-title">排行榜 & 交易员发现</div>
+      <div class="module-subtitle">整个平台的核心入口，用户来这里找到最好的交易员</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">首页排行榜</div>
+      <div class="feat-desc">多维度加权综合排名（ROI、胜率、Arena Score），支持按交易所筛选（VIP功能）、按时间段（7d/30d/全时）切换。使用 SSR 首屏渲染 + 无限滚动加载。数据来自 30+ 交易所的 trader_snapshots 表。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/trader/[handle]</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">交易员详情页</div>
+      <div class="feat-desc">展示单个交易员的完整画像：ROI/胜率/MDD/Sharpe/Sortino/PF、多时间段数据（7d/30d/全时）、权益曲线、持仓列表、历史交易记录。所有头像通过 /api/avatar 代理解决 CDN 防盗链问题。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/compare</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">交易员对比</div>
+      <div class="feat-desc">并排对比多个交易员的核心指标，支持雷达图可视化。适合用户在 follow 或复制交易前做决策。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/hot</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">热门 / 趋势</div>
+      <div class="feat-desc">基于近期活跃度和 Arena Score 增长率排序，展示当前最受关注的交易员。区别于综合排行榜，这里更强调"现在谁在涨"。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/exchange/[platform]</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">按交易所浏览</div>
+      <div class="feat-desc">每个交易所独立页面，展示该平台排行榜前列的交易员。数据来自 leaderboard_ranks 表。覆盖 Binance、OKX、Bybit、Bitget、Gate.io、Hyperliquid、GMX 等 30+ 交易所。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/search</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">全局搜索</div>
+      <div class="feat-desc">按交易员名称/handle/地址搜索，支持模糊匹配。还可以搜索 Library 内容、机构、工具。</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 2. 社交层 ===== -->
+<div class="module-card open" data-cat="social">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#a78bfa"></div>
+    <div>
+      <div class="module-title">社交层</div>
+      <div class="module-subtitle">消息 / 群组 / 动态 / 关注，Arena 从排行榜向社交交易平台演进的核心</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/messages</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">私信系统</div>
+      <div class="feat-desc">用户之间的一对一私信，实时消息（WebSocket 或 Supabase Realtime）。消息列表、对话详情、未读计数。支持文字、图片。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/groups</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">群组</div>
+      <div class="feat-desc">创建和加入交易主题社群，群组内可以发消息、分享交易策略。群组可以申请加入（/groups/[id]/apply），管理员审核后进入。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/post/[id]</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">动态 / 帖子详情</div>
+      <div class="feat-desc">用户发布的交易心得、市场分析、持仓分享。每个帖子独立页面，支持回复、点赞。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/my-posts</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">我的动态</div>
+      <div class="feat-desc">当前用户发布的所有帖子列表，可以管理和删除。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/following</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">关注流</div>
+      <div class="feat-desc">聚合关注的交易员和用户的最新动态，类似 Twitter 的 Home feed。显示交易员发布的内容、仓位更新、绩效变化。followers 数字显示的是平台内关注数，不是外部平台粉丝数。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/inbox</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">通知 & 收件箱</div>
+      <div class="feat-desc">系统通知（被关注、被评论、被提及）+ 私信预览。红色数字角标，不使用脉冲动画。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/notifications</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">通知中心</div>
+      <div class="feat-desc">所有平台通知的集中列表，可以按类型筛选（关注、评论、系统）、标记已读。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/tip</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">打赏</div>
+      <div class="feat-desc">用户可以向交易员或内容创作者打赏代币，奖励好的内容和策略分享。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/channels</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">频道</div>
+      <div class="feat-desc">类似 Telegram Channel，单向广播型内容流。交易员可以开设频道，关注者订阅接收。</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 3. Library 知识库 ===== -->
+<div class="module-card open" data-cat="library">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#63b3ed"></div>
+    <div>
+      <div class="module-title">Library 知识库</div>
+      <div class="module-subtitle">60,644 条内容，书籍 / 论文 / 白皮书 / 活动，全部站内阅读</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/library</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">Library 主页</div>
+      <div class="feat-desc">四个内容类型：Books（书籍）、Papers（学术论文）、Whitepapers（加密白皮书）、Events（行业活动）。按分类过滤、搜索标题/作者/标签。书籍封面通过 Google Books API 获取（4219 本有封面），没有封面则不显示，禁止任何自动生成的替代品。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/library/[id]</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">内容详情 & 站内阅读</div>
+      <div class="feat-desc">论文和白皮书已下载到 Supabase Storage（bucket: library-files），支持站内直接阅读，不跳外部链接。书籍 EPUB 仍在持续下载中（来源：Anna's Archive / LibGen，只能从 Mac Mini 抓取，VPS 被封了）。Papers 24,579 篇已有 PDF，Books 29,000+ 本 EPUB 覆盖率持续提升。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name">内容来源 & 限制</div>
+      <div class="feat-desc">规则明确：不允许任何外部跳转，所有文件必须预下载到 Supabase Storage。书籍封面必须是出版社原版封面，没有就不显示。自动翻译的内容需要加"译"角标和颜色标记。</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 4. 市场行情 ===== -->
+<div class="module-card open" data-cat="market">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#f6ad55"></div>
+    <div>
+      <div class="module-title">市场行情</div>
+      <div class="module-subtitle">Flash 快讯 / 市场数据 / 多链资产 / 治理追踪</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/flash-news</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">Flash 快讯</div>
+      <div class="feat-desc">9 个新闻源，每 2 分钟在 VPS（45.76.152.169）扫一遍，新内容推送到平台。实时更新，不刷新页面。这是平台的实时信息流核心。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/market</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">市场数据</div>
+      <div class="feat-desc">加密市场整体行情，主流资产价格、涨跌幅、成交量。提供宏观市场上下文，帮助用户理解排行榜交易员的近期表现。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/multi-chain</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">多链视图</div>
+      <div class="feat-desc">跨链资产追踪，聚合 ETH / Solana / Arbitrum / BSC 等主流链的数据，提供统一视角看多链市场状态。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/governance</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">治理追踪</div>
+      <div class="feat-desc">主要 DeFi 协议的治理投票动态，追踪重要提案。面向关注协议治理的研究者和持仓用户。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/kol</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">KOL 榜</div>
+      <div class="feat-desc">加密领域关键意见领袖榜单，追踪影响力和内容质量。与交易员排行榜不同，KOL 的排名依据是内容影响力，不是交易绩效。X/Twitter 数据对接选用 LunarCrush（$72-90/月），目前因预算暂缓。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/bot</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">量化 Bot</div>
+      <div class="feat-desc">平台自有量化机器人的展示和追踪页面，展示 bot 策略、历史绩效、当前持仓。</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 5. 用户账户 & 会员 ===== -->
+<div class="module-card open" data-cat="user">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#f687b3"></div>
+    <div>
+      <div class="module-title">用户账户 & 会员体系</div>
+      <div class="module-subtitle">个人主页 / 绑定交易所 / Pro 会员 / 收藏 / 作品集</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/u/[handle]</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">用户主页</div>
+      <div class="feat-desc">用户的公开个人主页，展示基本信息、发布的动态、关注/被关注数。注意：followers 只显示平台内关注数，不显示外部平台粉丝数（已清零所有外部 followers）。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/user-center</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">个人中心</div>
+      <div class="feat-desc">当前用户的后台：编辑资料、绑定交易所账户、查看绑定的交易员数据、管理订阅。绑定交易所后，用户个人主页和交易员主页外观完全一致（User = Trader 原则）。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/settings</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">设置</div>
+      <div class="feat-desc">账户安全（密码、2FA）、通知偏好、语言切换（中英）、主题（亮/暗）。主题切换使用 View Transition API 圆形扩散动画。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/favorites</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">收藏</div>
+      <div class="feat-desc">用户收藏的交易员、Library 内容、帖子，统一管理在收藏页面。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/portfolio</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">作品集 / 持仓</div>
+      <div class="feat-desc">用户绑定交易所后可以查看自己的持仓历史和绩效曲线，等同于绑定的交易员主页数据。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/pricing</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">定价 & Pro 订阅</div>
+      <div class="feat-desc">Pro 会员方案展示（当前 Stripe 是 sandbox 模式，pk_test_ / sk_test_，页面显示 sandbox 提示）。Pro 功能包括：交易所筛选器、高级分析、更长历史数据等。非 Pro 功能区域使用明亮配色引导升级，不使用灰色隐藏。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/membership</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">会员管理</div>
+      <div class="feat-desc">Pro 会员的订阅状态、续费、取消。当前 Stripe 为测试环境，上线前需切换到 live key。Apple Pay 登录（$688/年开发者费用）暂缓。</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 6. 机构 & 工具目录 ===== -->
+<div class="module-card" data-cat="directory">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#4fd1c7"></div>
+    <div>
+      <div class="module-title">机构 & 工具目录</div>
+      <div class="module-subtitle">606 机构 / 196 工具，加密行业的 Crunchbase</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/s/institutions</span> 或 <span class="feat-route">/s</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">机构目录</div>
+      <div class="feat-desc">606 家机构（覆盖 CEX、DEX、加密 VC、对冲基金、L1/L2、DeFi 协议、托管、审计、媒体等 22 个子类别）。原先只有 110 家，通过 AI 生成导入扩展到 606 家，并做了去重处理。RLS 策略已设置允许匿名查询。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/s/tools</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">工具目录</div>
+      <div class="feat-desc">196 个加密工具（分析工具、链上数据、DeFi 工具、交易工具等 14 个分类）。原先 58 个，扩展到 196 个。</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 7. 平台基础层 ===== -->
+<div class="module-card" data-cat="infra">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#4fd1c7"></div>
+    <div>
+      <div class="module-title">平台基础层</div>
+      <div class="module-subtitle">认证 / 引导 / 帮助 / 后台管理 / SEO</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/login</span> <span class="feat-route">/auth</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">认证系统</div>
+      <div class="feat-desc">支持：邮箱密码、Google OAuth、Web3 钱包连接、X/Twitter（LunarCrush 暂缓）、Discord。Apple 登录需要 $688/年开发者账号，目前暂缓。Phone/Twilio 注册中。OAuth token 每 5 小时自动刷新是正常行为，refresh token 1 年有效。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/onboarding</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">新用户引导</div>
+      <div class="feat-desc">新注册用户的引导流程：选择感兴趣的交易方向、关注推荐的交易员、完善个人资料。引导完成后跳转首页。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/welcome</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">欢迎页</div>
+      <div class="feat-desc">平台落地页，面向未登录用户，介绍平台核心价值，引导注册。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/admin</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">后台管理</div>
+      <div class="feat-desc">平台管理员的控制台：用户管理、内容审核、数据质量监控、交易员数据导入状态查看。访问受 RLS 权限控制。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/help</span> <span class="feat-status live">live</span></div>
+      <div class="feat-name">帮助中心</div>
+      <div class="feat-desc">常见问题解答、功能使用说明、API 接入文档。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name"><span class="feat-route">/sitemap.ts</span> <span class="feat-route">/robots.ts</span></div>
+      <div class="feat-name">SEO 基础</div>
+      <div class="feat-desc">动态 sitemap 生成，robots.txt，canonical URL，OpenGraph 图片，Twitter Card。所有主要页面都有元数据配置。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name">法律页面 <span class="feat-route">/legal</span></div>
+      <div class="feat-name">隐私政策 & 服务条款</div>
+      <div class="feat-desc">平台运营所需的法律文档。注册时用户需同意服务条款。</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 8. 数据层 & 后端服务 ===== -->
+<div class="module-card" data-cat="data">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#f6ad55"></div>
+    <div>
+      <div class="module-title">数据层 & 后端服务</div>
+      <div class="module-subtitle">VPS cron / LaunchAgent / enrichment / 30+ 交易所数据管道</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name">VPS 数据采集（45.76.152.169）</div>
+      <div class="feat-desc">新加坡 VPS 运行所有交易所数据的定时采集 cron（每 1-3 小时），Flash 新闻（每 30 分钟）。路径 /opt/arena/scripts/，与 /opt/ranking-arena/ 是两个不同目录，push 之后两处都要同步。Puppeteer 在 VPS 上已损坏，Bybit/Bitget 等移到 Mac Mini 跑。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name">Mac Mini LaunchAgent</div>
+      <div class="feat-desc">Mac Mini 上的 launchd 服务：daily-checkpoint.mjs（UTC 00:00，覆盖 OKX/Gains/Hyperliquid/Binance Futures 快照）、Bybit/Bitget Puppeteer 抓取（Bybit 需要 puppeteer+stealth 绕 WAF）、enrichment master loop 持续运行。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name">数据完整性状态</div>
+      <div class="feat-desc">
+        已完全清除：Binance Futures TC、Gains WR+TC、Jupiter Perps、XT、XT Spot。<br>
+        无法解决：OKX Web3、Aevo（数据结构性缺失，确认后放弃）、dYdX、KuCoin。<br>
+        进行中：WR null 每次 VPS cron 导入新交易员时约反弹 3-5K，master loop 持续补充中。<br>
+        Sharpe Ratio：全平台 96-100% null，是数据完整性最大缺口。
+      </div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name">API 代理层（/api/avatar、/api/...）</div>
+      <div class="feat-desc">所有交易员头像通过 /api/avatar?url= 代理，解决各交易所 CDN 的 Referrer 防盗链问题。直接使用原 URL 会因 Referer 检查返回 403 导致头像无法加载。</div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name">Supabase 数据库架构</div>
+      <div class="feat-desc">核心表：traders（基础信息）、trader_snapshots（带时间戳的绩效快照，包含 roi_7d/30d、win_rate、max_drawdown、sharpe_ratio 等）、leaderboard_ranks（交易所原始排名）、user_profiles（用户 + 绑定交易员）、library（知识库条目）。Pro 计划已升级，解决了 Free 计划无法创建大表索引的问题。</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 9. UI 设计规则 ===== -->
+<div class="module-card" data-cat="design">
+  <div class="module-header" onclick="toggleCard(this.parentElement)">
+    <div class="cat-dot" style="background:#f687b3"></div>
+    <div>
+      <div class="module-title">UI 设计规则</div>
+      <div class="module-subtitle">明确的不能做和必须做，防止返工</div>
+    </div>
+    <div class="chevron">&#9654;</div>
+  </div>
+  <div class="module-body">
+
+    <div class="feat">
+      <div class="feat-name">绝对禁止</div>
+      <div class="feat-desc">
+        不允许任何 emoji 出现在 UI 中（文字/SVG/CSS 只能用几何符号 ● ▼ ▲）。<br>
+        不允许 DiceBear / identicon / 自动生成的头像，没有原版头像就不显示。<br>
+        不允许水平滚动，永远只能上下滑动（用户原话："永远让用户上下不要做左右滑动"）。<br>
+        不允许写死深色颜色值，必须用 CSS 变量（支持亮/暗主题切换）。<br>
+        不允许做辅助性优化（a11y lint SEO）直到核心数据完整性解决。
+      </div>
+    </div>
+    <hr class="div">
+
+    <div class="feat">
+      <div class="feat-name">必须做到</div>
+      <div class="feat-desc">
+        通知角标：红色带数字，不脉冲不发光。<br>
+        主题切换：View Transition API 圆形扩散动画（从按钮扩散）。<br>
+        紫金渐变（purpleGold）：用于活跃分类/筛选按钮。<br>
+        非 Pro 功能：明亮配色引导升级，不灰色隐藏。<br>
+        自动翻译内容：加"译"角标 + 颜色标记。<br>
+        交易员 ID 和头像：必须来自原平台，句柄纯数字的设为 NULL。<br>
+        User = Trader：用户绑定交易所后，个人主页和交易员主页外观完全一致。
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div>
+
+<script>
+function toggleCard(card) {
+  card.classList.toggle('open');
+}
+function setAll(open) {
+  document.querySelectorAll('.module-card').forEach(c => {
+    open ? c.classList.add('open') : c.classList.remove('open');
+  });
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', cur === 'light' ? '' : 'light');
+}
+function doSearch(q) {
+  q = q.trim().toLowerCase();
+  document.querySelectorAll('.module-card').forEach(card => {
+    const text = card.innerText.toLowerCase();
+    if (!q || text.includes(q)) {
+      card.style.display = '';
+      if (q) card.classList.add('open');
+    } else {
+      card.style.display = 'none';
+    }
+  });
+}
+</script>
+</body>
+</html>
