@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { t } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { DefiOverview as DefiOverviewData } from '@/lib/utils/defillama'
 
 function formatTVL(value: number): string {
@@ -13,6 +13,7 @@ function formatTVL(value: number): string {
 }
 
 export default function DefiOverview() {
+  const { t } = useLanguage()
   const [data, setData] = useState<DefiOverviewData | null>(null)
 
   useEffect(() => {
