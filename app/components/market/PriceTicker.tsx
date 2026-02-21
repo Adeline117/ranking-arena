@@ -16,8 +16,10 @@ function formatPrice(n: number): string {
   return `$${n.toPrecision(4)}`
 }
 
+const ICON_VERSION = 'v5'
+
 function getCryptoIcon(symbol: string, fallbackImage: string): string {
-  const localPath = `/icons/crypto/${symbol.toLowerCase()}.svg`
+  const localPath = `/icons/crypto/${symbol.toLowerCase()}.svg?${ICON_VERSION}`
   return localPath || fallbackImage
 }
 

@@ -103,7 +103,7 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
       <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[2] }}>
         {stats && (
           <Button variant="secondary" size="sm" onClick={() => exportStatsAsCSV(stats)}>
-            📊 {t('adminExportCSV') || 'Export CSV'}
+            {t('adminExportCSV') || 'Export CSV'}
           </Button>
         )}
         <Button variant="secondary" size="sm" onClick={loadStats} disabled={loading}>
