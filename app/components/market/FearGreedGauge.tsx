@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { t } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
 
 function getColor(value: number): string {
@@ -13,18 +13,19 @@ function getColor(value: number): string {
   return '#16c784'
 }
 
-function getLabel(value: number): string {
-  if (value <= 25) return t('fearGreedExtremeFear')
-  if (value <= 46) return t('fearGreedFear')
-  if (value <= 54) return t('fearGreedNeutral')
-  if (value <= 75) return t('fearGreedGreed')
-  return t('fearGreedExtremeGreed')
-}
-
 export default function FearGreedGauge() {
+  const { t } = useLanguage()
   const [data, setData] = useState<FearGreedData | null>(null)
   const [animatedValue, setAnimatedValue] = useState(0)
   const prevValueRef = useRef(0)
+
+  function getLabel(value: number): string {
+    if (value <= 25) return t('fearGreedExtremeFear')
+    if (value <= 46) return t('fearGreedFear')
+    if (value <= 54) return t('fearGreedNeutral')
+    if (value <= 75) return t('fearGreedGreed')
+    return t('fearGreedExtremeGreed')
+  }
 
   useEffect(() => {
     fetch('/api/market/fear-greed')

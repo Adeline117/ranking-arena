@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { t } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CryptoCategory } from '@/lib/utils/coingecko'
 
 const SECTOR_LABELS: Record<string, string> = {
@@ -17,6 +17,7 @@ const SECTOR_LABELS: Record<string, string> = {
 }
 
 export default function SectorPerformance() {
+  const { t } = useLanguage()
   const [sectors, setSectors] = useState<CryptoCategory[]>([])
 
   useEffect(() => {

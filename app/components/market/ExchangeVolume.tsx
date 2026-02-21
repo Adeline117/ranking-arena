@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { t } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { ExchangeInfo } from '@/lib/utils/coingecko'
 
 function formatBTC(value: number): string {
@@ -12,6 +12,7 @@ function formatBTC(value: number): string {
 }
 
 export default function ExchangeVolume() {
+  const { t } = useLanguage()
   const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
 
   useEffect(() => {
