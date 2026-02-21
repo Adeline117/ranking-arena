@@ -57,7 +57,7 @@ function timeAgo(ts: number, isZh = true): string {
   return isZh ? `${Math.floor(sec / 60)}分前` : `${Math.floor(sec / 60)}m ago`
 }
 
-const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTrade; index: number }) {
+const TradeRow = memo(function TradeRow({ trade, index, isZh }: { trade: NormalizedTrade; index: number; isZh: boolean }) {
   const isBuy = trade.side === 'buy'
   const sideColor = isBuy ? tokens.colors.accent.success : tokens.colors.accent.error
   const isEven = index % 2 === 0
@@ -128,7 +128,7 @@ const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTra
 
       {/* 时间 */}
       <span style={{ color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 9 }}>
-        {timeAgo(trade.timestamp)}
+        {timeAgo(trade.timestamp, isZh)}
       </span>
     </div>
   )
@@ -301,7 +301,7 @@ export default function LiveTradesFeed() {
             {t('waitingForData') || '等待交易数据...'}
           </div>
         ) : (
-          filteredTrades.map((trade, i) => <TradeRow key={trade.id} trade={trade} index={i} />)
+          filteredTrades.map((trade, i) => <TradeRow key={trade.id} trade={trade} index={i} isZh={isZh} />)
         )}
       </div>
 
