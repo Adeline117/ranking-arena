@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { normalizeCoinSymbol } from '@/lib/utils/crypto-icons'
 
 const ICON_BASE_PATH = '/icons/crypto'
+// Version suffix busts CDN-cached 404s that arose from files being added
+// after the initial cache warm-up (stale immutable 404s last up to 1 year).
+const ICON_VERSION = 'v5'
 
 // CoinCap CDN uses symbol-based URLs
 function getCdnUrl(symbol: string): string {
@@ -27,7 +30,7 @@ export default function CryptoIcon({ symbol, size = 20, style, className }: Cryp
   const normalized = normalizeCoinSymbol(symbol)
 
   const src = fallbackLevel === 0
-    ? `${ICON_BASE_PATH}/${normalized}.svg`
+    ? `${ICON_BASE_PATH}/${normalized}.svg?${ICON_VERSION}`
     : fallbackLevel === 1
       ? getCdnUrl(symbol)
       : `${ICON_BASE_PATH}/generic.svg`
