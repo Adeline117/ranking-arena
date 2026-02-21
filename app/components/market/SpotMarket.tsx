@@ -383,7 +383,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
           }}
         >
           <span style={{ fontSize: 16 }}>{showFavOnly ? '\u2605' : '\u2606'}</span>
-          {'收藏'}
+          {t('favorite') || 'Favorites'}
           {favorites.size > 0 && (
             <span style={{
               padding: '1px 6px',

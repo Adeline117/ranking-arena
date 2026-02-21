@@ -14,7 +14,8 @@ function getColor(value: number): string {
 }
 
 export default function FearGreedGauge() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const isZh = language === 'zh'
   const [data, setData] = useState<FearGreedData | null>(null)
   const [animatedValue, setAnimatedValue] = useState(0)
   const prevValueRef = useRef(0)
@@ -140,7 +141,7 @@ export default function FearGreedGauge() {
             color: tokens.colors.text.tertiary,
             fontWeight: 400,
           }}>
-            {new Date(Number(data.timestamp) * 1000).toLocaleDateString('zh-CN')}
+            {new Date(Number(data.timestamp) * 1000).toLocaleDateString(isZh ? 'zh-CN' : 'en-US')}
           </span>
         )}
       </div>
