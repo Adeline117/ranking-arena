@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Arena 数据缺失 — 修复进度</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; padding: 24px 32px; }
+  h1 { font-size: 19px; color: #a78bfa; margin-bottom: 6px; border-bottom: 1px solid #2d3748; padding-bottom: 10px; }
+  .subtitle { font-size: 13px; color: #718096; margin-bottom: 24px; }
+  details { margin: 5px 0; border-left: 2px solid #4a5568; padding-left: 16px; }
+  details[open] > summary { color: #a78bfa; }
+  summary { cursor: pointer; padding: 6px 8px; border-radius: 6px; font-weight: 600; color: #cbd5e0; list-style: none; display: flex; align-items: center; gap: 8px; user-select: none; font-size: 14px; }
+  summary:hover { background: #1e2435; }
+  summary::before { content: '▶'; font-size: 10px; color: #718096; transition: transform 0.2s; flex-shrink: 0; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  .row { padding: 4px 8px 4px 24px; color: #94a3b8; font-size: 13px; line-height: 1.7; }
+  .row strong { color: #e2e8f0; }
+  .ok { color: #68d391; font-weight: 600; }
+  .bad { color: #fc8181; font-weight: 600; }
+  .wip { color: #f6e05e; font-weight: 600; }
+  .skip { color: #718096; font-style: italic; }
+  table { border-collapse: collapse; margin: 8px 0 8px 24px; font-size: 13px; }
+  th { color: #a78bfa; text-align: left; padding: 4px 14px 4px 0; border-bottom: 1px solid #2d3748; font-size: 12px; }
+  td { padding: 4px 14px 4px 0; color: #cbd5e0; }
+  td.hi { color: #fc8181; }
+  td.lo { color: #68d391; }
+  .tag { font-size: 11px; background: #2d3748; color: #a0aec0; border-radius: 3px; padding: 1px 6px; font-weight: normal; }
+  .tag.running { background: #1a472a; color: #68d391; }
+  .tag.fail { background: #742a2a; color: #fc8181; }
+  .tag.skip { background: #2d3748; color: #718096; }
+  .tag.wip { background: #744210; color: #fbd38d; }
+  .reason { font-size: 12px; color: #718096; margin-left: 8px; }
+</style>
+</head>
+<body>
+<h1>Arena 数据缺失 — 修复进度</h1>
+<div class="subtitle">48,476 条 trader_snapshots 快照 / 最后更新: 2026-02-21</div>
+
+<!-- TOP LEVEL -->
+<details open>
+<summary>数据审计结果 — 按字段</summary>
+
+  <details open>
+  <summary>Sharpe Ratio <span class="tag fail">99%+ null 全平台</span></summary>
+  <div class="row">
+    脚本已有: <strong>enrich-lr-sharpe-direct.mjs</strong> (支持 binance_futures / bybit / bitget_futures / gateio / okx)<br>
+    问题: 脚本存在但未被 master loop 纳入 / 或 API 返回空值
+  </div>
+  <table>
+    <tr><th>Source</th><th>Sharpe null%</th><th>状态</th></tr>
+    <tr><td>binance_spot</td><td class="hi">99%</td><td><span class="tag wip">Agent 1 处理中</span></td></tr>
+    <tr><td>okx_web3</td><td class="hi">100%</td><td><span class="tag skip">结构性缺失 — API无此字段</span></td></tr>
+    <tr><td>bybit_spot</td><td class="hi">19%</td><td><span class="tag wip">Agent 1 处理中</span></td></tr>
+    <tr><td>bybit</td><td class="hi">15%</td><td><span class="tag wip">Agent 1 处理中</span></td></tr>
+    <tr><td>bitget_futures</td><td class="hi">98%</td><td><span class="tag wip">Agent 1 处理中</span></td></tr>
+    <tr><td>gmx</td><td class="hi">74%</td><td><span class="tag wip">Agent 1 处理中</span></td></tr>
+    <tr><td>hyperliquid</td><td class="hi">100%</td><td><span class="tag wip">Agent 1 处理中</span></td></tr>
+  </table>
+  </details>
+
+  <details open>
+  <summary>ROI 7d / ROI 30d <span class="tag fail">部分来源 80-100% null</span></summary>
+  <table>
+    <tr><th>Source</th><th>ROI7d null%</th><th>ROI30d null%</th><th>状态</th></tr>
+    <tr><td>binance_spot</td><td class="hi">84%</td><td class="hi">84%</td><td><span class="tag wip">Agent 2 处理中</span></td></tr>
+    <tr><td>bybit_spot</td><td class="hi">89%</td><td class="hi">87%</td><td><span class="tag wip">Agent 2 处理中</span></td></tr>
+    <tr><td>htx_futures</td><td class="hi">100%</td><td class="hi">100%</td><td><span class="tag wip">Agent 2 处理中</span></td></tr>
+    <tr><td>jupiter_perps</td><td class="hi">100%</td><td class="hi">100%</td><td><span class="tag wip">Agent 2 处理中</span></td></tr>
+    <tr><td>bitget_futures</td><td class="hi">85%</td><td class="hi">87%</td><td><span class="tag wip">Agent 2 处理中</span></td></tr>
+    <tr><td>binance_futures</td><td class="lo">16%</td><td class="lo">16%</td><td><span class="tag running">大部分已有</span></td></tr>
+    <tr><td>gmx</td><td class="lo">100%</td><td class="lo">1%</td><td><span class="tag fail">7d无API / 30d正常</span></td></tr>
+    <tr><td>hyperliquid</td><td class="lo">0%</td><td class="lo">0%</td><td><span class="ok">完整</span></td></tr>
+  </table>
+  </details>
+
+  <details>
+  <summary>Win Rate (全周期) <span class="tag fail">部分来源 65-93% null</span></summary>
+  <table>
+    <tr><th>Source</th><th>WR null%</th><th>尝试方法</th><th>状态</th></tr>
+    <tr><td>bitget_spot</td><td class="hi">93%</td><td>enrich-bitget-spot.mjs</td><td><span class="tag wip">Agent 2 检查中</span></td></tr>
+    <tr><td>gains</td><td class="hi">89%</td><td>enrich-gains-stats.mjs</td><td><span class="tag fail">API结构变更，v5已失效</span></td></tr>
+    <tr><td>gateio</td><td class="hi">68%</td><td>enrich-lr-gateio.mjs</td><td><span class="tag wip">Agent 2 检查中</span></td></tr>
+    <tr><td>okx_web3</td><td class="hi">65%</td><td>enrich-lr-okx-web3.mjs</td><td><span class="tag skip">结构性缺失 — 已确认 2026-02-19</span></td></tr>
+    <tr><td>binance_web3</td><td class="hi">60%</td><td>无专属脚本</td><td><span class="tag wip">待调查</span></td></tr>
+    <tr><td>binance_spot</td><td class="lo">2%</td><td>—</td><td><span class="ok">基本完整</span></td></tr>
+    <tr><td>bybit</td><td class="lo">0%</td><td>—</td><td><span class="ok">完整</span></td></tr>
+    <tr><td>hyperliquid</td><td class="lo">0%</td><td>—</td><td><span class="ok">完整</span></td></tr>
+  </table>
+  </details>
+
+  <details>
+  <summary>Max Drawdown (全周期) <span class="tag fail">部分来源 65-100% null</span></summary>
+  <table>
+    <tr><th>Source</th><th>MDD null%</th><th>尝试方法</th><th>状态</th></tr>
+    <tr><td>bingx_spot</td><td class="hi">100%</td><td>enrich-bingx-spot-mdd x4版本</td><td><span class="tag skip">spot API不暴露drawdown — 结构性缺失</span></td></tr>
+    <tr><td>bitget_futures</td><td class="hi">80%</td><td>enrich-bitget-futures-wr-mdd.mjs</td><td><span class="tag wip">Agent 2 检查中</span></td></tr>
+    <tr><td>gains</td><td class="hi">100%</td><td>enrich-gains-mdd x5版本</td><td><span class="tag fail">openOnly API已失效</span></td></tr>
+    <tr><td>gateio</td><td class="hi">73%</td><td>enrich-lr-gateio-numeric-mdd.mjs</td><td><span class="tag wip">Agent 2 检查中</span></td></tr>
+    <tr><td>binance_web3</td><td class="hi">77%</td><td>无专属脚本</td><td><span class="tag wip">待调查</span></td></tr>
+    <tr><td>okx_web3</td><td class="hi">65%</td><td>—</td><td><span class="tag skip">结构性缺失 — 已确认</span></td></tr>
+    <tr><td>bingx</td><td class="lo">0%</td><td>—</td><td><span class="ok">完整</span></td></tr>
+    <tr><td>hyperliquid</td><td class="lo">10%</td><td>enrich-hl-mdd.mjs</td><td><span class="ok">基本完整</span></td></tr>
+  </table>
+  </details>
+
+</details>
+
+<!-- BY OUTCOME -->
+<details open>
+<summary>已确认无解 — 结构性缺失</summary>
+<div class="row">
+  以下来源已经过多次尝试和网页核实，API本身不提供该字段，非访问问题。
+</div>
+
+  <details>
+  <summary>OKX Web3 — WR / MDD / Sharpe <span class="tag skip">结构性缺失</span></summary>
+  <div class="row">
+    <strong>尝试过:</strong> enrich-lr-okx-web3.mjs (多版本) / 直接 API / Playwright 拦截<br>
+    <strong>结论:</strong> OKX Web3 leaderboard API 返回的 profile 对象没有 win_rate / drawdown 字段，只有 PnL 和 ROI。截图确认 2026-02-19。<br>
+    <strong class="skip">无法修复，记录为 N/A</strong>
+  </div>
+  </details>
+
+  <details>
+  <summary>BingX Spot — MDD <span class="tag skip">结构性缺失</span></summary>
+  <div class="row">
+    <strong>尝试过:</strong> enrich-bingx-spot-mdd.mjs (v1-v4) / Playwright / 不同端点<br>
+    <strong>结论:</strong> BingX spot copy trading API 的 trader detail 端点无 drawdown 字段，只有 futures 有。<br>
+    <strong class="skip">无法修复，记录为 N/A</strong>
+  </div>
+  </details>
+
+  <details>
+  <summary>Gains — WR / MDD <span class="tag fail">API 失效</span></summary>
+  <div class="row">
+    <strong>尝试过:</strong> enrich-gains-mdd.mjs (v1-v5) / openOnly / stats API<br>
+    <strong>结论:</strong> Gains.trade API 结构变更，之前 openOnly 端点返回的 drawdown 字段已不存在。WR 同样缺失。<br>
+    <strong class="skip">待重新调查 API 新结构</strong>
+  </div>
+  </details>
+
+  <details>
+  <summary>Aevo / dYdX / KuCoin — 多字段 <span class="tag skip">已确认无解</span></summary>
+  <div class="row">
+    已于 2026-02-19 截图核实，数据结构性缺失，非访问问题。记录为 N/A。
+  </div>
+  </details>
+
+</details>
+
+<!-- MASTER LOOP STATUS -->
+<details open>
+<summary>Master Enrichment Loop 状态</summary>
+<div class="row">
+  LaunchAgent: <strong>enrich_master.mjs</strong> 持续运行 (Mac Mini)<br>
+  VPS puppeteer: 已失效 (bybit_spot / bitget_spot 移至 Mac Mini)<br>
+  当前运行: <span class="wip">enrich_bitfinex_wr_mdd.mjs (150/181)</span> — 2026-02-21 16:24
+</div>
+</details>
+
+<!-- AGENT TASKS -->
+<details open>
+<summary>Agent 任务分配</summary>
+
+  <details>
+  <summary>Agent 1 — Sharpe Ratio 全平台修复 <span class="tag wip">运行中</span></summary>
+  <div class="row">
+    目标: 运行 enrich-lr-sharpe-direct.mjs 覆盖所有支持来源<br>
+    优先级: binance_spot (192条, 99% null) / bitget_futures (55条, 98% null) / bybit_spot<br>
+    脚本: <strong>enrich-lr-sharpe-direct.mjs all --limit=5000</strong>
+  </div>
+  </details>
+
+  <details>
+  <summary>Agent 2 — ROI 7d/30d + WR/MDD 剩余缺口 <span class="tag wip">运行中</span></summary>
+  <div class="row">
+    目标 1: binance_spot / bybit_spot / htx ROI 7d/30d<br>
+    目标 2: bitget_futures WR/MDD (80% null)<br>
+    目标 3: gateio WR/MDD 剩余<br>
+    目标 4: binance_web3 调查 (无专属脚本)
+  </div>
+  </details>
+
+</details>
+
+</body>
+</html>
