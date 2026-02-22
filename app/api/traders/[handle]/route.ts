@@ -451,7 +451,11 @@ async function getTraderDetails(
   let snapshot30d = snapshot30dResult.data as SnapshotData | null
   
   // Fallback to leaderboard_ranks when trader_snapshots has no/empty data
-  if (!snapshot || ((snapshot.roi === 0 || snapshot.roi == null) && (snapshot.win_rate === 0 || snapshot.win_rate == null) && !snapshot.pnl)) {
+  const isEmptySnapshot = !snapshot ||
+    ((snapshot.roi === 0 || snapshot.roi == null) &&
+     (snapshot.win_rate === 0 || snapshot.win_rate == null) &&
+     (snapshot.pnl == null || Math.abs(snapshot.pnl as number) < 0.01))
+  if (isEmptySnapshot) {
     const { data: lrRows } = await supabase
       .from('leaderboard_ranks')
       .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, profitability_score, risk_control_score, execution_score')
