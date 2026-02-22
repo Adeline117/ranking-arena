@@ -451,7 +451,7 @@ async function getTraderDetails(
   let snapshot30d = snapshot30dResult.data as SnapshotData | null
   
   // Fallback to leaderboard_ranks when trader_snapshots has no/empty data
-  if (!snapshot || (snapshot.roi === 0 && snapshot.win_rate === 0 && !snapshot.pnl)) {
+  if (!snapshot || ((snapshot.roi === 0 || snapshot.roi == null) && (snapshot.win_rate === 0 || snapshot.win_rate == null) && !snapshot.pnl)) {
     const { data: lrRows } = await supabase
       .from('leaderboard_ranks')
       .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, profitability_score, risk_control_score, execution_score')
@@ -853,72 +853,64 @@ async function getTraderDetailsFromSnapshots(
   traderId: string,
   sourceType: SourceType
 ) {
-  // 获取最新快照数据
-  const [
-    snapshotResult,
-    snapshot7dResult,
-    snapshot30dResult,
-    arenaFollowersResult,
-    trackedSinceResult,
-    avatarResult,
-  ] = await Promise.all([
-    // 最新快照（90D）
-    supabase
-      .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id')
-      .eq('source', sourceType)
-      .eq('source_trader_id', traderId)
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-
-    // 7天快照
-    supabase
-      .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, trades_count')
-      .eq('source', sourceType)
-      .eq('source_trader_id', traderId)
-      .eq('season_id', '7D')
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-
-    // 30天快照
-    supabase
-      .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, trades_count')
-      .eq('source', sourceType)
-      .eq('source_trader_id', traderId)
-      .eq('season_id', '30D')
-      .order('captured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-
-    // Arena 粉丝数
-    supabase
-      .from('trader_follows')
-      .select('id', { count: 'exact', head: true })
-      .eq('trader_id', traderId),
-
-    // tracked_since
-    supabase
-      .from('trader_snapshots')
-      .select('captured_at')
-      .eq('source', sourceType)
-      .eq('source_trader_id', traderId)
-      .order('captured_at', { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-
-    // avatar_url from trader_sources
-    supabase
-      .from('trader_sources')
-      .select('avatar_url')
-      .eq('source', sourceType)
-      .eq('source_trader_id', traderId)
-      .limit(1)
-      .maybeSingle(),
-  ])
+  // 获取最新快照数据（带超时保护）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let snapshotQueryResults: any[] = [
+    { data: null }, { data: null }, { data: null },
+    { count: 0 }, { data: null }, { data: null },
+  ]
+  try {
+    snapshotQueryResults = await withTimeout(Promise.all([
+      supabase
+        .from('trader_snapshots')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count, followers, captured_at, season_id')
+        .eq('source', sourceType)
+        .eq('source_trader_id', traderId)
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('trader_snapshots')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count')
+        .eq('source', sourceType)
+        .eq('source_trader_id', traderId)
+        .eq('season_id', '7D')
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('trader_snapshots')
+        .select('roi, pnl, win_rate, max_drawdown, trades_count')
+        .eq('source', sourceType)
+        .eq('source_trader_id', traderId)
+        .eq('season_id', '30D')
+        .order('captured_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('trader_follows')
+        .select('id', { count: 'exact', head: true })
+        .eq('trader_id', traderId),
+      supabase
+        .from('trader_snapshots')
+        .select('captured_at')
+        .eq('source', sourceType)
+        .eq('source_trader_id', traderId)
+        .order('captured_at', { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('trader_sources')
+        .select('avatar_url')
+        .eq('source', sourceType)
+        .eq('source_trader_id', traderId)
+        .limit(1)
+        .maybeSingle(),
+    ]), 8000)
+  } catch {
+    // timeout — use null defaults
+  }
+  const [snapshotResult, snapshot7dResult, snapshot30dResult, arenaFollowersResult, trackedSinceResult, avatarResult] = snapshotQueryResults
   
   const snapshot = snapshotResult.data as SnapshotData | null
   const snapshot7d = snapshot7dResult.data as SnapshotData | null
