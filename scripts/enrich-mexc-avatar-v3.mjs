@@ -29,7 +29,9 @@ const H = {
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const DEFAULT_AVATAR_PATTERNS = ['avatar1.8fc6058c', '/banner/', 'placeholder', 'default_avatar', 'default.png'];
+// MEXC avatars are at public.mocortech.com/banner/ or similar paths — do NOT filter /banner/
+// Only filter known MEXC default/generic avatar patterns
+const DEFAULT_AVATAR_PATTERNS = ['avatar1.8fc6058c', 'placeholder', 'default_avatar', 'default.png', 'default.jpg', '/default/'];
 const isRealAvatar = url => url && url.startsWith('http') && !DEFAULT_AVATAR_PATTERNS.some(p => url.includes(p));
 
 async function sbGet(path) {

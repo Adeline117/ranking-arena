@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 /**
- * enrich-bybit-tc.mjs
+ * enrich-bybit-tc.mjs - v3
  * Fill NULL trades_count for bybit leaderboard_ranks
  * 
- * Uses page.goto approach (not in-page fetch) to access leader-income API
- * which returns win/loss counts by period.
+ * Bybit leader-income API returns:
+ * - cumTradeCount: total trades (cumulative across all time)
+ * - sevenDayProfitWinRateE4: 7D win rate
+ * - thirtyDayProfitWinRateE4: 30D win rate
+ * - Note: period-specific WinCount/LossCount fields no longer in API
+ * 
+ * We use cumTradeCount as the trades_count value (real exchange data).
  */
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
@@ -20,7 +25,6 @@ const H = {
   Prefer: 'return=minimal'
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const PERIOD_PREFIX = { '7D': 'sevenDay', '30D': 'thirtyDay', '90D': 'ninetyDay' };
 
 async function sbGet(path) {
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: H });
@@ -35,16 +39,8 @@ async function sbPatch(id, data) {
   if (!r.ok) console.error('Patch error', r.status);
 }
 
-function extractTc(result, seasonId) {
-  const pfx = PERIOD_PREFIX[seasonId];
-  if (!pfx || !result) return null;
-  const win = parseInt(result[pfx + 'WinCount'] || result[pfx + 'Win'] || '0');
-  const loss = parseInt(result[pfx + 'LossCount'] || result[pfx + 'Loss'] || '0');
-  return (win + loss) > 0 ? (win + loss) : null;
-}
-
 async function main() {
-  console.log('=== Bybit TC Enrichment (page.goto approach) ===\n');
+  console.log('=== Bybit TC Enrichment (cumTradeCount) ===\n');
 
   // Get rows missing TC
   let allRows = [];
@@ -62,11 +58,12 @@ async function main() {
   if (!allRows.length) { console.log('Nothing to do.'); return; }
 
   // Group by trader
-  const traderMap = new Map(); // mark → [rows]
+  const traderMap = new Map();
   for (const r of allRows) {
     if (!traderMap.has(r.source_trader_id)) traderMap.set(r.source_trader_id, []);
     traderMap.get(r.source_trader_id).push(r);
   }
+  // Only valid leaderMarks (base64 with special chars)
   const traders = [...traderMap.keys()].filter(
     id => id.includes('==') || id.includes('+') || id.includes('/') || (id.length > 15 && !/^\d+$/.test(id))
   );
@@ -79,7 +76,6 @@ async function main() {
   let page = await browser.newPage();
   await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-  // Visit bybit first for cookies
   console.log('Getting Bybit session...');
   try {
     await page.goto('https://www.bybit.com/copyTrading/traderRanking', {
@@ -96,7 +92,6 @@ async function main() {
     const mark = traders[i];
     const rows = traderMap.get(mark) || [];
 
-    // Refresh cookies every 200 traders
     if (i > 0 && i % 200 === 0) {
       try {
         await page.goto('https://www.bybit.com/copyTrading/traderRanking', {
@@ -113,55 +108,49 @@ async function main() {
       const resp = await page.goto(apiUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
       
       if (!resp?.ok()) {
-        errors++;
-        consecutive++;
+        errors++; consecutive++;
         await sleep(500);
         continue;
       }
 
       const text = await page.evaluate(() => document.body?.innerText || '').catch(() => '');
       if (!text || text.startsWith('<')) {
-        errors++;
-        consecutive++;
+        errors++; consecutive++;
         await sleep(500);
         continue;
       }
 
       const json = JSON.parse(text);
       if (json.retCode !== 0) {
-        noData++;
-        consecutive++;
+        noData++; consecutive++;
         await sleep(200);
         continue;
       }
 
       consecutive = 0;
       const result = json.result;
-      let rowUpdated = false;
       
+      // Get cumulative trade count (best available data)
+      const cumTC = parseInt(result.cumTradeCount || '0');
+      if (cumTC === 0) { noData++; continue; }
+      
+      // Update all rows for this trader (all periods get the same cumulative count)
       for (const row of rows) {
         if (row.trades_count !== null) continue;
-        const tc = extractTc(result, row.season_id);
-        if (tc !== null) {
-          await sbPatch(row.id, { trades_count: tc });
-          updated++;
-          rowUpdated = true;
-        }
+        await sbPatch(row.id, { trades_count: cumTC });
+        updated++;
       }
-      if (!rowUpdated) noData++;
 
     } catch (e) {
-      errors++;
-      consecutive++;
+      errors++; consecutive++;
     }
 
     if ((i + 1) % 50 === 0) {
       console.log(`  [${i+1}/${traders.length}] updated=${updated} noData=${noData} errors=${errors}`);
     }
     
-    await sleep(150);
+    await sleep(120);
 
-    // If too many consecutive errors, refresh browser
     if (consecutive >= 10) {
       console.log(`  Refreshing after ${consecutive} consecutive failures...`);
       try {
@@ -178,7 +167,7 @@ async function main() {
 
   console.log(`\n✅ Bybit TC Results:`);
   console.log(`  Updated: ${updated}`);
-  console.log(`  No data: ${noData}`);
+  console.log(`  No data (retCode!=0 or cumTC=0): ${noData}`);
   console.log(`  Errors: ${errors}`);
 
   const vr = await fetch(`${SB_URL}/rest/v1/leaderboard_ranks?source=eq.bybit&trades_count=is.null&select=id`, {

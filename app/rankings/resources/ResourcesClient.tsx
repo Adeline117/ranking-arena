@@ -134,6 +134,7 @@ export default function ResourcesClient({
       params.set('page', String(targetPage))
       params.set('limit', String(PAGE_SIZE))
       params.set('language', language)
+      params.set('has_file', 'true')  // Only show items with readable files
 
       const res = await fetch(`/api/library?${params}`)
       const data = await res.json()
