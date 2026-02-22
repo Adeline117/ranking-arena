@@ -15,6 +15,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import ExportButton from '@/app/components/common/ExportButton'
 import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import { logger } from '@/lib/logger'
+import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 
 interface TraderCompareData {
   id: string
@@ -47,7 +48,7 @@ function CompareContent() {
   const [error, setError] = useState<string | null>(null)
   const [traders, setTraders] = useState<TraderCompareData[]>([])
   // Search state removed - traders added from followed list only
-  const [isPro, setIsPro] = useState(false)
+  const [isPro, setIsPro] = useState(BETA_PRO_FEATURES_FREE)
   const [followedTraders, setFollowedTraders] = useState<Array<{
     id: string
     handle: string
@@ -83,7 +84,7 @@ function CompareContent() {
         if (subRes.ok) {
           const subData = await subRes.json()
           const tier = subData.subscription?.tier || 'free'
-          setIsPro(tier === 'pro')
+          setIsPro(BETA_PRO_FEATURES_FREE || tier === 'pro')
         }
 
         const ids = searchParams.get('ids')
