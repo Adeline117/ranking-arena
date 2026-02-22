@@ -22,15 +22,16 @@ export async function GET(req: NextRequest) {
   const search = (searchParams.get('search') || '').slice(0, 200) // cap search length
   const lang = searchParams.get('language') || ''  // user's UI language preference
   const sort = searchParams.get('sort') || 'recent'
+  const hasFile = searchParams.get('has_file') === 'true'  // filter for items with readable files
   const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1)
   const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '24') || 24), 100)
   const offset = (page - 1) * limit
 
   // Use tiered cache (memory → Redis → DB)
-  const cacheKey = `api:library:${category}:${search}:${lang}:${sort}:${page}:${limit}`
+  const cacheKey = `api:library:${category}:${search}:${lang}:${sort}:${hasFile}:${page}:${limit}`
   const result = await tieredGetOrSet(
     cacheKey,
-    () => fetchLibraryData({ category, search, lang, sort, page, limit, offset }),
+    () => fetchLibraryData({ category, search, lang, sort, hasFile, page, limit, offset }),
     search ? 'warm' : 'hot',  // 无搜索词时用 hot 层 (Redis 300s)，有搜索词用 warm 层
     ['library']
   )
@@ -44,8 +45,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function fetchLibraryData({ category, search, lang, sort, page, limit, offset }: {
-  category: string; search: string; lang: string; sort: string; page: number; limit: number; offset: number
+async function fetchLibraryData({ category, search, lang, sort, hasFile, page, limit, offset }: {
+  category: string; search: string; lang: string; sort: string; hasFile: boolean; page: number; limit: number; offset: number
 }) {
   // Use RPC for language-priority sorting when user has a language preference
   if (lang && !search) {
@@ -84,6 +85,11 @@ async function fetchLibraryData({ category, search, lang, sort, page, limit, off
 
   if (category && category !== 'all') {
     query = query.eq('category', category)
+  }
+
+  // Only show items with at least one readable file source
+  if (hasFile) {
+    query = query.or('epub_url.not.is.null,pdf_url.not.is.null,file_key.not.is.null,content_url.not.is.null')
   }
 
   if (search) {

@@ -27,6 +27,8 @@ async function fetchLibraryItems(): Promise<{ items: LibraryItem[]; total: numbe
     const { data, count } = await supabase
       .from('library_items')
       .select('*', { count: 'exact' })
+      // Only show items that have at least one readable file source
+      .or('epub_url.not.is.null,pdf_url.not.is.null,file_key.not.is.null,content_url.not.is.null')
       .order('created_at', { ascending: false })
       .range(0, 23)
 
@@ -90,10 +92,11 @@ async function fetchCategoryCounts(): Promise<Record<string, number>> {
   try {
     const supabase = getSupabaseAdmin()
     const cats = ['book', 'paper', 'whitepaper', 'research', 'academic_paper']
+    const hasFileFilter = 'epub_url.not.is.null,pdf_url.not.is.null,file_key.not.is.null,content_url.not.is.null'
     const [totalResult, ...catResults] = await Promise.all([
-      supabase.from('library_items').select('id', { count: 'exact', head: true }),
+      supabase.from('library_items').select('id', { count: 'exact', head: true }).or(hasFileFilter),
       ...cats.map(cat =>
-        supabase.from('library_items').select('id', { count: 'exact', head: true }).eq('category', cat)
+        supabase.from('library_items').select('id', { count: 'exact', head: true }).eq('category', cat).or(hasFileFilter)
       ),
     ])
     const counts: Record<string, number> = { all: totalResult.count || 0 }
