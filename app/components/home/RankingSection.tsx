@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useTransition } from 'react'
+import { useState, useEffect, useCallback, useRef, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
@@ -451,7 +451,7 @@ export default function RankingSection({
   // Get unique data sources - prefer availableSources from API if provided (reserved for future use)
   const _dataSources: string[] = availableSources && availableSources.length > 0
     ? availableSources
-    : [...new Set(traders.map(t => t.source).filter((s): s is string => !!s))]
+    : [...new Set(traders.map(trader => trader.source).filter((s): s is string => !!s))]
 
   // Format last updated time
   const formatLastUpdated = (dateStr: string | null | undefined) => {
@@ -473,23 +473,30 @@ export default function RankingSection({
   }
 
   // 根据分类过滤交易员，再应用交易所筛选、预设和高级筛选
-  const categoryFiltered = category === 'all'
-    ? traders
-    : traders.filter(t => t.source && filterByCategory(t.source, category))
+  // Use useMemo to stabilize array references — prevents auto-reset useEffects from
+  // firing on every render due to new array instances being created each time.
+  const categoryFiltered = useMemo(
+    () => category === 'all'
+      ? traders
+      : traders.filter(trader => trader.source && filterByCategory(trader.source, category)),
+    [traders, category]
+  )
 
   // 交易所筛选（所有用户可用）
   // If selectedExchange yields no results (stale localStorage), auto-fallback to all
-  const exchangeFilteredRaw = selectedExchange
-    ? categoryFiltered.filter(t => t.source === selectedExchange)
-    : categoryFiltered
-  const exchangeFiltered = (selectedExchange && exchangeFilteredRaw.length === 0 && categoryFiltered.length > 0)
-    ? categoryFiltered
-    : exchangeFilteredRaw
+  const exchangeFiltered = useMemo(() => {
+    const raw = selectedExchange
+      ? categoryFiltered.filter(trader => trader.source === selectedExchange)
+      : categoryFiltered
+    return (selectedExchange && raw.length === 0 && categoryFiltered.length > 0)
+      ? categoryFiltered
+      : raw
+  }, [categoryFiltered, selectedExchange])
 
   // Auto-reset stale exchange in localStorage
   useEffect(() => {
     if (selectedExchange && categoryFiltered.length > 0) {
-      const hasMatch = categoryFiltered.some(t => t.source === selectedExchange)
+      const hasMatch = categoryFiltered.some(trader => trader.source === selectedExchange)
       if (!hasMatch) {
         setSelectedExchange(null)
         try { localStorage.removeItem(LS_KEY_EXCHANGE) } catch { /* ignore */ }
@@ -500,24 +507,20 @@ export default function RankingSection({
 
   // Feature 6: Apply preset filter (now source-type based)
   // If preset yields no results (stale localStorage), auto-fallback to all
-  const presetFilteredRaw = activePreset && activePreset !== 'all'
-    ? (() => {
-        const presetConfig = PRESETS.find(p => p.id === activePreset)
-        return presetConfig
-          ? exchangeFiltered.filter(t => presetConfig.filter({ source: t.source }))
-          : exchangeFiltered
-      })()
-    : exchangeFiltered
-  const presetFiltered = (activePreset && activePreset !== 'all' && presetFilteredRaw.length === 0 && exchangeFiltered.length > 0)
-    ? exchangeFiltered
-    : presetFilteredRaw
+  const presetFiltered = useMemo(() => {
+    if (!activePreset || activePreset === 'all') return exchangeFiltered
+    const presetConfig = PRESETS.find(p => p.id === activePreset)
+    if (!presetConfig) return exchangeFiltered
+    const raw = exchangeFiltered.filter(trader => presetConfig.filter({ source: trader.source }))
+    return (raw.length === 0 && exchangeFiltered.length > 0) ? exchangeFiltered : raw
+  }, [activePreset, exchangeFiltered])
 
   // Auto-reset stale preset in localStorage
   useEffect(() => {
     if (activePreset && activePreset !== 'all' && exchangeFiltered.length > 0) {
       const presetConfig = PRESETS.find(p => p.id === activePreset)
       if (presetConfig) {
-        const hasMatch = exchangeFiltered.some(t => presetConfig.filter({ source: t.source }))
+        const hasMatch = exchangeFiltered.some(trader => presetConfig.filter({ source: trader.source }))
         if (!hasMatch) {
           setActivePreset(null)
           try { localStorage.removeItem(LS_KEY_PRESET) } catch { /* ignore */ }
@@ -527,15 +530,17 @@ export default function RankingSection({
     }
   }, [activePreset, exchangeFiltered, syncStateToUrl])
 
-  const advancedFiltered = hasActiveFilters
-    ? applyAdvancedFilter(presetFiltered, filterConfig)
-    : presetFiltered
+  const advancedFiltered = useMemo(
+    () => hasActiveFilters ? applyAdvancedFilter(presetFiltered, filterConfig) : presetFiltered,
+    [hasActiveFilters, presetFiltered, filterConfig]
+  )
 
   // Free users: limit to top 100 traders; Pro users: full leaderboard
   const FREE_LEADERBOARD_LIMIT = 100
-  const filteredTraders = isPro
-    ? advancedFiltered
-    : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT)
+  const filteredTraders = useMemo(
+    () => isPro ? advancedFiltered : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT),
+    [isPro, advancedFiltered]
+  )
 
   // Pro 功能提示
   const handleProRequired = () => {
@@ -735,9 +740,9 @@ export default function RankingSection({
       {!loading && traders.length > 0 && (() => {
         // Count traders per exchange (merge _futures/_spot/_web3 variants)
         const counts: Record<string, number> = {}
-        for (const t of traders) {
-          if (!t.source) continue
-          counts[t.source] = (counts[t.source] || 0) + 1
+        for (const trader of traders) {
+          if (!trader.source) continue
+          counts[trader.source] = (counts[trader.source] || 0) + 1
         }
         const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
         const totalEx = sorted.length
