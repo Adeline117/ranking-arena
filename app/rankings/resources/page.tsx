@@ -48,6 +48,8 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
       .select('*')
       .not('cover_url', 'is', null)
       .eq('category', 'book')
+      // Only show items that have at least one readable file source
+      .or('epub_url.not.is.null,pdf_url.not.is.null,file_key.not.is.null,content_url.not.is.null')
       .order('rating', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(6)
@@ -60,24 +62,28 @@ async function fetchFeatured(): Promise<LibraryItem[]> {
 
 const TOP_FIELDS = 'id,title,title_en,title_zh,author,category,cover_url,rating,rating_count,view_count,language'
 
+const HAS_FILE_FILTER = 'epub_url.not.is.null,pdf_url.not.is.null,file_key.not.is.null,content_url.not.is.null'
+
 async function fetchTopByCategory(category: string): Promise<LibraryItem[]> {
   if (process.env.NEXT_PHASE === 'phase-production-build') return []
   try {
     const supabase = getSupabaseAdmin()
-    // Try rated items first
+    // Try rated items first — only items with readable files
     const { data } = await supabase
       .from('library_items')
       .select(TOP_FIELDS)
       .eq('category', category)
       .not('rating', 'is', null)
+      .or(HAS_FILE_FILTER)
       .order('rating', { ascending: false })
       .limit(10)
     if (data && data.length >= 5) return data as LibraryItem[]
-    // Fallback: most viewed
+    // Fallback: most viewed — only items with readable files
     const { data: fallback } = await supabase
       .from('library_items')
       .select(TOP_FIELDS)
       .eq('category', category)
+      .or(HAS_FILE_FILTER)
       .order('view_count', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(10)
