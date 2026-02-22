@@ -134,8 +134,9 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           {(item.rating != null && item.rating > 0) && (
             <StarRating rating={item.rating} ratingCount={item.rating_count || 0} size={13} readonly />
           )}
-          {(item.pdf_url || item.file_key) && (() => {
-            const isEpub = item.file_key?.endsWith('.epub')
+          {(item.epub_url || item.pdf_url || item.file_key || item.content_url) && (() => {
+            const isEpub = item.epub_url || item.file_key?.endsWith('.epub')
+            const isPdf = item.pdf_url || item.file_key?.endsWith('.pdf') || (item.content_url && !isEpub)
             return (
               <span style={{
                 fontSize: 10, color: tokens.colors.accent.brand,
@@ -143,7 +144,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
                 padding: '1px 6px', borderRadius: tokens.radius.sm,
                 background: tokens.colors.accent.brandMuted,
               }}>
-                {isEpub ? 'ePub' : 'PDF'}
+                {isEpub ? 'ePub' : isPdf ? 'PDF' : 'Read'}
               </span>
             )
           })()}
