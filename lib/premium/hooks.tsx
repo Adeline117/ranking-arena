@@ -284,11 +284,13 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
 
   const value = useMemo<PremiumContextValue>(() => {
     const actualIsPremium = (subscription ? premiumService.isPremiumUser() : false) || hasNFT
+    // During open beta, all users get premium features unlocked
+    const effectiveIsPremium = BETA_PRO_FEATURES_FREE || actualIsPremium
     return {
       subscription,
       isLoading,
-      isPremium: actualIsPremium,
-      isFeaturesUnlocked: BETA_PRO_FEATURES_FREE || actualIsPremium,
+      isPremium: effectiveIsPremium,
+      isFeaturesUnlocked: true,
       tier: (subscription?.tier || 'free') === 'free' && hasNFT ? 'pro' : (subscription?.tier || 'free'),
       source: hasNFT ? 'nft' : (subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free'),
       hasNFT,

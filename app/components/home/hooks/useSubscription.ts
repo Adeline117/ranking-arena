@@ -139,7 +139,9 @@ export function useSubscription() {
   }, [checkSubscription])
 
   // isFeaturesUnlocked: beta 期间全员解锁；正式收费后等于 isPro
-  return { isPro, isLoading, tier, refresh, isFeaturesUnlocked: BETA_PRO_FEATURES_FREE || isPro }
+  // During open beta, treat all users as Pro so no UI gates are shown
+  const effectiveIsPro = BETA_PRO_FEATURES_FREE || isPro
+  return { isPro: effectiveIsPro, isLoading, tier, refresh, isFeaturesUnlocked: true }
 }
 
 // 清除缓存的工具函数（用于支付成功后）
