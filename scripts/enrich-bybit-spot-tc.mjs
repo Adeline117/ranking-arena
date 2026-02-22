@@ -3,15 +3,12 @@
  * enrich-bybit-spot-tc.mjs
  * Fill NULL trades_count for bybit_spot leaderboard_ranks
  * 
- * bybit_spot source_trader_id = numeric userId (like "191585431")
+ * bybit_spot source_trader_id = leaderUserId (numeric, like "191585431")
  * 
  * Strategy:
- * 1. Open bybit spot copy trading page with puppeteer
- * 2. Intercept API responses to get trader data (including win/loss counts)
- * 3. Match by leaderUserId and update trades_count
- * 
- * The key: Bybit spot uses the same dynamic-leader-list API but the leaderUserId
- * is what we store as source_trader_id
+ * 1. Paginate dynamic-leader-list to get leaderUserId → leaderMark mapping
+ * 2. Use leader-income with leaderMark to get cumTradeCount
+ * 3. Update trades_count
  */
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
@@ -42,9 +39,9 @@ async function sbPatch(id, data) {
 }
 
 async function main() {
-  console.log('=== Bybit Spot Trades Count Enrichment ===\n');
+  console.log('=== Bybit Spot TC Enrichment ===\n');
 
-  // 1. Get DB rows missing trades_count
+  // Get rows missing TC
   let allRows = [];
   let offset = 0;
   while (true) {
@@ -59,199 +56,139 @@ async function main() {
   console.log(`DB rows missing TC: ${allRows.length}`);
   if (!allRows.length) { console.log('Nothing to do.'); return; }
 
-  // Build lookup: source_trader_id → [rows]
-  const lookup = new Map();
+  // Group by trader
+  const traderMap = new Map();
   for (const r of allRows) {
-    if (!lookup.has(r.source_trader_id)) lookup.set(r.source_trader_id, []);
-    lookup.get(r.source_trader_id).push(r);
+    if (!traderMap.has(r.source_trader_id)) traderMap.set(r.source_trader_id, []);
+    traderMap.get(r.source_trader_id).push(r);
   }
-  console.log(`Unique traders: ${lookup.size}`);
+  console.log(`Unique traders: ${traderMap.size}`);
 
-  // enrichMap: source_trader_id → { sevenDay: {wr, mdd, tc}, thirtyDay: ..., ninetyDay: ... }
-  const enrichMap = new Map();
-
-  // 2. Launch puppeteer
   const browser = await puppeteer.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
   });
-  const page = await browser.newPage();
+  let page = await browser.newPage();
   await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-  // Intercept responses
-  const capturedApis = new Set();
-  page.on('response', async (resp) => {
-    const url = resp.url();
-    if (!url.includes('bybit')) return;
-    if (!url.includes('copy') && !url.includes('leader') && !url.includes('spot/api')) return;
-    const key = url.split('?')[0];
-    if (!capturedApis.has(key)) {
-      capturedApis.add(key);
-      console.log(`  New API: ${key.split('/').slice(-3).join('/')}`);
-    }
-    
-    try {
-      const ct = resp.headers()['content-type'] || '';
-      if (!ct.includes('json')) return;
-      const data = await resp.json().catch(() => null);
-      if (!data) return;
-      
-      // Look for trader list with leaderUserId
-      const list = data?.result?.leaderDetails || data?.data?.list || data?.result?.list || [];
-      for (const item of list) {
-        const uid = String(item.leaderUserId || item.userId || item.uid || '');
-        if (!uid) continue;
-        
-        // Extract TC from different fields
-        const winCount = parseInt(item.winCount || '0');
-        const loseCount = parseInt(item.loseCount || '0');
-        const tc = winCount + loseCount > 0 ? (winCount + loseCount) : null;
-        
-        // Also from metricValues
-        const metrics = item.metricValues || [];
-        // Bybit: [ROI, drawdown, followerProfit, winRate, PLRatio, SharpeRatio]
-        
-        if (!enrichMap.has(uid)) enrichMap.set(uid, {});
-        
-        // Try to figure out which period this is from the request
-        if (tc !== null) {
-          enrichMap.get(uid).tc = tc;
-        }
-      }
-    } catch { /* ignore */ }
-  });
-
-  // Navigate to Bybit and get cookies
-  console.log('Loading Bybit...');
+  console.log('Getting Bybit session...');
   try {
-    await page.goto('https://www.bybit.com/copyTrade/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto('https://www.bybit.com/copyTrading/traderRanking', {
+      waitUntil: 'domcontentloaded', timeout: 30000
+    });
   } catch (e) {
     console.log('  Nav note:', e.message.slice(0, 60));
   }
   await sleep(4000);
 
-  // 3. Paginate via leader-list for spot copy trading
-  const DURATIONS = [
-    'DATA_DURATION_SEVEN_DAY',
-    'DATA_DURATION_THIRTY_DAY',
-    'DATA_DURATION_NINETY_DAY',
-  ];
-  const PERIOD_PREFIX = { 'DATA_DURATION_SEVEN_DAY': '7D', 'DATA_DURATION_THIRTY_DAY': '30D', 'DATA_DURATION_NINETY_DAY': '90D' };
-
-  // Collect leaderUserId → leaderMark mapping and TC data
-  const uidToMark = new Map();
-
+  // Step 1: Build leaderUserId → leaderMark mapping by paginating the listing
+  console.log('\n--- Step 1: Building UID → leaderMark mapping ---');
+  const uidToMark = new Map(); // uid string → leaderMark base64
+  const targetUids = new Set(traderMap.keys());
+  
+  const DURATIONS = ['DATA_DURATION_SEVEN_DAY', 'DATA_DURATION_THIRTY_DAY', 'DATA_DURATION_NINETY_DAY'];
+  
   for (const dur of DURATIONS) {
     let pg = 1;
     let empty = 0;
-    const season = PERIOD_PREFIX[dur];
-    console.log(`\nFetching ${dur}...`);
     
-    while (true) {
+    while (pg <= 300 && uidToMark.size < targetUids.size) {
       const url = `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=${pg}&pageSize=50&dataDuration=${dur}&sortField=LEADER_SORT_FIELD_SORT_ROI`;
       
-      let json;
       try {
         const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10000 });
         const text = await page.evaluate(() => document.body?.innerText || '').catch(() => '');
         if (!text || text.startsWith('<')) { empty++; break; }
-        json = JSON.parse(text);
-      } catch { empty++; break; }
-      
-      if (json?.retCode !== 0) break;
-      const items = json?.result?.leaderDetails || [];
-      if (!items.length) { empty++; if (empty >= 2) break; pg++; continue; }
-      empty = 0;
-
-      for (const item of items) {
-        const uid = String(item.leaderUserId || '');
-        const mark = item.leaderMark || '';
-        if (uid && mark) uidToMark.set(uid, mark);
+        const json = JSON.parse(text);
+        if (json?.retCode !== 0) break;
         
-        const winCount = parseInt(item.winCount || '0');
-        const loseCount = parseInt(item.loseCount || '0');
-        if (winCount + loseCount > 0) {
-          if (!enrichMap.has(uid)) enrichMap.set(uid, {});
-          enrichMap.get(uid)[season] = winCount + loseCount;
+        const items = json?.result?.leaderDetails || [];
+        if (!items.length) { empty++; if (empty >= 2) break; pg++; continue; }
+        empty = 0;
+        
+        let added = 0;
+        for (const item of items) {
+          const uid = String(item.leaderUserId || '');
+          const mark = item.leaderMark || '';
+          if (uid && mark && targetUids.has(uid) && !uidToMark.has(uid)) {
+            uidToMark.set(uid, mark);
+            added++;
+          }
         }
-      }
-
-      if (pg % 20 === 0) {
-        const matched = [...enrichMap.keys()].filter(uid => lookup.has(uid)).length;
-        console.log(`  Page ${pg}: ${enrichMap.size} enriched, ${matched} DB matched`);
-      }
-      pg++;
-      await sleep(200);
-      if (pg > 200) break;
+        
+        if (pg % 20 === 0) {
+          console.log(`  ${dur} p${pg}: ${uidToMark.size}/${targetUids.size} mapped`);
+        }
+        pg++;
+        await sleep(150);
+      } catch { break; }
     }
+    
+    console.log(`  After ${dur}: ${uidToMark.size}/${targetUids.size} mapped`);
+    if (uidToMark.size >= targetUids.size) break;
   }
 
-  // 4. For traders with leaderMark but no TC, try leader-income
-  const missingTc = [...lookup.keys()].filter(uid => !enrichMap.has(uid) || !Object.values(enrichMap.get(uid)).some(v => v > 0));
-  console.log(`\n${missingTc.length} traders still missing TC. Trying leader-income API...`);
+  console.log(`\nMapped ${uidToMark.size} of ${targetUids.size} traders`);
+
+  // Step 2: Fetch leader-income for each trader with a known mark
+  console.log('\n--- Step 2: Fetching leader-income for each trader ---');
+  let updated = 0, noData = 0, errors = 0;
   
-  // Navigate back to Bybit for fresh cookies
-  try {
-    await page.goto('https://www.bybit.com/copyTrade/', { waitUntil: 'domcontentloaded', timeout: 20000 });
-    await sleep(3000);
-  } catch {}
-
-  let incomeGot = 0;
-  for (let i = 0; i < missingTc.length; i++) {
-    const uid = missingTc[i];
-    const mark = uidToMark.get(uid);
-    if (!mark) continue;
-
-    const apiUrl = `/x-api/fapi/beehive/public/v1/common/leader-income?leaderMark=${encodeURIComponent(mark)}`;
+  const markEntries = [...uidToMark.entries()];
+  
+  for (let i = 0; i < markEntries.length; i++) {
+    const [uid, mark] = markEntries[i];
+    const rows = traderMap.get(uid) || [];
     
-    const result = await page.evaluate(async (url) => {
+    if (i > 0 && i % 200 === 0) {
       try {
-        const r = await fetch(url, { credentials: 'include' });
-        if (!r.ok) return { error: r.status };
-        return r.json();
-      } catch (e) { return { error: e.message }; }
-    }, apiUrl);
-
-    if (result?.retCode === 0 && result?.result) {
-      const r = result.result;
-      const periods = {
-        '7D': parseInt(r.sevenDayWinCount||0) + parseInt(r.sevenDayLossCount||0),
-        '30D': parseInt(r.thirtyDayWinCount||0) + parseInt(r.thirtyDayLossCount||0),
-        '90D': parseInt(r.ninetyDayWinCount||0) + parseInt(r.ninetyDayLossCount||0),
-      };
-      if (Object.values(periods).some(v => v > 0)) {
-        enrichMap.set(uid, periods);
-        incomeGot++;
-      }
+        await page.goto('https://www.bybit.com/copyTrading/traderRanking', {
+          waitUntil: 'domcontentloaded', timeout: 20000
+        });
+        await sleep(3000);
+      } catch {}
     }
 
-    if (i % 30 === 0) console.log(`  Income API: ${i}/${missingTc.length}, got ${incomeGot}`);
-    await sleep(200);
+    const apiUrl = `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-income?leaderMark=${encodeURIComponent(mark)}`;
+    
+    try {
+      const resp = await page.goto(apiUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+      if (!resp?.ok()) { errors++; await sleep(500); continue; }
+      
+      const text = await page.evaluate(() => document.body?.innerText || '').catch(() => '');
+      if (!text || text.startsWith('<')) { errors++; continue; }
+      
+      const json = JSON.parse(text);
+      if (json.retCode !== 0) { noData++; continue; }
+      
+      const result = json.result;
+      const cumTC = parseInt(result.cumTradeCount || '0');
+      if (cumTC === 0) { noData++; continue; }
+      
+      for (const row of rows) {
+        await sbPatch(row.id, { trades_count: cumTC });
+        updated++;
+      }
+    } catch { errors++; }
+
+    if ((i + 1) % 50 === 0) {
+      console.log(`  [${i+1}/${markEntries.length}] updated=${updated} noData=${noData} errors=${errors}`);
+    }
+    await sleep(120);
   }
 
   await browser.close();
-  console.log(`\nTotal enrichMap: ${enrichMap.size}`);
 
-  // 5. Update DB
-  let updated = 0;
-  for (const row of allRows) {
-    const uid = row.source_trader_id;
-    const data = enrichMap.get(uid);
-    if (!data) continue;
+  console.log(`\n✅ Bybit Spot TC Results:`);
+  console.log(`  Mapped: ${uidToMark.size}/${targetUids.size}`);
+  console.log(`  Updated: ${updated}`);
+  console.log(`  No data: ${noData}`);
+  console.log(`  Errors: ${errors}`);
 
-    // Try to get TC for this season
-    const tc = data[row.season_id] || data.tc || null;
-    if (tc === null || tc === 0) continue;
-
-    await sbPatch(row.id, { trades_count: tc });
-    updated++;
-  }
-
-  console.log(`\n✅ Bybit Spot TC Results: ${updated} updated`);
   const vr = await fetch(`${SB_URL}/rest/v1/leaderboard_ranks?source=eq.bybit_spot&trades_count=is.null&select=id`, {
     headers: { ...H, Prefer: 'count=exact', Range: '0-0' }
   });
-  console.log(`📊 Remaining null: ${vr.headers.get('content-range')}`);
+  console.log(`\n📊 Remaining null: ${vr.headers.get('content-range')}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
