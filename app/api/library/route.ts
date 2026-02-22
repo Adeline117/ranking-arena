@@ -10,7 +10,7 @@ const supabase = createClient(
 )
 
 // Only select fields the frontend needs (avoid transferring large text fields like ai_summary)
-const LIBRARY_LIST_FIELDS = 'id,title,title_en,title_zh,author,description,category,subcategory,cover_url,language,tags,publish_date,rating,rating_count,view_count,download_count,is_free,pdf_url,file_key,created_at'
+const LIBRARY_LIST_FIELDS = 'id,title,title_en,title_zh,author,description,category,subcategory,cover_url,language,tags,publish_date,rating,rating_count,view_count,download_count,is_free,epub_url,pdf_url,file_key,content_url,created_at'
 
 export async function GET(req: NextRequest) {
   try {

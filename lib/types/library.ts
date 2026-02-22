@@ -9,9 +9,11 @@ export type LibraryItem = {
   subcategory: string | null
   source: string | null
   source_url: string | null
+  epub_url?: string | null
   pdf_url: string | null
-  cover_url: string | null
   file_key: string | null
+  content_url?: string | null
+  cover_url: string | null
   tags: string[] | null
   crypto_symbols: string[] | null
   publish_date: string | null
