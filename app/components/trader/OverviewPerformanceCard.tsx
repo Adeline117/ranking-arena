@@ -110,8 +110,8 @@ export default function OverviewPerformanceCard({
   useEffect(() => {
     setMounted(true)
     // Small delay to trigger bar animation after mount
-    const t = setTimeout(() => setIsVisible(true), 150)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setIsVisible(true), 150)
+    return () => clearTimeout(timer)
   }, [])
 
   const handlePeriodChange = (newPeriod: Period) => {
