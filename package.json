@@ -59,7 +59,8 @@
     "check:platforms": "node scripts/diagnose.mjs --platforms",
     "check:tables": "node scripts/check_tables.mjs",
     "check:enrichment": "node scripts/check_enrichment.mjs",
-    "check:scripts-boundary": "node scripts/check-production-boundary.mjs"
+    "check:scripts-boundary": "node scripts/check-production-boundary.mjs",
+    "backfill:24h": "npx tsx scripts/backfill-window-24h.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.985.0",
