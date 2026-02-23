@@ -181,6 +181,9 @@ export async function GET(request: NextRequest) {
   const stalenessSeconds = Math.floor((Date.now() - latestUpdate.getTime()) / 1000)
 
   // Build response
+  // NOTE: Do NOT filter traders by display_name — many traders lack profile entries
+  // and display_name=null is a valid state. Filtering on display_name was the root
+  // cause of traders=[] despite total_count>0 (bug: stale build had .filter(e=>e.display_name!=null)).
   const traders: RankingEntry[] = (snapshots || []).map(s => {
     const baseEntry = {
       platform: s.source as LeaderboardPlatform,
