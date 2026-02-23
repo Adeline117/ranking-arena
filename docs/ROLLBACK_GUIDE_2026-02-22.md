@@ -9,6 +9,7 @@
 
 1. `a5afd016` — baseline
 2. `80248d96` — update scripts docs for unified diagnostics usage
+3. `b17e92de` — add diagnostics script aliases for freshness and platforms
 
 ## Quick rollback commands
 
