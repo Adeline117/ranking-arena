@@ -858,8 +858,11 @@ async function getTraderDetailsFromSnapshots(
   sourceType: SourceType
 ) {
   // 获取最新快照数据（带超时保护）
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let snapshotQueryResults: any[] = [
+  type SnapshotQueryResult = {
+    data?: SnapshotData | { captured_at?: string | null } | { avatar_url?: string | null } | null
+    count?: number | null
+  }
+  let snapshotQueryResults: SnapshotQueryResult[] = [
     { data: null }, { data: null }, { data: null },
     { count: 0 }, { data: null }, { data: null },
   ]
