@@ -421,17 +421,22 @@ function RankingTableInner(props: {
       })
     }
     return [...data].sort((a, b) => {
-      let aVal = 0, bVal = 0
+      // Use null to distinguish "no data" from actual 0 — nulls always sort last
+      let aRaw: number | null = null, bRaw: number | null = null
       switch (sortColumn) {
-        case 'score': aVal = a.arena_score ?? 0; bVal = b.arena_score ?? 0; break
-        case 'roi': aVal = a.roi ?? 0; bVal = b.roi ?? 0; break
-        case 'pnl': aVal = a.pnl ?? 0; bVal = b.pnl ?? 0; break
-        case 'winrate': aVal = a.win_rate ?? 0; bVal = b.win_rate ?? 0; break
-        case 'mdd': aVal = Math.abs(a.max_drawdown ?? 0); bVal = Math.abs(b.max_drawdown ?? 0); break
-        case 'sortino': aVal = a.sortino_ratio ?? 0; bVal = b.sortino_ratio ?? 0; break
-        case 'alpha': aVal = a.alpha ?? 0; bVal = b.alpha ?? 0; break
+        case 'score': aRaw = a.arena_score ?? null; bRaw = b.arena_score ?? null; break
+        case 'roi': aRaw = a.roi ?? null; bRaw = b.roi ?? null; break
+        case 'pnl': aRaw = a.pnl ?? null; bRaw = b.pnl ?? null; break
+        case 'winrate': aRaw = a.win_rate ?? null; bRaw = b.win_rate ?? null; break
+        case 'mdd': aRaw = a.max_drawdown != null ? Math.abs(a.max_drawdown) : null; bRaw = b.max_drawdown != null ? Math.abs(b.max_drawdown) : null; break
+        case 'sortino': aRaw = a.sortino_ratio ?? null; bRaw = b.sortino_ratio ?? null; break
+        case 'alpha': aRaw = a.alpha ?? null; bRaw = b.alpha ?? null; break
       }
-      return sortDir === 'desc' ? bVal - aVal : aVal - bVal
+      // Null always goes to the bottom regardless of sort direction
+      if (aRaw === null && bRaw === null) return 0
+      if (aRaw === null) return 1
+      if (bRaw === null) return -1
+      return sortDir === 'desc' ? bRaw - aRaw : aRaw - bRaw
     })
   }, [traders, sortColumn, sortDir, debouncedSearch, styleFilter])
 

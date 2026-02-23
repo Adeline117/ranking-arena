@@ -18,7 +18,6 @@ import {
   TRADER_ACCENT_ERROR,
   RankDisplay,
   TraderAvatar,
-  ArenaScoreBadge,
   ArenaScoreCircle,
   areTraderPropsEqual,
 } from './shared/TraderDisplay'

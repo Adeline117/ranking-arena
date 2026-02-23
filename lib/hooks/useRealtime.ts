@@ -291,8 +291,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     const channel = supabase.channel(channelName)
 
     channel
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .on('postgres_changes' as any, { event, schema, table, ...(filter ? { filter } : {}) }, handleChange)
+      .on('postgres_changes', { event, schema, table, ...(filter ? { filter } : {}) }, handleChange)
       .subscribe((subscribeStatus: string) => {
         if (subscribeStatus === 'SUBSCRIBED') {
           setStatus('connected')
