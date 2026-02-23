@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
@@ -53,22 +53,25 @@ export default function VirtualMessageList({
   const parentRef = useRef<HTMLDivElement>(null)
 
   // Flatten message groups into a single array of items
-  const flatItems: FlatItem[] = []
-  const groups = groupMessagesByDate(messages)
-  groups.forEach(group => {
-    flatItems.push({ type: 'date-separator', date: group.date })
-    group.messages.forEach((msg, i) => {
-      const prevMsg = i > 0 ? group.messages[i - 1] : null
-      const nextMsg = i < group.messages.length - 1 ? group.messages[i + 1] : null
-      flatItems.push({
-        type: 'message',
-        msg,
-        isMine: msg.sender_id === userId,
-        isSameSenderAsPrev: prevMsg?.sender_id === msg.sender_id,
-        isSameSenderAsNext: nextMsg?.sender_id === msg.sender_id,
+  const flatItems = useMemo<FlatItem[]>(() => {
+    const items: FlatItem[] = []
+    const groups = groupMessagesByDate(messages)
+    groups.forEach(group => {
+      items.push({ type: 'date-separator', date: group.date })
+      group.messages.forEach((msg, i) => {
+        const prevMsg = i > 0 ? group.messages[i - 1] : null
+        const nextMsg = i < group.messages.length - 1 ? group.messages[i + 1] : null
+        items.push({
+          type: 'message',
+          msg,
+          isMine: msg.sender_id === userId,
+          isSameSenderAsPrev: prevMsg?.sender_id === msg.sender_id,
+          isSameSenderAsNext: nextMsg?.sender_id === msg.sender_id,
+        })
       })
     })
-  })
+    return items
+  }, [messages, userId])
 
   const virtualizer = useVirtualizer({
     count: flatItems.length,
@@ -90,7 +93,7 @@ export default function VirtualMessageList({
       }
     }
     prevCountRef.current = flatItems.length
-  }, [flatItems.length, userId, virtualizer])
+  }, [flatItems, userId, virtualizer])
 
   // Load more on scroll to top
   const handleScroll = useCallback(() => {

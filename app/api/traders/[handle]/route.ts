@@ -858,11 +858,7 @@ async function getTraderDetailsFromSnapshots(
   sourceType: SourceType
 ) {
   // 获取最新快照数据（带超时保护）
-  type SnapshotQueryResult = {
-    data?: SnapshotData | { captured_at?: string | null } | { avatar_url?: string | null } | null
-    count?: number | null
-  }
-  let snapshotQueryResults: SnapshotQueryResult[] = [
+  let snapshotQueryResults: unknown[] = [
     { data: null }, { data: null }, { data: null },
     { count: 0 }, { data: null }, { data: null },
   ]
@@ -917,11 +913,18 @@ async function getTraderDetailsFromSnapshots(
   } catch {
     // timeout — use null defaults
   }
-  const [snapshotResult, snapshot7dResult, snapshot30dResult, arenaFollowersResult, trackedSinceResult, avatarResult] = snapshotQueryResults
+  const [snapshotResult, snapshot7dResult, snapshot30dResult, arenaFollowersResult, trackedSinceResult, avatarResult] = snapshotQueryResults as [
+    { data: SnapshotData | null },
+    { data: SnapshotData | null },
+    { data: SnapshotData | null },
+    { count?: number | null },
+    { data: { captured_at?: string | null } | null },
+    { data: { avatar_url?: string | null } | null },
+  ]
   
-  const snapshot = snapshotResult.data as SnapshotData | null
-  const snapshot7d = snapshot7dResult.data as SnapshotData | null
-  const snapshot30d = snapshot30dResult.data as SnapshotData | null
+  const snapshot = snapshotResult.data
+  const snapshot7d = snapshot7dResult.data
+  const snapshot30d = snapshot30dResult.data
   const arenaFollowers = arenaFollowersResult.count || 0
   const trackedSince = trackedSinceResult.data?.captured_at || null
   const avatarUrl = avatarResult.data?.avatar_url || null
