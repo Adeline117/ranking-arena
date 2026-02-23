@@ -29,7 +29,32 @@
 - Upsert key: `source,source_trader_id,season_id,captured_at`.
 
 ### Next actions
-- Add risk-metric backfill chain (7D/30D)
 - Add data quality guard and cleaning scripts
 - Add reconcile + stale/SLA + contract checks
 - Add run_id lineage + materialized summary API path
+
+---
+
+## Round 2 - Risk metrics chain delivered
+
+### Quality score re-assessment
+- Current score: **68 / 100**
+- Improvement: +10 (P0-2 implementation)
+
+### Gap items
+1. MDD/ROI outlier cleaning and hard guard pending.
+2. handle/avatar nightly reconcile pending.
+3. stale source-season repair + SLA threshold pending.
+4. comparator and API/frontend contract check pending.
+5. run_id lineage and audit closure pending.
+6. materialized summary freshness/quality API pending.
+
+### Delivered in this round
+- **P0-2 implemented**: added dedicated 7D/30D risk metric backfill pipeline script.
+  - `scripts/backfill-risk-metrics-7d30d.ts`
+  - npm script: `backfill:risk:7d30d`
+  - Coverage output includes per-season fill counts for Sharpe/Sortino/PF.
+
+### Evidence
+- SQL update targets both `trader_snapshots` and `leaderboard_ranks`.
+- Seasonal scope pinned to `season_id IN ('7D','30D')`.
