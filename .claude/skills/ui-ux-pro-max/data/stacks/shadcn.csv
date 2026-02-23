@@ -1,0 +1,805 @@
+No,Category,Guideline,Description,Do,Don't,Code Good,Code Bad,Severity,Docs URL
+1,Setup,Initialize shadcn/ui properly,Use the CLI to initialize shadcn/ui with correct configuration,Run npx shadcn@latest init,Manually copy component files,"npx shadcn@latest init
+# Follow prompts for:
+# - TypeScript
+# - Style (default/new-york)
+# - Base color
+# - CSS variables","# Manually copying files
+cp -r shadcn-ui/components ./components
+# Missing configuration",error,https://ui.shadcn.com/docs/installation
+2,Setup,Configure components.json correctly,components.json defines paths and styling options,Set correct aliases and paths,Use default paths that don't match project,"{
+  ""$schema"": ""https://ui.shadcn.com/schema.json"",
+  ""style"": ""default"",
+  ""rsc"": true,
+  ""tsx"": true,
+  ""aliases"": {
+    ""components"": ""@/components"",
+    ""utils"": ""@/lib/utils""
+  }
+}","{
+  ""aliases"": {
+    ""components"": ""./components""
+  }
+}
+// Incorrect relative path",error,https://ui.shadcn.com/docs/components-json
+3,Setup,Install components as needed,Add components individually using the CLI,Install components you need with CLI,Install all components upfront,"npx shadcn@latest add button
+npx shadcn@latest add card
+npx shadcn@latest add dialog","npx shadcn@latest add --all
+# Bloats project with unused components",warning,https://ui.shadcn.com/docs/cli
+4,Setup,Keep utils function updated,The cn utility combines class names properly,Use cn() for all conditional classes,Use template literals for classes,"import { cn } from '@/lib/utils'
+<div className={cn(
+  'base-class',
+  isActive && 'active-class',
+  className
+)}>","<div className={`base-class ${isActive ? 'active-class' : ''} ${className}`}>
+// Messy, no deduplication",warning,https://ui.shadcn.com/docs/installation#add-a-cn-helper
+5,Theming,Use CSS variables for colors,shadcn/ui uses CSS custom properties for theming,Define colors as CSS variables in globals.css,Hardcode colors in components,"/* globals.css */
+:root {
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+}
+.dark {
+  --primary: 210 40% 98%;
+}","<Button className=""bg-[#1a1a2e] text-white"">
+  <!-- Hardcoded, won't theme -->
+</Button>",error,https://ui.shadcn.com/docs/theming
+6,Theming,Support dark mode properly,Implement dark mode with class or system preference,Use next-themes or similar for mode switching,Implement custom dark mode logic,"// app/layout.tsx
+import { ThemeProvider } from '@/components/theme-provider'
+<ThemeProvider attribute=""class"" defaultTheme=""system"">
+  {children}
+</ThemeProvider>","// Custom implementation
+const [dark, setDark] = useState(false)
+useEffect(() => {
+  document.body.classList.toggle('dark', dark)
+}, [dark])",warning,https://ui.shadcn.com/docs/dark-mode
+7,Theming,Use semantic color names,Apply colors by their purpose not their appearance,Use primary secondary destructive etc,Use specific color names,"<Button variant=""destructive"">Delete</Button>
+<Badge variant=""secondary"">Draft</Badge>
+<Alert variant=""default"">Info</Alert>","<Button className=""bg-red-500"">Delete</Button>
+<Badge className=""bg-gray-200"">Draft</Badge>
+// Won't follow theme",warning,https://ui.shadcn.com/docs/theming#colors
+8,Components,Import components from local path,Components are copied to your project for customization,Import from @/components/ui,Import from shadcn package,"import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'","import { Button } from 'shadcn/ui'
+// Package doesn't exist",error,https://ui.shadcn.com/docs
+9,Components,Use composition over configuration,Components are built with composition patterns,Compose components with children and slots,Expect single component with many props,"<Card>
+  <CardHeader>
+    <CardTitle>Title</CardTitle>
+    <CardDescription>Description</CardDescription>
+  </CardHeader>
+  <CardContent>Content</CardContent>
+  <CardFooter>Footer</CardFooter>
+</Card>","<Card
+  title=""Title""
+  description=""Description""
+  content=""Content""
+  footer=""Footer""
+/>
+// Not how shadcn works",error,https://ui.shadcn.com/docs/components/card
+10,Components,Forward refs correctly,Components should forward refs for DOM access,Use forwardRef and spread props,Ignore ref forwarding,"const Button = React.forwardRef<
+  HTMLButtonElement,
+  ButtonProps
+>(({ className, ...props }, ref) => (
+  <button ref={ref} {...props} />
+))
+Button.displayName = 'Button'","const Button = ({ className, ...props }) => (
+  <button {...props} />
+)
+// No ref forwarding",warning,https://ui.shadcn.com/docs/components/button
+11,Dialog,Control Dialog visibility properly,Use open and onOpenChange for controlled dialogs,Use controlled state for programmatic control,Rely only on trigger for opening,"const [open, setOpen] = useState(false)
+<Dialog open={open} onOpenChange={setOpen}>
+  <DialogTrigger asChild>
+    <Button>Open</Button>
+  </DialogTrigger>
+  <DialogContent>...</DialogContent>
+</Dialog>","<Dialog>
+  <DialogTrigger>Open</DialogTrigger>
+  <DialogContent>...</DialogContent>
+</Dialog>
+// Can't open programmatically",warning,https://ui.shadcn.com/docs/components/dialog
+12,Dialog,Add proper Dialog accessibility,Include required accessibility elements in dialogs,Add DialogHeader DialogTitle DialogDescription,Omit accessibility elements,"<DialogContent>
+  <DialogHeader>
+    <DialogTitle>Edit Profile</DialogTitle>
+    <DialogDescription>
+      Make changes to your profile here.
+    </DialogDescription>
+  </DialogHeader>
+  {/* content */}
+</DialogContent>","<DialogContent>
+  <h2>Edit Profile</h2>
+  <p>Make changes here</p>
+</DialogContent>
+// Missing aria labels",error,https://ui.shadcn.com/docs/components/dialog#accessibility
+13,Dialog,Handle Dialog form submission,Properly close dialog after form submission,Close dialog in onSubmit handler,Leave dialog open after submit,"<form onSubmit={(e) => {
+  e.preventDefault()
+  handleSubmit()
+  setOpen(false)
+}}>
+  <DialogFooter>
+    <Button type=""submit"">Save</Button>
+  </DialogFooter>
+</form>","<form onSubmit={handleSubmit}>
+  <Button type=""submit"">Save</Button>
+</form>
+// Dialog stays open",warning,https://ui.shadcn.com/docs/components/dialog
+14,Sheet,Use Sheet for side panels,Sheet provides slide-out panels from edges,Use Sheet for navigation settings filters,Use Dialog for side panel content,"<Sheet>
+  <SheetTrigger asChild>
+    <Button variant=""outline"">Filters</Button>
+  </SheetTrigger>
+  <SheetContent side=""right"">
+    <SheetHeader>
+      <SheetTitle>Filters</SheetTitle>
+    </SheetHeader>
+    <FilterForm />
+  </SheetContent>
+</Sheet>","<Dialog>
+  <DialogContent className=""fixed right-0"">
+    <!-- Trying to make dialog a sheet -->
+  </DialogContent>
+</Dialog>",info,https://ui.shadcn.com/docs/components/sheet
+15,Sheet,Configure Sheet side correctly,Sheet can slide from left right top or bottom,Set side prop based on UX needs,Always use default side,"<SheetContent side=""left"">
+  <!-- Navigation panel -->
+</SheetContent>
+<SheetContent side=""bottom"">
+  <!-- Mobile action sheet -->
+</SheetContent>","<SheetContent>
+  <!-- Always from right -->
+</SheetContent>",info,https://ui.shadcn.com/docs/components/sheet
+16,Form,Use react-hook-form integration,shadcn forms integrate with react-hook-form,Use Form components with useForm hook,Build forms without form library,"const form = useForm<FormValues>({
+  resolver: zodResolver(formSchema)
+})
+<Form {...form}>
+  <FormField
+    control={form.control}
+    name=""email""
+    render={({ field }) => (
+      <FormItem>
+        <FormLabel>Email</FormLabel>
+        <FormControl>
+          <Input {...field} />
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    )}
+  />
+</Form>","<form onSubmit={handleSubmit}>
+  <label>Email</label>
+  <Input
+    value={email}
+    onChange={(e) => setEmail(e.target.value)}
+  />
+  {errors.email && <span>{errors.email}</span>}
+</form>",warning,https://ui.shadcn.com/docs/components/form
+17,Form,Add Zod schema validation,Use Zod for type-safe form validation,Define Zod schema and use zodResolver,Write manual validation logic,"import { z } from 'zod'
+const formSchema = z.object({
+  email: z.string().email('Invalid email'),
+  password: z.string().min(8, 'Min 8 characters')
+})
+const form = useForm({
+  resolver: zodResolver(formSchema)
+})","const validate = (values) => {
+  const errors = {}
+  if (!values.email.includes('@')) {
+    errors.email = 'Invalid'
+  }
+  return errors
+}",warning,https://ui.shadcn.com/docs/components/form#define-a-schema
+18,Form,Display form errors properly,Show validation errors below form fields,Use FormMessage component,Display errors separately from fields,"<FormField
+  name=""email""
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel>Email</FormLabel>
+      <FormControl>
+        <Input {...field} />
+      </FormControl>
+      <FormDescription>Your email address</FormDescription>
+      <FormMessage />
+    </FormItem>
+  )}
+/>","<Input {...field} />
+{form.formState.errors.email && (
+  <p className=""text-red-500"">
+    {form.formState.errors.email.message}
+  </p>
+)}",info,https://ui.shadcn.com/docs/components/form
+19,Select,Use Select for single choice,Select provides dropdown for single selection,Use Select with proper value handling,Use native select element,"<Select value={value} onValueChange={setValue}>
+  <SelectTrigger>
+    <SelectValue placeholder=""Select option"" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value=""a"">Option A</SelectItem>
+    <SelectItem value=""b"">Option B</SelectItem>
+  </SelectContent>
+</Select>","<select
+  value={value}
+  onChange={(e) => setValue(e.target.value)}
+>
+  <option value=""a"">Option A</option>
+</select>
+// Unstyled, inconsistent",warning,https://ui.shadcn.com/docs/components/select
+20,Select,Group related Select items,Use SelectGroup and SelectLabel for organization,Group options with labels,List all options flat,"<SelectContent>
+  <SelectGroup>
+    <SelectLabel>Fruits</SelectLabel>
+    <SelectItem value=""apple"">Apple</SelectItem>
+    <SelectItem value=""banana"">Banana</SelectItem>
+  </SelectGroup>
+  <SelectGroup>
+    <SelectLabel>Vegetables</SelectLabel>
+    <SelectItem value=""carrot"">Carrot</SelectItem>
+  </SelectGroup>
+</SelectContent>","<SelectContent>
+  <SelectItem value=""apple"">Apple</SelectItem>
+  <SelectItem value=""banana"">Banana</SelectItem>
+  <SelectItem value=""carrot"">Carrot</SelectItem>
+</SelectContent>
+// Hard to scan",info,https://ui.shadcn.com/docs/components/select
+21,Command,Use Command for searchable lists,Command provides searchable command palette interface,Use Command for search and filter interfaces,Build custom search dropdowns,"<Command>
+  <CommandInput placeholder=""Search..."" />
+  <CommandList>
+    <CommandEmpty>No results found.</CommandEmpty>
+    <CommandGroup heading=""Suggestions"">
+      <CommandItem>Calendar</CommandItem>
+      <CommandItem>Search</CommandItem>
+    </CommandGroup>
+  </CommandList>
+</Command>","<div>
+  <input
+    type=""search""
+    onChange={(e) => filterItems(e.target.value)}
+  />
+  {filteredItems.map(item => (
+    <div onClick={() => select(item)}>{item}</div>
+  ))}
+</div>",info,https://ui.shadcn.com/docs/components/command
+22,Command,Implement Command in Popover,Combine Command with Popover for combobox pattern,Wrap Command in Popover for dropdown search,Show Command inline always,"<Popover open={open} onOpenChange={setOpen}>
+  <PopoverTrigger asChild>
+    <Button variant=""outline"">
+      {value || 'Select...'}
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent>
+    <Command>
+      <CommandInput />
+      <CommandList>
+        <CommandItem onSelect={() => setValue('...')}>
+          ...
+        </CommandItem>
+      </CommandList>
+    </Command>
+  </PopoverContent>
+</Popover>","<Command className=""mb-4"">
+  <!-- Always visible, takes space -->
+</Command>",warning,https://ui.shadcn.com/docs/components/combobox
+23,Table,Use Table for simple data display,Table component provides styled table markup,Use Table components for semantic tables,Use div-based grid layouts,"<Table>
+  <TableHeader>
+    <TableRow>
+      <TableHead>Name</TableHead>
+      <TableHead>Email</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {users.map(user => (
+      <TableRow key={user.id}>
+        <TableCell>{user.name}</TableCell>
+        <TableCell>{user.email}</TableCell>
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>","<div className=""grid grid-cols-2"">
+  <div>Name</div>
+  <div>Email</div>
+  {users.map(user => (
+    <>
+      <div>{user.name}</div>
+      <div>{user.email}</div>
+    </>
+  ))}
+</div>",warning,https://ui.shadcn.com/docs/components/table
+24,DataTable,Use TanStack Table for complex tables,DataTable combines Table with TanStack Table for features,Use @tanstack/react-table for sorting filtering pagination,Build custom table features,"import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
+const table = useReactTable({
+  data,
+  columns,
+  getCoreRowModel: getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel()
+})","// Custom sorting implementation
+const [sortField, setSortField] = useState('name')
+const sorted = [...data].sort((a, b) =>
+  a[sortField] > b[sortField] ? 1 : -1
+)",warning,https://ui.shadcn.com/docs/components/data-table
+25,DataTable,Define columns with proper types,Column definitions should be typed and memoized,Use ColumnDef type and useMemo,Define columns inline without memoization,"const columns: ColumnDef<User>[] = [
+  {
+    accessorKey: 'name',
+    header: 'Name',
+    cell: ({ row }) => row.getValue('name')
+  },
+  {
+    accessorKey: 'email',
+    header: ({ column }) => (
+      <Button onClick={() => column.toggleSorting()}>
+        Email
+      </Button>
+    )
+  }
+]","const columns = [
+  { field: 'name', header: 'Name' },
+  { field: 'email', header: 'Email' }
+]
+// Wrong format, re-creates on render",warning,https://ui.shadcn.com/docs/components/data-table#column-definitions
+26,DataTable,Implement DataTable pagination,Add pagination controls for large datasets,Use pagination state and controls,Load all data without pagination,"const [pagination, setPagination] = useState({
+  pageIndex: 0,
+  pageSize: 10
+})
+const table = useReactTable({
+  data,
+  columns,
+  getPaginationRowModel: getPaginationRowModel(),
+  onPaginationChange: setPagination,
+  state: { pagination }
+})
+<DataTablePagination table={table} />","<Table>
+  {allData.map(item => (
+    <TableRow>...</TableRow>
+  ))}
+</Table>
+// Renders thousands of rows",error,https://ui.shadcn.com/docs/components/data-table#pagination
+27,Tabs,Use Tabs for content organization,Tabs organize related content into switchable panels,Use Tabs for mutually exclusive content views,Use buttons with conditional rendering,"<Tabs defaultValue=""account"">
+  <TabsList>
+    <TabsTrigger value=""account"">Account</TabsTrigger>
+    <TabsTrigger value=""password"">Password</TabsTrigger>
+  </TabsList>
+  <TabsContent value=""account"">
+    <AccountSettings />
+  </TabsContent>
+  <TabsContent value=""password"">
+    <PasswordSettings />
+  </TabsContent>
+</Tabs>","<div>
+  <button onClick={() => setTab('account')}>Account</button>
+  <button onClick={() => setTab('password')}>Password</button>
+</div>
+{tab === 'account' && <AccountSettings />}
+{tab === 'password' && <PasswordSettings />}",warning,https://ui.shadcn.com/docs/components/tabs
+28,Tabs,Handle controlled Tabs state,Use value and onValueChange for controlled tabs,Control tab state when needed programmatically,Always use uncontrolled tabs,"const [tab, setTab] = useState('account')
+<Tabs value={tab} onValueChange={setTab}>
+  <TabsList>...</TabsList>
+  <TabsContent value=""account"">...</TabsContent>
+</Tabs>
+// Can programmatically change: setTab('password')","<Tabs defaultValue=""account"">
+  {/* Can't change tab programmatically */}
+</Tabs>",info,https://ui.shadcn.com/docs/components/tabs
+29,Accordion,Use Accordion for expandable content,Accordion shows collapsible content sections,Use Accordion for FAQ or grouped content,Use custom collapsible implementations,"<Accordion type=""single"" collapsible>
+  <AccordionItem value=""item-1"">
+    <AccordionTrigger>Question 1?</AccordionTrigger>
+    <AccordionContent>
+      Answer to question 1.
+    </AccordionContent>
+  </AccordionItem>
+  <AccordionItem value=""item-2"">
+    <AccordionTrigger>Question 2?</AccordionTrigger>
+    <AccordionContent>
+      Answer to question 2.
+    </AccordionContent>
+  </AccordionItem>
+</Accordion>","const [open, setOpen] = useState(null)
+{items.map(item => (
+  <div>
+    <button onClick={() => setOpen(item.id)}>
+      {item.question}
+    </button>
+    {open === item.id && <p>{item.answer}</p>}
+  </div>
+))}",warning,https://ui.shadcn.com/docs/components/accordion
+30,Accordion,Configure Accordion type properly,Choose single or multiple expansion behavior,Set type based on UX requirements,Always use default single type,"<Accordion type=""multiple"">
+  {/* Multiple items can be open */}
+</Accordion>
+<Accordion type=""single"" collapsible>
+  {/* One item, can close all */}
+</Accordion>","<Accordion type=""single"">
+  {/* Must always have one open */}
+</Accordion>",info,https://ui.shadcn.com/docs/components/accordion
+31,Toast,Use Sonner for toast notifications,shadcn recommends Sonner for toasts,Use toast from sonner package,Build custom toast system,"import { toast } from 'sonner'
+// In component
+toast.success('Changes saved!')
+toast.error('Something went wrong')
+toast.promise(saveData(), {
+  loading: 'Saving...',
+  success: 'Saved!',
+  error: 'Error'
+})","// Custom implementation
+const [toasts, setToasts] = useState([])
+const addToast = (msg) => {
+  setToasts([...toasts, msg])
+  setTimeout(() => removeToast(msg), 3000)
+}",warning,https://ui.shadcn.com/docs/components/sonner
+32,Toast,Add Toaster to layout,Include Toaster component once at app root,Add Toaster to root layout,Add Toaster to every page,"// app/layout.tsx
+import { Toaster } from '@/components/ui/sonner'
+export default function Layout({ children }) {
+  return (
+    <html>
+      <body>
+        {children}
+        <Toaster />
+      </body>
+    </html>
+  )
+}","// Every page
+export default function Page() {
+  return (
+    <>
+      <Content />
+      <Toaster />
+    </>
+  )
+}
+// Multiple Toasters",error,https://ui.shadcn.com/docs/components/sonner
+33,Popover,Use Popover for contextual content,Popover displays floating content anchored to trigger,Use Popover for rich tooltips or mini forms,Use absolute positioning manually,"<Popover>
+  <PopoverTrigger asChild>
+    <Button variant=""outline"">Open</Button>
+  </PopoverTrigger>
+  <PopoverContent className=""w-80"">
+    <div className=""space-y-2"">
+      <h4>Dimensions</h4>
+      <Input placeholder=""Width"" />
+    </div>
+  </PopoverContent>
+</Popover>","<div className=""relative"">
+  <button onClick={() => setOpen(!open)}>Open</button>
+  {open && (
+    <div className=""absolute top-full left-0 bg-white"">
+      ...
+    </div>
+  )}
+</div>",warning,https://ui.shadcn.com/docs/components/popover
+34,Popover,Position Popover correctly,Configure Popover alignment and side,Set side and align props for proper placement,Accept default positioning always,"<PopoverContent side=""right"" align=""start"">
+  {/* Opens to right, aligned to top */}
+</PopoverContent>
+<PopoverContent side=""bottom"" align=""center"">
+  {/* Opens below, centered */}
+</PopoverContent>","<PopoverContent>
+  {/* Default position may overflow */}
+</PopoverContent>",info,https://ui.shadcn.com/docs/components/popover
+35,DropdownMenu,Use DropdownMenu for action menus,DropdownMenu provides accessible dropdown menus,Use DropdownMenu for action lists,Use Popover for menus,"<DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant=""ghost"" size=""icon"">
+      <MoreHorizontal />
+    </Button>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent>
+    <DropdownMenuItem>Edit</DropdownMenuItem>
+    <DropdownMenuItem>Duplicate</DropdownMenuItem>
+    <DropdownMenuSeparator />
+    <DropdownMenuItem className=""text-red-600"">
+      Delete
+    </DropdownMenuItem>
+  </DropdownMenuContent>
+</DropdownMenu>","<Popover>
+  <PopoverTrigger>...</PopoverTrigger>
+  <PopoverContent>
+    <button>Edit</button>
+    <button>Delete</button>
+  </PopoverContent>
+</Popover>
+// No menu semantics",warning,https://ui.shadcn.com/docs/components/dropdown-menu
+36,DropdownMenu,Add keyboard shortcuts to menu items,Display keyboard shortcuts in dropdown items,Use DropdownMenuShortcut component,Omit shortcut indicators,"<DropdownMenuItem>
+  New Tab
+  <DropdownMenuShortcut>Cmd+T</DropdownMenuShortcut>
+</DropdownMenuItem>
+<DropdownMenuItem>
+  New Window
+  <DropdownMenuShortcut>Cmd+N</DropdownMenuShortcut>
+</DropdownMenuItem>","<DropdownMenuItem>New Tab (Cmd+T)</DropdownMenuItem>
+// Inconsistent formatting",info,https://ui.shadcn.com/docs/components/dropdown-menu
+37,DropdownMenu,Use submenus for nested options,DropdownMenuSub creates hierarchical menus,Use DropdownMenuSub for nested options,Flatten all options or use modal,"<DropdownMenuSub>
+  <DropdownMenuSubTrigger>More Tools</DropdownMenuSubTrigger>
+  <DropdownMenuSubContent>
+    <DropdownMenuItem>Save Page As...</DropdownMenuItem>
+    <DropdownMenuItem>Create Shortcut...</DropdownMenuItem>
+  </DropdownMenuSubContent>
+</DropdownMenuSub>","<DropdownMenuItem
+  onClick={() => setShowMoreTools(true)}
+>
+  More Tools...
+</DropdownMenuItem>
+// Opens separate modal",info,https://ui.shadcn.com/docs/components/dropdown-menu
+38,Tooltip,Use Tooltip for simple hints,Tooltip shows brief text on hover,Use Tooltip for icon buttons and truncated text,Use Tooltip for complex content,"<TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <Button variant=""ghost"" size=""icon"">
+        <Settings className=""h-4 w-4"" />
+      </Button>
+    </TooltipTrigger>
+    <TooltipContent>
+      <p>Settings</p>
+    </TooltipContent>
+  </Tooltip>
+</TooltipProvider>","<Tooltip>
+  <TooltipTrigger>...</TooltipTrigger>
+  <TooltipContent>
+    <form>
+      <Input />
+      <Button>Submit</Button>
+    </form>
+  </TooltipContent>
+</Tooltip>
+// Use Popover instead",warning,https://ui.shadcn.com/docs/components/tooltip
+39,Tooltip,Add TooltipProvider at root,TooltipProvider manages tooltip behavior globally,Add single TooltipProvider near app root,Wrap each Tooltip individually,"// layout.tsx
+<TooltipProvider>
+  {children}
+</TooltipProvider>
+// Then in components:
+<Tooltip>
+  <TooltipTrigger>...</TooltipTrigger>
+  <TooltipContent>Hint</TooltipContent>
+</Tooltip>","// Each tooltip
+<TooltipProvider>
+  <Tooltip>...</Tooltip>
+</TooltipProvider>
+<TooltipProvider>
+  <Tooltip>...</Tooltip>
+</TooltipProvider>",warning,https://ui.shadcn.com/docs/components/tooltip
+40,Skeleton,Use Skeleton for loading states,Skeleton provides content placeholder during loading,Use Skeleton matching content shape,Use spinner for all loading states,"<Card>
+  <CardHeader>
+    {loading ? (
+      <>
+        <Skeleton className=""h-4 w-[250px]"" />
+        <Skeleton className=""h-4 w-[200px]"" />
+      </>
+    ) : (
+      <>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{desc}</CardDescription>
+      </>
+    )}
+  </CardHeader>
+</Card>","<Card>
+  {loading ? (
+    <Spinner />
+  ) : (
+    <CardHeader>...</CardHeader>
+  )}
+</Card>
+// Layout shift when loaded",info,https://ui.shadcn.com/docs/components/skeleton
+41,Skeleton,Match Skeleton to content layout,Skeleton dimensions should match loaded content,Size skeletons to match actual content,Use generic skeleton shapes,"<div className=""flex items-center space-x-4"">
+  <Skeleton className=""h-12 w-12 rounded-full"" />
+  <div className=""space-y-2"">
+    <Skeleton className=""h-4 w-[250px]"" />
+    <Skeleton className=""h-4 w-[200px]"" />
+  </div>
+</div>","<Skeleton className=""h-20 w-full"" />
+// Doesn't match card layout",warning,https://ui.shadcn.com/docs/components/skeleton
+42,AlertDialog,Use AlertDialog for confirmations,AlertDialog interrupts user for important confirmations,Use AlertDialog for destructive action confirmations,Use Dialog for confirmations,"<AlertDialog>
+  <AlertDialogTrigger asChild>
+    <Button variant=""destructive"">Delete</Button>
+  </AlertDialogTrigger>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>Delete item?</AlertDialogTitle>
+      <AlertDialogDescription>
+        This action cannot be undone.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel>Cancel</AlertDialogCancel>
+      <AlertDialogAction onClick={handleDelete}>
+        Delete
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>","<Dialog>
+  <DialogContent>
+    <p>Are you sure?</p>
+    <Button onClick={handleDelete}>Yes</Button>
+  </DialogContent>
+</Dialog>
+// Can dismiss without action",warning,https://ui.shadcn.com/docs/components/alert-dialog
+43,AlertDialog,Require explicit action,AlertDialog should not close without explicit choice,Use AlertDialogCancel and AlertDialogAction,Allow backdrop click to dismiss,"<AlertDialogContent>
+  <AlertDialogFooter>
+    <AlertDialogCancel>Cancel</AlertDialogCancel>
+    <AlertDialogAction>Continue</AlertDialogAction>
+  </AlertDialogFooter>
+</AlertDialogContent>
+// Must click button to close","<Dialog>
+  <DialogContent onClick={(e) => e.stopPropagation()}>
+    {/* Can still click backdrop */}
+  </DialogContent>
+</Dialog>",warning,https://ui.shadcn.com/docs/components/alert-dialog
+44,Sidebar,Use Sidebar for app navigation,Sidebar component provides collapsible navigation,Use Sidebar components for main nav,Build custom sidebar divs,"<SidebarProvider>
+  <Sidebar>
+    <SidebarHeader>
+      <Logo />
+    </SidebarHeader>
+    <SidebarContent>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild>
+            <a href=""/"">Home</a>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarContent>
+  </Sidebar>
+  <SidebarInset>
+    {children}
+  </SidebarInset>
+</SidebarProvider>","<div className=""flex"">
+  <aside className=""w-64 border-r"">
+    <nav>...</nav>
+  </aside>
+  <main>{children}</main>
+</div>
+// No collapse, less accessible",warning,https://ui.shadcn.com/docs/components/sidebar
+45,Sidebar,Implement sidebar collapse,Support sidebar collapse for more content space,Use useSidebar hook for collapse control,Have fixed-width sidebar always,"import { useSidebar } from '@/components/ui/sidebar'
+function Header() {
+  const { toggleSidebar } = useSidebar()
+  return (
+    <Button onClick={toggleSidebar}>
+      <Menu />
+    </Button>
+  )
+}","<aside className=""w-64"">
+  {/* Always 64 width, no collapse */}
+</aside>",info,https://ui.shadcn.com/docs/components/sidebar#usesidebar
+46,Chart,Use Recharts for data visualization,shadcn charts are built on Recharts,Use Chart components with Recharts,Use other chart libraries or canvas,"import { ChartContainer, ChartTooltip } from '@/components/ui/chart'
+<ChartContainer config={chartConfig}>
+  <BarChart data={data}>
+    <Bar dataKey=""value"" fill=""var(--color-primary)"" />
+    <ChartTooltip />
+  </BarChart>
+</ChartContainer>","import Chart from 'chart.js'
+<canvas ref={chartRef} />
+// Doesn't match shadcn styling",info,https://ui.shadcn.com/docs/components/chart
+47,Chart,Configure chart colors properly,Use CSS variables for chart colors,Define colors in chartConfig with CSS variables,Hardcode colors in chart,"const chartConfig = {
+  revenue: {
+    label: 'Revenue',
+    color: 'hsl(var(--chart-1))'
+  },
+  expenses: {
+    label: 'Expenses',
+    color: 'hsl(var(--chart-2))'
+  }
+}","<Bar
+  dataKey=""revenue""
+  fill=""#4f46e5""
+/>
+// Won't adapt to theme",warning,https://ui.shadcn.com/docs/components/chart#colors
+48,Blocks,Use blocks as starting points,Blocks are pre-built page sections for quick starts,Customize blocks after copying,Use blocks without modification,"// Copy authentication-01 block
+// Then customize:
+<div className=""flex min-h-screen..."">
+  <Card className=""mx-auto max-w-sm"">
+    <CardHeader>
+      <CardTitle>Sign in to {appName}</CardTitle>
+    </CardHeader>
+    {/* Customized content */}
+  </Card>
+</div>","// Use block exactly as-is
+// Generic 'Sign in to your account'
+// Default styling everywhere",info,https://ui.shadcn.com/blocks
+49,Blocks,Compose blocks with components,Blocks demonstrate component composition patterns,Learn patterns from blocks and apply elsewhere,Treat blocks as black boxes,"// Learn pattern from login block:
+// Card with CardHeader + Form
+// Apply to other forms:
+<Card>
+  <CardHeader>
+    <CardTitle>Create Post</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <Form>...</Form>
+  </CardContent>
+</Card>","// Only copy-paste blocks
+// Never apply patterns elsewhere",info,https://ui.shadcn.com/blocks
+50,Accessibility,Maintain focus management,Ensure focus is properly managed in interactive components,Use asChild with focusable elements,Break focus management,"<DialogTrigger asChild>
+  <Button>Open Dialog</Button>
+</DialogTrigger>
+// Focus returns to button on close","<DialogTrigger>
+  <div onClick={...}>Open</div>
+</DialogTrigger>
+// Not focusable",error,https://ui.shadcn.com/docs/components/dialog
+51,Accessibility,Use asChild for semantic elements,asChild merges props with child element,Use asChild with semantic triggers,Nest buttons or use non-interactive triggers,"<DropdownMenuTrigger asChild>
+  <Button variant=""ghost"">
+    <Settings />
+  </Button>
+</DropdownMenuTrigger>","<DropdownMenuTrigger>
+  <Button>
+    Settings
+  </Button>
+</DropdownMenuTrigger>
+// Button inside button",error,https://ui.shadcn.com/docs/components/dropdown-menu
+52,Accessibility,Add labels to form controls,All form inputs must have accessible labels,Use FormLabel or Label component,Use placeholder as label,"<FormField
+  name=""email""
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel>Email address</FormLabel>
+      <FormControl>
+        <Input placeholder=""you@example.com"" {...field} />
+      </FormControl>
+    </FormItem>
+  )}
+/>","<Input placeholder=""Email"" />
+// Placeholder disappears, no label",error,https://ui.shadcn.com/docs/components/form
+53,Accessibility,Use semantic HTML in components,Preserve semantic HTML structure,Use correct HTML elements for their purpose,Override semantics with divs,"<Button asChild>
+  <a href=""/docs"">Documentation</a>
+</Button>
+// Renders as anchor with button styles","<Button onClick={() => router.push('/docs')}>
+  Documentation
+</Button>
+// Not a real link, no right-click",warning,https://ui.shadcn.com/docs/components/button
+54,Performance,Lazy load heavy components,Import large components dynamically,Use next/dynamic or React.lazy,Import all components statically,"import dynamic from 'next/dynamic'
+const Chart = dynamic(
+  () => import('@/components/ui/chart'),
+  { loading: () => <Skeleton /> }
+)","import { Chart } from '@/components/ui/chart'
+// Loaded even if not visible",warning,https://ui.shadcn.com/docs/components/chart
+55,Performance,Memoize expensive renders,Prevent unnecessary re-renders in lists and tables,Use React.memo for list items,Re-render entire list on any change,"const TableRow = React.memo(({ row }) => (
+  <tr>
+    {row.cells.map(cell => (
+      <td key={cell.id}>{cell.value}</td>
+    ))}
+  </tr>
+))","const TableRow = ({ row }) => (
+  <tr>...</tr>
+)
+// Re-renders on parent change",info,https://ui.shadcn.com/docs/components/data-table
+56,Customization,Modify components in place,shadcn components are yours to customize,Edit component files directly,Wrap components for customization,"// components/ui/button.tsx
+// Add new variant directly
+const buttonVariants = cva('...', {
+  variants: {
+    variant: {
+      default: '...',
+      gradient: 'bg-gradient-to-r from-purple-500 to-pink-500'
+    }
+  }
+})","// components/GradientButton.tsx
+const GradientButton = (props) => (
+  <Button className=""bg-gradient-to-r..."" {...props} />
+)
+// Unnecessary wrapper",info,https://ui.shadcn.com/docs/theming
+57,Customization,Extend variants with cva,Use class-variance-authority for variant management,Add variants to buttonVariants or similar,Use className for all variations,"const buttonVariants = cva(
+  'inline-flex items-center justify-center...',
+  {
+    variants: {
+      variant: {
+        default: '...',
+        custom: 'bg-custom text-custom-foreground'
+      },
+      size: {
+        default: 'h-10 px-4',
+        xs: 'h-7 px-2 text-xs'
+      }
+    }
+  }
+)","<Button className=""h-7 px-2 text-xs bg-custom"">
+  Small Custom
+</Button>
+// Not reusable",info,https://ui.shadcn.com/docs/theming
+58,Patterns,Use controlled components for forms,Control form component values through state,Use value and onChange/onValueChange,Mix controlled and uncontrolled,"const [date, setDate] = useState<Date>()
+<DatePicker
+  date={date}
+  onSelect={setDate}
+/>
+// Can validate, transform, sync","<DatePicker defaultValue={new Date()} />
+// Can't access or control value",warning,https://ui.shadcn.com/docs/components/date-picker
+59,Patterns,Compose for complex UI patterns,Build complex UI by composing simple components,Combine components for advanced patterns,Request more complex components,"<Card>
+  <CardHeader className=""flex flex-row items-center justify-between"">
+    <CardTitle>Team Members</CardTitle>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant=""ghost"" size=""icon"">
+          <MoreVertical />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem>Add member</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </CardHeader>
+</Card>","// Looking for CardWithActions component
+// Doesn't exist - compose it yourself",info,https://ui.shadcn.com/docs
+60,Patterns,Handle loading states consistently,Apply consistent loading patterns across the app,Use Skeleton or loading prop consistently,Mix different loading approaches,"// Consistent pattern
+<Button disabled={isLoading}>
+  {isLoading && <Loader2 className=""animate-spin"" />}
+  {isLoading ? 'Saving...' : 'Save'}
+</Button>
+// Or with component
+<Button loading={isLoading}>Save</Button>","// Inconsistent across app
+<Button disabled={loading}>Save</Button>
+<Button>
+  {loading ? 'Loading...' : 'Submit'}
+</Button>
+<Button>{loading && <Spinner />}Go</Button>",warning,https://ui.shadcn.com/docs/components/button
