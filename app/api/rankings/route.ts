@@ -365,16 +365,15 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
   const seasonIdUpper = window.toUpperCase();
   let availableSources = getCachedSources(seasonIdUpper);
   if (!availableSources) {
-    try {
-      const { data: rpcData } = await supabase.rpc('get_distinct_sources');
-      const allSources = rpcData
-        ? rpcData.map((r: { source: string }) => r.source)
-        : [];
-      availableSources = [...new Set(allSources)].sort() as string[];
-      setCachedSources(seasonIdUpper, availableSources);
-    } catch {
-      availableSources = [...new Set((paginatedRows || []).map((r: { source: string }) => r.source))].sort();
-    }
+    const { data: sourceRows } = await supabase
+      .from('trader_snapshots')
+      .select('source')
+      .eq('season_id', seasonIdUpper)
+      .not('arena_score', 'is', null)
+      .limit(5000);
+
+    availableSources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
+    setCachedSources(seasonIdUpper, availableSources);
   }
 
   return {
