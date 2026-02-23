@@ -83,26 +83,13 @@ export async function GET(request: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   )
 
-  // Fetch all snapshots (paginated to avoid 1000 row default limit)
-  let allData: Array<{ source: string; captured_at: string; roi: number | null; win_rate: number | null; max_drawdown: number | null }> = []
-  let page = 0
-  const PAGE_SIZE = 5000
-  while (true) {
-    const { data: batch, error: batchErr } = await supabase
-      .from('trader_snapshots')
-      .select('source, captured_at, roi, win_rate, max_drawdown')
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-    if (batchErr) {
-      return NextResponse.json({ error: batchErr.message }, { status: 500 })
-    }
-    allData = allData.concat(batch || [])
-    if (!batch || batch.length < PAGE_SIZE) break
-    page++
+  const { data: aggRows, error: aggErr } = await supabase.rpc('get_monitoring_freshness_summary')
+
+  if (aggErr) {
+    return NextResponse.json({ error: aggErr.message }, { status: 500 })
   }
 
-  const data = allData
-
-  // Aggregate by source
+  // Aggregate by source (already grouped in DB RPC)
   const platformData: Record<string, {
     lastUpdate: string | null
     total: number
@@ -111,19 +98,14 @@ export async function GET(request: NextRequest) {
     maxDrawdown: number
   }> = {}
 
-  for (const row of data || []) {
-    const src = row.source
-    if (!platformData[src]) {
-      platformData[src] = { lastUpdate: null, total: 0, roi: 0, winRate: 0, maxDrawdown: 0 }
+  for (const row of (aggRows || []) as Array<{ source: string; last_update: string | null; total: number; roi_count: number; win_rate_count: number; max_drawdown_count: number }>) {
+    platformData[row.source] = {
+      lastUpdate: row.last_update,
+      total: Number(row.total || 0),
+      roi: Number(row.roi_count || 0),
+      winRate: Number(row.win_rate_count || 0),
+      maxDrawdown: Number(row.max_drawdown_count || 0),
     }
-    const p = platformData[src]
-    if (!p.lastUpdate || row.captured_at > p.lastUpdate) {
-      p.lastUpdate = row.captured_at
-    }
-    p.total++
-    if (row.roi != null) p.roi++
-    if (row.win_rate != null) p.winRate++
-    if (row.max_drawdown != null) p.maxDrawdown++
   }
 
   const now = new Date()
