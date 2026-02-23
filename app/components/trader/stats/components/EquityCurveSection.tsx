@@ -312,17 +312,23 @@ function SimpleLineChart({
     return null
   }
 
-  const values = data.map(d => d[dataKey])
+  // Filter out data points with null/NaN values defensively (API types say number, but runtime may differ)
+  const validData = data.filter(d => d[dataKey] != null && !isNaN(d[dataKey] as number))
+  if (validData.length === 0) return null
+
+  const values = validData.map(d => d[dataKey] as number)
   const maxValue = Math.max(...values)
   const minValue = Math.min(...values)
+  // Guard against Infinity/-Infinity
+  if (!isFinite(maxValue) || !isFinite(minValue)) return null
   const range = maxValue - minValue || 1
 
   const width = 100
   const height = 100
-  const denominator = data.length > 1 ? data.length - 1 : 1
-  const points = data.map((d, i) => {
+  const denominator = validData.length > 1 ? validData.length - 1 : 1
+  const points = validData.map((d, i) => {
     const x = (i / denominator) * width
-    const y = height - ((d[dataKey] - minValue) / range) * height
+    const y = height - ((d[dataKey] as number - minValue) / range) * height
     return `${x},${y}`
   })
   const pathD = `M ${points.join(' L ')}`
@@ -341,12 +347,12 @@ function SimpleLineChart({
   }
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!chartRef.current || data.length === 0) return
+    if (!chartRef.current || validData.length === 0) return
     const rect = chartRef.current.getBoundingClientRect()
     const relX = e.clientX - rect.left
     const pct = relX / rect.width
-    const idx = Math.round(pct * (data.length - 1))
-    const clampedIdx = Math.max(0, Math.min(data.length - 1, idx))
+    const idx = Math.round(pct * (validData.length - 1))
+    const clampedIdx = Math.max(0, Math.min(validData.length - 1, idx))
     setHoverIndex(clampedIdx)
     setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
   }
@@ -356,7 +362,7 @@ function SimpleLineChart({
     setTooltipPos(null)
   }
 
-  const hoverData = hoverIndex !== null ? data[hoverIndex] : null
+  const hoverData = hoverIndex !== null ? validData[hoverIndex] : null
 
   return (
     <Box style={{
@@ -442,7 +448,7 @@ function SimpleLineChart({
           {/* Hover dot */}
           {hoverIndex !== null && (() => {
             const cx = (hoverIndex / denominator) * width
-            const cy = height - ((data[hoverIndex][dataKey] - minValue) / range) * height
+            const cy = height - (((validData[hoverIndex][dataKey] as number) - minValue) / range) * height
             return <circle cx={cx} cy={cy} r="4" fill={color} stroke={tokens.colors.bg.primary} strokeWidth="2" vectorEffect="non-scaling-stroke" />
           })()}
 
@@ -483,12 +489,12 @@ function SimpleLineChart({
             <Text size="sm" weight="bold" style={{ color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
               {formatTooltipValue(hoverData[dataKey])}
             </Text>
-            {dataKey === 'roi' && hoverData.pnl !== undefined && (
+            {dataKey === 'roi' && hoverData.pnl != null && !isNaN(hoverData.pnl) && (
               <Text size="xs" color="tertiary" style={{ display: 'block', marginTop: 2, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
                 PnL: {formatTooltipValue(hoverData.pnl).replace(/[+-]/, m => m)}
               </Text>
             )}
-            {dataKey === 'pnl' && hoverData.roi !== undefined && (
+            {dataKey === 'pnl' && hoverData.roi != null && !isNaN(hoverData.roi) && (
               <Text size="xs" color="tertiary" style={{ display: 'block', marginTop: 2, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
                 ROI: {hoverData.roi >= 0 ? '+' : ''}{hoverData.roi.toFixed(2)}%
               </Text>
@@ -505,15 +511,15 @@ function SimpleLineChart({
         marginTop: tokens.spacing[2],
       }}>
         <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
-          {data[0]?.date ? new Date(data[0].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) : ''}
+          {validData[0]?.date ? new Date(validData[0].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) : ''}
         </Text>
-        {data.length > 4 && (
+        {validData.length > 4 && (
           <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
-            {new Date(data[Math.floor(data.length / 2)].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' })}
+            {new Date(validData[Math.floor(validData.length / 2)].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' })}
           </Text>
         )}
         <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
-          {data[data.length - 1]?.date ? new Date(data[data.length - 1].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) : ''}
+          {validData[validData.length - 1]?.date ? new Date(validData[validData.length - 1].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) : ''}
         </Text>
       </Box>
     </Box>

@@ -218,9 +218,9 @@ export default function OverviewPerformanceCard({
     return `${sign}$${absValue.toFixed(2)}`
   }
 
-  // 生成 sparkline 数据 — 若 ROI 数据全为 0 则不显示 sparkline（避免平线误导）
-  const sparklineRawData = equityCurve?.map(d => d.roi) || []
-  const hasNonZeroSparkline = sparklineRawData.some(v => v !== 0 && v != null)
+  // 生成 sparkline 数据 — 过滤掉 null/NaN 值，若全为 0 则不显示 sparkline（避免平线误导）
+  const sparklineRawData = (equityCurve?.map(d => d.roi) || []).filter(v => v != null && !isNaN(v as number)) as number[]
+  const hasNonZeroSparkline = sparklineRawData.some(v => v !== 0)
   const sparklineData = hasNonZeroSparkline ? sparklineRawData : []
 
   return (

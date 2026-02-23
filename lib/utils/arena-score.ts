@@ -1,4 +1,3 @@
-import { SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { round2 } from '@/lib/utils/currency'
 
 /**
