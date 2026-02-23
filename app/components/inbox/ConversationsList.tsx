@@ -173,7 +173,7 @@ export default function ConversationsList(): React.ReactElement {
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [user?.id, loadConversations])
+  }, [user?.id, loadConversations, setUnreadMessages])
 
   function formatTime(dateString: string): string {
     const date = new Date(dateString)

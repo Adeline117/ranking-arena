@@ -291,8 +291,7 @@ export function usePostActions({
       if (response.ok) { setPosts(prev => prev.filter(p => p.id !== post.id)); if (openPost?.id === post.id) setOpenPost(null); showToast(t('deleted'), 'success') }
       else { showToast(data.error || t('deleteFailed'), 'error') }
     } catch { showToast(t('deleteFailed'), 'error') }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, openPost?.id, showDangerConfirm, showToast])
+  }, [accessToken, openPost?.id, setOpenPost, setPosts, showDangerConfirm, showToast, t])
 
   // Pin
   const handleTogglePin = useCallback(async (post: Post, e: React.MouseEvent) => {
@@ -306,7 +305,7 @@ export function usePostActions({
         showToast(data.data.message, 'success')
       } else { showToast(data.error || t('operationFailed'), 'error') }
     } catch { showToast(t('operationFailed'), 'error') }
-  }, [accessToken, showToast, t])
+  }, [accessToken, setPosts, showToast, t])
 
   return {
     toggleReaction, _toggleVote,

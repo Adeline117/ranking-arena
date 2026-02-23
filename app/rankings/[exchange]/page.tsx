@@ -10,7 +10,6 @@ import { logger } from '@/lib/logger'
 
 export const revalidate = 3600 // ISR: 1 hour
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _supabaseInstance: any = null
 
 function getSupabase() {
