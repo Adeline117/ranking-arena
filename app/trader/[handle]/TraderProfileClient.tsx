@@ -178,6 +178,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi * 100 : undefined)}
           maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
           winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
+          rank={data.rank ?? null}
           currentUserId={currentUserId}
         />
 

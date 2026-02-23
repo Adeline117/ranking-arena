@@ -1,0 +1,209 @@
+/**
+ * /wrapped/[handle] — Spotify Wrapped–style trader rank card
+ *
+ * Server component: fetches rank data, sets OG meta tags with
+ * the dynamic OG image so X/Twitter shows the card preview.
+ * Then renders the interactive client card with download + share buttons.
+ */
+
+import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import WrappedCardClient from './WrappedCardClient'
+
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
+
+// Platform display label map
+const PLATFORM_LABELS: Record<string, string> = {
+  binance_futures: 'Binance',
+  binance_spot: 'Binance Spot',
+  binance_web3: 'Binance Web3',
+  bybit: 'Bybit',
+  bybit_spot: 'Bybit Spot',
+  bitget_futures: 'Bitget',
+  bitget_spot: 'Bitget Spot',
+  okx: 'OKX',
+  okx_spot: 'OKX Spot',
+  okx_web3: 'OKX Web3',
+  okx_futures: 'OKX',
+  hyperliquid: 'Hyperliquid',
+  gmx: 'GMX',
+  dydx: 'dYdX',
+  mexc: 'MEXC',
+  kucoin: 'KuCoin',
+  gateio: 'Gate.io',
+  htx_futures: 'HTX',
+  weex: 'Weex',
+  blofin: 'Blofin',
+  coinex: 'CoinEx',
+}
+
+export interface WrappedTraderData {
+  handle: string
+  displayName: string
+  platform: string
+  platformLabel: string
+  rank: number | null
+  total: number | null
+  roi: number | null
+  winRate: number | null
+  score: number | null
+  maxDrawdown: number | null
+  window: string
+}
+
+interface Props {
+  params: Promise<{ handle: string }>
+  searchParams: Promise<{ platform?: string; window?: string }>
+}
+
+async function fetchWrappedData(handle: string, platform?: string, windowParam = '7d'): Promise<WrappedTraderData | null> {
+  try {
+    const supabase = getSupabaseAdmin()
+
+    // Map UI window param to season_id used in the DB
+    const seasonMap: Record<string, string> = {
+      '7d': '7D', '30d': '30D', '90d': '90D',
+      '7D': '7D', '30D': '30D', '90D': '90D',
+    }
+    const seasonId = seasonMap[windowParam] ?? '7D'
+
+    // Fetch trader_sources row (case-insensitive handle match)
+    let tsQuery = supabase
+      .from('trader_sources')
+      .select('handle, display_name, source, source_trader_id, avatar_url')
+      .ilike('handle', handle)
+      .limit(1)
+
+    if (platform) {
+      tsQuery = tsQuery.eq('source', platform)
+    }
+
+    const { data: ts } = await tsQuery.maybeSingle()
+
+    if (!ts) return null
+
+    const effectivePlatform = platform || ts.source
+    const platformLabel = PLATFORM_LABELS[effectivePlatform] ?? effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+
+    // Fetch leaderboard rank for this trader + window
+    const { data: lr } = await supabase
+      .from('leaderboard_ranks')
+      .select('rank, roi, win_rate, arena_score, max_drawdown, season_id')
+      .eq('source', ts.source)
+      .eq('source_trader_id', ts.source_trader_id)
+      .eq('season_id', seasonId)
+      .maybeSingle()
+
+    // Fetch total traders on this platform for percentile
+    const { count } = await supabase
+      .from('leaderboard_ranks')
+      .select('*', { count: 'exact', head: true })
+      .eq('source', ts.source)
+      .eq('season_id', seasonId)
+
+    return {
+      handle: ts.handle || handle,
+      displayName: ts.display_name || ts.handle || handle,
+      platform: effectivePlatform,
+      platformLabel,
+      rank: lr?.rank ?? null,
+      total: count ?? null,
+      roi: lr?.roi ?? null,
+      winRate: lr?.win_rate ?? null,
+      score: lr?.arena_score ?? null,
+      maxDrawdown: lr?.max_drawdown ?? null,
+      window: seasonId,
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+  const { handle } = await params
+  const { platform, window: windowParam = '7d' } = await searchParams
+  const decoded = decodeURIComponent(handle)
+
+  const data = await fetchWrappedData(decoded, platform, windowParam)
+
+  const name = data?.displayName || decoded
+  const rank = data?.rank
+  const roi = data?.roi
+  const topPct = rank && data?.total ? Math.ceil((rank / data.total) * 100) : null
+
+  const roiStr = roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null
+  const rankStr = rank != null ? `Ranked #${rank}` : null
+  const topStr = topPct != null && topPct <= 25 ? `Top ${topPct}% trader` : null
+
+  const parts = [rankStr, roiStr, topStr].filter(Boolean)
+  const title = `${name} — Arena Rank Card`
+  const description = parts.length
+    ? `${parts.join(' | ')} on ${data?.platformLabel ?? 'Arena'}`
+    : `${name}'s trading performance card on Arena`
+
+  // Build OG image URL — pass all params so the image can render without DB access
+  const ogParams = new URLSearchParams({
+    name,
+    handle: decoded,
+    platform: data?.platform ?? platform ?? '',
+    window: data?.window ?? windowParam,
+  })
+  if (rank != null) ogParams.set('rank', String(rank))
+  if (data?.total != null) ogParams.set('total', String(data.total))
+  if (roi != null) ogParams.set('roi', String(roi))
+  if (data?.winRate != null) ogParams.set('winRate', String(data.winRate))
+  if (data?.score != null) ogParams.set('score', String(data.score))
+
+  const ogImageUrl = `${BASE_URL}/api/og/rank?${ogParams}`
+  const pageUrl = `${BASE_URL}/wrapped/${encodeURIComponent(decoded)}${platform ? `?platform=${platform}` : ''}`
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: pageUrl,
+      siteName: 'Arena',
+      type: 'website',
+      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `${name} Arena Rank Card` }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [ogImageUrl],
+      site: '@arenafi_org',
+    },
+    alternates: { canonical: pageUrl },
+  }
+}
+
+export const dynamic = 'force-dynamic'
+
+export default async function WrappedPage({ params, searchParams }: Props) {
+  const { handle } = await params
+  const { platform, window: windowParam = '7d' } = await searchParams
+  const decoded = decodeURIComponent(handle)
+
+  const data = await fetchWrappedData(decoded, platform, windowParam)
+  if (!data) notFound()
+
+  // Build the OG image URL to pass to the client for download
+  const ogParams = new URLSearchParams({
+    name: data.displayName,
+    handle: decoded,
+    platform: data.platform,
+    window: data.window,
+  })
+  if (data.rank != null) ogParams.set('rank', String(data.rank))
+  if (data.total != null) ogParams.set('total', String(data.total))
+  if (data.roi != null) ogParams.set('roi', String(data.roi))
+  if (data.winRate != null) ogParams.set('winRate', String(data.winRate))
+  if (data.score != null) ogParams.set('score', String(data.score))
+
+  const ogImageUrl = `/api/og/rank?${ogParams}`
+
+  return <WrappedCardClient data={data} ogImageUrl={ogImageUrl} />
+}
