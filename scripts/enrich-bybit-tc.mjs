@@ -135,8 +135,8 @@ async function main() {
       if (cumTC === 0) { noData++; continue; }
       
       // Update all rows for this trader (all periods get the same cumulative count)
+      // Note: we already filtered trades_count=is.null when fetching, so no need to check
       for (const row of rows) {
-        if (row.trades_count !== null) continue;
         await sbPatch(row.id, { trades_count: cumTC });
         updated++;
       }

@@ -156,7 +156,9 @@ async function scrapeAllTraders(period) {
       const before = apiTraders.size
 
       // Try clicking next page
-      const clicked = await page.evaluate(() => {
+      let clicked
+      try {
+        clicked = await page.evaluate(() => {
         // Find next button
         const btns = document.querySelectorAll('button, li, a, [class*="next"]')
         for (const el of btns) {
@@ -205,6 +207,10 @@ async function scrapeAllTraders(period) {
           console.log(`  Page ${pageNum}: 3 pages with no new data, stopping`)
           break
         }
+      }
+      } catch (pageErr) {
+        console.log(`  Page ${pageNum}: error (${pageErr.message}), continuing with ${apiTraders.size} traders`)
+        break
       }
     }
 
