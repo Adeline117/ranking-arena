@@ -122,8 +122,9 @@ export async function GET(req: NextRequest) {
         }
         for (const [, lastUpdate] of grouped) {
           const ageHours = (now - lastUpdate.getTime()) / (1000 * 60 * 60)
-          if (ageHours < 24) scraperHealth.fresh++
-          else if (ageHours < 72) scraperHealth.stale++
+          // Unified freshness SLA: fresh < 12h, stale 12-24h, critical > 24h
+          if (ageHours < 12) scraperHealth.fresh++
+          else if (ageHours < 24) scraperHealth.stale++
           else scraperHealth.critical++
         }
       }
