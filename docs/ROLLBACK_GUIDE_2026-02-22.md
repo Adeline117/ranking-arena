@@ -8,6 +8,7 @@
 > New commit hashes will be appended after each small-step commit.
 
 1. `a5afd016` — baseline
+2. `80248d96` — update scripts docs for unified diagnostics usage
 
 ## Quick rollback commands
 

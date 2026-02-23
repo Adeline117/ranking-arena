@@ -55,6 +55,8 @@
     "diagnose": "node scripts/diagnose.mjs",
     "check:seasons": "node scripts/check_seasons.mjs",
     "check:status": "node scripts/check_status.mjs",
+    "check:freshness": "node scripts/diagnose.mjs --freshness",
+    "check:platforms": "node scripts/diagnose.mjs --platforms",
     "check:tables": "node scripts/check_tables.mjs",
     "check:enrichment": "node scripts/check_enrichment.mjs"
   },
