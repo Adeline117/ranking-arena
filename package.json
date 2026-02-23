@@ -58,7 +58,8 @@
     "check:freshness": "node scripts/diagnose.mjs --freshness",
     "check:platforms": "node scripts/diagnose.mjs --platforms",
     "check:tables": "node scripts/check_tables.mjs",
-    "check:enrichment": "node scripts/check_enrichment.mjs"
+    "check:enrichment": "node scripts/check_enrichment.mjs",
+    "check:scripts-boundary": "node scripts/check-production-boundary.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.985.0",
