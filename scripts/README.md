@@ -51,6 +51,8 @@ Backward-compatible shortcuts still work:
 ```bash
 npm run check:seasons
 npm run check:status
+npm run check:freshness
+npm run check:platforms
 npm run check:tables
 npm run check:enrichment
 ```
