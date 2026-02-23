@@ -10,7 +10,7 @@ interface Env {
   PROXY_SECRET?: string;
 }
 
-// 支持的交易所 API 白名单
+// Supported exchange API allow-list
 const ALLOWED_HOSTS = [
   'www.binance.com',
   'api.binance.com',
@@ -38,6 +38,19 @@ const ALLOWED_HOSTS = [
   // dYdX v4 indexer
   'indexer.dydx.trade',
   'indexer.v4testnet.dydx.exchange',
+  // BloFin copy trading
+  'openapi.blofin.com',
+  // BingX internal API (CF-blocked directly, accessible via Worker)
+  'api-app.qq-os.com',
+  'bingx.com',
+  // Gains Network (gTrade) — all chain backends
+  'backend-arbitrum.gains.trade',
+  'backend-polygon.gains.trade',
+  'backend-base.gains.trade',
+  'backend-global.gains.trade',
+  // GMX stats
+  'arbitrum-api.gmxinfra.io',
+  'gmx.squids.live',
 ];
 
 const worker = {
@@ -97,6 +110,41 @@ const worker = {
       return handleBinanceSpotCopyTrading(request, url);
     }
 
+    // Shortcut: /bingx/leaderboard
+    if (url.pathname === '/bingx/leaderboard') {
+      return handleBingxLeaderboard(request, url);
+    }
+
+    // Shortcut: /bingx/trader-detail
+    if (url.pathname === '/bingx/trader-detail') {
+      return handleBingxTraderDetail(request, url);
+    }
+
+    // Shortcut: /blofin/leaderboard
+    if (url.pathname === '/blofin/leaderboard') {
+      return handleBlofinLeaderboard(request, url);
+    }
+
+    // Shortcut: /blofin/trader-info
+    if (url.pathname === '/blofin/trader-info') {
+      return handleBlofinTraderInfo(request, url);
+    }
+
+    // Shortcut: /gains/leaderboard-all
+    if (url.pathname === '/gains/leaderboard-all') {
+      return handleGainsLeaderboardAll(request, url);
+    }
+
+    // Shortcut: /gains/open-trades
+    if (url.pathname === '/gains/open-trades') {
+      return handleGainsOpenTrades(request, url);
+    }
+
+    // Shortcut: /gains/trader-stats
+    if (url.pathname === '/gains/trader-stats') {
+      return handleGainsTraderStats(request, url);
+    }
+
     // 快捷端点: /dydx/leaderboard
     if (url.pathname === '/dydx/leaderboard') {
       return handleDydxLeaderboard(request, url);
@@ -119,6 +167,8 @@ const worker = {
         '/binance/copy-trading', '/binance/spot-copy-trading',
         '/bybit/copy-trading', '/bitget/copy-trading', '/kucoin/copy-trading',
         '/dydx/leaderboard', '/dydx/historical-pnl', '/dydx/subaccount',
+        '/blofin/leaderboard', '/blofin/trader-info',
+        '/gains/leaderboard-all', '/gains/open-trades', '/gains/trader-stats',
       ]
     }, { status: 404 });
   },
@@ -563,6 +613,232 @@ async function handleDydxSubaccount(request: Request, url: URL): Promise<Respons
       error: 'dYdX subaccount proxy error',
       details: error instanceof Error ? error.message : 'Unknown'
     }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+// ============================================
+// BingX Proxy Endpoints (bypasses CF block)
+// ============================================
+
+const BINGX_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Referer': 'https://bingx.com/en/CopyTrading/leaderBoard',
+  'Origin': 'https://bingx.com',
+};
+
+async function handleBingxLeaderboard(_request: Request, url: URL): Promise<Response> {
+  const pageIndex = url.searchParams.get('pageIndex') || '1';
+  const pageSize  = url.searchParams.get('pageSize')  || '100';
+  const timeType  = url.searchParams.get('timeType')  || '2';  // 1=7D 2=30D 3=90D
+
+  // BingX internal leaderboard API
+  const apiUrl = `https://api-app.qq-os.com/api/copy-trade-facade/v2/leaderboard/rank?pageIndex=${pageIndex}&pageSize=${pageSize}&timeType=${timeType}`;
+
+  try {
+    const response = await fetch(apiUrl, { method: 'GET', headers: BINGX_HEADERS });
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (error) {
+    // Fallback: try bingx.com API path
+    try {
+      const fallbackUrl = `https://bingx.com/api/copytrading/v1/leaderboard?pageIndex=${pageIndex}&pageSize=${pageSize}&timeType=${timeType}`;
+      const fallbackResp = await fetch(fallbackUrl, { method: 'GET', headers: BINGX_HEADERS });
+      const fallbackData = await fallbackResp.text();
+      return new Response(fallbackData, {
+        status: fallbackResp.status,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    } catch (fallbackError) {
+      return Response.json({ error: 'BingX leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+        status: 500,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+  }
+}
+
+async function handleBingxTraderDetail(_request: Request, url: URL): Promise<Response> {
+  const uid      = url.searchParams.get('uid') || '';
+  const timeType = url.searchParams.get('timeType') || '2';
+
+  if (!uid) {
+    return Response.json({ error: 'Missing uid' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+
+  const apiUrl = `https://api-app.qq-os.com/api/copy-trade-facade/v2/trader/new/stat?uid=${uid}&timeType=${timeType}`;
+
+  try {
+    const response = await fetch(apiUrl, { method: 'GET', headers: BINGX_HEADERS });
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (error) {
+    return Response.json({ error: 'BingX trader detail proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+// ============================================
+// BloFin Proxy Endpoints
+// ============================================
+
+const BLOFIN_API = 'https://openapi.blofin.com';
+const BLOFIN_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Origin': 'https://blofin.com',
+  'Referer': 'https://blofin.com/copy-trade',
+};
+
+async function handleBlofinLeaderboard(_request: Request, url: URL): Promise<Response> {
+  const period = url.searchParams.get('period') || '30';  // 7, 30, 90
+  const limit = url.searchParams.get('limit') || '100';
+
+  const apiUrl = `${BLOFIN_API}/api/v1/copytrading/public/leaderboard?period=${period}&limit=${limit}`;
+
+  try {
+    const response = await fetch(apiUrl, { method: 'GET', headers: BLOFIN_HEADERS });
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (error) {
+    return Response.json({ error: 'BloFin leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+async function handleBlofinTraderInfo(_request: Request, url: URL): Promise<Response> {
+  const uniqueCode = url.searchParams.get('uniqueCode') || '';
+
+  if (!uniqueCode) {
+    return Response.json({ error: 'Missing uniqueCode' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+
+  const apiUrl = `${BLOFIN_API}/api/v1/copytrading/public-lead-traders/detail?uniqueCode=${uniqueCode}`;
+
+  try {
+    const response = await fetch(apiUrl, { method: 'GET', headers: BLOFIN_HEADERS });
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (error) {
+    return Response.json({ error: 'BloFin trader info proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+// ============================================
+// Gains Network Proxy Endpoints
+// ============================================
+
+const GAINS_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+};
+
+async function handleGainsLeaderboardAll(_request: Request, url: URL): Promise<Response> {
+  const chain = url.searchParams.get('chain') || 'arbitrum';  // arbitrum, polygon, base
+  const validChains = ['arbitrum', 'polygon', 'base'];
+  const safeChain = validChains.includes(chain) ? chain : 'arbitrum';
+
+  const apiUrl = `https://backend-${safeChain}.gains.trade/leaderboard/all`;
+
+  try {
+    const response = await fetch(apiUrl, { method: 'GET', headers: GAINS_HEADERS });
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (error) {
+    return Response.json({ error: 'Gains leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+async function handleGainsOpenTrades(_request: Request, url: URL): Promise<Response> {
+  const chain = url.searchParams.get('chain') || 'arbitrum';
+  const validChains = ['arbitrum', 'polygon', 'base'];
+  const safeChain = validChains.includes(chain) ? chain : 'arbitrum';
+
+  const apiUrl = `https://backend-${safeChain}.gains.trade/open-trades`;
+
+  try {
+    const response = await fetch(apiUrl, { method: 'GET', headers: GAINS_HEADERS });
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (error) {
+    return Response.json({ error: 'Gains open-trades proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+}
+
+async function handleGainsTraderStats(_request: Request, url: URL): Promise<Response> {
+  const address = url.searchParams.get('address') || '';
+  const chainId = url.searchParams.get('chainId') || '42161';
+
+  if (!address) {
+    return Response.json({ error: 'Missing address' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+  }
+
+  const apiUrl = `https://backend-global.gains.trade/api/personal-trading-history/${address}/stats?chainId=${chainId}`;
+
+  try {
+    const response = await fetch(apiUrl, { method: 'GET', headers: GAINS_HEADERS });
+    const data = await response.text();
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (error) {
+    return Response.json({ error: 'Gains trader stats proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': '*' },
     });
