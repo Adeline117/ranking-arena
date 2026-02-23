@@ -42,19 +42,31 @@
 - Improvement: +10 (P0-2 implementation)
 
 ### Gap items
-1. MDD/ROI outlier cleaning and hard guard pending.
-2. handle/avatar nightly reconcile pending.
-3. stale source-season repair + SLA threshold pending.
-4. comparator and API/frontend contract check pending.
-5. run_id lineage and audit closure pending.
-6. materialized summary freshness/quality API pending.
+1. handle/avatar nightly reconcile pending.
+2. stale source-season repair + SLA threshold pending.
+3. comparator and API/frontend contract check pending.
+4. run_id lineage and audit closure pending.
+5. materialized summary freshness/quality API pending.
 
 ### Delivered in this round
 - **P0-2 implemented**: added dedicated 7D/30D risk metric backfill pipeline script.
   - `scripts/backfill-risk-metrics-7d30d.ts`
   - npm script: `backfill:risk:7d30d`
   - Coverage output includes per-season fill counts for Sharpe/Sortino/PF.
+- **P0-3 implemented**: added hard sanity guard + stock cleanup chain for MDD/ROI outliers.
+  - Migration: `supabase/migrations/20260223_mdd_roi_quality_guard.sql`
+  - Cleanup runner: `scripts/clean-mdd-roi-outliers.ts`
+  - npm script: `clean:outliers`
 
 ### Evidence
 - SQL update targets both `trader_snapshots` and `leaderboard_ranks`.
 - Seasonal scope pinned to `season_id IN ('7D','30D')`.
+- DB constraints introduced (`ck_trader_snapshots_roi_sane`, `ck_trader_snapshots_mdd_sane`) and a cleanup function (`clean_trader_snapshot_outliers`).
+
+---
+
+## Round 3 - P0 closure
+
+### Quality score re-assessment
+- Current score: **78 / 100**
+- Improvement: +10 (P0-3 delivered)

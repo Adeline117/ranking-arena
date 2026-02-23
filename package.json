@@ -61,7 +61,8 @@
     "check:enrichment": "node scripts/check_enrichment.mjs",
     "check:scripts-boundary": "node scripts/check-production-boundary.mjs",
     "backfill:24h": "npx tsx scripts/backfill-window-24h.ts",
-    "backfill:risk:7d30d": "npx tsx scripts/backfill-risk-metrics-7d30d.ts"
+    "backfill:risk:7d30d": "npx tsx scripts/backfill-risk-metrics-7d30d.ts",
+    "clean:outliers": "npx tsx scripts/clean-mdd-roi-outliers.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.985.0",
