@@ -19,14 +19,18 @@ import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('traders-api')
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 export const preferredRegion = ['iad1', 'sfo1', 'hnd1']
 export const dynamic = 'force-dynamic'
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
-    const timeRange = (searchParams.get('timeRange') || '90D') as Period
+    const rawTimeRange = searchParams.get('timeRange') || '90D'
+    const normalizedTimeRange = rawTimeRange.toUpperCase()
+    const timeRange = (normalizedTimeRange === '7D' || normalizedTimeRange === '30D' || normalizedTimeRange === '90D'
+      ? normalizedTimeRange
+      : '90D') as Period
     const exchangeFilter = searchParams.get('exchange')
     const sortBy = searchParams.get('sortBy') as 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown' | null
     const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc'

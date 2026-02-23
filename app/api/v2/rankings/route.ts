@@ -21,7 +21,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { Window, LeaderboardPlatform, RankingEntry, RankingsResponse } from '@/lib/types/leaderboard'
 import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
 import logger from '@/lib/logger'
@@ -77,10 +77,8 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Database query
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+  // Database query (server-side service role to keep backend policy consistent)
+  const supabase = getSupabaseAdmin()
 
   // Build query for latest snapshots per trader for this window
   let query = supabase
@@ -236,11 +234,8 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  // Filter out traders with no display name (NULL handles)
-  const filteredTraders = traders.filter((t) => t.display_name != null);
-
   const response: RankingsResponse = {
-    traders: filteredTraders,
+    traders,
     meta: {
       platform,
       market_type: marketType as 'futures',
