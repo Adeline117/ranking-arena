@@ -114,6 +114,10 @@
     {
       "path": "/api/cron/check-trader-alerts",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/generate-activities",
+      "schedule": "*/30 * * * *"
     }
   ],
   "headers": [

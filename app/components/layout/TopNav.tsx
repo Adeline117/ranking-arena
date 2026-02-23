@@ -348,6 +348,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
             {[
               { href: '/rankings', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
               { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
+              { href: '/feed', labelKey: 'feed' as const, tooltip: language === 'zh' ? '交易员动态时间线' : 'Trader activity timeline' },
               { href: '/market', labelKey: 'market' as const, tooltip: language === 'zh' ? '市场数据总览' : 'Market overview' },
               { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
             ].map((item) => {

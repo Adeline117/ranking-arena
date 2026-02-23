@@ -1,0 +1,136 @@
+/**
+ * /feed - Trader Activity Feed page
+ *
+ * Server component: fetches initial activity batch, passes to client feed.
+ */
+
+import type { Metadata } from 'next'
+import { Suspense } from 'react'
+import { createClient } from '@supabase/supabase-js'
+import ActivityFeed from '@/app/components/feed/ActivityFeed'
+import type { TraderActivity } from '@/lib/types/activities'
+import TopNav from '@/app/components/layout/TopNav'
+import { tokens } from '@/lib/design-tokens'
+import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+
+export const dynamic = 'force-dynamic'
+
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
+
+export const metadata: Metadata = {
+  title: 'Trader Activity Feed — Arena',
+  description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+  alternates: { canonical: `${baseUrl}/feed` },
+  openGraph: {
+    title: 'Trader Activity Feed — Arena',
+    description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+    url: `${baseUrl}/feed`,
+    siteName: 'Arena',
+    type: 'website',
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Server-side data fetch
+// ---------------------------------------------------------------------------
+
+async function fetchInitialActivities(): Promise<{
+  activities: TraderActivity[]
+  hasMore: boolean
+  nextCursor: string | null
+}> {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !supabaseKey) {
+      return { activities: [], hasMore: false, nextCursor: null }
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const LIMIT = 50
+    const { data, error } = await supabase
+      .from('trader_activities')
+      .select('id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at')
+      .order('occurred_at', { ascending: false })
+      .limit(LIMIT + 1)
+
+    if (error || !data) {
+      return { activities: [], hasMore: false, nextCursor: null }
+    }
+
+    const hasMore = data.length > LIMIT
+    const page = hasMore ? data.slice(0, LIMIT) : data
+    const nextCursor = hasMore && page.length > 0 ? page[page.length - 1].occurred_at : null
+
+    return {
+      activities: page as TraderActivity[],
+      hasMore,
+      nextCursor,
+    }
+  } catch {
+    return { activities: [], hasMore: false, nextCursor: null }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default async function FeedPage() {
+  const { activities, hasMore, nextCursor } = await fetchInitialActivities()
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+      }}
+    >
+      <TopNav />
+
+      <main
+        style={{
+          maxWidth: 720,
+          margin: '0 auto',
+          padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
+        }}
+      >
+        {/* Page header */}
+        <div style={{ marginBottom: tokens.spacing[5] }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: tokens.typography.fontSize['2xl'],
+              fontWeight: tokens.typography.fontWeight.black,
+              color: tokens.colors.text.primary,
+              fontFamily: tokens.typography.fontFamily.sans.join(', '),
+            }}
+          >
+            Activity Feed
+          </h1>
+          <p
+            style={{
+              margin: `${tokens.spacing[1]} 0 0`,
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.tertiary,
+              fontFamily: tokens.typography.fontFamily.sans.join(', '),
+            }}
+          >
+            Auto-generated milestones from live trader data — rank climbs, ROI breakouts, win streaks, and large profits.
+          </p>
+        </div>
+
+        {/* Feed */}
+        <Suspense fallback={<RankingSkeleton />}>
+          <ActivityFeed
+            initialActivities={activities}
+            initialHasMore={hasMore}
+            initialNextCursor={nextCursor}
+          />
+        </Suspense>
+      </main>
+    </div>
+  )
+}
