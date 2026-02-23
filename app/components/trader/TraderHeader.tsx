@@ -25,6 +25,7 @@ const AddToCollectionButton = dynamic(() => import('../features/AddToCollectionB
 
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
+const ChallengeButton = dynamic(() => import('./ChallengeButton'), { ssr: false })
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
 const MessageButton = dynamic(() => import('../ui/MessageButton'), { ssr: false })
 const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
@@ -708,6 +709,13 @@ export default function TraderHeader({
         {!isOwnProfile && !isRegistered && userId && (
           <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
         )}
+
+        {/* PK challenge button — allows initiating a head-to-head comparison */}
+        <ChallengeButton
+          handle={handle}
+          source={source}
+          displayName={displayNameProp || formatDisplayName(handle, source)}
+        />
 
         <ShareOnXButton
           handle={handle}
