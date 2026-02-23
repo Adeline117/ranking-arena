@@ -62,6 +62,8 @@ async function main() {
           const resp = await fetch(url)
           const data = await resp.json()
           const list = data?.data?.content || []
+          const totalElements = data?.data?.totalElements ?? data?.data?.total ?? 0
+          const totalPages = data?.data?.totalPages ?? (totalElements > 0 ? Math.ceil(totalElements / lim) : 0)
           return { 
             items: list.map(i => ({
               nickname: i.nickname || i.nickName,
@@ -69,8 +71,8 @@ async function main() {
               maxDrawdown: i.maxDrawdown7 ?? i.maxDrawdown ?? null,
               uid: i.uid
             })),
-            totalPages: data?.data?.totalPages,
-            totalElements: data?.data?.totalElements
+            totalPages,
+            totalElements
           }
         } catch (e) {
           return { items: [], error: e.message }
