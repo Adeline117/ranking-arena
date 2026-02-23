@@ -39,14 +39,14 @@ export async function GET(request: NextRequest) {
 
   const results: BatchResult[] = []
 
-  for (const { platform, period, limit } of PLATFORMS) {
+  for (const [index, { platform, period, limit }] of PLATFORMS.entries()) {
     const start = Date.now()
     try {
       const res = await fetch(
         `${baseUrl}/api/cron/enrich?platform=${platform}&period=${period}&limit=${limit}`,
         {
           method: 'GET',
-          headers: { 'Authorization': `Bearer ${cronSecret || ''}` },
+          headers: { Authorization: `Bearer ${cronSecret || ''}` },
         }
       )
       results.push({
@@ -64,8 +64,8 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Delay between enrichments
-    if (PLATFORMS.indexOf({ platform, period, limit }) < PLATFORMS.length - 1) {
+    // Delay between enrichments (skip after the last platform)
+    if (index < PLATFORMS.length - 1) {
       await new Promise((r) => setTimeout(r, 3000))
     }
   }
