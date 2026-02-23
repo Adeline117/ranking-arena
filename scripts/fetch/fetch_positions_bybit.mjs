@@ -25,12 +25,13 @@ async function getTraders() {
   const ids = new Set()
   let offset = 0
   while (true) {
-    const { data } = await sb.from('trader_sources')
+    const { data } = await sb.from('trader_snapshots')
       .select('source_trader_id')
-      .eq('source', 'bybit').eq('is_active', true)
+      .eq('source', 'bybit')
+      .in('season_id', ['7D','30D','90D'])
       .range(offset, offset + 999)
     if (!data?.length) break
-    data.forEach(t => ids.add(t.source_trader_id))
+    data.forEach(t => { if (t.source_trader_id) ids.add(t.source_trader_id) })
     offset += 1000
     if (data.length < 1000) break
   }
