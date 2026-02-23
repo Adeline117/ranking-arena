@@ -25,12 +25,16 @@ export const runtime = 'nodejs'
 /**
  * Fetch data from internal API endpoint
  */
-async function fetchInternalAPI(path: string): Promise<Record<string, unknown> | null> {
+async function fetchInternalAPI(
+  origin: string,
+  path: string,
+  authHeader: string,
+): Promise<Record<string, unknown> | null> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-    const response = await fetch(`${baseUrl}${path}`, {
+    const response = await fetch(`${origin}${path}`, {
       headers: {
         'Cache-Control': 'no-cache',
+        Authorization: authHeader,
       },
     })
 
@@ -254,10 +258,12 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch data from all monitoring endpoints in parallel
+    const origin = req.nextUrl.origin
+    const adminAuthHeader = authHeader as string
     const [generalStatsRaw, schedulerStatsRaw, anomalyStatsRaw] = await Promise.all([
-      fetchInternalAPI('/api/admin/stats'),
-      fetchInternalAPI('/api/admin/scheduler/stats'),
-      fetchInternalAPI('/api/admin/anomalies/stats'),
+      fetchInternalAPI(origin, '/api/admin/stats', adminAuthHeader),
+      fetchInternalAPI(origin, '/api/admin/scheduler/stats', adminAuthHeader),
+      fetchInternalAPI(origin, '/api/admin/anomalies/stats', adminAuthHeader),
     ])
 
     const generalStats = generalStatsRaw as GeneralStats | null
