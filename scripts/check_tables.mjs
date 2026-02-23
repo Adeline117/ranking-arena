@@ -61,34 +61,29 @@ async function checkTables() {
     console.log('  Sample:', JSON.stringify(sampleRow, null, 2).slice(0, 500))
   }
 
-  // Try to get table list from information_schema
-  console.log('\n📋 Tables containing "trader":')
-  const { data: tables, error: tableError } = await supabase
-    .rpc('get_tables_list')
-    .catch(() => ({ data: null, error: 'RPC not available' }))
+  // Stable fallback: probe known tables directly (avoid custom RPC dependency)
+  console.log('\n📋 Known trader tables:')
+  const tableNames = [
+    'trader_snapshots',
+    'trader_stats_detail',
+    'trader_equity_curve',
+    'trader_asset_breakdown',
+    'trader_position_history',
+    'trader_portfolio',
+    'traders'
+  ]
 
-  if (tableError) {
-    // Try direct query on common table names
-    const tableNames = [
-      'trader_snapshots',
-      'trader_stats_detail',
-      'trader_equity_curve',
-      'trader_asset_breakdown',
-      'trader_position_history',
-      'trader_portfolio',
-      'traders'
-    ]
+  for (const tableName of tableNames) {
+    const { count, error } = await supabase
+      .from(tableName)
+      .select('*', { count: 'exact', head: true })
 
-    for (const tableName of tableNames) {
-      const { count, error } = await supabase
-        .from(tableName)
-        .select('*', { count: 'exact', head: true })
-
-      if (!error) {
-        console.log(`  ${tableName}: ${count} rows`)
-      } else if (!error.message?.includes('does not exist')) {
-        console.log(`  ${tableName}: error - ${error.message}`)
-      }
+    if (!error) {
+      console.log(`  ${tableName}: ${count} rows`)
+    } else if (error.message?.includes('does not exist')) {
+      console.log(`  ${tableName}: not found`)
+    } else {
+      console.log(`  ${tableName}: error - ${error.message}`)
     }
   }
 

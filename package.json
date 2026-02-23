@@ -51,7 +51,12 @@
     "security:fix": "npm audit fix",
     "security:check": "npm run security:audit && npm run type-check && npm run lint",
     "validate:env": "npx tsx -e \"require('./lib/env')\"",
-    "predev": "npx tsx -e \"try{require('./lib/env')}catch(e){console.warn(e.message)}\""
+    "predev": "npx tsx -e \"try{require('./lib/env')}catch(e){console.warn(e.message)}\"",
+    "diagnose": "node scripts/diagnose.mjs",
+    "check:seasons": "node scripts/check_seasons.mjs",
+    "check:status": "node scripts/check_status.mjs",
+    "check:tables": "node scripts/check_tables.mjs",
+    "check:enrichment": "node scripts/check_enrichment.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.985.0",
