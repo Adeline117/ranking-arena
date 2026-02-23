@@ -19,6 +19,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import ShareButton from '../common/ShareButton'
+import ShareOnXButton from './ShareOnXButton'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
 const AddToCollectionButton = dynamic(() => import('../features/AddToCollectionButton'), { ssr: false })
 
@@ -52,6 +53,8 @@ interface TraderHeaderProps {
   roi90d?: number
   maxDrawdown?: number
   winRate?: number
+  /** Leaderboard rank for the Share on X wrapped card */
+  rank?: number | null
   /** Pre-fetched current user ID to avoid duplicate auth calls */
   currentUserId?: string | null
 }
@@ -296,6 +299,7 @@ export default function TraderHeader({
   roi90d,
   maxDrawdown,
   winRate,
+  rank,
   currentUserId: externalUserId,
 }: TraderHeaderProps): React.ReactElement {
   const [userId, setUserId] = useState<string | null>(externalUserId ?? null)
@@ -704,6 +708,15 @@ export default function TraderHeader({
         {!isOwnProfile && !isRegistered && userId && (
           <ClaimTraderButton traderId={traderId} handle={handle} userId={userId} source={source} />
         )}
+
+        <ShareOnXButton
+          handle={handle}
+          displayName={displayNameProp || formatDisplayName(handle, source)}
+          platform={source}
+          rank={rank}
+          roi={roi90d}
+          window="7d"
+        />
 
         <ShareButton
           data={{
