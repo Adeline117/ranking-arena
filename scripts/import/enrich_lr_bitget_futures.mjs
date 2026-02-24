@@ -2,7 +2,7 @@
  * Enrich leaderboard_ranks for Bitget Futures 90D - win_rate, max_drawdown, trades_count
  * Uses Bitget cycleData API via direct fetch (no browser)
  */
-import { getSupabaseClient, sleep } from './lib/shared.mjs'
+import { getSupabaseClient, sleep } from '../lib/shared.mjs'
 
 const sb = getSupabaseClient()
 const HEADERS = {

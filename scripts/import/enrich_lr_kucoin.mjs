@@ -1,7 +1,7 @@
 /**
  * Enrich leaderboard_ranks for KuCoin 90D - win_rate, trades_count via positionHistory API
  */
-import { getSupabaseClient, sleep } from './lib/shared.mjs'
+import { getSupabaseClient, sleep } from '../lib/shared.mjs'
 
 const sb = getSupabaseClient()
 

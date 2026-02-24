@@ -2,7 +2,7 @@
  * Enrich leaderboard_ranks for Toobit 90D - win_rate, max_drawdown, trades_count
  * Uses Toobit public API endpoints
  */
-import { getSupabaseClient, sleep } from './lib/shared.mjs'
+import { getSupabaseClient, sleep } from '../lib/shared.mjs'
 
 const sb = getSupabaseClient()
 const HEADERS = {
