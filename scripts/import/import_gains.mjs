@@ -72,7 +72,6 @@ async function fetchLeaderboardAll() {
       console.log(`    Direct failed, trying CF proxy...`)
       data = await fetchJson(proxyUrl)
     }
-    const data = await fetchJson(url)
 
     if (!data || typeof data !== 'object') {
       console.log(`  ⚠ ${chain.name}: no data`)
