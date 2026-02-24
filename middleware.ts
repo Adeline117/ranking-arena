@@ -110,7 +110,7 @@ export async function middleware(request: NextRequest) {
         const { success, limit, remaining, reset } = await rl.limit(ip)
         if (!success) {
           const retryAfter = Math.ceil((reset - Date.now()) / 1000)
-          console.log(`[middleware] ${method} ${pathname} 429 rate-limited ip=${ip} +${Date.now() - start}ms`)
+          console.warn(`[middleware] ${method} ${pathname} 429 rate-limited ip=${ip} +${Date.now() - start}ms`)
           return new NextResponse('Too Many Requests', {
             status: 429,
             headers: {
@@ -136,7 +136,7 @@ export async function middleware(request: NextRequest) {
     const token = match?.[1]
 
     if (!token) {
-      console.log(`[middleware] ${method} ${pathname} 401 missing-token +${Date.now() - start}ms`)
+      console.warn(`[middleware] ${method} ${pathname} 401 missing-token +${Date.now() - start}ms`)
       return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
@@ -145,7 +145,7 @@ export async function middleware(request: NextRequest) {
 
     const valid = await validateToken(token)
     if (!valid) {
-      console.log(`[middleware] ${method} ${pathname} 401 invalid-token +${Date.now() - start}ms`)
+      console.warn(`[middleware] ${method} ${pathname} 401 invalid-token +${Date.now() - start}ms`)
       return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
@@ -156,9 +156,11 @@ export async function middleware(request: NextRequest) {
   // --- Pass through + log ---
   const response = NextResponse.next()
 
-  // Log after response is forwarded
+  // Log after response is forwarded (debug only - omit in production to reduce noise)
   const duration = Date.now() - start
-  console.log(`[middleware] ${method} ${pathname} -> +${duration}ms`)
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(`[middleware] ${method} ${pathname} -> +${duration}ms`)
+  }
 
   return response
 }
