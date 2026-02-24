@@ -1,204 +1,225 @@
 /**
- * BitMart Copy Trading Leaderboard Import
- *
- * Source: https://www.bitmart.com/copy-trading
- * API: /api/copy-trading/v1/public/trader/list (public, no auth)
+ * BitMart Copy Trading import (Playwright DOM extraction)
  * 
- * BitMart has a public REST API — no browser required.
- * Routes through CF Worker for reliability.
- *
+ * Strategy: Load /ai/copy-trading, click "Masters" tab, scroll to load all,
+ * extract trader links, then scrape each detail page for full metrics.
+ * 
  * Usage: node scripts/import/import_bitmart.mjs [7D|30D|90D|ALL]
  */
-import {
-  getSupabaseClient,
-  calculateArenaScore,
-  sleep,
-} from '../lib/shared.mjs'
+import { chromium } from 'playwright';
+import { getSupabaseClient, calculateArenaScore, sleep, getTargetPeriods } from '../lib/shared.mjs';
 
-const supabase = getSupabaseClient()
-const SOURCE = 'bitmart'
+const supabase = getSupabaseClient();
+const SOURCE = 'bitmart';
 
-const CF_PROXY     = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
-const BITMART_BASE = 'https://www.bitmart.com'
-
-const PERIOD_MAP = { '7D': '7', '30D': '30', '90D': '90' }
-
-async function fetchJson(url, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-          'Accept': 'application/json',
-          'Origin': BITMART_BASE,
-          'Referer': `${BITMART_BASE}/copy-trading`,
-        },
-        signal: AbortSignal.timeout(20000),
-      })
-      if (!res.ok) return null
-      return await res.json()
-    } catch (e) {
-      if (i < retries - 1) await sleep(2000)
-    }
-  }
-  return null
-}
-
-/** Try multiple BitMart API endpoints. */
-async function fetchLeaderboard(period) {
-  const periodNum = PERIOD_MAP[period]
-  const traders = new Map()
-
-  const endpoints = [
-    // Direct API (sometimes accessible)
-    `${BITMART_BASE}/api/copy-trading/v1/public/trader/list?page=1&size=100&period=${periodNum}&sort=roi&order=desc`,
-    // CF Worker proxy
-    `${CF_PROXY}/proxy?url=${encodeURIComponent(`${BITMART_BASE}/api/copy-trading/v1/public/trader/list?page=1&size=100&period=${periodNum}&sort=roi&order=desc`)}`,
-  ]
-
-  for (const url of endpoints) {
-    const data = await fetchJson(url)
-    if (!data) continue
-
-    const list = data?.data?.list || data?.list || (Array.isArray(data) ? data : [])
-    if (list.length === 0) continue
-
-    console.log(`  ✓ Got ${list.length} traders from ${url.includes('proxy') ? 'CF proxy' : 'direct'}`)
-
-    for (const t of list) {
-      const id = String(t.trader_id || t.uid || t.id || '')
-      if (!id) continue
-
-      let roi = parseFloat(String(t.roi || t.roiRate || 0))
-      if (Math.abs(roi) > 0 && Math.abs(roi) < 5) roi *= 100
-
-      let wr = t.win_rate != null ? parseFloat(String(t.win_rate)) : null
-      if (wr != null && wr > 0 && wr <= 1) wr *= 100
-
-      let mdd = t.max_drawdown != null ? Math.abs(parseFloat(String(t.max_drawdown))) : null
-      if (mdd != null && mdd > 0 && mdd <= 1) mdd *= 100
-
-      traders.set(id, {
-        id,
-        nickname: t.nick_name || t.nickname || t.name || t.displayName || `Trader_${id.slice(0, 8)}`,
-        avatar: t.avatar || t.avatar_url || t.headImg || null,
-        roi,
-        pnl: parseFloat(String(t.pnl || t.totalPnl || t.profit || 0)),
-        winRate: wr,
-        maxDrawdown: mdd,
-        followers: parseInt(String(t.follower_count || t.followers || 0)),
-      })
-    }
-
-    // Paginate if needed
-    if (list.length >= 100) {
-      for (let page = 2; page <= 5; page++) {
-        await sleep(500)
-        const pageUrl = url.replace('page=1', `page=${page}`)
-        const nextData = await fetchJson(pageUrl)
-        const nextList = nextData?.data?.list || nextData?.list || []
-        if (nextList.length === 0) break
-
-        for (const t of nextList) {
-          const id = String(t.trader_id || t.uid || t.id || '')
-          if (!id || traders.has(id)) continue
-          // Same mapping as above
-          let roi = parseFloat(String(t.roi || 0))
-          if (Math.abs(roi) > 0 && Math.abs(roi) < 5) roi *= 100
-          traders.set(id, {
-            id, roi,
-            nickname: t.nick_name || t.nickname || `Trader_${id.slice(0, 8)}`,
-            avatar: t.avatar || null,
-            pnl: parseFloat(String(t.pnl || 0)),
-            winRate: null, maxDrawdown: null,
-            followers: parseInt(String(t.follower_count || 0)),
-          })
+async function scrapeDetailPage(page, uuid, name) {
+  try {
+    await page.goto(`https://www.bitmart.com/ai/copy-trading/master-detail/${uuid}`, {
+      waitUntil: 'networkidle',
+      timeout: 30000,
+    });
+    await sleep(3000);
+    
+    return await page.evaluate(() => {
+      const text = document.body.innerText;
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      
+      const getValueAfterLabel = (label) => {
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].includes(label) && i + 1 < lines.length) {
+            const val = lines[i + 1].replace(/[,$%+]/g, '').trim();
+            const num = parseFloat(val);
+            if (!isNaN(num)) return num;
+          }
         }
-        if (nextList.length < 100) break
-      }
-    }
-
-    break  // Successfully got data, stop trying endpoints
+        return null;
+      };
+      
+      // Also try inline patterns
+      const matchPct = (pattern) => {
+        const m = text.match(pattern);
+        return m ? parseFloat(m[1]) : null;
+      };
+      
+      const roi = matchPct(/Total ROI[:\s]*([+-]?\d+\.?\d*)%/i) 
+        || matchPct(/ROI[:\s]*([+-]?\d+\.?\d*)%/i)
+        || getValueAfterLabel('Total ROI');
+      const wr = matchPct(/Win Rate[:\s]*(\d+\.?\d*)%/i) 
+        || matchPct(/P\/L Ratio[:\s]*(\d+\.?\d*)%/i)
+        || getValueAfterLabel('Win Rate');
+      const mdd = matchPct(/Max(?:imum)? Drawdown[:\s]*(-?\d+\.?\d*)%/i)
+        || getValueAfterLabel('Max Drawdown');
+      const pnl = getValueAfterLabel('Total PnL') || getValueAfterLabel('PnL');
+      const aum = getValueAfterLabel('AUM');
+      const copiers = getValueAfterLabel('Copiers') || getValueAfterLabel('Followers');
+      
+      // Avatar
+      const img = document.querySelector('img[src*="cloudfront"], img[src*="avatar"]');
+      const avatar = img?.src || null;
+      
+      return { roi, wr, mdd: mdd != null ? Math.abs(mdd) : null, pnl, aum, copiers, avatar };
+    });
+  } catch (e) {
+    console.log(`    ⚠️ Failed ${name}: ${e.message.slice(0, 50)}`);
+    return null;
   }
-
-  return [...traders.values()]
-}
-
-async function saveTraders(traders, period) {
-  if (traders.length === 0) {
-    console.log(`  ⚠ No traders to save for ${period}`)
-    return 0
-  }
-  traders.sort((a, b) => (b.roi || 0) - (a.roi || 0))
-  const capturedAt = new Date().toISOString()
-
-  const sourcesData = traders.map(t => ({
-    source: SOURCE,
-    source_type: 'leaderboard',
-    source_trader_id: t.id,
-    handle: t.nickname,
-    avatar_url: t.avatar,
-    is_active: true,
-  }))
-
-  const { error: srcErr } = await supabase
-    .from('trader_sources')
-    .upsert(sourcesData, { onConflict: 'source,source_trader_id' })
-  if (srcErr) console.log(`  ⚠ trader_sources: ${srcErr.message}`)
-
-  let saved = 0
-  for (let i = 0; i < traders.length; i++) {
-    const t = traders[i]
-    const { totalScore } = calculateArenaScore(t.roi, t.pnl, t.maxDrawdown, t.winRate, period)
-    const snap = {
-      source: SOURCE,
-      source_trader_id: t.id,
-      season_id: period,
-      rank: i + 1,
-      roi: t.roi,
-      pnl: t.pnl,
-      win_rate: t.winRate,
-      max_drawdown: t.maxDrawdown,
-      followers: t.followers,
-      arena_score: totalScore,
-      captured_at: capturedAt,
-    }
-    const { error } = await supabase
-      .from('trader_snapshots')
-      .upsert(snap, { onConflict: 'source,source_trader_id,season_id' })
-    if (!error) saved++
-    else console.log(`  ⚠ [${t.id}]: ${error.message}`)
-  }
-
-  console.log(`  ✅ ${period}: saved ${saved}/${traders.length}`)
-  return saved
 }
 
 async function main() {
-  const arg = process.argv[2]?.toUpperCase()
-  const targetPeriods = arg === 'ALL' ? ['7D', '30D', '90D']
-    : arg && ['7D', '30D', '90D'].includes(arg) ? [arg]
-    : ['30D', '7D', '90D']
-
-  console.log('BitMart Copy Trading Import')
-  console.log(`Periods: ${targetPeriods.join(', ')}\n`)
-
-  let total = 0
-  for (const period of targetPeriods) {
-    console.log(`\n=== ${period} ===`)
-    const traders = await fetchLeaderboard(period)
-    console.log(`  Fetched: ${traders.length} traders`)
-
-    if (traders.length > 0) {
-      const top5 = traders.slice(0, 5)
-      top5.forEach((t, i) => console.log(`  ${i + 1}. ${t.nickname}: ROI ${t.roi?.toFixed(1)}%`))
+  const periods = getTargetPeriods(process.argv[2] ? [process.argv[2]] : ['30D']);
+  console.log(`BitMart Copy Trading import | Periods: ${periods.join(', ')}`);
+  
+  const browser = await chromium.launch({ headless: false, args: ['--disable-gpu'] });
+  
+  try {
+    const page = await browser.newPage();
+    
+    console.log('  Loading BitMart copy trading...');
+    await page.goto('https://www.bitmart.com/ai/copy-trading', {
+      waitUntil: 'networkidle',
+      timeout: 60000,
+    });
+    await sleep(10000);
+    
+    // Click Masters tab
+    try {
+      await page.getByText('Masters', { exact: true }).click();
+      console.log('  Clicked Masters tab');
+      await sleep(5000);
+    } catch {}
+    
+    // Scroll to load all masters
+    console.log('  Scrolling to load all traders...');
+    let prevCount = 0;
+    let stableRounds = 0;
+    for (let i = 0; i < 100; i++) {
+      await page.evaluate(() => window.scrollBy(0, 1000));
+      await sleep(1500);
+      const count = await page.evaluate(() => document.querySelectorAll('a[href*="master-detail"]').length);
+      if (count === prevCount) { stableRounds++; if (stableRounds >= 5) break; }
+      else { stableRounds = 0; prevCount = count; }
     }
-
-    total += await saveTraders(traders, period)
-    await sleep(2000)
+    
+    // Extract trader links
+    const traderLinks = await page.evaluate(() => {
+      const links = document.querySelectorAll('a[href*="master-detail"]');
+      const seen = new Set();
+      const results = [];
+      links.forEach(link => {
+        const name = (link.innerText || '').trim();
+        const href = link.getAttribute('href') || '';
+        const uuid = href.split('/').pop();
+        if (!uuid || seen.has(uuid) || !name || name === 'Copy' || name.length > 50) return;
+        seen.add(uuid);
+        results.push({ name, uuid });
+      });
+      return results;
+    });
+    
+    console.log(`  Found ${traderLinks.length} unique traders`);
+    
+    if (traderLinks.length === 0) {
+      console.log('  ERROR: No traders found');
+      await browser.close();
+      return;
+    }
+    
+    // Scrape each detail page
+    console.log(`  Scraping ${traderLinks.length} detail pages...`);
+    const detailPage = await browser.newPage();
+    const traders = [];
+    
+    for (let i = 0; i < traderLinks.length; i++) {
+      const { name, uuid } = traderLinks[i];
+      const detail = await scrapeDetailPage(detailPage, uuid, name);
+      
+      if (detail) {
+        traders.push({
+          uuid,
+          name,
+          roi: detail.roi,
+          pnl: detail.pnl,
+          wr: detail.wr,
+          mdd: detail.mdd,
+          aum: detail.aum,
+          copiers: detail.copiers ? Math.round(detail.copiers) : 0,
+          avatar: detail.avatar,
+        });
+      }
+      
+      if ((i + 1) % 10 === 0) console.log(`    ${i + 1}/${traderLinks.length} done`);
+    }
+    
+    await detailPage.close();
+    console.log(`\n  Successfully scraped ${traders.length} traders`);
+    
+    // TOP 5
+    traders.sort((a, b) => (b.roi || 0) - (a.roi || 0));
+    console.log('\n  TOP 5:');
+    traders.slice(0, 5).forEach((t, i) => {
+      console.log(`    ${i+1}. ${t.name} | ROI: ${t.roi}% | WR: ${t.wr}% | MDD: ${t.mdd}% | AUM: ${t.aum}`);
+    });
+    
+    // Save to DB
+    const capturedAt = new Date().toISOString();
+    
+    for (const period of periods) {
+      // Upsert trader_sources
+      const sources = traders.map(t => ({
+        source: SOURCE,
+        source_trader_id: t.uuid,
+        handle: t.name,
+        avatar_url: t.avatar,
+        is_active: true,
+        source_kind: 'exchange',
+        market_type: 'futures',
+      }));
+      
+      for (let i = 0; i < sources.length; i += 50) {
+        const { error } = await supabase.from('trader_sources').upsert(
+          sources.slice(i, i + 50), 
+          { onConflict: 'source,source_trader_id' }
+        );
+        if (error) console.log(`  ⚠️ source upsert error: ${error.message}`);
+      }
+      
+      // Upsert trader_snapshots
+      const snapshots = traders.map((t, idx) => {
+        const scores = calculateArenaScore(t.roi, t.pnl || 0, t.mdd, t.wr, period);
+        return {
+          source: SOURCE,
+          source_trader_id: t.uuid,
+          season_id: period,
+          rank: idx + 1,
+          roi: t.roi,
+          pnl: t.pnl || null,
+          win_rate: t.wr,
+          max_drawdown: t.mdd,
+          followers: t.copiers || 0,
+          aum: t.aum,
+          arena_score: typeof scores === 'object' ? scores.totalScore : scores,
+          captured_at: capturedAt,
+        };
+      });
+      
+      let saved = 0;
+      for (let i = 0; i < snapshots.length; i += 50) {
+        const batch = snapshots.slice(i, i + 50);
+        const { error } = await supabase.from('trader_snapshots').upsert(
+          batch, 
+          { onConflict: 'source,source_trader_id,season_id' }
+        );
+        if (!error) saved += batch.length;
+        else console.log(`  ⚠️ snapshot upsert error: ${error.message}`);
+      }
+      
+      console.log(`  ${period}: saved ${saved} traders`);
+    }
+    
+    console.log('\n✅ BitMart complete');
+  } finally {
+    await browser.close();
   }
-
-  console.log(`\n✅ BitMart import done: ${total} total saved`)
 }
 
-main().catch(console.error)
+main().catch(console.error);
