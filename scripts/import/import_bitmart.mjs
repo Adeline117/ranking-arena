@@ -1,6 +1,8 @@
 /**
  * BitMart Copy Trading import (Playwright DOM extraction)
  * 
+ * The old API endpoint is deprecated. We now scrape the DOM after loading the page.
+ * 
  * Strategy: Load /ai/copy-trading, click "Masters" tab, scroll to load all,
  * extract trader links, then scrape each detail page for full metrics.
  * 
@@ -65,6 +67,55 @@ async function scrapeDetailPage(page, uuid, name) {
   }
 }
 
+async function fetchAllTradersFromDOM(page) {
+  console.log('  Loading Masters tab and scrolling...');
+  
+  // Click Masters tab
+  try {
+    await page.getByText('Masters', { exact: true }).click();
+    await sleep(3000);
+  } catch {}
+  
+  // Scroll to load all masters
+  let prevCount = 0;
+  let stableRounds = 0;
+  for (let i = 0; i < 100; i++) {
+    await page.evaluate(() => window.scrollBy(0, 1000));
+    await sleep(1500);
+    
+    const count = await page.evaluate(() => {
+      return document.querySelectorAll('a[href*="master-detail"]').length;
+    });
+    
+    if (count === prevCount) {
+      stableRounds++;
+      if (stableRounds >= 5) break;
+    } else {
+      stableRounds = 0;
+      prevCount = count;
+    }
+  }
+  
+  // Extract trader links
+  const traderLinks = await page.evaluate(() => {
+    const links = document.querySelectorAll('a[href*="master-detail"]');
+    const seen = new Set();
+    const results = [];
+    links.forEach(link => {
+      const name = (link.innerText || '').trim();
+      const href = link.getAttribute('href') || '';
+      const uuid = href.split('/').pop();
+      if (!uuid || seen.has(uuid) || !name || name === 'Copy' || name.length > 50) return;
+      seen.add(uuid);
+      results.push({ name, uuid });
+    });
+    return results;
+  });
+  
+  console.log(`  Found ${traderLinks.length} unique traders on page`);
+  return traderLinks;
+}
+
 async function main() {
   const periods = getTargetPeriods(process.argv[2] ? [process.argv[2]] : ['30D']);
   console.log(`BitMart Copy Trading import | Periods: ${periods.join(', ')}`);
@@ -81,42 +132,8 @@ async function main() {
     });
     await sleep(10000);
     
-    // Click Masters tab
-    try {
-      await page.getByText('Masters', { exact: true }).click();
-      console.log('  Clicked Masters tab');
-      await sleep(5000);
-    } catch {}
-    
-    // Scroll to load all masters
-    console.log('  Scrolling to load all traders...');
-    let prevCount = 0;
-    let stableRounds = 0;
-    for (let i = 0; i < 100; i++) {
-      await page.evaluate(() => window.scrollBy(0, 1000));
-      await sleep(1500);
-      const count = await page.evaluate(() => document.querySelectorAll('a[href*="master-detail"]').length);
-      if (count === prevCount) { stableRounds++; if (stableRounds >= 5) break; }
-      else { stableRounds = 0; prevCount = count; }
-    }
-    
-    // Extract trader links
-    const traderLinks = await page.evaluate(() => {
-      const links = document.querySelectorAll('a[href*="master-detail"]');
-      const seen = new Set();
-      const results = [];
-      links.forEach(link => {
-        const name = (link.innerText || '').trim();
-        const href = link.getAttribute('href') || '';
-        const uuid = href.split('/').pop();
-        if (!uuid || seen.has(uuid) || !name || name === 'Copy' || name.length > 50) return;
-        seen.add(uuid);
-        results.push({ name, uuid });
-      });
-      return results;
-    });
-    
-    console.log(`  Found ${traderLinks.length} unique traders`);
+    // Get all traders from DOM
+    const traderLinks = await fetchAllTradersFromDOM(page);
     
     if (traderLinks.length === 0) {
       console.log('  ERROR: No traders found');
@@ -147,11 +164,17 @@ async function main() {
         });
       }
       
-      if ((i + 1) % 10 === 0) console.log(`    ${i + 1}/${traderLinks.length} done`);
+      if ((i + 1) % 5 === 0) console.log(`    ${i + 1}/${traderLinks.length} done`);
     }
     
     await detailPage.close();
     console.log(`\n  Successfully scraped ${traders.length} traders`);
+    
+    if (traders.length === 0) {
+      console.log('  ERROR: No traders with data');
+      await browser.close();
+      return;
+    }
     
     // TOP 5
     traders.sort((a, b) => (b.roi || 0) - (a.roi || 0));
