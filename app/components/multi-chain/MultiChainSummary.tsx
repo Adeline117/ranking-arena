@@ -1,4 +1,3 @@
-'use client'
 
 import { tokens } from '@/lib/design-tokens'
 import type { ChainData } from './ChainPortfolio'

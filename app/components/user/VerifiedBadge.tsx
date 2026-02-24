@@ -1,4 +1,3 @@
-'use client'
 
 interface VerifiedBadgeProps {
   tier: 'tier1' | 'tier2' | 'tier3'

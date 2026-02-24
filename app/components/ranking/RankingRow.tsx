@@ -1,4 +1,3 @@
-'use client'
 
 /**
  * RankingRow - re-exports TraderRow for consistent naming in this directory.

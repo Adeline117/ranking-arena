@@ -1,4 +1,3 @@
-'use client'
 
 import { createElement, type ReactNode } from 'react'
 import { getStickerById, isPureSticker, extractStickerId, STICKER_PATTERN } from '@/lib/stickers'

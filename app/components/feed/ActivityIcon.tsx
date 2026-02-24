@@ -1,4 +1,3 @@
-'use client'
 
 /**
  * ActivityIcon - renders a colored icon for each activity type.
