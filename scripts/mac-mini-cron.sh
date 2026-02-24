@@ -80,9 +80,13 @@ run_script "import_phemex.mjs" "ALL" 300
 run_script "import_bybit_spot.mjs" "ALL" 300
 run_script "import_bitget_spot_fast.mjs" "ALL" 300
 run_script "import_bingx_mac.mjs" "ALL" 300
+run_script "import_bingx_spot.mjs" "ALL" 300
 run_script "import_weex.mjs" "ALL" 300
+run_script "import_blofin_stealth.mjs" "ALL" 300
+run_script "import_bitmart.mjs" "30D" 300
 
 # ========== Tier 4: 纯API / DEX ==========
+run_script "import_hyperliquid.mjs" "ALL" 600
 run_script "import_dydx_enhanced.mjs" "ALL" 600
 run_script "import_gains.mjs" "ALL" 300
 run_script "import_btcc.mjs" "ALL" 300
