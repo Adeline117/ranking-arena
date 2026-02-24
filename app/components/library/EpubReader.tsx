@@ -4,18 +4,18 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Rendition, Book, NavItem, Contents } from 'epubjs'
 import AudioReader from './AudioReader'
 import { supabase } from '@/lib/supabase/client'
-import { tokens } from '@/lib/design-tokens'
+import { EpubToolbar } from './EpubToolbar'
+import { EpubSettings } from './EpubSettings'
+import { EpubSearchPanel, EpubNotesPanel, EpubStatsPanel, type EpubHighlight } from './EpubNavigation'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
 type ReadingTheme = 'white' | 'sepia' | 'dark' | 'green'
 type FontSize = 'small' | 'medium' | 'large'
 type FontFamily = 'sans' | 'serif' | 'mono' | 'kai'
-
 type LineHeight = 'compact' | 'normal' | 'relaxed'
 type PageMargin = 'narrow' | 'normal' | 'wide'
 
-// Extended epub.js types for internal APIs not exposed in @types
 interface EpubSpineItem {
   load: (loader: (path: string) => Promise<object>) => Promise<Document>
   cfiFromRange: (range: Range) => string
@@ -35,14 +35,6 @@ interface EpubContentsEntry {
 
 interface EpubControlsElement extends HTMLElement {
   __epubControls?: Record<string, () => void>
-}
-
-type EpubHighlight = {
-  cfiRange: string
-  text: string
-  note: string
-  color: string
-  createdAt: number
 }
 
 type SearchResult = {
@@ -73,7 +65,6 @@ export type EpubReaderProps = {
   onReady?: () => void
   goToHref?: string | null
   className?: string
-  // New props
   lineHeight?: LineHeight
   pageMargin?: PageMargin
   onLineHeightChange?: (lh: LineHeight) => void
@@ -278,11 +269,10 @@ export default function EpubReader({
     lsSet(`epub_stats_${bookId}`, readingStats)
   }, [readingStats, bookId])
 
-  // Session timer - track active reading time
+  // Session timer
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now()
-      // Only count time if user was active in last 60s (not idle)
       if (now - lastActiveRef.current < 60000) {
         setSessionElapsedSec(Math.floor((now - sessionStartRef.current) / 1000))
       }
@@ -303,7 +293,7 @@ export default function EpubReader({
     }
   }, [])
 
-  // Update stats on session end (unload)
+  // Update stats on session end
   useEffect(() => {
     const handleUnload = () => {
       const updatedStats = {
@@ -328,7 +318,6 @@ export default function EpubReader({
       const ePub = (await import('epubjs')).default
       if (cancelled || !containerRef.current) return
 
-      // Wait for container to have non-zero dimensions (flex layout may not be settled yet)
       let waitAttempts = 0
       while (containerRef.current && waitAttempts < 20) {
         const r = containerRef.current.getBoundingClientRect()
@@ -338,24 +327,16 @@ export default function EpubReader({
       }
       if (cancelled || !containerRef.current) return
 
-      // Fetch EPUB as ArrayBuffer to avoid CORS issues with epubjs zip extraction
       let bookInput: string | ArrayBuffer = url
       try {
         const resp = await fetch(url)
-        if (resp.ok) {
-          bookInput = await resp.arrayBuffer()
-        }
-      } catch {
-        // Fall back to URL if fetch fails
-      }
+        if (resp.ok) bookInput = await resp.arrayBuffer()
+      } catch { /* fall back to URL */ }
       if (cancelled) return
 
       const book = ePub(bookInput)
       bookRef.current = book
 
-      // Use explicit pixel dimensions to avoid epub.js measuring 0 height
-      // when the container hasn't fully laid out yet (flex/percentage sizing).
-      // Fall back to window dimensions if container reports 0.
       const containerEl = containerRef.current
       const rect = containerEl.getBoundingClientRect()
       const initWidth = Math.round(rect.width) || window.innerWidth
@@ -370,56 +351,41 @@ export default function EpubReader({
 
       renditionRef.current = rendition
 
-      // Fix: epub.js sets iframe sandbox="allow-same-origin" which blocks
-      // blob: fetches needed for chapter loading. We observe the container
-      // and add "allow-scripts" to any epub iframe's sandbox attribute.
-      // This is safe because EPUB content is trusted (we host the files).
+      // Fix iframe sandbox
       const iframeObserver = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
           for (const node of Array.from(mutation.addedNodes)) {
             if (node instanceof HTMLIFrameElement && node.sandbox) {
-              const sb = node.sandbox.toString()
-              if (!sb.includes('allow-scripts')) {
+              if (!node.sandbox.toString().includes('allow-scripts')) {
                 node.sandbox.add('allow-scripts')
               }
             }
           }
         }
       })
-      if (containerEl) {
-        iframeObserver.observe(containerEl, { childList: true, subtree: true })
-      }
+      if (containerEl) iframeObserver.observe(containerEl, { childList: true, subtree: true })
 
-      // Fix CSP: convert blob: stylesheets to inline <style> in epub iframe
+      // Fix CSP: convert blob: stylesheets to inline <style>
       rendition.hooks.content.register((contents: Contents) => {
         try {
           const doc = contents.document
           if (!doc) return
-
-          // Convert any blocked blob: stylesheets to inline <style> tags
           const links = doc.querySelectorAll('link[rel="stylesheet"]')
           links.forEach((link: Element) => {
             const href = link.getAttribute('href')
             if (href && href.startsWith('blob:')) {
-              fetch(href)
-                .then(r => r.text())
-                .then(css => {
-                  const style = doc.createElement('style')
-                  style.textContent = css
-                  link.parentNode?.replaceChild(style, link)
-                })
-                .catch(() => {})
+              fetch(href).then(r => r.text()).then(css => {
+                const style = doc.createElement('style')
+                style.textContent = css
+                link.parentNode?.replaceChild(style, link)
+              }).catch(() => {})
             }
           })
-        } catch (_e) {
-          // Silently handle - don't break reader
-        }
+        } catch { /* silent */ }
       })
 
-      // Apply theme
       applyTheme(rendition, theme, fontSize, fontFamily, localLineHeight, localPageMargin)
 
-      // Try server position first, then local
       let startLocation: string | null = null
       const serverPos = await loadEpubPositionFromServer(bookId)
       if (serverPos?.cfi) {
@@ -428,20 +394,13 @@ export default function EpubReader({
         startLocation = lsGet<string | null>(`epub_location_${bookId}`, null)
       }
 
-      if (startLocation) {
-        rendition.display(startLocation)
-      } else {
-        rendition.display()
-      }
+      if (startLocation) rendition.display(startLocation)
+      else rendition.display()
 
-      // TOC
       book.loaded.navigation.then((nav) => {
-        if (!cancelled && onTocLoaded) {
-          onTocLoaded(nav.toc)
-        }
+        if (!cancelled && onTocLoaded) onTocLoaded(nav.toc)
       })
 
-      // Track location changes
       rendition.on('relocated', (location: { start?: { cfi: string; displayed?: { page: number; total: number } }; end?: { cfi: string } }) => {
         if (cancelled) return
         const cfi = location.start?.cfi
@@ -451,10 +410,8 @@ export default function EpubReader({
           const percent = book.locations?.percentageFromCfi?.(cfi)
           const p = typeof percent === 'number' ? Math.round(percent * 100) : 0
 
-          // Use book-wide location index if available, else fall back to chapter page
           const bookTotal = (book.locations as unknown as { total?: number }).total || 0
-          let page: number
-          let total: number
+          let page: number, total: number
           if (bookTotal > 1) {
             const locIdx = (book.locations as unknown as { locationFromCfi?: (cfi: string) => number }).locationFromCfi?.(cfi) ?? 1
             page = Math.max(1, locIdx)
@@ -467,18 +424,9 @@ export default function EpubReader({
           setProgressPercent(p)
           setCurrentPage(page)
           setTotalPages(total)
+          setReadingStats(prev => ({ ...prev, pagesRead: Math.max(prev.pagesRead, page) }))
+          if (onProgressChange) onProgressChange(p, page, total)
 
-          // Track pages read
-          setReadingStats(prev => ({
-            ...prev,
-            pagesRead: Math.max(prev.pagesRead, page),
-          }))
-
-          if (onProgressChange) {
-            onProgressChange(p, page, total)
-          }
-
-          // Extract page text for audio reader
           try {
             const contents = rendition.getContents() as unknown as EpubContentsEntry[]
             if (contents && contents.length > 0) {
@@ -490,18 +438,15 @@ export default function EpubReader({
             }
           } catch { /* empty */ }
 
-          // Sync to server (debounced by nature of user interaction)
           syncEpubPositionToServer(bookId, cfi, p, page, total)
         }
       })
 
-      // Generate locations for progress
       book.ready.then(() => {
         if (cancelled) return
         return book.locations.generate(1024)
       }).then(() => {
         if (cancelled) return
-        // After locations are generated, update total pages to book-wide count
         const bookTotal = (book.locations as unknown as { total?: number }).total || 0
         if (bookTotal > 1) {
           setTotalPages(bookTotal)
@@ -514,7 +459,6 @@ export default function EpubReader({
           }
         }
         setReady(true)
-        // Increment session count
         setReadingStats(prev => ({
           ...prev,
           sessionsCount: prev.sessionsCount + 1,
@@ -523,7 +467,6 @@ export default function EpubReader({
         onReady?.()
       })
 
-      // Handle text selection for highlights
       rendition.on('selected', (cfiRange: string, contents: Contents) => {
         if (cancelled) return
         const range = contents.range(cfiRange)
@@ -534,21 +477,16 @@ export default function EpubReader({
         }
       })
 
-      // Restore existing highlights + fix CSP for epub iframe
       rendition.on('rendered', () => {
         const stored = lsGet<EpubHighlight[]>(`epub_highlights_${bookId}`, [])
         stored.forEach((h) => {
-          rendition.annotations.highlight(h.cfiRange, {}, () => {}, '', {
-            fill: h.color,
-            'fill-opacity': '0.3',
-          })
+          rendition.annotations.highlight(h.cfiRange, {}, () => {}, '', { fill: h.color, 'fill-opacity': '0.3' })
         })
       })
     }
 
     init()
 
-    // ResizeObserver to keep rendition dimensions in sync with container
     let resizeTimer: ReturnType<typeof setTimeout> | null = null
     const observer = new ResizeObserver((entries) => {
       if (cancelled) return
@@ -556,16 +494,13 @@ export default function EpubReader({
       if (!entry) return
       const { width, height } = entry.contentRect
       if (width > 0 && height > 0 && renditionRef.current) {
-        // Debounce resize to avoid excessive reflows
         if (resizeTimer) clearTimeout(resizeTimer)
         resizeTimer = setTimeout(() => {
           renditionRef.current?.resize(Math.round(width), Math.round(height))
         }, 150)
       }
     })
-    if (containerRef.current) {
-      observer.observe(containerRef.current)
-    }
+    if (containerRef.current) observer.observe(containerRef.current)
 
     return () => {
       cancelled = true
@@ -596,9 +531,7 @@ export default function EpubReader({
       'p, div, span, li, td, th, h1, h2, h3, h4, h5, h6': {
         color: styles.body.color + ' !important',
       },
-      'a': {
-        color: t === 'dark' ? '#8b9cf7 !important' : '#4a6fa5 !important',
-      },
+      'a': { color: t === 'dark' ? '#8b9cf7 !important' : '#4a6fa5 !important' },
     })
   }
 
@@ -616,36 +549,23 @@ export default function EpubReader({
   }, [goToHref])
 
   // ─── Navigation ────────────────────────────────────────────────
-  const goNext = useCallback(() => {
-    renditionRef.current?.next()
-  }, [])
+  const goNext = useCallback(() => { renditionRef.current?.next() }, [])
+  const goPrev = useCallback(() => { renditionRef.current?.prev() }, [])
 
-  const goPrev = useCallback(() => {
-    renditionRef.current?.prev()
-  }, [])
-
-  // Keyboard
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-
-      // Navigation
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); goNext() }
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goPrev() }
-
-      // Panels
       if (e.key === 's' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowSearch(p => !p) }
       if (e.key === 'n' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowNotes(p => !p) }
       if (e.key === 'i' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowStats(p => !p) }
       if (e.key === 't' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowTypography(p => !p) }
       if (e.key === 'a' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowAudioReader(p => !p) }
       if (e.key === 'Escape') {
-        setShowSearch(false)
-        setShowNotes(false)
-        setShowStats(false)
-        setShowTypography(false)
-        setShowNoteInput(false)
-        setShowAudioReader(false)
+        setShowSearch(false); setShowNotes(false); setShowStats(false)
+        setShowTypography(false); setShowNoteInput(false); setShowAudioReader(false)
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -665,8 +585,7 @@ export default function EpubReader({
     const dx = e.changedTouches[0].clientX - touchStartX.current
     const dy = e.changedTouches[0].clientY - touchStartY.current
     if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
-      if (dx < 0) goNext()
-      else goPrev()
+      if (dx < 0) goNext(); else goPrev()
     }
   }, [goNext, goPrev])
 
@@ -675,8 +594,7 @@ export default function EpubReader({
     if ((e.target as HTMLElement).closest('button, input, textarea, a')) return
     const rect = e.currentTarget.getBoundingClientRect()
     const x = (e.clientX - rect.left) / rect.width
-    if (x < 0.25) goPrev()
-    else if (x > 0.75) goNext()
+    if (x < 0.25) goPrev(); else if (x > 0.75) goNext()
   }, [goNext, goPrev])
 
   // ─── Search ────────────────────────────────────────────────────
@@ -732,10 +650,7 @@ export default function EpubReader({
       createdAt: Date.now(),
     }
     renditionRef.current.annotations.highlight(
-      pendingHighlight.cfiRange, {}, () => {}, '', {
-        fill: highlightColor,
-        'fill-opacity': '0.3',
-      }
+      pendingHighlight.cfiRange, {}, () => {}, '', { fill: highlightColor, 'fill-opacity': '0.3' }
     )
     setHighlights(prev => [...prev, newHighlight])
     setShowNoteInput(false)
@@ -765,18 +680,17 @@ export default function EpubReader({
       return a.cfiRange.localeCompare(b.cfiRange)
     })
 
-  // ─── Render ────────────────────────────────────────────────────
-
+  // ─── Derived style vars ────────────────────────────────────────
   const themeIsDark = theme === 'dark'
   const panelBg = themeIsDark ? 'var(--color-bg-secondary)' : 'var(--color-on-accent)'
   const panelText = themeIsDark ? 'var(--color-border-primary)' : 'var(--color-text-primary)'
   const panelBorder = themeIsDark ? 'var(--glass-bg-light)' : 'var(--color-overlay-subtle)'
   const panelSubtle = themeIsDark ? 'var(--overlay-hover)' : 'var(--overlay-hover)'
   const accent = 'var(--color-accent-primary, #6366f1)'
-
   const totalSessionTime = readingStats.totalReadingTimeSec + sessionElapsedSec
   const timeRemainingStr = estimateTimeRemaining(progressPercent, totalSessionTime, isZh)
 
+  // ─── Render ────────────────────────────────────────────────────
   return (
     <div className={className} style={{ position: 'relative', width: '100%', height: '100%' }}>
       {/* ePub render container */}
@@ -816,45 +730,25 @@ export default function EpubReader({
           text={currentPageText}
           isZh={isZh}
           themeIsDark={themeIsDark}
-          onClose={() => {
-            setShowAudioReader(false)
-          }}
+          onClose={() => setShowAudioReader(false)}
         />
       )}
 
-      {/* ─── Bottom progress info bar ─────────────────────── */}
-      {ready && (
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '6px 16px',
-          background: themeIsDark ? 'var(--color-blur-overlay)' : 'var(--glass-bg-heavy)',
-          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-          borderTop: `1px solid ${panelBorder}`,
-          fontSize: 11, color: themeIsDark ? 'var(--glass-border-heavy)' : 'var(--color-backdrop-light)',
-          zIndex: 50,
-        }}>
-          <span>{progressPercent}% -- {currentPage}/{totalPages}</span>
-          <span>
-            {isZh ? '本次阅读 ' : 'Session: '}{formatDuration(sessionElapsedSec, isZh)}
-          </span>
-          <span>
-            {isZh ? '预计剩余 ' : 'Remaining: '}{timeRemainingStr}
-          </span>
-          <button
-            onClick={() => setShowAudioReader(p => !p)}
-            style={{
-              padding: '2px 10px', borderRadius: tokens.radius.sm, fontSize: 11,
-              border: `1px solid ${panelBorder}`,
-              background: showAudioReader ? accent : 'transparent',
-              color: showAudioReader ? 'var(--color-on-accent)' : 'inherit',
-              cursor: 'pointer', transition: 'all 0.15s',
-            }}
-          >
-            {isZh ? '朗读模式' : 'Audio'}
-          </button>
-        </div>
-      )}
+      {/* Bottom toolbar */}
+      <EpubToolbar
+        ready={ready}
+        progressPercent={progressPercent}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        sessionElapsedSec={sessionElapsedSec}
+        isZh={isZh}
+        showAudioReader={showAudioReader}
+        themeIsDark={themeIsDark}
+        panelBorder={panelBorder}
+        accent={accent}
+        timeRemainingStr={timeRemainingStr}
+        onToggleAudio={() => setShowAudioReader(p => !p)}
+      />
 
       {/* Note input modal */}
       {showNoteInput && pendingHighlight && (
@@ -864,7 +758,7 @@ export default function EpubReader({
             style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
           <div role="dialog" aria-modal="true" aria-label={isZh ? '添加高亮和笔记' : 'Add Highlight & Note'} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: panelBg, color: panelText, borderRadius: tokens.radius.xl, padding: '24px 28px',
+            background: panelBg, color: panelText, borderRadius: 16, padding: '24px 28px',
             width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: '0 12px 40px var(--color-overlay-medium)',
             border: `1px solid ${panelBorder}`,
           }}>
@@ -873,48 +767,41 @@ export default function EpubReader({
             </h3>
             <p style={{
               fontSize: 13, lineHeight: 1.6, marginBottom: 12, padding: '8px 12px',
-              background: panelSubtle,
-              borderRadius: tokens.radius.md, borderLeft: `3px solid ${highlightColor}`,
+              background: panelSubtle, borderRadius: 8, borderLeft: `3px solid ${highlightColor}`,
               maxHeight: 80, overflow: 'auto',
             }}>
               {pendingHighlight.text.slice(0, 200)}{pendingHighlight.text.length > 200 ? '...' : ''}
             </p>
-
-            {/* Color picker */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               {HIGHLIGHT_COLORS.map(c => (
                 <button key={c} onClick={() => setHighlightColor(c)} style={{
                   width: 28, height: 28, borderRadius: '50%', background: c, border: 'none',
                   cursor: 'pointer',
                   outline: highlightColor === c ? `2px solid ${panelText}` : 'none',
-                  outlineOffset: 2,
-                  transition: 'transform 0.15s',
+                  outlineOffset: 2, transition: 'transform 0.15s',
                   transform: highlightColor === c ? 'scale(1.15)' : 'scale(1)',
                 }} />
               ))}
             </div>
-
             <textarea
               value={noteText}
               onChange={e => setNoteText(e.target.value)}
               placeholder={isZh ? '添加笔记（可选）...' : 'Add a note (optional)...'}
               style={{
-                width: '100%', minHeight: 72, padding: '10px 12px', borderRadius: tokens.radius.md,
+                width: '100%', minHeight: 72, padding: '10px 12px', borderRadius: 8,
                 border: `1px solid ${panelBorder}`, background: panelSubtle,
-                color: panelText, fontSize: 13, resize: 'vertical', outline: 'none',
-                fontFamily: 'inherit',
+                color: panelText, fontSize: 13, resize: 'vertical', outline: 'none', fontFamily: 'inherit',
               }}
             />
-
             <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
               <button onClick={() => { setShowNoteInput(false); setPendingHighlight(null) }} style={{
-                padding: '8px 18px', borderRadius: tokens.radius.md, border: `1px solid ${panelBorder}`,
+                padding: '8px 18px', borderRadius: 8, border: `1px solid ${panelBorder}`,
                 background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 13,
               }}>
                 {isZh ? '取消' : 'Cancel'}
               </button>
               <button onClick={confirmHighlight} style={{
-                padding: '8px 18px', borderRadius: tokens.radius.md, border: 'none',
+                padding: '8px 18px', borderRadius: 8, border: 'none',
                 background: accent, color: 'var(--foreground)',
                 cursor: 'pointer', fontSize: 13, fontWeight: 600,
               }}>
@@ -926,436 +813,88 @@ export default function EpubReader({
       )}
 
       {/* Search panel */}
-      {showSearch && (
-        <>
-          <div onClick={() => setShowSearch(false)}
-            role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-          <div role="dialog" aria-modal="true" aria-label={isZh ? '搜索内容' : 'Search'} style={{
-            position: 'fixed', top: 60, right: 12, width: 380, maxWidth: '90vw', maxHeight: '70vh',
-            background: panelBg, color: panelText, borderRadius: tokens.radius.xl, zIndex: 301,
-            boxShadow: 'var(--shadow-lg-dark)', border: `1px solid ${panelBorder}`,
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          }}>
-            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${panelBorder}` }}>
-              <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
-                {isZh ? '搜索内容' : 'Search'}
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') doSearch() }}
-                  placeholder={isZh ? '输入关键词...' : 'Enter keyword...'}
-                  style={{
-                    flex: 1, padding: '8px 12px', borderRadius: tokens.radius.md,
-                    border: `1px solid ${panelBorder}`,
-                    background: panelSubtle,
-                    color: panelText, fontSize: 13, outline: 'none',
-                  }}
-                  autoFocus
-                />
-                <button onClick={doSearch} disabled={searching} style={{
-                  padding: '8px 16px', borderRadius: tokens.radius.md, border: 'none',
-                  background: accent, color: 'var(--foreground)',
-                  cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
-                  opacity: searching ? 0.6 : 1,
-                }}>
-                  {searching ? (isZh ? '搜索中...' : 'Searching...') : (isZh ? '搜索' : 'Search')}
-                </button>
-              </div>
-            </div>
-            <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
-              {searchResults.length === 0 && !searching && searchQuery && (
-                <p style={{ padding: '20px', fontSize: 13, opacity: 0.4, textAlign: 'center' }}>
-                  {isZh ? '未找到结果' : 'No results found'}
-                </p>
-              )}
-              {searchResults.map((r, i) => (
-                <button key={i} onClick={() => {
-                  renditionRef.current?.display(r.cfi)
-                  setShowSearch(false)
-                }} style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px',
-                  border: 'none', background: 'transparent', color: panelText,
-                  cursor: 'pointer', fontSize: 13, lineHeight: 1.5,
-                  borderBottom: `1px solid ${panelBorder}`,
-                  transition: 'background 0.15s',
-                }}
-                  onMouseEnter={e => e.currentTarget.style.background = panelSubtle}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  {r.excerpt}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+      <EpubSearchPanel
+        show={showSearch}
+        onClose={() => setShowSearch(false)}
+        isZh={isZh}
+        panelBg={panelBg}
+        panelText={panelText}
+        panelBorder={panelBorder}
+        panelSubtle={panelSubtle}
+        accent={accent}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onSearch={doSearch}
+        searching={searching}
+        searchResults={searchResults}
+        onJumpTo={(cfi) => renditionRef.current?.display(cfi)}
+      />
 
-      {/* Notes/Highlights panel - Enhanced */}
-      {showNotes && (
-        <>
-          <div onClick={() => setShowNotes(false)}
-            role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-          <div role="dialog" aria-modal="true" aria-label={isZh ? '笔记与高亮' : 'Notes & Highlights'} style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0, width: 380, maxWidth: '85vw', zIndex: 301,
-            background: panelBg, color: panelText, boxShadow: '-4px 0 24px var(--color-overlay-medium)',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          }}>
-            {/* Header */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '16px 16px 12px', borderBottom: `1px solid ${panelBorder}`,
-            }}>
-              <div>
-                <span style={{ fontSize: 16, fontWeight: 700 }}>
-                  {isZh ? '高亮和笔记' : 'Highlights & Notes'}
-                </span>
-                <span style={{ fontSize: 12, opacity: 0.4, marginLeft: 8 }}>
-                  {highlights.length}{isZh ? ' 条' : ''}
-                </span>
-              </div>
-              <button aria-label="Close notes panel" onClick={() => setShowNotes(false)} style={{
-                background: 'none', border: 'none', color: panelText, cursor: 'pointer', padding: 4, opacity: 0.5,
-              }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
+      {/* Notes panel */}
+      <EpubNotesPanel
+        show={showNotes}
+        onClose={() => setShowNotes(false)}
+        isZh={isZh}
+        panelBg={panelBg}
+        panelText={panelText}
+        panelBorder={panelBorder}
+        panelSubtle={panelSubtle}
+        accent={accent}
+        highlights={highlights}
+        highlightSort={highlightSort}
+        highlightFilter={highlightFilter}
+        filteredHighlights={filteredHighlights}
+        editingNoteIdx={editingNoteIdx}
+        editNoteText={editNoteText}
+        onHighlightSortChange={setHighlightSort}
+        onHighlightFilterChange={setHighlightFilter}
+        onJumpToHighlight={(cfi) => renditionRef.current?.display(cfi)}
+        onRemoveHighlight={removeHighlight}
+        onStartEditNote={(idx, note) => { setEditingNoteIdx(idx); setEditNoteText(note) }}
+        onSaveNote={updateHighlightNote}
+        onCancelEditNote={() => setEditingNoteIdx(null)}
+        onEditNoteTextChange={setEditNoteText}
+      />
 
-            {/* Filters & Sort */}
-            {highlights.length > 0 && (
-              <div style={{
-                padding: '10px 16px', borderBottom: `1px solid ${panelBorder}`,
-                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-              }}>
-                {/* Color filter */}
-                <button onClick={() => setHighlightFilter('all')} style={{
-                  width: 20, height: 20, borderRadius: '50%', border: `2px solid ${panelBorder}`,
-                  background: 'linear-gradient(135deg, #FFEB3B 25%, #81D4FA 25%, #81D4FA 50%, #A5D6A7 50%, #A5D6A7 75%, #CE93D8 75%)',
-                  cursor: 'pointer', outline: highlightFilter === 'all' ? `2px solid ${panelText}` : 'none',
-                  outlineOffset: 2, flexShrink: 0,
-                }} />
-                {HIGHLIGHT_COLORS.map(c => (
-                  <button key={c} onClick={() => setHighlightFilter(c)} style={{
-                    width: 20, height: 20, borderRadius: '50%', background: c, border: 'none',
-                    cursor: 'pointer', outline: highlightFilter === c ? `2px solid ${panelText}` : 'none',
-                    outlineOffset: 2, flexShrink: 0,
-                  }} />
-                ))}
-                <div style={{ flex: 1 }} />
-                <select value={highlightSort} onChange={e => setHighlightSort(e.target.value as HighlightSortMode)} style={{
-                  padding: '4px 8px', borderRadius: tokens.radius.sm, border: `1px solid ${panelBorder}`,
-                  background: panelSubtle, color: panelText, fontSize: 11, outline: 'none',
-                }}>
-                  <option value="time">{isZh ? '按时间' : 'By time'}</option>
-                  <option value="position">{isZh ? '按位置' : 'By position'}</option>
-                </select>
-              </div>
-            )}
+      {/* Stats panel */}
+      <EpubStatsPanel
+        show={showStats}
+        onClose={() => setShowStats(false)}
+        isZh={isZh}
+        panelBg={panelBg}
+        panelText={panelText}
+        panelBorder={panelBorder}
+        panelSubtle={panelSubtle}
+        accent={accent}
+        progressPercent={progressPercent}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        sessionElapsedSec={sessionElapsedSec}
+        totalSessionTime={totalSessionTime}
+        sessionsCount={readingStats.sessionsCount}
+        timeRemainingStr={timeRemainingStr}
+      />
 
-            {/* Highlights list */}
-            <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
-              {highlights.length === 0 && (
-                <div style={{ padding: 32, textAlign: 'center' }}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.15, margin: '0 auto 12px' }}>
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                  </svg>
-                  <p style={{ fontSize: 13, opacity: 0.35, lineHeight: 1.6 }}>
-                    {isZh ? '暂无高亮或笔记。\n选中文字即可添加。' : 'No highlights yet.\nSelect text to add.'}
-                  </p>
-                </div>
-              )}
-              {filteredHighlights.map((h, _i) => {
-                const realIdx = highlights.indexOf(h)
-                return (
-                  <div key={realIdx} style={{
-                    padding: '14px 16px', borderBottom: `1px solid ${panelBorder}`,
-                    cursor: 'pointer', transition: 'background 0.15s',
-                  }}
-                    onClick={() => {
-                      renditionRef.current?.display(h.cfiRange)
-                      setShowNotes(false)
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = panelSubtle}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <p style={{
-                      fontSize: 13, lineHeight: 1.6, marginBottom: h.note ? 8 : 0,
-                      borderLeft: `3px solid ${h.color}`, paddingLeft: 10,
-                    }}>
-                      {h.text.slice(0, 200)}{h.text.length > 200 ? '...' : ''}
-                    </p>
+      {/* Typography settings */}
+      <EpubSettings
+        show={showTypography}
+        onClose={() => setShowTypography(false)}
+        isZh={isZh}
+        panelBg={panelBg}
+        panelText={panelText}
+        panelBorder={panelBorder}
+        panelSubtle={panelSubtle}
+        accent={accent}
+        fontFamily={fontFamily}
+        theme={theme}
+        fontSize={fontSize}
+        localLineHeight={localLineHeight}
+        localPageMargin={localPageMargin}
+        onLineHeightChange={setLocalLineHeight}
+        onPageMarginChange={setLocalPageMargin}
+      />
 
-                    {editingNoteIdx === realIdx ? (
-                      <div style={{ paddingLeft: 13, marginTop: 6 }} onClick={e => e.stopPropagation()}>
-                        <textarea
-                          value={editNoteText}
-                          onChange={e => setEditNoteText(e.target.value)}
-                          style={{
-                            width: '100%', minHeight: 48, padding: '6px 10px', borderRadius: tokens.radius.sm,
-                            border: `1px solid ${panelBorder}`, background: panelSubtle,
-                            color: panelText, fontSize: 12, resize: 'vertical', outline: 'none',
-                            fontFamily: 'inherit',
-                          }}
-                          autoFocus
-                        />
-                        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                          <button onClick={(e) => { e.stopPropagation(); updateHighlightNote(realIdx, editNoteText) }} style={{
-                            padding: '4px 12px', borderRadius: tokens.radius.sm, border: 'none',
-                            background: accent, color: 'var(--foreground)', cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                          }}>{isZh ? '保存' : 'Save'}</button>
-                          <button onClick={(e) => { e.stopPropagation(); setEditingNoteIdx(null) }} style={{
-                            padding: '4px 12px', borderRadius: tokens.radius.sm, border: `1px solid ${panelBorder}`,
-                            background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 11,
-                          }}>{isZh ? '取消' : 'Cancel'}</button>
-                        </div>
-                      </div>
-                    ) : h.note ? (
-                      <p style={{ fontSize: 12, opacity: 0.55, paddingLeft: 13, fontStyle: 'italic', lineHeight: 1.5 }}>
-                        {h.note}
-                      </p>
-                    ) : null}
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingLeft: 13 }}>
-                      <span style={{ fontSize: 11, opacity: 0.25 }}>
-                        {new Date(h.createdAt).toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={(e) => {
-                          e.stopPropagation()
-                          setEditingNoteIdx(realIdx)
-                          setEditNoteText(h.note)
-                        }} style={{
-                          background: 'none', border: 'none', color: panelText, cursor: 'pointer',
-                          fontSize: 11, opacity: 0.35, padding: '2px 4px',
-                        }}>
-                          {isZh ? '编辑' : 'Edit'}
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); removeHighlight(realIdx) }} style={{
-                          background: 'none', border: 'none', color: 'var(--color-accent-error)', cursor: 'pointer',
-                          fontSize: 11, opacity: 0.5, padding: '2px 4px',
-                        }}>
-                          {isZh ? '删除' : 'Delete'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Export highlights */}
-            {highlights.length > 0 && (
-              <div style={{ padding: '10px 16px', borderTop: `1px solid ${panelBorder}` }}>
-                <button onClick={() => {
-                  const text = highlights.map(h =>
-                    `"${h.text}"${h.note ? `\n  -- ${h.note}` : ''}\n  [${new Date(h.createdAt).toLocaleDateString(isZh ? 'zh-CN' : 'en-US')}]`
-                  ).join('\n\n---\n\n')
-                  navigator.clipboard?.writeText(text)
-                }} style={{
-                  width: '100%', padding: '8px', borderRadius: tokens.radius.md, border: `1px solid ${panelBorder}`,
-                  background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 12,
-                  opacity: 0.6, transition: 'opacity 0.15s',
-                }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                  onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
-                >
-                  {isZh ? '复制全部笔记到剪贴板' : 'Copy all notes to clipboard'}
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* ─── Reading Statistics Panel ─────────────────────── */}
-      {showStats && (
-        <>
-          <div onClick={() => setShowStats(false)}
-            role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-          <div role="dialog" aria-modal="true" aria-label={isZh ? '阅读统计' : 'Reading Statistics'} style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: panelBg, color: panelText, borderRadius: tokens.radius['2xl'], padding: '28px 32px',
-            width: 360, maxWidth: '90vw', zIndex: 301, boxShadow: 'var(--shadow-elevated)',
-            border: `1px solid ${panelBorder}`,
-          }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20, textAlign: 'center' }}>
-              {isZh ? '阅读统计' : 'Reading Statistics'}
-            </h3>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <StatCard
-                label={isZh ? '阅读进度' : 'Progress'}
-                value={`${progressPercent}%`}
-                themeIsDark={themeIsDark}
-              />
-              <StatCard
-                label={isZh ? '当前页' : 'Current Page'}
-                value={`${currentPage}/${totalPages}`}
-                themeIsDark={themeIsDark}
-              />
-              <StatCard
-                label={isZh ? '本次时长' : 'This Session'}
-                value={formatDuration(sessionElapsedSec, isZh)}
-                themeIsDark={themeIsDark}
-              />
-              <StatCard
-                label={isZh ? '累计阅读' : 'Total Time'}
-                value={formatDuration(totalSessionTime, isZh)}
-                themeIsDark={themeIsDark}
-              />
-              <StatCard
-                label={isZh ? '阅读次数' : 'Sessions'}
-                value={`${readingStats.sessionsCount}`}
-                themeIsDark={themeIsDark}
-              />
-              <StatCard
-                label={isZh ? '预计剩余' : 'Remaining'}
-                value={timeRemainingStr}
-                themeIsDark={themeIsDark}
-              />
-            </div>
-
-            {/* Progress bar */}
-            <div style={{ marginTop: 20 }}>
-              <div style={{
-                height: 6, borderRadius: 3, background: panelSubtle, overflow: 'hidden',
-              }}>
-                <div style={{
-                  height: '100%', borderRadius: 3, width: `${progressPercent}%`,
-                  background: accent, transition: 'width 0.3s ease',
-                }} />
-              </div>
-            </div>
-
-            <button onClick={() => setShowStats(false)} style={{
-              display: 'block', width: '100%', marginTop: 20, padding: '10px',
-              borderRadius: tokens.radius.md, border: `1px solid ${panelBorder}`,
-              background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 13,
-            }}>
-              {isZh ? '关闭' : 'Close'}
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* ─── Typography Settings Panel ────────────────────── */}
-      {showTypography && (
-        <>
-          <div onClick={() => setShowTypography(false)}
-            role="presentation"
-            style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-          <div role="dialog" aria-modal="true" aria-label={isZh ? '排版设置' : 'Typography'} style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: panelBg, color: panelText, borderRadius: tokens.radius['2xl'], padding: '28px 32px',
-            width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: 'var(--shadow-elevated)',
-            border: `1px solid ${panelBorder}`,
-          }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>
-              {isZh ? '排版设置' : 'Typography'}
-            </h3>
-
-            {/* Font Family */}
-            <div style={{ marginBottom: 18 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, opacity: 0.5 }}>
-                {isZh ? '字体' : 'Font Family'}
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {(Object.entries(FONT_FAMILY_MAP) as [FontFamily, string][]).map(([key, css]) => {
-                  const labels: Record<FontFamily, { zh: string; en: string }> = {
-                    sans: { zh: '黑体', en: 'Sans' },
-                    serif: { zh: '宋体', en: 'Serif' },
-                    mono: { zh: '等宽', en: 'Mono' },
-                    kai: { zh: '楷体', en: 'Kai' },
-                  }
-                  void css // font family is controlled by parent via props
-                  return (
-                    <button key={key} onClick={() => {
-                      // Font family selection is informational only; controlled by parent ReaderSettings
-                    }} style={{
-                      padding: '10px 8px', borderRadius: tokens.radius.md,
-                      background: fontFamily === key ? accent : panelSubtle,
-                      color: fontFamily === key ? 'var(--color-on-accent)' : panelText,
-                      border: 'none', cursor: 'pointer', fontSize: 14,
-                      fontFamily: css, fontWeight: 600, transition: 'all 0.15s',
-                    }}>
-                      {isZh ? labels[key].zh : labels[key].en}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Line Height */}
-            <div style={{ marginBottom: 18, borderTop: `1px solid ${panelBorder}`, paddingTop: 16 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, opacity: 0.5 }}>
-                {isZh ? '行间距' : 'Line Height'}
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {(['compact', 'normal', 'relaxed'] as LineHeight[]).map(lh => {
-                  const labels: Record<LineHeight, { zh: string; en: string }> = {
-                    compact: { zh: '紧凑', en: 'Compact' },
-                    normal: { zh: '标准', en: 'Normal' },
-                    relaxed: { zh: '宽松', en: 'Relaxed' },
-                  }
-                  return (
-                    <button key={lh} onClick={() => setLocalLineHeight(lh)} style={{
-                      flex: 1, padding: '8px 4px', borderRadius: tokens.radius.md,
-                      background: localLineHeight === lh ? accent : panelSubtle,
-                      color: localLineHeight === lh ? 'var(--color-on-accent)' : panelText,
-                      border: 'none', cursor: 'pointer', fontSize: 12,
-                      fontWeight: 600, transition: 'all 0.15s',
-                    }}>
-                      {isZh ? labels[lh].zh : labels[lh].en}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Page Margin */}
-            <div style={{ marginBottom: 18, borderTop: `1px solid ${panelBorder}`, paddingTop: 16 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, opacity: 0.5 }}>
-                {isZh ? '页面边距' : 'Page Margins'}
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {(['narrow', 'normal', 'wide'] as PageMargin[]).map(pm => {
-                  const labels: Record<PageMargin, { zh: string; en: string }> = {
-                    narrow: { zh: '窄', en: 'Narrow' },
-                    normal: { zh: '标准', en: 'Normal' },
-                    wide: { zh: '宽', en: 'Wide' },
-                  }
-                  return (
-                    <button key={pm} onClick={() => setLocalPageMargin(pm)} style={{
-                      flex: 1, padding: '8px 4px', borderRadius: tokens.radius.md,
-                      background: localPageMargin === pm ? accent : panelSubtle,
-                      color: localPageMargin === pm ? 'var(--color-on-accent)' : panelText,
-                      border: 'none', cursor: 'pointer', fontSize: 12,
-                      fontWeight: 600, transition: 'all 0.15s',
-                    }}>
-                      {isZh ? labels[pm].zh : labels[pm].en}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Keyboard shortcuts reference */}
-            <div style={{ borderTop: `1px solid ${panelBorder}`, paddingTop: 14 }}>
-              <p style={{ fontSize: 11, opacity: 0.35, lineHeight: 1.7 }}>
-                {isZh
-                  ? '快捷键: 方向键/空格 翻页 | S 搜索 | N 笔记 | I 统计 | T 排版 | Esc 关闭'
-                  : 'Keys: Arrows/Space nav | S search | N notes | I stats | T typography | Esc close'}
-              </p>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Expose controls via data attributes */}
+      {/* Expose controls */}
       <div data-epub-controls="true" style={{ display: 'none' }}
         ref={(el) => {
           if (el) {
@@ -1377,21 +916,6 @@ export default function EpubReader({
       <style>{`
         @keyframes epubSpin { to { transform: rotate(360deg) } }
       `}</style>
-    </div>
-  )
-}
-
-// ─── Stat Card ───────────────────────────────────────────────────────
-
-function StatCard({ label, value, themeIsDark }: { label: string; value: string; themeIsDark: boolean }) {
-  return (
-    <div style={{
-      padding: '14px 12px', borderRadius: tokens.radius.lg,
-      background: themeIsDark ? 'var(--overlay-hover)' : 'var(--overlay-hover)',
-      textAlign: 'center',
-    }}>
-      <p style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{value}</p>
-      <p style={{ fontSize: 11, opacity: 0.4 }}>{label}</p>
     </div>
   )
 }
