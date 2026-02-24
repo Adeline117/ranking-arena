@@ -2,11 +2,11 @@
  * Gains Network (gTrade) DEX Leaderboard Import — v3
  *
  * Fixes vs v2:
- *   - Routes all API calls through CF Worker proxy (bypasses Cloudflare 1015 block)
+ *   - Tries direct API first (Mac Mini residential IP not CF-blocked)
+ *   - Falls back to CF Worker proxy if direct fails
  *   - ROI calculation: uses avgLoss × count_loss as capital proxy (corrected formula)
- *   - MDD: fetched from per-trader stats API (winRate, totalTrades, roi)
  *   - Robust upsert: individual inserts with explicit conflict handling
- *   - Skips addresses that would produce empty rows (all-null metrics)
+ *   - Skips open-trade-only rows when leaderboard has real data
  *
  * Usage: node scripts/import/import_gains.mjs [7D|30D|90D|ALL]
  */
@@ -62,8 +62,16 @@ async function fetchLeaderboardAll() {
   const periodTraders = new Map()
 
   for (const chain of CHAIN_BACKENDS) {
-    const url = `${CF_PROXY}/gains/leaderboard-all?chain=${chain.name}`
-    console.log(`  → ${chain.name} via proxy...`)
+    // Try direct first (Mac Mini IP is not CF-blocked), fall back to CF Worker
+    const directUrl = `https://backend-${chain.name}.gains.trade/leaderboard/all`
+    const proxyUrl  = `${CF_PROXY}/gains/leaderboard-all?chain=${chain.name}`
+    console.log(`  → ${chain.name} (direct then proxy fallback)...`)
+
+    let data = await fetchJson(directUrl)
+    if (!data) {
+      console.log(`    Direct failed, trying CF proxy...`)
+      data = await fetchJson(proxyUrl)
+    }
     const data = await fetchJson(url)
 
     if (!data || typeof data !== 'object') {
