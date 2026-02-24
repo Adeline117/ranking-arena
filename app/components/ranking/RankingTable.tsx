@@ -38,16 +38,6 @@ export type ColumnKey = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' 
 // sortino, alpha, style removed — no data in DB yet
 const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
 const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
-const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
-  score: { zh: 'Arena Score', en: 'Arena Score' },
-  roi: { zh: 'ROI', en: 'ROI' },
-  pnl: { zh: 'PnL', en: 'PnL' },
-  winrate: { zh: '胜率', en: 'Win Rate' },
-  mdd: { zh: '最大回撤', en: 'Max Drawdown' },
-  sortino: { zh: 'Sortino', en: 'Sortino' },
-  alpha: { zh: 'Alpha', en: 'Alpha' },
-  style: { zh: '交易风格', en: 'Style' },
-}
 const LS_KEY_COLUMNS = 'ranking-visible-columns'
 const LS_KEY_VIEW_MODE = 'ranking-view-mode'
 const LS_KEY_VIEW_MANUAL = 'ranking-view-manual'
