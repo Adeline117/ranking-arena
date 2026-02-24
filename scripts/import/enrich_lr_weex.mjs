@@ -3,7 +3,7 @@
  * Note: MDD is NOT available from Weex APIs
  * Uses Weex public API endpoints
  */
-import { getSupabaseClient, sleep } from './lib/shared.mjs'
+import { getSupabaseClient, sleep } from '../lib/shared.mjs'
 
 const sb = getSupabaseClient()
 const HEADERS = {
