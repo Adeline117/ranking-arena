@@ -1,4 +1,3 @@
-'use client'
 
 /**
  * TokenDistribution - 代币持仓分布可视化

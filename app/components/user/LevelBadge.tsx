@@ -1,4 +1,3 @@
-'use client'
 
 import { getLevelInfo } from '@/lib/utils/user-level'
 

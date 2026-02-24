@@ -1,4 +1,3 @@
-'use client'
 
 import React from 'react'
 import { tokens } from '@/lib/design-tokens'
