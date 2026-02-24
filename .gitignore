@@ -120,3 +120,4 @@ financial_publications_summary.md
 # Claude Code config (local only)
 .claude/
 CLAUDE.md
+!.claude/skills/
