@@ -43,12 +43,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 // Map source -> best enrichment script (order of preference)
 const ENRICH_SCRIPTS = {
-  okx_web3: 'enrich_lr_okx_web3.mjs',       // API-based, no puppeteer
+  okx_web3: 'enrich_okx_web3.mjs',       // API-based, no puppeteer
   gains: 'enrich_lr_gains.mjs',               // API-based
-  gateio: 'enrich_lr_gateio_api.mjs',         // API-based
-  kucoin: 'enrich_kucoin_v2.mjs',             // API-based  
+  gateio: 'enrich_gateio_snapshots_v4.mjs',         // API-based
+  kucoin: 'enrich_kucoin_wr_v2.mjs',             // API-based  
   mexc: 'enrich_mexc_v3.mjs',                 // Puppeteer
-  dydx: 'enrich_dydx_fills.mjs',             // API-based
+  dydx: 'enrich_dydx.mjs',             // API-based
   phemex: 'enrich_phemex.mjs',               // May need puppeteer
   bitfinex: 'enrich_bitfinex_wr_mdd.mjs',    // API-based
   aevo: 'enrich_lr_dydx_aevo.mjs',           // API-based
