@@ -1,0 +1,14 @@
+# Ranking Arena - HTX Futures Cron Configuration
+# VPS: Singapore (45.76.152.169)
+# 运行频率: 每6小时一次 (与Group D batch-fetch-traders同步)
+# 时间: 00:00, 06:00, 12:00, 18:00 UTC
+
+# Environment variables (需要在crontab或~/.bashrc中设置)
+# export CRON_SECRET="arena-cron-secret-2025"
+# export API_ENDPOINT="https://ranking-arena.vercel.app"
+
+# HTX Futures 数据抓取 - 每6小时
+0 0,6,12,18 * * * /root/ranking-arena/vps-cron-htx.sh >> /var/log/ranking-arena/cron.log 2>&1
+
+# 日志清理 - 每周清理30天前的日志
+0 3 * * 0 find /var/log/ranking-arena -name "*.log" -mtime +30 -delete

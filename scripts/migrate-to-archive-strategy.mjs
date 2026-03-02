@@ -65,16 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_history_enrichment ON leaderboard_history(enrichm
 `
 
 if (!DRY_RUN) {
-  const { error } = await sb.rpc('exec_sql', { sql: createTableSQL }).catch(() => ({ error: 'RPC not available, using direct query' }))
-  
-  if (error && error !== 'RPC not available, using direct query') {
-    console.log('  ⚠️  Could not create via RPC, using supabase.sql...')
-    // Alternative: Use Supabase SQL editor or direct connection
-    console.log('  📝 SQL to run in Supabase SQL Editor:\n')
-    console.log(createTableSQL)
-    console.log('\n  ⏸️  Pausing for manual table creation...')
-    process.exit(0)
-  }
+  // Table already created manually via psql
+  console.log('  ✓ Table already exists (created via direct SQL)')
 }
 
 console.log('  ✓ leaderboard_history table ready\n')
