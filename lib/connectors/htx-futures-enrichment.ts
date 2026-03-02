@@ -6,7 +6,7 @@
  * Rate Limit: 200-300ms delay recommended
  */
 
-import { BaseExchangeConnector, TraderData, ListParams } from './base-connector'
+import { BaseExchangeConnector, TraderData, ListParams } from './base-connector-enrichment'
 
 const API_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank'
 
@@ -19,7 +19,7 @@ export class HTXFuturesConnector extends BaseExchangeConnector {
     }
   }
 
-  async getTraderDetail(traderId: string, params?: ListParams): Promise<TraderData | null> {
+  async getTraderDetail(traderId: string, _params?: ListParams): Promise<TraderData | null> {
     // HTX ranking API returns all traders, so we fetch and filter
     const traders = await this.getTraderList({ page: 1, pageSize: 50 })
     return traders.find(t => t.source_trader_id === traderId) || null
