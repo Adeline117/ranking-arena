@@ -20,7 +20,7 @@ async function main() {
   
   const { data, error } = await sb
     .from('leaderboard_ranks')
-    .select('id, source_trader_id, username, win_rate, max_drawdown, roi, pnl')
+    .select('id, source_trader_id, win_rate, max_drawdown, roi, pnl')
     .eq('source', 'gateio')
     .order('roi', { ascending: false, nullsLast: true })
     .limit(200)
@@ -44,14 +44,14 @@ async function main() {
   
   console.log(`\n📋 Sample traders with missing data:`)
   bothNull.slice(0, 5).forEach(t => {
-    console.log(`   ID ${t.id} (${t.username || t.source_trader_id}): WR=${t.win_rate}, MDD=${t.max_drawdown}, ROI=${t.roi}`)
+    console.log(`   ID ${t.id} (${t.source_trader_id}): WR=${t.win_rate}, MDD=${t.max_drawdown}, ROI=${t.roi}`)
   })
   
   const withData = data.filter(t => t.win_rate > 0 && t.max_drawdown > 0)
   if (withData.length > 0) {
     console.log(`\n✅ Sample traders WITH data:`)
     withData.slice(0, 5).forEach(t => {
-      console.log(`   ID ${t.id} (${t.username || t.source_trader_id}): WR=${t.win_rate}%, MDD=${t.max_drawdown}%, ROI=${t.roi}%`)
+      console.log(`   ID ${t.id} (${t.source_trader_id}): WR=${t.win_rate}%, MDD=${t.max_drawdown}%, ROI=${t.roi}%`)
     })
   }
 }
