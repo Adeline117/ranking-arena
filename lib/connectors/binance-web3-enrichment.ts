@@ -8,7 +8,7 @@
  * Rate Limit: 300-500ms delay recommended
  */
 
-import { BaseExchangeConnector, TraderData, ListParams } from './base-connector'
+import { BaseExchangeConnector, TraderData, ListParams } from './base-connector-enrichment'
 
 const API_URL = 'https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query'
 

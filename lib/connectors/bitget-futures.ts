@@ -1,75 +1,296 @@
 /**
- * Bitget Futures Connector
- * 
- * API: https://www.bitget.com/v1/trigger/trace/public/cycleData
- * Auth: None required
- * Rate Limit: 100-200ms delay recommended
+ * Bitget Futures copy trading connector (legacy interface).
+ * Fetches public leaderboard data from Bitget's copy trading API.
+ *
+ * Data source: Public copy trading leaderboard (no auth required).
+ * Rate limits: 20 req/min with 2.5-5s jitter.
  */
 
-import { BaseExchangeConnector, TraderData, ListParams } from './base-connector'
+import { BaseConnectorLegacy } from './base';
+import type {
+  RankingWindow,
+  TraderIdentity,
+  TraderSnapshotLegacy,
+  TraderProfileEnriched,
+  TraderTimeseriesLegacy,
+  TimeseriesType,
+  SnapshotMetricsLegacy,
+  LegacyPlatformConnector,
+} from '@/lib/types/leaderboard';
 
-const API_URL = 'https://www.bitget.com/v1/trigger/trace/public/cycleData'
+// ============================================
+// Bitget API types
+// ============================================
 
-export class BitgetFuturesConnector extends BaseExchangeConnector {
+interface BitgetTraderEntry {
+  traderId: string;
+  nickName?: string;
+  avatar?: string;
+  userPhoto?: string;
+  roi?: number;
+  totalProfit?: number;
+  pnl?: number;
+  winRatio?: number;
+  winRate?: number;
+  maxDrawdown?: number;
+  mdd?: number;
+  followerCount?: number;
+  currentCopyCount?: number;
+  tradeCount?: number;
+}
+
+interface BitgetLeaderboardResponse {
+  code: string;
+  data: {
+    list: BitgetTraderEntry[];
+    total?: number;
+  };
+}
+
+interface BitgetTraderDetailResponse {
+  code: string;
+  data: {
+    traderId: string;
+    nickName?: string;
+    avatar?: string;
+    introduction?: string;
+    followerCount?: number;
+    currentCopyCount?: number;
+    aum?: number;
+    registerTime?: number;
+    totalProfit?: number;
+    roi?: number;
+    winRatio?: number;
+    maxDrawdown?: number;
+    totalTradeCount?: number;
+    avgHoldTime?: number;
+    sharpeRatio?: number;
+    profitDays?: number;
+    lossDays?: number;
+  };
+}
+
+// ============================================
+// Window mapping
+// ============================================
+
+const WINDOW_TO_SORT: Record<RankingWindow, number> = {
+  '7d': 1,
+  '30d': 2,
+  '90d': 0,
+};
+
+// ============================================
+// Connector
+// ============================================
+
+export class BitgetFuturesConnector extends BaseConnectorLegacy implements LegacyPlatformConnector {
+  readonly platform = 'bitget_futures' as const;
+  private readonly baseUrl = 'https://www.bitget.com/v1/copy/mix';
+
   constructor() {
-    super('bitget_futures')
-    this.headers = {
-      ...this.headers,
-      'Content-Type': 'application/json',
-      'Origin': 'https://www.bitget.com',
-      'Referer': 'https://www.bitget.com/copy-trading/futures',
-    }
+    super();
+    this.init();
   }
 
-  async getTraderDetail(traderId: string, params?: ListParams): Promise<TraderData | null> {
-    const cycleTime = params?.period === '7d' ? 7 : params?.period === '90d' ? 90 : 30
+  async discoverLeaderboard(window: RankingWindow): Promise<TraderIdentity[]> {
+    const sortPeriod = WINDOW_TO_SORT[window];
+    const traders: TraderIdentity[] = [];
+    const pageSize = 20;
+    const maxPages = 5;
 
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({
-          languageType: 0,
-          triggerUserId: traderId,
-          cycleTime,
-        })
-      })
+    for (let page = 1; page <= maxPages; page++) {
+      const data = await this.requestWithCircuitBreaker<BitgetLeaderboardResponse>(
+        () => this.fetchLeaderboardPage(sortPeriod, page, pageSize),
+        { label: `discoverLeaderboard(${window}, page=${page})` },
+      );
 
-      if (!response.ok) return null
-      const json = await response.json()
-      if (json.code !== '00000') return null
+      if (data.code !== '0' || !data.data?.list?.length) break;
 
-      const data = json.data?.statisticsDTO
-      if (!data) return null
+      for (const entry of data.data.list) {
+        if (!entry.traderId) continue;
 
-      let winRate = this.parseNum(data.winningRate)
-      let maxDrawdown = this.parseNum(data.maxRetracement)
-      const roi = this.parseNum(data.roi)
-      const pnl = this.parseNum(data.pnl)
-      const tradesCount = parseInt(data.totalOrders) || null
-      const followers = parseInt(data.followersCount) || null
-
-      // Validate
-      winRate = this.validateWinRate(winRate)
-      maxDrawdown = this.validateMaxDrawdown(maxDrawdown)
-
-      return {
-        source_trader_id: traderId,
-        win_rate: winRate,
-        max_drawdown: maxDrawdown,
-        roi,
-        pnl,
-        trades_count: tradesCount,
-        followers,
+        traders.push({
+          platform: this.platform,
+          trader_key: entry.traderId,
+          display_name: entry.nickName || null,
+          avatar_url: entry.avatar || entry.userPhoto || null,
+          profile_url: `https://www.bitget.com/copytrading/trader/${entry.traderId}/futures`,
+          discovered_at: new Date().toISOString(),
+          last_seen: new Date().toISOString(),
+        });
       }
-    } catch (error) {
-      console.error(`Bitget API error for ${traderId}:`, error)
-      return null
     }
+
+    return traders;
   }
 
-  async getTraderList(params?: ListParams): Promise<TraderData[]> {
-    // Bitget doesn't have a simple list API - use detail API with known IDs
-    throw new Error('Bitget Futures requires trader IDs - use getTraderDetail')
+  async fetchTraderSnapshot(
+    traderKey: string,
+    window: RankingWindow,
+  ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
+    const detail = await this.requestWithCircuitBreaker<BitgetTraderDetailResponse>(
+      () => this.fetchTraderDetailApi(traderKey),
+      { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
+    );
+
+    const d = detail.data || {} as BitgetTraderDetailResponse['data'];
+
+    const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
+
+    const metrics: SnapshotMetricsLegacy = {
+      roi_pct: roi,
+      pnl_usd: d.totalProfit ?? null,
+      win_rate_pct: d.winRatio != null
+        ? (d.winRatio <= 1 ? d.winRatio * 100 : d.winRatio)
+        : null,
+      max_drawdown_pct: d.maxDrawdown != null ? Math.abs(d.maxDrawdown) : null,
+      trades_count: d.totalTradeCount ?? null,
+      copier_count: d.currentCopyCount ?? d.followerCount ?? null,
+      sharpe_ratio: d.sharpeRatio ?? null,
+      sortino_ratio: null,
+      volatility_pct: null,
+      avg_holding_hours: d.avgHoldTime ?? null,
+      profit_factor: null,
+      arena_score: null,
+      return_score: null,
+      drawdown_score: null,
+      stability_score: null,
+    };
+
+    return {
+      platform: this.platform,
+      trader_key: traderKey,
+      window,
+      as_of_ts: this.getDateBucket(),
+      metrics,
+      quality: this.buildQuality(metrics),
+    };
+  }
+
+  async fetchTraderProfile(
+    traderKey: string,
+  ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
+    const detail = await this.requestWithCircuitBreaker<BitgetTraderDetailResponse>(
+      () => this.fetchTraderDetailApi(traderKey),
+      { label: `fetchTraderProfile(${traderKey})` },
+    );
+
+    const d = detail.data || {} as BitgetTraderDetailResponse['data'];
+
+    return {
+      platform: this.platform,
+      trader_key: traderKey,
+      display_name: d.nickName || null,
+      avatar_url: d.avatar || null,
+      bio: d.introduction || null,
+      copier_count: d.currentCopyCount ?? d.followerCount ?? null,
+      aum_usd: d.aum ?? null,
+      active_since: null,
+      platform_tier: null,
+    };
+  }
+
+  async fetchTimeseries(
+    traderKey: string,
+    seriesType: TimeseriesType,
+  ): Promise<Omit<TraderTimeseriesLegacy, 'id' | 'created_at'>> {
+    if (seriesType !== 'equity_curve') {
+      return {
+        platform: this.platform,
+        trader_key: traderKey,
+        series_type: seriesType,
+        data: [],
+        as_of_ts: this.getDateBucket(),
+      };
+    }
+
+    const entries = await this.requestWithCircuitBreaker<Array<{ time: number; value: number }>>(
+      () => this.fetchPerformanceCurve(traderKey),
+      { label: `fetchTimeseries(${traderKey}, ${seriesType})` },
+    );
+
+    const data = entries.map((e) => ({
+      ts: new Date(e.time).toISOString(),
+      value: e.value,
+    }));
+
+    return {
+      platform: this.platform,
+      trader_key: traderKey,
+      series_type: seriesType,
+      data,
+      as_of_ts: this.getDateBucket(),
+    };
+  }
+
+  // ============================================
+  // Private
+  // ============================================
+
+  private async fetchLeaderboardPage(
+    sortPeriod: number,
+    page: number,
+    pageSize: number,
+  ): Promise<BitgetLeaderboardResponse> {
+    const response = await fetch(`${this.baseUrl}/trader/list`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': this.getRandomUA(),
+      },
+      body: JSON.stringify({
+        pageNo: page,
+        pageSize,
+        sortField: 'ROI',
+        sortType: sortPeriod,
+        rule: 2,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Bitget API returned ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  private async fetchTraderDetailApi(
+    traderId: string,
+  ): Promise<BitgetTraderDetailResponse> {
+    const url = `${this.baseUrl}/trader/detail?traderId=${traderId}`;
+
+    const response = await fetch(url, {
+      headers: { 'User-Agent': this.getRandomUA() },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Bitget detail API returned ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  private async fetchPerformanceCurve(
+    traderId: string,
+  ): Promise<Array<{ time: number; value: number }>> {
+    const url = `${this.baseUrl}/trader/profit-chart?traderId=${traderId}&timeRange=90`;
+
+    const response = await fetch(url, {
+      headers: { 'User-Agent': this.getRandomUA() },
+    });
+
+    if (!response.ok) return [];
+
+    const json = await response.json();
+    return json.data?.list || [];
+  }
+
+  private getRandomUA(): string {
+    const agents = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+    ];
+    return agents[Math.floor(Math.random() * agents.length)];
   }
 }

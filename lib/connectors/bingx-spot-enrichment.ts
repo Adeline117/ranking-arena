@@ -9,7 +9,7 @@
  *    Use the enrichment script for production data fetching
  */
 
-import { BaseExchangeConnector, TraderData, ListParams } from './base-connector'
+import { BaseExchangeConnector, TraderData, ListParams } from './base-connector-enrichment'
 
 const API_URL = 'https://api-app.qq-os.com/api/copy-trade-facade/v2/spot/trader/search'
 
