@@ -1,66 +1,117 @@
 #!/usr/bin/env node
 /**
- * Debug: intercept Gate.io copy trading API calls
+ * Debug script to find Gate.io API endpoints
+ * Captures network requests when loading leaderboard page
  */
-import { chromium } from 'playwright'
-import { sleep } from './lib/shared.mjs'
+
+import puppeteer from 'puppeteer-extra'
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+
+puppeteer.use(StealthPlugin())
 
 async function main() {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    viewport: { width: 1920, height: 1080 },
+  console.log('🌐 Launching browser...\n')
+  
+  const browser = await puppeteer.launch({
+    headless: false, // Show browser to debug
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
   })
-  const page = await context.newPage()
+
+  const page = await browser.newPage()
   
-  const allRequests = []
-  const allResponses = []
+  // Capture API requests
+  const apiRequests = []
   
-  page.on('request', req => {
-    const url = req.url()
-    if (url.includes('copy') || url.includes('leader') || url.includes('trader') || url.includes('api')) {
-      allRequests.push({ method: req.method(), url: url.slice(0, 150) })
+  page.on('response', async (response) => {
+    const url = response.url()
+    
+    // Filter for Gate.io API calls
+    if (url.includes('gate.io') && (url.includes('/api') || url.includes('leader'))) {
+      try {
+        const status = response.status()
+        const contentType = response.headers()['content-type'] || ''
+        
+        console.log(`📡 ${status} ${url}`)
+        
+        if (contentType.includes('application/json')) {
+          const json = await response.json()
+          apiRequests.push({
+            url,
+            status,
+            data: json,
+          })
+          
+          // Print sample data
+          console.log(`   Data keys: ${Object.keys(json).join(', ')}`)
+          if (json.data && Array.isArray(json.data)) {
+            console.log(`   Array length: ${json.data.length}`)
+            if (json.data[0]) {
+              console.log(`   First item keys: ${Object.keys(json.data[0]).join(', ')}`)
+            }
+          }
+          console.log('')
+        }
+      } catch (e) {
+        // Not JSON or error parsing
+      }
     }
   })
-  
-  page.on('response', async res => {
-    const url = res.url()
-    if (res.status() !== 200) return
-    if (!url.includes('copy') && !url.includes('leader') && !url.includes('api')) return
-    try {
-      const ct = res.headers()['content-type'] || ''
-      if (!ct.includes('json')) return
-      const j = await res.json()
-      const preview = JSON.stringify(j).slice(0, 200)
-      allResponses.push({ url: url.slice(0, 150), preview })
-    } catch {}
+
+  console.log('🔍 Loading Gate.io leaderboard...\n')
+  await page.goto('https://www.gate.io/futures_leaderboard', {
+    waitUntil: 'networkidle2',
+    timeout: 30000,
   })
 
-  console.log('=== Navigating to gate.io/copytrading ===')
-  await page.goto('https://www.gate.io/copytrading', { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {})
-  await sleep(5000)
-  
-  console.log('\n=== API Requests ===')
-  for (const r of allRequests.slice(0, 30)) console.log(`${r.method} ${r.url}`)
-  
-  console.log('\n=== JSON Responses ===')
-  for (const r of allResponses.slice(0, 20)) console.log(`${r.url}\n  → ${r.preview}\n`)
-  
-  // Now navigate to a specific trader
-  console.log('\n=== Navigating to trader 21597 ===')
-  allRequests.length = 0
-  allResponses.length = 0
-  
-  await page.goto('https://www.gate.io/copytrading/trader/21597', { waitUntil: 'networkidle', timeout: 20000 }).catch(() => {})
-  await sleep(4000)
-  
-  console.log('\n=== Trader detail API Requests ===')
-  for (const r of allRequests.slice(0, 30)) console.log(`${r.method} ${r.url}`)
-  
-  console.log('\n=== Trader detail JSON Responses ===')
-  for (const r of allResponses.slice(0, 20)) console.log(`${r.url}\n  → ${r.preview}\n`)
-  
-  await browser.close()
+  console.log('\n⏳ Waiting 3 seconds for additional requests...\n')
+  await new Promise(resolve => setTimeout(resolve, 3000))
+
+  console.log('\n═══════════════════════════════════════')
+  console.log(`Captured ${apiRequests.length} API requests`)
+  console.log('═══════════════════════════════════════\n')
+
+  // Try clicking on a trader to see detail API
+  try {
+    console.log('🖱️  Trying to click first trader...\n')
+    
+    // Wait for trader list to load
+    await page.waitForSelector('[class*="trader"], [class*="leader"], a[href*="leaderboard"]', {
+      timeout: 10000,
+    })
+    
+    const traderLinks = await page.$$('a[href*="leaderboard"]')
+    
+    if (traderLinks.length > 0) {
+      console.log(`Found ${traderLinks.length} trader links\n`)
+      
+      // Click first trader
+      await traderLinks[0].click()
+      
+      console.log('⏳ Waiting for detail page...\n')
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      
+      console.log('\n═══════════════════════════════════════')
+      console.log(`Total API requests: ${apiRequests.length}`)
+      console.log('═══════════════════════════════════════\n')
+    }
+  } catch (e) {
+    console.log(`⚠️  Could not click trader: ${e.message}\n`)
+  }
+
+  // Print all captured URLs
+  console.log('📋 All API URLs:\n')
+  apiRequests.forEach((req, i) => {
+    console.log(`${i + 1}. ${req.url}`)
+  })
+
+  console.log('\n✅ Done! Check the browser window.')
+  console.log('Press Ctrl+C to close.\n')
+
+  // Keep browser open for inspection
+  await new Promise(() => {})
 }
 
-main().catch(e => { console.error(e); process.exit(1) })
+main().catch(error => {
+  console.error('❌ Error:', error)
+  process.exit(1)
+})
