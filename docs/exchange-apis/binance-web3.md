@@ -1,184 +1,207 @@
-# Binance Web3 Wallet
+# Binance Web3 API
 
-**Status**: ⚠️ API Changed  
+**Status**: ✅ Complete (extracted from existing scripts)  
 **Priority**: P0  
 **Data Gap**: 54.4%  
-**Last Updated**: 2026-03-01
-
-⚠️ **WARNING**: The documented endpoint returns 404 as of 2026-03-01. API may have changed or requires authentication. Needs further investigation.
+**Last Updated**: 2026-03-02
 
 ---
 
-## Trader List API (Copy Trade Rank)
+## Wallet Leaderboard API
 
 ### Endpoint
 ```
-POST https://www.binance.com/bapi/composite/v1/friendly/marketing-campaign/copy-trade/rank-list
+GET https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query
 ```
 
-### 请求示例 (cURL)
+### Authentication
+❌ No API key required
+
+### 请求示例
 ```bash
-curl -X POST 'https://www.binance.com/bapi/composite/v1/friendly/marketing-campaign/copy-trade/rank-list' \
-  -H 'Content-Type: application/json' \
-  -H 'Origin: https://www.binance.com' \
-  -H 'Referer: https://www.binance.com/en/web3-wallet' \
+curl 'https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query?tag=ALL&pageNo=1&pageSize=100&sortBy=0&orderBy=0&period=30d&chainId=56' \
   -H 'User-Agent: Mozilla/5.0...' \
-  -d '{
-    "pageNumber": 1,
-    "pageSize": 50,
-    "timeRange": "WEEKLY",
-    "tradeType": "SPOT",
-    "walletType": "WEB3"
-  }'
+  -H 'Accept: application/json'
 ```
 
-### 请求参数 (JSON Body)
+### 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `pageNumber` | number | ✅ | 页码（从1开始） |
-| `pageSize` | number | ✅ | 每页数量（最大50） |
-| `timeRange` | string | ✅ | 时间窗口: WEEKLY(7D) / MONTHLY(30D) / QUARTER(90D) |
-| `tradeType` | string | ✅ | 交易类型: SPOT |
-| `walletType` | string | ✅ | 钱包类型: WEB3 |
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `tag` | string | "ALL" (all categories) |
+| `pageNo` | number | 页码 (从1开始) |
+| `pageSize` | number | 每页数量 (max 100) |
+| `sortBy` | number | 排序方式 (0 = default) |
+| `orderBy` | number | 排序顺序 (0 = desc) |
+| `period` | string | 时间段: "7d", "30d", "90d" |
+| `chainId` | number | 链ID: 56=BSC, 1=ETH, 8453=Base |
 
-### 响应示例 (JSON)
+### 响应示例
 ```json
 {
   "code": "000000",
-  "message": "success",
+  "message": null,
   "data": {
-    "total": 500,
-    "list": [
+    "data": [
       {
-        "encryptedUid": "ABC123XYZ789",
-        "uid": "987654321",
-        "nickname": "Web3Trader",
-        "userPhotoUrl": "https://...",
-        "roi": 125.5,
-        "pnlRate": 1.255,
-        "pnl": 45230.12,
-        "winRate": 68.5,
-        "maxDrawdown": -12.3,
-        "mdd": -0.123,
-        "tradeCount": 234,
-        "followerCount": 567
+        "address": "0x1234567890abcdef1234567890abcdef12345678",
+        "addressLabel": "TraderX",
+        "addressLogo": "https://...",
+        "realizedPnlPercent": 1.255,
+        "realizedPnl": "45230.12",
+        "winRate": 0.685,
+        "totalTxCnt": "234",
+        "chainId": 56
       }
-    ]
+    ],
+    "total": 500
   }
 }
 ```
 
 ### 字段映射
 
-| API字段 | DB字段 | 数据类型 | 说明 |
-|---------|--------|----------|------|
-| `encryptedUid` (优先) / `uid` | `source_trader_id` | string | 交易员ID |
-| `nickname` | `handle` | string | 昵称 |
-| `userPhotoUrl` | `avatar_url` | string | 头像URL |
-| `roi` / `pnlRate` | `roi` | number | ROI% (可能是百分比或小数) |
-| `pnl` | `pnl` | number | PnL USDT |
-| `winRate` | `win_rate` | number | 胜率% (通常已是0-100) |
-| `maxDrawdown` / `mdd` | `max_drawdown` | number | 最大回撤% (负数) |
-| `tradeCount` | `trades_count` | number | 交易次数 |
-| `followerCount` | `followers` | number | 跟单人数 |
+| API字段 | DB字段 | 转换逻辑 |
+|---------|--------|----------|
+| `address` | `source_trader_id` | Lowercase hex string |
+| `addressLabel` | `handle` | Fallback to address.slice(0,10) |
+| `addressLogo` | `avatar_url` | Direct mapping |
+| `realizedPnlPercent` | `roi` | × 100 (API returns decimal) |
+| `realizedPnl` | `pnl` | parseFloat() |
+| `winRate` | `win_rate` | × 100 if ≤1 |
+| `totalTxCnt` | `trades_count` | parseInt() |
+| `chainId` | (metadata) | BSC/ETH/Base |
 
 ---
 
-## Window Mapping
+## Multi-Chain Support
 
-| DB Window | API timeRange |
-|-----------|---------------|
-| `7d` | `WEEKLY` |
-| `30d` | `MONTHLY` |
-| `90d` | `QUARTER` |
+### Supported Chains
+
+| Chain | chainId | Priority |
+|-------|---------|----------|
+| **BSC** | 56 | 🔥 Primary |
+| **Ethereum** | 1 | Secondary |
+| **Base** | 8453 | Secondary |
+
+### Deduplication Strategy
+```javascript
+// Dedupe by address across chains, BSC first (priority)
+const tradersMap = new Map()
+
+for (const { chainId } of [56, 1, 8453]) {
+  const items = await fetchChain(chainId)
+  for (const t of items) {
+    if (!tradersMap.has(t.address)) {
+      tradersMap.set(t.address, t) // First seen wins
+    }
+  }
+}
+```
+
+---
+
+## Multi-Period Support
+
+### Time Periods
+
+| Period | API Value | DB Field Mapping |
+|--------|-----------|------------------|
+| 7 days | `"7d"` | `roi_7d`, `win_rate_7d`, etc. |
+| 30 days | `"30d"` | `roi_30d`, `win_rate_30d`, etc. |
+| 90 days | `"90d"` | `roi_90d`, `win_rate_90d`, etc. |
+
+### Implementation
+```javascript
+const PERIOD_MAP = { '7D': '7d', '30D': '30d', '90D': '90d' }
+
+for (const period of ['7D', '30D', '90D']) {
+  const periodApi = PERIOD_MAP[period]
+  const traders = await fetchAllTraders(periodApi, chainId)
+  
+  await supabase.from('trader_snapshots').upsert(
+    traders.map(t => ({
+      source: 'binance_web3',
+      source_trader_id: t.address,
+      season_id: period,  // '7D', '30D', '90D'
+      roi: t.realizedPnlPercent * 100,
+      pnl: t.realizedPnl,
+      win_rate: t.winRate <= 1 ? t.winRate * 100 : t.winRate,
+      trades_count: parseInt(t.totalTxCnt),
+    }))
+  )
+}
+```
 
 ---
 
 ## 注意事项
 
+### Address Format
+⚠️ Addresses are **EVM hex addresses** (0x...)
+
+**Normalization**:
+```javascript
+const address = t.address.toLowerCase() // Always lowercase
+```
+
+### Win Rate Conversion
+API returns winRate as:
+- `0.685` (decimal 0-1) → Convert to 68.5%
+- `68.5` (already %) → Keep as-is
+
+```javascript
+const winRate = t.winRate <= 1 ? t.winRate * 100 : t.winRate
+```
+
+### ROI Conversion
+API returns `realizedPnlPercent` as decimal:
+- `1.255` → 125.5%
+
+```javascript
+const roi = (t.realizedPnlPercent || 0) * 100
+```
+
+### Pagination
+- **Max pageSize**: 100
+- **Recommendation**: Fetch all pages until `items.length < pageSize`
+
 ### Rate Limiting
-- 限制: ~15 requests/minute
-- 策略: 4000ms delay between requests
-- concurrent: 1 (避免并发)
-
-### Authentication
-- ✅ **无需API key** — 公开接口
-- ✅ **无需签名**
-
-### Headers
-必须的headers:
-```
-Content-Type: application/json
-Origin: https://www.binance.com
-Referer: https://www.binance.com/en/web3-wallet
-User-Agent: Mozilla/5.0...
-```
-
-### 数据转换
-
-**ROI**: 
-- API可能返回: `125.5` (百分比) 或 `1.255` (小数)
-- 检测: 如果 `roi > 10` 则已是百分比，否则需×100
-- DB存储: `125.5`
-
-**Win Rate**:
-- API返回: `68.5` (百分比 0-100)
-- DB存储: `68.5` (不变)
-
-**Max Drawdown**:
-- API返回: `-12.3` (负数百分比)
-- DB存储: `-12.3` (不变)
-
-**PnL**:
-- API返回: `45230.12` (USDT)
-- DB存储: `45230.12` (不变)
+- Unknown exact limits
+- Recommendation: 300-500ms delay between requests
+- Delay 500ms between chains
 
 ---
 
-## Trader Detail API
+## 实现文件
 
-### Status
-❌ **Individual profiles NOT publicly accessible**
-
-Web3 wallet不提供单个trader的详情API。所有数据只能从leaderboard获取。
-
----
-
-## Limitations
-
-1. **90D Window**: 可能不可用，需测试
-2. **ROI Sort**: 不支持排序参数（平台默认排序）
-3. **Detail Pages**: 无公开的trader profile API
-4. **Timeseries**: 无历史数据API
+- ✅ **Script**: `scripts/import/import_binance_web3_v2.mjs` (working implementation)
+- ✅ **Enrichment**: `scripts/import/enrich_binance_web3.mjs`
+- 🔄 **Connector**: Need to create `lib/exchanges/binance-web3.ts`
 
 ---
 
-## 实现状态
+## Data Quality
 
-- [x] API endpoint discovered
-- [x] cURL tested
-- [x] Response documented
-- [x] Field mapping defined
-- [x] Connector code written (`connectors/binance/web3.ts`)
-- [ ] Import script created
-- [ ] Data validated in DB
-- [ ] Added to cron schedule
+**Current Coverage**:
+- ✅ Multi-period support (7d, 30d, 90d)
+- ✅ Multi-chain support (BSC, ETH, Base)
+- ✅ All core fields available
 
----
+**54.4% gap explained**:
+- Likely from old records before multi-period implementation
+- Or: Missing `max_drawdown` (not available from API)
 
-## 相关文件
-
-- Connector: `connectors/binance/web3.ts`
+### Missing Fields
+- ❌ `max_drawdown` - Not provided by Binance Web3 API
+- ⚠️ May need to compute from transaction history (if available)
 
 ---
 
-## 发现日志
+## 相关发现
 
-**2026-03-01**: 
-- ✅ 发现rank-list endpoint
-- ✅ 公开POST接口，支持分页
-- ✅ 字段映射清晰
-- ⚠️ **无trader detail API**
-- ⚠️ **90D window可能不可用**
-- ⚠️ **无排序参数** — 平台默认排序
+From `scripts/import/import_binance_web3_v2.mjs`:
+- **Pure API implementation** (no Puppeteer needed)
+- Reliable pagination (100 traders/page)
+- Multi-chain + multi-period support
+- Simple JSON response structure
