@@ -13,7 +13,7 @@ async function main() {
   console.log('🌐 Launching browser...\n')
   
   const browser = await puppeteer.launch({
-    headless: false, // Show browser to debug
+    headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   })
 
@@ -25,8 +25,8 @@ async function main() {
   page.on('response', async (response) => {
     const url = response.url()
     
-    // Filter for Gate.io API calls
-    if (url.includes('gate.io') && (url.includes('/api') || url.includes('leader'))) {
+    // Filter for Gate API calls (both .io and .com)
+    if (url.includes('gate') && (url.includes('/api') || url.includes('leader') || url.includes('ranking') || url.includes('copy'))) {
       try {
         const status = response.status()
         const contentType = response.headers()['content-type'] || ''
@@ -57,14 +57,52 @@ async function main() {
     }
   })
 
-  console.log('🔍 Loading Gate.io leaderboard...\n')
-  await page.goto('https://www.gate.io/futures_leaderboard', {
-    waitUntil: 'networkidle2',
-    timeout: 30000,
-  })
+  // Try different URLs to find the leaderboard
+  const urls = [
+    'https://www.gate.io/copy-trading',
+    'https://www.gate.com/copy-trading',
+    'https://www.gate.io/futures_leaderboard',
+  ]
+  
+  for (const url of urls) {
+    console.log(`🔍 Trying ${url}...\n`)
+    
+    try {
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      })
+      
+      // Wait for network to settle
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      
+      console.log(`   Current URL: ${page.url()}\n`)
+      
+      if (apiRequests.length > 0) {
+        console.log(`   ✅ Found ${apiRequests.length} API requests so far\n`)
+      }
+    } catch (e) {
+      console.log(`   ⚠️  Failed: ${e.message}\n`)
+    }
+  }
+  
+  console.log('Final URL:', page.url())
 
-  console.log('\n⏳ Waiting 3 seconds for additional requests...\n')
-  await new Promise(resolve => setTimeout(resolve, 3000))
+  console.log('\n⏳ Waiting 5 seconds for page to fully load...\n')
+  await new Promise(resolve => setTimeout(resolve, 5000))
+  
+  // Print current URL
+  console.log(`Current URL: ${page.url()}\n`)
+  
+  // Take screenshot to debug
+  await page.screenshot({ path: '/tmp/gateio-debug.png' })
+  console.log('Screenshot saved to /tmp/gateio-debug.png\n')
+  
+  // Print page content sample
+  const bodyHTML = await page.evaluate(() => document.body.innerHTML)
+  console.log('Page content preview:')
+  console.log(bodyHTML.substring(0, 500))
+  console.log('...\n')
 
   console.log('\n═══════════════════════════════════════')
   console.log(`Captured ${apiRequests.length} API requests`)
@@ -104,11 +142,9 @@ async function main() {
     console.log(`${i + 1}. ${req.url}`)
   })
 
-  console.log('\n✅ Done! Check the browser window.')
-  console.log('Press Ctrl+C to close.\n')
-
-  // Keep browser open for inspection
-  await new Promise(() => {})
+  console.log('\n✅ Done!')
+  
+  await browser.close()
 }
 
 main().catch(error => {
