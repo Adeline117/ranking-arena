@@ -1,0 +1,152 @@
+'use client'
+
+import Link from 'next/link'
+import { useLanguage } from '../Providers/LanguageProvider'
+import ExchangeLogo from '../ui/ExchangeLogo'
+import type { Exchange } from '@/lib/exchange'
+
+// Map display exchange key to the primary DB source used in /rankings/[exchange]
+const EXCHANGE_SOURCE_MAP: Record<string, string> = {
+  binance: 'binance_futures',
+  okx: 'okx_futures',
+  bybit: 'bybit',
+  bitget: 'bitget_futures',
+  mexc: 'mexc',
+  kucoin: 'kucoin',
+  gate: 'gateio',
+  htx: 'htx_futures',
+  coinex: 'coinex',
+  bingx: 'bingx',
+  phemex: 'phemex',
+  weex: 'weex',
+  aevo: 'aevo',
+  hyperliquid: 'hyperliquid',
+  gmx: 'gmx',
+  dydx: 'dydx',
+  jupiter: 'jupiter_perps',
+  toobit: '',
+  btcc: '',
+  bitfinex: '',
+  lbank: 'lbank',
+  blofin: 'blofin',
+  xt: 'xt',
+  gains: 'gains',
+}
+
+const EXCHANGES: { name: string; key: Exchange }[] = [
+  { name: 'Binance', key: 'binance' },
+  { name: 'OKX', key: 'okx' },
+  { name: 'Bybit', key: 'bybit' },
+  { name: 'Bitget', key: 'bitget' },
+  { name: 'MEXC', key: 'mexc' },
+  { name: 'KuCoin', key: 'kucoin' },
+  { name: 'Gate.io', key: 'gate' },
+  { name: 'HTX', key: 'htx' },
+  { name: 'CoinEx', key: 'coinex' },
+  { name: 'BingX', key: 'bingx' as Exchange },
+  { name: 'Phemex', key: 'phemex' as Exchange },
+  { name: 'WEEX', key: 'weex' },
+  { name: 'Aevo', key: 'aevo' as Exchange },
+  { name: 'Hyperliquid', key: 'hyperliquid' as Exchange },
+  { name: 'GMX', key: 'gmx' as Exchange },
+  { name: 'dYdX', key: 'dydx' as Exchange },
+  { name: 'Jupiter', key: 'jupiter' as Exchange },
+  { name: 'Toobit', key: 'toobit' as Exchange },
+  { name: 'BTCC', key: 'btcc' as Exchange },
+  { name: 'Bitfinex', key: 'bitfinex' as Exchange },
+  { name: 'LBank', key: 'lbank' as Exchange },
+  { name: 'BloFin', key: 'blofin' as Exchange },
+  { name: 'XT.com', key: 'xt' as Exchange },
+  { name: 'Gains', key: 'gains' as Exchange },
+]
+
+export default function ExchangePartners() {
+  const { language } = useLanguage()
+
+  const doubled = [...EXCHANGES, ...EXCHANGES]
+
+  return (
+    <div style={{
+      overflow: 'hidden',
+      padding: '10px 0',
+      borderBottom: `1px solid var(--color-border-primary)`,
+      position: 'relative',
+    }}>
+      {/* Fade edges */}
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
+        background: `linear-gradient(to right, var(--color-bg-primary), transparent)`,
+        zIndex: 1, pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
+        background: `linear-gradient(to left, var(--color-bg-primary), transparent)`,
+        zIndex: 1, pointerEvents: 'none',
+      }} />
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 20,
+        animation: 'exchange-scroll 35s linear infinite',
+        width: 'max-content',
+      }}>
+        <span style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: 'var(--color-text-tertiary)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          flexShrink: 0,
+          paddingLeft: 8,
+          paddingRight: 4,
+        }}>
+          {language === 'zh' ? '数据来源' : 'Sources'}
+        </span>
+        {doubled.map((ex, i) => {
+          const source = EXCHANGE_SOURCE_MAP[ex.key] || ''
+          const content = (
+            <>
+              <ExchangeLogo exchange={ex.key} size={18} />
+              {ex.name}
+            </>
+          )
+          const sharedStyle: React.CSSProperties = {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            textDecoration: 'none',
+          }
+          return source ? (
+            <Link
+              key={`${ex.key}-${i}`}
+              href={`/rankings/${source}`}
+              style={sharedStyle}
+            >
+              {content}
+            </Link>
+          ) : (
+            <span
+              key={`${ex.key}-${i}`}
+              style={sharedStyle}
+            >
+              {content}
+            </span>
+          )
+        })}
+      </div>
+
+      <style>{`
+        @keyframes exchange-scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
+    </div>
+  )
+}

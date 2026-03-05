@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     // 获取用户的所有收藏夹
     const { data: folders, error } = await supabase
       .from('bookmark_folders')
-      .select('*')
+      .select('id, name, description, avatar_url, is_public, is_default, created_at')
       .eq('user_id', user.id)
       .order('is_default', { ascending: false })
       .order('created_at', { ascending: true })

@@ -17,6 +17,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { type FetchResult } from './shared'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'bitfinex'
 
@@ -27,14 +29,23 @@ export async function fetchBitfinex(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    result.periods[period] = {
-      total: 0,
-      saved: 0,
-      error: 'No public leaderboard/copy-trading API available on Bitfinex',
+  try {
+    for (const period of periods) {
+      result.periods[period] = {
+        total: 0,
+        saved: 0,
+        error: 'No public leaderboard/copy-trading API available on Bitfinex',
+      }
     }
-  }
 
-  result.duration = Date.now() - start
-  return result
+    result.duration = Date.now() - start
+    return result
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
+    result.duration = Date.now() - start
+    return result
+  }
 }
