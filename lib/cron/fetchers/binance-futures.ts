@@ -37,6 +37,7 @@ import {
 const SOURCE = 'binance_futures'
 const API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 2000
 const PAGE_SIZE = 20
 
@@ -52,6 +53,31 @@ const HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
   Origin: 'https://www.binance.com',
   Referer: 'https://www.binance.com/en/copy-trading',
+}
+
+// Helper to fetch with proxy fallback
+async function fetchWithProxyFallback<T>(
+  url: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: unknown }
+): Promise<T> {
+  // Try direct first
+  try {
+    return await fetchJson<T>(url, opts)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    // If geo-blocked or WAF blocked, try proxy
+    if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
+      if (PROXY_URL) {
+        const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+        return await fetchJson<T>(proxyTarget, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: opts.body,
+        })
+      }
+    }
+    throw err
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +140,7 @@ async function fetchPeriod(
 
       let data: BinanceApiResponse
       try {
-        data = await fetchJson<BinanceApiResponse>(API_URL, {
+        data = await fetchWithProxyFallback<BinanceApiResponse>(API_URL, {
           method: 'POST',
           headers: HEADERS,
           body,
@@ -122,8 +148,8 @@ async function fetchPeriod(
       } catch (err) {
         // Binance returns HTTP 451 for geo-blocked requests
         const msg = err instanceof Error ? err.message : ''
-        if (msg.includes('451')) {
-          return { total: 0, saved: 0, error: 'Geo-blocked (HTTP 451) — deploy to Vercel Japan/SG' }
+        if (msg.includes('451') || msg.includes('403')) {
+          return { total: 0, saved: 0, error: 'Geo-blocked (HTTP 451/403) — proxy fallback failed or not configured' }
         }
         throw err
       }
