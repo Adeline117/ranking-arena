@@ -22,6 +22,8 @@ import {
   sleep,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 // Extended trader with temporary enrichment fields
 type EnrichedTrader = TraderData & {

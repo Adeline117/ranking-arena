@@ -44,6 +44,29 @@ export class CircuitOpenError extends Error {
   }
 }
 
+// ============================================
+// Type Guards
+// ============================================
+
+/**
+ * Type guard to check if value is an Error
+ */
+export function isError(value: unknown): value is Error {
+  return value instanceof Error
+}
+
+/**
+ * Safely extract Error from unknown catch value
+ */
+export function toError(value: unknown): Error {
+  if (isError(value)) return value
+  if (typeof value === 'string') return new Error(value)
+  if (value && typeof value === 'object' && 'message' in value) {
+    return new Error(String((value as { message: unknown }).message))
+  }
+  return new Error(String(value))
+}
+
 class CircuitBreaker {
   private state: CircuitState = 'closed'
   private failureCount = 0
@@ -279,7 +302,7 @@ export abstract class BaseConnector implements PlatformConnector {
           throw error // Non-retryable errors
         }
 
-        lastError = error as Error
+        lastError = toError(error)
 
         // Exponential backoff
         if (attempt < this.config.maxRetries) {

@@ -26,6 +26,8 @@ import {
   normalizeWinRate,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'kucoin'
 const TARGET = 500

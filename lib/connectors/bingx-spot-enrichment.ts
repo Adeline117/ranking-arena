@@ -10,6 +10,7 @@
  */
 
 import { BaseExchangeConnector, TraderData, ListParams } from './base-connector-enrichment'
+import { dataLogger } from '../utils/logger'
 
 const API_URL = 'https://api-app.qq-os.com/api/copy-trade-facade/v2/spot/trader/search'
 
@@ -93,7 +94,7 @@ export class BingXSpotConnector extends BaseExchangeConnector {
         }
       }).filter((t: TraderData) => t.source_trader_id)
     } catch (error) {
-      console.error('BingX API error:', error)
+      dataLogger.error('BingX API error:', error)
       return []
     }
   }

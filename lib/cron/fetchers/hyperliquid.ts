@@ -16,6 +16,8 @@ import {
   sleep,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'hyperliquid'
 const STATS_API = 'https://stats-data.hyperliquid.xyz/Mainnet'

@@ -12,6 +12,8 @@ import {
   fetchJson,
 } from './shared'
 import { PANCAKESWAP_SUBGRAPH } from '../../web3/dex-tracker'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'pancakeswap'
 const TARGET = 200

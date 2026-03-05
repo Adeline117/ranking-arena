@@ -9,6 +9,7 @@
  */
 
 import { BaseExchangeConnector, TraderData, ListParams } from './base-connector-enrichment'
+import { dataLogger } from '../utils/logger'
 
 const API_URL = 'https://web3.binance.com/bapi/defi/v1/public/wallet-direct/market/leaderboard/query'
 
@@ -71,7 +72,7 @@ export class BinanceWeb3Connector extends BaseExchangeConnector {
         }
       }).filter((t: TraderData) => t.source_trader_id)
     } catch (error) {
-      console.error('Binance Web3 API error:', error)
+      dataLogger.error('Binance Web3 API error:', error)
       return []
     }
   }
