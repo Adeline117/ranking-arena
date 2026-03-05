@@ -169,6 +169,12 @@ STRIPE_SECRET_KEY
 
 ## Agent Work Rules (MUST FOLLOW)
 
+### Git Commit Rule (MANDATORY)
+**Every change must be committed and pushed to GitHub immediately.**
+- No asking "should I commit?" - just do it
+- After any file edit, stage → commit → push
+- Small, atomic commits preferred
+
 ### Checkpoint Protocol
 1. **No one-shot features** - Break into subtasks, commit after each
 2. **E2E verification required** - After each feature, verify it works end-to-end
