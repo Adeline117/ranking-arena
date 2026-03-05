@@ -117,7 +117,8 @@ convert-img-to-image.sh
 install.sh
 financial_publications_summary.md
 
-# Claude Code config (local only)
+# Claude Code config
 .claude/
-CLAUDE.md
 !.claude/skills/
+!.claude/commands/
+!.claude/agents/
