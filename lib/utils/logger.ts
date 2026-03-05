@@ -704,3 +704,8 @@ export function fireAndForget<T>(
 
 export { Logger }
 export type { LogLevel, LoggerConfig, LogEntry }
+
+/**
+ * Alias for captureError (for Sentry compatibility)
+ */
+export const captureException = captureError

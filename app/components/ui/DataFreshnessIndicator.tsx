@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -37,7 +37,7 @@ interface DataFreshnessIndicatorProps {
  * 数据新鲜度指示器
  * 显示数据的更新时间和更新频率
  */
-export default function DataFreshnessIndicator({
+export default memo(function DataFreshnessIndicator({
   lastUpdated,
   updateTier = 'standard',
   showDetails = true,
@@ -192,13 +192,13 @@ export default function DataFreshnessIndicator({
       )}
     </Box>
   )
-}
+})
 
 /**
  * 更新层级徽章（简化版）
  * 用于表格行内显示
  */
-export function UpdateTierBadge({
+export const UpdateTierBadge = memo(function UpdateTierBadge({
   tier,
   size = 'sm'
 }: {
@@ -248,4 +248,4 @@ export function UpdateTierBadge({
       </Text>
     </Box>
   )
-}
+})

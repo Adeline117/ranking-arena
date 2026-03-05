@@ -276,9 +276,12 @@ export async function GET(
     refresh_job: refreshJob,
   }
 
+  // Cache to Redis (warm tier - 5min TTL, async)
+  void tieredSet(cacheKey, response, 'warm', ['trader', platform])
+
   const res = NextResponse.json(response)
-  // Short cache for detail pages - fresh data matters
   res.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+  res.headers.set('X-Cache', 'MISS')
   return res
   } catch (error) {
     logger.error('[trader-detail] Unexpected error:', error)

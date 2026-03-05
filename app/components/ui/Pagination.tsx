@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -15,7 +15,7 @@ export interface PaginationProps {
  * Pagination component with prev/next buttons and numbered page buttons with ellipsis.
  * Uses CSS classes for hover effects instead of JS onMouseEnter/Leave.
  */
-export default function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
+export default memo(function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
   const { t, language } = useLanguage()
 
   if (totalPages <= 1) return null
@@ -141,4 +141,4 @@ export default function Pagination({ currentPage, totalPages, onPageChange }: Pa
       </button>
     </nav>
   )
-}
+})

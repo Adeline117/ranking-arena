@@ -27,6 +27,8 @@ import {
   sleep,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'drift'
 const API_BASE = 'https://mainnet-beta.api.drift.trade'

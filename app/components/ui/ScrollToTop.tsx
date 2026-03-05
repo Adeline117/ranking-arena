@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { usePathname } from 'next/navigation'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-export default function ScrollToTop() {
+export default memo(function ScrollToTop() {
   const [visible, setVisible] = useState(false)
   const { t } = useLanguage()
   const pathname = usePathname()
@@ -65,4 +65,4 @@ export default function ScrollToTop() {
       </svg>
     </button>
   )
-}
+})

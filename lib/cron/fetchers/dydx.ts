@@ -18,6 +18,8 @@ import {
   sleep,
 } from './shared'
 import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'dydx'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
