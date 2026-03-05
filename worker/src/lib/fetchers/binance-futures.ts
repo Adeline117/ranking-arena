@@ -138,7 +138,7 @@ async function fetchPeriod(
 
       let data: BinanceApiResponse
       try {
-        data = await fetchJson<BinanceApiResponse>(API_URL, {
+        data = await fetchWithProxyFallback<BinanceApiResponse>(API_URL, {
           method: 'POST',
           headers: HEADERS,
           body,
@@ -146,8 +146,8 @@ async function fetchPeriod(
       } catch (err) {
         // Binance returns HTTP 451 for geo-blocked requests
         const msg = err instanceof Error ? err.message : ''
-        if (msg.includes('451')) {
-          return { total: 0, saved: 0, error: 'Geo-blocked (HTTP 451) — deploy to Vercel Japan/SG' }
+        if (msg.includes('451') || msg.includes('403')) {
+          return { total: 0, saved: 0, error: 'Geo-blocked (HTTP 451/403) — proxy fallback failed or not configured' }
         }
         throw err
       }
