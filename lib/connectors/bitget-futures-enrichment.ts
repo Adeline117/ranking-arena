@@ -7,6 +7,7 @@
  */
 
 import { BaseExchangeConnector, TraderData, ListParams } from './base-connector-enrichment'
+import { dataLogger } from '../utils/logger'
 
 const API_URL = 'https://www.bitget.com/v1/trigger/trace/public/cycleData'
 
@@ -63,7 +64,7 @@ export class BitgetFuturesConnector extends BaseExchangeConnector {
         followers,
       }
     } catch (error) {
-      console.error(`Bitget API error for ${traderId}:`, error)
+      dataLogger.error(`Bitget API error for ${traderId}:`, error)
       return null
     }
   }

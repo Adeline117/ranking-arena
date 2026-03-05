@@ -125,3 +125,61 @@ export function isEmpty(obj: unknown): boolean {
   return false
 }
 
+// ============================================
+// Type Guards
+// ============================================
+
+/**
+ * Type guard to check if value is an Error
+ */
+export function isError(value: unknown): value is Error {
+  return value instanceof Error
+}
+
+/**
+ * Safely extract Error from unknown catch value
+ */
+export function toError(value: unknown): Error {
+  if (isError(value)) return value
+  if (typeof value === 'string') return new Error(value)
+  if (value && typeof value === 'object' && 'message' in value) {
+    return new Error(String((value as { message: unknown }).message))
+  }
+  return new Error(String(value))
+}
+
+/**
+ * Type guard to check if value is a non-null object
+ */
+export function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Type guard to check if value is a non-empty string
+ */
+export function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+/**
+ * Type guard to check if value is a finite number
+ */
+export function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+/**
+ * Safely get a property from an unknown object
+ */
+export function getProperty<T>(
+  obj: unknown,
+  key: string,
+  validator?: (v: unknown) => v is T
+): T | undefined {
+  if (!isObject(obj)) return undefined
+  const value = obj[key]
+  if (validator) return validator(value) ? value : undefined
+  return value as T | undefined
+}
+

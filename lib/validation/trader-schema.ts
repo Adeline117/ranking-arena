@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod'
+import { dataLogger } from '../utils/logger'
 
 /**
  * 支持的交易所列表
@@ -145,7 +146,7 @@ export async function validateAndInsertTrader(data: unknown) {
       const expectedROI = (validated.pnl / validated.aum) * 100
       const diff = Math.abs(expectedROI - validated.roi)
       if (diff > 50) {
-        console.warn(`[VALIDATION WARNING] ROI/PnL/AUM mismatch: trader=${validated.source_trader_id}`)
+        dataLogger.warn(`[VALIDATION WARNING] ROI/PnL/AUM mismatch: trader=${validated.source_trader_id}`)
       }
     }
     
@@ -156,9 +157,9 @@ export async function validateAndInsertTrader(data: unknown) {
     return validated
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('[VALIDATION ERROR] Invalid trader data:', {
-        source: (data as any)?.source,
-        trader_id: (data as any)?.source_trader_id,
+      dataLogger.error('[VALIDATION ERROR] Invalid trader data:', {
+        source: (data as Record<string, unknown>)?.source,
+        trader_id: (data as Record<string, unknown>)?.source_trader_id,
         errors: error.issues,
       })
     }

@@ -7,6 +7,7 @@
  */
 
 import { BaseExchangeConnector, TraderData, ListParams } from './base-connector-enrichment'
+import { dataLogger } from '../utils/logger'
 
 const API_URL = 'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank'
 
@@ -65,7 +66,7 @@ export class HTXFuturesConnector extends BaseExchangeConnector {
         }
       }).filter((t: TraderData) => t.source_trader_id) // Filter out invalid entries
     } catch (error) {
-      console.error('HTX API error:', error)
+      dataLogger.error('HTX API error:', error)
       return []
     }
   }

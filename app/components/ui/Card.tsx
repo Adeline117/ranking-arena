@@ -17,7 +17,7 @@ export interface CardProps {
   onClick?: () => void
 }
 
-export default function Card({ 
+export default memo(function Card({ 
   title, 
   subtitle,
   children, 
@@ -116,4 +116,4 @@ export default function Card({
       {children}
     </Box>
   )
-}
+})

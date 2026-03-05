@@ -10,6 +10,7 @@
  */
 
 import type { TraderSnapshot } from '../validation/trader-schema'
+import { dataLogger } from '../utils/logger'
 
 export interface AnomalyRule {
   id: string
@@ -208,7 +209,7 @@ export class AnomalyDetector {
             // 尝试自动修复
             if (rule.autoFix) {
               fixed = await rule.autoFix(fixed)
-              console.log(`[AUTO-FIX] ${rule.id}`)
+              dataLogger.info(`[AUTO-FIX] ${rule.id}`)
             }
             break
             
@@ -219,7 +220,7 @@ export class AnomalyDetector {
             
           case 'log':
             info.push(message)
-            console.log(`[INFO] ${message}`)
+            dataLogger.debug(`[INFO] ${message}`)
             break
         }
       }
