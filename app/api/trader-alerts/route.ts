@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('trader_alerts')
-      .select('*')
+      .select('id, trader_id, source, alert_roi_change, roi_change_threshold, alert_drawdown, drawdown_threshold, alert_pnl_change, pnl_change_threshold, alert_score_change, score_change_threshold, alert_rank_change, rank_change_threshold, alert_new_position, alert_price_above, price_above_value, alert_price_below, price_below_value, price_symbol, one_time, enabled, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 

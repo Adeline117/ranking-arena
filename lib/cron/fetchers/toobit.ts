@@ -19,6 +19,8 @@ import {
   parseNum,
   normalizeWinRate,
 } from './shared'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'toobit'
 const TARGET = 500
@@ -189,11 +191,28 @@ export async function fetchToobit(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    result.periods[period] = await fetchPeriod(supabase, period)
-    if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
-  }
+  try {
+    for (const period of periods) {
+      try {
+        result.periods[period] = await fetchPeriod(supabase, period)
+      } catch (err) {
+        captureException(err instanceof Error ? err : new Error(String(err)), {
+          tags: { platform: SOURCE, period },
+        })
+        logger.error(`[${SOURCE}] Period ${period} failed`, err instanceof Error ? err : new Error(String(err)))
+        result.periods[period] = { total: 0, saved: 0, error: err instanceof Error ? err.message : String(err) }
+      }
+      if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+    }
 
-  result.duration = Date.now() - start
-  return result
+    result.duration = Date.now() - start
+    return result
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
+    result.duration = Date.now() - start
+    return result
+  }
 }

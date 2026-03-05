@@ -19,6 +19,7 @@ import type {
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
 import { logger } from '@/lib/logger'
+import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +49,15 @@ export async function GET(
       { error: 'trader_key is required' },
       { status: 400 }
     )
+  }
+
+  // Check cache first (warm tier - 5min TTL)
+  const cacheKey = `trader:${platform}:${trader_key}`
+  const cached = await tieredGet<TraderDetailResponse>(cacheKey)
+  if (cached.data) {
+    return NextResponse.json(cached.data, {
+      headers: { 'X-Cache': 'HIT', 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+    })
   }
 
   const supabase = getSupabaseAdmin()

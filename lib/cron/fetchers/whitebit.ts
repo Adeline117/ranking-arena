@@ -13,6 +13,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { type FetchResult } from './shared'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'whitebit'
 
@@ -23,14 +25,23 @@ export async function fetchWhitebit(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    result.periods[period] = {
-      total: 0,
-      saved: 0,
-      error: 'WhiteBit does not offer copy-trading — no leaderboard API available',
+  try {
+    for (const period of periods) {
+      result.periods[period] = {
+        total: 0,
+        saved: 0,
+        error: 'WhiteBit does not offer copy-trading — no leaderboard API available',
+      }
     }
-  }
 
-  result.duration = Date.now() - start
-  return result
+    result.duration = Date.now() - start
+    return result
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
+    result.duration = Date.now() - start
+    return result
+  }
 }
