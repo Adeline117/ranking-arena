@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
+import { fireAndForget } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -169,7 +170,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       // Update follower/following counts (best-effort, recount from source of truth)
-      updateFollowCounts(supabase, followerId, followingId).catch(() => {})
+      fireAndForget(updateFollowCounts(supabase, followerId, followingId), 'Update follow counts')
 
       // Send follow notification (best-effort)
       const { data: followerProfile } = await supabase
@@ -212,7 +213,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Update follower/following counts (best-effort)
-      updateFollowCounts(supabase, followerId, followingId).catch(() => {})
+      fireAndForget(updateFollowCounts(supabase, followerId, followingId), 'Update follow counts')
 
       return NextResponse.json({ success: true, following: false, mutual: false })
     } else {

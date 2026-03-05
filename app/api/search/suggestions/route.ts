@@ -9,6 +9,7 @@
 import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
+import { fireAndForget } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -165,15 +166,16 @@ export const GET = withPublic(
     }
 
     // Log search analytics asynchronously (fire-and-forget)
-    void Promise.resolve(
+    fireAndForget(
       supabase
         .from('search_analytics')
         .insert({
           query: query.slice(0, 200),
           result_count: suggestions.length,
           source: 'dropdown',
-        })
-    ).catch(() => {})
+        }),
+      'Record search analytics'
+    )
 
     return success(result, 200, {
       'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',

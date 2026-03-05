@@ -95,7 +95,7 @@ export const env = {
 
   // ── Auth ──
   ADMIN_EMAILS: getEnv('ADMIN_EMAILS', false),
-  NEXT_PUBLIC_ADMIN_EMAILS: getEnv('NEXT_PUBLIC_ADMIN_EMAILS', false),
+  // NEXT_PUBLIC_ADMIN_EMAILS is deprecated - use database role check instead
   ADMIN_SECRET,
   INVITE_SECRET,
 

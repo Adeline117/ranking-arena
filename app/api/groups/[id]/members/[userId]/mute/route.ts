@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/data/notifications'
 import logger from '@/lib/logger'
+import { fireAndForget } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -173,13 +174,16 @@ export async function POST(
 
     // Audit log (fire-and-forget)
     const duration = muted_until || 'permanent'
-    void Promise.resolve(supabase.from('group_audit_log').insert({
-      group_id: groupId,
-      actor_id: user.id,
-      action: 'mute',
-      target_id: targetUserId,
-      details: { duration, reason: reason || null }
-    })).catch(() => {})
+    fireAndForget(
+      supabase.from('group_audit_log').insert({
+        group_id: groupId,
+        actor_id: user.id,
+        action: 'mute',
+        target_id: targetUserId,
+        details: { duration, reason: reason || null }
+      }),
+      'Group audit log: mute'
+    )
 
     return NextResponse.json({ success: true })
 
@@ -236,13 +240,16 @@ export async function DELETE(
     }
 
     // Audit log (fire-and-forget)
-    void Promise.resolve(supabase.from('group_audit_log').insert({
-      group_id: groupId,
-      actor_id: user.id,
-      action: 'unmute',
-      target_id: targetUserId,
-      details: {}
-    })).catch(() => {})
+    fireAndForget(
+      supabase.from('group_audit_log').insert({
+        group_id: groupId,
+        actor_id: user.id,
+        action: 'unmute',
+        target_id: targetUserId,
+        details: {}
+      }),
+      'Group audit log: unmute'
+    )
 
     return NextResponse.json({ success: true })
 

@@ -54,6 +54,13 @@ export type RateLimitConfig = {
   window: number
   /** 标识符前缀，用于区分不同的 API */
   prefix?: string
+  /**
+   * 当限流服务出错时的策略：
+   * - false (默认): fail-open，允许请求通过
+   * - true: fail-close，拒绝请求（返回 503）
+   * 敏感操作（如登录、支付）应使用 failClose: true
+   */
+  failClose?: boolean
 }
 
 // 默认限流配置
@@ -206,8 +213,27 @@ export async function checkRateLimit(
     
     return null // 未超过限制
   } catch (error) {
-    // 限流服务出错时，允许请求通过（fail-open）
     rateLimitLogger.error('限流检查失败:', error)
+
+    // 敏感操作使用 fail-close 策略，拒绝请求
+    if (finalConfig.failClose) {
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          error: '服务暂时不可用，请稍后再试',
+          code: 'SERVICE_UNAVAILABLE',
+        }),
+        {
+          status: 503,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': '30',
+          },
+        }
+      )
+    }
+
+    // 非敏感操作使用 fail-open 策略，允许请求通过
     return null
   }
 }
@@ -244,11 +270,11 @@ export const RateLimitPresets = {
   // 读取 API - 高频限制（新增）
   read: { requests: 500, window: 60, prefix: 'read' } as RateLimitConfig,
   
-  // 敏感操作 - 严格限制
-  sensitive: { requests: 15, window: 60, prefix: 'sensitive' } as RateLimitConfig,
-  
-  // 登录/注册 - 防止暴力破解
-  auth: { requests: 10, window: 60, prefix: 'login' } as RateLimitConfig,
+  // 敏感操作 - 严格限制，fail-close
+  sensitive: { requests: 15, window: 60, prefix: 'sensitive', failClose: true } as RateLimitConfig,
+
+  // 登录/注册 - 防止暴力破解，fail-close
+  auth: { requests: 10, window: 60, prefix: 'login', failClose: true } as RateLimitConfig,
   
   // 搜索 API - 中等限制（新增）
   search: { requests: 60, window: 60, prefix: 'search' } as RateLimitConfig,

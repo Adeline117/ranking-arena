@@ -20,8 +20,8 @@
 |----------|----------|--------|-------------|
 | `CRON_SECRET` | ✅ | ❌ | Secret for authenticating Vercel cron requests |
 | `ADMIN_SECRET` | ✅ | ❌ | Admin API authentication secret |
-| `ADMIN_EMAILS` | ❌ | ❌ | Comma-separated admin email list |
-| `NEXT_PUBLIC_ADMIN_EMAILS` | ❌ | ✅ | Client-side admin email list |
+| `ADMIN_EMAILS` | ❌ | ❌ | Comma-separated admin email list (server-side only) |
+| ~~`NEXT_PUBLIC_ADMIN_EMAILS`~~ | ❌ | ❌ | **DEPRECATED** - Use database role instead to avoid exposing admin emails |
 | `INVITE_SECRET` | ❌ | ❌ | Secret for invite link generation |
 | `ENCRYPTION_KEY` | ✅ | ❌ | Encryption key for sensitive data |
 | `ENCRYPTION_KEY_PART1` | ❌ | ❌ | Split encryption key (part 1) |

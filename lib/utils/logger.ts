@@ -193,6 +193,36 @@ class Logger {
   }
 
   /**
+   * Log API error with standard format
+   */
+  apiError(endpoint: string, error: unknown, context?: Record<string, unknown>): void {
+    const errorMessage = error instanceof Error
+      ? error.message
+      : (typeof error === 'object' && error !== null && 'message' in error)
+        ? String((error as Record<string, unknown>).message)
+        : JSON.stringify(error)
+    this.error(`API Error: ${endpoint}`, { endpoint, error: errorMessage, ...context })
+    if (error instanceof Error) {
+      void captureError(error, { endpoint, ...context })
+    }
+  }
+
+  /**
+   * Log database error
+   */
+  dbError(operation: string, error: unknown, context?: Record<string, unknown>): void {
+    const errorMessage = error instanceof Error
+      ? error.message
+      : (typeof error === 'object' && error !== null && 'message' in error)
+        ? String((error as Record<string, unknown>).message)
+        : JSON.stringify(error)
+    this.error(`Database Error: ${operation}`, { operation, error: errorMessage, ...context })
+    if (error instanceof Error) {
+      void captureError(error, { operation, ...context })
+    }
+  }
+
+  /**
    * 创建子 logger
    */
   child(name: string): Logger {
@@ -504,14 +534,22 @@ export function devOnly(fn: () => void): void {
 // ============================================
 
 let Sentry: typeof import('@sentry/nextjs') | null = null
+let sentryLoadFailed = false
 
 // 延迟加载 Sentry（避免客户端导入问题）
 async function getSentry() {
   if (Sentry) return Sentry
+  if (sentryLoadFailed) return null
+
   try {
     Sentry = await import('@sentry/nextjs')
     return Sentry
-  } catch {
+  } catch (e) {
+    sentryLoadFailed = true
+    // Log to console so we know Sentry isn't working
+    if (isProduction) {
+      console.warn('[Logger] Sentry load failed, error reporting disabled:', e instanceof Error ? e.message : e)
+    }
     return null
   }
 }
@@ -520,9 +558,17 @@ async function getSentry() {
  * 向 Sentry 发送错误
  */
 export async function captureError(error: Error, context?: Record<string, unknown>): Promise<void> {
-  const sentry = await getSentry()
-  if (sentry) {
-    sentry.captureException(error, { extra: context })
+  try {
+    const sentry = await getSentry()
+    if (sentry) {
+      sentry.captureException(error, { extra: context })
+    } else if (isProduction) {
+      // Fallback: log to console if Sentry unavailable in production
+      console.error('[Sentry Fallback] Error:', error.message, context)
+    }
+  } catch (e) {
+    // Don't let Sentry errors crash the app
+    console.error('[Logger] captureError failed:', e instanceof Error ? e.message : e)
   }
 }
 
@@ -530,9 +576,15 @@ export async function captureError(error: Error, context?: Record<string, unknow
  * 向 Sentry 发送消息
  */
 export async function captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info', context?: Record<string, unknown>): Promise<void> {
-  const sentry = await getSentry()
-  if (sentry) {
-    sentry.captureMessage(message, { level, extra: context })
+  try {
+    const sentry = await getSentry()
+    if (sentry) {
+      sentry.captureMessage(message, { level, extra: context })
+    } else if (isProduction && level === 'error') {
+      console.error('[Sentry Fallback] Message:', message, context)
+    }
+  } catch (e) {
+    console.error('[Logger] captureMessage failed:', e instanceof Error ? e.message : e)
   }
 }
 
@@ -540,9 +592,13 @@ export async function captureMessage(message: string, level: 'info' | 'warning' 
  * 添加 Sentry breadcrumb
  */
 export async function addBreadcrumb(message: string, level: 'info' | 'warning' | 'error' = 'info', data?: Record<string, unknown>): Promise<void> {
-  const sentry = await getSentry()
-  if (sentry) {
-    sentry.addBreadcrumb({ message, level, data, timestamp: Date.now() / 1000 })
+  try {
+    const sentry = await getSentry()
+    if (sentry) {
+      sentry.addBreadcrumb({ message, level, data, timestamp: Date.now() / 1000 })
+    }
+  } catch {
+    // Breadcrumbs are non-critical, silently ignore failures
   }
 }
 
@@ -612,6 +668,34 @@ export async function safeExecute<T>(
     }
     return [null, err]
   }
+}
+
+/**
+ * Fire-and-forget：执行异步操作，记录错误但不阻塞
+ * 用于替代 `.catch(() => {})` 模式，提供更好的可观测性
+ *
+ * @param promise - 要执行的 Promise
+ * @param context - 描述操作的上下文（用于错误日志）
+ * @param options - 可选配置
+ */
+export function fireAndForget<T>(
+  promise: Promise<T>,
+  context: string,
+  options?: {
+    /** 是否发送到 Sentry (默认 false，仅 warn 级别日志) */
+    reportToSentry?: boolean
+    /** 自定义日志实例 */
+    log?: Logger
+  }
+): void {
+  const log = options?.log ?? logger
+  promise.catch((error) => {
+    const err = error instanceof Error ? error : new Error(String(error))
+    log.warn(`[FireAndForget] ${context} failed:`, err.message)
+    if (options?.reportToSentry) {
+      void captureError(err, { context, fireAndForget: true })
+    }
+  })
 }
 
 // ============================================

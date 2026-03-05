@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { fireAndForget } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -121,13 +122,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Audit log (fire-and-forget)
-    void Promise.resolve(supabase.from('group_audit_log').insert({
-      group_id: groupId,
-      actor_id: user.id,
-      action: 'kick',
-      target_id: targetUserId,
-      details: { reason: null }
-    })).catch(() => {})
+    fireAndForget(
+      supabase.from('group_audit_log').insert({
+        group_id: groupId,
+        actor_id: user.id,
+        action: 'kick',
+        target_id: targetUserId,
+        details: { reason: null }
+      }),
+      'Group audit log: kick'
+    )
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {

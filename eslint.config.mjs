@@ -57,6 +57,13 @@ const eslintConfig = defineConfig([
 
       // Encourage async/await error handling
       "no-async-promise-executor": "warn",
+
+      // Detect empty Promise .catch() callbacks like .catch(() => {})
+      // Use fireAndForget() from lib/utils/logger instead for proper logging
+      "no-restricted-syntax": ["warn", {
+        "selector": "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[body.type='BlockStatement'][body.body.length=0]",
+        "message": "Empty .catch(() => {}) silently swallows errors. Use fireAndForget() from lib/utils/logger instead."
+      }],
     },
   },
   // ============================================

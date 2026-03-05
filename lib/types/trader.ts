@@ -25,11 +25,43 @@ export type ExchangeWithWeb3 = typeof EXCHANGES_WITH_WEB3[number]
 /** 时间范围 */
 export type TimeRange = '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All'
 
-/** 交易风格标签 (V2 - aligned with classification module) */
-export type TradingStyle = 'short_term' | 'swing' | 'long_term'
+/**
+ * Trading style classification
+ * This is the canonical definition - all other files should import from here
+ *
+ * Values:
+ * - scalper: High-frequency, short holding periods (<4h), many trades
+ * - swing: Medium-term trades, holding 4-48 hours
+ * - trend: Longer-term trend following, holding 48h-2 weeks
+ * - position: Long-term holding, >2 weeks
+ * - unknown: Unable to classify (insufficient data)
+ */
+export type TradingStyle = 'scalper' | 'swing' | 'trend' | 'position' | 'unknown'
 
-/** Legacy trading style mapping */
+/**
+ * Valid trading styles for API filtering (excludes 'unknown')
+ */
+export const VALID_TRADING_STYLES = ['scalper', 'swing', 'trend', 'position'] as const
+export type FilterableTradingStyle = (typeof VALID_TRADING_STYLES)[number]
+
+/**
+ * Legacy mapping for backwards compatibility with APIs
+ * @deprecated Use TradingStyle instead
+ */
 export type TradingStyleLegacy = 'high_frequency' | 'swing' | 'trend' | 'scalping' | 'position'
+
+/**
+ * Maps legacy style names to current style names
+ */
+export const TRADING_STYLE_LEGACY_MAP: Record<TradingStyleLegacy | 'hft' | 'day_trader', TradingStyle> = {
+  high_frequency: 'scalper',
+  hft: 'scalper',
+  scalping: 'scalper',
+  day_trader: 'swing',
+  swing: 'swing',
+  trend: 'trend',
+  position: 'position',
+}
 
 /** 风险等级 */
 export type RiskLevel = 1 | 2 | 3 | 4 | 5

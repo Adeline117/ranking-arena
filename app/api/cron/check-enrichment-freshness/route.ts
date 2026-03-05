@@ -51,7 +51,12 @@ export async function GET(req: Request) {
 
   const now = Date.now()
   const results: EnrichmentStatus[] = []
-  const platforms = ['binance_futures', 'bybit', 'okx_futures']
+  // Expanded platforms to monitor - cover all major platforms
+  const platforms = [
+    'binance_futures', 'binance_spot', 'bybit', 'bybit_spot',
+    'okx_futures', 'bitget_futures', 'bitget_spot',
+    'hyperliquid', 'gmx', 'mexc', 'kucoin'
+  ]
   const periods = ['7D', '30D', '90D']
   const tables = ['trader_stats_detail', 'trader_equity_curve']
 
@@ -60,12 +65,12 @@ export async function GET(req: Request) {
     for (const source of platforms) {
       for (const period of periods) {
         try {
-          // Get latest record
+          // Get latest record (both tables use 'period' field)
           const { data, error } = await supabase
             .from(table)
             .select('captured_at')
             .eq('source', source)
-            .eq(table === 'trader_equity_curve' ? 'season_id' : 'period', period)
+            .eq('period', period)
             .order('captured_at', { ascending: false })
             .limit(1)
             .maybeSingle()
@@ -79,7 +84,7 @@ export async function GET(req: Request) {
             .from(table)
             .select('id', { count: 'exact', head: true })
             .eq('source', source)
-            .eq(table === 'trader_equity_curve' ? 'season_id' : 'period', period)
+            .eq('period', period)
 
           const lastUpdate = data?.captured_at || null
           let ageHours: number | null = null
@@ -121,6 +126,40 @@ export async function GET(req: Request) {
         }
       }
     }
+  }
+
+  // Check sharpe_ratio fill rate in trader_snapshots
+  const sharpeFillRates: { source: string; fillPct: number }[] = []
+  for (const source of platforms) {
+    try {
+      // Get total count
+      const { count: total } = await supabase
+        .from('trader_snapshots')
+        .select('id', { count: 'exact', head: true })
+        .eq('source', source)
+
+      // Get count with sharpe_ratio
+      const { count: hasSharpe } = await supabase
+        .from('trader_snapshots')
+        .select('id', { count: 'exact', head: true })
+        .eq('source', source)
+        .not('sharpe_ratio', 'is', null)
+
+      const fillPct = total && total > 0 ? Math.round((hasSharpe || 0) / total * 100) : 0
+      sharpeFillRates.push({ source, fillPct })
+    } catch (err) {
+      logger.error('Error checking sharpe fill rate', { source }, err instanceof Error ? err : new Error(String(err)))
+    }
+  }
+
+  // Alert on low sharpe ratio fill rates
+  const lowSharpePlatforms = sharpeFillRates.filter(s => s.fillPct < 30)
+  if (lowSharpePlatforms.length > 3) {
+    await captureMessage(
+      `[EnrichmentFreshness] Low sharpe_ratio fill rate: ${lowSharpePlatforms.map(p => `${p.source}(${p.fillPct}%)`).join(', ')}`,
+      'warning',
+      { lowSharpePlatforms }
+    )
   }
 
   // Calculate summary
@@ -183,6 +222,7 @@ export async function GET(req: Request) {
       critical_hours: CRITICAL_THRESHOLD_MS / (1000 * 60 * 60),
     },
     summary,
+    sharpe_fill_rates: sharpeFillRates,
     results,
   })
 }

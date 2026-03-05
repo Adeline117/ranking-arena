@@ -29,6 +29,7 @@ import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/
 import { getWeightedPosts } from '@/lib/data/posts-weighted'
 import { getServerCache, setServerCache, deleteServerCacheByPrefix, CacheTTL } from '@/lib/utils/server-cache'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
+import { fireAndForget } from '@/lib/utils/logger'
 
 // 缓存键前缀
 const POSTS_CACHE_PREFIX = 'posts:'
@@ -197,7 +198,7 @@ export async function GET(request: NextRequest) {
 
       // For hot posts, also cache in Redis (5 minutes, matches cron interval)
       if (isHotQuery && posts.length > 0) {
-        cacheSet(HOT_POSTS_REDIS_KEY, posts, { ttl: 300 }).catch(() => {})
+        fireAndForget(cacheSet(HOT_POSTS_REDIS_KEY, posts, { ttl: 300 }), 'Cache hot posts to Redis')
       }
 
       // Trim to requested limit if we fetched more for cache
