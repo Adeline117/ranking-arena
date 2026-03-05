@@ -119,6 +119,20 @@ const PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     concurrency: 5,
     delayMs: 1000,
   },
+  binance_spot: {
+    platform: 'binance_spot',
+    fetchEquityCurve: async (traderId, days) => {
+      const timeRangeMap: Record<number, 'WEEKLY' | 'MONTHLY' | 'QUARTERLY'> = {
+        7: 'WEEKLY',
+        30: 'MONTHLY',
+        90: 'QUARTERLY',
+      }
+      return fetchBinanceEquityCurve(traderId, timeRangeMap[days] || 'QUARTERLY')
+    },
+    fetchStatsDetail: fetchBinanceStatsDetail,
+    concurrency: 4,
+    delayMs: 1200,
+  },
   bybit: {
     platform: 'bybit',
     fetchEquityCurve: fetchBybitEquityCurve,
@@ -126,6 +140,13 @@ const PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchBybitPositionHistory,
     concurrency: 5,
     delayMs: 1000,
+  },
+  bybit_spot: {
+    platform: 'bybit_spot',
+    fetchEquityCurve: fetchBybitEquityCurve,
+    fetchStatsDetail: fetchBybitStatsDetail,
+    concurrency: 4,
+    delayMs: 1200,
   },
   okx_futures: {
     platform: 'okx_futures',
@@ -144,6 +165,13 @@ const PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     concurrency: 2,
     delayMs: 2000,
   },
+  bitget_spot: {
+    platform: 'bitget_spot',
+    fetchEquityCurve: fetchBitgetEquityCurve,
+    fetchStatsDetail: fetchBitgetStatsDetail,
+    concurrency: 2,
+    delayMs: 2000,
+  },
   hyperliquid: {
     platform: 'hyperliquid',
     fetchPositionHistory: fetchHyperliquidPositionHistory,
@@ -155,6 +183,43 @@ const PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchPositionHistory: fetchGmxPositionHistory,
     concurrency: 2,
     delayMs: 1000,
+  },
+  mexc: {
+    platform: 'mexc',
+    // MEXC has limited API access, stats-only enrichment
+    concurrency: 2,
+    delayMs: 2000,
+  },
+  dydx: {
+    platform: 'dydx',
+    // dYdX on-chain data, position history focused
+    fetchPositionHistory: fetchGmxPositionHistory, // Similar GraphQL pattern
+    concurrency: 2,
+    delayMs: 1500,
+  },
+  kucoin: {
+    platform: 'kucoin',
+    // KuCoin limited access
+    concurrency: 2,
+    delayMs: 2500,
+  },
+  gains: {
+    platform: 'gains',
+    // Gains Network on-chain
+    concurrency: 2,
+    delayMs: 1500,
+  },
+  jupiter_perps: {
+    platform: 'jupiter_perps',
+    // Jupiter on Solana
+    concurrency: 2,
+    delayMs: 1500,
+  },
+  aevo: {
+    platform: 'aevo',
+    // Aevo DEX
+    concurrency: 2,
+    delayMs: 1500,
   },
 }
 

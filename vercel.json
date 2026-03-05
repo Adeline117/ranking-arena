@@ -1,6 +1,6 @@
 {
   "regions": [
-    "sfo1"
+    "hnd1"
   ],
   "crons": [
     {
@@ -72,12 +72,44 @@
       "schedule": "2 */4 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=c",
+      "schedule": "15 */6 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=d",
+      "schedule": "25 */6 * * *"
+    },
+    {
+      "path": "/api/cron/batch-fetch-traders?group=e",
+      "schedule": "35 */8 * * *"
+    },
+    {
       "path": "/api/cron/batch-enrich",
       "schedule": "10 */4 * * *"
     },
     {
+      "path": "/api/cron/batch-enrich?period=30D",
+      "schedule": "20 */6 * * *"
+    },
+    {
+      "path": "/api/cron/batch-enrich?period=7D",
+      "schedule": "30 */6 * * *"
+    },
+    {
       "path": "/api/cron/check-trader-alerts",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/check-data-gaps",
+      "schedule": "45 */4 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-data?type=snapshots&limit=200",
+      "schedule": "50 */2 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-data?type=enrichment&limit=150",
+      "schedule": "5 */3 * * *"
     }
   ],
   "headers": [
