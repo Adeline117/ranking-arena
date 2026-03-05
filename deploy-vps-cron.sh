@@ -23,10 +23,15 @@ ssh "$VPS_USER@$VPS_HOST" "chmod +x $REMOTE_DIR/vps-cron-htx.sh"
 
 # 3. 设置环境变量
 echo "[3/5] 设置环境变量..."
+echo ""
+echo "⚠️  IMPORTANT: You must manually set CRON_SECRET on the VPS:"
+echo "   ssh root@$VPS_HOST \"echo 'export CRON_SECRET=<your-secret>' >> ~/.bashrc\""
+echo ""
 ssh "$VPS_USER@$VPS_HOST" "cat >> ~/.bashrc << 'EOF'
 
 # Ranking Arena Environment Variables
-export CRON_SECRET='arena-cron-secret-2025'
+# IMPORTANT: Set CRON_SECRET manually - do not commit secrets to git
+# export CRON_SECRET='<set-your-secret-here>'
 export API_ENDPOINT='https://ranking-arena.vercel.app'
 EOF
 "

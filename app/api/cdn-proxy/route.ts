@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCorsOrigin } from '@/lib/utils/cors'
 
 /**
  * Proxy for PDF/EPUB files to handle CORS and CSP restrictions.
@@ -36,11 +37,12 @@ export async function GET(request: NextRequest) {
     }
 
     const buffer = await resp.arrayBuffer()
+    const origin = request.headers.get('Origin')
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': resp.headers.get('Content-Type') || 'application/pdf',
         'Cache-Control': 'public, max-age=86400, s-maxage=86400',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': getCorsOrigin(origin),
       },
     })
   } catch {

@@ -3,6 +3,8 @@
  * Reads arena:latest hash (populated by VPS bridge) and pushes to clients
  */
 
+import { getCorsOrigin } from '@/lib/utils/cors'
+
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +38,8 @@ async function getLatestPrices(): Promise<Record<string, PriceData>> {
   return prices
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const origin = request.headers.get('Origin')
   const encoder = new TextEncoder()
   let closed = false
   let intervalId: ReturnType<typeof setInterval> | null = null
@@ -88,7 +91,7 @@ export async function GET() {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getCorsOrigin(origin),
     },
   })
 }

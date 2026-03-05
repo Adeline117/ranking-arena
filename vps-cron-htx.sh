@@ -5,8 +5,11 @@
 
 set -e
 
-# 环境变量
-CRON_SECRET="${CRON_SECRET:-arena-cron-secret-2025}"
+# 环境变量 (CRON_SECRET 必须从环境变量设置，不使用默认值)
+if [ -z "$CRON_SECRET" ]; then
+  echo "ERROR: CRON_SECRET environment variable is required"
+  exit 1
+fi
 API_ENDPOINT="${API_ENDPOINT:-https://ranking-arena.vercel.app}"
 
 # 日志目录
