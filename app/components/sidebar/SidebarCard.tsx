@@ -1,10 +1,11 @@
+import { memo } from 'react'
 
 interface SidebarCardProps {
   title: string
   children: React.ReactNode
 }
 
-export default function SidebarCard({ title, children }: SidebarCardProps) {
+export default memo(function SidebarCard({ title, children }: SidebarCardProps) {
   return (
     <div className="sidebar-card card-hover">
       <h3 style={{
@@ -21,4 +22,4 @@ export default function SidebarCard({ title, children }: SidebarCardProps) {
       {children}
     </div>
   )
-}
+})

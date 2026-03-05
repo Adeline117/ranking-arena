@@ -13,6 +13,8 @@ import {
   fetchJson,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'aevo'
 const API_URL = 'https://api.aevo.xyz/leaderboard'
@@ -158,6 +160,10 @@ export async function fetchAevo(
     }
   } catch (err) {
     // If the initial fetch fails, mark all periods as error
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
     for (const period of periods) {
       result.periods[period] = {
         total: 0,

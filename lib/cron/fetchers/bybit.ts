@@ -24,6 +24,8 @@ import {
   normalizeWinRate,
 } from './shared'
 import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 // Dynamic import to avoid bundling puppeteer on Vercel
 const getCloudflareBypass = () => import('../scrapers/cloudflare-bypass')
 

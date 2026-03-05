@@ -30,6 +30,8 @@ import {
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { createHmac } from 'crypto'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'bitget_futures'
 const TARGET = 500

@@ -19,6 +19,8 @@ import {
   normalizeWinRate,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 // Dynamic import to avoid bundling puppeteer on Vercel
 const getInterceptApiResponses = () => import('../scrapers/cloudflare-bypass').then(m => m.interceptApiResponses)
 
