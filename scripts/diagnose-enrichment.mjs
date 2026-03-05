@@ -34,6 +34,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 // Test Functions
 // ============================================
 
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+
 async function fetchJson(url, options = {}) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 15000)
@@ -60,6 +62,25 @@ async function fetchJson(url, options = {}) {
   }
 }
 
+async function fetchWithProxy(url, options = {}) {
+  // Try direct first
+  try {
+    return await fetchJson(url, options)
+  } catch (err) {
+    // Fallback to proxy
+  }
+
+  // Try proxy
+  console.log('  Retrying via proxy...')
+  const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+  return await fetchJson(proxyTarget, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: options.body,
+    timeoutMs: options.timeoutMs,
+  })
+}
+
 // ============================================
 // Binance Test
 // ============================================
@@ -68,23 +89,34 @@ async function testBinanceEquityCurve(traderId) {
   console.log(`\n[Binance] Testing equity curve for ${traderId}...`)
 
   const BINANCE_API = 'https://www.binance.com/bapi/futures/v2/friendly/future/copy-trade'
+  const targetUrl = `${BINANCE_API}/lead-portfolio/query-performance`
 
-  const data = await fetchJson(
-    `${BINANCE_API}/lead-portfolio/query-performance`,
-    {
+  // Try direct first
+  let data = await fetchJson(targetUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Origin': 'https://www.binance.com',
+      'Referer': 'https://www.binance.com/en/copy-trading',
+    },
+    body: { portfolioId: traderId, timeRange: 'QUARTERLY' },
+    timeoutMs: 15000,
+  })
+
+  // If direct failed, try via proxy
+  if (!data) {
+    console.log('  Direct call failed, trying via proxy...')
+    const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(targetUrl)}`
+    data = await fetchJson(proxyTarget, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Origin': 'https://www.binance.com',
-        'Referer': 'https://www.binance.com/en/copy-trading',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: { portfolioId: traderId, timeRange: 'QUARTERLY' },
-      timeoutMs: 15000,
-    }
-  )
+      timeoutMs: 20000,
+    })
+  }
 
   if (!data) {
-    console.log('  Result: FAILED - No response')
+    console.log('  Result: FAILED - No response (direct + proxy)')
     return { success: false, points: 0 }
   }
 

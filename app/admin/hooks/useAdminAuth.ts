@@ -5,11 +5,8 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
-// 管理员邮箱白名单（必须通过环境变量 NEXT_PUBLIC_ADMIN_EMAILS 配置，逗号分隔）
-// 安全默认值：空数组，不允许任何未配置的管理员
-const ADMIN_EMAILS: string[] = process.env.NEXT_PUBLIC_ADMIN_EMAILS
-  ? process.env.NEXT_PUBLIC_ADMIN_EMAILS.split(',').map(e => e.trim()).filter(e => e.length > 0)
-  : []
+// Admin check is done via database role in user_profiles.role
+// This prevents exposing admin emails in the client bundle
 
 export function useAdminAuth() {
   const router = useRouter()
@@ -37,22 +34,16 @@ export function useAdminAuth() {
       setEmail(session.user.email ?? null)
       setAccessToken(session.access_token)
       setUserId(session.user.id)
-      
-      // 检查是否是管理员
-      // 方法1: 邮箱白名单
-      const isAdminByEmail = session.user.email && ADMIN_EMAILS.includes(session.user.email)
-      
-      // 方法2: 检查数据库中的 admin 角色
+
+      // Check admin status via database role (secure, server-validated)
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('role')
         .eq('id', session.user.id)
         .maybeSingle()
-      
-      const isAdminByRole = profile?.role === 'admin'
-      
-      if (!isAdminByEmail && !isAdminByRole) {
-        // 不是管理员，重定向到首页
+
+      if (profile?.role !== 'admin') {
+        // Not an admin, redirect to home
         router.push('/')
         return
       }

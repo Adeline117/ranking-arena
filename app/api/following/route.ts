@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createLogger } from '@/lib/utils/logger'
+import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { getAuthUser } from '@/lib/supabase/server'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 
@@ -247,7 +247,7 @@ export async function GET(request: NextRequest) {
       result = cached.data
     } else {
       result = await fetchFollowingItems(userId)
-      await tieredSet(cacheKey, result, 'hot', ['following']).catch(() => {})
+      fireAndForget(tieredSet(cacheKey, result, 'hot', ['following']), 'Cache following list')
     }
 
     const { items, traderCount, userCount } = result

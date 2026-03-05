@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { detectMarketCondition, detectVolatilityRegime, calculateTrendStrength } from '@/lib/utils/market-correlation'
 import { logger } from '@/lib/logger'
+import { fireAndForget } from '@/lib/utils/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 
 export const dynamic = 'force-dynamic'
@@ -142,12 +143,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Record pipeline metrics
-    await recordFetchResult(supabase, 'market_data', {
-      success: true,
-      durationMs: Date.now() - startTime,
-      recordCount: Object.keys(results.prices || {}).length,
-      metadata: { type, results },
-    }).catch(() => {})
+    fireAndForget(
+      recordFetchResult(supabase, 'market_data', {
+        success: true,
+        durationMs: Date.now() - startTime,
+        recordCount: Object.keys(results.prices || {}).length,
+        metadata: { type, results },
+      }),
+      'Record market data fetch metrics'
+    )
 
     return NextResponse.json({ success: true, type, results })
   } catch (err) {

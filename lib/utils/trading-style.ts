@@ -3,7 +3,9 @@
  * 根据持仓时间和交易频率自动判断交易风格
  */
 
-export type TradingStyle = 'scalper' | 'swing' | 'trend' | 'position' | 'unknown'
+// Re-export TradingStyle from canonical location
+export type { TradingStyle } from '@/lib/types/trader'
+import type { TradingStyle } from '@/lib/types/trader'
 
 export interface TradingStyleInfo {
   style: TradingStyle

@@ -196,6 +196,38 @@ Write code → Run tests → Tests pass?
     → Yes: Mark task complete
 ```
 
+## Automation & Health Checks
+
+### Pipeline 健康检查
+```bash
+# 完整健康检查（推荐每日运行）
+node scripts/pipeline-health-check.mjs
+
+# 快速检查（仅数据新鲜度）
+node scripts/pipeline-health-check.mjs --quick
+
+# 生成修复脚本
+node scripts/pipeline-health-check.mjs --fix
+```
+
+### 自动验证 Hooks
+`.claude/settings.json` 配置了自动验证：
+- **PostToolUse**: 每次修改 `.ts` 文件后自动运行 TypeScript 检查
+- **Stop**: 完成任务前自动运行 `npm run type-check`
+
+### Fetcher 修复流程
+1. 运行 `node scripts/pipeline-health-check.mjs` 识别问题
+2. 参考 `/.claude/skills/arena-fetcher-error-handling.md` 获取标准模板
+3. 修复后运行 `/fix-pipeline` 验证
+
+### 关键诊断脚本
+| 脚本 | 用途 |
+|-----|------|
+| `scripts/pipeline-health-check.mjs` | 全面健康检查 |
+| `scripts/diagnose-enrichment.mjs` | Enrichment API 诊断 |
+| `scripts/check-data-distribution.mjs` | 数据分布检查 |
+| `scripts/backfill-sharpe-ratio.mjs` | Sharpe ratio 回填 |
+
 ## Quick Reference
 | Action | Command/Location |
 |--------|------------------|

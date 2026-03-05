@@ -11,7 +11,7 @@
  *   limit: number (default: 100, max: 500)
  *   offset: number (default: 0)
  *   sort: 'arena_score' | 'arena_score_v3' | 'roi' | 'pnl' | 'sortino' | 'calmar' | 'alpha' (default: 'arena_score')
- *   trading_style: 'hft' | 'day_trader' | 'swing' | 'trend' | 'scalping' (optional filter)
+ *   trading_style: 'scalper' | 'swing' | 'trend' | 'position' (optional filter, legacy names also accepted)
  *   min_alpha: number (optional minimum alpha threshold)
  *   min_sortino: number (optional minimum sortino threshold)
  *
@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { Window, LeaderboardPlatform, RankingEntry, RankingsResponse } from '@/lib/types/leaderboard'
+import { VALID_TRADING_STYLES, TRADING_STYLE_LEGACY_MAP, type TradingStyle } from '@/lib/types/trader'
 import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
 import logger from '@/lib/logger'
 
@@ -69,13 +70,18 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const validStyles = ['hft', 'day_trader', 'swing', 'trend', 'scalping']
-  if (tradingStyle && !validStyles.includes(tradingStyle)) {
+  // Accept both current and legacy style names
+  const allValidStyles = [...VALID_TRADING_STYLES, ...Object.keys(TRADING_STYLE_LEGACY_MAP)]
+  if (tradingStyle && !allValidStyles.includes(tradingStyle)) {
     return NextResponse.json(
-      { error: `Invalid trading_style. Must be one of: ${validStyles.join(', ')}` },
+      { error: `Invalid trading_style. Must be one of: ${VALID_TRADING_STYLES.join(', ')}` },
       { status: 400 }
     )
   }
+  // Normalize legacy style names to current names
+  const normalizedStyle = tradingStyle
+    ? (TRADING_STYLE_LEGACY_MAP[tradingStyle as keyof typeof TRADING_STYLE_LEGACY_MAP] || tradingStyle as TradingStyle)
+    : null
 
   // Database query (server-side service role to keep backend policy consistent)
   const supabase = getSupabaseAdmin()
@@ -89,8 +95,8 @@ export async function GET(request: NextRequest) {
     .not('arena_score', 'is', null)
 
   // V3 Filters
-  if (tradingStyle) {
-    query = query.eq('trading_style', tradingStyle)
+  if (normalizedStyle) {
+    query = query.eq('trading_style', normalizedStyle)
   }
   if (minAlpha !== null) {
     query = query.gte('alpha', minAlpha)

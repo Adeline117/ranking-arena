@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getGroupRole, canManageMembers } from '@/lib/services/group-permissions'
 import logger from '@/lib/logger'
+import { fireAndForget } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -101,13 +102,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Log to group_audit_log (fire-and-forget)
-    void Promise.resolve(supabase.from('group_audit_log').insert({
-      group_id: groupId,
-      actor_id: user.id,
-      action: 'ban',
-      target_id: targetUserId,
-      details: { reason }
-    })).catch(() => {})
+    fireAndForget(
+      supabase.from('group_audit_log').insert({
+        group_id: groupId,
+        actor_id: user.id,
+        action: 'ban',
+        target_id: targetUserId,
+        details: { reason }
+      }),
+      'Group audit log: ban'
+    )
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
@@ -156,13 +160,16 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     // Log to group_audit_log (fire-and-forget)
-    void Promise.resolve(supabase.from('group_audit_log').insert({
-      group_id: groupId,
-      actor_id: user.id,
-      action: 'unban',
-      target_id: targetUserId,
-      details: {}
-    })).catch(() => {})
+    fireAndForget(
+      supabase.from('group_audit_log').insert({
+        group_id: groupId,
+        actor_id: user.id,
+        action: 'unban',
+        target_id: targetUserId,
+        details: {}
+      }),
+      'Group audit log: unban'
+    )
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {

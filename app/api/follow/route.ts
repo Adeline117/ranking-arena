@@ -6,7 +6,7 @@
 
 import { NextResponse } from 'next/server'
 import { withApiMiddleware, createErrorResponse } from '@/lib/api/middleware'
-import { createLogger } from '@/lib/utils/logger'
+import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
 const logger = createLogger('follow-api')
@@ -103,7 +103,7 @@ export const POST = withApiMiddleware(
       }
 
       logger.info('用户关注交易员', { userId: user.id, traderId })
-      await invalidateFollowingCache(user.id).catch(() => {})
+      fireAndForget(invalidateFollowingCache(user.id), 'Invalidate following cache')
       return { success: true, following: true }
     } else {
       // 取消关注
@@ -127,7 +127,7 @@ export const POST = withApiMiddleware(
       }
 
       logger.info('用户取消关注交易员', { userId: user.id, traderId })
-      await invalidateFollowingCache(user.id).catch(() => {})
+      fireAndForget(invalidateFollowingCache(user.id), 'Invalidate following cache')
       return { success: true, following: false }
     }
   },
