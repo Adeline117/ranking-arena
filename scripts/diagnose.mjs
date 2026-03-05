@@ -20,8 +20,8 @@ import { dirname, resolve } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const tasks = {
-  seasons: [resolve(__dirname, 'import/check_seasons.mjs')],
-  status: [resolve(__dirname, 'import/check_status.mjs')],
+  seasons: [resolve(__dirname, 'check_seasons.mjs')],
+  status: [resolve(__dirname, 'check_status.mjs')],
   freshness: [resolve(__dirname, 'check-freshness.mjs'), '--basic'],
   platforms: [resolve(__dirname, 'check-freshness.mjs'), '--platform'],
   tables: [resolve(__dirname, 'check_tables.mjs')],
