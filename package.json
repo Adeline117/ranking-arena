@@ -72,7 +72,7 @@
     "@capacitor/browser": "^7.0.1",
     "@capacitor/camera": "^7.0.1",
     "@capacitor/core": "^7.2.0",
-    "@capacitor/haptics": "^7.0.1",
+    "@capacitor/haptics": "^8.0.1",
     "@capacitor/ios": "^7.2.0",
     "@capacitor/keyboard": "^7.0.1",
     "@capacitor/local-notifications": "^7.0.1",
