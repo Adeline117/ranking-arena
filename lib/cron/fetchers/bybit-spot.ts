@@ -26,6 +26,7 @@ import { type StatsDetail, upsertStatsDetail } from './enrichment'
 const SOURCE = 'bybit_spot'
 const API_URL =
   'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list'
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 500
 const PAGE_SIZE = 50
 
@@ -33,6 +34,24 @@ const PERIOD_MAP: Record<string, string> = {
   '7D': 'DATA_DURATION_SEVEN_DAY',
   '30D': 'DATA_DURATION_THIRTY_DAY',
   '90D': 'DATA_DURATION_NINETY_DAY',
+}
+
+// Helper to fetch with proxy fallback
+async function fetchWithProxyFallback<T>(url: string): Promise<T> {
+  // Try direct first
+  try {
+    return await fetchJson<T>(url)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    // If WAF blocked, try proxy
+    if (msg.includes('403') || msg.includes('Access Denied')) {
+      if (PROXY_URL) {
+        const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+        return await fetchJson<T>(proxyTarget)
+      }
+    }
+    throw err
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +106,16 @@ async function fetchPeriod(
         `&dataDuration=${duration}` +
         `&sortField=LEADER_SORT_FIELD_SORT_ROI`
 
-      const data = await fetchJson<BybitApiResponse>(url)
+      let data: BybitApiResponse
+      try {
+        data = await fetchWithProxyFallback<BybitApiResponse>(url)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes('403') || msg.includes('Access Denied')) {
+          return { total: 0, saved: 0, error: 'WAF-blocked — proxy fallback failed or not configured' }
+        }
+        throw err
+      }
 
       const details = data?.result?.leaderDetails || []
       if (details.length === 0) break
@@ -100,11 +128,7 @@ async function fetchPeriod(
 
       if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
       await sleep(500)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes('403') || msg.includes('Access Denied')) {
-        return { total: 0, saved: 0, error: 'WAF-blocked from this IP (deploy to Vercel Japan/SG)' }
-      }
+    } catch {
       break
     }
   }
