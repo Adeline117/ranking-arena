@@ -26,8 +26,10 @@ const GROUPS: Record<string, string[]> = {
   c: ['coinex', 'bitget_spot', 'xt', 'bybit_spot', 'binance_web3'],
   // Group D: Lower-priority batch 2 (every 6h) — 6 platforms
   d: ['lbank', 'dydx', 'phemex', 'gains', 'htx_futures', 'weex'],
-  // Group E: Lowest-priority (every 8h) — 2 platforms
-  e: ['blofin', 'bingx', 'gateio'],
+  // Group E: Lowest-priority (every 8h) — 5 platforms
+  e: ['blofin', 'bingx', 'gateio', 'cryptocom', 'bitfinex'],
+  // Group F: Additional platforms (every 12h) — 5 platforms
+  f: ['whitebit', 'btse', 'toobit', 'uniswap', 'pancakeswap'],
 }
 
 interface BatchResult {

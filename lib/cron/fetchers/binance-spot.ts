@@ -28,6 +28,7 @@ const API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/home-page-list'
 const DETAIL_API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/portfolio-detail'
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 500
 const PAGE_SIZE = 100
 const ENRICH_LIMIT = 300
@@ -38,6 +39,32 @@ const HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
   Origin: 'https://www.binance.com',
   Referer: 'https://www.binance.com/en/copy-trading/spot',
+}
+
+// Helper to fetch with proxy fallback
+async function fetchWithProxyFallback<T>(
+  url: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: unknown; timeoutMs?: number }
+): Promise<T> {
+  // Try direct first
+  try {
+    return await fetchJson<T>(url, opts)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    // If geo-blocked or WAF blocked, try proxy
+    if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
+      if (PROXY_URL) {
+        const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+        return await fetchJson<T>(proxyTarget, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: opts.body,
+          timeoutMs: opts.timeoutMs,
+        })
+      }
+    }
+    throw err
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +130,7 @@ async function enrichTraderDetail(
 ): Promise<{ winRate: number | null; maxDrawdown: number | null; followers: number | null }> {
   try {
     const timeRange = PERIOD_TO_TIMERANGE[period] || 'QUARTERLY'
-    const data = await fetchJson<DetailResponse>(DETAIL_API_URL, {
+    const data = await fetchWithProxyFallback<DetailResponse>(DETAIL_API_URL, {
       method: 'POST',
       headers: HEADERS,
       body: { portfolioId: traderId, timeRange },
@@ -158,15 +185,15 @@ async function fetchPeriod(
 
       let data: ApiResponse
       try {
-        data = await fetchJson<ApiResponse>(API_URL, {
+        data = await fetchWithProxyFallback<ApiResponse>(API_URL, {
           method: 'POST',
           headers: HEADERS,
           body,
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : ''
-        if (msg.includes('451')) {
-          return { total: 0, saved: 0, error: 'Geo-blocked (HTTP 451) — deploy to Vercel Japan/SG' }
+        if (msg.includes('451') || msg.includes('403')) {
+          return { total: 0, saved: 0, error: 'Geo-blocked (HTTP 451/403) — proxy fallback failed or not configured' }
         }
         throw err
       }
