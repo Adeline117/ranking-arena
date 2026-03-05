@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import logger from '@/lib/logger'
+import { getCorsOrigin } from '@/lib/utils/cors'
 
 export const dynamic = 'force-dynamic'
 
@@ -136,11 +137,12 @@ export async function GET(request: Request) {
     const contentType = response.headers.get('content-type') || 'image/png'
     const buffer = await response.arrayBuffer()
 
+    const origin = request.headers.get('Origin')
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': contentType,
         'Cache-Control': `public, max-age=${CACHE_MAX_AGE}`,
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': getCorsOrigin(origin),
       },
     })
   } catch (error: unknown) {

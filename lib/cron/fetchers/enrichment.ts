@@ -12,6 +12,42 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchJson, sleep } from './shared'
 
 // ============================================
+// Proxy Configuration for Geo-blocked APIs
+// ============================================
+
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+
+/**
+ * Fetch with proxy fallback for geo-blocked APIs (Binance, etc.)
+ * First tries direct request, then falls back to proxy if geo-blocked.
+ */
+async function fetchWithProxyFallback<T>(
+  url: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: unknown; timeoutMs?: number }
+): Promise<T> {
+  // Try direct first
+  try {
+    return await fetchJson<T>(url, opts)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    // If geo-blocked (451) or WAF blocked (403), try proxy
+    if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
+      if (PROXY_URL) {
+        console.warn(`[enrichment] Geo-blocked, retrying via proxy: ${url.slice(0, 80)}...`)
+        const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+        return await fetchJson<T>(proxyTarget, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: opts.body,
+          timeoutMs: opts.timeoutMs,
+        })
+      }
+    }
+    throw err
+  }
+}
+
+// ============================================
 // Types
 // ============================================
 
@@ -115,7 +151,7 @@ export async function fetchBinanceEquityCurve(
   timeRange: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' = 'QUARTERLY'
 ): Promise<EquityCurvePoint[]> {
   try {
-    const data = await fetchJson<BinancePerformanceResponse>(
+    const data = await fetchWithProxyFallback<BinancePerformanceResponse>(
       `${BINANCE_API}/lead-portfolio/query-performance`,
       {
         method: 'POST',
@@ -129,7 +165,10 @@ export async function fetchBinanceEquityCurve(
       }
     )
 
-    if (!data?.data?.dailyPnls) return []
+    if (!data?.data?.dailyPnls) {
+      console.warn(`[enrichment] Binance equity curve empty for ${traderId}`)
+      return []
+    }
 
     return data.data.dailyPnls.map((d) => ({
       date: d.date,
@@ -137,7 +176,7 @@ export async function fetchBinanceEquityCurve(
       pnl: d.pnl != null ? Number(d.pnl) : null,
     }))
   } catch (err) {
-    console.warn(`[enrichment] Binance equity curve failed: ${err}`)
+    console.warn(`[enrichment] Binance equity curve failed for ${traderId}: ${err}`)
     return []
   }
 }
@@ -147,7 +186,7 @@ export async function fetchBinancePositionHistory(
   pageSize = 50
 ): Promise<PositionHistoryItem[]> {
   try {
-    const data = await fetchJson<BinancePositionResponse>(
+    const data = await fetchWithProxyFallback<BinancePositionResponse>(
       `${BINANCE_API}/lead-portfolio/query-position-history`,
       {
         method: 'POST',
@@ -161,7 +200,10 @@ export async function fetchBinancePositionHistory(
       }
     )
 
-    if (!data?.data?.list) return []
+    if (!data?.data?.list) {
+      console.warn(`[enrichment] Binance position history empty for ${traderId}`)
+      return []
+    }
 
     return data.data.list.map((p) => ({
       symbol: p.symbol || '',
@@ -181,7 +223,7 @@ export async function fetchBinancePositionHistory(
       status: 'closed',
     }))
   } catch (err) {
-    console.warn(`[enrichment] Binance position history failed: ${err}`)
+    console.warn(`[enrichment] Binance position history failed for ${traderId}: ${err}`)
     return []
   }
 }
@@ -206,7 +248,7 @@ export async function fetchBybitEquityCurve(
   days = 90
 ): Promise<EquityCurvePoint[]> {
   try {
-    const data = await fetchJson<BybitChartResponse>(
+    const data = await fetchWithProxyFallback<BybitChartResponse>(
       'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/leader-chart',
       {
         method: 'POST',
@@ -220,7 +262,16 @@ export async function fetchBybitEquityCurve(
       }
     )
 
-    if (!data?.result?.dataList) return []
+    // Check for API error codes
+    if (data?.retCode !== 0 && data?.retCode !== undefined) {
+      console.warn(`[enrichment] Bybit equity curve API error for ${traderId}: retCode=${data.retCode}`)
+      return []
+    }
+
+    if (!data?.result?.dataList) {
+      console.warn(`[enrichment] Bybit equity curve empty for ${traderId}`)
+      return []
+    }
 
     return data.result.dataList
       .filter((d) => d.date)
@@ -230,7 +281,7 @@ export async function fetchBybitEquityCurve(
         pnl: d.pnl != null ? Number(d.pnl) : null,
       }))
   } catch (err) {
-    console.warn(`[enrichment] Bybit equity curve failed: ${err}`)
+    console.warn(`[enrichment] Bybit equity curve failed for ${traderId}: ${err}`)
     return []
   }
 }
@@ -263,7 +314,7 @@ export async function fetchBybitPositionHistory(
   pageSize = 50
 ): Promise<PositionHistoryItem[]> {
   try {
-    const data = await fetchJson<BybitHistoryOrderResponse>(
+    const data = await fetchWithProxyFallback<BybitHistoryOrderResponse>(
       'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/leader-history-order',
       {
         method: 'POST',
@@ -277,7 +328,16 @@ export async function fetchBybitPositionHistory(
       }
     )
 
-    if (!data?.result?.data) return []
+    // Check for API error codes
+    if (data?.retCode !== 0 && data?.retCode !== undefined) {
+      console.warn(`[enrichment] Bybit position history API error for ${traderId}: retCode=${data.retCode}`)
+      return []
+    }
+
+    if (!data?.result?.data) {
+      console.warn(`[enrichment] Bybit position history empty for ${traderId}`)
+      return []
+    }
 
     return data.result.data.map((p) => ({
       symbol: p.symbol || '',
@@ -295,7 +355,7 @@ export async function fetchBybitPositionHistory(
       status: 'closed',
     }))
   } catch (err) {
-    console.warn(`[enrichment] Bybit position history failed: ${err}`)
+    console.warn(`[enrichment] Bybit position history failed for ${traderId}: ${err}`)
     return []
   }
 }
@@ -807,8 +867,8 @@ export async function fetchBinanceStatsDetail(
   traderId: string
 ): Promise<StatsDetail | null> {
   try {
-    // Fetch trader detail stats
-    const data = await fetchJson<BinanceTraderStatsResponse>(
+    // Fetch trader detail stats with proxy fallback for geo-blocking
+    const data = await fetchWithProxyFallback<BinanceTraderStatsResponse>(
       `${BINANCE_API}/lead-portfolio/query-lead-base-info`,
       {
         method: 'POST',
@@ -886,7 +946,7 @@ export async function fetchBinanceStatsDetail(
       totalPositions: positions.length,
     }
   } catch (err) {
-    console.warn(`[enrichment] Binance stats detail failed: ${err}`)
+    console.warn(`[enrichment] Binance stats detail failed for ${traderId}: ${err}`)
     return null
   }
 }
@@ -919,7 +979,7 @@ export async function fetchBybitStatsDetail(
   traderId: string
 ): Promise<StatsDetail | null> {
   try {
-    const data = await fetchJson<BybitTraderDetailResponse>(
+    const data = await fetchWithProxyFallback<BybitTraderDetailResponse>(
       `https://www.bybit.com/x-api/fapi/beehive/public/v1/common/leader-detail`,
       {
         method: 'POST',
@@ -933,7 +993,16 @@ export async function fetchBybitStatsDetail(
       }
     )
 
-    if (!data?.result) return null
+    // Check for API error codes
+    if (data?.retCode !== 0 && data?.retCode !== undefined) {
+      console.warn(`[enrichment] Bybit stats detail API error for ${traderId}: retCode=${data.retCode}`)
+      return null
+    }
+
+    if (!data?.result) {
+      console.warn(`[enrichment] Bybit stats detail empty for ${traderId}`)
+      return null
+    }
 
     const d = data.result
     const parseNum = (v: string | number | undefined): number | null => {
@@ -961,7 +1030,7 @@ export async function fetchBybitStatsDetail(
       totalPositions: null,
     }
   } catch (err) {
-    console.warn(`[enrichment] Bybit stats detail failed: ${err}`)
+    console.warn(`[enrichment] Bybit stats detail failed for ${traderId}: ${err}`)
     return null
   }
 }

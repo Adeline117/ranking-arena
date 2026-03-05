@@ -16,6 +16,7 @@ import {
   type RealtimeSnapshot,
 } from '@/lib/utils/tradingview-ws'
 import { createLogger } from '@/lib/utils/logger'
+import { getCorsOrigin } from '@/lib/utils/cors'
 
 // 必须使用 Node.js 运行时
 export const runtime = 'nodejs'
@@ -30,22 +31,24 @@ const SNAPSHOT_TTL_MS = 2000
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const isStream = searchParams.get('stream') === '1'
+  const origin = request.headers.get('Origin')
 
   if (isStream) {
-    return handleSSE(request)
+    return handleSSE(request, origin)
   }
 
-  return handleSnapshot()
+  return handleSnapshot(origin)
 }
 
-async function handleSnapshot(): Promise<NextResponse> {
+async function handleSnapshot(origin: string | null): Promise<NextResponse> {
+  const corsOrigin = getCorsOrigin(origin)
   try {
     const now = Date.now()
     if (snapshotCache && now - snapshotCache.ts < SNAPSHOT_TTL_MS) {
       return NextResponse.json(snapshotCache.data, {
         headers: {
           'Cache-Control': 'no-cache',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': corsOrigin,
         },
       })
     }
@@ -56,7 +59,7 @@ async function handleSnapshot(): Promise<NextResponse> {
     return NextResponse.json(snapshot, {
       headers: {
         'Cache-Control': 'no-cache',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin,
       },
     })
   } catch (e) {
@@ -66,7 +69,8 @@ async function handleSnapshot(): Promise<NextResponse> {
   }
 }
 
-function handleSSE(request: NextRequest): Response {
+function handleSSE(request: NextRequest, origin: string | null): Response {
+  const corsOrigin = getCorsOrigin(origin)
   const encoder = new TextEncoder()
   let intervalId: ReturnType<typeof setInterval> | null = null
   let closed = false
@@ -127,7 +131,7 @@ function handleSSE(request: NextRequest): Response {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': corsOrigin,
     },
   })
 }

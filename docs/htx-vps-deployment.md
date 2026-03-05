@@ -67,11 +67,14 @@ ssh root@45.76.152.169 'ls -lh /var/log/ranking-arena/'
 
 ### 环境变量
 
-在VPS的 `~/.bashrc` 中已配置：
+在VPS的 `~/.bashrc` 中需要配置：
 ```bash
-export CRON_SECRET='arena-cron-secret-2025'
+# IMPORTANT: Set your CRON_SECRET - do not commit secrets to git
+export CRON_SECRET='<your-secret-here>'
 export API_ENDPOINT='https://ranking-arena.vercel.app'
 ```
+
+⚠️ **Security Note**: CRON_SECRET should be a strong, unique secret that matches the one configured in Vercel environment variables. Never commit secrets to git.
 
 ### 日志管理
 

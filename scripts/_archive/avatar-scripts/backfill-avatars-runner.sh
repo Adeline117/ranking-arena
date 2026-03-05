@@ -9,7 +9,12 @@
 #   ./scripts/backfill-avatars-runner.sh binance_futures 200
 #   ./scripts/backfill-avatars-runner.sh all 100
 
-CRON_SECRET="arena-cron-secret-2025"
+# CRON_SECRET must be set via environment variable
+if [ -z "$CRON_SECRET" ]; then
+  echo "ERROR: CRON_SECRET environment variable is required"
+  echo "Usage: CRON_SECRET=your-secret ./scripts/backfill-avatars-runner.sh [platform] [limit]"
+  exit 1
+fi
 BASE_URL="https://ranking-arena.vercel.app"
 PLATFORM="${1:-all}"
 LIMIT="${2:-200}"
