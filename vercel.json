@@ -1,4 +1,5 @@
 {
+  "buildCommand": "TURBOPACK=0 next build",
   "regions": [
     "hnd1"
   ],
