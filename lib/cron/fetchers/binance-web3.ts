@@ -37,6 +37,7 @@ import { type StatsDetail, upsertStatsDetail } from './enrichment'
 
 const SOURCE = 'binance_web3'
 const TARGET = 500
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 
 // Binance community leaderboard API (works for on-chain/web3 traders)
 // Note: /bapi/composite/ returns 404, /bapi/futures/ is the correct prefix (returns 451 geo-block)
@@ -47,6 +48,32 @@ const HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
   Origin: 'https://www.binance.com',
   Referer: 'https://www.binance.com/en/leaderboard',
+}
+
+// Helper to fetch with proxy fallback
+async function fetchWithProxyFallback<T>(
+  url: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: unknown; timeoutMs?: number }
+): Promise<T> {
+  // Try direct first
+  try {
+    return await fetchJson<T>(url, opts)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    // If geo-blocked or WAF blocked, try proxy
+    if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
+      if (PROXY_URL) {
+        const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+        return await fetchJson<T>(proxyTarget, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: opts.body,
+          timeoutMs: opts.timeoutMs,
+        })
+      }
+    }
+    throw err
+  }
 }
 
 const PERIOD_MAP: Record<string, string> = {
@@ -94,7 +121,7 @@ async function tryLeaderboardApi(
 ): Promise<LeaderboardEntry[]> {
   const timeRange = PERIOD_MAP[period] || 'QUARTERLY'
   try {
-    const data = await fetchJson<{
+    const data = await fetchWithProxyFallback<{
       data?: LeaderboardEntry[]
       code?: string
       msg?: string
@@ -117,8 +144,8 @@ async function tryLeaderboardApi(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     // Binance returns HTTP 451 for geo-blocked requests
-    if (msg.includes('451')) {
-      console.warn(`[binance-web3] Geo-blocked (HTTP 451) from this IP`)
+    if (msg.includes('451') || msg.includes('403')) {
+      console.warn(`[binance-web3] Geo-blocked (HTTP 451/403) — proxy fallback failed`)
     } else {
       console.warn(`[binance-web3] leaderboard API failed: ${msg}`)
     }
