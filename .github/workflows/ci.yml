@@ -24,8 +24,9 @@ jobs:
           echo "Checking for duplicate migration versions..."
           MIGRATIONS_DIR="supabase/migrations"
           if [ -d "$MIGRATIONS_DIR" ]; then
-            # Extract version numbers (first 5 digits) and check for duplicates
-            VERSIONS=$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | xargs -n1 basename | cut -c1-5 | sort)
+            # Extract version prefixes (everything before first underscore) and check for duplicates
+            # This handles both YYYYMMDD and YYYYMMDDHHmmss formats
+            VERSIONS=$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | xargs -n1 basename | sed 's/_.*//' | sort)
             DUPLICATES=$(echo "$VERSIONS" | uniq -d)
             if [ -n "$DUPLICATES" ]; then
               echo "ERROR: Duplicate migration versions found:"
