@@ -45,6 +45,9 @@ jest.mock('@/lib/logger', () => ({
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
+import { sendAlert } from '@/lib/alerts/send-alert'
+
+const mockSendAlert = sendAlert as jest.MockedFunction<typeof sendAlert>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -101,23 +104,32 @@ describe('GET /api/cron/weekly-report', () => {
   // ---- Successful report ---------------------------------------------------
 
   it('generates weekly report and sends alert', async () => {
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') {
-        return {
-          select: jest.fn().mockReturnValue({
-            gte: jest.fn().mockResolvedValue({ count: 150, error: null }),
-            then: (resolve: (v: unknown) => void) => resolve({ count: 32000, error: null }),
-          }),
-        }
+    mockFrom.mockImplementation(() => {
+      // Return a chainable mock that handles all query patterns:
+      // .select().gte() -> { count, error }
+      // .select().lt().limit() -> { data, error }
+      // .select() -> { count, error }
+      const makeChain = (): Record<string, jest.Mock> => {
+        const chain: Record<string, jest.Mock> = {}
+        const handler = () =>
+          new Proxy(
+            {},
+            {
+              get(_target, prop) {
+                if (prop === 'then') {
+                  return (resolve: (v: unknown) => void) =>
+                    resolve({ count: 100, data: [], error: null })
+                }
+                if (!chain[prop as string]) {
+                  chain[prop as string] = jest.fn().mockImplementation(handler)
+                }
+                return chain[prop as string]
+              },
+            }
+          )
+        return { select: jest.fn().mockImplementation(handler) }
       }
-      if (table === 'user_profiles') {
-        return {
-          select: jest.fn().mockReturnValue({
-            gte: jest.fn().mockResolvedValue({ count: 10, error: null }),
-          }),
-        }
-      }
-      return chainable({ data: [], error: null, count: 0 })
+      return makeChain()
     })
 
     const res = await GET(createCronRequest(CRON_SECRET))

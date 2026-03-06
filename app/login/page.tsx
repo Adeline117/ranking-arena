@@ -130,8 +130,8 @@ export default function LoginPage() {
             } else {
               router.push(getRedirectUrl())
             }
-          }).catch(() => { router.push(getRedirectUrl()) }) // eslint-disable-line no-restricted-syntax -- auth lookup failed, still redirect user
-        }).catch(() => { router.push(getRedirectUrl()) }) // eslint-disable-line no-restricted-syntax -- account setup failed, still redirect user
+          }).catch(() => { router.push(getRedirectUrl()) })
+        }).catch(() => { router.push(getRedirectUrl()) })
       }
     })
     return () => { subscription.unsubscribe() }

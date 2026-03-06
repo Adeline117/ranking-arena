@@ -50,7 +50,7 @@ function getStoredViewMode(): ViewMode {
   try {
     const stored = localStorage.getItem(LS_KEY_VIEW_MODE)
     if (stored === 'table' || stored === 'card') return stored
-  } catch { /* ignore */ }
+  } catch { /* localStorage unavailable in SSR/private browsing */ }
   return 'table'
 }
 
@@ -69,7 +69,7 @@ function getStoredColumns(): ColumnKey[] {
         return parsed
       }
     }
-  } catch { /* ignore */ }
+  } catch { /* localStorage unavailable in SSR/private browsing */ }
   return DEFAULT_VISIBLE_COLUMNS
 }
 
@@ -222,14 +222,14 @@ function RankingTableInner(props: {
     try {
       localStorage.setItem(LS_KEY_VIEW_MODE, mode)
       localStorage.setItem(LS_KEY_VIEW_MANUAL, 'true')
-    } catch { /* ignore */ }
+    } catch { /* localStorage unavailable in SSR/private browsing */ }
   }
 
   const resetViewModeToAuto = () => {
     try {
       localStorage.removeItem(LS_KEY_VIEW_MANUAL)
       localStorage.removeItem(LS_KEY_VIEW_MODE)
-    } catch { /* ignore */ }
+    } catch { /* localStorage unavailable in SSR/private browsing */ }
     // Re-apply auto logic based on current screen width
     const isMobile = window.matchMedia('(max-width: 767px)').matches
     setViewMode(isMobile ? 'card' : 'table')

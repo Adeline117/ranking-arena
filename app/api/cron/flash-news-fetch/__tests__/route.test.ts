@@ -34,8 +34,7 @@ global.fetch = mockFetch
 // ---------------------------------------------------------------------------
 
 let GET: typeof import('../route').GET
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamically imported after mock setup
-let NextRequest: any
+let NextRequest: typeof import('next/server').NextRequest
 
 async function loadRoute() {
   // Reset module registry so the route re-reads CRON_SECRET
@@ -50,6 +49,15 @@ async function loadRoute() {
       info: jest.fn(),
       warn: jest.fn(),
       error: jest.fn(),
+    },
+  }))
+  jest.mock('@/lib/services/pipeline-logger', () => ({
+    PipelineLogger: {
+      start: jest.fn().mockResolvedValue({
+        success: jest.fn().mockResolvedValue(undefined),
+        error: jest.fn().mockResolvedValue(undefined),
+        timeout: jest.fn().mockResolvedValue(undefined),
+      }),
     },
   }))
   global.fetch = mockFetch

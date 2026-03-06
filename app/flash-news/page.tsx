@@ -222,7 +222,7 @@ export default function FlashNewsPage() {
         })
       }
     } catch {
-      // silent fail
+      // Translation is best-effort; original text remains visible
     } finally {
       setTranslatingIds(prev => {
         const next = new Set(prev)

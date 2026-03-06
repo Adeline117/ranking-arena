@@ -23,6 +23,7 @@ export const maxDuration = 120
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 // ---------------------------------------------------------------------------
 // Auth
@@ -268,6 +269,7 @@ export async function GET(request: NextRequest) {
   }
 
   const startTime = Date.now()
+  const plog = await PipelineLogger.start('generate-activities')
 
   try {
     const supabase = getClient()
@@ -421,6 +423,8 @@ export async function GET(request: NextRequest) {
 
     logger.info(`generate-activities: inserted ${inserted} of ${toInsert.length} potential events`)
 
+    await plog.success(inserted, { tradersScanned: uniqueKeys.length, potentialEvents: toInsert.length })
+
     return NextResponse.json({
       ok: true,
       tradersScanned: uniqueKeys.length,
@@ -430,6 +434,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (err) {
     logger.error('generate-activities: unhandled error', err)
+    await plog.error(err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 },

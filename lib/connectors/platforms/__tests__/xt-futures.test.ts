@@ -6,7 +6,6 @@
  */
 
 import { XtFuturesConnector } from '../xt-futures'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally

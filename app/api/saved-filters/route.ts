@@ -19,20 +19,6 @@ import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
-// 筛选配置类型
-interface FilterConfig {
-  category?: string[]      // 类型：futures, spot, web3
-  exchange?: string[]      // 交易所
-  roi_min?: number         // 最小 ROI
-  roi_max?: number         // 最大 ROI
-  drawdown_min?: number    // 最小回撤
-  drawdown_max?: number    // 最大回撤
-  period?: '7D' | '30D' | '90D'  // period
-  min_pnl?: number         // 最小 PnL
-  min_score?: number       // 最小 Arena Score
-  min_win_rate?: number    // 最小胜率
-}
-
 const MAX_SAVED_FILTERS = 10
 
 // Zod schema for filter_config

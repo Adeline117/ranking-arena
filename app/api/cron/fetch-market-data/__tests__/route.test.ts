@@ -40,6 +40,17 @@ jest.mock('@/lib/utils/pipeline-monitor', () => ({
   recordFetchResult: jest.fn().mockResolvedValue(undefined),
 }))
 
+jest.mock('@/lib/services/pipeline-logger', () => ({
+  PipelineLogger: {
+    start: jest.fn().mockResolvedValue({
+      id: 1,
+      success: jest.fn().mockResolvedValue(undefined),
+      error: jest.fn().mockResolvedValue(undefined),
+      timeout: jest.fn().mockResolvedValue(undefined),
+    }),
+  },
+}))
+
 // Mock global fetch for CoinGecko API
 const mockFetch = jest.fn()
 global.fetch = mockFetch
@@ -62,7 +73,7 @@ function createCronRequest(secret?: string, params?: Record<string, string>): Ne
 }
 
 /** Build chainable mock */
-function chainable(result: { data?: unknown; error?: unknown }) {
+function _chainable(result: { data?: unknown; error?: unknown }) {
   const handler = (): unknown =>
     new Proxy(
       {},

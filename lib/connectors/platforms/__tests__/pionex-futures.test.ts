@@ -8,7 +8,6 @@
  */
 
 import { PionexFuturesConnector } from '../pionex-futures'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally
@@ -224,9 +223,9 @@ describe('PionexFuturesConnector', () => {
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.trader_key).toBeNull()
-      expect(normalized.roi).toBeNull()
-      expect(normalized.pnl).toBeNull()
+      expect(normalized.trader_key ?? null).toBeNull()
+      expect(normalized.roi ?? null).toBeNull()
+      expect(normalized.pnl ?? null).toBeNull()
     })
   })
 

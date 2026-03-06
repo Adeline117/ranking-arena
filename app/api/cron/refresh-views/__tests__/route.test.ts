@@ -22,6 +22,31 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}))
+
+jest.mock('@/lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}))
+
+jest.mock('@/lib/services/pipeline-logger', () => ({
+  PipelineLogger: {
+    start: jest.fn().mockResolvedValue({
+      success: jest.fn().mockResolvedValue(undefined),
+      error: jest.fn().mockResolvedValue(undefined),
+      timeout: jest.fn().mockResolvedValue(undefined),
+    }),
+  },
 }))
 
 import { NextRequest } from 'next/server'

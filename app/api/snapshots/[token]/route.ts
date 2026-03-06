@@ -114,7 +114,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     // Increment view count (fire and forget)
     void Promise.resolve(
       supabase.rpc('increment_snapshot_view_count', { snapshot_share_token: token })
-    ).catch(() => { /* View count increment is fire-and-forget */ }) // eslint-disable-line no-restricted-syntax -- non-critical analytics
+    ).catch(() => { /* View count increment is fire-and-forget */ })
 
     const response = NextResponse.json({
       success: true,

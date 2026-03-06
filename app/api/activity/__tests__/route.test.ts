@@ -116,7 +116,6 @@ describe('POST /api/activity', () => {
       body: { events: [] },
     })
     const res = await POST(req)
-    const body = await res.json()
 
     expect(res.status).toBe(400)
   })

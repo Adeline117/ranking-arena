@@ -69,7 +69,8 @@ async function fetchInitialActivities(): Promise<{
       hasMore,
       nextCursor,
     }
-  } catch {
+  } catch (error) {
+    console.warn('[feed] fetchActivities failed:', error instanceof Error ? error.message : String(error))
     return { activities: [], hasMore: false, nextCursor: null }
   }
 }

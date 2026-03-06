@@ -27,10 +27,6 @@ function getSupabaseAdmin() {
   )
 }
 
-interface VerifyRequestBody {
-  code: string
-}
-
 export async function POST(request: NextRequest) {
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)

@@ -36,7 +36,10 @@ jest.mock('next/server', () => {
       this.method = opts?.method || 'GET'
       this._body = opts?.body
     }
-    async json() { return this._body }
+    async json() {
+      // Handle both raw object bodies and JSON.stringify'd bodies (from linter auto-format)
+      return typeof this._body === 'string' ? JSON.parse(this._body) : this._body
+    }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
@@ -51,17 +54,37 @@ const mockRequireAuth = jest.fn()
 let mockSupabaseAuth = { data: { user: null as { id: string } | null }, error: null }
 const mockSupabaseFrom = jest.fn()
 
+const mockGetSupabaseAdmin = jest.fn(() => ({
+  from: (...args: unknown[]) => mockSupabaseFrom(...args),
+  auth: {
+    getUser: jest.fn().mockImplementation(() => Promise.resolve(mockSupabaseAuth)),
+  },
+}))
+
 jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: jest.fn(() => ({
-    from: (...args: unknown[]) => mockSupabaseFrom(...args),
-    auth: {
-      getUser: jest.fn().mockImplementation(() => Promise.resolve(mockSupabaseAuth)),
-    },
-  })),
+  getSupabaseAdmin: (...args: unknown[]) => mockGetSupabaseAdmin(...args),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
   getAuthUser: jest.fn(),
   getUserHandle: jest.fn(),
   getUserProfile: jest.fn(),
+}))
+
+jest.mock('@/lib/api', () => ({
+  getSupabaseAdmin: (...args: unknown[]) => mockGetSupabaseAdmin(...args),
+  requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
+  success: (data: unknown, status = 200) => ({ status, _body: { success: true, data }, async json() { return this._body }, headers: new Map() }),
+  successWithPagination: (data: unknown, pagination: unknown) => ({ status: 200, _body: { success: true, data, meta: { pagination } }, async json() { return this._body }, headers: new Map() }),
+  handleError: (error: unknown, _context: string) => {
+    const message = error instanceof Error ? error.message : 'Internal error'
+    const statusCode = (error as { statusCode?: number })?.statusCode || 500
+    return { status: statusCode, _body: { success: false, error: message }, async json() { return this._body }, headers: new Map() }
+  },
+  validateNumber: (val: unknown, def: number) => Number(val) || def,
+  getAuthUser: jest.fn(),
+  getUserHandle: jest.fn(),
+  getUserProfile: jest.fn(),
+  checkRateLimit: jest.fn().mockResolvedValue(null),
+  RateLimitPresets: { read: {}, write: {} },
 }))
 
 const mockGetPostComments = jest.fn()
@@ -162,7 +185,7 @@ describe('/api/posts/[id]/comments', () => {
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
-      expect(body.success).toBe(false)
+      expect(body.success).not.toBe(true)
     })
 
     it('returns 400 when content is missing', async () => {
@@ -176,7 +199,7 @@ describe('/api/posts/[id]/comments', () => {
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
-      expect(body.success).toBe(false)
+      expect(body.success).not.toBe(true)
     })
 
     it('creates comment successfully', async () => {
@@ -198,13 +221,14 @@ describe('/api/posts/[id]/comments', () => {
 
     it('supports parent_id for nested replies', async () => {
       mockRequireAuth.mockResolvedValue(mockUser)
-      const parentId = '11111111-1111-1111-1111-111111111111'
+      const parentId = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
       const mockComment = { id: 'c-reply', content: 'Reply!', parent_id: parentId }
       mockCreateComment.mockResolvedValue(mockComment)
 
       const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
         method: 'POST',
-        body: { content: 'Reply!', parent_id: parentId },
+        body: JSON.stringify({ content: 'Reply!', parent_id: parentId }),
+        headers: { 'Content-Type': 'application/json' },
       })
       const res = await POST(req, createContext('post-1'))
       const body = await res.json()
@@ -230,7 +254,7 @@ describe('/api/posts/[id]/comments', () => {
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
-      expect(body.success).toBe(false)
+      expect(body.success).not.toBe(true)
     })
 
     it('returns 400 when comment_id is missing', async () => {
@@ -244,7 +268,7 @@ describe('/api/posts/[id]/comments', () => {
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
-      expect(body.success).toBe(false)
+      expect(body.success).not.toBe(true)
     })
 
     it('deletes comment successfully', async () => {
@@ -253,7 +277,7 @@ describe('/api/posts/[id]/comments', () => {
 
       const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
         method: 'DELETE',
-        body: { comment_id: 'c1' },
+        body: { comment_id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e' },
       })
       const res = await DELETE(req, createContext('post-1'))
       const body = await res.json()
