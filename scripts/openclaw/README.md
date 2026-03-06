@@ -70,3 +70,4 @@ Action:
 |--------|---------|
 | `health-monitor.mjs` | Health check (run every 30 min) |
 | `health-monitor.mjs daily` | Daily summary report (run at 8 AM) |
+| `ux-patrol.mjs` | UX health check — pages, APIs, data quality, SSR (daily at 9 AM) |
