@@ -31,7 +31,7 @@ function getServiceKey(): string {
 
 async function main() {
   const serviceKey = getServiceKey()
-  const supabase = createClient(SUPABASE_URL, serviceKey)
+  const supabase = createClient(SUPABASE_URL!, serviceKey)
   const agent = new ProxyAgent(PROXY)
 
   // Fetch all binance_futures traders with numeric handles

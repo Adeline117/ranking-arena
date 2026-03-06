@@ -20,7 +20,7 @@ async function getServiceKey(): Promise<string> {
 
 async function main() {
   const serviceKey = await getServiceKey()
-  const supabase = createClient(SUPABASE_URL, serviceKey)
+  const supabase = createClient(SUPABASE_URL!, serviceKey)
 
   const { data: traders } = await supabase
     .from('trader_sources')

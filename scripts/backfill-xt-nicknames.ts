@@ -20,7 +20,7 @@ async function getServiceKey(): Promise<string> {
 
 async function main() {
   const serviceKey = await getServiceKey()
-  const supabase = createClient(SUPABASE_URL, serviceKey)
+  const supabase = createClient(SUPABASE_URL!, serviceKey)
 
   // Get numeric-handle XT traders (paginate since Supabase limits to 1000)
   const numericSet = new Map<string, string>()
