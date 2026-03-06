@@ -111,7 +111,7 @@ function SearchContent() {
         setSearchHistory(getSearchHistory())
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: save history only when loading transitions, other deps (query, results) are read from current closure
   }, [loading])
 
   const highlightText = useCallback((text: string, q: string): React.ReactNode => {

@@ -140,7 +140,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (err instanceof Error && (err.name === 'AbortError' || controller.signal.aborted)) return
       setError(err instanceof Error ? err.message : t('loadFailed'))
     } finally { if (!controller.signal.aborted) setLoading(false) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/t/showToast are stable refs; only re-create when query params or auth change
   }, [props.groupId, props.authorHandle, accessToken, sortType, pageSize, props.groupIds, props.sortBy, storeSetPosts])
 
   // Load more posts
@@ -171,17 +171,17 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (err instanceof Error && err.name === 'AbortError') return
       logger.error('加载更多失败:', err)
     } finally { setLoadingMore(false) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/t are stable refs; only re-create when pagination state or query params change
   }, [loadingMore, hasMore, loading, offset, pageSize, props.sortBy, sortType, props.authorHandle, props.groupId, props.groupIds, accessToken, posts])
 
   useEffect(() => { return () => { if (abortControllerRef.current) abortControllerRef.current.abort() } }, [])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true); await loadPosts(); setRefreshing(false); showToast(t('refreshed'), 'success')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded; read at call time via language dep instead
   }, [loadPosts, showToast, language])
 
-  useEffect(() => { loadPosts() }, [props.groupId, props.authorHandle, accessToken, sortType, feedRefreshTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadPosts() }, [props.groupId, props.authorHandle, accessToken, sortType, feedRefreshTrigger]) // eslint-disable-line react-hooks/exhaustive-deps -- loadPosts is excluded to avoid circular dep; effect triggers are the meaningful query params
 
   useEffect(() => {
     const el = loadMoreRef.current; if (!el) return
@@ -196,7 +196,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     if (posts.length > 0 && accessToken && bookmarksLoadedRef.current) {
       actions.loadUserBookmarksAndReposts(posts.map(p => p.id))
     }
-  }, [posts.length, accessToken]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [posts.length, accessToken]) // eslint-disable-line react-hooks/exhaustive-deps -- actions.loadUserBookmarksAndReposts is a stable ref; only re-run when post count or auth changes
 
   // Handle initialPostId
   const initialPostIdRef = useRef<string | null>(null)
@@ -223,7 +223,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         loadSinglePost()
       }
     }
-  }, [props.initialPostId, posts, openPost, setComments]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [props.initialPostId, posts, openPost, setComments]) // eslint-disable-line react-hooks/exhaustive-deps -- t is excluded; read at call time from closure
 
   // Translation effects
   useEffect(() => {

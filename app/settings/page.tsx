@@ -118,7 +118,7 @@ function SettingsContent() {
       if (!data.user) { router.push('/login?redirect=/settings'); return }
       h.loadProfile(data.user.id)
     }).catch(() => { /* Auth check failure on settings page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-  }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [router]) // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount; h methods are stable refs defined in useSettingsHandlers
 
   // ===== Lazy-load sessions and blocked users =====
   useEffect(() => {
@@ -130,7 +130,7 @@ function SettingsContent() {
       setBlockedUsersLoaded(true)
       h.loadBlockedUsers(h.userId)
     }
-  }, [activeSection, sessionsLoaded, blockedUsersLoaded, h.userId, h.loadingSessions, h.loadingBlockedUsers]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeSection, sessionsLoaded, blockedUsersLoaded, h.userId, h.loadingSessions, h.loadingBlockedUsers]) // eslint-disable-line react-hooks/exhaustive-deps -- h.loadSessions/h.loadBlockedUsers are stable refs, listing them causes infinite re-render
 
   // ===== Render: auth required / loading states =====
   if (!h.loading && !h.userId) {

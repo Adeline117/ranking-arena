@@ -16,6 +16,7 @@ import type { Platform } from '@/lib/types/leaderboard';
 import { createClient } from '@supabase/supabase-js';
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor';
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60

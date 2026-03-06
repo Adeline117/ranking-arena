@@ -5,6 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -92,6 +93,7 @@ async function handleCron(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const plog = await PipelineLogger.start('auto-news-post')
   try {
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -157,6 +159,7 @@ async function handleCron(req: NextRequest) {
       }
     }
 
+    await plog.success(posted, { fetched: allNews.length, new: newItems.length })
     return NextResponse.json({
       ok: true,
       fetched: allNews.length,
@@ -165,6 +168,7 @@ async function handleCron(req: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (e) {
+    await plog.error(e instanceof Error ? e : new Error(String(e)))
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }

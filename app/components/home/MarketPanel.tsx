@@ -73,7 +73,7 @@ export default function MarketPanel() {
         loadCustomPairs(data.user.id)
       }
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; loadCustomPairs and supabase are stable singletons
   }, [])
 
   const saveCustomPairs = async (pairs: string[]) => {
@@ -227,7 +227,7 @@ export default function MarketPanel() {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load function is defined in closure; only re-run when customPairs or t changes
   }, [customPairs, t])
 
   const formatTime = (date: Date) => {

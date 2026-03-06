@@ -192,7 +192,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       state.resolve(false)
     }
     closeDialog()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- state is an object; only re-create when resolve ref changes, not on every state update
   }, [state.resolve, closeDialog])
 
   const handleConfirm = useCallback(async () => {
@@ -208,7 +208,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       state.resolve(true)
     }
     closeDialog()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- state is an object; only re-create when options/resolve change, not on every state update
   }, [state.options, state.resolve, closeDialog])
 
   const handleCancel = useCallback(() => {
@@ -219,7 +219,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       state.resolve(false)
     }
     closeDialog()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- state is an object; only re-create when options/resolve change, not on every state update
   }, [state.options, state.resolve, closeDialog])
 
   // Keep ref in sync
