@@ -118,6 +118,7 @@ export async function GET(request: NextRequest) {
 
     if (fetchError || !recentPosts) {
       logger.error('Failed to fetch posts for hot score fallback', { error: fetchError?.message })
+      await plog.error(new Error(fetchError?.message || 'No posts for fallback'))
       return NextResponse.json({ success: false, error: fetchError?.message || 'No posts' }, { status: 500 })
     }
 

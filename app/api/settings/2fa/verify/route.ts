@@ -4,12 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import { verifyTotpCode, generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import logger from '@/lib/logger'
+
+// Zod schema for POST /api/settings/2fa/verify
+const Verify2FASchema = z.object({
+  code: z.string().min(1, 'Verification code is required').max(10, 'Code too long').regex(/^\d+$/, 'Code must be numeric'),
+})
 
 export const dynamic = 'force-dynamic'
 
