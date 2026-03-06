@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-const sb = createClient('https://iknktzifjdyujdccyhsv.supabase.co', process.env.SUPABASE_SERVICE_ROLE_KEY);
+const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 const MORE_URLS = {
   'SEC v. Terraform Labs': 'https://www.sec.gov/litigation/complaints/2023/comp-pr2023-32.pdf',

@@ -3,8 +3,9 @@
  * Enrich Bitget Futures PNL + Equity via Puppeteer
  * Strategy: Fetch traderList to get UID→nickname mapping, match DB, call cycleData
  */
-// Set env vars before running: DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL env var required')
+process.env.DATABASE_URL = process.env.DATABASE_URL
+process.env.SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const { createClient } = require('@supabase/supabase-js')
 const { Pool } = require('pg')

@@ -4,7 +4,7 @@
  * Uses pg Pool (not Client) to avoid connection hanging
  */
 process.env.DATABASE_URL = process.env.DATABASE_URL
-process.env.SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+process.env.SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const { createClient } = require('@supabase/supabase-js')

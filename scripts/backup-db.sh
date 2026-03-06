@@ -4,7 +4,7 @@
 # 建议cron: 0 3 * * * bash /Users/adelinewen/ranking-arena/scripts/backup-db.sh
 
 BACKUP_DIR="/Users/adelinewen/ranking-arena/backups"
-DB_URL="${process.env.DATABASE_URL}"
+DB_URL="$DATABASE_URL"
 DATE=$(date +%Y%m%d_%H%M)
 PSQL="/opt/homebrew/opt/libpq/bin/psql"
 

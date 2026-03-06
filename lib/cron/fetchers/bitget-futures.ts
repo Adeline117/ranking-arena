@@ -238,7 +238,8 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
         allTraders.push(...list)
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(300)
-      } catch {
+      } catch (err) {
+        logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
     }

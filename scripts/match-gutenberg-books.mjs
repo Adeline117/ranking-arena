@@ -9,7 +9,7 @@ import fs from 'fs'
 import path from 'path'
 import { pipeline } from 'stream/promises'
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)

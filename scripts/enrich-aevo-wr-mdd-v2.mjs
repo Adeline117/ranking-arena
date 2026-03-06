@@ -13,7 +13,7 @@
  *   node scripts/enrich-aevo-wr-mdd-v2.mjs 2>&1 | tee /tmp/aevo-wr-mdd.log
  */
 
-const SB_URL = 'https://iknktzifjdyujdccyhsv.supabase.co';
+const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const H = {
   apikey: SB_KEY,

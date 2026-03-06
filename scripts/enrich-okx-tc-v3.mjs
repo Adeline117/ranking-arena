@@ -15,7 +15,7 @@
  *   node scripts/enrich-okx-tc-v3.mjs 2>&1 | tee /tmp/okx-tc.log
  */
 
-const SB_URL = 'https://iknktzifjdyujdccyhsv.supabase.co';
+const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const H = {
   apikey: SB_KEY,

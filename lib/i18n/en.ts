@@ -2797,7 +2797,10 @@ const en = {
   selectMembers: 'Select members',
   selectedCount: '{n} selected',
   createGroup: 'Create',
-  
+  maxGroupMembers: 'Maximum 50 members',
+  minGroupMembers: 'Select at least 1 member',
+  createGroupFailed: 'Failed to create group',
+
   dragDropHint: 'Drop files here to send',
   pasteImageHint: 'Paste image to send',
   attachmentUploading: 'Uploading...',

@@ -1,7 +1,7 @@
 import pg from 'pg';
 const { Client } = pg;
 
-const DB = '${process.env.DATABASE_URL}';
+const DB = process.env.DATABASE_URL;
 
 async function main() {
   const client = new Client({ connectionString: DB });

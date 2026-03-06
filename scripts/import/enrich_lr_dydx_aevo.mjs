@@ -16,7 +16,7 @@ import { ProxyAgent, fetch as proxyFetch } from 'undici'
 import { calculateArenaScore } from '../lib/shared.mjs'
 
 const { Client } = pg
-const DB_URL = '${process.env.DATABASE_URL}'
+const DB_URL = process.env.DATABASE_URL
 const INDEXER = 'https://indexer.dydx.trade/v4'
 const PROXY = 'http://127.0.0.1:7890'
 const PERIODS = { '7D': 7, '30D': 30, '90D': 90 }

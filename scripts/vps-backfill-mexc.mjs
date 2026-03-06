@@ -6,7 +6,7 @@
  * Usage: scp this to VPS, then: node vps-backfill-mexc.mjs
  */
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
 

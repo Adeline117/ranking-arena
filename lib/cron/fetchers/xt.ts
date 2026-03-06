@@ -167,7 +167,8 @@ async function fetchEliteV2(
         if (!hasMore || items.length < PAGE_SIZE) break
         pageNo++
         await sleep(300)
-      } catch {
+      } catch (err) {
+        logger.warn(`[${SOURCE}] EliteV2 page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
     }
@@ -216,7 +217,8 @@ async function fetchFallbackEndpoints(allTraders: Map<string, XtTrader>): Promis
 
         if (newCount === 0) break
         await sleep(300)
-      } catch {
+      } catch (err) {
+        logger.warn(`[${SOURCE}] Fallback page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
     }
@@ -233,16 +235,16 @@ async function fetchPeriod(
   // Primary: elite-leader-list-v2 with different sort types and days
   try {
     await fetchEliteV2(days, allTraders)
-  } catch {
-    // continue to fallback
+  } catch (err) {
+    logger.warn(`[${SOURCE}] EliteV2 failed, trying fallback: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Fallback: try other endpoints if we didn't get enough
   if (allTraders.size < TARGET) {
     try {
       await fetchFallbackEndpoints(allTraders)
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Fallback endpoints failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

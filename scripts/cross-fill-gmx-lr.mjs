@@ -10,7 +10,7 @@ dotenv.config({ path: '.env.local' })
 import pg from 'pg'
 const { Client } = pg
 
-const DB_URL = process.env.DATABASE_URL || '${process.env.DATABASE_URL}'
+const DB_URL = process.env.DATABASE_URL || process.env.DATABASE_URL
 
 async function main() {
   console.log('=== GMX LR Cross-fill from trader_snapshots ===')

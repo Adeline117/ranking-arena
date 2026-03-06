@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const R2_ACCOUNT_ID = 'e13575d5cb0b28c296541dd960067496'

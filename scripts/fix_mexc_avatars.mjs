@@ -23,7 +23,7 @@ const HEX_PATTERN = /^[a-f0-9]{32}$/
 const CACHE_FILE = '/tmp/mexc_avatar_map.json'
 
 const supabase = createClient(
-  'https://iknktzifjdyujdccyhsv.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
