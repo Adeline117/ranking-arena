@@ -51,6 +51,7 @@ function isTransientError(err: unknown): boolean {
 
 function resetPool(): void {
   if (pool) {
+    // eslint-disable-next-line no-restricted-syntax -- Intentional: cleanup errors are non-critical
     pool.end().catch(() => { /* ignore cleanup errors */ });
     pool = null;
   }

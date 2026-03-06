@@ -254,6 +254,7 @@ export function reportError(error: unknown, context?: Record<string, unknown>) {
           ? ['{{ default }}', String(errorInfo.code)]
           : ['{{ default }}'],
       })
+    // eslint-disable-next-line no-restricted-syntax -- Intentional: dynamic import, failure is non-critical
     }).catch(() => {
       // Sentry 加载失败时静默处理
     })
