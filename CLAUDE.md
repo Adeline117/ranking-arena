@@ -1,10 +1,9 @@
 # Arena - Claude Code Context
 
 ## Session Start Checklist
-1. Read this file (CLAUDE.md) - project constitution
-2. Read `PROGRESS.md` - what's done, what's in progress
-3. Read `TASKS.md` - priority queue
-4. Read `DECISIONS.md` - why things are built this way
+**Quick fix** (small bug, one file): Just read this file (CLAUDE.md)
+**Feature work**: Also read `PROGRESS.md` + `TASKS.md`
+**Architecture change**: Also read `DECISIONS.md`
 
 ## Project Overview
 Crypto trader ranking platform. 32,000+ traders across 27+ CEX/DEX exchanges.
@@ -25,7 +24,7 @@ Live site: https://www.arenafi.org
 ## Directory Structure
 ```
 app/                    # Next.js App Router pages
-  api/                  # 74 API route groups
+  api/                  # 100+ API route groups
     cron/               # Scheduled jobs (Vercel Cron)
   components/           # Shared UI components
   rankings/             # Leaderboard pages
@@ -47,7 +46,7 @@ scripts/                # CLI tools and maintenance
   import/               # Data import scripts
   backfill-*.ts         # Backfill jobs
 
-supabase/migrations/    # 98 migration files (00001-00083+)
+supabase/migrations/    # SQL migration files
 worker/                 # Background job runner
 cloudflare-worker/      # CF Worker for geo-blocked APIs
 ```
@@ -159,34 +158,9 @@ STRIPE_SECRET_KEY
 2. **Memory**: Dev server needs `--max-old-space-size=3584` (configured in npm scripts)
 3. **Build time**: Full build takes significant time; use Turbopack in dev
 
-## Custom Agents (`.claude/agents/`)
-- `code-reviewer`: Style guide + best practices check
-- `silent-failure-hunter`: Find error handling gaps
-- `security-reviewer`: Auth/payment/API security
-- `perf-reviewer`: N+1 queries, missing indexes
-- `data-auditor`: Data quality sampling
-
-## Custom Skills (`.claude/skills/`)
-- `arena-supabase-ops`: DB operations, RLS, migrations
-- `arena-enrichment-patterns`: Enrichment jobs + script development
-- `arena-vps-cron`: VPS cron deployment
-- `arena-anti-block`: Geo-blocking bypass patterns
-- `arena-cf-worker-patterns`: Cloudflare Worker proxy
-- `arena-vercel-deploy`: Vercel deployment + pitfalls
-- `arena-fetcher-error-handling`: Fetcher error handling templates
-- `ccxt-typescript`: Market data via CCXT
-- `security-review`: Auth/payment/RLS security
-- `data-quality`: Data quality audit
-- `fix-issue`: GitHub issue fix flow
-
-## Slash Commands (`.claude/commands/`)
-- `/fix-pipeline` - Diagnose and fix data pipeline issues
-- `/deploy-staging` - Deploy to Vercel preview
-- `/add-connector` - Add new exchange connector
-- `/debug-cron` - Troubleshoot cron job failures
-- `/code-review` - Review code for style/security
-- `/implement-spec specs/xxx.md` - Autonomously implement a feature spec
-- `/weekly-self-check` - Analyze pipeline/anomalies/code quality, auto-fix low-risk issues
+## Claude Code Resources
+See `.claude/ARENA_SKILL_SYSTEM.md` for full list of agents, skills, and slash commands.
+Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spec`, `/weekly-self-check`
 
 ## Agent Work Rules (MUST FOLLOW)
 
@@ -234,7 +208,7 @@ node scripts/pipeline-health-check.mjs --fix
 ### 自动验证 Hooks
 `.claude/settings.json` 配置了自动验证：
 - **PreToolUse**: 写入 `supabase/migrations/` 时自动拦截，需确认
-- **Stop**: 完成任务前自动运行 `npx tsc --noEmit`（类型检查）
+- **Pre-push** (git hook): lint 变更文件 + `tsc --noEmit`（推送前兜底）
 
 ### Spec-Driven Development
 ```bash
@@ -279,15 +253,6 @@ try {
 | `scripts/diagnose-enrichment.mjs` | Enrichment API 诊断 |
 | `scripts/check-data-distribution.mjs` | 数据分布检查 |
 | `scripts/backfill-sharpe-ratio.mjs` | Sharpe ratio 回填 |
-
-## Self-Improvement Rules
-Every Friday (via `/weekly-self-check` or OpenClaw cron):
-- Read `pipeline_job_stats` view: find lowest success rates, recurring errors
-- Read `trader_anomalies`: find data quality patterns
-- Check Sentry/logs for repeated errors
-- Write findings to `/docs/IMPROVEMENTS.md`
-- Auto-fix low-risk issues (error handling, logging, <3 files)
-- Flag high-risk changes for human confirmation
 
 ## Quick Reference
 | Action | Command/Location |

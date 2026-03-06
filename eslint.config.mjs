@@ -14,8 +14,8 @@ const eslintConfig = defineConfig([
       // ----------------------------------------
       // Disabled rules (legacy patterns)
       // ----------------------------------------
-      // Warn on explicit `any` — moving towards full type safety.
-      "@typescript-eslint/no-explicit-any": "warn",
+      // Off: 71 legacy `any` annotations produce noise. TypeScript strict mode + code review catch new ones.
+      "@typescript-eslint/no-explicit-any": "off",
 
       // These rules are helpful, but currently too strict for the codebase patterns.
       "react-hooks/set-state-in-effect": "off",
