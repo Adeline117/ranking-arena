@@ -32,6 +32,9 @@ const SOURCE = 'bitget_futures'
 const TARGET = 500
 const PAGE_SIZE = 50
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+// VPS Playwright scraper for WAF-protected exchanges
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
 /** Bitget API period values */
 const PERIOD_MAP: Record<string, string> = {
@@ -271,7 +274,31 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
     }
   }
 
-  // Strategy 3: VPS proxy fallback for geo/WAF blocks
+  // Strategy 3: VPS Playwright scraper (browser-based bypass)
+  if (allTraders.length === 0 && VPS_SCRAPER_KEY) {
+    try {
+      logger.warn('[bitget-futures] Trying VPS Playwright scraper...')
+      const url = `${VPS_SCRAPER_URL}/bitget/leaderboard`
+      const res = await fetch(url, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(60_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as BitgetResponse
+        if (data.code === '00000' || data.code === 0 || data.code === '0') {
+          const list = data.data?.traderList || data.data?.list || []
+          if (list.length > 0) {
+            allTraders.push(...list)
+            logger.info(`[bitget-futures] VPS scraper got ${allTraders.length} traders`)
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(`[bitget-futures] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // Strategy 4: VPS generic proxy fallback for geo/WAF blocks
   if (allTraders.length === 0) {
     const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
     if (vpsUrl) {
