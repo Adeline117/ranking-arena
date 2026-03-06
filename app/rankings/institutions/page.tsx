@@ -214,7 +214,7 @@ export default function InstitutionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [category, sort, debouncedSearch, language])
+  }, [category, sort, debouncedSearch, language]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   useEffect(() => {
     fetchData()
@@ -401,7 +401,7 @@ export default function InstitutionsPage() {
 }
 
 function InstitutionCard({ institution, language }: { institution: Institution; language: 'zh' | 'en' }) {
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
   const name = language === 'zh' ? (institution.name_zh || institution.name) : institution.name
   const desc = language === 'zh' ? (institution.description_zh || institution.description) : institution.description
 
