@@ -3532,6 +3532,52 @@ const en = {
     selected: 'Selected',
     next: 'Next',
 
+    // isZh migration - common
+    activity: 'Activity',
+    aBook: 'a book',
+    allItemsLoaded: 'All items loaded',
+    failedToLoadRetry: 'Failed to load, please retry',
+    featured: 'Featured',
+    followedTrader: 'Followed trader',
+    inGroup: 'in',
+    institutions: 'Institutions',
+    joinedGroup: 'Joined group',
+    noInstitutionsFound: 'No institutions found',
+    noItemsFound: 'No items found',
+    noRatingsYet: 'No ratings yet',
+    noRecentActivity: 'No recent activity',
+    noToolsFound: 'No tools found',
+    prev: 'Prev',
+    publishedAPost: 'Published a post',
+    tools: 'Tools',
+    tradingLibrary: 'Trading Library',
+    tryDifferentCategory: 'Try a different category',
+    tryDifferentKeywords: 'Try different keywords',
+    unknownGroup: 'Unknown group',
+
+    // isZh migration - rankings
+    discoverRateInstitutions: 'Discover and rate top institutions in crypto',
+    discoverRateTools: 'Discover and rate top tools in crypto',
+    searchByTitleAuthor: 'Search by title, author, or keyword...',
+    searchInstitutions: 'Search institutions...',
+    searchTools: 'Search tools...',
+    top10Books: 'Top 10 Books',
+    top10Exchanges: 'Top 10 Exchanges',
+    top10Funds: 'Top 10 Funds',
+    top10Papers: 'Top 10 Papers',
+    top10Projects: 'Top 10 Projects',
+    top10QuantPlatforms: 'Top 10 Quant Platforms',
+    top10Scripts: 'Top 10 Scripts',
+    top10TradingTools: 'Top 10 Trading Tools',
+    top10Whitepapers: 'Top 10 Whitepapers',
+
+    // isZh migration - epub/notes (additional keys)
+    epubEnterKeyword: 'Enter keyword...',
+    epubHighlightsNotes: 'Highlights & Notes',
+    epubNoHighlightsYet: 'No highlights yet.\nSelect text to add.',
+    epubReadingStats: 'Reading Statistics',
+    notesHighlights: 'Notes & Highlights',
+
 // Filter
 grade: 'Grade',
 
