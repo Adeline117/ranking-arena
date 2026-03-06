@@ -55,14 +55,40 @@ async function fetchWithProxyFallback<T>(
     const msg = err instanceof Error ? err.message : ''
     // If geo-blocked or WAF blocked, try proxy
     if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
+      // Try CF Worker proxy
       if (PROXY_URL) {
-        const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
-        return await fetchJson<T>(proxyTarget, {
+        try {
+          const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+          return await fetchJson<T>(proxyTarget, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: opts.body,
+            timeoutMs: opts.timeoutMs,
+          })
+        } catch (_cfErr) {
+          // CF proxy failed, try VPS
+        }
+      }
+
+      // Try VPS proxy
+      const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+      if (vpsUrl) {
+        const res = await fetch(vpsUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: opts.body,
-          timeoutMs: opts.timeoutMs,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+          },
+          body: JSON.stringify({
+            url,
+            method: opts.method || 'POST',
+            headers: opts.headers || {},
+            body: opts.body || null,
+          }),
+          signal: AbortSignal.timeout(opts.timeoutMs || 20000),
         })
+        if (!res.ok) throw new Error(`VPS proxy HTTP ${res.status}`)
+        return (await res.json()) as T
       }
     }
     throw err
