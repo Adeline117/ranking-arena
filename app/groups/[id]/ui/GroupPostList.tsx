@@ -518,7 +518,7 @@ function PostListItem(props: PostListItemProps) {
                   overflow: 'hidden', position: 'relative',
                 }}>
                   {post.author_avatar_url ? (
-                    <Image src={post.author_avatar_url} alt="" fill sizes="22px" style={{ objectFit: 'cover' }} />
+                    <Image src={post.author_avatar_url} alt={post.author_handle || 'User avatar'} fill sizes="22px" style={{ objectFit: 'cover' }} />
                   ) : (
                     <span style={{ color: tokens.colors.white, fontSize: 10, fontWeight: 700 }}>
                       {(post.author_handle || 'U').charAt(0).toUpperCase()}
@@ -839,7 +839,7 @@ function CommentsSection(props: CommentsSectionProps) {
                         overflow: 'hidden', position: 'relative' as const,
                       }}>
                         {comment.author_avatar_url ? (
-                          <Image src={comment.author_avatar_url} alt="" fill sizes="24px" style={{ objectFit: 'cover' }} />
+                          <Image src={comment.author_avatar_url} alt={comment.author_handle || 'User avatar'} fill sizes="24px" style={{ objectFit: 'cover' }} />
                         ) : (
                           <span style={{ color: tokens.colors.white, fontSize: 9, fontWeight: 700 }}>
                             {(comment.author_handle || 'U').charAt(0).toUpperCase()}
@@ -918,7 +918,7 @@ function CommentsSection(props: CommentsSectionProps) {
                               overflow: 'hidden', position: 'relative' as const,
                             }}>
                               {reply.author_avatar_url ? (
-                                <Image src={reply.author_avatar_url} alt="" fill sizes="20px" style={{ objectFit: 'cover' }} />
+                                <Image src={reply.author_avatar_url} alt={reply.author_handle || 'User avatar'} fill sizes="20px" style={{ objectFit: 'cover' }} />
                               ) : (
                                 <span style={{ color: tokens.colors.white, fontSize: 8, fontWeight: 700 }}>
                                   {reply.author_handle.charAt(0).toUpperCase()}

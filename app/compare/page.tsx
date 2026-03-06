@@ -376,7 +376,7 @@ function CompareContent() {
                       {ft.avatar_url ? (
                         <img
                           src={ft.avatar_url}
-                          alt=""
+                          alt={ft.handle || 'Trader avatar'}
                           width={32}
                           height={32}
                           loading="lazy"

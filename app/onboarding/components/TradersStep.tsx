@@ -79,7 +79,7 @@ export default function TradersStep({ theme, language, traders, followedTraders,
                   fontSize: 14, fontWeight: 600, color: theme.textPrimary, overflow: 'hidden',
                 }}>
                   {t.avatar_url ? (
-                    <Image src={t.avatar_url} alt="" width={36} height={36} loading="lazy" unoptimized style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                    <Image src={t.avatar_url} alt={formatTraderName(t)} width={36} height={36} loading="lazy" unoptimized style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
                   ) : (
                     (formatTraderName(t)).charAt(0).toUpperCase()
                   )}

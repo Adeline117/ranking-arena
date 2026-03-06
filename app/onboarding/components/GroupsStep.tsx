@@ -65,7 +65,7 @@ export default function GroupsStep({ theme, language, groups, joinedGroups, load
                   fontSize: 16, fontWeight: 600, color: theme.textPrimary, overflow: 'hidden',
                 }}>
                   {g.avatar_url ? (
-                    <Image src={g.avatar_url} alt="" width={40} height={40} loading="lazy" unoptimized style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }} />
+                    <Image src={g.avatar_url} alt={displayName} width={40} height={40} loading="lazy" unoptimized style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }} />
                   ) : (
                     displayName.charAt(0).toUpperCase()
                   )}
