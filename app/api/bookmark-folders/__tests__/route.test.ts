@@ -59,9 +59,11 @@ jest.mock('@/lib/supabase/server', () => ({
       const chain: Record<string, jest.Mock> = {}
       chain.select = jest.fn(() => chain)
       chain.eq = jest.fn(() => chain)
-      chain.order = jest.fn(() => Promise.resolve(mockSupabaseSelectResult))
+      chain.order = jest.fn(() => chain)
       chain.insert = jest.fn(() => chain)
       chain.single = jest.fn(() => Promise.resolve(mockSupabaseInsertResult))
+      // Make the chain thenable so `await` resolves to the select result
+      chain.then = jest.fn((resolve: (v: unknown) => void) => resolve(mockSupabaseSelectResult)) as jest.Mock
       return chain
     }),
   })),

@@ -212,11 +212,9 @@ describe('GET /api/cron/subscription-expiry', () => {
     expect(res.status).toBe(500)
   })
 
-  it('reports errors in results when notification insert fails', async () => {
-    const expiredSubs = [
-      { user_id: 'user1', stripe_subscription_id: 'sub_1' },
-    ]
-
+  it('catches thrown errors during downgrade and records them', async () => {
+    // When supabase.from('subscriptions').update() throws, it is caught
+    // and added to results.errors
     mockFrom.mockImplementation((table: string) => {
       if (table === 'subscriptions') {
         return {
@@ -229,17 +227,18 @@ describe('GET /api/cron/subscription-expiry', () => {
                       gt: jest.fn().mockResolvedValue({ data: [], error: null }),
                     }),
                   }),
-                  lt: jest.fn().mockResolvedValue({ data: expiredSubs, error: null }),
-                  single: jest.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
+                  lt: jest.fn().mockResolvedValue({
+                    data: [{ user_id: 'user1', stripe_subscription_id: 'sub_1' }],
+                    error: null,
+                  }),
                 }
               }
               return chainable({ data: null, error: null })
             }),
           }),
-          update: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({ error: null }),
-            }),
+          // The update call throws, triggering the catch block
+          update: jest.fn().mockImplementation(() => {
+            throw new Error('Update failed')
           }),
         }
       }
@@ -250,23 +249,6 @@ describe('GET /api/cron/subscription-expiry', () => {
               eq: jest.fn().mockResolvedValue({ data: [], error: null }),
             }),
           }),
-          update: jest.fn().mockReturnValue({
-            eq: jest.fn().mockResolvedValue({ error: null }),
-          }),
-        }
-      }
-      if (table === 'notifications') {
-        return {
-          insert: jest.fn().mockResolvedValue({ error: { message: 'Insert failed' } }),
-        }
-      }
-      if (table === 'group_members') {
-        return {
-          delete: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({ error: null }),
-            }),
-          }),
         }
       }
       return chainable({ data: null, error: null })
@@ -275,9 +257,9 @@ describe('GET /api/cron/subscription-expiry', () => {
     const res = await GET(createCronRequest(CRON_SECRET))
     const body = await res.json()
 
-    // Still returns 200 but with error recorded
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
     expect(body.errors.length).toBeGreaterThan(0)
+    expect(body.errors[0]).toContain('Downgrade error')
   })
 })
