@@ -22,9 +22,8 @@ type ShelfBook = {
 }
 
 export default function BookshelfTab() {
-  const { language, t } = useLanguage()
+  const { t } = useLanguage()
   useToast()
-  const isZh = language === 'zh'
 
   const [books, setBooks] = useState<ShelfBook[]>([])
   const [loading, setLoading] = useState(true)
@@ -92,14 +91,14 @@ export default function BookshelfTab() {
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         </svg>
         <p style={{ fontSize: 16, marginBottom: 12 }}>
-          {isZh ? '登录后查看你的书架' : 'Login to see your bookshelf'}
+          {t('bookshelfLoginPrompt')}
         </p>
         <a href="/login" style={{
           display: 'inline-block', padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
-          {isZh ? '去登录' : 'Login'}
+          {t('bookshelfLogin')}
         </a>
       </div>
     )
@@ -110,9 +109,9 @@ export default function BookshelfTab() {
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', scrollbarWidth: 'none' }}>
         {([
-          { key: 'all' as const, label: isZh ? '全部' : 'All' },
-          { key: 'want_to_read' as const, label: isZh ? '想读' : 'Want to Read' },
-          { key: 'read' as const, label: isZh ? '已读' : 'Read' },
+          { key: 'all' as const, label: t('bookshelfAll') },
+          { key: 'want_to_read' as const, label: t('bookshelfWantToRead') },
+          { key: 'read' as const, label: t('bookshelfRead') },
         ]).map(opt => (
           <button
             key={opt.key}
@@ -189,10 +188,10 @@ export default function BookshelfTab() {
               <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
             </svg>
             <p style={{ fontSize: 20, fontWeight: 800, marginBottom: 6, letterSpacing: '0.5px' }}>
-              {isZh ? '探索书城' : 'Explore Library'}
+              {t('bookshelfExploreLibrary')}
             </p>
             <p style={{ fontSize: 14, opacity: 0.85, marginBottom: 20 }}>
-              {isZh ? '60,000+ 本书籍、论文、白皮书等你发现' : '60,000+ books, papers & whitepapers await'}
+              {t('bookshelfExploreDesc')}
             </p>
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -200,7 +199,7 @@ export default function BookshelfTab() {
               background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)',
               fontWeight: 700, fontSize: 15, letterSpacing: '0.3px',
             }}>
-              {isZh ? '立即探索' : 'Browse Now'}
+              {t('bookshelfBrowseNow')}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>
@@ -242,7 +241,7 @@ export default function BookshelfTab() {
                   color: book.status === 'read' ? tokens.colors.accent.success : tokens.colors.accent.brand,
                   fontWeight: 600,
                 }}>
-                  {book.status === 'read' ? (isZh ? '已读' : 'Read') : (isZh ? '想读' : 'Want to Read')}
+                  {book.status === 'read' ? t('bookshelfStatusRead') : t('bookshelfStatusWantToRead')}
                 </span>
               </div>
 
@@ -277,7 +276,7 @@ export default function BookshelfTab() {
               <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
             </svg>
             <span style={{ fontSize: 13, fontWeight: 500, marginTop: 8 }}>
-              {isZh ? '去书城' : 'Browse'}
+              {t('bookshelfBrowse')}
             </span>
           </Link>
         </div>

@@ -6,6 +6,8 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import { BitgetFuturesLeaderboardResponseSchema, BitgetFuturesDetailResponseSchema, BitgetFuturesTimeseriesResponseSchema } from './schemas'
 import type {
   DiscoverResult,
   ProfileResult,
@@ -45,10 +47,11 @@ export class BitgetFuturesConnector extends BaseConnector {
     const timeRange = WINDOW_MAP[window]
     const pageNo = Math.floor(offset / limit) + 1
 
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${pageNo}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BitgetFuturesLeaderboardResponseSchema, _rawLb, 'bitget-futures/leaderboard')
 
     const list = data?.data?.list || data?.data || []
 
@@ -73,10 +76,11 @@ export class BitgetFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BitgetFuturesDetailResponseSchema, _rawProfile, 'bitget-futures/profile')
 
     const info = data?.data
 
@@ -111,10 +115,11 @@ export class BitgetFuturesConnector extends BaseConnector {
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     const timeRange = WINDOW_MAP[window]
 
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}&timeRange=${timeRange}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BitgetFuturesDetailResponseSchema, _rawSnap, 'bitget-futures/snapshot')
 
     const info = data?.data
 
@@ -149,10 +154,11 @@ export class BitgetFuturesConnector extends BaseConnector {
   }
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
-    const data = await this.request<any>(
+    const _rawTs = await this.request<any>(
       `https://www.bitget.com/v1/trigger/trace/public/trader/profitList?traderId=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BitgetFuturesTimeseriesResponseSchema, _rawTs, 'bitget-futures/timeseries')
 
     const profitList = data?.data || []
 
