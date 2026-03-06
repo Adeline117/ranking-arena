@@ -145,7 +145,7 @@ export abstract class BaseExchangeConnector {
  * Rate limiter for API calls
  */
 export class RateLimiter {
-  private queue: Array<() => Promise<any>> = []
+  private queue: Array<() => Promise<unknown>> = []
   private running = 0
   private maxConcurrent: number
   private delayMs: number

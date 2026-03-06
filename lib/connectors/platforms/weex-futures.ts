@@ -35,7 +35,7 @@ export class WeexFuturesConnector extends BaseConnector {
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
     }
     const page = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       `https://www.weex.com/api/v1/copy-trade/public/trader/rank?page=${page}&size=${limit}&sort=roi&period=${window}`,
       { method: 'GET' }
     )
@@ -53,7 +53,7 @@ export class WeexFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const _rawProfile = await this.request<any>(
+    const _rawProfile = await this.request<Record<string, unknown>>(
       `https://www.weex.com/api/v1/copy-trade/public/trader/${traderKey}/info`,
       { method: 'GET' }
     )
@@ -81,7 +81,7 @@ export class WeexFuturesConnector extends BaseConnector {
         fetched_at: new Date().toISOString(),
       }
     }
-    const _rawSnap = await this.request<any>(
+    const _rawSnap = await this.request<Record<string, unknown>>(
       `https://www.weex.com/api/v1/copy-trade/public/trader/${traderKey}/info?period=${window}`,
       { method: 'GET' }
     )

@@ -27,9 +27,6 @@ export interface VerifyResult {
 
 type VerifyFn = () => Promise<VerifyResult>
 
-/** Loose shape for external API responses checked by validators */
-type ApiResponse = Record<string, any>
-
 // ── Helpers ──
 
 async function verifyEndpoint(
