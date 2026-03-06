@@ -245,6 +245,7 @@ export default function GroupsFeedPage() {
   const { email, userId } = useAuthSession()
   const [myGroups, setMyGroups] = useState<Group[]>([])
   const [_loadingGroups, setLoadingGroups] = useState(true)
+  const [_groupsError, setGroupsError] = useState(false)
   const [subTab, setSubTab] = useState<SubTabKey>('recommended')
 
   // Load user's joined groups
@@ -276,6 +277,7 @@ export default function GroupsFeedPage() {
         setMyGroups(groupsData || [])
       } catch (err) {
         logger.error('Failed to load groups:', err)
+        setGroupsError(true)
       } finally {
         setLoadingGroups(false)
       }

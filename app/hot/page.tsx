@@ -50,6 +50,7 @@ function HotContent() {
   const [_loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
+  const [postsError, setPostsError] = useState(false)
 
   // Tabbed sections state
   const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
@@ -158,6 +159,7 @@ function HotContent() {
   // Load hot posts from cache API
   const loadPosts = useCallback(async () => {
     setLoadingPosts(true)
+    setPostsError(false)
     try {
       const headers: Record<string, string> = {}
       if (accessToken) {
@@ -212,6 +214,7 @@ function HotContent() {
     } catch (e) {
       logger.error('Failed to load posts:', e)
       setPosts([])
+      setPostsError(true)
       showToast(t('loadHotPostsFailed'), 'error')
     } finally {
       setLoadingPosts(false)
@@ -734,6 +737,11 @@ function HotContent() {
                   {loadingPosts ? (
                     <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
                       <Text color="tertiary">{t('loading')}</Text>
+                    </Box>
+                  ) : postsError ? (
+                    <Box style={{ padding: '48px 24px', textAlign: 'center' }}>
+                      <Text color="tertiary" style={{ marginBottom: 12 }}>{t('loadFailed')}</Text>
+                      <button onClick={loadPosts} style={{ color: tokens.colors.accent.primary, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', fontSize: 14 }}>{t('retry')}</button>
                     </Box>
                   ) : visibleHot.length === 0 ? (
                     <div className="empty-state" style={{ padding: '64px 24px' }}>
