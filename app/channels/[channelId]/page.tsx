@@ -73,7 +73,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
 
   useEffect(() => {
     if (params && typeof params === 'object' && 'then' in params) {
-      (params as Promise<{ channelId: string }>).then(r => setChannelId(r.channelId)).catch(() => { /* params resolution should not fail */ })
+      (params as Promise<{ channelId: string }>).then(r => setChannelId(r.channelId)).catch(() => { /* params resolution should not fail */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
     }
   }, [params])
 

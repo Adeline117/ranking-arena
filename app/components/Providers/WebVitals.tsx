@@ -54,7 +54,7 @@ export function WebVitals() {
           if (rating === 'poor') {
             Sentry.setTag(`poor_${name.toLowerCase()}`, 'true')
           }
-        }).catch(() => {
+        }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
           // Sentry not available
         })
       }
@@ -80,7 +80,7 @@ export function WebVitals() {
             body,
             headers: { 'Content-Type': 'application/json' },
             keepalive: true,
-          }).catch(() => {
+          }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
             // Ignore analytics errors
           })
         }

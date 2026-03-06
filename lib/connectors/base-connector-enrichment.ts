@@ -115,7 +115,7 @@ export abstract class BaseExchangeConnector {
   /**
    * Parse number safely (no fabricated values!)
    */
-  protected parseNum(v: any): number | null {
+  protected parseNum(v: unknown): number | null {
     if (v == null || v === '') return null
     const n = parseFloat(String(v).replace('%', '').trim())
     return isNaN(n) ? null : n

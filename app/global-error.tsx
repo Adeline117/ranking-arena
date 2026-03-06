@@ -29,7 +29,7 @@ export default function GlobalError({
           digest: error.digest,
         },
       })
-    }).catch(() => {
+    }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
       // Sentry 加载失败时静默处理
     })
   }, [error])

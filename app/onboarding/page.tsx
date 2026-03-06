@@ -93,7 +93,7 @@ export default function OnboardingPage() {
     }
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) setUserId(data.user.id)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for onboarding */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for onboarding */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [router])
 
   const fetchTraders = useCallback(async () => {

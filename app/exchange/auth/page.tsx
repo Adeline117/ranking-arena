@@ -39,7 +39,7 @@ function ExchangeAuthContent() {
         return
       }
       setUserId(data.user.id)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for exchange auth page */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for exchange auth page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [router])
 
   const handleOAuth = async (exchange: string) => {

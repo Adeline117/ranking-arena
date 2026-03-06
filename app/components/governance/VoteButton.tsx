@@ -71,7 +71,7 @@ export function VoteButton({
     let cancelled = false
     checkHasVoted(proposalId, address).then((result) => {
       if (!cancelled && result) setVoted(true)
-    }).catch(() => { /* ignore check errors */ })
+    }).catch(() => { /* ignore check errors */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
     return () => { cancelled = true }
   }, [address, proposalId, hasVoted])
 

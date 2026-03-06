@@ -3,6 +3,13 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { z } from 'zod'
+
+const InteractionSchema = z.object({
+  action: z.enum(['like', 'dislike', 'view', 'share', 'bookmark', 'follow', 'unfollow']),
+  target_type: z.enum(['post', 'comment', 'trader', 'group', 'user']),
+  target_id: z.string().min(1).max(255),
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -37,15 +44,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { action, target_type, target_id } = body as {
-      action?: string
-      target_type?: string
-      target_id?: string
+    const parsed = InteractionSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`) },
+        { status: 400 }
+      )
     }
-
-    if (!action || !target_type || !target_id) {
-      return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
-    }
+    const { action, target_type, target_id } = parsed.data
 
     const supabase = getSupabaseAdmin()
     await supabase.from('user_interactions').insert({

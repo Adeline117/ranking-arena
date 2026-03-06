@@ -69,7 +69,7 @@ export class ErrorBoundary extends Component<Props, State> {
           },
           tags: { errorBoundary: true },
         })
-      }).catch(() => {
+      }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
         // Sentry 加载失败时静默降级
       })
     }

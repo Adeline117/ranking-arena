@@ -78,7 +78,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
   useEffect(() => {
     supabase.auth.getUser().then(({ data: userData }) => {
       setCurrentUserId(userData.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader profile */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader profile */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   const displayName = formatDisplayName(data.handle, data.source)

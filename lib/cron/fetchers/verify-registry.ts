@@ -32,7 +32,8 @@ async function verifyEndpoint(
     method?: string
     headers?: Record<string, string>
     body?: unknown
-    validateResponse?: (data: unknown) => boolean
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    validateResponse?: (data: any) => boolean
     timeoutMs?: number
   }
 ): Promise<VerifyResult> {

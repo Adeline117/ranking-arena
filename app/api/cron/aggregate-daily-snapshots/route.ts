@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: Fetch ALL previous daily snapshots in one query
-    const traderKeys = Array.from(snapshotMap.keys())
+    const _traderKeys = Array.from(snapshotMap.keys())
     const platforms = [...new Set(Array.from(snapshotMap.values()).map(s => s.source))]
 
     // Get the latest daily snapshot before dateStr for each trader

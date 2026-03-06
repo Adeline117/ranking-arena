@@ -87,7 +87,7 @@ function ActivityLogSection({ groupId }: { groupId: string }) {
 export default function GroupManagePage({ params }: { params: Promise<{ id: string }> }) {
   const [groupId, setGroupId] = useState<string>('')
   useEffect(() => {
-    if (params && typeof params === 'object' && 'then' in params) { (params as Promise<{ id: string }>).then(resolved => setGroupId(resolved.id)).catch(() => { /* Intentionally swallowed: params resolution should not fail */ }) }
+    if (params && typeof params === 'object' && 'then' in params) { (params as Promise<{ id: string }>).then(resolved => setGroupId(resolved.id)).catch(() => { /* Intentionally swallowed: params resolution should not fail */ }) } // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
     else { setGroupId(String((params as { id: string })?.id ?? '')) }
   }, [params])
 

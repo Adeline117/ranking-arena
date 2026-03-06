@@ -64,8 +64,8 @@ export default function PortfolioPage() {
       }
       supabase.auth.getSession().then(({ data: sessionData }) => {
         setToken(sessionData.session?.access_token ?? null)
-      }).catch(() => { /* Intentionally swallowed: session token fetch non-critical */ })
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for portfolio page */ })
+      }).catch(() => { /* Intentionally swallowed: session token fetch non-critical */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for portfolio page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [router])
 
   const fetchHeaders = useCallback((): Record<string, string> => {

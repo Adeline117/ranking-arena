@@ -187,7 +187,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setCurrentUserId(data.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader page */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   // Show error toast when SWR fetch fails with no cached data (skip 404s — empty state handles those)

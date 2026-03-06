@@ -12,7 +12,7 @@ export interface ApiKeyValidationResult {
   nickname?: string
   permissions?: string[]
   error?: string
-  details?: any
+  details?: Record<string, unknown>
 }
 
 export interface ExchangeCredentials {

@@ -205,7 +205,7 @@ export default function TraderAboutCard({
      
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for about card */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for about card */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   const handleFollowersClick = () => {

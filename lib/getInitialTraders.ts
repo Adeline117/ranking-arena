@@ -75,9 +75,9 @@ export async function fetchLeaderboardFromDB(
     const result = await fetchLeaderboardFromDBInner(supabase, timeRange, limit, controller.signal)
     clearTimeout(timer)
     return result
-  } catch (err: any) {
+  } catch (err: unknown) {
     clearTimeout(timer)
-    if (err?.name === 'AbortError' || err?.message?.includes('timeout')) {
+    if ((err as any)?.name === 'AbortError' || (err as any)?.message?.includes('timeout')) {
       logger.warn('[getInitialTraders] Timed out — returning empty (ISR will fill on next request)')
     } else {
       logger.error('[getInitialTraders] Error:', err)

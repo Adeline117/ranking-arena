@@ -25,7 +25,7 @@ function ExchangeAuthorizePageContent() {
      
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for authorize page */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for authorize page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
 
     const exchangeParam = searchParams.get('exchange')
     if (!exchangeParam) {

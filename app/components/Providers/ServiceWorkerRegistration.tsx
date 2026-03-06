@@ -37,7 +37,7 @@ export function ServiceWorkerRegistration() {
               })
             })
           })
-          .catch(() => {
+          .catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
             // Registration failed silently
           })
 
