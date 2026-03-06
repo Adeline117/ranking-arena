@@ -284,17 +284,28 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
   ): Promise<{ pnl: number; roi: number; nTrades: number; winRate: number | null; maxDrawdownPct: number | null }> {
     const startTime = Date.now() - WINDOW_TO_MS[window];
 
-    const response = await this.fetchWithTimeout({
-      type: 'userFills',
-      user: address,
-      startTime,
-    });
+    // Fetch fills and leaderboard in parallel so we can get windowed ROI
+    const period = WINDOW_TO_PERIOD[window];
+    const [fillsResponse, lbEntries] = await Promise.all([
+      this.fetchWithTimeout({
+        type: 'userFills',
+        user: address,
+        startTime,
+      }),
+      this.fetchLeaderboard(period).catch(() => [] as HyperliquidLeaderEntry[]),
+    ]);
 
-    if (!response.ok) {
-      return { pnl: 0, roi: 0, nTrades: 0, winRate: null, maxDrawdownPct: null };
+    // Look up ROI from leaderboard (accurate per-window value, decimal e.g. 0.35)
+    const lbEntry = lbEntries.find(
+      (e) => e.ethAddress.toLowerCase() === address.toLowerCase(),
+    );
+    const lbRoi = lbEntry?.roi ?? 0;
+
+    if (!fillsResponse.ok) {
+      return { pnl: 0, roi: lbRoi, nTrades: 0, winRate: null, maxDrawdownPct: null };
     }
 
-    const rawFills = await response.json();
+    const rawFills = await fillsResponse.json();
     const fills: HyperliquidFill[] = warnValidate(z.array(HyperliquidFillSchema), rawFills, 'hyperliquid/user-fills') as HyperliquidFill[];
 
     let totalPnl = 0;
@@ -330,8 +341,6 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     const winRate = totalTrades > 0 ? wins / totalTrades : null;
 
     // Convert MDD to percentage relative to peak equity
-    // MDD % = (peak - trough) / peak * 100
-    // Use peak PnL as reference; if no meaningful peak, leave null
     let maxDrawdownPct: number | null = null;
     if (peakPnl > 0 && maxDrawdown > 0) {
       maxDrawdownPct = (maxDrawdown / peakPnl) * 100;
@@ -339,7 +348,7 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
 
     return {
       pnl: totalPnl,
-      roi: 0, // Would need initial equity to calculate
+      roi: lbRoi,
       nTrades: fills.length,
       winRate,
       maxDrawdownPct,

@@ -29,8 +29,10 @@ function createConnector() {
 function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
     status,
-    headers: { get: () => null },
+    ok: status >= 200 && status < 300,
+    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
     json: async () => body,
+    text: async () => JSON.stringify(body),
   })
 }
 
@@ -164,8 +166,10 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 429,
-        headers: { get: () => '30' },
+        ok: false,
+        headers: { get: (key: string) => key === 'retry-after' ? '30' : key === 'content-type' ? 'application/json' : null },
         json: async () => ({}),
+        text: async () => '{}',
       })
 
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)
@@ -210,26 +214,49 @@ describe('HyperliquidPerpConnector', () => {
       assetPositions: [],
     }
 
-    test('returns snapshot with computed ROI from clearinghouse state', async () => {
+    const validLeaderboardWithTrader = {
+      leaderboardRows: [
+        { ethAddress: '0xabc123', displayName: 'TestWhale', roi: '0.35', pnl: '120000' },
+        { ethAddress: '0xother', displayName: 'Other', roi: '0.10', pnl: '5000' },
+      ],
+    }
+
+    const emptyLeaderboard = { leaderboardRows: [] }
+
+    test('returns snapshot with ROI from leaderboard', async () => {
       const connector = createConnector()
+      // fetchTraderSnapshot now makes 2 parallel requests: clearinghouse + leaderboard
       mockFetchResponse(validClearinghouseState)
+      mockFetchResponse(validLeaderboardWithTrader)
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.pnl).toBe(50000)
       expect(result!.metrics.aum).toBe(250000)
-      // ROI = (totalRawPnl / (accountValue - totalRawPnl)) * 100
-      // ROI = (50000 / (250000 - 50000)) * 100 = 25
+      // ROI from leaderboard: 0.35 * 100 = 35
+      expect(result!.metrics.roi).toBe(35)
+    })
+
+    test('falls back to clearinghouse ROI when trader not on leaderboard', async () => {
+      const connector = createConnector()
+      mockFetchResponse(validClearinghouseState)
+      mockFetchResponse(emptyLeaderboard)
+
+      const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
+
+      expect(result).not.toBeNull()
+      // Fallback: ROI = (50000 / (250000 - 50000)) * 100 = 25
       expect(result!.metrics.roi).toBe(25)
     })
 
-    test('ROI is null when accountValue is 0', async () => {
+    test('ROI is null when accountValue is 0 and trader not on leaderboard', async () => {
       const connector = createConnector()
       mockFetchResponse({
         marginSummary: { accountValue: '0', totalRawPnl: '0' },
         assetPositions: [],
       })
+      mockFetchResponse(emptyLeaderboard)
 
       const result = await connector.fetchTraderSnapshot('0xempty', '7d')
 
@@ -241,6 +268,7 @@ describe('HyperliquidPerpConnector', () => {
     test('DEX-specific fields are null', async () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
+      mockFetchResponse(validLeaderboardWithTrader)
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '7d')
 
@@ -255,6 +283,7 @@ describe('HyperliquidPerpConnector', () => {
     test('quality flags reflect DEX limitations', async () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
+      mockFetchResponse(validLeaderboardWithTrader)
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
 
@@ -270,24 +299,28 @@ describe('HyperliquidPerpConnector', () => {
     test('window_native is false for 7d (non-native for clearinghouse)', async () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
+      mockFetchResponse(validLeaderboardWithTrader)
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '7d')
 
       expect(result).not.toBeNull()
-      // 7d is not native for clearinghouse
       expect(result!.quality_flags.window_native).toBe(false)
     })
 
-    test('sends correct request body for clearinghouse state', async () => {
+    test('sends correct request bodies for both API calls', async () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
+      mockFetchResponse(validLeaderboardWithTrader)
 
       await connector.fetchTraderSnapshot('0xabc123', '30d')
 
-      const call = mockFetch.mock.calls[0]
-      const body = JSON.parse(call[1].body)
-      expect(body.type).toBe('clearinghouseState')
-      expect(body.user).toBe('0xabc123')
+      // Two parallel requests: clearinghouse + leaderboard
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      const bodies = mockFetch.mock.calls.map((call: unknown[]) => JSON.parse((call[1] as { body: string }).body))
+      const clearinghouseCall = bodies.find((b: Record<string, unknown>) => b.type === 'clearinghouseState')
+      const leaderboardCall = bodies.find((b: Record<string, unknown>) => b.type === 'leaderboard')
+      expect(clearinghouseCall).toEqual({ type: 'clearinghouseState', user: '0xabc123' })
+      expect(leaderboardCall).toEqual({ type: 'leaderboard', timeWindow: 'month' })
     })
   })
 
@@ -383,8 +416,10 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 500,
-        headers: { get: () => null },
+        ok: false,
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({}),
+        text: async () => '{}',
       })
 
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
@@ -394,8 +429,10 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetch.mockResolvedValueOnce({
         status: 400,
-        headers: { get: () => null },
+        ok: false,
+        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
         json: async () => ({ error: 'Bad request' }),
+        text: async () => JSON.stringify({ error: 'Bad request' }),
       })
 
       await expect(connector.discoverLeaderboard('7d')).rejects.toThrow(ConnectorError)

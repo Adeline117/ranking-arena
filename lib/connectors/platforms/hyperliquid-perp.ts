@@ -87,22 +87,54 @@ export class HyperliquidPerpConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    // Get clearinghouse state for current equity
-    const _rawState = await this.request<Record<string, unknown>>(
-      'https://api.hyperliquid.xyz/info',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'clearinghouseState', user: traderKey }),
-      }
-    )
+    // Fetch leaderboard for the requested window to get accurate ROI
+    const timeWindow = window === '7d' ? 'day' : window === '30d' ? 'month' : 'allTime'
+
+    const [_rawState, _rawLb] = await Promise.all([
+      // Get clearinghouse state for current equity / AUM
+      this.request<Record<string, unknown>>(
+        'https://api.hyperliquid.xyz/info',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'clearinghouseState', user: traderKey }),
+        }
+      ),
+      // Get leaderboard to look up the trader's windowed ROI
+      this.request<Record<string, unknown>>(
+        'https://api.hyperliquid.xyz/info',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'leaderboard', timeWindow }),
+        }
+      ),
+    ])
+
     const state = warnValidate(HyperliquidClearinghouseResponseSchema, _rawState, 'hyperliquid-perp/clearinghouse')
+    const lbData = warnValidate(HyperliquidLeaderboardResponseSchema, _rawLb, 'hyperliquid-perp/leaderboard-snapshot')
 
     const accountValue = Number(state?.marginSummary?.accountValue) || 0
     const totalRawPnl = Number(state?.marginSummary?.totalRawPnl) || 0
 
-    // Compute approximate ROI (this is simplified; proper implementation would track starting equity)
-    const roi = accountValue > 0 ? (totalRawPnl / (accountValue - totalRawPnl)) * 100 : null
+    // Look up the trader's ROI from the leaderboard (accurate per-window value)
+    const leaderboardRows = lbData?.leaderboardRows || []
+    const traderKeyLower = traderKey.toLowerCase()
+    const lbEntry = Array.isArray(leaderboardRows)
+      ? leaderboardRows.find((row: Record<string, unknown>) => {
+          const addr = String(row.ethAddress || '').toLowerCase()
+          return addr === traderKeyLower
+        })
+      : undefined
+
+    let roi: number | null = null
+    if (lbEntry && lbEntry.roi != null) {
+      // Leaderboard ROI is a decimal (e.g. 0.35 = 35%), convert to percentage
+      roi = Number(lbEntry.roi) * 100
+    } else if (accountValue > 0 && totalRawPnl !== 0) {
+      // Fallback: approximate ROI from clearinghouse state
+      roi = (totalRawPnl / (accountValue - totalRawPnl)) * 100
+    }
 
     const metrics: SnapshotMetrics = {
       roi,
@@ -121,12 +153,12 @@ export class HyperliquidPerpConnector extends BaseConnector {
     const quality_flags: QualityFlags = {
       missing_fields: ['win_rate', 'max_drawdown', 'followers', 'copiers', 'sharpe_ratio', 'sortino_ratio'],
       non_standard_fields: {
-        roi: 'Computed from current account state, not windowed historical. Window accuracy depends on data refresh frequency.',
+        roi: 'Sourced from leaderboard endpoint (per-window). Falls back to clearinghouse approximation if trader not on leaderboard.',
       },
       window_native: window === '30d',  // Only 'month' is truly native
       notes: [
         'Hyperliquid is a DEX - no copy trading features',
-        'ROI computed from clearinghouse state (approximate for windows other than 30d)',
+        'ROI sourced from leaderboard when available, falls back to clearinghouse approximation',
         'Win rate requires trade-level analysis of fills',
       ],
     }

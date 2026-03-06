@@ -238,7 +238,13 @@ export abstract class BaseConnector implements PlatformConnector {
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), this.config.timeout)
 
-        const response = await fetch(url, {
+        // Proxy support: rewrite URL through CF Worker if proxyUrl is configured
+        let fetchUrl = url
+        if (this.config.proxyUrl) {
+          fetchUrl = `${this.config.proxyUrl}/proxy?url=${encodeURIComponent(url)}`
+        }
+
+        const response = await fetch(fetchUrl, {
           ...options,
           signal: controller.signal,
           headers: {
@@ -250,6 +256,19 @@ export abstract class BaseConnector implements PlatformConnector {
         })
 
         clearTimeout(timeout)
+
+        // WAF/CloudFlare detection: check content-type before parsing JSON
+        const contentType = response.headers.get('content-type') || ''
+        if (response.ok && !contentType.includes('application/json')) {
+          this.rateLimiter?.recordFailure()
+          throw new ConnectorError(
+            `WAF/CloudFlare block detected: expected JSON but got ${contentType}`,
+            this.platform,
+            this.marketType,
+            response.status,
+            true // retryable — may succeed after backoff
+          )
+        }
 
         // Rate limited
         if (response.status === 429) {
