@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
       }
 
       logger.info('Hot scores refreshed (full)', { count: fullCount })
+      await plog.success(fullCount ?? 0, { method: 'full' })
       return NextResponse.json({
         success: true,
         count: fullCount,
