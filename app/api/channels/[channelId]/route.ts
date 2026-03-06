@@ -8,6 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:channels:channelId')
 
 export const dynamic = 'force-dynamic'
 
@@ -95,7 +98,8 @@ export async function GET(
       has_more: hasMore,
       my_role: membership.role,
     })
-  } catch {
+  } catch (error) {
+    logger.error('GET_CHANNEL failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -143,7 +147,8 @@ export async function PATCH(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     return NextResponse.json({ channel })
-  } catch {
+  } catch (error) {
+    logger.error('PATCH_CHANNEL failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -177,7 +182,8 @@ export async function DELETE(
     await supabase.from('chat_channels').delete().eq('id', channelId)
 
     return NextResponse.json({ ok: true })
-  } catch {
+  } catch (error) {
+    logger.error('DELETE_CHANNEL failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
