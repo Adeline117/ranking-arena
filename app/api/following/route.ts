@@ -20,8 +20,12 @@ export const dynamic = 'force-dynamic'
 
 const logger = createLogger('following-api')
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+function getSupabaseUrl() {
+  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+}
+function getSupabaseKey() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+}
 
 function followingCacheKey(userId: string): string {
   return `following:${userId}`
@@ -57,7 +61,7 @@ export async function invalidateFollowingCache(userId: string): Promise<void> {
 type FollowingResult = { items: FollowItem[]; traderCount: number; userCount: number }
 
 async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+  const supabase = createClient(getSupabaseUrl(), getSupabaseKey())
 
   // 并行获取关注的交易员和用户
   const [traderFollowsResult, userFollowsResult] = await Promise.all([
@@ -234,7 +238,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Cannot access other users\' following lists' }, { status: 403 })
     }
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
+    if (!getSupabaseUrl() || !getSupabaseKey()) {
       return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
     }
 
