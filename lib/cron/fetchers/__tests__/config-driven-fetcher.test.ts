@@ -17,12 +17,13 @@ import { createConfigDrivenFetcher, type ExchangeConfig } from '../config-driven
 // Mocks
 // ============================================
 
-// Mock the shared module (fetchJson, fetchWithFallback, upsertTraders, sleep)
+// Mock the shared module (fetchJsonWithRetry, fetchWithFallback, upsertTraders, sleep)
 jest.mock('../shared', () => {
   const actual = jest.requireActual('../shared')
   return {
     ...actual,
     fetchJson: jest.fn(),
+    fetchJsonWithRetry: jest.fn(),
     fetchWithFallback: jest.fn(),
     upsertTraders: jest.fn().mockResolvedValue({ saved: 0 }),
     sleep: jest.fn().mockResolvedValue(undefined),
@@ -48,9 +49,9 @@ jest.mock('@/lib/utils/logger', () => ({
   },
 }))
 
-import { fetchJson, fetchWithFallback, upsertTraders } from '../shared'
+import { fetchJsonWithRetry, fetchWithFallback, upsertTraders } from '../shared'
 
-const mockFetchJson = fetchJson as jest.MockedFunction<typeof fetchJson>
+const mockFetchJson = fetchJsonWithRetry as jest.MockedFunction<typeof fetchJsonWithRetry>
 const mockFetchWithFallback = fetchWithFallback as jest.MockedFunction<typeof fetchWithFallback>
 const mockUpsertTraders = upsertTraders as jest.MockedFunction<typeof upsertTraders>
 
@@ -525,7 +526,7 @@ describe('Proxy fallback', () => {
     expect(mockFetchJson).not.toHaveBeenCalled()
   })
 
-  test('uses fetchJson when useProxyFallback is false/absent', async () => {
+  test('uses fetchJsonWithRetry when useProxyFallback is false/absent', async () => {
     const config = createTestConfig()
     const fetcher = createConfigDrivenFetcher(config)
     const supabase = createMockSupabase()

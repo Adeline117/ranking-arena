@@ -256,7 +256,7 @@ function HotContent() {
   useEffect(() => {
     if (activeHotTab !== 'groups') return
     loadGroups()
-  }, [activeHotTab])
+  }, [activeHotTab, loadGroups])
 
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))

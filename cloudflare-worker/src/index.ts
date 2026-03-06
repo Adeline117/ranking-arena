@@ -17,8 +17,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'https://ranking-arena.vercel.app',
 ];
 
-// Thread-local request origin (set per-request in fetch handler)
-let _requestOrigin = '*';
+// Per-request origin (set in fetch handler, never wildcard)
+let _requestOrigin = 'https://www.arenafi.org';
 
 /** Return CORS header value scoped to validated origin */
 function corsOrigin(): string {
@@ -82,14 +82,12 @@ const worker = {
       ? (env.ALLOWED_ORIGINS).split(',').map(o => o.trim())
       : DEFAULT_ALLOWED_ORIGINS;
 
-    // Determine CORS origin for this request
+    // Determine CORS origin for this request — never use wildcard
     if (origin && allowedOrigins.some(o => origin === o || origin.endsWith(o))) {
       _requestOrigin = origin;
-    } else if (origin === '') {
-      // Server-to-server (no Origin header) — use wildcard
-      _requestOrigin = '*';
     } else {
-      _requestOrigin = allowedOrigins[0] || '*';
+      // Server-to-server or unrecognized origin — use first allowed origin
+      _requestOrigin = allowedOrigins[0] || 'https://www.arenafi.org';
     }
 
     if (!allowedOrigins.some(o => origin === o || origin.endsWith(o)) && origin !== '') {
@@ -680,7 +678,7 @@ async function handleBingxLeaderboard(_request: Request, url: URL): Promise<Resp
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (error) {
+  } catch (_error) {
     // Fallback: try bingx.com API path
     try {
       const fallbackUrl = `https://bingx.com/api/copytrading/v1/leaderboard?pageIndex=${pageIndex}&pageSize=${pageSize}&timeType=${timeType}`;
@@ -691,7 +689,7 @@ async function handleBingxLeaderboard(_request: Request, url: URL): Promise<Resp
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': corsOrigin() },
       });
     } catch (_fallbackError) {
-      return Response.json({ error: 'BingX leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+      return Response.json({ error: 'BingX leaderboard proxy error', details: 'Upstream API unavailable' }, {
         status: 500,
         headers: { 'Access-Control-Allow-Origin': corsOrigin() },
       });

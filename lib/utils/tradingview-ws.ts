@@ -76,7 +76,7 @@ interface TradingViewClientWrapper {
   lastTaFetch: number
    
   client: any
-   
+
   charts: Map<string, any>
   connected: boolean
   destroy: () => void

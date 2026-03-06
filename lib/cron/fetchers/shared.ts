@@ -351,6 +351,23 @@ export async function upsertTraders(
   for (let i = 0; i < validated.length; i += BATCH) {
     const batch = validated.slice(i, i + BATCH)
 
+    // Upsert trader_sources (handle + avatar_url for leaderboard display)
+    const sources = batch.map((t) => ({
+      source: t.source,
+      source_trader_id: t.source_trader_id,
+      handle: t.handle || null,
+      avatar_url: t.avatar_url || null,
+      profile_url: t.profile_url || null,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }))
+
+    const { error: srcErr } = await supabase
+      .from('trader_sources')
+      .upsert(sources, { onConflict: 'source,source_trader_id', ignoreDuplicates: false })
+
+    if (srcErr) dataLogger.warn(`[upsert] trader_sources error: ${srcErr.message}`)
+
     // Upsert trader_profiles_v2
     const profiles = batch.map((t) => ({
       platform: t.source,
@@ -470,6 +487,38 @@ export async function fetchJson<T = unknown>(
   } finally {
     clearTimeout(timeout)
   }
+}
+
+/**
+ * fetchJson with automatic retry + exponential backoff.
+ * Retries on 5xx, network errors, and timeouts. Does NOT retry 4xx.
+ */
+export async function fetchJsonWithRetry<T = unknown>(
+  url: string,
+  opts?: Parameters<typeof fetchJson>[1] & { maxRetries?: number }
+): Promise<T> {
+  const { maxRetries = 2, ...fetchOpts } = opts ?? {}
+
+  let lastError: unknown
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchJson<T>(url, fetchOpts)
+    } catch (error) {
+      lastError = error
+      const msg = error instanceof Error ? error.message : ''
+      const is5xx = /HTTP 5\d\d/.test(msg)
+      const isNetwork = /abort|timeout|ECONNRESET|ETIMEDOUT|fetch failed/i.test(msg)
+
+      if (attempt >= maxRetries || (!is5xx && !isNetwork)) {
+        throw error
+      }
+
+      const delay = Math.min(1000 * Math.pow(2, attempt), 8000) * (0.5 + Math.random() * 0.5)
+      dataLogger.warn(`[fetchJsonWithRetry] Attempt ${attempt + 1} failed for ${url}, retrying in ${Math.round(delay)}ms`)
+      await sleep(delay)
+    }
+  }
+  throw lastError
 }
 
 export function sleep(ms: number): Promise<void> {

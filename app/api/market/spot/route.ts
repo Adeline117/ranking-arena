@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { CoinGeckoMarketsResponseSchema, validateCoinGeckoResponse } from './schemas'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,8 @@ export async function GET(_req: NextRequest) {
           throw new Error(`CoinGecko request failed: ${res.status}`)
         }
 
-        const raw: Array<{ id: string; symbol: string; name: string; image: string; current_price: number; price_change_percentage_24h: number | null; price_change_percentage_1h_in_currency: number | null; price_change_percentage_7d_in_currency: number | null; high_24h: number | null; low_24h: number | null; total_volume: number; market_cap: number; market_cap_rank: number }> = await res.json()
+        const rawJson = await res.json()
+        const raw = validateCoinGeckoResponse(CoinGeckoMarketsResponseSchema, rawJson, 'spot/top100')
 
         return raw.map((c) => ({
           id: c.id,
