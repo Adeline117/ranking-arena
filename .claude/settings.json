@@ -1,13 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm *)", "Bash(npx *)", "Bash(node *)",
-      "Bash(git *)",
-      "Bash(cat *)", "Bash(ls *)", "Bash(find *)", "Bash(grep *)",
-      "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(chmod *)",
-      "Bash(curl *)", "Bash(echo *)", "Bash(head *)", "Bash(tail *)",
-      "Bash(wc *)", "Bash(sort *)", "Bash(sed *)",
-      "Write", "Edit", "Read"
+      "Bash(*)",
+      "Write", "Edit", "Read",
+      "WebFetch", "WebSearch",
+      "Agent", "Glob", "Grep",
+      "NotebookEdit"
     ],
     "deny": [
       "Bash(rm -rf *)", "Bash(sudo *)"
