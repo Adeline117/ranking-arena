@@ -15,7 +15,6 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
   fetchWithFallback,
   sleep,
   parseNum,
