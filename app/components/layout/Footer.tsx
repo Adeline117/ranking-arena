@@ -174,7 +174,6 @@ export default function Footer() {
           lineHeight: 1.6,
           marginTop: 16,
           marginBottom: 0,
-          opacity: 0.7,
         }}
       >
         {isZh

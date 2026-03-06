@@ -103,9 +103,9 @@ html.theme-transition *::after {
   --color-accent-primary-30: rgba(139, 111, 168, 0.3);
   --color-accent-primary-40: rgba(139, 111, 168, 0.4);
   --color-accent-primary-60: rgba(139, 111, 168, 0.6);
-  --color-translated: #4A8A87;
-  --color-translated-08: rgba(74, 138, 135, 0.08);
-  --color-translated-20: rgba(74, 138, 135, 0.2);
+  --color-translated: #7CBBB8;
+  --color-translated-08: rgba(124, 187, 184, 0.08);
+  --color-translated-20: rgba(124, 187, 184, 0.2);
   --color-accent-success: #2fe57d;
   --color-accent-success-04: rgba(47, 229, 125, 0.04);
   --color-accent-success-05: rgba(47, 229, 125, 0.05);
@@ -308,14 +308,14 @@ html.theme-transition *::after {
   --color-accent-primary-30: rgba(123, 95, 152, 0.3);
   --color-accent-primary-40: rgba(123, 95, 152, 0.4);
   --color-accent-primary-60: rgba(123, 95, 152, 0.6);
-  --color-translated: #7CBBB8;
-  --color-translated-08: rgba(124, 187, 184, 0.08);
-  --color-translated-20: rgba(124, 187, 184, 0.2);
+  --color-translated: #357574;
+  --color-translated-08: rgba(53, 117, 116, 0.08);
+  --color-translated-20: rgba(53, 117, 116, 0.2);
   --color-accent-success: #22C55E;
   --color-accent-success-20: rgba(34, 197, 94, 0.2);
   --color-accent-error: #EF4444;
   --color-accent-error-20: rgba(239, 68, 68, 0.2);
-  --color-accent-warning: #F59E0B;
+  --color-accent-warning: #b45309;
   --color-accent-primary-15: rgba(123, 95, 152, 0.15);
   --color-accent-primary-10: rgba(123, 95, 152, 0.1);
   --color-accent-primary-20: rgba(123, 95, 152, 0.2);
@@ -418,7 +418,7 @@ html.theme-transition *::after {
   /* Score breakdown dimension colors */
   --color-score-profitability: #3b82f6;
   --color-score-risk: #10b981;
-  --color-score-execution: #f59e0b;
+  --color-score-execution: #b45309;
   
   /* Chart/decorative palette (darker for light bg) */
   --color-chart-green: #059669;
@@ -1215,6 +1215,17 @@ select:focus-visible {
   box-shadow: 0 1px 6px var(--color-accent-primary-40);
 }
 
+.top-nav-link:focus-visible,
+.top-nav-logo-link:focus-visible,
+.top-nav-login-link:focus-visible,
+.top-nav-menu-link:focus-visible,
+.top-nav-notif-btn:focus-visible,
+.footer-link:focus-visible {
+  outline: 2px solid var(--color-brand, #8b6fa8);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 .top-nav-link:not(.top-nav-link-active):hover {
   color: var(--color-text-primary);
   background: var(--color-bg-secondary);
@@ -1486,8 +1497,8 @@ select:focus-visible {
   justify-content: center;
 }
 .touch-target-sm {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -175,6 +175,9 @@ const en = {
     traderNotRegisteredDesc: 'This trader has not claimed this account',
     unclaimedBadge: 'Unclaimed',
     claimThisProfile: 'Claim this profile',
+    claimYourProfile: 'Is this you? Claim your profile',
+    claimYourProfileDesc: 'Verify your exchange account to unlock profile customization, performance badges, and share your trading record with the community.',
+    loginToClaim: 'Log in to Claim',
     jumpToExchange: 'Go to Exchange',
     unlockToJumpExchange: 'Unlock to copy trade',
     copyTradePro: 'Copy Pro',
@@ -3629,6 +3632,22 @@ freeFeatureRankings: 'Basic Rankings',
 freeFeaturePosts: 'Community Posts',
 freeFeatureGroups: 'Public Groups',
 freeFeatureLibrary: 'Library Access',
+
+// Feedback
+feedbackTitle: 'Send Feedback',
+feedbackPlaceholder: 'Tell us what you think, report a bug, or suggest a feature...',
+feedbackSubmit: 'Submit',
+feedbackSubmitting: 'Submitting...',
+feedbackSuccess: 'Thanks for your feedback!',
+feedbackError: 'Failed to submit feedback. Please try again.',
+feedbackScreenshot: 'Add screenshot (optional)',
+
+// Data disclaimer
+dataDisclaimer: 'Data is for informational purposes only. Not financial advice.',
+
+// Missing keys referenced in code
+selected: 'Selected',
+next: 'Next',
 
 } as const
 

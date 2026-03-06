@@ -57,6 +57,7 @@ export default function HomePage() {
           padding: '8px 16px',
         }}
       >
+        <h1 className="sr-only">Arena — Crypto Trader Rankings</h1>
         <HomeSubNav />
         <Suspense fallback={null}><ExchangePartners /></Suspense>
         <div style={{ height: 8 }} />

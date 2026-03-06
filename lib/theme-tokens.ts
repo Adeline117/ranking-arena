@@ -43,7 +43,7 @@ export const lightTokens = {
       brandHover: '#9d84b5',   // Brand hover state
       brandMuted: 'rgba(139, 111, 168, 0.15)', // Brand muted background
       brandLight: '#c9b8db',   // Brand light for secondary text on brand bg
-      translated: '#4A8A87',   // Translated text color (darker teal for light mode)
+      translated: '#357574',   // Translated text color (WCAG AA 5.4:1 on white)
     },
 
     // Sentiment colors (bull/bear, positive/negative)
@@ -73,7 +73,7 @@ export const lightTokens = {
 
     // Star/rating colors
     rating: {
-      filled: '#f5c518',       // Active star
+      filled: '#946800',       // Active star (WCAG AA 5.0:1 on white)
       empty: '#D0D0D8',        // Empty star background
     },
 
