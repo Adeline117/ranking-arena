@@ -9,8 +9,10 @@ import TopNav from '../layout/TopNav'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
 import HomeSubNav from './HomeSubNav'
+import FoundingMemberBanner from './FoundingMemberBanner'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
+const HomeHero = lazy(() => import('./HomeHero'))
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 // HomePageWithSubNav removed from homepage - only used in groups page
@@ -57,7 +59,11 @@ export default function HomePage() {
         }}
       >
         <h1 className="sr-only">Arena — Crypto Trader Rankings</h1>
-        <HomeSubNav />
+        <Suspense fallback={null}><HomeHero /></Suspense>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <HomeSubNav />
+          <FoundingMemberBanner />
+        </div>
         <Suspense fallback={null}><ExchangePartners /></Suspense>
         <ThreeColumnLayout
           leftSidebar={
