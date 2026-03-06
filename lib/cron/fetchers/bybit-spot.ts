@@ -131,7 +131,7 @@ async function fetchPeriod(
       if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
       await sleep(500)
     } catch (err) {
-      logger.warn(`[${SOURCE}] Pagination error: ${err instanceof Error ? err.message : String(err)}`)
+      logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
       break
     }
   }

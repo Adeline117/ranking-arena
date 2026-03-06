@@ -3,7 +3,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 
 async function getServiceKey(): Promise<string> {
   const fs = await import('fs')
@@ -20,7 +20,7 @@ async function getServiceKey(): Promise<string> {
 
 async function main() {
   const serviceKey = await getServiceKey()
-  const supabase = createClient(SUPABASE_URL, serviceKey)
+  const supabase = createClient(SUPABASE_URL!, serviceKey)
 
   const { data: traders } = await supabase
     .from('trader_sources')

@@ -11,8 +11,8 @@ import { createClient } from '@supabase/supabase-js'
 import pg from 'pg'
 const { Client: PgClient } = pg
 
-const DB_URL = '${process.env.DATABASE_URL}'
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+const DB_URL = process.env.DATABASE_URL
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const args = process.argv.slice(2)

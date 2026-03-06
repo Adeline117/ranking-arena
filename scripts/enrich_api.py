@@ -12,8 +12,7 @@ import psycopg2
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import os
-DB = os.environ.get("DATABASE_URL", "")
+DB = os.environ["DATABASE_URL"]
 
 def log(msg):
     print(msg, flush=True)

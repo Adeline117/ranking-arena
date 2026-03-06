@@ -62,7 +62,7 @@ async function aggregateTraders(): Promise<
         addrMap.set(addr, prev)
       }
     } catch (err) {
-      logger.warn(`[${SOURCE}] Swap aggregation page failed: ${err instanceof Error ? err.message : String(err)}`)
+      logger.warn(`[${SOURCE}] Swap page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
       break
     }
   }

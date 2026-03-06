@@ -23,7 +23,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const CACHE_FILE = '/tmp/mexc_all_traders_v2.json'
 
 const supabase = createClient(
-  'https://iknktzifjdyujdccyhsv.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 

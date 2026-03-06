@@ -2,7 +2,7 @@
 // Bulk seed library with known crypto whitepapers, books, and research
 import pg from 'pg'
 
-const DATABASE_URL = process.env.DATABASE_URL || '${process.env.DATABASE_URL}'
+const DATABASE_URL = process.env.DATABASE_URL || process.env.DATABASE_URL
 
 const whitepapers = [
   { title: 'Bitcoin: A Peer-to-Peer Electronic Cash System', author: 'Satoshi Nakamoto', pdf_url: 'https://bitcoin.org/bitcoin.pdf', crypto_symbols: ['BTC'], publish_date: '2008-10-31', subcategory: 'blockchain' },

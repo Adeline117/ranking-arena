@@ -9,8 +9,7 @@ from decimal import Decimal
 def log(msg, **kw):
     print(msg, flush=True)
 
-import os
-DB = os.environ.get("DATABASE_URL", "")
+DB = os.environ["DATABASE_URL"]
 
 
 def print_status(conn, label=""):

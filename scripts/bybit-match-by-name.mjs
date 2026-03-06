@@ -10,7 +10,7 @@ const { Pool } = pg
 puppeteer.use(StealthPlugin())
 
 const pool = new Pool({
-  connectionString: '${process.env.DATABASE_URL}'
+  connectionString: process.env.DATABASE_URL
 })
 
 async function main() {

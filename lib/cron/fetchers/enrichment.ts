@@ -1582,7 +1582,7 @@ export async function enrichBinanceTraders(
 
           success++
         } catch (err) {
-          logger.warn(`[enrichment] Error: ${err instanceof Error ? err.message : String(err)}`)
+          logger.warn(`[binance_futures] Enrichment failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
           failed++
         }
       })
@@ -1621,7 +1621,7 @@ export async function enrichBybitTraders(
           }
           success++
         } catch (err) {
-          logger.warn(`[enrichment] Error: ${err instanceof Error ? err.message : String(err)}`)
+          logger.warn(`[bybit] Equity curve fetch failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
           failed++
         }
       })

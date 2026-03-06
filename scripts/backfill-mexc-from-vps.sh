@@ -13,8 +13,8 @@ fi
 cat << 'SCRIPT' > /tmp/backfill-mexc.mjs
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_URL = "$NEXT_PUBLIC_SUPABASE_URL"
+const SUPABASE_KEY = "$SUPABASE_SERVICE_ROLE_KEY"
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'

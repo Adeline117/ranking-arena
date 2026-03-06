@@ -113,7 +113,7 @@ async function fetchAccountsWithStats(
 
     if (json.data?.accounts?.length) return json.data.accounts
   } catch (err) {
-    logger.warn(`[${SOURCE}] Error: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(`[${SOURCE}] V3 schema query failed, trying fallback: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Fallback: Messari standard schema (similar to Kwenta/MUX)

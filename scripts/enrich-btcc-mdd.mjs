@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config'
 import { createClient } from '@supabase/supabase-js'
-const sb = createClient('https://iknktzifjdyujdccyhsv.supabase.co', process.env.SUPABASE_SERVICE_ROLE_KEY)
+const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const HEADERS = { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.btcc.com/en-US/copy-trading', 'Origin': 'https://www.btcc.com' }
 

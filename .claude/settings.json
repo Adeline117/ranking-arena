@@ -10,7 +10,8 @@
       "Write", "Edit", "Read"
     ],
     "deny": [
-      "Bash(rm -rf /*)","Bash(sudo *)"
+      "Bash(rm -rf *)", "Bash(sudo *)",
+      "Bash(git push *)", "Bash(git push)"
     ]
   },
   "hooks": {

@@ -175,7 +175,8 @@ async function fetchEnrichmentData(
       maxDrawdown: maxDD > 0 && maxDD < 200 ? maxDD : null,
       equityCurve,
     }
-  } catch {
+  } catch (err) {
+    logger.warn(`[${SOURCE}] MDD/equity enrichment failed: ${err instanceof Error ? err.message : String(err)}`)
     return emptyResult
   }
 }

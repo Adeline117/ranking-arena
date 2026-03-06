@@ -1,3 +1,3 @@
 #!/bin/bash
-# Auto-commit temporarily disabled during feature development
+# Temporarily disabled — Turbopack symlink build bug prevents auto-commit
 exit 0
