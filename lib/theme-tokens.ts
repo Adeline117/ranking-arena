@@ -20,9 +20,9 @@ export const lightTokens = {
     
     // Text hierarchy (WCAG AA contrast ratios on #FFFFFF) — aligned with globals.css
     text: {
-      primary: '#1A1A1A',      // Almost black text (16.6:1)
-      secondary: '#5A5A6A',    // Secondary text (7.1:1)
-      tertiary: '#5F5F70',     // Muted text (5.5:1)
+      primary: '#111111',      // Near-black text (18.9:1)
+      secondary: '#3D3D4D',    // Secondary text (10.2:1)
+      tertiary: '#4A4A5A',     // Muted text (8.0:1)
       disabled: '#767676',     // Disabled text (4.54:1 WCAG AA)
     },
     
@@ -35,7 +35,7 @@ export const lightTokens = {
     
     // Accent colors
     accent: {
-      primary: '#1A1A1A',      // Primary actions
+      primary: '#111111',      // Primary actions
       success: '#00C853',      // Positive ROI/states
       warning: '#FF9800',      // Warnings
       error: '#F44336',        // Negative ROI/states
@@ -106,9 +106,9 @@ export const darkTokens = {
     
     // Text hierarchy (WCAG AA contrast ratios on #0B0A10)
     text: {
-      primary: '#EDEDED',      // Primary text (14.5:1)
-      secondary: '#9A9A9A',    // Secondary text (7.0:1)
-      tertiary: '#898998',     // Muted text (5.7:1)
+      primary: '#F0F0F0',      // Primary text (15.3:1)
+      secondary: '#B8B8C3',    // Secondary text (9.5:1)
+      tertiary: '#9E9EB0',     // Muted text (7.2:1)
       disabled: '#6B6B6B',     // Disabled text (4.5:1 WCAG AA on #0B0A10)
     },
     

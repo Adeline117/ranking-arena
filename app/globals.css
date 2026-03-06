@@ -85,9 +85,9 @@ html.theme-transition *::after {
   --color-bg-hover: #252232;
   
   /* Text colors (WCAG AA on #0B0A10 — minimum 4.5:1 contrast) */
-  --color-text-primary: #EDEDED;
-  --color-text-secondary: #A8A8B3;
-  --color-text-tertiary: #8E8E9E;
+  --color-text-primary: #F0F0F0;
+  --color-text-secondary: #B8B8C3;
+  --color-text-tertiary: #9E9EB0;
   --color-text-quaternary: #8585A0;
   
   /* Border colors */
@@ -284,7 +284,7 @@ html.theme-transition *::after {
 /* Light theme */
 [data-theme='light'] {
   --background: #FFFFFF;
-  --foreground: #1A1A1A;
+  --foreground: #111111;
   
   /* Background colors */
   --color-bg-primary: #FFFFFF;
@@ -293,10 +293,10 @@ html.theme-transition *::after {
   --color-bg-hover: #E8E8EC;
   
   /* Text colors (WCAG AA on #FFFFFF) */
-  --color-text-primary: #1A1A1A;
-  --color-text-secondary: #5A5A6A;
-  --color-text-tertiary: #5F5F70;
-  --color-text-quaternary: #767680;
+  --color-text-primary: #111111;
+  --color-text-secondary: #3D3D4D;
+  --color-text-tertiary: #4A4A5A;
+  --color-text-quaternary: #5A5A68;
   
   /* Border colors */
   --color-border-primary: #E0E0E6;
