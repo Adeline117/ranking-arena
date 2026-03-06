@@ -86,6 +86,9 @@ interface BybitApiResponse {
 // Fetch helpers with proxy fallback
 // ---------------------------------------------------------------------------
 
+// Cache which strategy works to avoid wasting time on failed strategies for subsequent pages
+let _bybitStrategy: 'scraper' | 'direct' | 'cf_proxy' | 'vps_proxy' | 'www' | 'none' | null = null
+
 async function fetchBybitPage(
   pageNo: number,
   pageSize: number,
@@ -99,19 +102,25 @@ async function fetchBybitPage(
   const proxyUrl =
     `${PROXY_URL}/bybit/copy-trading?pageNo=${pageNo}&pageSize=${pageSize}&period=${duration}`
 
-  // Strategy 1: Try VPS Playwright scraper (single page, ~65s per page)
-  // Only use for first page to stay within Vercel function timeout (300s)
-  // Pages 2+ fall through to faster direct API / proxy strategies
+  // If we already know all strategies fail, don't waste time
+  if (_bybitStrategy === 'none') return null
+
+  // If we know only scraper works and we're past page 1, return null
+  // (scraper is too slow for multi-page — 73s per page)
+  if (_bybitStrategy === 'scraper' && pageNo > 1) return null
+
+  // Strategy 1: VPS Playwright scraper (only page 1 due to ~73s latency)
   if (VPS_SCRAPER_KEY && pageNo <= 1) {
     try {
       const url = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${pageSize}&duration=${duration}`
       const res = await fetch(url, {
         headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-        signal: AbortSignal.timeout(240_000), // Allow queue wait (~65s/req) + processing
+        signal: AbortSignal.timeout(180_000),
       })
       if (res.ok) {
         const data = (await res.json()) as BybitApiResponse
         if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+          if (!_bybitStrategy) _bybitStrategy = 'scraper'
           return data
         }
       }
@@ -120,72 +129,71 @@ async function fetchBybitPage(
     }
   }
 
-  // Strategy 2: Try direct API (api2.bybit.com, works from non-US IPs)
-  try {
-    const data = await fetchJson<BybitApiResponse>(directUrl)
-    if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
-      return data
-    }
-  } catch (err) {
-    logger.warn(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
-  }
-
-  // Strategy 3: Try Cloudflare Worker proxy
-  try {
-    const data = await fetchJson<BybitApiResponse>(proxyUrl)
-    if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
-      return data
-    }
-  } catch (err) {
-    logger.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
-  }
-
-  // Strategy 4: VPS generic proxy (Tokyo/Singapore VPS)
-  const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
-  if (vpsUrl) {
+  // Strategy 2: Direct API (api2.bybit.com) — skip if already known to fail
+  if (!_bybitStrategy || _bybitStrategy === 'direct') {
     try {
-      const res = await fetch(vpsUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
-        },
-        body: JSON.stringify({
-          url: directUrl,
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            Referer: 'https://www.bybit.com/en/copy-trading',
-            Accept: 'application/json',
-          },
-        }),
-      })
-      if (res.ok) {
-        const data = (await res.json()) as BybitApiResponse
-        if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
-          return data
-        }
+      const data = await fetchJson<BybitApiResponse>(directUrl, { timeoutMs: 10000 })
+      if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+        _bybitStrategy = 'direct'
+        return data
       }
     } catch (err) {
-      logger.warn(`[bybit] VPS proxy failed: ${err instanceof Error ? err.message : err}`)
+      logger.warn(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
     }
   }
 
-  // Strategy 5: Try www.bybit.com/x-api fallback (may be WAF-blocked)
-  try {
-    const wwwUrl = directUrl.replace('api2.bybit.com/fapi', 'www.bybit.com/x-api/fapi')
-    const data = await fetchJson<BybitApiResponse>(wwwUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        Referer: 'https://www.bybit.com/en/copy-trading',
-        Origin: 'https://www.bybit.com',
-      },
-    })
-    if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
-      return data
+  // Strategy 3: CF Worker proxy — skip if already known to fail
+  if (!_bybitStrategy || _bybitStrategy === 'cf_proxy') {
+    try {
+      const data = await fetchJson<BybitApiResponse>(proxyUrl, { timeoutMs: 10000 })
+      if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+        _bybitStrategy = 'cf_proxy'
+        return data
+      }
+    } catch (err) {
+      logger.warn(`[bybit] CF proxy failed: ${err instanceof Error ? err.message : err}`)
     }
-  } catch (err) {
-    logger.warn(`[bybit] www.bybit.com fallback failed: ${err instanceof Error ? err.message : err}`)
+  }
+
+  // Strategy 4: VPS generic proxy — skip if already known to fail
+  if (!_bybitStrategy || _bybitStrategy === 'vps_proxy') {
+    const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+    if (vpsUrl) {
+      try {
+        const res = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+          },
+          body: JSON.stringify({
+            url: directUrl,
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+              Referer: 'https://www.bybit.com/en/copy-trading',
+              Accept: 'application/json',
+            },
+          }),
+          signal: AbortSignal.timeout(15_000),
+        })
+        if (res.ok) {
+          const data = (await res.json()) as BybitApiResponse
+          if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+            _bybitStrategy = 'vps_proxy'
+            return data
+          }
+        }
+      } catch (err) {
+        logger.warn(`[bybit] VPS proxy failed: ${err instanceof Error ? err.message : err}`)
+      }
+    }
+  }
+
+  // If this is page 1 and nothing worked, mark all strategies as failed
+  if (pageNo <= 1 && !_bybitStrategy) {
+    _bybitStrategy = 'none'
+    logger.warn(`[bybit] All strategies failed for page 1 — marking as unavailable`)
   }
 
   return null

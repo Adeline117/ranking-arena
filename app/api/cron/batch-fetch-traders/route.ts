@@ -65,14 +65,24 @@ export async function GET(request: NextRequest) {
   const overallStart = Date.now()
   const plog = await PipelineLogger.start(`batch-fetch-traders-${group}`, { group, platforms })
 
+  // Per-platform timeout: scale based on group size to fit within 300s Vercel limit
+  // Reserve 10s for overhead, distribute remaining time across platforms
+  const PLATFORM_TIMEOUT_MS = Math.floor((290_000 - platforms.length * 2000) / platforms.length)
+
   for (const platform of platforms) {
     const start = Date.now()
     try {
+      const headers: Record<string, string> = {
+          'Authorization': `Bearer ${cronSecret}`,
+        }
+      // Bypass Vercel Deployment Protection for internal cron calls
+      if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+        headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+      }
       const res = await fetch(`${baseUrl}/api/cron/fetch-traders/${platform}`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${cronSecret}`,
-        },
+        headers,
+        signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS),
       })
 
       if (!res.ok) {

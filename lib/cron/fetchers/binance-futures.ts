@@ -57,73 +57,69 @@ const HEADERS: Record<string, string> = {
   Referer: 'https://www.binance.com/en/copy-trading',
 }
 
-// Helper to fetch with proxy fallback (direct → CF proxy → VPS proxy)
+// Strategy cache: once we find a working method, reuse it for all subsequent pages
+let _cachedStrategy: 'direct' | 'vps' | null = null
+
+// Helper to fetch with proxy fallback (direct → VPS proxy)
+// Caches the working strategy to avoid wasting time on failed strategies for every page
 async function fetchWithProxyFallback<T>(
   url: string,
   opts: { method?: string; headers?: Record<string, string>; body?: unknown }
 ): Promise<T> {
+  const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+
+  // If we already know VPS works, skip direct entirely
+  if (_cachedStrategy === 'vps' && vpsUrl) {
+    return await fetchViaVps<T>(vpsUrl, url, opts)
+  }
+
   // Try direct first
   try {
-    return await fetchJson<T>(url, opts)
+    const result = await fetchJson<T>(url, { ...opts, timeoutMs: 10000 })
+    _cachedStrategy = 'direct'
+    return result
   } catch (directErr) {
     const msg = directErr instanceof Error ? directErr.message : ''
     const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('geo-blocked')
 
     if (!isBlocked) throw directErr
 
-    // Try CF Worker proxy
-    if (PROXY_URL) {
-      try {
-        const proxyTarget = `${PROXY_URL}/binance/copy-trading`
-        const cfResult = await fetchJson<T>(proxyTarget, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: opts.body,
-        })
-        // CF proxy may return 200 with geo-block message in body — detect and skip
-        const cfAny = cfResult as Record<string, unknown>
-        const cfMsg = String(cfAny?.msg || cfAny?.message || '')
-        if (cfMsg.includes('restricted location') || cfMsg.includes('unavailable')) {
-          logger.warn(`[binance-futures] CF proxy returned geo-block: ${cfMsg.slice(0, 120)}`)
-        } else {
-          return cfResult
-        }
-      } catch (cfErr) {
-        logger.warn(`[binance-futures] CF proxy failed: ${cfErr instanceof Error ? cfErr.message : String(cfErr)}`)
-      }
-    }
-
-    // Try VPS proxy as last resort (SG preferred for Binance, JP as fallback)
-    const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+    // Direct is geo-blocked → try VPS proxy
     if (vpsUrl) {
       try {
-        logger.warn(`[binance-futures] Trying VPS proxy for ${url.slice(0, 80)}...`)
-        const res = await fetch(vpsUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
-          },
-          body: JSON.stringify({
-            url,
-            method: opts.method || 'POST',
-            headers: opts.headers || {},
-            body: opts.body || null,
-          }),
-        })
-        if (!res.ok) throw new Error(`VPS proxy HTTP ${res.status}`)
-        return (await res.json()) as T
+        logger.warn(`[binance-futures] Direct geo-blocked, switching to VPS proxy`)
+        const result = await fetchViaVps<T>(vpsUrl, url, opts)
+        _cachedStrategy = 'vps'
+        return result
       } catch (vpsErr) {
         logger.warn(`[binance-futures] VPS proxy failed: ${vpsErr instanceof Error ? vpsErr.message : String(vpsErr)}`)
       }
     }
 
-    // All failed
     throw new Error(
-      `Geo-blocked (HTTP 451) — direct, CF proxy, and VPS proxy all failed. ` +
-      `Set VPS_PROXY_URL or VPS_PROXY_JP to enable VPS fallback.`
+      `Geo-blocked (HTTP 451) — direct and VPS proxy both failed. ` +
+      `Set VPS_PROXY_SG/VPS_PROXY_URL to enable VPS fallback.`
     )
   }
+}
+
+async function fetchViaVps<T>(vpsUrl: string, targetUrl: string, opts: { method?: string; headers?: Record<string, string>; body?: unknown }): Promise<T> {
+  const res = await fetch(vpsUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+    },
+    body: JSON.stringify({
+      url: targetUrl,
+      method: opts.method || 'POST',
+      headers: opts.headers || {},
+      body: opts.body || null,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  if (!res.ok) throw new Error(`VPS proxy HTTP ${res.status}`)
+  return (await res.json()) as T
 }
 
 // ---------------------------------------------------------------------------
