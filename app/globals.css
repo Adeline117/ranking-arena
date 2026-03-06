@@ -557,11 +557,20 @@ a:hover {
   color: var(--color-accent-primary);
 }
 
-/* HomeSubNav pill hover */
-.home-subnav-pill:hover {
+/* HomeSubNav pill hover — only for inactive tabs */
+.home-subnav-pill:not([style*="var(--color-on-accent)"]):hover {
   background: var(--color-bg-hover) !important;
   color: var(--color-text-primary) !important;
 }
+
+/* ============================================
+   Utility classes for gradual inline-style migration
+   ============================================ */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scroll-snap-x { overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.scroll-snap-x > * { scroll-snap-align: start; }
+.fade-edges { -webkit-mask-image: linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent); mask-image: linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent); }
 
 /* Unified input focus ring */
 input:focus-visible,
