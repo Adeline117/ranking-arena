@@ -76,6 +76,7 @@ export default function MyPostsPage() {
 
   const fetchPosts = useCallback(async (offset: number, append: boolean) => {
     if (!userId) return
+    if (!append) setLoadError(false)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -93,7 +94,7 @@ export default function MyPostsPage() {
 
       if (!res.ok) {
         logger.error('Error fetching posts:', data.error)
-        if (!append) setPosts([])
+        if (!append) { setPosts([]); setLoadError(true) }
         showToast(t('loadPostsFailed'), 'error')
         return
       }
@@ -118,7 +119,7 @@ export default function MyPostsPage() {
       setHasMore(loadedPosts.length >= PAGE_SIZE)
     } catch (error) {
       logger.error('Error loading posts:', error)
-      if (!append) setPosts([])
+      if (!append) { setPosts([]); setLoadError(true) }
       showToast(t('loadPostsFailed'), 'error')
     }
   }, [userId, showToast, t])
@@ -238,6 +239,24 @@ export default function MyPostsPage() {
             <PostSkeleton />
             <PostSkeleton />
           </>
+        ) : loadError ? (
+          <EmptyState
+            title={t('loadPostsFailed')}
+            description={language === 'zh' ? '请检查网络后重试' : 'Please check your network and try again'}
+            action={
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setLoading(true)
+                  setLoadError(false)
+                  offsetRef.current = 0
+                  fetchPosts(0, false).finally(() => setLoading(false))
+                }}
+              >
+                {language === 'zh' ? '重试' : 'Retry'}
+              </Button>
+            }
+          />
         ) : posts.length === 0 ? (
           <EmptyState
             title={t('noPosts')}
