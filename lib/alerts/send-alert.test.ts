@@ -1,6 +1,6 @@
 /**
  * Send Alert Tests
- * 测试警告通知系统
+ * 测试统一 Telegram 告警系统
  */
 
 import { sendAlert, sendScraperAlert } from './send-alert'
@@ -8,28 +8,23 @@ import { sendAlert, sendScraperAlert } from './send-alert'
 // Mock fetch
 global.fetch = jest.fn()
 
-// Mock Supabase
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    from: jest.fn().mockReturnThis(),
-    select: jest.fn().mockReturnThis(),
-  })),
+// Mock logger
+jest.mock('@/lib/logger', () => ({
+  logger: {
+    warn: jest.fn(),
+    info: jest.fn(),
+    error: jest.fn(),
+  },
 }))
 
-import { createClient } from '@supabase/supabase-js'
-
-// Mock environment variables
 const originalEnv = process.env
 
 beforeEach(() => {
   jest.clearAllMocks()
   process.env = {
     ...originalEnv,
-    SUPABASE_URL: 'https://test.supabase.co',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
-    // Ensure Telegram env vars are cleared to avoid interference
-    TELEGRAM_BOT_TOKEN: '',
-    TELEGRAM_ALERT_CHAT_ID: '',
+    TELEGRAM_BOT_TOKEN: 'test-token',
+    TELEGRAM_ALERT_CHAT_ID: 'test-chat-id',
   }
   ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
 })
@@ -39,13 +34,8 @@ afterAll(() => {
 })
 
 describe('sendAlert', () => {
-  test('should return not sent when no config', async () => {
-    // Mock Supabase to return no config
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({ data: null, error: null }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
+  test('should return not sent when Telegram env missing', async () => {
+    delete process.env.TELEGRAM_BOT_TOKEN
 
     const result = await sendAlert({
       title: 'Test Alert',
@@ -57,33 +47,7 @@ describe('sendAlert', () => {
     expect(result.channels).toEqual([])
   })
 
-  test('should return not sent when Supabase env missing', async () => {
-    delete process.env.SUPABASE_URL
-    delete process.env.NEXT_PUBLIC_SUPABASE_URL
-
-    const result = await sendAlert({
-      title: 'Test Alert',
-      message: 'Test message',
-      level: 'info',
-    })
-
-    expect(result.sent).toBe(false)
-    expect(result.channels).toEqual([])
-  })
-
-  test('should send to Slack when configured', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
-
+  test('should send via Telegram when configured', async () => {
     const result = await sendAlert({
       title: 'Test Alert',
       message: 'Test message',
@@ -91,9 +55,9 @@ describe('sendAlert', () => {
     })
 
     expect(result.sent).toBe(true)
-    expect(result.channels).toContain('slack')
+    expect(result.channels).toContain('telegram')
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://hooks.slack.com/test',
+      'https://api.telegram.org/bottest-token/sendMessage',
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -101,88 +65,7 @@ describe('sendAlert', () => {
     )
   })
 
-  test('should send to Feishu when configured', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'feishu_webhook_url', value: 'https://open.feishu.cn/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
-
-    const result = await sendAlert({
-      title: 'Test Alert',
-      message: 'Test message',
-      level: 'critical',
-    })
-
-    expect(result.sent).toBe(true)
-    expect(result.channels).toContain('feishu')
-  })
-
-  test('should send to both Slack and Feishu when both configured', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-          { key: 'feishu_webhook_url', value: 'https://open.feishu.cn/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
-
-    const result = await sendAlert({
-      title: 'Test Alert',
-      message: 'Test message',
-      level: 'info',
-    })
-
-    expect(result.sent).toBe(true)
-    expect(result.channels).toContain('slack')
-    expect(result.channels).toContain('feishu')
-  })
-
-  test('should not send to disabled channels', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: false },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-
-    const result = await sendAlert({
-      title: 'Test Alert',
-      message: 'Test message',
-      level: 'info',
-    })
-
-    expect(result.sent).toBe(false)
-    expect(result.channels).toEqual([])
-    expect(global.fetch).not.toHaveBeenCalled()
-  })
-
   test('should handle fetch errors gracefully', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
     ;(global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'))
 
     const result = await sendAlert({
@@ -196,16 +79,6 @@ describe('sendAlert', () => {
   })
 
   test('should handle non-ok response', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
     ;(global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500 })
 
     const result = await sendAlert({
@@ -218,19 +91,7 @@ describe('sendAlert', () => {
     expect(result.channels).toEqual([])
   })
 
-  test('should include details in Slack payload', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
-
+  test('should include details in Telegram payload', async () => {
     await sendAlert({
       title: 'Test Alert',
       message: 'Test message',
@@ -243,38 +104,18 @@ describe('sendAlert', () => {
 
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
     const body = JSON.parse(fetchCall[1].body)
-    expect(body.attachments[0].fields).toHaveLength(2)
+    expect(body.text).toContain('Platform')
+    expect(body.text).toContain('binance')
+    expect(body.text).toContain('TIMEOUT')
+    expect(body.parse_mode).toBe('HTML')
   })
 
-  test('should use correct color for each level', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
+  test('should send correct chat_id', async () => {
+    await sendAlert({ title: 'Test', message: 'msg', level: 'critical' })
 
-    // Info level
-    await sendAlert({ title: 'Info', message: 'Test', level: 'info' })
-    let body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body)
-    expect(body.attachments[0].color).toBe('#22c55e')
-
-    // Warning level
-    ;(global.fetch as jest.Mock).mockClear()
-    await sendAlert({ title: 'Warning', message: 'Test', level: 'warning' })
-    body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body)
-    expect(body.attachments[0].color).toBe('#f59e0b')
-
-    // Critical level
-    ;(global.fetch as jest.Mock).mockClear()
-    await sendAlert({ title: 'Critical', message: 'Test', level: 'critical' })
-    body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body)
-    expect(body.attachments[0].color).toBe('#ef4444')
+    const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
+    const body = JSON.parse(fetchCall[1].body)
+    expect(body.chat_id).toBe('test-chat-id')
   })
 })
 
@@ -285,18 +126,6 @@ describe('sendScraperAlert', () => {
   })
 
   test('should send critical alert for critical platforms', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
-
     await sendScraperAlert(
       ['binance'],
       [],
@@ -305,23 +134,11 @@ describe('sendScraperAlert', () => {
 
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
     const body = JSON.parse(fetchCall[1].body)
-    expect(body.attachments[0].title).toContain('严重过期')
-    expect(body.attachments[0].color).toBe('#ef4444')
+    expect(body.text).toContain('严重过期')
+    expect(body.text).toContain('Binance')
   })
 
   test('should send warning alert for stale platforms', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
-
     await sendScraperAlert(
       [],
       ['bybit'],
@@ -330,23 +147,11 @@ describe('sendScraperAlert', () => {
 
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
     const body = JSON.parse(fetchCall[1].body)
-    expect(body.attachments[0].title).toContain('陈旧')
-    expect(body.attachments[0].color).toBe('#f59e0b')
+    expect(body.text).toContain('陈旧')
+    expect(body.text).toContain('Bybit')
   })
 
   test('should include both critical and stale platforms', async () => {
-    const mockSupabase = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockResolvedValue({
-        data: [
-          { key: 'slack_webhook_url', value: 'https://hooks.slack.com/test', enabled: true },
-        ],
-        error: null,
-      }),
-    }
-    ;(createClient as jest.Mock).mockReturnValue(mockSupabase)
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
-
     await sendScraperAlert(
       ['binance'],
       ['bybit', 'bitget'],
@@ -355,8 +160,8 @@ describe('sendScraperAlert', () => {
 
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
     const body = JSON.parse(fetchCall[1].body)
-    expect(body.attachments[0].text).toContain('Binance')
-    expect(body.attachments[0].text).toContain('Bybit')
-    expect(body.attachments[0].text).toContain('Bitget')
+    expect(body.text).toContain('Binance')
+    expect(body.text).toContain('Bybit')
+    expect(body.text).toContain('Bitget')
   })
 })
