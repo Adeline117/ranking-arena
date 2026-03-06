@@ -15,9 +15,9 @@ export default function ShareCompareButton({ traderIds }: ShareCompareButtonProp
   const handleShare = () => {
     const url = `${window.location.origin}/compare?ids=${traderIds.join(',')}`
     if (navigator.share) {
-      navigator.share({ title: 'Trader Comparison', url }).catch(() => {})
+      navigator.share({ title: 'Trader Comparison', url }).catch(err => console.warn('[ShareCompareButton] share failed', err))
     } else {
-      navigator.clipboard.writeText(url).catch(() => {})
+      navigator.clipboard.writeText(url).catch(err => console.warn('[ShareCompareButton] share failed', err))
     }
   }
 

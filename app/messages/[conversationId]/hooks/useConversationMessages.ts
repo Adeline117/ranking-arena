@@ -95,7 +95,7 @@ export function useConversationMessages({ conversationId, userId, accessToken }:
       if (newMsg.receiver_id === userId) {
         setMessages(prev => { if (prev.some(m => m.id === newMsg.id)) return prev; return [...prev, newMsg] })
         if (accessToken && conversationId) {
-          fetch('/api/messages/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` }, body: JSON.stringify({ conversationId }) }).catch(() => {})
+          fetch('/api/messages/read', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` }, body: JSON.stringify({ conversationId }) }).catch(err => console.warn('[useConversationMessages] mark-read failed', err))
         }
       }
     },

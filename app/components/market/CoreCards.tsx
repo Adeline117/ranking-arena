@@ -287,7 +287,7 @@ export default function CoreCards() {
       fetch('/api/market/exchanges', { signal: controller.signal })
         .then(r => r.json())
         .then(json => { if (alive && Array.isArray(json)) setExchanges(json.slice(0, 5)) })
-        .catch(() => {})
+        .catch(err => console.warn('[CoreCards] fetch failed', err))
     }
     fetchMarketData()
     // Refresh market data every 60 seconds

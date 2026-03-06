@@ -77,7 +77,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}`, ...getCsrfHeaders() },
       body: JSON.stringify({ conversationId }),
-    }).catch(() => {})
+    }).catch(err => console.warn('[Messages] fetch failed', err))
   }, [conversationId, accessToken])
 
   // Inject spin animation
@@ -114,7 +114,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
     fetch(`/api/chat/${conversationId}/settings`, { headers: { 'Authorization': `Bearer ${accessToken}` } })
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data?.settings) { setRemark(data.settings.remark || null); setClearedBefore(data.settings.cleared_before || null) } })
-      .catch(() => {})
+      .catch(err => console.warn('[Messages] fetch failed', err))
   }, [conversationId, accessToken])
 
   // Send handler

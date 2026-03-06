@@ -19,7 +19,7 @@ export default function ExchangeVolume() {
     fetch('/api/market/exchanges')
       .then((r) => r.json())
       .then((json) => { if (Array.isArray(json)) setExchanges(json) })
-      .catch(() => {})
+      .catch(err => console.warn('[ExchangeVolume] fetch failed', err))
   }, [])
 
   if (exchanges.length === 0) return null

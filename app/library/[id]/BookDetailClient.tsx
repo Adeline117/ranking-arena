@@ -127,7 +127,7 @@ export default function BookDetailClient({
             setUserReview(d.userReview || null)
             if (d.userReview) setShortReview(d.userReview)
           })
-          .catch(() => {})
+          .catch(err => console.warn('[BookDetailClient] fetch failed', err))
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,7 +148,7 @@ export default function BookDetailClient({
         setReviews(paginated)
         setHasMoreReviews(paginated.length < allReviews.length)
       })
-      .catch(() => {})
+      .catch(err => console.warn('[BookDetailClient] fetch failed', err))
   }, [id])
 
   // Fetch reviews on mount and when page changes

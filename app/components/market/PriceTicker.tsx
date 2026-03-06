@@ -42,7 +42,7 @@ export default function PriceTicker() {
             image: c.image as string,
           })))
         })
-        .catch(() => {})
+        .catch(err => console.warn('[PriceTicker] fetch failed', err))
     }
 
     load()

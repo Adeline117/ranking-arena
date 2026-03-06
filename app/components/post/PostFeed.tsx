@@ -206,7 +206,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       const postToOpen = posts.find(p => p.id === props.initialPostId)
       if (postToOpen) {
         setOpenPost(postToOpen); setComments([])
-        fetch(`/api/posts/${postToOpen.id}/comments`).then(res => res.json()).then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) }).catch(() => {})
+        fetch(`/api/posts/${postToOpen.id}/comments`).then(res => res.json()).then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) }).catch(err => console.warn('[PostFeed] fetch failed', err))
       } else {
         const loadSinglePost = async () => {
           try {
@@ -216,7 +216,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
               const post = data.data.post
               setOpenPost({ id: post.id, title: post.title || t('noTitle'), content: post.content || '', author_id: post.author_id, author_handle: post.author_handle || 'user', author_avatar_url: post.author_avatar_url, group_id: post.group_id, group_name: post.group_name, created_at: post.created_at, like_count: post.like_count || 0, dislike_count: post.dislike_count || 0, comment_count: post.comment_count || 0, bookmark_count: post.bookmark_count || 0, repost_count: post.repost_count || 0, view_count: post.view_count || 0, hot_score: post.hot_score || 0, is_pinned: post.is_pinned || false, poll_enabled: post.poll_enabled || false, poll_bull: post.poll_bull || 0, poll_bear: post.poll_bear || 0, poll_wait: post.poll_wait || 0, user_reaction: post.user_reaction, user_vote: post.user_vote })
               setComments([])
-              fetch(`/api/posts/${props.initialPostId}/comments`).then(res => res.json()).then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) }).catch(() => {})
+              fetch(`/api/posts/${props.initialPostId}/comments`).then(res => res.json()).then(data => { if (data.success && data.data?.comments) setComments(data.data.comments) }).catch(err => console.warn('[PostFeed] fetch failed', err))
             }
           } catch (err) { logger.error('Failed to load single post:', err) }
         }

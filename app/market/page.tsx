@@ -116,7 +116,7 @@ function MobileSectorsTab() {
           .sort((a, b) => b.change - a.change)
         setSectors(result)
       })
-      .catch(() => {})
+      .catch(err => console.warn('[MarketPage] fetch failed', err))
       .finally(() => setLoading(false))
   }, [])
 

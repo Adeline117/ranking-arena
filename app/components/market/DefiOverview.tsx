@@ -20,7 +20,7 @@ export default function DefiOverview() {
     fetch('/api/market/defi')
       .then((r) => r.json())
       .then((json) => { if (!json.error) setData(json) })
-      .catch(() => {})
+      .catch(err => console.warn('[DefiOverview] fetch failed', err))
   }, [])
 
   if (!data) return null

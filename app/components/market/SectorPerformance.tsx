@@ -24,7 +24,7 @@ export default function SectorPerformance() {
     fetch('/api/market/sectors')
       .then((r) => r.json())
       .then((json) => { if (Array.isArray(json)) setSectors(json.slice(0, 4)) })
-      .catch(() => {})
+      .catch(err => console.warn('[SectorPerformance] fetch failed', err))
   }, [])
 
   if (sectors.length === 0) return null
