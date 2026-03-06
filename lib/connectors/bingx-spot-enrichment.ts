@@ -87,7 +87,7 @@ export class BingXSpotConnector extends BaseExchangeConnector {
         
         let winRate = this.parseNum(rankStat.winRate || rankStat.winRate90d)
         let maxDrawdown = this.parseNum(rankStat.maxDrawdown || rankStat.maxDrawdown90d)
-        const tradesCount = parseInt(rankStat.totalTransactions || rankStat.totalOrders || 0) || null
+        const tradesCount = parseInt(rankStat.totalTransactions || rankStat.totalOrders || '0') || null
 
         // Calculate MDD from equity curve if available
         if (!maxDrawdown && rankStat.chart && rankStat.chart.length > 1) {
