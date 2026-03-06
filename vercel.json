@@ -119,6 +119,14 @@
     {
       "path": "/api/cron/backfill-data?type=enrichment&limit=150",
       "schedule": "5 */3 * * *"
+    },
+    {
+      "path": "/api/analytics/daily",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/notifications/ranking-changes",
+      "schedule": "0 9 * * *"
     }
   ],
   "headers": [
