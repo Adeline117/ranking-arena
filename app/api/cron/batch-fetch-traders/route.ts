@@ -23,12 +23,12 @@ export const maxDuration = 300
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: High-priority CEX (every 3h) — 5 platforms
-  a: ['binance_futures', 'binance_spot', 'bybit', 'bitget_futures', 'okx_futures'],
+  // Group A: High-priority CEX (every 3h) — 4 platforms (bybit has dedicated cron)
+  a: ['binance_futures', 'binance_spot', 'bitget_futures', 'okx_futures'],
   // Group B: Mid-priority (every 4h) — 7 platforms
   b: ['mexc', 'kucoin', 'okx_web3', 'hyperliquid', 'gmx', 'jupiter_perps', 'aevo'],
-  // Group C: Lower-priority batch 1 (every 6h) — 6 platforms
-  c: ['coinex', 'bitget_spot', 'xt', 'bybit_spot', 'binance_web3'],
+  // Group C: Lower-priority batch 1 (every 6h) — 4 platforms (bybit_spot has dedicated cron)
+  c: ['coinex', 'bitget_spot', 'xt', 'binance_web3'],
   // Group D: Lower-priority batch 2 (every 6h) — 8 platforms
   d: ['dydx', 'phemex', 'gains', 'htx_futures', 'weex', 'bitmart', 'kwenta', 'mux'],
   // Group E: Lowest-priority (every 8h) — 7 platforms
