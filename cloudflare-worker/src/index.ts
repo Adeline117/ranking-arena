@@ -658,7 +658,7 @@ async function handleBingxLeaderboard(_request: Request, url: URL): Promise<Resp
         status: fallbackResp.status,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
-    } catch (fallbackError) {
+    } catch (_fallbackError) {
       return Response.json({ error: 'BingX leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
         status: 500,
         headers: { 'Access-Control-Allow-Origin': '*' },

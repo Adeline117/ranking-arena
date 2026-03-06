@@ -32,15 +32,15 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('\n=== HTX Futures Top 10 (90D) ===\n');
-  console.log('Trader ID\t\tROI%\tWR%\tMDD%\tPnL\t\tArena Score');
-  console.log('-'.repeat(80));
+  console.warn('\n=== HTX Futures Top 10 (90D) ===\n');
+  console.warn('Trader ID\t\tROI%\tWR%\tMDD%\tPnL\t\tArena Score');
+  console.warn('-'.repeat(80));
   
   for (const row of data) {
     const wr = row.win_rate !== null ? row.win_rate.toFixed(1) : 'NULL';
     const mdd = row.max_drawdown !== null ? row.max_drawdown.toFixed(1) : 'NULL';
     const pnl = row.pnl !== null ? row.pnl.toFixed(0) : 'NULL';
-    console.log(`${row.source_trader_id.slice(0,12)}\t${row.roi.toFixed(1)}\t${wr}\t${mdd}\t${pnl}\t${row.arena_score.toFixed(1)}`);
+    console.warn(`${row.source_trader_id.slice(0,12)}\t${row.roi.toFixed(1)}\t${wr}\t${mdd}\t${pnl}\t${row.arena_score.toFixed(1)}`);
   }
 
   // 统计NULL值数量
@@ -54,11 +54,11 @@ async function main() {
   const nullWR = stats.filter(s => s.win_rate === null).length;
   const nullMDD = stats.filter(s => s.max_drawdown === null).length;
 
-  console.log('\n=== Field Coverage ===');
-  console.log(`Total HTX traders (90D): ${totalCount}`);
-  console.log(`Win Rate NULL: ${nullWR} (${(nullWR/totalCount*100).toFixed(1)}%)`);
-  console.log(`Max Drawdown NULL: ${nullMDD} (${(nullMDD/totalCount*100).toFixed(1)}%)`);
-  console.log('\n✅ 验证完成');
+  console.warn('\n=== Field Coverage ===');
+  console.warn(`Total HTX traders (90D): ${totalCount}`);
+  console.warn(`Win Rate NULL: ${nullWR} (${(nullWR/totalCount*100).toFixed(1)}%)`);
+  console.warn(`Max Drawdown NULL: ${nullMDD} (${(nullMDD/totalCount*100).toFixed(1)}%)`);
+  console.warn('\n✅ 验证完成');
 }
 
 main().catch(console.error);

@@ -34,9 +34,9 @@ interface ExportRankingButtonProps {
 }
 
 /** CSV / JSON export dropdown button */
-function ExportRankingButton({ traders, source, timeRange, language }: ExportRankingButtonProps) {
+function ExportRankingButton({ traders, source, timeRange }: ExportRankingButtonProps) {
   const [showMenu, setShowMenu] = React.useState(false)
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

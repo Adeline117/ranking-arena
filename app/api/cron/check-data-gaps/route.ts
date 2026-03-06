@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
           .eq('source', platform)
           .eq('season_id', period)
 
-        const snapshotMap = new Map(snapshots?.map((s) => [s.source_trader_id, s]) || [])
+        const _snapshotMap = new Map(snapshots?.map((s) => [s.source_trader_id, s]) || [])
 
         let missingRoi = 0
         let missingPnl = 0

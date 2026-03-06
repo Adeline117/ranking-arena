@@ -164,7 +164,7 @@ self.addEventListener('fetch', (event) => {
                 });
                 await cache.put(request, responseWithTimestamp);
               }
-            }).catch(() => {});
+            }).catch(() => {}); // eslint-disable-line no-restricted-syntax -- fire-and-forget, failure is non-critical
 
             return cachedResponse;
           }

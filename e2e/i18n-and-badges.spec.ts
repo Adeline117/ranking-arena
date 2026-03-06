@@ -39,7 +39,7 @@ test.describe('i18n Language Toggle', () => {
   test('switching language changes page text', async ({ page }) => {
     // Wait for page content
     const rankingSection = page.locator('.home-ranking-section')
-    await rankingSection.isVisible({ timeout: 15_000 }).catch(() => {})
+    await rankingSection.isVisible({ timeout: 15_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     // Capture initial text
     const _initialText = await page.textContent('body')
@@ -101,7 +101,7 @@ test.describe('Exchange Badges', () => {
   test('exchange names display correctly on trader detail', async ({ page }) => {
     // Navigate to a trader detail page from the ranking
     const traderLinks = page.locator('a[href*="/trader/"]')
-    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
+    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     if (await traderLinks.count() > 0) {
       await traderLinks.first().click()

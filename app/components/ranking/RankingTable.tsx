@@ -329,7 +329,7 @@ function RankingTableInner(props: {
   // Virtual scrolling disabled — 100 items/page renders fine without it
   const useVirtual = false
   const tableScrollRef = useRef<HTMLDivElement>(null)
-  const tableVirtualizer = useVirtualizer({
+  const tableVirtualizer = useVirtualizer({ // eslint-disable-line react-hooks/incompatible-library -- by design
     count: 0,
     getScrollElement: () => tableScrollRef.current,
     estimateSize: () => 56,

@@ -3654,10 +3654,6 @@ feedbackScreenshot: '添加截图（可选）',
 // Data disclaimer
 dataDisclaimer: '数据仅供参考，不构成任何投资建议。',
 
-// Missing keys referenced in code
-selected: '已选择',
-next: '下一步',
-
 // Search page
 searchPostBy: '作者',
 searchViewAll: '查看全部',
@@ -3791,6 +3787,11 @@ scoreTotal: '总分',
 
 // Export ranking
 exportRanking: '导出排名',
+exportRankingShort: '导出',
+
+// Ranking style filter
+rankingStyleLabel: '风格',
+rankingStyleAll: '全部',
 
 // Pro / Paywall
 proUpgradeTitle: '升级 Pro，解锁全部功能',

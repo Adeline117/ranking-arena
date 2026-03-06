@@ -35,7 +35,7 @@ test.describe('认证流程', () => {
   test('未登录用户可以访问首页', async ({ page }) => {
     await expect(page).toHaveTitle(/Arena/i)
     // Ranking section is a client component - wait for hydration
-    await page.waitForSelector('.home-ranking-section, .ranking-table-container', { timeout: 30_000 }).catch(() => {})
+    await page.waitForSelector('.home-ranking-section, .ranking-table-container', { timeout: 30_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
     const rankingSection = page.locator('.home-ranking-section, .ranking-table-container').first()
     // Use soft assertion - ranking section depends on API data availability
     const isVisible = await rankingSection.isVisible({ timeout: 5_000 }).catch(() => false)
