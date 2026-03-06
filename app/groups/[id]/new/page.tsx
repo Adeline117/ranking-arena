@@ -9,130 +9,18 @@ import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { renderContentWithLinks } from '@/lib/utils/content'
-import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
-import type { Sticker } from '@/lib/stickers'
 import { logger } from '@/lib/logger'
-import Image from 'next/image'
-
-interface UploadedImage {
-  url: string
-  fileName: string
-}
-
-interface UploadedVideo {
-  url: string
-  fileName: string
-  fileSize?: number
-  thumbnail?: string
-}
-
-interface PollOption {
-  text: string
-  votes: number
-}
-
-const TITLE_MAX_LENGTH = 100
-const CONTENT_MAX_LENGTH = 10000
-const DRAFT_KEY_PREFIX = 'group_post_draft_'
-const MAX_IMAGES = 9
-const MAX_VIDEO_SIZE_MB = 100
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska']
-
-const POLL_DURATION_OPTIONS = [
-  { label_zh: '1小时', label_en: '1 hour', value: 1 },
-  { label_zh: '6小时', label_en: '6 hours', value: 6 },
-  { label_zh: '12小时', label_en: '12 hours', value: 12 },
-  { label_zh: '1天', label_en: '1 day', value: 24 },
-  { label_zh: '3天', label_en: '3 days', value: 72 },
-  { label_zh: '7天', label_en: '7 days', value: 168 },
-]
-
-// Shared input style
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  borderRadius: tokens.radius.md,
-  border: ('1px solid ' + tokens.colors.border.primary),
-  background: tokens.colors.bg.secondary,
-  color: tokens.colors.text.primary,
-  fontSize: tokens.typography.fontSize.base,
-  outline: 'none',
-  fontFamily: tokens.typography.fontFamily.sans.join(', '),
-}
-
-// Character count component
-interface CharCountProps {
-  current: number
-  max: number
-}
-
-function CharCount({ current, max }: CharCountProps): React.ReactElement {
-  const isOver = current > max
-  return (
-    <Text size="xs" style={{ color: isOver ? tokens.colors.accent.error : tokens.colors.text.tertiary }}>
-      {current}/{max}
-    </Text>
-  )
-}
-
-// Toggle switch component
-interface ToggleSwitchProps {
-  enabled: boolean
-  onToggle: () => void
-  label: string
-  description?: string
-}
-
-function ToggleSwitch({ enabled, onToggle, label, description }: ToggleSwitchProps): React.ReactElement {
-  return (
-    <Box
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: tokens.spacing[3],
-        padding: tokens.spacing[4],
-        borderRadius: tokens.radius.md,
-        border: `1px solid ${enabled ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
-        background: enabled ? 'var(--color-accent-primary-10)' : tokens.colors.bg.secondary,
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-      }}
-      onClick={onToggle}
-    >
-      <Box
-        style={{
-          width: 44,
-          height: 24,
-          borderRadius: tokens.radius.lg,
-          background: enabled ? tokens.colors.accent.brand : tokens.colors.border.primary,
-          position: 'relative',
-          transition: 'background 0.2s ease',
-        }}
-      >
-        <Box
-          style={{
-            width: 20,
-            height: 20,
-            borderRadius: '50%',
-            background: tokens.colors.white,
-            position: 'absolute',
-            top: 2,
-            left: enabled ? 22 : 2,
-            transition: 'left 0.2s ease',
-            boxShadow: '0 1px 3px var(--color-overlay-medium)',
-          }}
-        />
-      </Box>
-      <Box>
-        <Text size="sm" weight="bold" style={{ color: enabled ? tokens.colors.accent.brand : tokens.colors.text.primary }}>
-          {label}
-        </Text>
-        {description && <Text size="xs" color="tertiary">{description}</Text>}
-      </Box>
-    </Box>
-  )
-}
+import type { UploadedImage, UploadedVideo, PollOption, LinkPreview } from './types'
+import {
+  TITLE_MAX_LENGTH, CONTENT_MAX_LENGTH, DRAFT_KEY_PREFIX,
+  MAX_IMAGES, MAX_VIDEO_SIZE_MB,
+  ALLOWED_IMAGE_TYPES, ALLOWED_VIDEO_TYPES,
+} from './types'
+import { CharCount, ToggleSwitch, inputStyle } from './components/FormControls'
+import { ContentEditor } from './components/ContentEditor'
+import { PollEditor } from './components/PollEditor'
+import { ImageUploader } from './components/ImageUploader'
+import { VideoUploader } from './components/VideoUploader'
 
 export default function NewGroupPostPage(): React.ReactElement {
   const params = useParams<{ id: string }>()
@@ -166,7 +54,7 @@ export default function NewGroupPostPage(): React.ReactElement {
   const [videoUploadProgress, setVideoUploadProgress] = useState(0)
 
   // Link preview state (UF15)
-  const [linkPreview, setLinkPreview] = useState<{ url: string; title: string; description: string; image: string } | null>(null)
+  const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null)
   const [linkPreviewLoading, setLinkPreviewLoading] = useState(false)
   const linkPreviewUrlRef = useRef<string | null>(null)
 
@@ -182,10 +70,8 @@ export default function NewGroupPostPage(): React.ReactElement {
   const draftKey = `${DRAFT_KEY_PREFIX}${groupId}`
 
   useEffect(() => {
-    // 等待 groupId 解析完成
     if (!groupId) return
 
-     
     supabase.auth.getUser().then(async ({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
@@ -222,26 +108,26 @@ export default function NewGroupPostPage(): React.ReactElement {
         router.push(`/groups/${groupId}`)
         return
       }
-    }).catch(() => { /* Intentionally swallowed: auth/membership check handled via UI redirects */ })
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, groupId, showToast, language])
 
-  // 加载小组名称
+  // Load group name
   useEffect(() => {
     if (!groupId) return
-    
+
     const loadGroupName = async () => {
       const { data } = await supabase
         .from('groups')
         .select('name')
         .eq('id', groupId)
         .maybeSingle()
-      
+
       if (data?.name) {
         setGroupName(data.name)
       }
     }
-    
+
     loadGroupName()
   }, [groupId])
 
@@ -252,13 +138,12 @@ export default function NewGroupPostPage(): React.ReactElement {
         .select('handle')
         .eq('id', uid)
         .maybeSingle()
-      
+
       if (userProfile?.handle) {
         setUserHandle(userProfile.handle)
         return
       }
 
-       
       const { data: user } = await supabase.auth.getUser()
       if (user?.user?.email) {
         setUserHandle(user.user.email.split('@')[0])
@@ -292,7 +177,7 @@ export default function NewGroupPostPage(): React.ReactElement {
   // Auto-save draft to localStorage (debounced)
   useEffect(() => {
     if (typeof window === 'undefined' || !groupId) return
-    
+
     const saveTimer = setTimeout(() => {
       if (title.trim() || content.trim()) {
         localStorage.setItem(draftKey, JSON.stringify({ title, content, images, pollEnabled }))
@@ -493,7 +378,6 @@ export default function NewGroupPostPage(): React.ReactElement {
   }, [showToast, t])
 
   const handleSubmit = async () => {
-    // 防止双重提交
     if (submitRef.current || loading) return
 
     if (!title.trim()) {
@@ -519,7 +403,6 @@ export default function NewGroupPostPage(): React.ReactElement {
     submitRef.current = true
     setLoading(true)
     try {
-      // 如果有图片但没有插入到内容中，自动附加到内容末尾
       let finalContent = content
       if (images.length > 0) {
         const unincludedImages = images.filter(img => !content.includes(img.url))
@@ -528,21 +411,19 @@ export default function NewGroupPostPage(): React.ReactElement {
         }
       }
 
-      // 如果开启投票，先创建投票
       let pollId = null
       if (pollEnabled) {
         const validOptions = pollOptions.filter(opt => opt.text.trim())
-
         const endAt = new Date(Date.now() + pollDuration * 60 * 60 * 1000)
 
         const { data: pollData, error: pollError } = await supabase
           .from('polls')
           .insert({
             question: title,
-            options: validOptions.map((opt, index) => ({ 
-              text: opt.text.trim(), 
+            options: validOptions.map((opt, index) => ({
+              text: opt.text.trim(),
               votes: 0,
-              index 
+              index
             })),
             type: pollType,
             end_at: endAt.toISOString(),
@@ -585,7 +466,6 @@ export default function NewGroupPostPage(): React.ReactElement {
       logger.warn('Post created successfully:', postData?.id)
 
       clearDraft()
-      // Remember last-used group for CreatePostFAB quick access
       if (typeof window !== 'undefined') {
         localStorage.setItem('last_post_group_id', groupId)
       }
@@ -612,6 +492,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         </Text>
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+          {/* Title input */}
           <Box>
             <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
               <Text size="sm" weight="bold">{t('titleLabel')}</Text>
@@ -629,174 +510,24 @@ export default function NewGroupPostPage(): React.ReactElement {
             />
           </Box>
 
-          <Box>
-            <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
-              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                <Text size="sm" weight="bold">
-                  {t('contentLabel')}
-                </Text>
-                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: ('1px solid ' + tokens.colors.border.primary) }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowPreview(false)}
-                    style={{
-                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                      border: 'none',
-                      background: !showPreview ? tokens.colors.accent.brand : 'transparent',
-                      color: !showPreview ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
-                      fontSize: tokens.typography.fontSize.xs,
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    {t('edit')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowPreview(true)}
-                    style={{
-                      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                      border: 'none',
-                      borderLeft: ('1px solid ' + tokens.colors.border.primary),
-                      background: showPreview ? tokens.colors.accent.brand : 'transparent',
-                      color: showPreview ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
-                      fontSize: tokens.typography.fontSize.xs,
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    {t('preview')}
-                  </button>
-                </Box>
-                {draftSaved && (
-                  <Text size="xs" color="tertiary" style={{ color: tokens.colors.accent.success }}>
-                    {t('draftSaved')}
-                  </Text>
-                )}
-              </Box>
-              <CharCount current={content.length} max={CONTENT_MAX_LENGTH} />
-            </Box>
-            
-            {showPreview ? (
-              <Box
-                style={{
-                  width: '100%',
-                  minHeight: 288,
-                  padding: tokens.spacing[4],
-                  borderRadius: tokens.radius.md,
-                  border: ('2px solid ' + tokens.colors.accent.brand),
-                  background: `linear-gradient(135deg, var(--color-accent-primary-08) 0%, var(--color-accent-primary-10) 100%)`,
-                  color: tokens.colors.text.primary,
-                  fontSize: tokens.typography.fontSize.base,
-                  lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  position: 'relative',
-                }}
-              >
-                <Box
-                  style={{
-                    position: 'absolute',
-                    top: -12,
-                    left: 12,
-                    background: tokens.colors.accent.brand,
-                    color: tokens.colors.white,
-                    padding: '2px 10px',
-                    borderRadius: tokens.radius.full,
-                    fontSize: 11,
-                    fontWeight: 700,
-                  }}
-                >
-                  {t('previewMode')}
-                </Box>
-                {content ? renderContentWithLinks(content) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
-              </Box>
-            ) : (
-              <textarea
-                placeholder={t('enterContent')}
-                value={content}
-                onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
-                maxLength={CONTENT_MAX_LENGTH}
-                rows={12}
-                aria-label={t('contentLabel')}
-                className="post-editor-input"
-                style={{ ...inputStyle, padding: tokens.spacing[4], resize: 'vertical', lineHeight: 1.7, transition: 'border-color 0.2s, box-shadow 0.2s', minHeight: 240 }}
-              />
-            )}
-            {/* UF15: Link Preview Card */}
-            {linkPreviewLoading && (
-              <Box style={{ marginTop: tokens.spacing[2], padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}` }}>
-                <Text size="xs" color="tertiary">{language === 'zh' ? '正在获取链接预览...' : 'Fetching link preview...'}</Text>
-              </Box>
-            )}
-            {linkPreview && !linkPreviewLoading && (
-              <Box style={{
-                marginTop: tokens.spacing[2], padding: tokens.spacing[3], borderRadius: tokens.radius.md,
-                background: tokens.colors.bg.secondary, border: `1px solid ${tokens.colors.border.primary}`,
-                display: 'flex', gap: tokens.spacing[3], alignItems: 'flex-start',
-              }}>
-                {linkPreview.image && (
-                  <Image src={linkPreview.image} alt={linkPreview.title || 'Link preview'} width={80} height={60} loading="lazy" unoptimized style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
-                )}
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="sm" weight="bold" style={{ marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {linkPreview.title}
-                  </Text>
-                  {linkPreview.description && (
-                    <Text size="xs" color="secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
-                      {linkPreview.description}
-                    </Text>
-                  )}
-                  <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>{new URL(linkPreview.url).hostname}</Text>
-                </Box>
-                <button aria-label="Close" onClick={() => { setLinkPreview(null); linkPreviewUrlRef.current = 'dismissed' }}
-                  style={{ background: 'none', border: 'none', color: tokens.colors.text.tertiary, cursor: 'pointer', fontSize: 16, padding: 2 }}>×</button>
-              </Box>
-            )}
-            {/* Sticker button */}
-            <div style={{ position: 'relative', marginTop: tokens.spacing[2] }}>
-              <button
-                type="button"
-                onClick={() => setShowStickerPicker(prev => !prev)}
-                style={{
-                  background: 'transparent',
-                  border: ('1px solid ' + tokens.colors.border.primary),
-                  cursor: 'pointer',
-                  padding: '4px 10px',
-                  borderRadius: tokens.radius.md,
-                  color: showStickerPicker ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
-                  fontSize: 13,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
-                  <path d="M14 3v4a2 2 0 0 0 2 2h4" />
-                </svg>
-                {language === 'zh' ? '贴纸' : 'Sticker'}
-              </button>
-              <DynamicStickerPicker
-                isOpen={showStickerPicker}
-                onClose={() => setShowStickerPicker(false)}
-                onSelect={(sticker: Sticker) => {
-                  setContent(prev => prev + ('[sticker:' + sticker.id + ']'))
-                  setShowStickerPicker(false)
-                }}
-              />
-            </div>
-            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
-              {t('mentionTip')}
-            </Text>
-          </Box>
+          {/* Content editor with preview, link preview, sticker picker */}
+          <ContentEditor
+            content={content}
+            setContent={setContent}
+            showPreview={showPreview}
+            setShowPreview={setShowPreview}
+            showStickerPicker={showStickerPicker}
+            setShowStickerPicker={setShowStickerPicker}
+            draftSaved={draftSaved}
+            linkPreview={linkPreview}
+            setLinkPreview={setLinkPreview}
+            linkPreviewLoading={linkPreviewLoading}
+            linkPreviewUrlRef={linkPreviewUrlRef}
+            language={language}
+            t={t}
+          />
 
+          {/* Poll toggle */}
           <ToggleSwitch
             enabled={pollEnabled}
             onToggle={() => setPollEnabled(!pollEnabled)}
@@ -804,441 +535,44 @@ export default function NewGroupPostPage(): React.ReactElement {
             description={t('pollDescription')}
           />
 
-          {/* 投票设置 */}
+          {/* Poll settings */}
           {pollEnabled && (
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-              <Box>
-                <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                  {t('pollOptionsLabel')}
-                </Text>
-                {pollOptions.map((option, index) => (
-                  <Box key={index} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
-                    <Text size="xs" color="tertiary" style={{ width: 20 }}>{index + 1}.</Text>
-                    <input
-                      type="text"
-                      placeholder={`${t('pollOptionPlaceholder')} ${index + 1}`}
-                      aria-label={`${t('pollOptionPlaceholder')} ${index + 1}`}
-                      value={option.text}
-                      onChange={(e) => {
-                        const newOptions = [...pollOptions]
-                        newOptions[index].text = e.target.value
-                        setPollOptions(newOptions)
-                      }}
-                      style={{
-                        flex: 1,
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                        borderRadius: tokens.radius.md,
-                        border: ('1px solid ' + tokens.colors.border.primary),
-                        background: tokens.colors.bg.primary,
-                        color: tokens.colors.text.primary,
-                        fontSize: tokens.typography.fontSize.sm,
-                        outline: 'none',
-                      }}
-                    />
-                    {pollOptions.length > 2 && (
-                      <button aria-label="Close"
-                        onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
-                        style={{
-                          width: 28,
-                          height: 28,
-                          border: 'none',
-                          background: 'var(--color-accent-error-20)',
-                          color: tokens.colors.accent.error,
-                          borderRadius: tokens.radius.md,
-                          cursor: 'pointer',
-                          fontSize: 16,
-                        }}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </Box>
-                ))}
-                {pollOptions.length < 6 && (
-                  <button
-                    onClick={() => setPollOptions([...pollOptions, { text: '', votes: 0 }])}
-                    style={{
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      border: ('1px dashed ' + tokens.colors.border.primary),
-                      background: 'transparent',
-                      color: tokens.colors.text.secondary,
-                      borderRadius: tokens.radius.md,
-                      cursor: 'pointer',
-                      fontSize: tokens.typography.fontSize.sm,
-                      width: '100%',
-                    }}
-                  >
-                    + {t('addOption')}
-                  </button>
-                )}
-              </Box>
-
-              <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
-                <Box style={{ flex: 1, minWidth: 150 }}>
-                  <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                    {t('pollTypeLabel')}
-                  </Text>
-                  <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                    <button
-                      onClick={() => setPollType('single')}
-                      style={{
-                        flex: 1,
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                        borderRadius: tokens.radius.md,
-                        border: `1px solid ${pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
-                        background: pollType === 'single' ? 'var(--color-accent-primary-20)' : 'transparent',
-                        color: pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
-                        cursor: 'pointer',
-                        fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {t('singleChoice')}
-                    </button>
-                    <button
-                      onClick={() => setPollType('multiple')}
-                      style={{
-                        flex: 1,
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                        borderRadius: tokens.radius.md,
-                        border: `1px solid ${pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
-                        background: pollType === 'multiple' ? 'var(--color-accent-primary-20)' : 'transparent',
-                        color: pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
-                        cursor: 'pointer',
-                        fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {t('multipleChoice')}
-                    </button>
-                  </Box>
-                </Box>
-
-                <Box style={{ flex: 1, minWidth: 150 }}>
-                  <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-                    {t('pollDurationLabel')}
-                  </Text>
-                  <select
-                    value={pollDuration}
-                    onChange={(e) => setPollDuration(Number(e.target.value))}
-                    style={{
-                      width: '100%',
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                      borderRadius: tokens.radius.md,
-                      border: ('1px solid ' + tokens.colors.border.primary),
-                      background: tokens.colors.bg.primary,
-                      color: tokens.colors.text.primary,
-                      fontSize: tokens.typography.fontSize.sm,
-                      outline: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {POLL_DURATION_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{language === 'zh' ? opt.label_zh : opt.label_en}</option>
-                    ))}
-                  </select>
-                </Box>
-              </Box>
-            </Box>
+            <PollEditor
+              pollOptions={pollOptions}
+              setPollOptions={setPollOptions}
+              pollType={pollType}
+              setPollType={setPollType}
+              pollDuration={pollDuration}
+              setPollDuration={setPollDuration}
+              language={language}
+              t={t}
+            />
           )}
 
-          {/* 图片上传区域 */}
-          <Box>
-            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-              {t('imagesOptional')}
-            </Text>
-            
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-              multiple
-              onChange={handleImageUpload}
-              style={{ display: 'none' }}
-              id="image-upload"
-            />
-            
-            <Box 
-              style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                gap: tokens.spacing[3],
-                marginBottom: tokens.spacing[3],
-              }}
-            >
-              {images.map((image, index) => (
-                <Box
-                  key={index}
-                  style={{
-                    position: 'relative',
-                    width: 100,
-                    height: 100,
-                    borderRadius: tokens.radius.md,
-                    overflow: 'hidden',
-                    border: ('1px solid ' + tokens.colors.border.primary),
-                  }}
-                >
-                  <img
-                    src={image.url}
-                    alt={`Upload ${index + 1}`}
-                    width={120}
-                    height={120}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
-                  />
-                  <Box
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      right: 0,
-                      display: 'flex',
-                      gap: 2,
-                    }}
-                  >
-                    <button
-                      onClick={() => insertImageToContent(image.url)}
-                      title={t('imageInserted') || (language === 'zh' ? '插入到内容' : 'Insert to content')}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        border: 'none',
-                        background: 'var(--color-accent-primary)',
-                        color: tokens.colors.white,
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      ↵
-                    </button>
-                    <button aria-label="Close"
-                      onClick={() => removeImage(index)}
-                      title={language === 'zh' ? '删除' : 'Delete'}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        border: 'none',
-                        background: 'var(--color-accent-error)',
-                        color: tokens.colors.white,
-                        cursor: 'pointer',
-                        fontSize: 14,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      ×
-                    </button>
-                  </Box>
-                </Box>
-              ))}
-              
-              {images.length < 9 && (
-                <label
-                  htmlFor="image-upload"
-                  style={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: tokens.radius.md,
-                    border: ('2px dashed ' + tokens.colors.border.primary),
-                    background: tokens.colors.bg.secondary,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: uploading ? 'not-allowed' : 'pointer',
-                    opacity: uploading ? 0.5 : 1,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  {uploading ? (
-                    <Text size="xs" color="secondary">{t('uploadingImage')}</Text>
-                  ) : (
-                    <>
-                      <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>+</Text>
-                      <Text size="xs" color="secondary">{t('addImage')}</Text>
-                    </>
-                  )}
-                </label>
-              )}
-            </Box>
-            
-            <Text size="xs" color="tertiary">
-              {t('imageSupport')}
-            </Text>
-          </Box>
+          {/* Image upload */}
+          <ImageUploader
+            images={images}
+            uploading={uploading}
+            fileInputRef={fileInputRef}
+            onUpload={handleImageUpload}
+            onRemove={removeImage}
+            onInsert={insertImageToContent}
+            language={language}
+            t={t}
+          />
 
-          {/* 视频上传区域 */}
-          <Box>
-            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
-              {t('videoOptional')}
-            </Text>
+          {/* Video upload */}
+          <VideoUploader
+            videos={videos}
+            videoUploading={videoUploading}
+            videoUploadProgress={videoUploadProgress}
+            videoInputRef={videoInputRef}
+            onUpload={handleVideoUpload}
+            onRemove={removeVideo}
+            t={t}
+          />
 
-            <input
-              ref={videoInputRef}
-              type="file"
-              accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska"
-              onChange={handleVideoUpload}
-              style={{ display: 'none' }}
-              id="video-upload"
-            />
-
-            <Box
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: tokens.spacing[3],
-                marginBottom: tokens.spacing[3],
-              }}
-            >
-              {/* 已上传的视频预览 */}
-              {videos.map((video) => (
-                <Box
-                  key={video.url}
-                  style={{
-                    position: 'relative',
-                    width: 200,
-                    height: 120,
-                    borderRadius: tokens.radius.md,
-                    overflow: 'hidden',
-                    border: ('2px solid ' + tokens.colors.accent.brand),
-                    background: tokens.colors.black,
-                  }}
-                >
-                  <video
-                    src={video.url}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
-                  />
-                  {/* 播放图标 */}
-                  <Box
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      width: 40,
-                      height: 40,
-                      borderRadius: '50%',
-                      background: 'var(--color-accent-primary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: tokens.colors.white,
-                      fontSize: 18,
-                    }}
-                  >
-                    Play
-                  </Box>
-                  {/* 文件大小标签 */}
-                  <Box
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      background: 'var(--color-accent-primary)',
-                      color: tokens.colors.white,
-                      fontSize: 10,
-                      textAlign: 'center',
-                      padding: '2px 0',
-                    }}
-                  >
-                    {video.fileSize ? (video.fileSize / 1024 / 1024).toFixed(1) : '?'}MB
-                  </Box>
-                  {/* 删除按钮 */}
-                  <button aria-label="Close"
-                    onClick={removeVideo}
-                    title={t('deleteVideo')}
-                    style={{
-                      position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      width: 24,
-                      height: 24,
-                      border: 'none',
-                      background: 'var(--color-accent-error)',
-                      color: tokens.colors.white,
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      borderRadius: tokens.radius.sm,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    ×
-                  </button>
-                </Box>
-              ))}
-
-              {/* 上传按钮 */}
-              {videos.length < 1 && (
-                <label
-                  htmlFor="video-upload"
-                  style={{
-                    width: 200,
-                    height: 120,
-                    borderRadius: tokens.radius.md,
-                    border: ('2px dashed ' + tokens.colors.border.primary),
-                    background: tokens.colors.bg.secondary,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: videoUploading ? 'not-allowed' : 'pointer',
-                    opacity: videoUploading ? 0.5 : 1,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  {videoUploading ? (
-                    <Box style={{ textAlign: 'center' }}>
-                      <Text size="xs" color="secondary">{t('uploadingProgress').replace('{percent}', String(videoUploadProgress))}</Text>
-                      {/* 进度条 */}
-                      <Box
-                        style={{
-                          width: 150,
-                          height: 4,
-                          background: tokens.colors.border.primary,
-                          borderRadius: 2,
-                          marginTop: 8,
-                          overflow: 'hidden',
-                        }}
-                      >
-                        <Box
-                          style={{
-                            width: `${videoUploadProgress}%`,
-                            height: '100%',
-                            background: tokens.colors.accent.brand,
-                            transition: 'width 0.3s ease',
-                          }}
-                        />
-                      </Box>
-                    </Box>
-                  ) : (
-                    <>
-                      <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>Video</Text>
-                      <Text size="xs" color="secondary" style={{ marginTop: 4 }}>{t('addVideo')}</Text>
-                      <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>MP4, WebM, MOV</Text>
-                    </>
-                  )}
-                </label>
-              )}
-            </Box>
-
-            <Text size="xs" color="tertiary">
-              {t('videoFormatSupport')}
-            </Text>
-          </Box>
-
+          {/* Action buttons */}
           <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
             <Button
               variant="ghost"

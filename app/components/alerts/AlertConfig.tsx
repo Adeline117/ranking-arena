@@ -300,14 +300,16 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
 
       {/* 一次性提醒 */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, marginBottom: 16 }}>
-        <input
-          type="checkbox"
-          checked={alert.one_time}
-          onChange={() => setAlert(prev => ({ ...prev, one_time: !prev.one_time }))}
-        />
-        <Text style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
-          {t('alertOneTime')}
-        </Text>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={alert.one_time}
+            onChange={() => setAlert(prev => ({ ...prev, one_time: !prev.one_time }))}
+          />
+          <Text style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
+            {t('alertOneTime')}
+          </Text>
+        </label>
       </Box>
 
       {/* 操作按钮 */}
@@ -405,7 +407,7 @@ function AlertRow({
       padding: '8px 0', borderBottom: `1px solid ${tokens.colors.border.primary}`,
     }}>
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-        <input type="checkbox" checked={checked} onChange={onToggle} />
+        <input type="checkbox" checked={checked} onChange={onToggle} aria-label={label} />
         <Box>
           <Text style={{ fontSize: 14, fontWeight: 500 }}>{label}</Text>
           <Text style={{ fontSize: 12, color: tokens.colors.text.secondary }}>{desc}</Text>
@@ -417,6 +419,7 @@ function AlertRow({
             type="number"
             value={threshold}
             onChange={(e) => onThresholdChange(Number(e.target.value))}
+            aria-label={`${label} threshold`}
             style={{
               width: 60, padding: '4px 6px', borderRadius: tokens.radius.sm, fontSize: 13,
               border: `1px solid ${tokens.colors.border.primary}`,
@@ -450,7 +453,7 @@ function AlertPriceRow({
       padding: '8px 0', borderBottom: `1px solid ${tokens.colors.border.primary}`,
     }}>
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-        <input type="checkbox" checked={checked} onChange={onToggle} />
+        <input type="checkbox" checked={checked} onChange={onToggle} aria-label={label} />
         <Box>
           <Text style={{ fontSize: 14, fontWeight: 500 }}>{label}</Text>
           <Text style={{ fontSize: 12, color: tokens.colors.text.secondary }}>{desc}</Text>
@@ -463,6 +466,7 @@ function AlertPriceRow({
             placeholder="BTC"
             value={symbol || ''}
             onChange={(e) => onSymbolChange(e.target.value || null)}
+            aria-label={`${label} symbol`}
             style={{
               width: 50, padding: '4px 6px', borderRadius: tokens.radius.sm, fontSize: 13,
               border: `1px solid ${tokens.colors.border.primary}`,
@@ -475,6 +479,7 @@ function AlertPriceRow({
             placeholder="0"
             value={value ?? ''}
             onChange={(e) => onValueChange(e.target.value ? Number(e.target.value) : null)}
+            aria-label={`${label} value`}
             style={{
               width: 80, padding: '4px 6px', borderRadius: tokens.radius.sm, fontSize: 13,
               border: `1px solid ${tokens.colors.border.primary}`,
