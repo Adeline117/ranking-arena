@@ -92,6 +92,35 @@ interface BybitApiResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Batch prefetch: all periods in single VPS browser session (~55s vs ~195s)
+// ---------------------------------------------------------------------------
+
+const _batchCache = new Map<string, BybitApiResponse>()
+
+async function prefetchBatch(periods: string[]): Promise<void> {
+  if (!VPS_SCRAPER_KEY) return
+  const durations = periods.map(p => PERIOD_MAP[p] || PERIOD_MAP['30D'])
+  try {
+    const url = `${VPS_SCRAPER_URL}/bybit/leaderboard-batch?pageSize=${PAGE_SIZE}&durations=${durations.join(',')}`
+    const res = await fetch(url, {
+      headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+      signal: AbortSignal.timeout(120_000),
+    })
+    if (res.ok) {
+      const data = await res.json() as Record<string, BybitApiResponse>
+      for (const [dur, resp] of Object.entries(data)) {
+        if (resp?.result?.leaderDetails && resp.result.leaderDetails.length > 0) {
+          _batchCache.set(dur, resp)
+        }
+      }
+      logger.info(`[${SOURCE}] Batch prefetch: ${_batchCache.size}/${durations.length} periods cached`)
+    }
+  } catch (err) {
+    logger.warn(`[${SOURCE}] Batch prefetch failed: ${err instanceof Error ? err.message : err}`)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Period fetcher
 // ---------------------------------------------------------------------------
 
@@ -106,14 +135,21 @@ async function fetchPeriod(
   for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
     let data: BybitApiResponse | null = null
 
+    // Strategy 0: Check batch cache (prefetched all periods in single browser session)
+    if (pageNo === 1 && _batchCache.has(duration)) {
+      data = _batchCache.get(duration)!
+      _batchCache.delete(duration)
+      logger.info(`[${SOURCE}] Using batch-cached data for ${duration}`)
+    }
+
     // Strategy 1: VPS Playwright scraper (bypasses Akamai WAF)
-    // Only page 1 to stay within Vercel function timeout (300s)
-    if (VPS_SCRAPER_KEY && pageNo <= 1) {
+    // Only page 1, only if batch cache missed
+    if (!data && VPS_SCRAPER_KEY && pageNo <= 1 && _batchCache.size === 0) {
       try {
         const scraperUrl = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${PAGE_SIZE}&duration=${duration}`
         const res = await fetch(scraperUrl, {
           headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-          signal: AbortSignal.timeout(240_000), // Allow queue wait (~65s/req) + processing
+          signal: AbortSignal.timeout(240_000),
         })
         if (res.ok) {
           const scraperData = (await res.json()) as BybitApiResponse
@@ -238,6 +274,9 @@ export async function fetchBybitSpot(
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
   try {
+    // Prefetch all periods in a single VPS browser session (~55s vs ~195s)
+    await prefetchBatch(periods)
+
     for (const period of periods) {
       result.periods[period] = await fetchPeriod(supabase, period)
       if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
