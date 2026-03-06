@@ -4025,12 +4025,17 @@ botTokenPrice: 'Token Price',
 botMarketCap: 'Market Cap',
 botWindowComparison: 'Window Comparison',
 botWindowLabel: 'Window',
+botWindow: 'Window',
 botOnchainInfo: 'On-chain Info',
+botOnChainInfo: 'On-chain Info',
 botContractLabel: 'Contract: ',
+botContractAddress: 'Contract: ',
 botTokenLabel: 'Token: ',
+botTokenAddress: 'Token: ',
 
 // Portfolio page
 portfolioPageTitle: 'Portfolio',
+portfolioTitle: 'Portfolio',
 portfolioConnectExchange: 'Connect Exchange',
 portfolioConnectedExchanges: 'Connected Exchanges',
 portfolioAddFailed: 'Failed to add exchange',
@@ -4058,6 +4063,35 @@ collectionEmpty: 'No collections',
 
 // Hot page translated badge
 hotTranslatedBadge: 'TR',
+
+// SectorTreemap
+sectorTreemapTitle: 'Sector Heatmap',
+sectorTreemap1h: '1H',
+sectorTreemap24h: '24H',
+sectorTreemap7d: '7D',
+sectorTreemapLoading: 'Loading...',
+sectorTreemapMCap: 'MCap',
+sectorTreemapBigDrop: 'Big Drop',
+sectorTreemapDip: 'Dip',
+sectorTreemapRise: 'Rise',
+sectorTreemapRally: 'Rally',
+
+// UserActivityFeed
+userActivityTitle: 'Activity',
+userActivityNoActivities: 'No activity yet',
+userActivityLoadMore: 'Load more',
+userActivityMarked: 'Marked ',
+userActivityWantRead: ' as want to read',
+userActivityStartedReading: 'Started reading ',
+userActivityFinishedReading: 'Finished reading ',
+userActivityRated: 'Rated ',
+userActivityRatedSuffix: ' ',
+userActivityReviewed: 'Reviewed ',
+userActivityFollowedTrader: 'Followed trader ',
+userActivityFollowedUser: 'Followed ',
+userActivityJoinedGroup: 'Joined group ',
+userActivityPublishedPost: 'Published post ',
+userActivityView: 'View',
 
 } as const
 

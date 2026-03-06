@@ -257,7 +257,7 @@ function CompareChart({
       }
 
       window.addEventListener('resize', resizeHandler)
-    })
+    }).catch(() => {})
 
     return () => {
       disposed = true

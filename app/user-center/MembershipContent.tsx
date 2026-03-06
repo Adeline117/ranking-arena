@@ -96,7 +96,6 @@ interface MembershipInfo {
 
 export default function MembershipContent() {
   const { t, language } = useLanguage()
-  const isZh = language === 'zh'
   const router = useRouter()
   const { showToast } = useToast()
   const { getAuthHeadersAsync } = useAuthSession()
@@ -302,7 +301,7 @@ export default function MembershipContent() {
                 </div>
                 <div style={{ fontWeight: 600, marginTop: 4, color: tokens.colors.text.primary }}>
                   {new Date(info.subscription.currentPeriodEnd).toLocaleDateString(
-                    isZh ? 'zh-CN' : 'en-US'
+                    language === 'zh' ? 'zh-CN' : 'en-US'
                   )}
                 </div>
               </div>
@@ -442,7 +441,7 @@ export default function MembershipContent() {
                   color: '#451a03',
                 }}
               >
-                {isZh ? `前${PRICING.lifetime.spots}名` : `First ${PRICING.lifetime.spots}`}
+                {t('membershipLifetimeSpots').replace('{spots}', String(PRICING.lifetime.spots))}
               </Box>
 
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

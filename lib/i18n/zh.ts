@@ -4032,12 +4032,17 @@ botTokenPrice: '代币价格',
 botMarketCap: '市值',
 botWindowComparison: '时间窗口对比',
 botWindowLabel: '窗口',
+botWindow: '窗口',
 botOnchainInfo: '链上信息',
+botOnChainInfo: '链上信息',
 botContractLabel: '合约地址: ',
+botContractAddress: '合约地址: ',
 botTokenLabel: '代币地址: ',
+botTokenAddress: '代币地址: ',
 
 // Portfolio page (投资组合)
 portfolioPageTitle: '投资组合',
+portfolioTitle: '投资组合',
 portfolioConnectExchange: '连接交易所',
 portfolioConnectedExchanges: '已连接交易所',
 portfolioAddFailed: '添加交易所失败',
@@ -4065,6 +4070,35 @@ collectionEmpty: '暂无收藏夹',
 
 // Hot page translated badge (热榜翻译标记)
 hotTranslatedBadge: '译',
+
+// SectorTreemap (板块热力图)
+sectorTreemapTitle: '板块热力图',
+sectorTreemap1h: '1小时',
+sectorTreemap24h: '24小时',
+sectorTreemap7d: '7天',
+sectorTreemapLoading: '加载中...',
+sectorTreemapMCap: '市值',
+sectorTreemapBigDrop: '大跌',
+sectorTreemapDip: '小跌',
+sectorTreemapRise: '小涨',
+sectorTreemapRally: '大涨',
+
+// UserActivityFeed (用户动态)
+userActivityTitle: '动态',
+userActivityNoActivities: '暂无动态',
+userActivityLoadMore: '加载更多',
+userActivityMarked: '标记了 ',
+userActivityWantRead: ' 为想读',
+userActivityStartedReading: '开始阅读 ',
+userActivityFinishedReading: '读完了 ',
+userActivityRated: '评价了 ',
+userActivityRatedSuffix: ' ',
+userActivityReviewed: '评论了 ',
+userActivityFollowedTrader: '关注了交易员 ',
+userActivityFollowedUser: '关注了 ',
+userActivityJoinedGroup: '加入了小组 ',
+userActivityPublishedPost: '发布了帖子 ',
+userActivityView: '查看',
 
 } as const
 
