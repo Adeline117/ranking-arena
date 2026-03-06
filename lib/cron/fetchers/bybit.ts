@@ -38,8 +38,8 @@ const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 const TARGET = 500
 const PAGE_SIZE = 50
 
-// Phase 2: Enrichment settings - increased coverage from 50 to 100
-const ENRICH_LIMIT = 300
+// Phase 2: Enrichment settings
+const ENRICH_LIMIT = 50
 const ENRICH_CONCURRENCY = 5 // Increased concurrency
 const ENRICH_DELAY_MS = 1000
 
@@ -86,6 +86,32 @@ interface BybitApiResponse {
 // Fetch helpers with proxy fallback
 // ---------------------------------------------------------------------------
 
+// Batch cache: prefetched page-1 data for all periods from a single VPS browser session
+const _batchCache = new Map<string, BybitApiResponse>()
+
+async function prefetchBatch(periods: string[]): Promise<void> {
+  if (!VPS_SCRAPER_KEY) return
+  const durations = periods.map(p => PERIOD_MAP[p] || PERIOD_MAP['30D'])
+  try {
+    const url = `${VPS_SCRAPER_URL}/bybit/leaderboard-batch?pageSize=${PAGE_SIZE}&durations=${durations.join(',')}`
+    const res = await fetch(url, {
+      headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+      signal: AbortSignal.timeout(120_000),
+    })
+    if (res.ok) {
+      const data = await res.json() as Record<string, BybitApiResponse>
+      for (const [dur, resp] of Object.entries(data)) {
+        if (resp?.result?.leaderDetails && resp.result.leaderDetails.length > 0) {
+          _batchCache.set(dur, resp)
+        }
+      }
+      logger.info(`[bybit] Batch prefetch: ${_batchCache.size}/${durations.length} periods cached`)
+    }
+  } catch (err) {
+    logger.warn(`[bybit] Batch prefetch failed: ${err instanceof Error ? err.message : err}`)
+  }
+}
+
 // Cache which strategy works to avoid wasting time on failed strategies for subsequent pages
 let _bybitStrategy: 'scraper' | 'direct' | 'cf_proxy' | 'vps_proxy' | 'www' | 'none' | null = null
 
@@ -109,8 +135,17 @@ async function fetchBybitPage(
   // (scraper is too slow for multi-page — 73s per page)
   if (_bybitStrategy === 'scraper' && pageNo > 1) return null
 
-  // Strategy 1: VPS Playwright scraper (only page 1 due to ~73s latency)
-  if (VPS_SCRAPER_KEY && pageNo <= 1) {
+  // Strategy 0: Check batch cache (prefetched all periods in single browser session)
+  if (pageNo === 1 && _batchCache.has(duration)) {
+    const cached = _batchCache.get(duration)!
+    _batchCache.delete(duration)
+    if (!_bybitStrategy) _bybitStrategy = 'scraper'
+    logger.info(`[bybit] Using batch-cached data for ${duration}`)
+    return cached
+  }
+
+  // Strategy 1: VPS Playwright scraper (only page 1, only if batch cache missed)
+  if (VPS_SCRAPER_KEY && pageNo <= 1 && _batchCache.size === 0) {
     try {
       const url = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${pageSize}&duration=${duration}`
       const res = await fetch(url, {
@@ -278,8 +313,8 @@ async function fetchPeriod(
   const { saved, error } = await upsertTraders(supabase, top)
 
   // Phase 2: Enrich top traders with equity curve and stats detail
-  // Extended to all periods (not just 90D)
-  if (saved > 0) {
+  // Only enrich 90D to save time budget (enrichment APIs use same WAF-blocked endpoints)
+  if (saved > 0 && period === '90D') {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
     logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
@@ -337,6 +372,9 @@ export async function fetchBybit(
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
   try {
+    // Prefetch all periods in a single VPS browser session (~55s vs ~195s)
+    await prefetchBatch(periods)
+
     for (const period of periods) {
       result.periods[period] = await fetchPeriod(supabase, period)
       if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
