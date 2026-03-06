@@ -96,8 +96,8 @@ export default function BookDetailClient({
   initialLangVersions,
   canonicalUrl,
 }: BookDetailClientProps) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { language, t } = useLanguage()
+  const isZh = language === 'zh'  // kept for locale-dependent title selection and date formatting
   const id = book.id
 
   const [overview, setOverview] = useState<RatingOverview | null>(initialOverview)
@@ -163,7 +163,7 @@ export default function BookDetailClient({
   const [statusLoading, setStatusLoading] = useState(false)
   const handleStatus = async (status: 'want_to_read' | 'reading' | 'read') => {
     if (!session) {
-      alert(isZh ? '请先登录' : 'Please login first')
+      alert(t('bookPleaseLogin'))
       return
     }
     if (statusLoading) return
@@ -244,7 +244,7 @@ export default function BookDetailClient({
 
         {/* Breadcrumb */}
         <Breadcrumb items={[
-          { label: isZh ? '书库' : 'Library', href: '/library' },
+          { label: t('library'), href: '/library' },
           { label: book.title },
         ]} />
 
@@ -316,7 +316,7 @@ export default function BookDetailClient({
                 <div>
                   <StarRating rating={avg} ratingCount={count} size={22} readonly showCount={false} />
                   <span style={{ fontSize: 13, color: tokens.colors.text.tertiary, display: 'block', marginTop: 2 }}>
-                    {count} {isZh ? '人评价' : 'ratings'}
+                    {count} {t('bookRatings')}
                   </span>
                 </div>
               </div>
@@ -324,14 +324,14 @@ export default function BookDetailClient({
 
             {/* Metadata pills */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-              {book.category && <MetaPill label={isZh ? ({
-                book: '书籍', paper: '论文', whitepaper: '白皮书', event: '事件',
-                research: '研报', academic_paper: '学术论文', finance: '金融', regulatory: '监管',
-              } as Record<string, string>)[book.category] || book.category : book.category} />}
+              {book.category && <MetaPill label={({
+                book: t('bookCategoryBook'), paper: t('bookCategoryPaper'), whitepaper: t('bookCategoryWhitepaper'), event: t('bookCategoryEvent'),
+                research: t('bookCategoryResearch'), academic_paper: t('bookCategoryAcademic'), finance: t('bookCategoryFinance'), regulatory: t('bookCategoryRegulatory'),
+              } as Record<string, string>)[book.category] || book.category} />}
               {book.publisher && <MetaPill label={book.publisher} />}
               {book.publish_date && <MetaPill label={book.publish_date} />}
-              {book.language && <MetaPill label={book.language === 'zh' ? (isZh ? '中文' : 'Chinese') : book.language === 'en' ? (isZh ? '英文' : 'English') : book.language} />}
-              {book.page_count && <MetaPill label={`${book.page_count} ${isZh ? '页' : 'pages'}`} />}
+              {book.language && <MetaPill label={book.language === 'zh' ? t('bookLanguageChinese') : book.language === 'en' ? t('bookLanguageEnglish') : book.language} />}
+              {book.page_count && <MetaPill label={`${book.page_count} ${t('bookPages')}`} />}
               {book.isbn && <MetaPill label={`ISBN: ${book.isbn}`} />}
             </div>
 
@@ -345,7 +345,7 @@ export default function BookDetailClient({
                 alignItems: 'center',
               }}>
                 <span style={{ fontSize: 12, color: tokens.colors.text.tertiary, fontWeight: 600 }}>
-                  {isZh ? '其他语言版本' : 'Other Languages'}:
+                  {t('bookOtherLanguages')}:
                 </span>
                 {langVersions.map(v => (
                   <Link
@@ -386,7 +386,7 @@ export default function BookDetailClient({
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                     </svg>
-                    {isZh ? '开始阅读' : 'Start Reading'}
+                    {t('bookStartReading')}
                   </Link>
                 ) : !session ? (
                   <Link
@@ -405,7 +405,7 @@ export default function BookDetailClient({
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
-                    {isZh ? '登录后阅读' : 'Login to Read'}
+                    {t('bookLoginToRead')}
                   </Link>
                 ) : (
                   <Link
@@ -424,7 +424,7 @@ export default function BookDetailClient({
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
-                    {isZh ? '升级 Pro 解锁' : 'Upgrade to Pro'}
+                    {t('bookUpgradePro')}
                   </Link>
                 )
               ) : (
@@ -437,7 +437,7 @@ export default function BookDetailClient({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                   </svg>
-                  {isZh ? '暂无电子版' : 'No digital version'}
+                  {t('bookNoDigitalVersion')}
                 </span>
               )}
 
@@ -460,7 +460,7 @@ export default function BookDetailClient({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
                   </svg>
-                  {isZh ? '查看来源' : 'View Source'}
+                  {t('bookViewSource')}
                 </a>
               )}
 
@@ -470,7 +470,7 @@ export default function BookDetailClient({
                 onClick={() => handleStatus('want_to_read')}
                 activeColor={tokens.colors.accent.brand}
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill={userStatus === 'want_to_read' ? 'var(--color-on-accent)' : 'none'} stroke="currentColor" strokeWidth="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" /></svg>}
-                label={isZh ? '想读' : 'Want to Read'}
+                label={t('bookWantToRead')}
               />
 
               {/* Reading */}
@@ -479,7 +479,7 @@ export default function BookDetailClient({
                 onClick={() => handleStatus('reading')}
                 activeColor="var(--color-accent-warning, #FFB800)"
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>}
-                label={isZh ? '在读' : 'Reading'}
+                label={t('bookReading')}
               />
 
               {/* Mark as Read */}
@@ -488,7 +488,7 @@ export default function BookDetailClient({
                 onClick={() => handleStatus('read')}
                 activeColor={tokens.colors.accent.success}
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>}
-                label={isZh ? '读过' : 'Read'}
+                label={t('bookRead')}
               />
 
               {/* Share */}
@@ -517,12 +517,12 @@ export default function BookDetailClient({
                 transition: 'all 0.3s ease',
               }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 10 }}>
-                  {userRating ? (isZh ? '你的评分' : 'Your Rating') : (isZh ? '给这本书评分' : 'Rate this book')}
+                  {userRating ? t('bookYourRating') : t('bookRateThis')}
                 </p>
                 <StarRating rating={0} userRating={userRating || 0} onRate={handleRate} size={36} showCount={false} />
                 {showRatingPrompt && !userRating && (
                   <p style={{ fontSize: 12, color: tokens.colors.accent.brand, marginTop: 8 }}>
-                    {isZh ? '点击星星评分吧' : 'Tap a star to rate'}
+                    {t('bookTapToRate')}
                   </p>
                 )}
                 {/* Short review textarea - show after rating */}
@@ -540,7 +540,7 @@ export default function BookDetailClient({
                             fontSize: 12, color: tokens.colors.accent.brand, flexShrink: 0, padding: '2px 0',
                           }}
                         >
-                          {isZh ? '编辑' : 'Edit'}
+                          {t('bookEditReview')}
                         </button>
                       </div>
                     ) : (
@@ -548,7 +548,7 @@ export default function BookDetailClient({
                         <textarea
                           value={shortReview}
                           onChange={e => setShortReview(e.target.value.slice(0, 280))}
-                          placeholder={isZh ? '写一句短评吧' : 'Write a short review...'}
+                          placeholder={t('bookWriteShortReview')}
                           style={{
                             width: '100%', minHeight: 60, padding: '10px 12px',
                             borderRadius: tokens.radius.md, fontSize: 14,
@@ -570,7 +570,7 @@ export default function BookDetailClient({
                                 textDecoration: 'none', fontWeight: 500,
                               }}
                             >
-                              {isZh ? '写长评 →' : 'Write long review →'}
+                              {t('bookWriteLongReview')}
                             </Link>
                             <button
                               onClick={handleSubmitReview}
@@ -585,7 +585,7 @@ export default function BookDetailClient({
                                 transition: `all ${tokens.transition.fast}`,
                               }}
                             >
-                              {reviewSubmitting ? '...' : (isZh ? '发布' : 'Post')}
+                              {reviewSubmitting ? '...' : t('bookPost')}
                             </button>
                           </div>
                         </div>
@@ -615,7 +615,7 @@ export default function BookDetailClient({
 
         {/* ===== Description ===== */}
         {book.description && (
-          <Section title={isZh ? '简介' : 'Description'}>
+          <Section title={t('bookDescription')}>
             <p style={{
               fontSize: tokens.typography.fontSize.base,
               lineHeight: tokens.typography.lineHeight.relaxed,
@@ -635,7 +635,7 @@ export default function BookDetailClient({
                   fontSize: 13, fontWeight: 500,
                 }}
               >
-                {descExpanded ? (isZh ? '收起' : 'Show less') : (isZh ? '展开全文' : 'Show more')}
+                {descExpanded ? t('bookShowLess') : t('bookShowMore')}
               </button>
             )}
           </Section>
@@ -643,14 +643,14 @@ export default function BookDetailClient({
 
         {/* ===== Rating Overview ===== */}
         {count > 0 && (
-          <Section title={isZh ? '评分概览' : 'Rating Overview'}>
+          <Section title={t('bookRatingOverview')}>
             <BookRatingOverview average={avg} count={count} distribution={dist} />
           </Section>
         )}
 
         {/* ===== Reviews ===== */}
         {reviews.length > 0 && (
-          <Section title={isZh ? '书评' : 'Reviews'}>
+          <Section title={t('bookReviews')}>
             <BookReviews
               reviews={reviews}
               bookId={id}
@@ -665,7 +665,7 @@ export default function BookDetailClient({
 
         {/* ===== Similar Books ===== */}
         {similar.length > 0 && (
-          <Section title={isZh ? '相关推荐' : 'Similar Books'}>
+          <Section title={t('bookSimilar')}>
             <SimilarBooks items={similar} />
           </Section>
         )}
