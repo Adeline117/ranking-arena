@@ -55,17 +55,17 @@ function GroupAvatar({ name, avatarUrl, size = 32 }: { name: string; avatarUrl: 
   )
 }
 
-function formatRelativeTime(dateStr: string, isZh: boolean): string {
+function formatRelativeTime(dateStr: string, t: (key: string) => string): string {
   const now = Date.now()
   const then = new Date(dateStr).getTime()
   const diffMin = Math.floor((now - then) / 60000)
-  if (diffMin < 1) return isZh ? '刚刚' : 'just now'
-  if (diffMin < 60) return isZh ? `${diffMin}分钟前` : `${diffMin}m ago`
+  if (diffMin < 1) return t('justNow')
+  if (diffMin < 60) return t('minutesAgoShort').replace('{n}', String(diffMin))
   const diffH = Math.floor(diffMin / 60)
-  if (diffH < 24) return isZh ? `${diffH}小时前` : `${diffH}h ago`
+  if (diffH < 24) return t('hoursAgoShort').replace('{n}', String(diffH))
   const diffD = Math.floor(diffH / 24)
-  if (diffD < 30) return isZh ? `${diffD}天前` : `${diffD}d ago`
-  return isZh ? '很久以前' : 'long ago'
+  if (diffD < 30) return t('daysAgoShort').replace('{n}', String(diffD))
+  return t('longAgo')
 }
 
 async function fetchMyGroups(userId: string): Promise<Group[]> {
@@ -161,7 +161,7 @@ export default function MyGroups() {
                         marginTop: 1,
                       }}
                     >
-                      {formatRelativeTime(g.updated_at, isZh)}
+                      {formatRelativeTime(g.updated_at, t)}
                     </div>
                   )}
                 </div>

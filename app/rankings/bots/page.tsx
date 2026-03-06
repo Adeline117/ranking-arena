@@ -22,11 +22,11 @@ import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
 type BotCategory = 'all' | 'tg_bot' | 'ai_agent' | 'vault'
 type WindowOption = '7D' | '30D' | '90D'
 
-const CATEGORY_LABELS: Record<BotCategory, { zh: string; en: string }> = {
-  all: { zh: '全部', en: 'All' },
-  tg_bot: { zh: 'TG交易Bot', en: 'TG Bots' },
-  ai_agent: { zh: 'AI Agent', en: 'AI Agents' },
-  vault: { zh: '链上金库', en: 'Vaults' },
+const CATEGORY_LABEL_KEYS: Record<BotCategory, string> = {
+  all: 'botsCategoryAll',
+  tg_bot: 'botsCategoryTgBot',
+  ai_agent: 'botsCategoryAiAgent',
+  vault: 'botsCategoryVault',
 }
 
 const CHAIN_COLORS: Record<string, string> = {
@@ -80,13 +80,14 @@ function ChainBadge({ chain }: { chain: string | null }) {
 
 /** Category tag */
 function CategoryTag({ category }: { category: string }) {
-  const labels: Record<string, { zh: string; en: string; color: string }> = {
-    tg_bot: { zh: 'TG Bot', en: 'TG Bot', color: 'var(--color-chart-amber)' },
-    ai_agent: { zh: 'AI Agent', en: 'AI Agent', color: 'var(--color-chart-violet)' },
-    vault: { zh: '金库', en: 'Vault', color: 'var(--color-chart-teal)' },
-    strategy: { zh: '策略', en: 'Strategy', color: 'var(--color-chart-blue)' },
+  const { t } = useLanguage()
+  const TAG_KEYS: Record<string, { key: string; color: string }> = {
+    tg_bot: { key: 'botsTagTgBot', color: 'var(--color-chart-amber)' },
+    ai_agent: { key: 'botsTagAiAgent', color: 'var(--color-chart-violet)' },
+    vault: { key: 'botsTagVault', color: 'var(--color-chart-teal)' },
+    strategy: { key: 'botsTagStrategy', color: 'var(--color-chart-blue)' },
   }
-  const cfg = labels[category] || { zh: category, en: category, color: 'var(--color-text-tertiary)' }
+  const cfg = TAG_KEYS[category] || { key: category, color: 'var(--color-text-tertiary)' }
   return (
     <span style={{
       display: 'inline-block',
@@ -97,7 +98,7 @@ function CategoryTag({ category }: { category: string }) {
       background: `color-mix(in srgb, ${cfg.color} 15%, transparent)`,
       color: cfg.color,
     }}>
-      {cfg.zh}
+      {t(cfg.key)}
     </span>
   )
 }
@@ -234,8 +235,7 @@ function BotRow({ bot }: { bot: BotEntry }) {
 }
 
 function BotsContent() {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -274,16 +274,16 @@ function BotsContent() {
 
   return (
     <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
-      
+
       <div className="feed-main-content max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 80 }}>
         {/* Header */}
         <div className="flex items-center justify-between" style={{ marginBottom: tokens.spacing[4] }}>
           <div>
             <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: tokens.typography.fontWeight.black, letterSpacing: '-0.3px' }}>
-              {isZh ? 'Web3 机器人排行榜' : 'Web3 Bot Rankings'}
+              {t('botsTitle')}
             </h1>
             <p style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-              {isZh ? 'TG交易Bot / AI Agent / 链上金库 综合排名' : 'TG Bots / AI Agents / On-chain Vaults Rankings'}
+              {t('botsSubtitle')}
             </p>
           </div>
           <Link
@@ -294,7 +294,7 @@ function BotsContent() {
               textDecoration: 'none',
             }}
           >
-            {isZh ? '< 交易员排行榜' : '< Trader Rankings'}
+            {t('botsBackToTraders')}
           </Link>
         </div>
 
@@ -345,7 +345,7 @@ function BotsContent() {
                 outline: 'none',
               }}
             >
-              {isZh ? CATEGORY_LABELS[cat].zh : CATEGORY_LABELS[cat].en}
+              {t(CATEGORY_LABEL_KEYS[cat])}
             </button>
           ))}
         </div>
@@ -356,7 +356,7 @@ function BotsContent() {
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder={isZh ? '搜索机器人名称或代币...' : 'Search bots or tokens...'}
+            placeholder={t('botsSearchPlaceholder')}
             style={{
               width: '100%', padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
               borderRadius: tokens.radius.lg,
@@ -374,7 +374,7 @@ function BotsContent() {
           isLoading={isLoading}
           error={error}
           isEmpty={filteredBots.length === 0 && !isLoading}
-          emptyMessage={isZh ? '暂无机器人数据' : 'No bot data available'}
+          emptyMessage={t('botsNoData')}
           loadingComponent={<RankingSkeleton />}
         >
           <div className="rounded-xl overflow-hidden" style={{
@@ -397,11 +397,11 @@ function BotsContent() {
               }}
             >
               <div style={{ textAlign: 'center' }}>#</div>
-              <div>{isZh ? '机器人' : 'Bot'}</div>
+              <div>{t('botsBot')}</div>
               <div style={{ textAlign: 'right' }}>TVL</div>
-              <div style={{ textAlign: 'right' }}>{isZh ? '用户' : 'Users'}</div>
+              <div style={{ textAlign: 'right' }}>{t('botsUsers')}</div>
               <div style={{ textAlign: 'right' }}>APY/ROI</div>
-              <div className="col-volume" style={{ textAlign: 'right' }}>{isZh ? '交易量' : 'Volume'}</div>
+              <div className="col-volume" style={{ textAlign: 'right' }}>{t('botsVolume')}</div>
               <div style={{ textAlign: 'right' }}>Score</div>
             </div>
 
@@ -410,7 +410,7 @@ function BotsContent() {
             ))}
 
             <div className="px-4 py-3 text-xs text-center border-t" style={{ color: 'var(--color-text-tertiary)', borderColor: 'var(--color-border-primary)' }}>
-              {isZh ? `共 ${filteredBots.length} 个机器人` : `${filteredBots.length} bots total`}
+              {t('botsTotalCount').replace('{count}', String(filteredBots.length))}
             </div>
           </div>
         </DataStateWrapper>
@@ -426,7 +426,7 @@ export default function BotRankingsPage() {
     <ErrorBoundary pageType="rankings">
       <Suspense fallback={
         <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
-          
+
           <div className="max-w-5xl mx-auto px-4 py-6"><RankingSkeleton /></div>
         </Box>
       }>

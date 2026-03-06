@@ -105,8 +105,8 @@ describe('CACHE_TTL', () => {
     expect(CACHE_TTL.TRADERS_LIST).toBe(300)
   })
 
-  test('交易员详情 TTL 为 1 分钟', () => {
-    expect(CACHE_TTL.TRADER_DETAIL).toBe(60)
+  test('交易员详情 TTL 为 3 分钟', () => {
+    expect(CACHE_TTL.TRADER_DETAIL).toBe(180)
   })
 
   test('市场数据 TTL 为 10 秒', () => {

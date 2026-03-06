@@ -96,7 +96,7 @@ describe('getPasswordStrength', () => {
     const result = getPasswordStrength('123456')
     expect(result.level).toBe(2)
     expect(result.label).toBe('一般')
-    expect(result.color).toBe('#ffa500')
+    expect(result.color).toBe('var(--color-medal-gold-end)')
   })
 
   it('should return weak for very short password', () => {
@@ -104,7 +104,7 @@ describe('getPasswordStrength', () => {
     const result = getPasswordStrength('12345')
     expect(result.level).toBe(1)
     expect(result.label).toBe('弱')
-    expect(result.color).toBe('#ff4d4d')
+    expect(result.color).toBe('var(--color-accent-error)')
   })
 
   it('should return medium for password with mixed case', () => {
@@ -116,7 +116,7 @@ describe('getPasswordStrength', () => {
     const result = getPasswordStrength('Password123!')
     expect(result.level).toBe(4)
     expect(result.label).toBe('强')
-    expect(result.color).toBe('#2fe57d')
+    expect(result.color).toBe('var(--color-accent-success)')
   })
 })
 

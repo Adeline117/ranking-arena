@@ -17,13 +17,6 @@
  */
 
 import { BaseConnector } from '../base'
-import { warnValidate } from '../schemas'
-import {
-  BinanceFuturesLeaderboardResponseSchema,
-  BinanceFuturesBaseInfoResponseSchema,
-  BinanceFuturesPerformanceResponseSchema,
-  BinanceFuturesPositionResponseSchema,
-} from './schemas'
 import type {
   LeaderboardPlatform,
   MarketType,
