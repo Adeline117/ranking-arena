@@ -94,7 +94,8 @@ async function fetchPeriod(
 
       if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
       await sleep(500)
-    } catch {
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
       break
     }
   }
