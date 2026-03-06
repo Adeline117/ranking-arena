@@ -196,9 +196,44 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
-  // Stealth browser fallback when HTTP fetch fails
+  // VPS proxy fallback when HTTP fetch fails
   if (allTraders.size === 0) {
-    logger.warn(`[${SOURCE}] HTTP fetch failed, trying stealth browser fallback...`)
+    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
+    if (vpsUrl) {
+      logger.warn(`[${SOURCE}] HTTP fetch failed, trying VPS proxy...`)
+      for (const buildUrl of API_ENDPOINTS) {
+        if (allTraders.size >= TARGET) break
+        try {
+          const url = buildUrl(1, periodType)
+          const res = await fetch(vpsUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+            },
+            body: JSON.stringify({ url, method: 'GET', headers: HEADERS }),
+          })
+          if (!res.ok) continue
+          const data = (await res.json()) as BingxResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+          }
+          if (allTraders.size > 0) {
+            logger.warn(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
+            break
+          }
+        } catch (err) {
+          logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
+  }
+
+  // Stealth browser fallback when all HTTP methods fail
+  if (allTraders.size === 0) {
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying stealth browser fallback...`)
     try {
       const interceptApiResponses = await getInterceptApiResponses()
       const { responses } = await interceptApiResponses(

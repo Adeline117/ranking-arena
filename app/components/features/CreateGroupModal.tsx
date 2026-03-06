@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
@@ -68,6 +68,13 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const [description, setDescription] = useState('')
   const [searching, setSearching] = useState(false)
   const [creating, setCreating] = useState(false)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const debouncedSearch = useCallback((query: string) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    if (!query.trim()) { setSearchResults([]); return }
+    searchTimerRef.current = setTimeout(() => searchUsers(query), 300)
+  }, [])
 
   const searchUsers = useCallback(async (query: string) => {
     if (!query.trim() || !accessToken) return
@@ -91,7 +98,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
         return prev.filter(m => m.id !== user.id)
       }
       if (prev.length >= 49) {
-        showToast('最多50人', 'warning')
+        showToast(t('maxGroupMembers'), 'warning')
         return prev
       }
       return [...prev, user]
@@ -104,7 +111,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
       return
     }
     if (selectedMembers.length < 1) {
-      showToast('至少选择1位成员', 'warning')
+      showToast(t('minGroupMembers'), 'warning')
       return
     }
 
@@ -128,7 +135,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
         showToast(data.error || 'Failed', 'error')
       }
     } catch {
-      showToast('Failed to create group', 'error')
+      showToast(t('createGroupFailed'), 'error')
     } finally {
       setCreating(false)
     }
@@ -171,7 +178,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
               <input
                 type="text"
                 value={searchQuery}
-                onChange={e => { setSearchQuery(e.target.value); searchUsers(e.target.value) }}
+                onChange={e => { setSearchQuery(e.target.value); debouncedSearch(e.target.value) }}
                 placeholder={t('searchUsers')}
                 style={{
                   width: '100%', padding: '10px 14px', borderRadius: tokens.radius.md,
