@@ -368,6 +368,7 @@ function SearchContent() {
         pointerEvents: 'none', zIndex: 0,
       }} />
       <TopNav email={email} />
+      <h1 className="sr-only">{t('search')}</h1>
 
       <main style={{
         maxWidth: 900, margin: '0 auto',
