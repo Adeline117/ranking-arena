@@ -200,10 +200,8 @@ async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
   const periodParam = PERIOD_MAP[period] || period
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
 
+  // V1 decommissioned, V2 public return 404. Kept as fallback.
   const urls = [
-    // V1 public endpoint (still working as of 2026)
-    'https://api.bitget.com/api/mix/v1/trace/traderList',
-    // V2 endpoints (may return 404)
     'https://api.bitget.com/api/v2/copy/spot-trader/trader-profit-ranking',
     'https://api.bitget.com/api/v2/copy/spot-trader/query-trader-list',
   ]
@@ -213,11 +211,7 @@ async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
 
     for (let page = 1; page <= maxPages; page++) {
       try {
-        const isV1 = apiUrl.includes('/mix/v1/trace/')
-        const queryParams = isV1
-          ? `sortRule=roi&sortFlag=desc&pageNo=${page}&pageSize=${PAGE_SIZE}`
-          : `period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
-        const url = `${apiUrl}?${queryParams}`
+        const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
         const data = await fetchJson<BitgetResponse>(url, {
           headers: {
             Referer: 'https://www.bitget.com/',

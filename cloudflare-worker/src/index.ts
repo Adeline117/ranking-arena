@@ -391,11 +391,9 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
 
   const bitgetPeriod = periodMap[period] || period;
 
-  // Try multiple endpoints - Bitget frequently changes their API
+  // V1 decommissioned (30032), V2 public return 404
+  // These are kept as fallback in case Bitget restores public access
   const endpoints = [
-    // V1 public endpoint (still working as of 2026)
-    `https://api.bitget.com/api/mix/v1/trace/traderList?sortRule=roi&sortFlag=desc&pageNo=${pageNo}&pageSize=${pageSize}`,
-    // V2 public endpoints (may return 404)
     `https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking?period=${bitgetPeriod}&pageNo=${pageNo}&pageSize=${pageSize}`,
     `https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list?period=${bitgetPeriod}&pageNo=${pageNo}&pageSize=${pageSize}`,
   ];
