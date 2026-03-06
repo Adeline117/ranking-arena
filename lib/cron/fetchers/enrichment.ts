@@ -1581,7 +1581,8 @@ export async function enrichBinanceTraders(
           }
 
           success++
-        } catch {
+        } catch (err) {
+          logger.warn(`[enrichment] Error: ${err instanceof Error ? err.message : String(err)}`)
           failed++
         }
       })

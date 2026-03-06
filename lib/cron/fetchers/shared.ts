@@ -480,4 +480,70 @@ export function normalizeROI(rawRoi: number | null, platform: string): number | 
   }
   return rawRoi
 }
+// ============================================
+// Verify Endpoint Helper
+// ============================================
+
+export interface VerifyResult {
+  platform: string
+  healthy: boolean
+  apiReachable: boolean
+  responseFormat: 'valid' | 'invalid' | 'error'
+  failureReason?: FailureReason
+  latencyMs: number
+  checkedAt: string
+  details?: string
+}
+
+export async function verifyEndpoint(
+  platform: string,
+  url: string,
+  opts?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: unknown
+    timeoutMs?: number
+    validateResponse?: (data: unknown) => boolean
+  }
+): Promise<VerifyResult> {
+  const start = Date.now()
+  const checkedAt = new Date().toISOString()
+
+  try {
+    const data = await fetchJson(url, {
+      method: opts?.method,
+      headers: opts?.headers,
+      body: opts?.body,
+      timeoutMs: opts?.timeoutMs || 10000,
+    })
+
+    const latencyMs = Date.now() - start
+    const isValid = opts?.validateResponse ? opts.validateResponse(data) : !!data
+
+    return {
+      platform,
+      healthy: isValid,
+      apiReachable: true,
+      responseFormat: isValid ? 'valid' : 'invalid',
+      failureReason: isValid ? undefined : 'empty_data',
+      latencyMs,
+      checkedAt,
+    }
+  } catch (err) {
+    const latencyMs = Date.now() - start
+    const reason = classifyFetchError(err)
+
+    return {
+      platform,
+      healthy: false,
+      apiReachable: false,
+      responseFormat: 'error',
+      failureReason: reason,
+      latencyMs,
+      checkedAt,
+      details: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 // cron reset Mon Feb  9 09:11:44 PST 2026
