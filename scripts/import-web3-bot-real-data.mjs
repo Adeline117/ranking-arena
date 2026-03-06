@@ -15,7 +15,7 @@
 import 'dotenv/config'
 
 const DB_URL = process.env.DATABASE_URL ||
-  'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+  '${process.env.DATABASE_URL}'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 

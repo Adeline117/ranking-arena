@@ -13,7 +13,7 @@ import 'dotenv/config'
 import pg from 'pg'
 const { Client } = pg
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = process.env.DATABASE_URL || '${process.env.DATABASE_URL}'
 const CF_PROXY = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 
 const DRY_RUN = process.argv.includes('--dry-run')

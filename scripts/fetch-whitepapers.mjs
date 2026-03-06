@@ -8,7 +8,7 @@ import { execSync } from 'child_process'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const PSQL = '/opt/homebrew/opt/libpq/bin/psql'
-const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = '${process.env.DATABASE_URL}'
 const BUCKET = 'library'
 const TMP_DIR = '/tmp/whitepapers'
 

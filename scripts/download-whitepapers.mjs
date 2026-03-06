@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url'
 
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = '${process.env.DATABASE_URL}'
 const BUCKET = 'library'
 const STORAGE_BASE = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}`
 

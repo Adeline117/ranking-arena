@@ -12,7 +12,7 @@
 import pg from 'pg'
 const { Client } = pg
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = process.env.DATABASE_URL || '${process.env.DATABASE_URL}'
 
 const DRY_RUN = process.argv.includes('--dry-run')
 const SOURCE_FILTER = process.argv.find(a => a.startsWith('--source='))?.split('=')[1] || null
