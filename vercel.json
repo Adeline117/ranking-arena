@@ -17,6 +17,10 @@
       "schedule": "0 */3 * * *"
     },
     {
+      "path": "/api/cron/verify-fetchers",
+      "schedule": "30 */3 * * *"
+    },
+    {
       "path": "/api/cron/fetch-details?tier=hot&concurrency=50&limit=150",
       "schedule": "*/15 * * * *"
     },
