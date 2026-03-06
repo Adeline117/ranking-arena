@@ -178,6 +178,7 @@ async function computeSeason(
     trading_style: string | null
     avg_holding_hours: number | null
     style_confidence: number | null
+    sharpe_ratio: number | null
   }
 
   const allSnapshots: TraderRow[] = []
@@ -195,7 +196,7 @@ async function computeSeason(
         while (true) {
           const { data, error } = await supabase
             .from('trader_snapshots')
-            .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence')
+            .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, sharpe_ratio')
             .eq('source', source)
             .eq('season_id', season)
             .gte('captured_at', freshnessISOBySource(source))
@@ -330,6 +331,7 @@ async function computeSeason(
       trading_style: t.trading_style,
       avg_holding_hours: t.avg_holding_hours,
       style_confidence: t.style_confidence,
+      sharpe_ratio: t.sharpe_ratio,
     }
   })
 
@@ -370,6 +372,7 @@ async function computeSeason(
       trading_style: t.trading_style,
       avg_holding_hours: t.avg_holding_hours,
       style_confidence: t.style_confidence,
+      sharpe_ratio: t.sharpe_ratio,
     }))
 
     const { error } = await supabase
