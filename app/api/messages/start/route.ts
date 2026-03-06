@@ -7,10 +7,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
+
+// Zod schema for POST /api/messages/start
+const StartConversationSchema = z.object({
+  receiverId: z.string().uuid('Invalid receiver ID'),
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -29,17 +35,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { receiverId } = body
-
-    // SECURITY: Use authenticated user's ID as sender, ignoring any client-provided senderId.
-    const senderId = user.id
-
-    if (!receiverId) {
+    const parsed = StartConversationSchema.safeParse(body)
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Missing recipient', error_code: 'VALIDATION_ERROR' },
+        { error: 'Invalid input', error_code: 'VALIDATION_ERROR', details: parsed.error.flatten() },
         { status: 400 }
       )
     }
+    const { receiverId } = parsed.data
+
+    // SECURITY: Use authenticated user's ID as sender, ignoring any client-provided senderId.
+    const senderId = user.id
 
     if (senderId === receiverId) {
       return NextResponse.json(

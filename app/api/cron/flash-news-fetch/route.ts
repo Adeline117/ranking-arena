@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -102,6 +103,7 @@ async function handleFetch(req: NextRequest) {
   }
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
+  const plog = await PipelineLogger.start('flash-news-fetch')
 
   try {
     // Fetch all feeds in parallel
@@ -136,13 +138,16 @@ async function handleFetch(req: NextRequest) {
 
     if (insertError) {
       logger.error('[flash-news-fetch] Insert error:', insertError)
+      await plog.error(new Error(insertError.message))
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
     logger.info(`[flash-news-fetch] Inserted ${inserted?.length || 0} new flash news items`)
+    await plog.success(inserted?.length || 0, { total_fetched: allItems.length })
     return NextResponse.json({ inserted: inserted?.length || 0, total_fetched: allItems.length })
   } catch (err) {
     logger.error('[flash-news-fetch] Error:', err)
+    await plog.error(err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }

@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 /**
- * OpenClaw 健康监控
+ * OpenClaw Health Monitor
  *
- * Mac Mini 上通过 OpenClaw 调度运行。
- * 每 30 分钟检查 Arena 健康，异常时发 Telegram 告警。
- * 正常时只写日志，不发消息（控制 token 消耗）。
+ * Runs on Mac Mini via OpenClaw scheduler.
+ * Checks Arena health every 30 minutes, sends Telegram alerts on issues.
  *
- * 用法:
- *   node scripts/openclaw/health-monitor.mjs           # 健康检查（默认）
- *   node scripts/openclaw/health-monitor.mjs daily      # 每日报告
- *   node scripts/openclaw/health-monitor.mjs --with-auto-fix  # 异常时自动修复
+ * Usage (standalone):
+ *   CRON_SECRET=xxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_ALERT_CHAT_ID=xxx node scripts/openclaw/health-monitor.mjs
  *
- * 环境变量:
- *   CRON_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_ALERT_CHAT_ID
+ * Usage (OpenClaw):
+ *   Configure as a skill that runs every 30 minutes
+ *
+ * Flags:
+ *   check              Health check mode (default)
+ *   daily              Daily report mode
+ *   --with-auto-fix    Trigger auto-fix for failing fetchers after alert
  */
 
 import path from 'path'
@@ -25,12 +27,12 @@ const CRON_SECRET = process.env.CRON_SECRET
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID
 
-// 自动修复冷却: 每个平台 6 小时
+// Auto-fix cooldown: 6 hours between fix attempts per platform
 const AUTO_FIX_COOLDOWN_MS = 6 * 60 * 60 * 1000
-const fixAttempts = new Map()
+const fixAttempts = new Map() // platform -> last attempt timestamp
 
 if (!CRON_SECRET) {
-  console.error('CRON_SECRET 未设置')
+  console.error('CRON_SECRET is required')
   process.exit(1)
 }
 
@@ -55,7 +57,7 @@ async function checkPipelineHealth() {
 
 async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    console.log('[Telegram 未配置]', text)
+    console.log('[Telegram disabled]', text)
     return
   }
 
@@ -71,58 +73,61 @@ async function sendTelegram(text) {
       }),
     })
   } catch (err) {
-    console.error('Telegram 发送失败:', err.message)
+    console.error('Telegram send failed:', err.message)
   }
 }
 
-// ============================================
-// 健康检查 - 只在异常时发 Telegram
-// ============================================
+function formatDuration(ms) {
+  if (!ms) return 'N/A'
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
 
 async function runHealthCheck() {
   const issues = []
   let basicHealth, pipelineHealth
 
-  // 1. 基础健康
+  // 1. Basic health
   try {
     basicHealth = await checkBasicHealth()
     if (basicHealth.status === 'unhealthy') {
-      issues.push(`系统不健康: DB=${basicHealth.checks?.database?.status}, Redis=${basicHealth.checks?.redis?.status}`)
+      issues.push(`🚨 System UNHEALTHY: DB=${basicHealth.checks?.database?.status}, Redis=${basicHealth.checks?.redis?.status}`)
     } else if (basicHealth.status === 'degraded') {
-      issues.push(`系统降级: ${JSON.stringify(basicHealth.checks)}`)
+      issues.push(`⚠️ System degraded: ${JSON.stringify(basicHealth.checks)}`)
     }
   } catch (err) {
-    issues.push(`Arena 无法访问: ${err.message}`)
+    issues.push(`🚨 Arena UNREACHABLE: ${err.message}`)
   }
 
-  // 2. Pipeline 健康
+  // 2. Pipeline health
   try {
     pipelineHealth = await checkPipelineHealth()
 
     if (pipelineHealth.status === 'critical') {
       const { failedJobs, stuckJobs, staleJobs } = pipelineHealth.summary || {}
-      issues.push(`Pipeline 严重: ${failedJobs} 失败, ${stuckJobs} 卡住, ${staleJobs} 过期`)
+      issues.push(`🚨 Pipeline CRITICAL: ${failedJobs} failed, ${stuckJobs} stuck, ${staleJobs} stale`)
 
+      // List specific failures
       if (pipelineHealth.recentFailures?.length) {
         for (const f of pipelineHealth.recentFailures.slice(0, 5)) {
-          issues.push(`  - ${f.job_name}: ${f.error_message?.slice(0, 100) || '未知'}`)
+          issues.push(`  ❌ ${f.job_name}: ${f.error_message?.slice(0, 100) || 'unknown'}`)
         }
       }
     } else if (pipelineHealth.status === 'degraded') {
       const { failedJobs, staleJobs } = pipelineHealth.summary || {}
-      issues.push(`Pipeline 降级: ${failedJobs} 失败, ${staleJobs} 过期`)
+      issues.push(`⚠️ Pipeline degraded: ${failedJobs} failed, ${staleJobs} stale`)
     }
   } catch (err) {
-    issues.push(`Pipeline 检查失败: ${err.message}`)
+    issues.push(`⚠️ Pipeline check failed: ${err.message}`)
   }
 
-  // 3. 有异常才发 Telegram
+  // 3. Send alert if issues found
   if (issues.length > 0) {
-    const msg = `<b>\u{1F534} Arena 健康告警</b>\n\n${issues.join('\n')}\n\n<i>${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</i>`
+    const msg = `<b>🏟 Arena Health Alert</b>\n\n${issues.join('\n')}\n\n<i>${new Date().toISOString()}</i>`
     await sendTelegram(msg)
-    console.log('告警:', issues.join(' | '))
+    console.log('ALERT:', issues.join(' | '))
 
-    // 4. 自动修复
+    // 4. Trigger auto-fix if --with-auto-fix flag is set
     if (process.argv.includes('--with-auto-fix') && pipelineHealth) {
       await triggerAutoFix(pipelineHealth)
     }
@@ -130,14 +135,9 @@ async function runHealthCheck() {
     return { status: 'alert', issues }
   }
 
-  // 正常时只写日志，不发 Telegram
-  console.log(`\u{2705} 一切正常 (基础: ${basicHealth?.status}, Pipeline: ${pipelineHealth?.status})`)
+  console.log(`✅ All healthy (basic: ${basicHealth?.status}, pipeline: ${pipelineHealth?.status})`)
   return { status: 'healthy' }
 }
-
-// ============================================
-// 自动修复
-// ============================================
 
 async function triggerAutoFix(pipelineHealth) {
   const { spawn } = await import('child_process')
@@ -148,21 +148,21 @@ async function triggerAutoFix(pipelineHealth) {
       platform: f.job_name.replace('fetch-traders-', ''),
       reason: classifyErrorMsg(f.error_message),
     }))
-  if (failingJobs.length === 0) { console.log('[自动修复] 无 fetcher 失败'); return }
+  if (failingJobs.length === 0) { console.log('[auto-fix] No fetcher failures'); return }
   const seen = new Set()
   for (const { platform, reason } of failingJobs) {
     if (seen.has(platform)) continue
     seen.add(platform)
     const lastAttempt = fixAttempts.get(platform) || 0
-    if (Date.now() - lastAttempt < AUTO_FIX_COOLDOWN_MS) { console.log('[自动修复] 冷却中: ' + platform); continue }
+    if (Date.now() - lastAttempt < AUTO_FIX_COOLDOWN_MS) { console.log('[auto-fix] Cooldown: ' + platform); continue }
     fixAttempts.set(platform, Date.now())
-    console.log('[自动修复] 修复 ' + platform + ' (' + reason + ')')
+    console.log('[auto-fix] Fixing ' + platform + ' (' + reason + ')')
     try {
       const proc = spawn('node', [autoFixScript, platform, '--reason', reason], {
         cwd: path.dirname(__dirname), stdio: 'inherit', timeout: 300000,
       })
-      proc.on('close', (code) => console.log('[自动修复] ' + platform + ' 退出码: ' + code))
-    } catch (err) { console.error('[自动修复] 启动失败: ' + platform, err.message) }
+      proc.on('close', (code) => console.log('[auto-fix] ' + platform + ' exit: ' + code))
+    } catch (err) { console.error('[auto-fix] Launch failed for ' + platform, err.message) }
   }
 }
 
@@ -179,73 +179,127 @@ function classifyErrorMsg(msg) {
 }
 
 // ============================================
+// 用户活动数据
+// ============================================
+
+async function fetchActivityStats() {
+  try {
+    const res = await fetch(`${ARENA_URL}/api/analytics/activity`, {
+      headers: {
+        Authorization: `Bearer ${CRON_SECRET}`,
+        'Cache-Control': 'no-cache',
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    return json.activity || null
+  } catch (err) {
+    console.error('获取活动数据失败:', err.message)
+    return null
+  }
+}
+
+// ============================================
 // 每日报告
 // ============================================
 
 async function runDailyReport() {
   let pipelineHealth
+  let activity
 
   try {
-    pipelineHealth = await checkPipelineHealth()
+    ;[pipelineHealth, activity] = await Promise.all([
+      checkPipelineHealth(),
+      fetchActivityStats(),
+    ])
   } catch (err) {
-    await sendTelegram(`<b>\u{1F4CA} Arena 每日报告</b>\n\n获取 Pipeline 数据失败: ${err.message}`)
+    await sendTelegram(`<b>📊 Arena 每日报告</b>\n\n获取数据失败: ${err.message}`)
     return
   }
 
   const { summary, stats } = pipelineHealth
+  const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' })
 
   const totalRuns = stats?.reduce((s, j) => s + (j.total_runs || 0), 0) || 0
   const totalSuccess = stats?.reduce((s, j) => s + (j.success_count || 0), 0) || 0
   const totalErrors = stats?.reduce((s, j) => s + (j.error_count || 0), 0) || 0
-  const totalRecords = stats?.reduce((s, j) => s + (j.total_records_processed || 0), 0) || 0
 
   const overallSuccessRate = totalRuns > 0 ? ((totalSuccess / totalRuns) * 100).toFixed(1) : 'N/A'
 
   const worstJobs = (stats || [])
     .filter(j => j.success_rate < 100)
     .sort((a, b) => (a.success_rate || 0) - (b.success_rate || 0))
-    .slice(0, 5)
+    .slice(0, 3)
 
-  const statusEmoji = summary?.failedJobs === 0 ? '\u{1F7E2}' : summary?.failedJobs < 3 ? '\u{1F7E1}' : '\u{1F534}'
+  const statusEmoji = summary?.failedJobs === 0 ? '🟢' : summary?.failedJobs < 3 ? '🟡' : '🔴'
 
-  let report = `<b>\u{1F4CA} Arena 每日报告</b>\n`
-  report += `<i>${new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' })}</i>\n\n`
-  report += `<b>状态:</b> ${statusEmoji} ${pipelineHealth.status}\n`
-  report += `<b>成功率 (7天):</b> ${overallSuccessRate}%\n`
-  report += `<b>总运行次数 (7天):</b> ${totalRuns}\n`
-  report += `<b>处理记录数:</b> ${totalRecords.toLocaleString()}\n`
-  report += `<b>错误数:</b> ${totalErrors}\n`
-  report += `<b>任务:</b> ${summary?.healthyJobs || 0} 健康 / ${summary?.totalJobs || 0} 总计\n`
+  let report = `📊<b>【日报】${today}</b>\n\n`
+
+  // 🔧 系统状态
+  report += `🔧 <b>系统状态</b>\n`
+  report += `- Pipeline：${statusEmoji} ${summary?.healthyJobs || 0}/${summary?.totalJobs || 0} 正常`
+  if (summary?.failedJobs > 0) {
+    report += `，${summary.failedJobs} 异常`
+  }
+  report += `\n`
+  report += `- 成功率 (7天)：${overallSuccessRate}%\n`
+  report += `- 错误数：${totalErrors}\n`
 
   if (worstJobs.length > 0) {
-    report += `\n<b>成功率最低:</b>\n`
-    for (const j of worstJobs) {
-      report += `  ${j.success_rate}% - ${j.job_name}\n`
-    }
+    report += `- 错误 Top ${worstJobs.length}：${worstJobs.map(j => `${j.job_name}(${j.success_rate}%)`).join('、')}\n`
   }
 
   if (summary?.staleJobs > 0 || summary?.stuckJobs > 0) {
-    report += `\n\u{26A0}\u{FE0F} ${summary.staleJobs} 过期, ${summary.stuckJobs} 卡住`
+    report += `- ⚠️ ${summary.staleJobs} 过期, ${summary.stuckJobs} 卡住\n`
+  }
+
+  // 📈 流量与用户
+  report += `\n📈 <b>流量与用户</b>\n`
+  if (activity) {
+    report += `- 今日新注册：${activity.signups}\n`
+    report += `- 总注册用户：${activity.total_users}\n`
+    report += `- 今日活跃用户：${activity.active_users}\n`
+  } else {
+    report += `- <i>活动数据获取失败</i>\n`
+  }
+
+  // 💬 社区活动
+  report += `\n💬 <b>社区活动</b>\n`
+  if (activity) {
+    report += `- 新建小组：${activity.new_groups} 个\n`
+    report += `- 新发帖子：${activity.new_posts} 条\n`
+    report += `- 新评论：${activity.new_comments} 条\n`
+    report += `- 新关注（用户间）：${activity.new_follows}\n`
+  } else {
+    report += `- <i>社区数据获取失败</i>\n`
+  }
+
+  // 👤 交易员认领
+  report += `\n👤 <b>交易员认领</b>\n`
+  if (activity) {
+    report += `- 今日新认领：${activity.new_claims} 个\n`
+    report += `- 总已认领：${activity.total_verified} 个\n`
+    report += `- 待审核认领：${activity.pending_claims} 个\n`
+  } else {
+    report += `- <i>认领数据获取失败</i>\n`
   }
 
   await sendTelegram(report)
   console.log('每日报告已发送')
 }
 
-// ============================================
-// 入口
-// ============================================
-
+// Main
 const mode = process.argv[2] || 'check'
 
 if (mode === 'daily') {
   runDailyReport().catch(err => {
-    console.error('每日报告失败:', err)
+    console.error('Daily report failed:', err)
     process.exit(1)
   })
 } else {
   runHealthCheck().catch(err => {
-    console.error('健康检查失败:', err)
+    console.error('Health check failed:', err)
     process.exit(1)
   })
 }

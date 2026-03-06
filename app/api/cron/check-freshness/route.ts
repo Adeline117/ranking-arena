@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -59,6 +60,8 @@ export async function GET(req: Request) {
   const supabase = createClient(supabaseUrl, supabaseKey, {
     auth: { persistSession: false },
   })
+
+  const plog = await PipelineLogger.start('check-freshness')
 
   try {
     // Get latest update per platform from trader_sources (fast)
@@ -116,6 +119,12 @@ export async function GET(req: Request) {
 
     const ok = alerts.length === 0
 
+    await plog.success(platformStatuses.length, {
+      fresh: platformStatuses.filter(p => p.status === 'fresh').length,
+      stale: alerts.filter(a => a.level === 'stale').length,
+      critical: alerts.filter(a => a.level === 'critical').length,
+    })
+
     return NextResponse.json({
       ok,
       checked_at: new Date().toISOString(),
@@ -134,6 +143,7 @@ export async function GET(req: Request) {
       headers: { 'Cache-Control': 'no-store' },
     })
   } catch (e: unknown) {
+    await plog.error(e)
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Unknown error' },
       { status: 500 }

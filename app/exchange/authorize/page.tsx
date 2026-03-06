@@ -35,7 +35,7 @@ function ExchangeAuthorizePageContent() {
 
     setExchange(exchangeParam)
     loadAuthUrl(exchangeParam)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; loadAuthUrl/supabase/t are stable or defined after hook
   }, [searchParams, router])
 
   const loadAuthUrl = async (ex: string) => {

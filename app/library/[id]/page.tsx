@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -5,14 +6,18 @@ import { JsonLd } from '@/app/components/Providers/JsonLd'
 import BookDetailClient from './BookDetailClient'
 import type { BookDetail, RatingOverview, SimilarItem, LanguageVersion } from './BookDetailClient'
 
+export const revalidate = 300 // ISR: 5 minutes
+
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-async function getBookData(id: string) {
+const BOOK_COLUMNS = 'id, title, title_en, title_zh, author, description, category, subcategory, source, source_url, pdf_url, cover_url, tags, publish_date, download_count, is_free, buy_url, content_url, publisher, isbn, page_count, language, language_group_id, rating, rating_count, file_key, epub_url'
+
+const getBookData = cache(async function getBookData(id: string) {
   const supabase = getSupabaseAdmin()
 
   const { data: item, error } = await supabase
     .from('library_items')
-    .select('*')
+    .select(BOOK_COLUMNS)
     .eq('id', id)
     .single()
 
@@ -24,7 +29,8 @@ async function getBookData(id: string) {
       .from('book_ratings')
       .select('rating')
       .eq('library_item_id', id)
-      .not('rating', 'is', null),
+      .not('rating', 'is', null)
+      .limit(1000),
     supabase
       .from('library_items')
       .select('id, title, author, cover_url, category, rating, rating_count')
@@ -65,21 +71,17 @@ async function getBookData(id: string) {
     similar: (similarResult.data || []) as SimilarItem[],
     langVersions: (langResult.data || []) as LanguageVersion[],
   }
-}
+})
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params
-  const supabase = getSupabaseAdmin()
-  const { data: item } = await supabase
-    .from('library_items')
-    .select('title, title_en, author, description, cover_url, category')
-    .eq('id', id)
-    .single()
+  const data = await getBookData(id)
 
-  if (!item) {
+  if (!data) {
     return { title: 'Book Not Found | Arena' }
   }
 
+  const item = data.book
   const title = item.title_en || item.title
   const description = item.description?.slice(0, 160) || `${title} by ${item.author || 'Unknown'}`
 

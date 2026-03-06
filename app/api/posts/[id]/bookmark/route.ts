@@ -5,10 +5,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import { apiLogger } from '@/lib/utils/logger'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+
+// Zod schema for POST /api/posts/[id]/bookmark (body is optional)
+const BookmarkSchema = z.object({
+  folder_id: z.string().uuid().optional().nullable(),
+}).optional()
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -88,10 +94,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // 获取请求体中的 folder_id（提前获取，用于判断是移动收藏夹还是取消收藏）
-    let folder_id = null
+    let folder_id: string | null = null
     try {
       const body = await request.json()
-      folder_id = body.folder_id || null
+      const parsed = BookmarkSchema.safeParse(body)
+      if (parsed.success && parsed.data?.folder_id) {
+        folder_id = parsed.data.folder_id
+      } else if (!parsed.success) {
+        return NextResponse.json(
+          { error: 'Invalid input', details: parsed.error.flatten() },
+          { status: 400 }
+        )
+      }
     } catch {
       // 没有请求体，使用默认收藏夹或取消收藏
     }

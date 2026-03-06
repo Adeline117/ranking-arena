@@ -4,12 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import { verifyTotpCode, generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import logger from '@/lib/logger'
+
+// Zod schema for POST /api/settings/2fa/verify
+const Verify2FASchema = z.object({
+  code: z.string().min(1, 'Verification code is required').max(10, 'Code too long').regex(/^\d+$/, 'Code must be numeric'),
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -19,10 +25,6 @@ function getSupabaseAdmin() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   )
-}
-
-interface VerifyRequestBody {
-  code: string
 }
 
 export async function POST(request: NextRequest) {
@@ -44,12 +46,15 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    const body = (await request.json()) as VerifyRequestBody
-    const { code } = body
-
-    if (!code || typeof code !== 'string') {
-      return NextResponse.json({ error: 'Missing or invalid code' }, { status: 400 })
+    const body = await request.json()
+    const parsed = Verify2FASchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
+    const { code } = parsed.data
 
     // Get the stored TOTP secret
     const { data: profile, error: profileError } = await supabase

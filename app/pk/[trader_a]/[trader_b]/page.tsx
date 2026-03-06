@@ -81,7 +81,7 @@ export async function generateMetadata({
 
 // ─── Page params ──────────────────────────────────────────────────────────────
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300 // ISR: 5 minutes
 
 // ─── Page component ───────────────────────────────────────────────────────────
 

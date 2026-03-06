@@ -209,7 +209,6 @@ export default function NotificationsPage() {
         },
         body: JSON.stringify({ notification_id: notification.id }),
       }).catch(() => {
-        // 回滚
         setNotifications((prev) =>
           prev.map((n) => (n.id === notification.id ? { ...n, read: false } : n))
         )

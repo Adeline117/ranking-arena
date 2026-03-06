@@ -78,7 +78,7 @@ export function usePostForm() {
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore draft once on mount; showToast/t are stable refs
   }, [handle, draftKey])
 
   // Auto-save draft to localStorage (debounced)

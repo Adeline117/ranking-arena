@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -120,6 +121,8 @@ export async function GET(req: NextRequest) {
     missingEnrichmentGaps: 0,
     platformsWithIssues: [] as string[],
   }
+
+  const plog = await PipelineLogger.start('check-data-gaps')
 
   for (const platform of platforms) {
     try {
@@ -302,6 +305,8 @@ export async function GET(req: NextRequest) {
   }
 
   const duration = Date.now() - startTime
+
+  await plog.success(reports.length, { summary })
 
   return NextResponse.json({
     ok: true,

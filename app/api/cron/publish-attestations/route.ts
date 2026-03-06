@@ -4,6 +4,7 @@ import { publishAttestation, createDataHash } from '@/lib/web3/eas'
 import { ARENA_SCORE_SCHEMA_UID } from '@/lib/web3/contracts'
 import type { Address } from 'viem'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -35,6 +36,7 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdmin()
   const results: { handle: string; uid?: string; error?: string }[] = []
+  const plog = await PipelineLogger.start('publish-attestations')
 
   try {
     // Get top 100 traders with wallet addresses
@@ -135,6 +137,7 @@ export async function POST(request: NextRequest) {
     const successful = results.filter(r => r.uid).length
     const failed = results.filter(r => r.error).length
 
+    await plog.success(successful, { total: traders.length, skipped, failed })
     return NextResponse.json({
       total: traders.length,
       skipped,
@@ -143,6 +146,7 @@ export async function POST(request: NextRequest) {
       results,
     })
   } catch (err) {
+    await plog.error(err instanceof Error ? err : new Error(String(err)))
     logger.apiError('/api/cron/publish-attestations', err, {})
     return NextResponse.json({ error: 'Cron job failed' }, { status: 500 })
   }

@@ -44,7 +44,7 @@ const fetcher = async (url: string) => {
 export default function NewsFlash() {
   const { language, t } = useLanguage()
 
-  const { data, error, isLoading } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     '/api/flash-news?limit=5&sort=published_at',
     fetcher,
     {
@@ -89,9 +89,15 @@ export default function NewsFlash() {
             <div key={i} className="skeleton" style={{ height: 52, marginBottom: 4, borderRadius: tokens.radius.md }} />
           ))
         ) : error ? (
-          <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
-            {t('sidebarLoadFailed')}
-          </p>
+          <div style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
+            <div>{t('sidebarLoadFailed')}</div>
+            <button
+              onClick={() => mutate()}
+              style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: '1px solid var(--glass-border-light)', background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+            >
+              {t('retry') || 'Retry'}
+            </button>
+          </div>
         ) : news.length === 0 ? (
           <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
             {t('sidebarNoNews')}

@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -171,6 +172,7 @@ export async function POST(request: NextRequest) {
   let fetched = 0
   let inserted = 0
   let errors = 0
+  const plog = await PipelineLogger.start('fetch-funding-rates')
 
   try {
 
@@ -222,6 +224,7 @@ export async function POST(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
+    await plog.success(inserted, { fetched, errors, duration })
     return NextResponse.json({
       success: true,
       fetched,
@@ -231,6 +234,7 @@ export async function POST(request: NextRequest) {
       duration: `${duration}ms`,
     })
   } catch (error) {
+    await plog.error(error instanceof Error ? error : new Error(String(error)))
     logger.apiError('/api/cron/fetch-funding-rates', error, {})
     return NextResponse.json(
       {

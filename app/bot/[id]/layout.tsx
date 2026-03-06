@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       }
     }
   } catch {
-    // fallback
+    // Metadata fetch failed; fall through to default metadata below
   }
 
   return {

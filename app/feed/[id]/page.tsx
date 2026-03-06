@@ -4,6 +4,7 @@
  * Allows each activity to be shared via link with a rich preview.
  */
 
+import { cache } from 'react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -14,7 +15,7 @@ import { ACTIVITY_META } from '@/lib/types/activities'
 import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300 // ISR: 5 minutes
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
@@ -22,7 +23,7 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 // Server data fetch
 // ---------------------------------------------------------------------------
 
-async function fetchActivity(id: string): Promise<TraderActivity | null> {
+const fetchActivity = cache(async function fetchActivity(id: string): Promise<TraderActivity | null> {
   try {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -38,10 +39,11 @@ async function fetchActivity(id: string): Promise<TraderActivity | null> {
 
     if (error || !data) return null
     return data as TraderActivity
-  } catch {
+  } catch (error) {
+    console.warn('[feed/id] fetchActivity failed:', error instanceof Error ? error.message : String(error))
     return null
   }
-}
+})
 
 // ---------------------------------------------------------------------------
 // Metadata (OG card)

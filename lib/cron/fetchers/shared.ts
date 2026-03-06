@@ -98,7 +98,7 @@ export function classifyFetchError(
 // VPS Proxy Support
 // ============================================
 
-const VPS_PROXY_URL = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP || ''
+const VPS_PROXY_URL = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP || ''
 
 export async function fetchViaVpsProxy<T = unknown>(
   targetUrl: string,
@@ -486,6 +486,50 @@ export async function fetchJson<T = unknown>(
     return (await res.json()) as T
   } finally {
     clearTimeout(timeout)
+  }
+}
+
+/**
+ * Fetch with VPS proxy fallback.
+ * Tries direct first; on geo-block/WAF error, falls back to VPS proxy.
+ */
+export async function fetchWithVpsFallback<T = unknown>(
+  url: string,
+  opts?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: unknown
+    timeoutMs?: number
+  }
+): Promise<T> {
+  try {
+    return await fetchJson<T>(url, opts)
+  } catch (directErr) {
+    const msg = directErr instanceof Error ? directErr.message : ''
+    const isBlocked =
+      msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('geo-blocked')
+
+    if (!isBlocked) throw directErr
+
+    const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+    if (!vpsUrl) throw directErr
+
+    const res = await fetch(vpsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+      },
+      body: JSON.stringify({
+        url,
+        method: opts?.method || 'GET',
+        headers: opts?.headers || {},
+        body: opts?.body || null,
+      }),
+      signal: AbortSignal.timeout(opts?.timeoutMs || 20000),
+    })
+    if (!res.ok) throw new Error(`VPS proxy HTTP ${res.status}`)
+    return (await res.json()) as T
   }
 }
 

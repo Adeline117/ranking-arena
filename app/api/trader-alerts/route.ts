@@ -3,14 +3,14 @@
  * Pro 会员功能：管理关注交易员的变动提醒配置
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   requireAuth,
   success,
   error,
   handleError,
-  validateString,
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
@@ -19,30 +19,29 @@ import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
-// 提醒配置类型
-interface TraderAlertConfig {
-  id?: string
-  trader_id: string
-  source?: string
-  alert_roi_change?: boolean
-  roi_change_threshold?: number
-  alert_drawdown?: boolean
-  drawdown_threshold?: number
-  alert_pnl_change?: boolean
-  pnl_change_threshold?: number
-  alert_score_change?: boolean
-  score_change_threshold?: number
-  alert_rank_change?: boolean
-  rank_change_threshold?: number
-  alert_new_position?: boolean
-  alert_price_above?: boolean
-  price_above_value?: number | null
-  alert_price_below?: boolean
-  price_below_value?: number | null
-  price_symbol?: string | null
-  one_time?: boolean
-  enabled?: boolean
-}
+// Zod schema for POST /api/trader-alerts
+const TraderAlertSchema = z.object({
+  trader_id: z.string().min(1, 'trader_id is required'),
+  source: z.string().optional().nullable(),
+  alert_roi_change: z.boolean().optional().default(true),
+  roi_change_threshold: z.number().min(0).max(100).optional().default(10),
+  alert_drawdown: z.boolean().optional().default(true),
+  drawdown_threshold: z.number().min(0).max(100).optional().default(20),
+  alert_pnl_change: z.boolean().optional().default(false),
+  pnl_change_threshold: z.number().min(0).optional().default(5000),
+  alert_score_change: z.boolean().optional().default(true),
+  score_change_threshold: z.number().min(0).max(100).optional().default(5),
+  alert_rank_change: z.boolean().optional().default(false),
+  rank_change_threshold: z.number().min(0).optional().default(5),
+  alert_new_position: z.boolean().optional().default(false),
+  alert_price_above: z.boolean().optional().default(false),
+  price_above_value: z.number().optional().nullable(),
+  alert_price_below: z.boolean().optional().default(false),
+  price_below_value: z.number().optional().nullable(),
+  price_symbol: z.string().max(20).optional().nullable(),
+  one_time: z.boolean().optional().default(false),
+  enabled: z.boolean().optional().default(true),
+})
 
 /**
  * GET - 获取用户的提醒配置列表
@@ -120,48 +119,45 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const config: TraderAlertConfig = body
-
-    // 验证必填字段
-    const traderId = validateString(config.trader_id, {
-      required: true,
-      fieldName: 'trader_id',
-    })
-
-    if (!traderId) {
-      return error('Missing trader_id', 400)
+    const parsed = TraderAlertSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
+    const config = parsed.data
 
     // 检查是否已存在配置
     const { data: existing } = await supabase
       .from('trader_alerts')
       .select('id')
       .eq('user_id', user.id)
-      .eq('trader_id', traderId)
+      .eq('trader_id', config.trader_id)
       .maybeSingle()
 
     const alertData = {
       user_id: user.id,
-      trader_id: traderId,
+      trader_id: config.trader_id,
       source: config.source || null,
-      alert_roi_change: config.alert_roi_change ?? true,
-      roi_change_threshold: config.roi_change_threshold ?? 10,
-      alert_drawdown: config.alert_drawdown ?? true,
-      drawdown_threshold: config.drawdown_threshold ?? 20,
-      alert_pnl_change: config.alert_pnl_change ?? false,
-      pnl_change_threshold: config.pnl_change_threshold ?? 5000,
-      alert_score_change: config.alert_score_change ?? true,
-      score_change_threshold: config.score_change_threshold ?? 5,
-      alert_rank_change: config.alert_rank_change ?? false,
-      rank_change_threshold: config.rank_change_threshold ?? 5,
-      alert_new_position: config.alert_new_position ?? false,
-      alert_price_above: config.alert_price_above ?? false,
+      alert_roi_change: config.alert_roi_change,
+      roi_change_threshold: config.roi_change_threshold,
+      alert_drawdown: config.alert_drawdown,
+      drawdown_threshold: config.drawdown_threshold,
+      alert_pnl_change: config.alert_pnl_change,
+      pnl_change_threshold: config.pnl_change_threshold,
+      alert_score_change: config.alert_score_change,
+      score_change_threshold: config.score_change_threshold,
+      alert_rank_change: config.alert_rank_change,
+      rank_change_threshold: config.rank_change_threshold,
+      alert_new_position: config.alert_new_position,
+      alert_price_above: config.alert_price_above,
       price_above_value: config.price_above_value ?? null,
-      alert_price_below: config.alert_price_below ?? false,
+      alert_price_below: config.alert_price_below,
       price_below_value: config.price_below_value ?? null,
       price_symbol: config.price_symbol ?? null,
-      one_time: config.one_time ?? false,
-      enabled: config.enabled ?? true,
+      one_time: config.one_time,
+      enabled: config.enabled,
     }
 
     let result

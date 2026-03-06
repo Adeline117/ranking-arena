@@ -16,6 +16,7 @@ import { NextResponse } from 'next/server'
 import { isAuthorized, createSupabaseAdmin, logCronExecution } from '@/lib/cron/utils'
 import { createScheduleManager } from '@/lib/services/schedule-manager'
 import { createLogger } from '@/lib/utils/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 const logger = createLogger('CalculateTiers')
 
@@ -36,6 +37,8 @@ function isSmartSchedulerEnabled(): boolean {
  */
 export async function GET(req: Request) {
   const startTime = Date.now()
+
+  const plog = await PipelineLogger.start('calculate-tiers')
 
   try {
     // 1. Verify authorization
@@ -102,6 +105,8 @@ export async function GET(req: Request) {
     const currentCallsPerDay = tierStats.total * 6 // Assuming every 4 hours = 6x per day
     const reduction = ((currentCallsPerDay - expectedCallsPerDay) / currentCallsPerDay) * 100
 
+    await plog.success(tierStats.total, { hot: tierStats.hot, active: tierStats.active, normal: tierStats.normal, dormant: tierStats.dormant })
+
     // 9. Return results
     return NextResponse.json({
       ok: true,
@@ -132,6 +137,7 @@ export async function GET(req: Request) {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     logger.error('Tier calculation failed', { error: errorMessage })
+    await plog.error(error)
 
     return NextResponse.json(
       {

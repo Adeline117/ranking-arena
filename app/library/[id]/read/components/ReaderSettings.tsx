@@ -154,7 +154,7 @@ export default function ReaderSettings({
                     fontFamily: FONT_FAMILIES[f].css,
                     fontWeight: 600, transition: 'all 0.15s',
                   }}>
-                    {t(labelKeys[f] as any)}
+                    {t(labelKeys[f])}
                   </button>
                 )
               })}

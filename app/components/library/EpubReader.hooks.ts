@@ -558,7 +558,7 @@ export function useEpubInit({
         renditionRef.current = null
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- heavy init effect; theme/font changes applied via separate useEffect
   }, [url, bookId])
 
   // Apply theme/font changes

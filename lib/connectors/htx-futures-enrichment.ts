@@ -48,7 +48,7 @@ export class HTXFuturesConnector extends BaseExchangeConnector {
       if (json.code !== 200) return []
 
       const items = json.data?.itemList || []
-      return items.map((item: any) => {
+      return items.map((item: { userSign?: string; winRate?: string; mdd?: string; roi?: string; pnl?: string; imgUrl?: string }) => {
         const userSign = (item.userSign || '').replace(/=+$/, '') // Strip trailing =
         let winRate = this.parseNum(item.winRate)
         let maxDrawdown = this.parseNum(item.mdd)

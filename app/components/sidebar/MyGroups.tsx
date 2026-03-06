@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import useSWR from 'swr'
@@ -18,8 +19,9 @@ type Group = {
 }
 
 function GroupAvatar({ name, avatarUrl, size = 32 }: { name: string; avatarUrl: string | null; size?: number }) {
+  const [imgError, setImgError] = useState(false)
   const initial = (name || '?').charAt(0).toUpperCase()
-  if (avatarUrl) {
+  if (avatarUrl && !imgError) {
     return (
       <Image
         src={avatarUrl}
@@ -31,6 +33,7 @@ function GroupAvatar({ name, avatarUrl, size = 32 }: { name: string; avatarUrl: 
           objectFit: 'cover',
           minWidth: size,
         }}
+        onError={() => setImgError(true)}
       />
     )
   }
@@ -84,7 +87,7 @@ export default function MyGroups() {
   const { language, t } = useLanguage()
   const { user } = useAuthSession()
 
-  const { data: groups = [], isLoading, error: swrError } = useSWR(
+  const { data: groups = [], isLoading, error: swrError, mutate } = useSWR(
     user ? ['my-groups', user.id] : null,
     ([, userId]) => fetchMyGroups(userId),
     {
@@ -111,9 +114,15 @@ export default function MyGroups() {
           {[1, 2].map(i => <div key={i} className="skeleton" style={{ height: 40, borderRadius: tokens.radius.md }} />)}
         </div>
       ) : swrError ? (
-        <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
-          {t('loadFailed')}
-        </p>
+        <div style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
+          <div>{t('loadFailed')}</div>
+          <button
+            onClick={() => mutate()}
+            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+          >
+            {t('retry') || 'Retry'}
+          </button>
+        </div>
       ) : groups.length === 0 ? (
         <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
           {t('sidebarNoGroupsJoined')}

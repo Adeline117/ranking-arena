@@ -272,7 +272,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
       setRetryCount(prev => prev + 1)
       connect()
     }, delay)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect excluded to break circular dependency with scheduleReconnect
   }, [autoReconnect, retryCount, maxRetries, retryBaseDelay, setStatus, onError])
 
   const connect = useCallback(() => {
@@ -331,7 +331,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
   useEffect(() => {
     connect()
     return () => disconnect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; connect/disconnect are stable refs
   }, [])
 
   useEffect(() => {
@@ -340,7 +340,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     } else {
       disconnect()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only toggle connection when enabled changes; connect/disconnect are stable refs
   }, [enabled])
 
   useEffect(() => {

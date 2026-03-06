@@ -99,7 +99,7 @@ function CompareContent() {
     }
 
     init()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTraders is stable; including it would cause refetch loops
   }, [authChecked, accessToken, searchParams])
 
   // Fallback: if Privy SDK hasn't loaded after 3s, stop loading anyway

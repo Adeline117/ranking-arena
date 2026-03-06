@@ -95,7 +95,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
         {(['all', 'want_to_read', 'reading', 'read'] as const).map(status => {
           const label = status === 'all'
             ? t('bookshelfAll')
-            : t(STATUS_I18N_KEYS[status] as any)
+            : t(STATUS_I18N_KEYS[status])
           const count = status === 'all' ? items.length : counts[status]
           return (
             <button
@@ -161,7 +161,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
                   boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                 }}>
                   <Text style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-on-accent)', letterSpacing: '0.02em' }}>
-                    {t(STATUS_I18N_KEYS[book.status] as any)}
+                    {t(STATUS_I18N_KEYS[book.status])}
                   </Text>
                 </Box>
               </Box>

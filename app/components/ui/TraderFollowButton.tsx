@@ -93,8 +93,8 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         setFollowing(actualFollowing)
         onFollowChange?.(actualFollowing)
       }
-    } catch (_error) {
-      // intentionally empty
+    } catch {
+      // Non-critical: follow state refresh failed, UI will use cached/optimistic value
     }
   }, [userId, traderId, getAuthHeadersAsync, onFollowChange])
 
@@ -168,7 +168,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     } finally {
       setIsLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded to avoid re-creating callback on language change; translations are read at call time
   }, [traderId, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange])
 
   // UF8: Resume pending follow action after login
@@ -190,7 +190,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         }
       }
     } catch { /* intentionally empty */ }
-  }, [userId, traderId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, traderId]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when userId/traderId change; executeFollow and onFollowChange are stable refs
 
   useEffect(() => {
     if (!userId) return

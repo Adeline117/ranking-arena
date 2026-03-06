@@ -12,6 +12,7 @@ import AlertsPanel from './components/AlertsPanel'
 import SchedulerMetrics from './components/SchedulerMetrics'
 import AnomalyMetrics from './components/AnomalyMetrics'
 import SystemMetrics from './components/SystemMetrics'
+import MetricsTrends from './components/MetricsTrends'
 
 interface SchedulerData {
   enabled: boolean
@@ -249,6 +250,9 @@ export default function MonitoringPage() {
 
             {/* Anomaly Detection Metrics */}
             <AnomalyMetrics data={data.anomalyDetection} />
+
+            {/* Performance Trends */}
+            <MetricsTrends accessToken={accessToken!} />
 
             {/* System Metrics */}
             <SystemMetrics data={data.system} />

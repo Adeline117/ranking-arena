@@ -14,13 +14,14 @@ const eslintConfig = defineConfig([
       // ----------------------------------------
       // Disabled rules (legacy patterns)
       // ----------------------------------------
-      // This repo contains many pragmatic uses of `any` across UI + scripts.
-      "@typescript-eslint/no-explicit-any": "off",
+      // Warn on explicit `any` — moving towards full type safety.
+      "@typescript-eslint/no-explicit-any": "warn",
 
       // These rules are helpful, but currently too strict for the codebase patterns.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/immutability": "off",
       "react-hooks/purity": "off",
+      "react-hooks/refs": "off",
 
       // Next link rule is nice-to-have; we allow <a> in simple 404 pages.
       "@next/next/no-html-link-for-pages": "off",
@@ -35,8 +36,8 @@ const eslintConfig = defineConfig([
       // Encourage use of === over == (catches type coercion bugs)
       "eqeqeq": ["warn", "always", { "null": "ignore" }],
 
-      // Warn on console.log (should use logger utility)
-      "no-console": ["warn", { "allow": ["warn", "error"] }],
+      // Ban console.log in production code (use logger utility)
+      "no-console": ["error", { "allow": ["warn", "error"] }],
 
       // Warn on unused variables (helps catch dead code)
       "@typescript-eslint/no-unused-vars": ["warn", {
@@ -45,8 +46,8 @@ const eslintConfig = defineConfig([
         "caughtErrorsIgnorePattern": "^_"
       }],
 
-      // Warn on empty catch blocks (should at least log)
-      "no-empty": ["warn", { "allowEmptyCatch": false }],
+      // Ban empty catch blocks (must at least log or comment)
+      "no-empty": ["error", { "allowEmptyCatch": false }],
 
       // Encourage async/await error handling
       "no-async-promise-executor": "warn",

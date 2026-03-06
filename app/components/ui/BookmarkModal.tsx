@@ -49,7 +49,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
       setNewFolderName('')
       setNewFolderPublic(true)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFolders is defined in closure, not a stable ref
   }, [isOpen, authChecked, accessToken])
 
   useEffect(() => {

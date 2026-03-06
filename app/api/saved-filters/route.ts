@@ -3,14 +3,14 @@
  * Pro 会员功能：保存和管理筛选配置
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   requireAuth,
   success,
   error,
   handleError,
-  validateString,
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
@@ -19,29 +19,30 @@ import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
-// 筛选配置类型
-interface FilterConfig {
-  category?: string[]      // 类型：futures, spot, web3
-  exchange?: string[]      // 交易所
-  roi_min?: number         // 最小 ROI
-  roi_max?: number         // 最大 ROI
-  drawdown_min?: number    // 最小回撤
-  drawdown_max?: number    // 最大回撤
-  period?: '7D' | '30D' | '90D'  // period
-  min_pnl?: number         // 最小 PnL
-  min_score?: number       // 最小 Arena Score
-  min_win_rate?: number    // 最小胜率
-}
-
-interface SavedFilter {
-  id?: string
-  name: string
-  description?: string
-  filter_config: FilterConfig
-  is_default?: boolean
-}
-
 const MAX_SAVED_FILTERS = 10
+
+// Zod schema for filter_config
+const FilterConfigSchema = z.object({
+  category: z.array(z.string()).optional(),
+  exchange: z.array(z.string()).optional(),
+  roi_min: z.number().optional(),
+  roi_max: z.number().optional(),
+  drawdown_min: z.number().optional(),
+  drawdown_max: z.number().optional(),
+  period: z.enum(['7D', '30D', '90D']).optional(),
+  min_pnl: z.number().optional(),
+  min_score: z.number().optional(),
+  min_win_rate: z.number().optional(),
+}).passthrough()
+
+// Zod schema for POST /api/saved-filters
+const SaveFilterSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().min(1, 'Filter name is required').max(50, 'Filter name must be at most 50 characters'),
+  description: z.string().max(200).optional().nullable(),
+  filter_config: FilterConfigSchema,
+  is_default: z.boolean().optional().default(false),
+})
 
 /**
  * GET - 获取用户的筛选配置列表
@@ -112,30 +113,21 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const filter: SavedFilter = body
-
-    // 验证必填字段
-    const name = validateString(filter.name, {
-      required: true,
-      maxLength: 50,
-      fieldName: 'name',
-    })
-
-    if (!name) {
-      return error('Filter name is required', 400)
+    const parsed = SaveFilterSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
-
-    // 验证 filter_config
-    if (!filter.filter_config || typeof filter.filter_config !== 'object') {
-      return error('Invalid filter config', 400)
-    }
+    const filter = parsed.data
 
     const filterData = {
       user_id: user.id,
-      name: name,
+      name: filter.name,
       description: filter.description || null,
       filter_config: filter.filter_config,
-      is_default: filter.is_default ?? false,
+      is_default: filter.is_default,
     }
 
     let result

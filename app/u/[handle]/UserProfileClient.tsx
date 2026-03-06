@@ -1,41 +1,23 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
-import useSWR from 'swr'
-import { fetcher } from '@/lib/hooks/useSWR'
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
-import { useSubscription } from '@/app/components/home/hooks/useSubscription'
-import { useToast } from '@/app/components/ui/Toast'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { logger } from '@/lib/logger'
+import TopNav from '@/app/components/layout/TopNav'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import { Box } from '@/app/components/base'
+import { tokens } from '@/lib/design-tokens'
+import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/Dynamic'
 
+import type { ServerProfile, TraderPageData, ProfileTabKey } from './components/types'
+import { userProfileStyles } from './components/profileStyles'
 import ProfileNotFound from './components/ProfileNotFound'
 import { TraderLoading, TraderError } from './components/TraderLoadingError'
 import TraderProfileView from './components/TraderProfileView'
-import NonTraderProfileView from './components/NonTraderProfileView'
+import UserProfileHeader from './components/UserProfileHeader'
+import UserProfileTabs from './components/UserProfileTabs'
+import UserProfileContent from './components/UserProfileContent'
+import { useUserProfile } from './hooks/useUserProfile'
 
-interface ServerProfile {
-  id: string
-  handle: string
-  bio?: string
-  avatar_url?: string
-  cover_url?: string
-  show_followers?: boolean
-  show_following?: boolean
-  followers: number
-  following: number
-  followingTraders: number
-  isRegistered: boolean
-  isVerifiedTrader?: boolean
-  proBadgeTier: 'pro' | null
-  role?: string
-  traderHandle?: string
-  exp?: number
-}
-
-type TraderPageData = Record<string, any>
-type ProfileTabKey = 'overview' | 'stats' | 'portfolio'
+// Re-export types for backward compatibility
+export type { ServerProfile, TraderPageData, ProfileTabKey }
 
 interface UserProfileClientProps {
   handle: string
@@ -44,165 +26,46 @@ interface UserProfileClientProps {
 }
 
 export default function UserProfileClient({ handle, serverProfile, serverTraderData }: UserProfileClientProps) {
-  const router = useRouter()
-  const { showToast } = useToast()
-  const { t } = useLanguage()
-  const { isPro } = useSubscription()
+  const {
+    email,
+    currentUserId,
+    profile,
+    mounted,
+    isPro,
+    isOwnProfile,
+    t,
 
-  const [email, setEmail] = useState<string | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [profile, setProfile] = useState<ServerProfile | null>(serverProfile)
-  const [followersCount, setFollowersCount] = useState(serverProfile?.followers || 0)
-  const [mounted, setMounted] = useState(false)
-  const profileCreationRef = useRef(false)
-  const searchParams = useSearchParams()
-  const pathname = usePathname()
+    modalType,
+    setModalType,
+    followersCount,
+    setFollowersCount,
+    followingCount,
 
-  useEffect(() => { setMounted(true) }, [])
+    activeProfileTab,
+    handleProfileTabChange,
 
-  // Trader data - SWR with server fallback
-  const isTrader = !!serverProfile?.traderHandle
-  const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
-    isTrader ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}` : null,
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      refreshInterval: 60_000,
-      dedupingInterval: 5000,
-      errorRetryCount: 2,
-      fallbackData: serverTraderData ?? undefined,
-    }
-  )
-
-  // Tabs
-  const urlTab = searchParams.get('tab')
-  const [activeProfileTab, setActiveProfileTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
-  )
-
-  const updateUrl = useCallback((tab: string) => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (tab === 'overview') {
-      params.delete('tab')
-    } else {
-      params.set('tab', tab)
-    }
-    const qs = params.toString()
-    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
-  }, [searchParams, pathname, router])
-
-  const handleProfileTabChange = useCallback((tab: ProfileTabKey) => {
-    setActiveProfileTab(tab)
-    updateUrl(tab)
-  }, [updateUrl])
-
-  // Auth check
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setCurrentUserId(data.user?.id ?? null)
-
-      if (!serverProfile && data.user) {
-        const emailHandle = data.user.email?.split('@')[0]
-        const isOwnProfile = handle === data.user.id || handle === emailHandle
-        if (isOwnProfile) {
-          handleOwnProfileCreation(data.user.id, emailHandle)
-        }
-      }
-    }).catch((err) => {
-      logger.error('[UserProfile] Auth check failed:', err)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  async function handleOwnProfileCreation(userId: string, emailHandle?: string) {
-    if (profileCreationRef.current) return
-    profileCreationRef.current = true
-
-    try {
-      const { data: existingProfile } = await supabase
-        .from('user_profiles')
-        .select('id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, role')
-        .eq('id', userId)
-        .maybeSingle()
-
-      if (existingProfile) {
-        if (existingProfile.handle && existingProfile.handle !== handle) {
-          router.replace(`/u/${encodeURIComponent(existingProfile.handle)}`)
-          return
-        }
-        setProfile({
-          id: existingProfile.id,
-          handle: existingProfile.handle || handle,
-          bio: existingProfile.bio || undefined,
-          avatar_url: existingProfile.avatar_url || undefined,
-          cover_url: existingProfile.cover_url || undefined,
-          followers: 0,
-          following: 0,
-          followingTraders: 0,
-          isRegistered: true,
-          proBadgeTier: null,
-          role: existingProfile.role || undefined,
-        })
-      } else {
-        const defaultHandle = emailHandle || userId.slice(0, 8)
-        const { error: insertError } = await supabase
-          .from('user_profiles')
-          .insert({ id: userId, handle: defaultHandle })
-
-        if (insertError && insertError.code !== '23505') {
-          logger.warn('Profile insert failed (non-conflict):', insertError)
-        }
-
-        const { data: newProfile, error: createError } = await supabase
-          .from('user_profiles')
-          .select('id, handle, bio, avatar_url, cover_url')
-          .eq('id', userId)
-          .maybeSingle()
-
-        if (newProfile && !createError) {
-          if (newProfile.handle && newProfile.handle !== handle) {
-            router.replace(`/u/${encodeURIComponent(newProfile.handle)}`)
-            return
-          }
-          setProfile({
-            id: newProfile.id,
-            handle: newProfile.handle || handle,
-            bio: newProfile.bio || undefined,
-            avatar_url: newProfile.avatar_url || undefined,
-            cover_url: newProfile.cover_url || undefined,
-            followers: 0,
-            following: 0,
-            followingTraders: 0,
-            isRegistered: true,
-            proBadgeTier: null,
-          })
-        }
-      }
-    } catch (error) {
-      logger.error('Error creating own profile:', error)
-      showToast(t('loadUserDataFailed'), 'error')
-    }
-  }
+    isTrader,
+    traderData,
+    isTraderDataLoading,
+    isTraderDataError,
+  } = useUserProfile({ handle, serverProfile, serverTraderData })
 
   // Not found state
   if (!profile) {
     return <ProfileNotFound handle={handle} email={email} />
   }
 
-  // Trader mode: loading / error states
-  const isTraderDataLoading = isTrader && traderLoading && !serverTraderData
-  const isTraderDataError = isTrader && traderError && !traderData
-
+  // Trader loading state
   if (isTraderDataLoading) {
     return <TraderLoading email={email} />
   }
 
+  // Trader error state
   if (isTraderDataError) {
     return <TraderError email={email} />
   }
 
-  // Trader mode: full trader layout
+  // Trader mode: identical to TraderPageClient layout
   if (isTrader) {
     return (
       <TraderProfileView
@@ -221,19 +84,71 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
   // Non-trader mode: user profile layout
   return (
-    <NonTraderProfileView
-      email={email}
-      handle={handle}
-      profile={profile}
-      serverProfile={serverProfile}
-      currentUserId={currentUserId}
-      isPro={isPro}
-      mounted={mounted}
-      activeTab={activeProfileTab}
-      onTabChange={handleProfileTabChange}
-      followersCount={followersCount}
-      onFollowersCountChange={(delta) => setFollowersCount(prev => prev + delta)}
-      traderData={traderData}
-    />
+    <Box
+      className="user-profile-page"
+      style={{
+        minHeight: '100vh',
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <TopNav email={email} />
+
+      <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
+        <Breadcrumb items={[
+          { label: t('userProfileCommunity'), href: '/' },
+          { label: `@${profile.handle}` },
+        ]} />
+
+        {/* Profile Header */}
+        <UserProfileHeader
+          profile={profile}
+          handle={handle}
+          isOwnProfile={isOwnProfile}
+          currentUserId={currentUserId}
+          mounted={mounted}
+          followersCount={followersCount}
+          followingCount={followingCount}
+          onFollowersCountChange={(delta) => setFollowersCount(prev => prev + delta)}
+          onFollowersClick={() => {
+            if (profile.isRegistered && (isOwnProfile || profile.show_followers !== false)) {
+              setModalType('followers')
+            }
+          }}
+        />
+
+        {/* Tabs */}
+        <UserProfileTabs
+          activeTab={activeProfileTab}
+          onTabChange={handleProfileTabChange}
+        />
+
+        {/* Tab Content */}
+        <UserProfileContent
+          profile={profile}
+          handle={handle}
+          isOwnProfile={isOwnProfile}
+          activeTab={activeProfileTab}
+          traderData={traderData}
+        />
+
+        {/* Followers modal */}
+        {profile.isRegistered && (
+          <FollowListModal
+            isOpen={modalType === 'followers'}
+            onClose={() => setModalType(null)}
+            type="followers"
+            handle={profile.handle}
+            currentUserId={currentUserId}
+            isOwnProfile={isOwnProfile}
+            isPublic={profile.show_followers !== false}
+          />
+        )}
+
+        <style>{userProfileStyles}</style>
+      </Box>
+    </Box>
   )
 }
+
+// FollowersList extracted to ./components/FollowersList.tsx

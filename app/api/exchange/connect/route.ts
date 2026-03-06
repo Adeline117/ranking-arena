@@ -3,14 +3,13 @@
  * POST /api/exchange/connect
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   requireAuth,
   success,
   handleError,
-  validateString,
-  validateEnum,
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
@@ -19,6 +18,17 @@ import { encrypt } from '@/lib/exchange/encryption'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('exchange-connect')
+
+// Zod schema for POST /api/exchange/connect
+const ConnectExchangeSchema = z.object({
+  exchange: z.string().refine(
+    (val) => SUPPORTED_EXCHANGES.includes(val as Exchange),
+    { message: `exchange must be one of: ${SUPPORTED_EXCHANGES.join(', ')}` }
+  ),
+  apiKey: z.string().min(10, 'API Key must be at least 10 characters'),
+  apiSecret: z.string().min(10, 'API Secret must be at least 10 characters'),
+  passphrase: z.string().optional().nullable(),
+})
 
 export async function POST(req: NextRequest) {
   // Rate limit: sensitive operation
@@ -30,22 +40,16 @@ export async function POST(req: NextRequest) {
     const adminSupabase = getSupabaseAdmin()
     const body = await req.json()
 
-    // 验证输入
-    const exchange = validateEnum(body.exchange, SUPPORTED_EXCHANGES, {
-      required: true,
-      fieldName: 'exchange',
-    })!
-    const apiKey = validateString(body.apiKey, {
-      required: true,
-      minLength: 10,
-      fieldName: 'API Key',
-    })!
-    const apiSecret = validateString(body.apiSecret, {
-      required: true,
-      minLength: 10,
-      fieldName: 'API Secret',
-    })!
-    const passphrase = validateString(body.passphrase)
+    // Zod 输入验证
+    const parsed = ConnectExchangeSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+    const { exchange, apiKey, apiSecret } = parsed.data
+    const passphrase = parsed.data.passphrase ?? null
 
     // Bitget 需要 passphrase
     if (exchange === 'bitget' && !passphrase) {

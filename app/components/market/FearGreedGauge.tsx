@@ -53,7 +53,7 @@ export default function FearGreedGauge() {
       else prevValueRef.current = to
     }
     requestAnimationFrame(animate)
-  }, [data?.value]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data?.value]) // eslint-disable-line react-hooks/exhaustive-deps -- animate only on value change; prevValueRef is a stable ref
 
   const cardStyle = {
     padding: tokens.spacing[5],

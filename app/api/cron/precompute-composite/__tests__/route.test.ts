@@ -30,6 +30,30 @@ jest.mock('@/lib/utils/logger', () => ({
   }),
 }))
 
+jest.mock('@/lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+  logError: jest.fn(),
+  logWarn: jest.fn(),
+  logInfo: jest.fn(),
+  logDebug: jest.fn(),
+}))
+
+jest.mock('@/lib/services/pipeline-logger', () => ({
+  PipelineLogger: {
+    start: jest.fn().mockResolvedValue({
+      id: 1,
+      success: jest.fn().mockResolvedValue(undefined),
+      error: jest.fn().mockResolvedValue(undefined),
+      timeout: jest.fn().mockResolvedValue(undefined),
+    }),
+  },
+}))
+
 jest.mock('@/lib/types/leaderboard', () => ({
   PLATFORM_CATEGORY: {
     'binance-futures': 'futures',

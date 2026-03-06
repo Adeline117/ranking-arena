@@ -19,6 +19,7 @@ import {
   type TraderData,
 } from '@/lib/services/anomaly-manager'
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 // Verify cron secret
 function verifyCronSecret(request: NextRequest): boolean {
@@ -120,6 +121,8 @@ export async function GET(request: NextRequest) {
     })
   }
 
+  const plog = await PipelineLogger.start('detect-anomalies')
+
   try {
 
     // 1. Fetch active traders
@@ -159,6 +162,7 @@ export async function GET(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
+    await plog.success(totalAnomalies, { tradersChecked: traders.length, criticalAnomalies: criticalCount })
 
     return NextResponse.json({
       success: true,
@@ -173,6 +177,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('[Anomaly Detection] Error:', error)
+    await plog.error(error)
 
     return NextResponse.json(
       {

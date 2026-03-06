@@ -8,6 +8,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getServerCache, setServerCache, CacheTTL } from '@/lib/utils/server-cache'
 import { computeIndicators, IndicatorResults } from '@/lib/utils/technical-analysis'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('trader-indicators-api')
 
 export const revalidate = 300 // 5分钟
 
@@ -105,7 +108,8 @@ export async function GET(
     const response = NextResponse.json(results)
     response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
     return response
-  } catch (_err) {
+  } catch (err) {
+    logger.error('GET /api/traders/[handle]/indicators failed', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

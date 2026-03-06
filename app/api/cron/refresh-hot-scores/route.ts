@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { del as cacheDelete } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60  // Increased for velocity updates
@@ -34,6 +35,8 @@ export async function GET(request: NextRequest) {
   } else if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const plog = await PipelineLogger.start('refresh-hot-scores')
 
   try {
     const supabase = getSupabaseAdmin()
@@ -67,6 +70,8 @@ export async function GET(request: NextRequest) {
         // Cache invalidation failure is non-critical
       }
 
+      await plog.success(incrementalCount ?? 0, { method: 'incremental' })
+
       return NextResponse.json({
         success: true,
         count: incrementalCount,
@@ -91,6 +96,7 @@ export async function GET(request: NextRequest) {
       }
 
       logger.info('Hot scores refreshed (full)', { count: fullCount })
+      await plog.success(fullCount ?? 0, { method: 'full' })
       return NextResponse.json({
         success: true,
         count: fullCount,
@@ -112,6 +118,7 @@ export async function GET(request: NextRequest) {
 
     if (fetchError || !recentPosts) {
       logger.error('Failed to fetch posts for hot score fallback', { error: fetchError?.message })
+      await plog.error(new Error(fetchError?.message || 'No posts for fallback'))
       return NextResponse.json({ success: false, error: fetchError?.message || 'No posts' }, { status: 500 })
     }
 
@@ -134,6 +141,7 @@ export async function GET(request: NextRequest) {
 
     if (updateErrors > recentPosts.length / 2) {
       logger.error('Too many hot score update failures', { errors: updateErrors, total: recentPosts.length })
+      await plog.error(new Error(`${updateErrors}/${recentPosts.length} updates failed`))
       return NextResponse.json({ success: false, error: `${updateErrors}/${recentPosts.length} updates failed` }, { status: 500 })
     }
 
@@ -143,9 +151,11 @@ export async function GET(request: NextRequest) {
       // non-critical
     }
 
+    await plog.success(recentPosts.length, { method: 'fallback' })
     return NextResponse.json({ success: true, method: 'fallback' })
   } catch (err: unknown) {
     logger.error('Hot score refresh failed', { error: String(err) })
+    await plog.error(err)
     return NextResponse.json({ success: false, error: String(err) }, { status: 500 })
   }
 }

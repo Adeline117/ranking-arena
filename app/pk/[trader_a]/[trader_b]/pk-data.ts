@@ -80,26 +80,29 @@ export async function fetchPKTrader(
         trades_count: snap?.trades_count ?? null,
       }
     } else {
-      // Default (90d): use leaderboard_ranks for main metrics
-      const { data: lr } = (await supabase
-        .from('leaderboard_ranks')
-        .select(
-          'display_name, rank, arena_score, roi, pnl, win_rate, max_drawdown'
-        )
-        .eq('source', src.source)
-        .eq('source_trader_id', src.source_trader_id)
-        .maybeSingle()) as { data: LeaderboardRow | null }
+      // Default (90d): parallel fetch leaderboard_ranks + trades_count
+      const [lrResult, snapResult] = await Promise.all([
+        supabase
+          .from('leaderboard_ranks')
+          .select(
+            'display_name, rank, arena_score, roi, pnl, win_rate, max_drawdown'
+          )
+          .eq('source', src.source)
+          .eq('source_trader_id', src.source_trader_id)
+          .maybeSingle(),
+        supabase
+          .from('trader_snapshots')
+          .select('trades_count')
+          .eq('source', src.source)
+          .eq('source_trader_id', src.source_trader_id)
+          .not('season_id', 'in', '("7D","30D")')
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
 
-      // trades_count from snapshots
-      const { data: snap } = (await supabase
-        .from('trader_snapshots')
-        .select('trades_count')
-        .eq('source', src.source)
-        .eq('source_trader_id', src.source_trader_id)
-        .not('season_id', 'in', '("7D","30D")')
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()) as { data: { trades_count: number | null } | null }
+      const lr = lrResult.data as LeaderboardRow | null
+      const snap = snapResult.data as { trades_count: number | null } | null
 
       metrics = {
         roi: lr?.roi ?? null,

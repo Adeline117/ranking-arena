@@ -34,11 +34,12 @@ export async function getTradersArenaFollowersCount(
   traderIds.forEach(id => resultMap.set(id, 0))
 
   try {
-    // Single query: fetch all follow rows for these traders, then count in JS
+    // Single query: fetch follow rows for these traders, then count in JS
     const { data } = await supabase
       .from('trader_follows')
       .select('trader_id')
       .in('trader_id', traderIds)
+      .limit(10000)
 
     if (data) {
       for (const row of data) {

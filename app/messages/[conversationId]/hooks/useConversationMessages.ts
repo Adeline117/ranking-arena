@@ -82,7 +82,7 @@ export function useConversationMessages({ conversationId, userId, accessToken }:
       else { setHasMore(false) }
     } catch { showToast(t('loadOlderMessagesFailed'), 'error') }
     finally { setLoadingMore(false) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref from useLanguage
   }, [conversationId, accessToken, loadingMore, hasMore, messages, showToast])
 
   // Realtime: incoming messages

@@ -41,7 +41,7 @@ export default function AudioReader({ text, themeIsDark, onClose }: AudioReaderP
     return () => {
       ctrl.stop()
     }
-  }, [text]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [text]) // eslint-disable-line react-hooks/exhaustive-deps -- recreate controller only when text changes; rate/pitch/voice applied via updateOptions
 
   // Update options when rate/pitch/voice change
   useEffect(() => {

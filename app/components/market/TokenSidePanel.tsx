@@ -183,7 +183,7 @@ export default function TokenSidePanel({ token, onClose }: {
       }))
       setOhlcData(data)
     } catch {
-      // ignore
+      // Chart data fetch failed; panel still shows token info without chart
     } finally {
       setChartLoading(false)
     }

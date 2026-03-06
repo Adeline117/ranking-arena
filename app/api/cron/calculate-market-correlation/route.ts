@@ -19,6 +19,7 @@ import {
   calculateMarketConditionPerformance,
 } from '@/lib/utils/market-correlation'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -40,6 +41,8 @@ export async function POST(request: NextRequest) {
   let processed = 0
   let updated = 0
   let errors = 0
+
+  const plog = await PipelineLogger.start('calculate-market-correlation')
 
   try {
     // Get benchmark returns (BTC and ETH)
@@ -138,6 +141,8 @@ export async function POST(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
+    await plog.success(updated, { processed, errors })
+
     return NextResponse.json({
       success: true,
       processed,
@@ -152,6 +157,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     logger.apiError('/api/cron/calculate-market-correlation', err, {})
+    await plog.error(err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }

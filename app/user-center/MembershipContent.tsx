@@ -108,7 +108,7 @@ export default function MembershipContent() {
 
   useEffect(() => {
     fetchMembershipInfo()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; fetchMembershipInfo is defined after hook
   }, [])
 
   async function fetchMembershipInfo() {

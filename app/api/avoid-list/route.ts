@@ -4,7 +4,8 @@
  * POST /api/avoid-list - 创建避雷投票
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   getAuthUser,
@@ -14,7 +15,6 @@ import {
   handleError,
   validateString,
   validateNumber,
-  validateEnum,
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
@@ -27,6 +27,18 @@ import {
   hasUserVoted,
   type AvoidReasonType,
 } from '@/lib/data/avoid-list'
+
+// Zod schema for POST /api/avoid-list
+const AvoidVoteSchema = z.object({
+  trader_id: z.string().min(1, 'trader_id is required'),
+  source: z.string().min(1, 'source is required'),
+  reason: z.string().max(1000).optional().nullable(),
+  reason_type: z.enum(['high_drawdown', 'fake_data', 'inconsistent', 'poor_communication', 'other']).optional().nullable(),
+  loss_amount: z.number().min(0).optional().nullable(),
+  loss_percent: z.number().optional().nullable(),
+  follow_duration_days: z.number().min(0).optional().nullable(),
+  screenshot_url: z.string().url().max(500).optional().nullable(),
+})
 
 /**
  * GET /api/avoid-list
@@ -95,12 +107,14 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin()
     const body = await request.json()
 
-    const trader_id = validateString(body.trader_id, { required: true, fieldName: 'trader_id' })
-    const source = validateString(body.source, { required: true, fieldName: 'source' })
-
-    if (!trader_id || !source) {
-      return handleError(new Error('Missing required parameters'), 'avoid-list POST')
+    const parsed = AvoidVoteSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
+    const { trader_id, source } = parsed.data
 
     // 检查是否已投票
     const alreadyVoted = await hasUserVoted(supabase, user.id, trader_id, source)
@@ -108,25 +122,15 @@ export async function POST(request: NextRequest) {
       return handleError(new Error('You have already voted to avoid this trader'), 'avoid-list POST')
     }
 
-    const reason = validateString(body.reason, { maxLength: 1000 })
-    const reason_type = validateEnum(
-      body.reason_type,
-      ['high_drawdown', 'fake_data', 'inconsistent', 'poor_communication', 'other'] as const
-    )
-    const loss_amount = validateNumber(body.loss_amount, { min: 0 })
-    const loss_percent = validateNumber(body.loss_percent)
-    const follow_duration_days = validateNumber(body.follow_duration_days, { min: 0 })
-    const screenshot_url = validateString(body.screenshot_url, { maxLength: 500 })
-
     const vote = await createAvoidVote(supabase, user.id, {
       trader_id,
       source,
-      reason: reason ?? undefined,
-      reason_type: reason_type as AvoidReasonType | undefined,
-      loss_amount: loss_amount ?? undefined,
-      loss_percent: loss_percent ?? undefined,
-      follow_duration_days: follow_duration_days ?? undefined,
-      screenshot_url: screenshot_url ?? undefined,
+      reason: parsed.data.reason ?? undefined,
+      reason_type: (parsed.data.reason_type as AvoidReasonType) ?? undefined,
+      loss_amount: parsed.data.loss_amount ?? undefined,
+      loss_percent: parsed.data.loss_percent ?? undefined,
+      follow_duration_days: parsed.data.follow_duration_days ?? undefined,
+      screenshot_url: parsed.data.screenshot_url ?? undefined,
     })
 
     return success({ vote, message: 'Avoid list vote submitted' })

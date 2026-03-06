@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -381,7 +382,8 @@ export async function GET(request: Request) {
   const platform = url.searchParams.get('platform')
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '200'), 500)
   const mode = url.searchParams.get('mode') || 'auto' // 'bulk', 'individual', 'auto'
-  
+  const plog = await PipelineLogger.start(`backfill-avatars-${platform || 'unknown'}`)
+
   if (!platform) {
     return NextResponse.json({ 
       error: 'platform parameter required',
@@ -416,6 +418,7 @@ export async function GET(request: Request) {
   
   result.total = traders.length
   if (!traders.length) {
+    await plog.success(0)
     return NextResponse.json({ ...result, message: 'No missing avatars' })
   }
 
@@ -437,6 +440,7 @@ export async function GET(request: Request) {
     
     // If bulk got most of them, return
     if (result.updated > traders.length * 0.5 || mode === 'bulk') {
+      await plog.success(result.updated, { total: result.total, errors: result.errors })
       return NextResponse.json(result)
     }
   }
@@ -472,6 +476,7 @@ export async function GET(request: Request) {
     }
   }
 
+  await plog.success(result.updated, { total: result.total, errors: result.errors })
   return NextResponse.json(result)
 }
 // Avatar backfill trigger - Sat Feb  7 18:04:52 PST 2026

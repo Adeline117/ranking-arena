@@ -54,7 +54,7 @@ function ActivityDescription({ item }: { item: ActivityItem }) {
       const statusKey = BOOK_STATUS_I18N[item.data.status as string] || 'profileActivityRated'
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-          {t(statusKey as any)}{' '}
+          {t(statusKey)}{' '}
           <Link href={`/library/${item.data.itemId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
             {book?.title || (t('aBook'))}
           </Link>

@@ -16,6 +16,7 @@ import type { Platform } from '@/lib/types/leaderboard';
 import { createClient } from '@supabase/supabase-js';
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor';
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const plog = await PipelineLogger.start('discover-traders');
   try {
     const runner = new JobRunner();
     const platforms = getAvailablePlatforms();
@@ -51,6 +53,7 @@ export async function GET(request: NextRequest) {
       });
     } catch { /* ignore */ }
 
+    await plog.success(enqueuedCount, { platforms: results });
     return NextResponse.json({
       success: true,
       enqueued: enqueuedCount,
@@ -58,6 +61,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
+    await plog.error(error instanceof Error ? error : new Error(String(error)));
     logger.error('[Cron /discover-traders] Error:', error);
 
     // Record error metric

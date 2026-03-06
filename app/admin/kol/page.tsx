@@ -39,19 +39,25 @@ export default function AdminKolPage() {
   const [applications, setApplications] = useState<KolApplication[]>([])
   const [filter, setFilter] = useState('pending')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [reviewing, setReviewing] = useState<Record<string, boolean>>({})
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({})
 
   const fetchApplications = useCallback(async () => {
     if (!accessToken) return
     setLoading(true)
+    setLoadError(false)
     try {
       const res = await fetch(`/api/admin/kol/review?status=${filter}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch')
       setApplications(data.data || [])
     } catch {
       logger.error('Failed to fetch applications')
+      setLoadError(true)
+      setApplications([])
     } finally {
       setLoading(false)
     }
@@ -62,6 +68,7 @@ export default function AdminKolPage() {
   }, [isAdmin, accessToken, fetchApplications])
 
   const handleReview = async (applicationId: string, action: 'approved' | 'rejected') => {
+    setReviewing(prev => ({ ...prev, [applicationId]: true }))
     try {
       const res = await fetch('/api/admin/kol/review', {
         method: 'POST',
@@ -80,6 +87,8 @@ export default function AdminKolPage() {
       }
     } catch {
       logger.error('Review failed')
+    } finally {
+      setReviewing(prev => ({ ...prev, [applicationId]: false }))
     }
   }
 
@@ -117,6 +126,24 @@ export default function AdminKolPage() {
 
         {loading ? (
           <p style={{ color: 'var(--color-text-tertiary)' }}>{t('loading')}</p>
+        ) : loadError ? (
+          <div style={{ padding: '32px 0', textAlign: 'center' }}>
+            <p style={{ color: 'var(--color-accent-error)', marginBottom: 12 }}>{t('loadFailed')}</p>
+            <button
+              onClick={() => fetchApplications()}
+              style={{
+                padding: '6px 16px',
+                borderRadius: 6,
+                border: '1px solid var(--color-border-primary)',
+                background: 'var(--color-bg-tertiary)',
+                color: 'var(--color-text-secondary)',
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
+              {language === 'zh' ? '重试' : 'Retry'}
+            </button>
+          </div>
         ) : applications.length === 0 ? (
           <p style={{ color: 'var(--color-text-tertiary)' }}>{t('kolNoApplications').replace('{status}', t(STATUS_KEYS[filter].key))}</p>
         ) : (
@@ -193,31 +220,35 @@ export default function AdminKolPage() {
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
                         onClick={() => handleReview(app.id, 'approved')}
+                        disabled={reviewing[app.id]}
                         style={{
                           padding: '6px 16px',
                           borderRadius: 6,
                           border: 'none',
                           background: 'var(--color-score-great)',
                           color: tokens.colors.white,
-                          cursor: 'pointer',
+                          cursor: reviewing[app.id] ? 'not-allowed' : 'pointer',
+                          opacity: reviewing[app.id] ? 0.6 : 1,
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        {t('kolApprove')}
+                        {reviewing[app.id] ? (language === 'zh' ? '处理中...' : 'Processing...') : t('kolApprove')}
                       </button>
                       <button
                         onClick={() => handleReview(app.id, 'rejected')}
+                        disabled={reviewing[app.id]}
                         style={{
                           padding: '6px 16px',
                           borderRadius: 6,
                           border: 'none',
                           background: 'var(--color-accent-error)',
                           color: tokens.colors.white,
-                          cursor: 'pointer',
+                          cursor: reviewing[app.id] ? 'not-allowed' : 'pointer',
+                          opacity: reviewing[app.id] ? 0.6 : 1,
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        {t('kolReject')}
+                        {reviewing[app.id] ? (language === 'zh' ? '处理中...' : 'Processing...') : t('kolReject')}
                       </button>
                     </div>
                   </div>

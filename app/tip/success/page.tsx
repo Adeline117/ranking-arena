@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-export default function TipSuccessPage() {
+function TipSuccessContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { t } = useLanguage()
@@ -34,18 +34,18 @@ export default function TipSuccessPage() {
         {/* 成功图标 */}
         <div className="mb-6 flex justify-center">
           <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'var(--color-accent-success-20)' }}>
-            <svg 
-              className="w-10 h-10" 
+            <svg
+              className="w-10 h-10"
               style={{ color: 'var(--color-accent-success)' }}
-              fill="none" 
-              viewBox="0 0 24 24" 
+              fill="none"
+              viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M5 13l4 4L19 7" 
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
               />
             </svg>
           </div>
@@ -67,7 +67,7 @@ export default function TipSuccessPage() {
           >
             {t('backToHome')}
           </Link>
-          
+
           <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
             {t('redirectingCountdown').replace('{seconds}', String(countdown))}
           </p>
@@ -80,5 +80,17 @@ export default function TipSuccessPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function TipSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg-primary)' }}>
+        <div className="text-center" style={{ color: 'var(--color-text-secondary)' }}>Loading...</div>
+      </div>
+    }>
+      <TipSuccessContent />
+    </Suspense>
   )
 }
