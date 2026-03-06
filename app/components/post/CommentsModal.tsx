@@ -277,6 +277,8 @@ export default function CommentsModal({
           marginLeft: isReply ? 42 : 0,
           padding: '10px 0',
           borderBottom: isReply ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+          borderLeft: isReply ? `2px solid var(--color-accent-primary-20, ${tokens.colors.border.primary})` : 'none',
+          paddingLeft: isReply ? 12 : 0,
           opacity: isDeleting ? 0.5 : 1,
           transition: 'opacity 0.2s',
         }}
