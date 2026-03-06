@@ -142,7 +142,7 @@ describe('GET /api/cron/weekly-report', () => {
     expect(mockSendAlert).toHaveBeenCalledTimes(1)
     expect(mockSendAlert).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: expect.stringContaining('Weekly Report'),
+        title: expect.stringContaining('每周报告'),
         level: 'info',
       })
     )
