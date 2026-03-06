@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
@@ -53,9 +52,9 @@ export default function NonTraderProfileView({
   email,
   handle,
   profile,
-  serverProfile,
+  serverProfile: _serverProfile,
   currentUserId,
-  isPro,
+  isPro: _isPro,
   mounted,
   activeTab,
   onTabChange,
