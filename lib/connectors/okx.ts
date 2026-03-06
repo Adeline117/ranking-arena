@@ -175,16 +175,23 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
 
   private async fetchLeaderboardApi(period: string): Promise<OKXLeaderboardResponse> {
     const url = `${this.baseUrl}/public/rank-list?period=${period}&pageNo=1&pageSize=100&sortType=YIELD_RATE`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`OKX leaderboard API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`OKX leaderboard API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchTraderDetailApi(
@@ -192,21 +199,28 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
     window: RankingWindow,
   ): Promise<{ code: string; data: OKXTraderEntry }> {
     const url = `${this.baseUrl}/public/trader-info?uniqueName=${uniqueName}&period=${WINDOW_TO_PERIOD[window]}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`OKX trader detail API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`OKX trader detail API returned ${response.status}`);
+      }
+
+      const json: { code: string; data: OKXTraderEntry } = await response.json();
+      if (json.code !== '0' || !json.data) {
+        throw new Error(`OKX trader detail API returned no data for ${uniqueName}`);
+      }
+
+      return json;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const json: { code: string; data: OKXTraderEntry } = await response.json();
-    if (json.code !== '0' || !json.data) {
-      throw new Error(`OKX trader detail API returned no data for ${uniqueName}`);
-    }
-
-    return json;
   }
 
   private getRandomUA(): string {

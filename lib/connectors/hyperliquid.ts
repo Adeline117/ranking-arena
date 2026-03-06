@@ -125,17 +125,10 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     traderKey: string,
     window: RankingWindow,
   ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
-    // Fetch user state and fills in parallel
-    const [_userState, pnlData] = await Promise.all([
-      this.requestWithCircuitBreaker<HyperliquidUserState>(
-        () => this.fetchUserState(traderKey),
-        { label: `fetchUserState(${traderKey})` },
-      ),
-      this.requestWithCircuitBreaker<{ pnl: number; roi: number; nTrades: number; winRate: number | null }>(
-        () => this.fetchUserPnl(traderKey, window),
-        { label: `fetchUserPnl(${traderKey}, ${window})` },
-      ),
-    ]);
+    const pnlData = await this.requestWithCircuitBreaker<{ pnl: number; roi: number; nTrades: number; winRate: number | null }>(
+      () => this.fetchUserPnl(traderKey, window),
+      { label: `fetchUserPnl(${traderKey}, ${window})` },
+    );
 
     const metrics: SnapshotMetricsLegacy = {
       roi_pct: pnlData.roi != null ? pnlData.roi * 100 : null,
@@ -233,14 +226,26 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
   // Private
   // ============================================
 
+  private async fetchWithTimeout(body: Record<string, unknown>): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
+    try {
+      return await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   private async fetchLeaderboard(period: string): Promise<HyperliquidLeaderEntry[]> {
-    const response = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'leaderboard',
-        timeWindow: period,
-      }),
+    const response = await this.fetchWithTimeout({
+      type: 'leaderboard',
+      timeWindow: period,
     });
 
     if (!response.ok) {
@@ -252,13 +257,9 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
   }
 
   private async fetchUserState(address: string): Promise<HyperliquidUserState> {
-    const response = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'clearinghouseState',
-        user: address,
-      }),
+    const response = await this.fetchWithTimeout({
+      type: 'clearinghouseState',
+      user: address,
     });
 
     if (!response.ok) {
@@ -272,17 +273,12 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     address: string,
     window: RankingWindow,
   ): Promise<{ pnl: number; roi: number; nTrades: number; winRate: number | null }> {
-    // Fetch fills for the window period
     const startTime = Date.now() - WINDOW_TO_MS[window];
 
-    const response = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'userFills',
-        user: address,
-        startTime,
-      }),
+    const response = await this.fetchWithTimeout({
+      type: 'userFills',
+      user: address,
+      startTime,
     });
 
     if (!response.ok) {
@@ -318,14 +314,10 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
   private async fetchUserFills(address: string): Promise<HyperliquidFill[]> {
     const startTime = Date.now() - 90 * 24 * 60 * 60 * 1000; // Last 90 days
 
-    const response = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'userFills',
-        user: address,
-        startTime,
-      }),
+    const response = await this.fetchWithTimeout({
+      type: 'userFills',
+      user: address,
+      startTime,
     });
 
     if (!response.ok) return [];
