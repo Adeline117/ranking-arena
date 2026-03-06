@@ -12,13 +12,11 @@
  *   }
  */
 
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+import { logger } from '@/lib/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 function getClient() {
-  return createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+  return getSupabaseAdmin()
 }
 
 export interface PipelineLogHandle {
@@ -44,7 +42,7 @@ export class PipelineLogger {
 
     if (error || !data) {
       // If logging fails, return a no-op handle so jobs still run
-      console.warn(`[PipelineLogger] Failed to start log for ${jobName}:`, error?.message)
+      logger.warn(`[PipelineLogger] Failed to start log for ${jobName}: ${error?.message}`)
       return createNoOpHandle()
     }
 
@@ -105,7 +103,7 @@ export class PipelineLogger {
       .select('*')
 
     if (error) {
-      console.warn('[PipelineLogger] Failed to get job statuses:', error.message)
+      logger.warn(`[PipelineLogger] Failed to get job statuses: ${error.message}`)
       return []
     }
     return data || []
@@ -129,7 +127,7 @@ export class PipelineLogger {
       .select('*')
 
     if (error) {
-      console.warn('[PipelineLogger] Failed to get job stats:', error.message)
+      logger.warn(`[PipelineLogger] Failed to get job stats: ${error.message}`)
       return []
     }
     return data || []
@@ -153,7 +151,7 @@ export class PipelineLogger {
       .limit(limit)
 
     if (error) {
-      console.warn('[PipelineLogger] Failed to get recent failures:', error.message)
+      logger.warn(`[PipelineLogger] Failed to get recent failures: ${error.message}`)
       return []
     }
     return data || []

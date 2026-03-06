@@ -186,7 +186,7 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], minWidth: 0 }}>
             <Skeleton width="36px" height="36px" variant="circular" style={{ flexShrink: 0 }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
-              <Skeleton width={`${60 + Math.random() * 40}%`} height="14px" />
+              <Skeleton width={`${60 + (i * 17 % 40)}%`} height="14px" />
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <Skeleton width="14px" height="14px" variant="circular" />
                 <Skeleton width="50px" height="10px" />
