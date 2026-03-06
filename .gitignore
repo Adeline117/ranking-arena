@@ -85,6 +85,13 @@ cloudflare-worker/node_modules/
 # Worker
 worker/node_modules/
 
+# Infrastructure secrets
+infra/bullmq/.env
+
+# Generated reports and artifacts
+playwright-report/
+data/generated/
+
 # Local scripts (may contain sensitive data)
 scripts/local-scrape.mjs
 .env*.local
