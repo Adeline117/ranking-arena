@@ -180,10 +180,9 @@ async function fetchTechnicalAnalysis(
 // ============================================
 
 function createTVClient(): TradingViewClientWrapper {
-  let TradingView: any
+  let TradingView: TVModule | undefined
   try {
-     
-    TradingView = globalThis.require?.('@mathieuc/' + 'tradingview')
+    TradingView = globalThis.require?.('@mathieuc/' + 'tradingview') as TVModule | undefined
   } catch { /* optional dep */ }
 
   const wrapper: TradingViewClientWrapper = {
@@ -197,6 +196,7 @@ function createTVClient(): TradingViewClientWrapper {
   }
 
   try {
+    if (!TradingView) throw new Error('TradingView module not available')
     const client = new TradingView.Client()
     wrapper.client = client
 
