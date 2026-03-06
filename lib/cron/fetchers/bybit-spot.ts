@@ -113,7 +113,7 @@ async function fetchPeriod(
         const scraperUrl = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${PAGE_SIZE}&duration=${duration}`
         const res = await fetch(scraperUrl, {
           headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-          signal: AbortSignal.timeout(90_000), // VPS browser launch + page load takes ~65s
+          signal: AbortSignal.timeout(240_000), // Allow queue wait (~65s/req) + processing
         })
         if (res.ok) {
           const scraperData = (await res.json()) as BybitApiResponse

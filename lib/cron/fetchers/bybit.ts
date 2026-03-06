@@ -107,7 +107,7 @@ async function fetchBybitPage(
       const url = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${pageSize}&duration=${duration}`
       const res = await fetch(url, {
         headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(240_000), // Allow queue wait (~65s/req) + processing
       })
       if (res.ok) {
         const data = (await res.json()) as BybitApiResponse

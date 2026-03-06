@@ -69,12 +69,20 @@
       "schedule": "5 * * * *"
     },
     {
+      "path": "/api/cron/fetch-traders/bybit",
+      "schedule": "50 */3 * * *"
+    },
+    {
       "path": "/api/cron/batch-fetch-traders?group=a",
       "schedule": "55 */3 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b",
       "schedule": "2 */4 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/bybit_spot",
+      "schedule": "10 */6 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=c",
