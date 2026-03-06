@@ -166,7 +166,7 @@ describe('POST /api/stripe/create-checkout', () => {
       body: JSON.stringify({ plan: 'monthly' }),
     })
     const res = await POST(req)
-    const body = await res.json()
+    await res.json()
 
     expect(res.status).toBe(401)
   })
@@ -248,7 +248,7 @@ describe('POST /api/stripe/create-checkout', () => {
       body: JSON.stringify({ plan: 'monthly', promotionCode: 'promo_abc' }),
     })
     const res = await POST(req)
-    const body = await res.json()
+    await res.json()
 
     expect(res.status).toBe(200)
     expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
