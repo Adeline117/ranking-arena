@@ -221,7 +221,7 @@ export default function ToolsPage() {
       if (queryError) throw queryError
       setTools(data || [])
     } catch {
-      setError(isZh ? '加载失败，请重试' : 'Failed to load, please retry')
+      setError(t('failedToLoadRetry'))
     } finally {
       setLoading(false)
     }
@@ -238,25 +238,25 @@ export default function ToolsPage() {
         {/* Top Leaderboards */}
         <TopLeaderboards columns={[
           {
-            title: isZh ? '交易工具 Top 10' : 'Top 10 Trading Tools',
+            title: t('top10TradingTools'),
             icon: <TradingIcon />,
             entries: topTrading.map(t => toolToEntry(t, isZh)),
             loading: leaderboardLoading,
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
           {
-            title: isZh ? '量化平台 Top 10' : 'Top 10 Quant Platforms',
+            title: t('top10QuantPlatforms'),
             icon: <QuantIcon />,
             entries: topQuant.map(t => toolToEntry(t, isZh)),
             loading: leaderboardLoading,
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
           {
-            title: isZh ? '开源脚本 Top 10' : 'Top 10 Scripts',
+            title: t('top10Scripts'),
             icon: <CodeIcon />,
             entries: topScripts.map(t => toolToEntry(t, isZh)),
             loading: leaderboardLoading,
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
         ]} />
 
@@ -289,11 +289,11 @@ export default function ToolsPage() {
               margin: 0,
               letterSpacing: '-0.02em',
             }}>
-              {isZh ? '工具' : 'Tools'}
+              {t('tools')}
             </h1>
           </div>
           <p style={{ fontSize: tokens.typography.fontSize.base, color: 'var(--color-text-tertiary)', marginBottom: 24, lineHeight: tokens.typography.lineHeight.normal }}>
-            {isZh ? '发现并评价加密行业中的顶级工具' : 'Discover and rate top tools in crypto'}
+            {t('discoverRateTools')}
           </p>
         </div>
 
@@ -379,7 +379,7 @@ export default function ToolsPage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={isZh ? '搜索工具...' : 'Search tools...'}
+            placeholder={t('searchTools')}
             style={{
               width: '100%', padding: '10px 16px', borderRadius: tokens.radius.full,
               border: '1px solid var(--color-border-primary)',
@@ -411,7 +411,7 @@ export default function ToolsPage() {
                 fontSize: tokens.typography.fontSize.sm,
               }}
             >
-              {isZh ? '重试' : 'Retry'}
+              {t('retry')}
             </button>
           </div>
         ) : loading ? (
@@ -422,7 +422,7 @@ export default function ToolsPage() {
           </div>
         ) : tools.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.base }}>
-            {isZh ? '暂无数据' : 'No tools found'}
+            {t('noToolsFound')}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: 20 }}>

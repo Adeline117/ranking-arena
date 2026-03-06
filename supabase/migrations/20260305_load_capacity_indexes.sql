@@ -27,3 +27,14 @@ CREATE INDEX IF NOT EXISTS idx_trader_snapshots_freshness
 -- Uses DISTINCT-like access pattern - only needs source column per season
 CREATE INDEX IF NOT EXISTS idx_leaderboard_ranks_source_season
   ON leaderboard_ranks(season_id, source);
+
+-- trader_snapshots: support sort-by-drawdown in rankings
+-- Used when users sort by max_drawdown instead of arena_score
+CREATE INDEX IF NOT EXISTS idx_trader_snapshots_season_drawdown
+  ON trader_snapshots(season_id, max_drawdown DESC NULLS LAST)
+  WHERE max_drawdown IS NOT NULL;
+
+-- posts: support group + hot_score sort for group feed queries
+CREATE INDEX IF NOT EXISTS idx_posts_group_hot_score
+  ON posts(group_id, hot_score DESC NULLS LAST)
+  WHERE group_id IS NOT NULL;

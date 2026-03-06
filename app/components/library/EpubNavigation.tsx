@@ -57,7 +57,7 @@ export function EpubSearchPanel({
       <div onClick={onClose}
         role="presentation"
         style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-      <div role="dialog" aria-modal="true" aria-label={isZh ? '搜索内容' : 'Search'} style={{
+      <div role="dialog" aria-modal="true" aria-label={t('search')} style={{
         position: 'fixed', top: 60, right: 12, width: 380, maxWidth: '90vw', maxHeight: '70vh',
         background: panelBg, color: panelText, borderRadius: tokens.radius.xl, zIndex: 301,
         boxShadow: 'var(--shadow-lg-dark)', border: `1px solid ${panelBorder}`,
@@ -65,14 +65,14 @@ export function EpubSearchPanel({
       }}>
         <div style={{ padding: '14px 16px', borderBottom: `1px solid ${panelBorder}` }}>
           <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
-            {isZh ? '搜索内容' : 'Search'}
+            {t('search')}
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               value={searchQuery}
               onChange={e => onSearchQueryChange(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') onSearch() }}
-              placeholder={isZh ? '输入关键词...' : 'Enter keyword...'}
+              placeholder={t('epubEnterKeyword')}
               style={{
                 flex: 1, padding: '8px 12px', borderRadius: tokens.radius.md,
                 border: `1px solid ${panelBorder}`,
@@ -86,14 +86,14 @@ export function EpubSearchPanel({
               cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
               opacity: searching ? 0.6 : 1,
             }}>
-              {searching ? (isZh ? '搜索中...' : 'Searching...') : (isZh ? '搜索' : 'Search')}
+              {searching ? (t('epubSearching')) : (t('search'))}
             </button>
           </div>
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
           {searchResults.length === 0 && !searching && searchQuery && (
             <p style={{ padding: '20px', fontSize: 13, opacity: 0.4, textAlign: 'center' }}>
-              {isZh ? '未找到结果' : 'No results found'}
+              {t('noResultsFound')}
             </p>
           )}
           {searchResults.map((r, i) => (
@@ -158,7 +158,7 @@ export function EpubNotesPanel({
       <div onClick={onClose}
         role="presentation"
         style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-      <div role="dialog" aria-modal="true" aria-label={isZh ? '笔记与高亮' : 'Notes & Highlights'} style={{
+      <div role="dialog" aria-modal="true" aria-label={t('notesHighlights')} style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, width: 380, maxWidth: '85vw', zIndex: 301,
         background: panelBg, color: panelText, boxShadow: '-4px 0 24px var(--color-overlay-medium)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -170,7 +170,7 @@ export function EpubNotesPanel({
         }}>
           <div>
             <span style={{ fontSize: 16, fontWeight: 700 }}>
-              {isZh ? '高亮和笔记' : 'Highlights & Notes'}
+              {t('epubHighlightsNotes')}
             </span>
             <span style={{ fontSize: 12, opacity: 0.4, marginLeft: 8 }}>
               {highlights.length}{isZh ? ' 条' : ''}
@@ -209,8 +209,8 @@ export function EpubNotesPanel({
               padding: '4px 8px', borderRadius: tokens.radius.sm, border: `1px solid ${panelBorder}`,
               background: panelSubtle, color: panelText, fontSize: 11, outline: 'none',
             }}>
-              <option value="time">{isZh ? '按时间' : 'By time'}</option>
-              <option value="position">{isZh ? '按位置' : 'By position'}</option>
+              <option value="time">{t('epubByTime')}</option>
+              <option value="position">{t('epubByPosition')}</option>
             </select>
           </div>
         )}
@@ -263,11 +263,11 @@ export function EpubNotesPanel({
                       <button onClick={e => { e.stopPropagation(); onSaveNote(realIdx, editNoteText) }} style={{
                         padding: '4px 12px', borderRadius: tokens.radius.sm, border: 'none',
                         background: accent, color: 'var(--foreground)', cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                      }}>{isZh ? '保存' : 'Save'}</button>
+                      }}>{t('save')}</button>
                       <button onClick={e => { e.stopPropagation(); onCancelEditNote() }} style={{
                         padding: '4px 12px', borderRadius: tokens.radius.sm, border: `1px solid ${panelBorder}`,
                         background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 11,
-                      }}>{isZh ? '取消' : 'Cancel'}</button>
+                      }}>{t('cancel')}</button>
                     </div>
                   </div>
                 ) : h.note ? (
@@ -285,13 +285,13 @@ export function EpubNotesPanel({
                       background: 'none', border: 'none', color: panelText, cursor: 'pointer',
                       fontSize: 11, opacity: 0.35, padding: '2px 4px',
                     }}>
-                      {isZh ? '编辑' : 'Edit'}
+                      {t('edit')}
                     </button>
                     <button onClick={e => { e.stopPropagation(); onRemoveHighlight(realIdx) }} style={{
                       background: 'none', border: 'none', color: 'var(--color-accent-error)', cursor: 'pointer',
                       fontSize: 11, opacity: 0.5, padding: '2px 4px',
                     }}>
-                      {isZh ? '删除' : 'Delete'}
+                      {t('delete')}
                     </button>
                   </div>
                 </div>
@@ -316,7 +316,7 @@ export function EpubNotesPanel({
               onMouseEnter={e => e.currentTarget.style.opacity = '1'}
               onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}
             >
-              {isZh ? '复制全部笔记到剪贴板' : 'Copy all notes to clipboard'}
+              {t('epubCopyAllNotes')}
             </button>
           </div>
         )}
@@ -382,23 +382,23 @@ export function EpubStatsPanel({
       <div onClick={onClose}
         role="presentation"
         style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-      <div role="dialog" aria-modal="true" aria-label={isZh ? '阅读统计' : 'Reading Statistics'} style={{
+      <div role="dialog" aria-modal="true" aria-label={t('epubReadingStats')} style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         background: panelBg, color: panelText, borderRadius: tokens.radius['2xl'], padding: '28px 32px',
         width: 360, maxWidth: '90vw', zIndex: 301, boxShadow: 'var(--shadow-elevated)',
         border: `1px solid ${panelBorder}`,
       }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20, textAlign: 'center' }}>
-          {isZh ? '阅读统计' : 'Reading Statistics'}
+          {t('epubReadingStats')}
         </h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <StatCard label={isZh ? '阅读进度' : 'Progress'} value={`${progressPercent}%`} themeIsDark={themeIsDark} />
-          <StatCard label={isZh ? '当前页' : 'Current Page'} value={`${currentPage}/${totalPages}`} themeIsDark={themeIsDark} />
-          <StatCard label={isZh ? '本次时长' : 'This Session'} value={formatDur(sessionElapsedSec, isZh)} themeIsDark={themeIsDark} />
-          <StatCard label={isZh ? '累计阅读' : 'Total Time'} value={formatDur(totalSessionTime, isZh)} themeIsDark={themeIsDark} />
-          <StatCard label={isZh ? '阅读次数' : 'Sessions'} value={`${sessionsCount}`} themeIsDark={themeIsDark} />
-          <StatCard label={isZh ? '预计剩余' : 'Remaining'} value={timeRemainingStr} themeIsDark={themeIsDark} />
+          <StatCard label={t('epubProgress')} value={`${progressPercent}%`} themeIsDark={themeIsDark} />
+          <StatCard label={t('epubCurrentPage')} value={`${currentPage}/${totalPages}`} themeIsDark={themeIsDark} />
+          <StatCard label={t('epubThisSession')} value={formatDur(sessionElapsedSec, isZh)} themeIsDark={themeIsDark} />
+          <StatCard label={t('epubTotalTime')} value={formatDur(totalSessionTime, isZh)} themeIsDark={themeIsDark} />
+          <StatCard label={t('epubSessions')} value={`${sessionsCount}`} themeIsDark={themeIsDark} />
+          <StatCard label={t('epubRemaining')} value={timeRemainingStr} themeIsDark={themeIsDark} />
         </div>
 
         {/* Progress bar */}
@@ -416,7 +416,7 @@ export function EpubStatsPanel({
           borderRadius: tokens.radius.md, border: `1px solid ${panelBorder}`,
           background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 13,
         }}>
-          {isZh ? '关闭' : 'Close'}
+          {t('close')}
         </button>
       </div>
     </>
