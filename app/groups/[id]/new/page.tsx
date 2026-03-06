@@ -12,7 +12,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 import type { UploadedImage, UploadedVideo, PollOption, LinkPreview } from './types'
 import {
-  TITLE_MAX_LENGTH, CONTENT_MAX_LENGTH, DRAFT_KEY_PREFIX,
+  TITLE_MAX_LENGTH, DRAFT_KEY_PREFIX,
   MAX_IMAGES, MAX_VIDEO_SIZE_MB,
   ALLOWED_IMAGE_TYPES, ALLOWED_VIDEO_TYPES,
 } from './types'
