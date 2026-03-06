@@ -17,6 +17,10 @@ import type {
   SnapshotMetricsLegacy,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  MEXCLeaderboardResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // MEXC API types
@@ -72,10 +76,11 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
     const maxPages = 5;
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await this.requestWithCircuitBreaker<MEXCLeaderboardResponse>(
+      const raw = await this.requestWithCircuitBreaker<MEXCLeaderboardResponse>(
         () => this.fetchLeaderboardPage(sortPeriod, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
+      const data = warnValidate(MEXCLeaderboardResponseSchema, raw, 'mexc/leaderboard') as unknown as MEXCLeaderboardResponse;
 
       if (data.code !== 0 || !data.data?.resultList?.length) break;
 

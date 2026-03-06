@@ -17,6 +17,10 @@ import type {
   SnapshotMetricsLegacy,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  CoinExLeaderboardResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // CoinEx API types
@@ -71,10 +75,11 @@ export class CoinExConnector extends BaseConnectorLegacy implements LegacyPlatfo
     const traders: TraderIdentity[] = [];
 
     for (let page = 1; page <= 5; page++) {
-      const data = await this.requestWithCircuitBreaker<CoinExLeaderboardResponse>(
+      const raw = await this.requestWithCircuitBreaker<CoinExLeaderboardResponse>(
         () => this.fetchLeaderboardPage(period, page, 20),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
+      const data = warnValidate(CoinExLeaderboardResponseSchema, raw, 'coinex/leaderboard') as unknown as CoinExLeaderboardResponse;
 
       if (data.code !== 0 || !data.data?.data?.length) break;
 

@@ -17,6 +17,10 @@ import type {
   SnapshotMetricsLegacy,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  KuCoinLeaderboardResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // KuCoin API types
@@ -74,10 +78,11 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
     const maxPages = 5;
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await this.requestWithCircuitBreaker<KuCoinLeaderboardResponse>(
+      const raw = await this.requestWithCircuitBreaker<KuCoinLeaderboardResponse>(
         () => this.fetchLeaderboardPage(period, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
+      const data = warnValidate(KuCoinLeaderboardResponseSchema, raw, 'kucoin/leaderboard') as unknown as KuCoinLeaderboardResponse;
 
       if (data.code !== '200000' || !data.data?.items?.length) break;
 

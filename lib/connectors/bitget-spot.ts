@@ -17,6 +17,10 @@ import type {
   SnapshotMetricsLegacy,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  BitgetSpotListResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // Bitget Spot API types
@@ -71,10 +75,11 @@ export class BitgetSpotConnector extends BaseConnectorLegacy implements LegacyPl
     const traders: TraderIdentity[] = [];
 
     for (let page = 1; page <= 5; page++) {
-      const data = await this.requestWithCircuitBreaker<BitgetSpotListResponse>(
+      const raw = await this.requestWithCircuitBreaker<BitgetSpotListResponse>(
         () => this.fetchLeaderboardPage(sortPeriod, page, 20),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
+      const data = warnValidate(BitgetSpotListResponseSchema, raw, 'bitget-spot/leaderboard') as unknown as BitgetSpotListResponse;
 
       if (data.code !== '0' || !data.data?.list?.length) break;
 
