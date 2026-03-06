@@ -28,6 +28,76 @@ const ENRICH_LIMIT = 300 // OKX already has pnlRatios data, no extra API calls n
 
 const WINDOW_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
 
+// Strategy cache: once we find a working method, reuse it for all subsequent pages
+let _cachedStrategy: 'direct' | 'vps' | null = null
+
+// Helper to fetch via VPS proxy
+async function fetchViaVps<T>(
+  vpsUrl: string,
+  targetUrl: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: unknown }
+): Promise<T> {
+  const res = await fetch(vpsUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+    },
+    body: JSON.stringify({
+      url: targetUrl,
+      method: opts.method || 'GET',
+      headers: opts.headers || {},
+      body: opts.body || null,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  if (!res.ok) throw new Error(`VPS proxy HTTP ${res.status}`)
+  return (await res.json()) as T
+}
+
+// Helper to fetch with proxy fallback (direct → VPS proxy)
+// Caches the working strategy to avoid wasting time on failed strategies for every page
+async function fetchWithProxyFallback<T>(
+  url: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: unknown }
+): Promise<T> {
+  const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+
+  // If we already know VPS works, skip direct entirely
+  if (_cachedStrategy === 'vps' && vpsUrl) {
+    return await fetchViaVps<T>(vpsUrl, url, opts)
+  }
+
+  // Try direct first
+  try {
+    const result = await fetchJson<T>(url, { ...opts, timeoutMs: 10000 })
+    _cachedStrategy = 'direct'
+    return result
+  } catch (directErr) {
+    const msg = directErr instanceof Error ? directErr.message : ''
+    const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('geo-blocked')
+
+    if (!isBlocked) throw directErr
+
+    // Direct is geo-blocked → try VPS proxy
+    if (vpsUrl) {
+      try {
+        logger.warn(`[${SOURCE}] Direct geo-blocked, switching to VPS proxy`)
+        const result = await fetchViaVps<T>(vpsUrl, url, opts)
+        _cachedStrategy = 'vps'
+        return result
+      } catch (vpsErr) {
+        logger.warn(`[${SOURCE}] VPS proxy failed: ${vpsErr instanceof Error ? vpsErr.message : String(vpsErr)}`)
+      }
+    }
+
+    throw new Error(
+      `Geo-blocked — direct and VPS proxy both failed. ` +
+      `Set VPS_PROXY_SG/VPS_PROXY_URL to enable VPS fallback.`
+    )
+  }
+}
+
 // ── API response types ──
 
 interface OkxPnlRatio {
@@ -158,7 +228,7 @@ async function fetchPeriod(
   for (let page = 1; page <= Math.min(totalPages, MAX_PAGES); page++) {
     try {
       const url = `${API_URL}?instType=SWAP&page=${page}`
-      const data = await fetchJson<OkxApiResponse>(url, {
+      const data = await fetchWithProxyFallback<OkxApiResponse>(url, {
         headers: { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
       })
 
