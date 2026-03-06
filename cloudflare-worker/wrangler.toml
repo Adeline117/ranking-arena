@@ -3,7 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 # Route through non-US Cloudflare edge to avoid Binance geo-blocking
-# Smart placement lets CF pick the optimal location near the origin servers
+# Smart placement was routing to blocked US regions; disabled.
+# Workers subrequests egress from the colo nearest to the origin server,
+# so Binance (Singapore origin) should egress from a non-US colo.
+# If still blocked, set PROXY_FALLBACK_URL to a VPS-based proxy.
 [placement]
 mode = "smart"
 
