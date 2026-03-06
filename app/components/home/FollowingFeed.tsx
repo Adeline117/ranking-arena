@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -9,7 +9,6 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import PostCard from '@/app/components/post/components/PostCard'
 import type { PostWithUserState } from '@/lib/types'
 import { logger } from '@/lib/logger'
-import { useToast } from '@/app/components/ui/Toast'
 
 /** Score posts by freshness (10h half-life) + engagement */
 function calculateFeedScore(post: PostWithUserState): number {
@@ -23,62 +22,55 @@ function calculateFeedScore(post: PostWithUserState): number {
 
 export default function FollowingFeed() {
   const { user, loading: authLoading } = useAuthSession()
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const isZh = language === 'zh'
-  const { showToast } = useToast()
   const [posts, setPosts] = useState<PostWithUserState[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [followingIds, setFollowingIds] = useState<string[]>([])
+
+  const fetchFollowingPosts = useCallback(async () => {
+    if (authLoading || !user) return
+    setLoading(true)
+    setError(false)
+    try {
+      // Get following list (needed for empty state check)
+      const { data: follows } = await supabase
+        .from('user_follows')
+        .select('following_id')
+        .eq('follower_id', user.id)
+
+      const ids = follows?.map(f => f.following_id) || []
+      setFollowingIds(ids)
+
+      if (ids.length === 0) { setLoading(false); return }
+
+      // Get posts from followed users via RPC
+      const { data: postsData, error: rpcError } = await supabase
+        .rpc('get_following_feed', { p_user_id: user.id, p_limit: 30 })
+
+      if (rpcError) {
+        logger.error('get_following_feed RPC error:', rpcError)
+        throw rpcError
+      }
+
+      // Score and sort by relevance (freshness + engagement)
+      const scoredPosts = ((postsData as PostWithUserState[]) || [])
+        .sort((a, b) => calculateFeedScore(b) - calculateFeedScore(a))
+      setPosts(scoredPosts)
+    } catch (e) {
+      logger.error('Failed to fetch following feed:', e)
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [user, authLoading])
 
   useEffect(() => {
     if (authLoading) return
     if (!user) { setLoading(false); return }
-
-    let stale = false
-
-    async function fetchFollowingPosts() {
-      setLoading(true)
-      try {
-        // Get following list (needed for empty state check)
-        const { data: follows } = await supabase
-          .from('user_follows')
-          .select('following_id')
-          .eq('follower_id', user!.id)
-
-        if (stale) return
-
-        const ids = follows?.map(f => f.following_id) || []
-        setFollowingIds(ids)
-
-        if (ids.length === 0) { setLoading(false); return }
-
-        // Get posts from followed users via RPC
-        const { data: postsData, error: rpcError } = await supabase
-          .rpc('get_following_feed', { p_user_id: user!.id, p_limit: 30 })
-
-        if (stale) return
-
-        if (rpcError) {
-          logger.error('get_following_feed RPC error:', rpcError)
-          throw rpcError
-        }
-
-        // Score and sort by relevance (freshness + engagement)
-        const scoredPosts = ((postsData as PostWithUserState[]) || [])
-          .sort((a, b) => calculateFeedScore(b) - calculateFeedScore(a))
-        setPosts(scoredPosts)
-      } catch (e) {
-        if (stale) return
-        logger.error('Failed to fetch following feed:', e)
-        showToast(isZh ? '加载关注动态失败' : 'Failed to load feed', 'error')
-      } finally {
-        if (!stale) setLoading(false)
-      }
-    }
-
     fetchFollowingPosts()
-    return () => { stale = true }
-  }, [user, authLoading, isZh, showToast])
+  }, [user, authLoading, fetchFollowingPosts])
 
   // Not logged in
   if (!authLoading && !user) {
@@ -108,6 +100,27 @@ export default function FollowingFeed() {
         {[1, 2, 3].map(i => (
           <div key={i} className="skeleton" style={{ height: 120, borderRadius: tokens.radius.lg }} />
         ))}
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        textAlign: 'center', padding: '40px 20px',
+        color: tokens.colors.text.tertiary,
+      }}>
+        <p style={{ fontSize: 14, marginBottom: 8 }}>{t('loadFailed')}</p>
+        <button
+          onClick={fetchFollowingPosts}
+          style={{
+            fontSize: 13, color: tokens.colors.accent.brand,
+            background: 'transparent', border: 'none',
+            textDecoration: 'underline', cursor: 'pointer',
+          }}
+        >
+          {t('retry')}
+        </button>
       </div>
     )
   }

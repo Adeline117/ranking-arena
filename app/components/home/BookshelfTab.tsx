@@ -22,12 +22,13 @@ type ShelfBook = {
 }
 
 export default function BookshelfTab() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const { showToast } = useToast()
   const isZh = language === 'zh'
 
   const [books, setBooks] = useState<ShelfBook[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'want_to_read' | 'read'>('all')
 
@@ -42,6 +43,7 @@ export default function BookshelfTab() {
   const fetchBookshelf = useCallback(async () => {
     if (!userId) return
     setLoading(true)
+    setError(false)
     try {
       let query = supabase
         .from('book_ratings')
@@ -53,11 +55,11 @@ export default function BookshelfTab() {
         query = query.eq('status', filter)
       }
 
-      const { data, error } = await query.order('updated_at', { ascending: false })
+      const { data, error: queryError } = await query.order('updated_at', { ascending: false })
 
-      if (error) {
+      if (queryError) {
         setBooks([])
-        showToast(isZh ? '加载书架失败' : 'Failed to load bookshelf', 'error')
+        setError(true)
         return
       }
 
@@ -72,11 +74,11 @@ export default function BookshelfTab() {
     } catch (e) {
       logger.error('Failed to fetch bookshelf:', e)
       setBooks([])
-      showToast(isZh ? '加载书架失败' : 'Failed to load bookshelf', 'error')
+      setError(true)
     } finally {
       setLoading(false)
     }
-  }, [userId, filter, isZh, showToast])
+  }, [userId, filter])
 
   useEffect(() => {
     if (userId) fetchBookshelf()
@@ -138,6 +140,24 @@ export default function BookshelfTab() {
               <div style={{ height: 12, borderRadius: tokens.radius.sm, width: '75%', background: tokens.colors.bg.secondary, animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
           ))}
+        </div>
+      ) : error ? (
+        /* Error state */
+        <div style={{
+          textAlign: 'center', padding: '40px 20px',
+          color: tokens.colors.text.tertiary,
+        }}>
+          <p style={{ fontSize: 14, marginBottom: 8 }}>{t('loadFailed')}</p>
+          <button
+            onClick={fetchBookshelf}
+            style={{
+              fontSize: 13, color: tokens.colors.accent.brand,
+              background: 'transparent', border: 'none',
+              textDecoration: 'underline', cursor: 'pointer',
+            }}
+          >
+            {t('retry')}
+          </button>
         </div>
       ) : books.length === 0 ? (
         /* Empty state - attractive library entrance */
