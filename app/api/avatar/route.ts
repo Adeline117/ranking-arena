@@ -9,6 +9,9 @@ import { getCorsOrigin } from '@/lib/utils/cors'
 
 export const dynamic = 'force-dynamic'
 
+// Pin to Tokyo — exchange CDNs are geo-blocked from US regions
+export const preferredRegion = 'hnd1'
+
 // 缓存时间：7 天
 const CACHE_MAX_AGE = 60 * 60 * 24 * 7
 
@@ -116,8 +119,12 @@ export async function GET(request: Request) {
       return new NextResponse('Domain not allowed', { status: 403 })
     }
 
-    // 请求图片 - 模拟浏览器请求
+    // 请求图片 - 模拟浏览器请求（10s timeout 防止 function 挂起）
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10_000)
+
     const response = await fetch(decodedUrl, {
+      signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': urlObj.origin + '/',
@@ -128,7 +135,7 @@ export async function GET(request: Request) {
         'Sec-Fetch-Mode': 'no-cors',
         'Sec-Fetch-Site': 'cross-site',
       },
-    })
+    }).finally(() => clearTimeout(timeout))
 
     if (!response.ok) {
       return new NextResponse('Failed to fetch image', { status: response.status })
