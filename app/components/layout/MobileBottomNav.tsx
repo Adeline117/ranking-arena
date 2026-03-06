@@ -300,7 +300,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
         gap: 4,
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         textDecoration: 'none',
-        color: active ? 'var(--color-brand)' : 'var(--color-text-tertiary)',
+        color: active ? 'var(--color-brand)' : 'var(--color-text-secondary)',
         transition: `all ${tokens.transition.base}`,
         borderRadius: tokens.radius.lg,
         position: 'relative',
@@ -318,7 +318,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
           alignItems: 'center',
           justifyContent: 'center',
           transition: `all ${tokens.transition.fast}`,
-          opacity: active ? 1 : 0.7,
+          opacity: active ? 1 : 0.85,
           transform: active ? 'scale(1.1)' : 'scale(1)',
         }}
       >
