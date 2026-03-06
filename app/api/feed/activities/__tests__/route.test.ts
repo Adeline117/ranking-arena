@@ -67,26 +67,32 @@ import { NextRequest } from 'next/server'
 import { GET } from '../route'
 
 describe('GET /api/feed/activities', () => {
-  function createQueryChain(result: { data: unknown[] | null; error: unknown }) {
-    const chain: Record<string, jest.Mock> = {}
-    chain.select = jest.fn(() => chain)
-    chain.order = jest.fn(() => chain)
-    chain.limit = jest.fn(() => Promise.resolve(result))
-    chain.eq = jest.fn(() => chain)
-    chain.lt = jest.fn(() => chain)
-    return chain
+  // Build a persistent chain mock that captures all calls
+  let queryChain: Record<string, jest.Mock>
+  let queryResult: { data: unknown[] | null; error: unknown }
+
+  function resetQueryChain(result: { data: unknown[] | null; error: unknown } = { data: [], error: null }) {
+    queryResult = result
+    queryChain = {} as Record<string, jest.Mock>
+    queryChain.select = jest.fn(() => queryChain)
+    queryChain.order = jest.fn(() => queryChain)
+    queryChain.eq = jest.fn(() => queryChain)
+    queryChain.lt = jest.fn(() => queryChain)
+    queryChain.limit = jest.fn(() => Promise.resolve(queryResult))
+    // Make from() always return the same chain
+    mockSupabaseFrom.mockReturnValue(queryChain)
   }
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockSupabaseFrom.mockReturnValue(createQueryChain({ data: [], error: null }))
+    resetQueryChain()
   })
 
   it('returns activities with default limit', async () => {
     const activities = [
       { id: 'a1', source: 'binance_futures', handle: 'trader1', activity_type: 'roi_milestone', occurred_at: '2026-03-06T00:00:00Z' },
     ]
-    mockSupabaseFrom.mockReturnValue(createQueryChain({ data: activities, error: null }))
+    resetQueryChain({ data: activities, error: null })
 
     const req = new NextRequest('http://localhost/api/feed/activities')
     const res = await GET(req)
@@ -109,7 +115,7 @@ describe('GET /api/feed/activities', () => {
   })
 
   it('respects limit parameter', async () => {
-    mockSupabaseFrom.mockReturnValue(createQueryChain({ data: [], error: null }))
+    resetQueryChain({ data: [], error: null })
 
     const req = new NextRequest('http://localhost/api/feed/activities?limit=10')
     const res = await GET(req)
