@@ -325,7 +325,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: 'rgba(0,0,0,0.5)',
+                  background: 'var(--color-backdrop-heavy, rgba(0,0,0,0.5))',
                 }}
                 onClick={() => setShowAlertConfig(false)}
               >

@@ -146,7 +146,7 @@ const styles: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'var(--color-backdrop-heavy, rgba(0, 0, 0, 0.6))',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -180,7 +180,12 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--color-text-secondary)',
     fontSize: '18px',
     cursor: 'pointer',
-    padding: '4px 8px',
+    padding: '8px 12px',
+    minWidth: 44,
+    minHeight: 44,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   form: {
     display: 'flex',

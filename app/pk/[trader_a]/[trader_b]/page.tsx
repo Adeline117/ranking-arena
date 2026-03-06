@@ -273,7 +273,7 @@ export default async function PKPage({
             textAlign: 'center',
             marginTop: 48,
             fontSize: 12,
-            color: 'rgba(255,255,255,0.2)',
+            color: 'var(--color-text-tertiary)',
           }}
         >
           arena.arenafi.org — Transparent Crypto Trader Rankings

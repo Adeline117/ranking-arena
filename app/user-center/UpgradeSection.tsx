@@ -136,7 +136,7 @@ export default function UpgradeSection({
               borderRadius: tokens.radius.full,
               fontSize: 10,
               fontWeight: 700,
-              color: '#451a03',
+              color: '#fff',
             }}
           >
             {t('membershipLifetimeSpots').replace('{spots}', String(PRICING.lifetime.spots))}
