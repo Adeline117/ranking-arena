@@ -4,6 +4,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import { dataLogger } from '@/lib/utils/logger'
 
 // ============================================
@@ -212,6 +213,30 @@ export interface TraderData {
   avatar_url?: string | null
 }
 
+/**
+ * Zod schema for TraderData — validates all connector output before DB writes.
+ * safeParse rejects malformed records (NaN, Infinity, wrong types) and logs failures.
+ */
+export const TraderDataSchema = z.object({
+  source: z.string().min(1),
+  source_trader_id: z.string().min(1),
+  handle: z.string().nullable(),
+  profile_url: z.string().nullable().optional(),
+  season_id: z.string().min(1),
+  rank: z.number().int().positive().nullable().optional(),
+  roi: z.number().finite().nullable(),
+  pnl: z.number().finite().nullable(),
+  win_rate: z.number().finite().min(0).max(100).nullable(),
+  max_drawdown: z.number().finite().nullable(),
+  followers: z.number().finite().nonnegative().nullable().optional(),
+  trades_count: z.number().finite().nonnegative().nullable().optional(),
+  arena_score: z.number().finite().nullable(),
+  captured_at: z.string().min(1),
+  sharpe_ratio: z.number().finite().nullable().optional(),
+  aum: z.number().finite().nonnegative().nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
+})
+
 export interface FetchResult {
   source: string
   periods: Record<string, { total: number; saved: number; error?: string }>
@@ -314,12 +339,32 @@ export async function upsertTraders(
 ): Promise<{ saved: number; error?: string }> {
   if (traders.length === 0) return { saved: 0 }
 
+  // Validate all records with Zod before DB writes
+  const validated: TraderData[] = []
+  let rejected = 0
+  for (const t of traders) {
+    const result = TraderDataSchema.safeParse(t)
+    if (result.success) {
+      validated.push(t)
+    } else {
+      rejected++
+      if (rejected <= 5) {
+        const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
+        dataLogger.warn(`[validation] Rejected trader ${t.source}/${t.source_trader_id}: ${issues}`)
+      }
+    }
+  }
+  if (rejected > 0) {
+    dataLogger.warn(`[validation] ${rejected}/${traders.length} traders rejected by schema validation (source: ${traders[0]?.source})`)
+  }
+  if (validated.length === 0) return { saved: 0, error: `All ${traders.length} traders failed validation` }
+
   const BATCH = 100
 
   let saved = 0
 
-  for (let i = 0; i < traders.length; i += BATCH) {
-    const batch = traders.slice(i, i + BATCH)
+  for (let i = 0; i < validated.length; i += BATCH) {
+    const batch = validated.slice(i, i + BATCH)
 
     // Upsert trader_profiles_v2
     const profiles = batch.map((t) => ({

@@ -1,0 +1,205 @@
+/**
+ * Enrichment database upsert functions
+ */
+
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { EquityCurvePoint, PositionHistoryItem, StatsDetail, AssetBreakdown, PortfolioPosition } from './enrichment-types'
+
+export async function upsertEquityCurve(
+  supabase: SupabaseClient,
+  source: string,
+  traderId: string,
+  period: string,
+  curve: EquityCurvePoint[]
+): Promise<{ saved: number; error?: string }> {
+  if (curve.length === 0) return { saved: 0 }
+
+  const capturedAt = new Date().toISOString()
+
+  // Delete existing data for this period
+  await supabase
+    .from('trader_equity_curve')
+    .delete()
+    .eq('source', source)
+    .eq('source_trader_id', traderId)
+    .eq('period', period)
+
+  const records = curve.map((point) => ({
+    source,
+    source_trader_id: traderId,
+    period,
+    data_date: point.date,
+    roi_pct: point.roi,
+    pnl_usd: point.pnl,
+    captured_at: capturedAt,
+  }))
+
+  const { error } = await supabase.from('trader_equity_curve').insert(records)
+
+  if (error) {
+    return { saved: 0, error: error.message }
+  }
+
+  return { saved: records.length }
+}
+
+export async function upsertPositionHistory(
+  supabase: SupabaseClient,
+  source: string,
+  traderId: string,
+  positions: PositionHistoryItem[]
+): Promise<{ saved: number; error?: string }> {
+  if (positions.length === 0) return { saved: 0 }
+
+  const capturedAt = new Date().toISOString()
+
+  const records = positions.map((pos) => ({
+    source,
+    source_trader_id: traderId,
+    symbol: pos.symbol,
+    direction: pos.direction,
+    position_type: pos.positionType,
+    margin_mode: pos.marginMode,
+    open_time: pos.openTime,
+    close_time: pos.closeTime,
+    entry_price: pos.entryPrice,
+    exit_price: pos.exitPrice,
+    max_position_size: pos.maxPositionSize,
+    closed_size: pos.closedSize,
+    pnl_usd: pos.pnlUsd,
+    pnl_pct: pos.pnlPct,
+    status: pos.status,
+    captured_at: capturedAt,
+  }))
+
+  // Use upsert with conflict handling
+  const { error } = await supabase.from('trader_position_history').upsert(records, {
+    onConflict: 'source,source_trader_id,symbol,open_time',
+    ignoreDuplicates: true,
+  })
+
+  if (error) {
+    return { saved: 0, error: error.message }
+  }
+
+  return { saved: records.length }
+}
+
+export async function upsertStatsDetail(
+  supabase: SupabaseClient,
+  source: string,
+  traderId: string,
+  period: string,
+  stats: StatsDetail
+): Promise<{ saved: boolean; error?: string }> {
+  const capturedAt = new Date().toISOString()
+
+  const record = {
+    source,
+    source_trader_id: traderId,
+    period,
+    total_trades: stats.totalTrades,
+    profitable_trades_pct: stats.profitableTradesPct,
+    avg_holding_time_hours: stats.avgHoldingTimeHours,
+    avg_profit: stats.avgProfit,
+    avg_loss: stats.avgLoss,
+    largest_win: stats.largestWin,
+    largest_loss: stats.largestLoss,
+    sharpe_ratio: stats.sharpeRatio,
+    max_drawdown: stats.maxDrawdown,
+    current_drawdown: stats.currentDrawdown,
+    volatility: stats.volatility,
+    copiers_count: stats.copiersCount,
+    copiers_pnl: stats.copiersPnl,
+    aum: stats.aum,
+    winning_positions: stats.winningPositions,
+    total_positions: stats.totalPositions,
+    captured_at: capturedAt,
+  }
+
+  const { error } = await supabase
+    .from('trader_stats_detail')
+    .upsert(record, {
+      onConflict: 'source,source_trader_id,period,captured_at',
+    })
+
+  if (error) {
+    return { saved: false, error: error.message }
+  }
+
+  return { saved: true }
+}
+
+export async function upsertAssetBreakdown(
+  supabase: SupabaseClient,
+  source: string,
+  traderId: string,
+  period: string,
+  assets: AssetBreakdown[]
+): Promise<{ saved: number; error?: string }> {
+  if (assets.length === 0) return { saved: 0 }
+
+  const capturedAt = new Date().toISOString()
+
+  // Delete existing data for this period
+  await supabase
+    .from('trader_asset_breakdown')
+    .delete()
+    .eq('source', source)
+    .eq('source_trader_id', traderId)
+    .eq('period', period)
+
+  const records = assets.map((asset) => ({
+    source,
+    source_trader_id: traderId,
+    period,
+    symbol: asset.symbol,
+    weight_pct: asset.weightPct,
+    captured_at: capturedAt,
+  }))
+
+  const { error } = await supabase.from('trader_asset_breakdown').insert(records)
+
+  if (error) {
+    return { saved: 0, error: error.message }
+  }
+
+  return { saved: records.length }
+}
+
+export async function upsertPortfolio(
+  supabase: SupabaseClient,
+  source: string,
+  traderId: string,
+  positions: PortfolioPosition[]
+): Promise<{ saved: number; error?: string }> {
+  if (positions.length === 0) return { saved: 0 }
+
+  const capturedAt = new Date().toISOString()
+
+  // Delete existing portfolio data
+  await supabase
+    .from('trader_portfolio')
+    .delete()
+    .eq('source', source)
+    .eq('source_trader_id', traderId)
+
+  const records = positions.map((pos) => ({
+    source,
+    source_trader_id: traderId,
+    symbol: pos.symbol,
+    direction: pos.direction,
+    invested_pct: pos.investedPct,
+    entry_price: pos.entryPrice,
+    pnl: pos.pnl,
+    captured_at: capturedAt,
+  }))
+
+  const { error } = await supabase.from('trader_portfolio').insert(records)
+
+  if (error) {
+    return { saved: 0, error: error.message }
+  }
+
+  return { saved: records.length }
+}

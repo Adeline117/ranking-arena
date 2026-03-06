@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { JsonLd } from '@/app/components/Providers/JsonLd'
 import BookDetailClient from './BookDetailClient'
 import type { BookDetail, RatingOverview, SimilarItem, LanguageVersion } from './BookDetailClient'
 
@@ -135,7 +136,7 @@ export default async function BookDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(bookJsonLd) }} />
+      <JsonLd data={bookJsonLd} />
       <BookDetailClient
         book={book}
         initialOverview={overview}

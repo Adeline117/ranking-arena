@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import { verifyQStashSignature } from '@/lib/cron/qstash-client'
 import { createLogger } from '@/lib/utils/logger'
 import { circuitBreakerManager } from '@/lib/connectors/circuit-breaker'
@@ -37,6 +38,17 @@ interface PlatformData {
   max_drawdown?: number
   copiers_count?: number
 }
+
+const PlatformDataSchema = z.object({
+  trader_key: z.string().min(1),
+  nickname: z.string().optional(),
+  avatar_url: z.string().optional(),
+  roi: z.number().finite(),
+  pnl: z.number().finite(),
+  win_rate: z.number().finite().min(0).max(100).optional(),
+  max_drawdown: z.number().finite().optional(),
+  copiers_count: z.number().finite().nonnegative().optional(),
+})
 
 export async function POST(
   request: NextRequest,
@@ -103,7 +115,26 @@ export async function POST(
       })
     }
 
-    // 5. 写入数据库
+    // 5. Validate with Zod before DB writes
+    const validTraders: PlatformData[] = []
+    let rejected = 0
+    for (const trader of data) {
+      const result = PlatformDataSchema.safeParse(trader)
+      if (result.success) {
+        validTraders.push(trader)
+      } else {
+        rejected++
+        if (rejected <= 3) {
+          const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
+          logger.warn(`[${platform}] Rejected trader ${trader.trader_key}: ${issues}`)
+        }
+      }
+    }
+    if (rejected > 0) {
+      logger.warn(`[${platform}] ${rejected}/${data.length} traders failed validation`)
+    }
+
+    // 6. 写入数据库
     const supabase = createClient(
       process.env.SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -112,7 +143,7 @@ export async function POST(
     const { error: upsertError } = await supabase
       .from('trader_snapshots')
       .upsert(
-        data.map((trader: PlatformData) => ({
+        validTraders.map((trader: PlatformData) => ({
           platform,
           trader_key: trader.trader_key,
           nickname: trader.nickname,
@@ -133,12 +164,13 @@ export async function POST(
     }
 
     const durationMs = Date.now() - startTime
-    logger.info(`[OK] ${platform} refresh complete: ${data.length} traders in ${durationMs}ms`)
+    logger.info(`[OK] ${platform} refresh complete: ${validTraders.length} traders in ${durationMs}ms${rejected > 0 ? ` (${rejected} rejected)` : ''}`)
 
     return NextResponse.json({
       success: true,
       platform,
-      count: data.length,
+      count: validTraders.length,
+      rejected,
       durationMs,
     })
 

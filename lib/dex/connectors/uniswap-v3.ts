@@ -3,8 +3,9 @@
  * 数据源: The Graph API (免费tier)
  */
 
-import { createPublicClient, http } from 'viem'
-import { mainnet } from 'viem/chains'
+// viem imports reserved for future on-chain integration
+// import { createPublicClient, http } from 'viem'
+// import { mainnet } from 'viem/chains'
 
 const UNISWAP_V3_SUBGRAPH = 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3'
 
@@ -34,7 +35,7 @@ export async function fetchUniswapV3TopTraders(limit = 100) {
   return data.data.swaps
 }
 
-export async function getTraderStats(address: string) {
+export async function getTraderStats(_address: string) {
   // TODO: 聚合该地址的交易统计
   return {
     total_volume: 0,

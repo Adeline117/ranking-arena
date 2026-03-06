@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { uiLogger } from '@/lib/utils/logger'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface CrossExchangeOpp {

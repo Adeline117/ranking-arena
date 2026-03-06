@@ -219,6 +219,13 @@ export default function LoginPage() {
         const { data: existingProfile } = await supabase.from('user_profiles').select('handle').eq('id', userId).maybeSingle()
         if (!existingProfile || !existingProfile.handle) updateData.handle = finalHandle
       }
+      // Capture UTM parameters for attribution
+      const utmSource = searchParams.get('utm_source')
+      const utmMedium = searchParams.get('utm_medium')
+      const utmCampaign = searchParams.get('utm_campaign')
+      if (utmSource) updateData.utm_source = utmSource
+      if (utmMedium) updateData.utm_medium = utmMedium
+      if (utmCampaign) updateData.utm_campaign = utmCampaign
       await supabase.from('user_profiles').upsert(updateData, { onConflict: 'id' })
     } catch (err) { logger.error('Error creating profile:', err) }
   }

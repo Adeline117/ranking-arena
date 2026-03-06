@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 // Use plain <img> for crypto icons (SVGs cause 400 on Vercel image optimizer)
 import { tokens } from '@/lib/design-tokens'
+import { uiLogger } from '@/lib/utils/logger'
 
 interface TickerCoin {
   symbol: string

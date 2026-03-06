@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { JsonLd } from '@/app/components/Providers/JsonLd'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 
 const EXCHANGE_DISPLAY: Record<string, string> = {
@@ -55,6 +56,13 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
         ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track their performance history on Arena.`
         : `${name} is a ${exchange} crypto trader. View performance analytics and rankings on Arena.`
 
+      const ogParams = new URLSearchParams({ handle: decoded })
+      if (roi \!= null) ogParams.set('roi', roi.toFixed(2))
+      if (score \!= null) ogParams.set('score', score.toFixed(0))
+      if (rank \!= null) ogParams.set('rank', String(rank))
+      if (ts.source) ogParams.set('source', ts.source)
+      const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
+
       return {
         title,
         description,
@@ -64,26 +72,29 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
           siteName: 'Arena',
           type: 'profile',
-          ...(ts.avatar_url ? { images: [{ url: ts.avatar_url, width: 200, height: 200 }] } : {}),
+          images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `${name} trading performance card` }],
         },
-        twitter: { card: 'summary', title, description },
+        twitter: { card: 'summary_large_image', title, description, images: [ogImageUrl] },
         alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
       }
     }
   } catch { /* fall through */ }
 
   // Fallback — no DB data
+  const fallbackOgImage = `${BASE}/api/og/trader?handle=${encodeURIComponent(decoded)}`
   return {
     title: `${decoded} | Crypto Trader — Arena`,
-    description: `View ${decoded}'s crypto trading performance, PnL, and rank on Arena.`,
+    description: `View ${decoded}'s crypto trading performance, PnL, and rank on Arena among 32,000+ traders.`,
     openGraph: {
       title: `${decoded} | Crypto Trader — Arena`,
       description: `View ${decoded}'s crypto trading performance on Arena.`,
-      url: `https://www.arenafi.org/trader/${encodeURIComponent(decoded)}`,
+      url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
       type: 'profile',
+      images: [{ url: fallbackOgImage, width: 1200, height: 630 }],
     },
-    alternates: { canonical: `https://www.arenafi.org/trader/${encodeURIComponent(decoded)}` },
+    twitter: { card: 'summary_large_image', title: `${decoded} | Crypto Trader — Arena`, images: [fallbackOgImage] },
+    alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
   }
 }
 
@@ -291,10 +302,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
     return (
       <>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
+        <JsonLd data={jsonLd} />
         <TraderProfileClient data={traderData} serverTraderData={serverTraderData} />
       </>
     )

@@ -90,4 +90,4 @@ async function main() {
   console.log(`Enriched: ${enriched}, Failed: ${failed}`)
 }
 
-main().catch(console.error)
+main().catch((err) => { console.error('[enrich-bitget-now] Fatal:', err); process.exit(1) })
