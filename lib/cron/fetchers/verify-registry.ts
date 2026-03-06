@@ -25,8 +25,6 @@ type VerifyFn = () => Promise<VerifyResult>
 
 // ── Helpers ──
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 async function verifyEndpoint(
   platform: string,
   url: string,

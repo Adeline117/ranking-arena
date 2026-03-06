@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRealtimePrices, type PriceFlashInfo } from '@/lib/hooks/useRealtimePrices'
 import MarketTable, { Column } from './MarketTable'
+import { uiLogger } from '@/lib/utils/logger'
 import Sparkline from './Sparkline'
 
 interface SpotCoin {

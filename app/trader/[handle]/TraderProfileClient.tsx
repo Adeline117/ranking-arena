@@ -244,13 +244,13 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                   />
                 )}
 
-                {/* Claim this profile CTA — replaces activity feed for unclaimed traders */}
+                {/* Claim this profile CTA */}
                 <Box
                   style={{
                     padding: tokens.spacing[8],
-                    background: tokens.colors.bg.secondary,
+                    background: `linear-gradient(135deg, ${tokens.colors.bg.secondary} 0%, var(--color-accent-primary-08, ${tokens.colors.bg.secondary}) 100%)`,
                     borderRadius: tokens.radius.xl,
-                    border: `1px solid ${tokens.colors.border.primary}`,
+                    border: '1px solid var(--color-accent-primary-30)',
                     textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
@@ -258,19 +258,26 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                     gap: tokens.spacing[4],
                   }}
                 >
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-text-tertiary)', opacity: 0.5 }}>
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                    <line x1="12" y1="11" x2="12" y2="17" />
-                    <line x1="9" y1="14" x2="15" y2="14" />
-                  </svg>
-                  <Text size="base" weight="bold" style={{ color: 'var(--color-text-secondary)' }}>
-                    {t('traderNotRegistered')}
+                  <Box style={{
+                    width: 56, height: 56,
+                    borderRadius: tokens.radius.full,
+                    background: 'var(--color-accent-primary-15)',
+                    display: 'grid', placeItems: 'center',
+                  }}>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent, currentColor)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                      <line x1="12" y1="11" x2="12" y2="17" />
+                      <line x1="9" y1="14" x2="15" y2="14" />
+                    </svg>
+                  </Box>
+                  <Text size="lg" weight="bold" style={{ color: 'var(--color-text-primary)' }}>
+                    {t('claimYourProfile')}
                   </Text>
-                  <Text size="sm" color="tertiary">
-                    {t('traderNotRegisteredDesc')}
+                  <Text size="sm" color="tertiary" style={{ maxWidth: 400, lineHeight: 1.6 }}>
+                    {t('claimYourProfileDesc')}
                   </Text>
-                  {currentUserId && (
+                  {currentUserId ? (
                     <Box style={{ marginTop: tokens.spacing[2] }}>
                       <ClaimTraderButton
                         traderId={traderProfile?.id || data.source_trader_id}
@@ -279,6 +286,23 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                         source={traderProfile?.source || data.source}
                       />
                     </Box>
+                  ) : (
+                    <a
+                      href={`/login?returnUrl=${encodeURIComponent(`/trader/${encodeURIComponent(data.handle)}`)}`}
+                      style={{
+                        marginTop: tokens.spacing[2],
+                        padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                        borderRadius: tokens.radius.lg,
+                        background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+                        color: tokens.colors.white,
+                        fontWeight: 700,
+                        fontSize: tokens.typography.fontSize.sm,
+                        textDecoration: 'none',
+                        display: 'inline-block',
+                      }}
+                    >
+                      {t('loginToClaim')}
+                    </a>
                   )}
                 </Box>
               </Box>
@@ -343,6 +367,15 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
             }
           }
         `}</style>
+
+        {/* Data disclaimer */}
+        <Text
+          size="xs"
+          color="tertiary"
+          style={{ textAlign: 'center', marginTop: tokens.spacing[6], opacity: 0.7 }}
+        >
+          {t('dataDisclaimer')}
+        </Text>
       </Box>
     </Box>
   )

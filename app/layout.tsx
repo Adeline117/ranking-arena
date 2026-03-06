@@ -7,6 +7,7 @@ import Providers from "./components/Providers";
 import CapacitorProvider from "./components/Providers/CapacitorProvider";
 import { SkipLink } from "./components/Providers/Accessibility";
 import { PageErrorBoundary } from "./components/utils/ErrorBoundary";
+import { JsonLd } from "./components/Providers/JsonLd";
 
 // Defer non-critical layout components via dynamic import (code-split)
 // Note: ssr:false not allowed in Server Components; these are 'use client' components
@@ -180,21 +181,18 @@ export default function RootLayout({
         </noscript>
 
         {/* WebSite structured data — helps Google understand sitelinks search box */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'WebSite',
-            name: 'Arena',
-            url: 'https://www.arenafi.org',
-            description: 'Crypto trader rankings across 30+ exchanges — Binance, Bybit, OKX, Hyperliquid and more.',
-            potentialAction: {
-              '@type': 'SearchAction',
-              target: { '@type': 'EntryPoint', urlTemplate: 'https://www.arenafi.org/?q={search_term_string}' },
-              'query-input': 'required name=search_term_string',
-            },
-          }) }}
-        />
+        <JsonLd data={{
+          '@context': 'https://schema.org',
+          '@type': 'WebSite',
+          name: 'Arena',
+          url: 'https://www.arenafi.org',
+          description: 'Crypto trader rankings across 30+ exchanges — Binance, Bybit, OKX, Hyperliquid and more.',
+          potentialAction: {
+            '@type': 'SearchAction',
+            target: { '@type': 'EntryPoint', urlTemplate: 'https://www.arenafi.org/?q={search_term_string}' },
+            'query-input': 'required name=search_term_string',
+          },
+        }} />
       </head>
       <body
         className="font-sans antialiased"

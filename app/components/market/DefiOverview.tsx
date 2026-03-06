@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { DefiOverview as DefiOverviewData } from '@/lib/utils/defillama'
+import { uiLogger } from '@/lib/utils/logger'
 
 function formatTVL(value: number): string {
   if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`

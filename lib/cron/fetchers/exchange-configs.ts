@@ -25,8 +25,7 @@ function genericExtractList(response: unknown): unknown[] {
   return []
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyItem = Record<string, any>
+type AnyItem = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any -- generic exchange response items
 
 const toobitConfig: ExchangeConfig = {
   source: 'toobit',

@@ -16,7 +16,9 @@ async function fetchOne(id: string): Promise<{ nickname: string; avatarUrl: stri
     if (json?.data?.nickname) {
       return { nickname: json.data.nickname, avatarUrl: json.data.avatarUrl || null };
     }
-  } catch {}
+  } catch (err) {
+    if (process.env.DEBUG) console.warn('[fetchOne] Failed:', err instanceof Error ? err.message : err);
+  }
   return null;
 }
 
@@ -65,4 +67,4 @@ async function main() {
   await client.end();
 }
 
-main().catch(console.error);
+main().catch((err) => { console.error('[backfill-binance-detail] Fatal:', err); process.exit(1) });

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
+import { uiLogger } from '@/lib/utils/logger'
 
 function getColor(value: number): string {
   if (value <= 25) return '#ea3943'

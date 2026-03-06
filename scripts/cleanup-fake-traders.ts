@@ -39,4 +39,4 @@ async function main() {
   await client.end()
 }
 
-main().catch(console.error)
+main().catch((err) => { console.error('[cleanup-fake-traders] Fatal:', err); process.exit(1) })

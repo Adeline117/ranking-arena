@@ -11,7 +11,7 @@ async function main() {
     const r = await mexc.discoverLeaderboard('90d', 3)
     console.log('OK:', r.ok, r.ok ? r.data.length + ' traders' : r.error)
     if (r.ok && r.data[0]) console.log('Metrics:', JSON.stringify(r.data[0].metrics))
-  } catch (e: any) { console.log('Error:', e.message) }
+  } catch (e: unknown) { console.error('[test-connectors] Error:', e instanceof Error ? e.message : e) }
 
   // CoinEx
   console.log('\n═══ CoinEx ═══')
@@ -20,7 +20,7 @@ async function main() {
     const r = await coinex.discoverLeaderboard('90d', 3)
     console.log('OK:', r.ok, r.ok ? r.data.length + ' traders' : r.error)
     if (r.ok && r.data[0]) console.log('Metrics:', JSON.stringify(r.data[0].metrics))
-  } catch (e: any) { console.log('Error:', e.message) }
+  } catch (e: unknown) { console.error('[test-connectors] Error:', e instanceof Error ? e.message : e) }
 
   // Bitget
   console.log('\n═══ Bitget ═══')
@@ -29,7 +29,7 @@ async function main() {
     const r = await bitget.discoverLeaderboard('90d', 3)
     console.log('OK:', r.ok, r.ok ? r.data.length + ' traders' : r.error)
     if (r.ok && r.data[0]) console.log('Metrics:', JSON.stringify(r.data[0].metrics))
-  } catch (e: any) { console.log('Error:', e.message) }
+  } catch (e: unknown) { console.error('[test-connectors] Error:', e instanceof Error ? e.message : e) }
 
   // Bybit
   console.log('\n═══ Bybit ═══')
@@ -38,6 +38,6 @@ async function main() {
     const r = await bybit.discoverLeaderboard('90d', 3)
     console.log('OK:', r.ok, r.ok ? r.data.length + ' traders' : r.error)
     if (r.ok && r.data[0]) console.log('Metrics:', JSON.stringify(r.data[0].metrics))
-  } catch (e: any) { console.log('Error:', e.message) }
+  } catch (e: unknown) { console.error('[test-connectors] Error:', e instanceof Error ? e.message : e) }
 }
 main()

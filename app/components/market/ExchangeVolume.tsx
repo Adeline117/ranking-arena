@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { ExchangeInfo } from '@/lib/utils/coingecko'
+import { uiLogger } from '@/lib/utils/logger'
 
 function formatBTC(value: number): string {
   if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`

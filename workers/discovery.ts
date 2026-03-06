@@ -396,7 +396,7 @@ async function discoverPlatform(meta: PlatformDiscoveryMeta): Promise<SourceConf
         });
       }
     } catch (error) {
-      console.log(`  ✗ Leaderboard error: ${(error as Error).message}`);
+      console.error(`[Discovery] Leaderboard error for ${key}:`, { error: (error as Error).message });
       proofs.push({
         url: meta.leaderboard_url,
         request_path: meta.api_endpoints[0] || '',
@@ -501,6 +501,6 @@ const platformArg = process.argv.find(a => a.startsWith('--platform='));
 const targetPlatform = platformArg?.split('=')[1];
 
 runDiscovery(targetPlatform).catch(err => {
-  console.error('Discovery failed:', err);
+  console.error('[Discovery] Fatal:', { error: err instanceof Error ? err.message : String(err) });
   process.exit(1);
 });
