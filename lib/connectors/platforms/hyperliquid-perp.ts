@@ -12,6 +12,12 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  HyperliquidLeaderboardResponseSchema,
+  HyperliquidClearinghouseResponseSchema,
+  HyperliquidFillsResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags, TraderTimeseries,
@@ -36,7 +42,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     const timeWindow = window === '7d' ? 'day' : window === '30d' ? 'month' : 'allTime'
 
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       'https://api.hyperliquid.xyz/info',
       {
         method: 'POST',
@@ -44,6 +50,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
         body: JSON.stringify({ type: 'leaderboard', timeWindow }),
       }
     )
+    const data = warnValidate(HyperliquidLeaderboardResponseSchema, _rawLb, 'hyperliquid-perp/leaderboard')
     const leaderboard = data?.leaderboardRows || data || []
 
     // For 90d with allTime, we take top entries (platform doesn't have 90d natively, uses allTime)
@@ -81,7 +88,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     // Get clearinghouse state for current equity
-    const state = await this.request<any>(
+    const _rawState = await this.request<any>(
       'https://api.hyperliquid.xyz/info',
       {
         method: 'POST',
@@ -89,6 +96,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
         body: JSON.stringify({ type: 'clearinghouseState', user: traderKey }),
       }
     )
+    const state = warnValidate(HyperliquidClearinghouseResponseSchema, _rawState, 'hyperliquid-perp/clearinghouse')
 
     const accountValue = Number(state?.marginSummary?.accountValue) || 0
     const totalRawPnl = Number(state?.marginSummary?.totalRawPnl) || 0
@@ -127,7 +135,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
     // Get user fills for trade history
-    const fills = await this.request<any>(
+    const _rawFills = await this.request<any>(
       'https://api.hyperliquid.xyz/info',
       {
         method: 'POST',
@@ -135,6 +143,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
         body: JSON.stringify({ type: 'userFills', user: traderKey }),
       }
     )
+    const fills = warnValidate(HyperliquidFillsResponseSchema, _rawFills, 'hyperliquid-perp/fills')
 
     const series: TraderTimeseries[] = []
 

@@ -3,6 +3,8 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import { HtxFuturesLeaderboardResponseSchema, HtxFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -26,7 +28,7 @@ export class HtxFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const page = Math.floor(offset / limit) + 1
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://www.htx.com/bapi/copy-trade/v1/public/trader/list`,
       {
         method: 'POST',
@@ -34,6 +36,7 @@ export class HtxFuturesConnector extends BaseConnector {
         body: JSON.stringify({ page, pageSize: limit, sortBy: 'roi', period: window }),
       }
     )
+    const data = warnValidate(HtxFuturesLeaderboardResponseSchema, _rawLb, 'htx-futures/leaderboard')
     const list = data?.data?.list || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
@@ -47,10 +50,11 @@ export class HtxFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://www.htx.com/bapi/copy-trade/v1/public/trader/detail?uid=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(HtxFuturesDetailResponseSchema, _rawProfile, 'htx-futures/profile')
     const info = data?.data
     if (!info) return null
 
@@ -67,10 +71,11 @@ export class HtxFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://www.htx.com/bapi/copy-trade/v1/public/trader/detail?uid=${traderKey}&period=${window}`,
       { method: 'GET' }
     )
+    const data = warnValidate(HtxFuturesDetailResponseSchema, _rawSnap, 'htx-futures/snapshot')
     const info = data?.data
     if (!info) return null
 

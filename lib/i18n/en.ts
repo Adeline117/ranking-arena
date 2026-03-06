@@ -4137,6 +4137,65 @@ userProfileDeveloper: 'Developer',
 userProfileLoginToFollow: 'Login to Follow',
 userProfileNoStatsYet: 'No stats data yet. Link an exchange to view.',
 
+// Tools page categories
+toolsCatAll: 'All',
+toolsCatTradingTool: 'Trading Tools',
+toolsCatTradingBot: 'Trading Bots',
+toolsCatCopytrading: 'Copy Trading',
+toolsCatQuantPlatform: 'Quant Platforms',
+toolsCatAnalytics: 'Analytics',
+toolsCatWallets: 'Wallets',
+toolsCatDevTools: 'Dev Tools',
+toolsCatComplianceTax: 'Compliance & Tax',
+toolsCatInfo: 'News & Info',
+toolsCatStrategy: 'Strategies',
+toolsCatScript: 'Scripts',
+toolsCatCharting: 'Charting',
+toolsCatSignal: 'Signals',
+
+// Tools page sort options
+toolsSortRating: 'Highest Rated',
+toolsSortNewest: 'Newest',
+toolsSortReviews: 'Most Reviews',
+
+// Tools page pricing labels
+toolsPricingFree: 'Free',
+toolsPricingFreemium: 'Freemium',
+toolsPricingPaid: 'Paid',
+toolsPricingOpenSource: 'Open Source',
+
+// Institutions page categories
+instCatAll: 'All',
+instCatExchange: 'Exchanges',
+instCatCex: 'CEX',
+instCatDex: 'DEX',
+instCatDerivatives: 'Derivatives',
+instCatDexAggregator: 'DEX Aggregators',
+instCatOtc: 'OTC',
+instCatFund: 'Funds',
+instCatCryptoVc: 'Crypto VC',
+instCatTraditionalVc: 'Traditional VC',
+instCatHedgeFund: 'Hedge Funds',
+instCatFamilyOffice: 'Family Office',
+instCatTradingFirm: 'Trading Firms',
+instCatDaoTreasury: 'DAO Treasury',
+instCatAccelerator: 'Accelerators',
+instCatL1: 'L1',
+instCatL2: 'L2',
+instCatProject: 'Projects',
+instCatDefi: 'DeFi',
+instCatInfrastructure: 'Infrastructure',
+instCatServices: 'Services',
+instCatMedia: 'Media',
+
+// Institutions page sort options
+instSortRating: 'Highest Rated',
+instSortNewest: 'Newest',
+instSortReviews: 'Most Reviews',
+
+// Institutions page - no ratings
+instNoRatingsYet: 'No ratings yet',
+
 } as const
 
 export default en

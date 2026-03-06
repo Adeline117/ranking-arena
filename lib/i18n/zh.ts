@@ -4144,6 +4144,65 @@ userProfileDeveloper: '开发者',
 userProfileLoginToFollow: '登录后关注',
 userProfileNoStatsYet: '暂无统计数据，绑定交易所后可查看',
 
+// Tools page categories (工具页分类)
+toolsCatAll: '全部',
+toolsCatTradingTool: '交易工具',
+toolsCatTradingBot: '交易机器人',
+toolsCatCopytrading: '跟单',
+toolsCatQuantPlatform: '量化平台',
+toolsCatAnalytics: '分析工具',
+toolsCatWallets: '钱包',
+toolsCatDevTools: '开发工具',
+toolsCatComplianceTax: '合规/税务',
+toolsCatInfo: '资讯',
+toolsCatStrategy: '策略',
+toolsCatScript: '脚本',
+toolsCatCharting: '图表',
+toolsCatSignal: '信号',
+
+// Tools page sort options (工具页排序)
+toolsSortRating: '评分最高',
+toolsSortNewest: '最新',
+toolsSortReviews: '评价最多',
+
+// Tools page pricing labels (工具页定价标签)
+toolsPricingFree: '免费',
+toolsPricingFreemium: '免费增值',
+toolsPricingPaid: '付费',
+toolsPricingOpenSource: '开源',
+
+// Institutions page categories (机构页分类)
+instCatAll: '全部',
+instCatExchange: '交易所',
+instCatCex: 'CEX',
+instCatDex: 'DEX',
+instCatDerivatives: '衍生品',
+instCatDexAggregator: 'DEX聚合器',
+instCatOtc: 'OTC',
+instCatFund: '基金',
+instCatCryptoVc: '加密VC',
+instCatTraditionalVc: '传统VC',
+instCatHedgeFund: '对冲基金',
+instCatFamilyOffice: '家族办公室',
+instCatTradingFirm: '交易公司',
+instCatDaoTreasury: 'DAO国库',
+instCatAccelerator: '加速器',
+instCatL1: 'L1',
+instCatL2: 'L2',
+instCatProject: '项目方',
+instCatDefi: 'DeFi',
+instCatInfrastructure: '基础设施',
+instCatServices: '服务商',
+instCatMedia: '媒体',
+
+// Institutions page sort options (机构页排序)
+instSortRating: '评分最高',
+instSortNewest: '最新',
+instSortReviews: '评价最多',
+
+// Institutions page - no ratings (机构页-暂无评分)
+instNoRatingsYet: '暂无评分',
+
 } as const
 
 export default zh

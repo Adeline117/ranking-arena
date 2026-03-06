@@ -7,7 +7,11 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
-import { BitgetFuturesLeaderboardResponseSchema } from './schemas'
+import {
+  BitgetFuturesLeaderboardResponseSchema,
+  BitgetFuturesDetailResponseSchema,
+  BitgetFuturesTimeseriesResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult,
   ProfileResult,
@@ -80,7 +84,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}`,
       { method: 'GET' }
     )
-    const data = warnValidate(, _rawProfile, 'bitget-futures/profile')
+    const data = warnValidate(BitgetFuturesDetailResponseSchema, _rawProfile, 'bitget-futures/profile')
 
     const info = data?.data
 
@@ -119,7 +123,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}&timeRange=${timeRange}`,
       { method: 'GET' }
     )
-    const data = warnValidate(, _rawSnap, 'bitget-futures/snapshot')
+    const data = warnValidate(BitgetFuturesDetailResponseSchema, _rawSnap, 'bitget-futures/snapshot')
 
     const info = data?.data
 
@@ -158,7 +162,7 @@ export class BitgetFuturesConnector extends BaseConnector {
       `https://www.bitget.com/v1/trigger/trace/public/trader/profitList?traderId=${traderKey}`,
       { method: 'GET' }
     )
-    const data = warnValidate(, _rawTs, 'bitget-futures/timeseries')
+    const data = warnValidate(BitgetFuturesTimeseriesResponseSchema, _rawTs, 'bitget-futures/timeseries')
 
     const profitList = data?.data || []
 

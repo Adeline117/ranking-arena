@@ -10,6 +10,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  GateioFuturesLeaderboardResponseSchema,
+  GateioFuturesDetailResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -59,10 +64,11 @@ export class GateioFuturesConnector extends BaseConnector {
 
     try {
       // Attempt to use Gate.io strategy bot API
-      const data = await this.request<{ data?: { list?: GateioLeaderboardEntry[] } }>(
+      const _rawLb = await this.request<{ data?: { list?: GateioLeaderboardEntry[] } }>(
         `https://www.gate.io/api/v1/copy/leaders?page=1&limit=${limit}&period=${period}&sort=roi`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(GateioFuturesLeaderboardResponseSchema, _rawLb, 'gateio-futures/leaderboard')
 
       const list = data?.data?.list || []
       const traders: TraderSource[] = list.map((item) => ({
@@ -85,10 +91,11 @@ export class GateioFuturesConnector extends BaseConnector {
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     try {
-      const data = await this.request<{ data?: GateioLeaderboardEntry }>(
+      const _rawProfile = await this.request<{ data?: GateioLeaderboardEntry }>(
         `https://www.gate.io/api/v1/copy/leader/${traderKey}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(GateioFuturesDetailResponseSchema, _rawProfile, 'gateio-futures/profile')
 
       const info = data?.data
       if (!info) return null
@@ -126,10 +133,11 @@ export class GateioFuturesConnector extends BaseConnector {
     const period = periodMap[window] || '30d'
 
     try {
-      const data = await this.request<{ data?: GateioLeaderboardEntry }>(
+      const _rawSnap = await this.request<{ data?: GateioLeaderboardEntry }>(
         `https://www.gate.io/api/v1/copy/leader/${traderKey}?period=${period}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(GateioFuturesDetailResponseSchema, _rawSnap, 'gateio-futures/snapshot')
 
       const info = data?.data
       if (!info) {
