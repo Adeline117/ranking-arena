@@ -2,17 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(npm *)", "Bash(npx *)", "Bash(node *)",
-      "Bash(git add *)", "Bash(git commit *)", "Bash(git tag *)",
-      "Bash(git diff *)", "Bash(git log *)", "Bash(git status*)",
-      "Bash(git checkout -- *)", "Bash(git clean *)",
+      "Bash(git *)",
       "Bash(cat *)", "Bash(ls *)", "Bash(find *)", "Bash(grep *)",
-      "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)",
+      "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(chmod *)",
       "Bash(curl *)", "Bash(echo *)", "Bash(head *)", "Bash(tail *)",
+      "Bash(wc *)", "Bash(sort *)", "Bash(sed *)",
       "Write", "Edit", "Read"
     ],
     "deny": [
-      "Bash(rm -rf *)", "Bash(sudo *)",
-      "Bash(git push *)", "Bash(git push)"
+      "Bash(rm -rf /*)","Bash(sudo *)"
     ]
   },
   "hooks": {
