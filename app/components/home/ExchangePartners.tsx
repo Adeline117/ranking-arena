@@ -146,6 +146,9 @@ export default function ExchangePartners() {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
+        @media (prefers-reduced-motion: reduce) {
+          * { animation-duration: 0s !important; }
+        }
       `}</style>
     </div>
   )

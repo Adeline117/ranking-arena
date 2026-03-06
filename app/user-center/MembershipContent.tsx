@@ -337,11 +337,11 @@ export default function MembershipContent() {
           </Text>
 
           {/* Plan Selector */}
-          <Box style={{ marginBottom: tokens.spacing[5] }}>
+          <Box role="radiogroup" aria-label={t('pricingTitle')} style={{ marginBottom: tokens.spacing[5] }}>
             {/* Monthly */}
-            <Box
-              onClick={() => setSelectedPlan('monthly')}
+            <label
               style={{
+                display: 'block',
                 padding: tokens.spacing[4],
                 borderRadius: tokens.radius.lg,
                 border: `2px solid ${selectedPlan === 'monthly' ? 'var(--color-pro-gradient-start)' : 'var(--color-border-primary)'}`,
@@ -351,6 +351,14 @@ export default function MembershipContent() {
                 marginBottom: tokens.spacing[3],
               }}
             >
+              <input
+                type="radio"
+                name="plan"
+                value="monthly"
+                checked={selectedPlan === 'monthly'}
+                onChange={() => setSelectedPlan('monthly')}
+                style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+              />
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box>
                   <Text size="sm" weight="bold">{t('monthlyPlan')}</Text>
@@ -363,12 +371,12 @@ export default function MembershipContent() {
                   <Text size="xs" color="tertiary">{t('perMonth')}</Text>
                 </Box>
               </Box>
-            </Box>
+            </label>
 
             {/* Yearly */}
-            <Box
-              onClick={() => setSelectedPlan('yearly')}
+            <label
               style={{
+                display: 'block',
                 padding: tokens.spacing[4],
                 borderRadius: tokens.radius.lg,
                 border: `2px solid ${selectedPlan === 'yearly' ? 'var(--color-pro-gradient-start)' : 'var(--color-border-primary)'}`,
@@ -378,6 +386,14 @@ export default function MembershipContent() {
                 position: 'relative',
               }}
             >
+              <input
+                type="radio"
+                name="plan"
+                value="yearly"
+                checked={selectedPlan === 'yearly'}
+                onChange={() => setSelectedPlan('yearly')}
+                style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+              />
               <Box
                 style={{
                   position: 'absolute',
@@ -413,28 +429,36 @@ export default function MembershipContent() {
                   </Text>
                 </Box>
               </Box>
-            </Box>
+            </label>
             {/* Lifetime */}
-            <Box
-              onClick={() => setSelectedPlan('lifetime')}
+            <label
               style={{
+                display: 'block',
                 padding: tokens.spacing[4],
                 borderRadius: tokens.radius.lg,
-                border: `2px solid ${selectedPlan === 'lifetime' ? '#f59e0b' : 'var(--color-border-primary)'}`,
-                background: selectedPlan === 'lifetime' ? 'color-mix(in srgb, #f59e0b 8%, transparent)' : 'transparent',
+                border: `2px solid ${selectedPlan === 'lifetime' ? 'var(--color-founding-accent)' : 'var(--color-border-primary)'}`,
+                background: selectedPlan === 'lifetime' ? 'var(--color-founding-accent-muted)' : 'transparent',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
                 position: 'relative',
                 marginTop: tokens.spacing[3],
               }}
             >
+              <input
+                type="radio"
+                name="plan"
+                value="lifetime"
+                checked={selectedPlan === 'lifetime'}
+                onChange={() => setSelectedPlan('lifetime')}
+                style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+              />
               <Box
                 style={{
                   position: 'absolute',
                   top: -8,
                   right: 12,
                   padding: '2px 8px',
-                  background: '#f59e0b',
+                  background: 'var(--color-founding-accent)',
                   borderRadius: tokens.radius.full,
                   fontSize: 10,
                   fontWeight: 700,
@@ -446,17 +470,17 @@ export default function MembershipContent() {
 
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box>
-                  <Text size="sm" weight="bold" style={{ color: '#f59e0b' }}>{t('membershipFoundingLifetime')}</Text>
+                  <Text size="sm" weight="bold" style={{ color: 'var(--color-founding-accent)' }}>{t('membershipFoundingLifetime')}</Text>
                   <Text size="xs" color="tertiary">{t('membershipOneTimeForever')}</Text>
                 </Box>
                 <Box style={{ textAlign: 'right' }}>
-                  <Text size="xl" weight="black" style={{ color: '#f59e0b' }}>
+                  <Text size="xl" weight="black" style={{ color: 'var(--color-founding-accent)' }}>
                     ${PRICING.lifetime.price}
                   </Text>
                   <Text size="xs" color="tertiary">{t('membershipOneTime')}</Text>
                 </Box>
               </Box>
-            </Box>
+            </label>
           </Box>
 
           {/* Subscribe Button */}
@@ -467,9 +491,9 @@ export default function MembershipContent() {
             style={{
               width: '100%',
               padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-              background: selectedPlan === 'lifetime' ? '#f59e0b' : 'var(--color-pro-badge-bg)',
+              background: selectedPlan === 'lifetime' ? 'var(--color-founding-accent)' : 'var(--color-pro-badge-bg)',
               border: 'none',
-              boxShadow: selectedPlan === 'lifetime' ? '0 4px 16px rgba(245,158,11,0.3)' : '0 4px 16px var(--color-pro-badge-shadow)',
+              boxShadow: selectedPlan === 'lifetime' ? '0 4px 16px var(--color-founding-accent-shadow)' : '0 4px 16px var(--color-pro-badge-shadow)',
               fontSize: tokens.typography.fontSize.md,
               fontWeight: 700,
             }}

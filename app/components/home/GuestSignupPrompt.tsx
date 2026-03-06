@@ -68,13 +68,14 @@ export default function GuestSignupPrompt() {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 9999,
+        zIndex: tokens.zIndex.modal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-backdrop)',
         backdropFilter: 'blur(4px)',
-        animation: 'fadeIn 0.3s ease',
+        WebkitBackdropFilter: 'blur(4px)',
+        animation: 'modalFadeIn 0.3s ease',
       }}
       onClick={handleDismiss}
     >
@@ -82,12 +83,12 @@ export default function GuestSignupPrompt() {
         style={{
           background: tokens.colors.bg.secondary,
           borderRadius: tokens.radius.xl,
-          padding: '40px 32px',
+          padding: `${tokens.spacing[10]} ${tokens.spacing[8]}`,
           maxWidth: 420,
           width: '90%',
           textAlign: 'center',
           position: 'relative',
-          animation: 'slideUp 0.3s ease',
+          animation: 'modalSlideUp 0.3s ease',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -117,18 +118,18 @@ export default function GuestSignupPrompt() {
         </button>
 
         <h2 style={{
-          fontSize: 24,
+          fontSize: tokens.typography.fontSize.xl,
           fontWeight: 800,
           color: tokens.colors.text.primary,
-          margin: '0 0 8px',
+          margin: `0 0 ${tokens.spacing[2]}`,
         }}>
           {t('guestSignupTitle')}
         </h2>
 
         <p style={{
-          fontSize: 14,
+          fontSize: tokens.typography.fontSize.sm,
           color: tokens.colors.text.secondary,
-          margin: '0 0 16px',
+          margin: `0 0 ${tokens.spacing[4]}`,
           lineHeight: 1.6,
         }}>
           {t('guestSignupSubtitle')}
@@ -136,7 +137,7 @@ export default function GuestSignupPrompt() {
 
         <div style={{
           textAlign: 'left',
-          margin: '0 0 24px',
+          margin: `0 0 ${tokens.spacing[5]}`,
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
@@ -160,7 +161,7 @@ export default function GuestSignupPrompt() {
               borderRadius: tokens.radius.lg,
               background: tokens.colors.accent.brand,
               color: tokens.colors.white,
-              fontSize: 16,
+              fontSize: tokens.typography.fontSize.md,
               fontWeight: 700,
               textDecoration: 'none',
               textAlign: 'center',
@@ -172,7 +173,7 @@ export default function GuestSignupPrompt() {
           <button
             onClick={handleDismiss}
             style={{
-              padding: '10px 24px',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
               borderRadius: tokens.radius.lg,
               background: 'transparent',
               color: tokens.colors.text.tertiary,
@@ -187,16 +188,6 @@ export default function GuestSignupPrompt() {
         </div>
       </div>
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   )
 }

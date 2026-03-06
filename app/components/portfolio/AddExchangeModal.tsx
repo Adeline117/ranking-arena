@@ -40,7 +40,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!apiKey.trim() || !apiSecret.trim()) {
-      setError('API Key and Secret are required')
+      setError(t('apiKeySecretRequired'))
       return
     }
     setError('')
@@ -57,7 +57,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
       setLabel('')
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add exchange')
+      setError(err instanceof Error ? err.message : t('failedToAddExchange'))
     } finally {
       setSubmitting(false)
     }
@@ -65,17 +65,20 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
 
   return (
     <div style={styles.overlay} onClick={onClose} role="presentation">
-      <div style={styles.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Connect Exchange">
+      <div style={styles.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t('connectExchange')}>
         <div style={styles.header}>
-          <h3 style={styles.title}>Connect Exchange</h3>
-          <button style={styles.closeBtn} onClick={onClose} aria-label="Close">
-            x
+          <h3 style={styles.title}>{t('connectExchange')}</h3>
+          <button style={styles.closeBtn} onClick={onClose} aria-label={t('close')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
           </button>
         </div>
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.field}>
-            <label style={styles.label}>Exchange</label>
+            <label style={styles.label}>{t('exchange')}</label>
             <select
               value={exchange}
               onChange={e => setExchange(e.target.value)}
@@ -90,7 +93,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           </div>
 
           <div style={styles.field}>
-            <label style={styles.label}>Label (optional)</label>
+            <label style={styles.label}>{t('labelOptional')}</label>
             <input
               type="text"
               value={label}
@@ -101,7 +104,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           </div>
 
           <div style={styles.field}>
-            <label style={styles.label}>API Key</label>
+            <label style={styles.label}>{t('apiKey')}</label>
             <input
               type="password"
               value={apiKey}
@@ -113,7 +116,7 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           </div>
 
           <div style={styles.field}>
-            <label style={styles.label}>API Secret</label>
+            <label style={styles.label}>{t('apiSecret')}</label>
             <input
               type="password"
               value={apiSecret}
@@ -127,14 +130,14 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
           {error && <p style={styles.error}>{error}</p>}
 
           <div style={styles.hint}>
-            Use read-only API keys. Do not enable trading or withdrawal permissions.
+            {t('apiKeyReadOnlyHint')}
           </div>
 
           <button type="submit" disabled={submitting} style={{
             ...styles.submitBtn,
             opacity: submitting ? 0.6 : 1,
           }}>
-            {submitting ? 'Connecting...' : 'Connect'}
+            {submitting ? t('connecting') : t('connect')}
           </button>
         </form>
       </div>
