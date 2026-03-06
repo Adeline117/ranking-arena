@@ -8,6 +8,7 @@ import { RankingBadge } from '../../ui/icons'
 import { Box, Text } from '../../base'
 import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl } from '@/lib/utils/avatar'
 import { getScoreColorInfo, getScoreColor } from '@/lib/utils/score-colors'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { Trader } from '../RankingTable'
 
 // Shared color constants for trader display components
@@ -340,7 +341,7 @@ export function ArenaScoreCircle({
     ? Math.min(40, Math.max(0, Math.round((pnl / 100000) * 40)))
     : null
   const hasBreakdown = roiScore !== null || pnlScore !== null
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
   const tooltipContent = show ? (
     <div
@@ -368,12 +369,12 @@ export function ArenaScoreCircle({
         Arena Score
       </div>
       <div>
-        {isZh ? 'ROI 分' : 'ROI Score'}:{' '}
+        {t('scoreRoiScore')}:{' '}
         <span style={{ fontWeight: 700, color: tokens.colors.text.primary, fontVariantNumeric: 'tabular-nums' }}>{roiScore ?? '—'}</span>
         <span style={{ color: tokens.colors.text.tertiary }}>{' '}/ 60</span>
       </div>
       <div>
-        {isZh ? 'PnL 分' : 'PnL Score'}:{' '}
+        {t('scorePnlScore')}:{' '}
         <span style={{ fontWeight: 700, color: tokens.colors.text.primary, fontVariantNumeric: 'tabular-nums' }}>{pnlScore ?? '—'}</span>
         <span style={{ color: tokens.colors.text.tertiary }}>{' '}/ 40</span>
       </div>
@@ -383,7 +384,7 @@ export function ArenaScoreCircle({
         paddingTop: 4,
         fontWeight: 800,
       }}>
-        {isZh ? '总分' : 'Total'}:{' '}
+        {t('scoreTotal')}:{' '}
         <span style={{ color: ringColor, fontVariantNumeric: 'tabular-nums' }}>{score.toFixed(0)}</span>
         <span style={{ color: tokens.colors.text.tertiary }}>{' '}/ 100</span>
       </div>
