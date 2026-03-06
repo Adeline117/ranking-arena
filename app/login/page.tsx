@@ -118,15 +118,15 @@ export default function LoginPage() {
         saveNewAccountToStore().then(() => {
           supabase.auth.getUser().then(({ data: { user } }) => {
             if (user) {
-              supabase
+              Promise.resolve(supabase
                 .from('user_profiles')
                 .select('handle')
                 .eq('id', user.id)
-                .maybeSingle()
-                .then(({ data: userProfile }) => {
-                  router.push(getRedirectUrl(userProfile?.handle, user.email))
-                })
-                .catch(() => { router.push(getRedirectUrl()) })
+                .maybeSingle())
+                .then(
+                  ({ data: userProfile }) => { router.push(getRedirectUrl(userProfile?.handle, user.email)) },
+                  () => { router.push(getRedirectUrl()) }
+                )
             } else {
               router.push(getRedirectUrl())
             }

@@ -27,7 +27,7 @@ import { PostDetailModal } from './components/PostDetailModal'
 import { HotGroupsList } from './components/HotGroupsList'
 
 // Use design token for brand color
-const ARENA_PURPLE = tokens.colors.accent.brand
+const _ARENA_PURPLE = tokens.colors.accent.brand
 
 function HotContent() {
   const { t, language } = useLanguage()
