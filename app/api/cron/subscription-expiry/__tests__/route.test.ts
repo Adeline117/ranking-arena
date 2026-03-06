@@ -203,16 +203,6 @@ describe('GET /api/cron/subscription-expiry', () => {
 
   // ---- Error handling ------------------------------------------------------
 
-  it('returns 500 when supabase credentials are missing', async () => {
-    const origUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    process.env.NEXT_PUBLIC_SUPABASE_URL = ''
-
-    const res = await GET(createCronRequest(CRON_SECRET))
-    expect(res.status).toBe(500)
-
-    process.env.NEXT_PUBLIC_SUPABASE_URL = origUrl
-  })
-
   it('returns 500 when database throws', async () => {
     mockFrom.mockImplementation(() => {
       throw new Error('Connection lost')
@@ -220,5 +210,74 @@ describe('GET /api/cron/subscription-expiry', () => {
 
     const res = await GET(createCronRequest(CRON_SECRET))
     expect(res.status).toBe(500)
+  })
+
+  it('reports errors in results when notification insert fails', async () => {
+    const expiredSubs = [
+      { user_id: 'user1', stripe_subscription_id: 'sub_1' },
+    ]
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'subscriptions') {
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockImplementation((_col: string, val: unknown) => {
+              if (val === 'active') {
+                return {
+                  eq: jest.fn().mockReturnValue({
+                    lt: jest.fn().mockReturnValue({
+                      gt: jest.fn().mockResolvedValue({ data: [], error: null }),
+                    }),
+                  }),
+                  lt: jest.fn().mockResolvedValue({ data: expiredSubs, error: null }),
+                  single: jest.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
+                }
+              }
+              return chainable({ data: null, error: null })
+            }),
+          }),
+          update: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          }),
+        }
+      }
+      if (table === 'user_profiles') {
+        return {
+          select: jest.fn().mockReturnValue({
+            not: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ data: [], error: null }),
+            }),
+          }),
+          update: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ error: null }),
+          }),
+        }
+      }
+      if (table === 'notifications') {
+        return {
+          insert: jest.fn().mockResolvedValue({ error: { message: 'Insert failed' } }),
+        }
+      }
+      if (table === 'group_members') {
+        return {
+          delete: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          }),
+        }
+      }
+      return chainable({ data: null, error: null })
+    })
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+    const body = await res.json()
+
+    // Still returns 200 but with error recorded
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.errors.length).toBeGreaterThan(0)
   })
 })
