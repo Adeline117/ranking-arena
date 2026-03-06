@@ -104,7 +104,7 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    console.warn(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
   }
 
   // Strategy 2: Try Cloudflare Worker proxy
@@ -114,12 +114,44 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    console.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
   }
 
-  // Strategy 3: Stealth browser bypass (extract cookies then retry direct API)
+  // Strategy 3: VPS proxy (Tokyo/Singapore VPS with clean IP)
+  const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+  if (vpsUrl) {
+    try {
+      logger.warn(`[bybit] Trying VPS proxy...`)
+      const res = await fetch(vpsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+        },
+        body: JSON.stringify({
+          url: directUrl,
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            Referer: 'https://www.bybit.com/en/copy-trading',
+            Accept: 'application/json',
+          },
+        }),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as BybitApiResponse
+        if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+          return data
+        }
+      }
+    } catch (err) {
+      logger.warn(`[bybit] VPS proxy failed: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+
+  // Strategy 4: Stealth browser bypass (last resort)
   try {
-    console.warn(`[bybit] Trying stealth browser to bypass Akamai WAF...`)
+    logger.warn(`[bybit] Trying stealth browser to bypass Akamai WAF...`)
     const { bypassCloudflare, cookiesToHeader } = await getCloudflareBypass()
     const { cookies } = await bypassCloudflare('https://www.bybit.com/en/copy-trading', {
       proxy: process.env.STEALTH_PROXY || undefined,
@@ -136,7 +168,7 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    console.warn(`[bybit] Stealth browser fallback failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[bybit] Stealth browser fallback failed: ${err instanceof Error ? err.message : err}`)
   }
 
   return null
@@ -159,7 +191,7 @@ async function fetchPeriod(
     const data = await fetchBybitPage(pageNo, PAGE_SIZE, duration)
     
     if (!data) {
-      lastError = 'WAF-blocked from both direct API and proxy'
+      lastError = 'WAF-blocked from direct API, CF proxy, and VPS proxy'
       break
     }
 
@@ -224,7 +256,7 @@ async function fetchPeriod(
   // Extended to all periods (not just 90D)
   if (saved > 0) {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
+    logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     // Map period to days for equity curve API
     const daysMap: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
@@ -254,7 +286,7 @@ async function fetchPeriod(
               enrichedCount++
             }
           } catch (err) {
-            console.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err}`)
+            logger.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err instanceof Error ? err.message : String(err)}`)
           }
         })
       )
@@ -262,7 +294,7 @@ async function fetchPeriod(
         await sleep(ENRICH_DELAY_MS)
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
+    logger.info(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
   }
 
   return { total: top.length, saved, error }
@@ -279,9 +311,16 @@ export async function fetchBybit(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    result.periods[period] = await fetchPeriod(supabase, period)
-    if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+  try {
+    for (const period of periods) {
+      result.periods[period] = await fetchPeriod(supabase, period)
+      if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+    }
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

@@ -299,7 +299,7 @@ async function fetchPeriod(
   await enrichTraders(topTraders, period)
 
   // Phase 3: Save stats_detail for ALL periods (extended from 90D only)
-  console.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders (${period})...`)
+  logger.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders (${period})...`)
   let statsSaved = 0
   for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
     const stats: StatsDetail = {
@@ -325,7 +325,7 @@ async function fetchPeriod(
     const { saved } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
     if (saved) statsSaved++
   }
-  console.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
+  logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
 
   const capturedAt = new Date().toISOString()
   const traders: TraderData[] = topTraders.map((t, idx) => ({
@@ -358,17 +358,24 @@ export async function fetchHyperliquid(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    try {
-      result.periods[period] = await fetchPeriod(supabase, period)
-    } catch (err) {
-      result.periods[period] = {
-        total: 0,
-        saved: 0,
-        error: err instanceof Error ? err.message : String(err),
+  try {
+    for (const period of periods) {
+      try {
+        result.periods[period] = await fetchPeriod(supabase, period)
+      } catch (err) {
+        result.periods[period] = {
+          total: 0,
+          saved: 0,
+          error: err instanceof Error ? err.message : String(err),
+        }
       }
+      if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
     }
-    if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

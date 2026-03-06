@@ -1,19 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-
-// Lazy initialization to avoid build-time errors when env vars are missing
-let _supabaseAdmin: SupabaseClient | null = null
-function getSupabaseAdmin(): SupabaseClient {
-  if (!_supabaseAdmin) {
-    _supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-  }
-  return _supabaseAdmin
-}
 
 // Exchange peer IDs between users for WebRTC signaling
 // POST: register/update peer ID for a user or initiate a call signal
@@ -30,7 +18,8 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.slice(7)
-    const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token)
+    const supabaseAdmin = getSupabaseAdmin()
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -40,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'register') {
       // Register/update peer ID
-      const { error } = await getSupabaseAdmin()
+      const { error } = await supabaseAdmin
         .from('call_signals')
         .upsert({
           user_id: user.id,
@@ -58,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'call') {
       // Look up target user's peer ID
-      const { data: signal } = await getSupabaseAdmin()
+      const { data: signal } = await supabaseAdmin
         .from('call_signals')
         .select('peer_id')
         .eq('user_id', targetUserId)
@@ -85,7 +74,8 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.slice(7)
-    const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token)
+    const supabaseAdmin = getSupabaseAdmin()
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

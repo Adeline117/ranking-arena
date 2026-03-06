@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchJson, sleep } from './shared'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // Proxy Configuration for Geo-blocked APIs
@@ -33,7 +34,7 @@ async function fetchWithProxyFallback<T>(
     // If geo-blocked (451) or WAF blocked (403), try proxy
     if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
       if (PROXY_URL) {
-        console.warn(`[enrichment] Geo-blocked, retrying via proxy: ${url.slice(0, 80)}...`)
+        logger.warn(`[enrichment] Geo-blocked, retrying via proxy: ${url.slice(0, 80)}...`)
         const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
         return await fetchJson<T>(proxyTarget, {
           method: 'POST',
@@ -166,7 +167,7 @@ export async function fetchBinanceEquityCurve(
     )
 
     if (!data?.data?.dailyPnls) {
-      console.warn(`[enrichment] Binance equity curve empty for ${traderId}`)
+      logger.warn(`[enrichment] Binance equity curve empty for ${traderId}`)
       return []
     }
 
@@ -176,7 +177,7 @@ export async function fetchBinanceEquityCurve(
       pnl: d.pnl != null ? Number(d.pnl) : null,
     }))
   } catch (err) {
-    console.warn(`[enrichment] Binance equity curve failed for ${traderId}: ${err}`)
+    logger.warn(`[enrichment] Binance equity curve failed for ${traderId}: ${err}`)
     return []
   }
 }
@@ -201,7 +202,7 @@ export async function fetchBinancePositionHistory(
     )
 
     if (!data?.data?.list) {
-      console.warn(`[enrichment] Binance position history empty for ${traderId}`)
+      logger.warn(`[enrichment] Binance position history empty for ${traderId}`)
       return []
     }
 
@@ -223,7 +224,7 @@ export async function fetchBinancePositionHistory(
       status: 'closed',
     }))
   } catch (err) {
-    console.warn(`[enrichment] Binance position history failed for ${traderId}: ${err}`)
+    logger.warn(`[enrichment] Binance position history failed for ${traderId}: ${err}`)
     return []
   }
 }
@@ -264,12 +265,12 @@ export async function fetchBybitEquityCurve(
 
     // Check for API error codes
     if (data?.retCode !== 0 && data?.retCode !== undefined) {
-      console.warn(`[enrichment] Bybit equity curve API error for ${traderId}: retCode=${data.retCode}`)
+      logger.warn(`[enrichment] Bybit equity curve API error for ${traderId}: retCode=${data.retCode}`)
       return []
     }
 
     if (!data?.result?.dataList) {
-      console.warn(`[enrichment] Bybit equity curve empty for ${traderId}`)
+      logger.warn(`[enrichment] Bybit equity curve empty for ${traderId}`)
       return []
     }
 
@@ -281,7 +282,7 @@ export async function fetchBybitEquityCurve(
         pnl: d.pnl != null ? Number(d.pnl) : null,
       }))
   } catch (err) {
-    console.warn(`[enrichment] Bybit equity curve failed for ${traderId}: ${err}`)
+    logger.warn(`[enrichment] Bybit equity curve failed for ${traderId}: ${err}`)
     return []
   }
 }
@@ -330,12 +331,12 @@ export async function fetchBybitPositionHistory(
 
     // Check for API error codes
     if (data?.retCode !== 0 && data?.retCode !== undefined) {
-      console.warn(`[enrichment] Bybit position history API error for ${traderId}: retCode=${data.retCode}`)
+      logger.warn(`[enrichment] Bybit position history API error for ${traderId}: retCode=${data.retCode}`)
       return []
     }
 
     if (!data?.result?.data) {
-      console.warn(`[enrichment] Bybit position history empty for ${traderId}`)
+      logger.warn(`[enrichment] Bybit position history empty for ${traderId}`)
       return []
     }
 
@@ -355,7 +356,7 @@ export async function fetchBybitPositionHistory(
       status: 'closed',
     }))
   } catch (err) {
-    console.warn(`[enrichment] Bybit position history failed for ${traderId}: ${err}`)
+    logger.warn(`[enrichment] Bybit position history failed for ${traderId}: ${err}`)
     return []
   }
 }
@@ -406,7 +407,7 @@ export async function fetchOkxCurrentPositions(
       status: 'open',
     }))
   } catch (err) {
-    console.warn(`[enrichment] OKX current positions failed: ${err}`)
+    logger.warn(`[enrichment] OKX current positions failed: ${err}`)
     return []
   }
 }
@@ -461,7 +462,7 @@ export async function fetchOkxEquityCurve(
       }
     }).filter((p) => p.date)
   } catch (err) {
-    console.warn(`[enrichment] OKX equity curve failed: ${err}`)
+    logger.warn(`[enrichment] OKX equity curve failed: ${err}`)
     return []
   }
 }
@@ -520,7 +521,7 @@ export async function fetchOkxPositionHistory(
       status: 'closed',
     }))
   } catch (err) {
-    console.warn(`[enrichment] OKX position history failed: ${err}`)
+    logger.warn(`[enrichment] OKX position history failed: ${err}`)
     return []
   }
 }
@@ -562,7 +563,7 @@ export async function fetchBitgetEquityCurve(
         pnl: d.profit != null ? Number(d.profit) : null,
       }))
   } catch (err) {
-    console.warn(`[enrichment] Bitget equity curve failed: ${err}`)
+    logger.warn(`[enrichment] Bitget equity curve failed: ${err}`)
     return []
   }
 }
@@ -618,7 +619,7 @@ export async function fetchBitgetPositionHistory(
       status: 'closed',
     }))
   } catch (err) {
-    console.warn(`[enrichment] Bitget position history failed: ${err}`)
+    logger.warn(`[enrichment] Bitget position history failed: ${err}`)
     return []
   }
 }
@@ -680,7 +681,7 @@ export async function fetchBitgetStatsDetail(
       totalPositions: positions.length,
     }
   } catch (err) {
-    console.warn(`[enrichment] Bitget stats detail failed: ${err}`)
+    logger.warn(`[enrichment] Bitget stats detail failed: ${err}`)
     return null
   }
 }
@@ -746,7 +747,7 @@ export async function fetchHyperliquidPositionHistory(
       }
     })
   } catch (err) {
-    console.warn(`[enrichment] Hyperliquid position history failed: ${err}`)
+    logger.warn(`[enrichment] Hyperliquid position history failed: ${err}`)
     return []
   }
 }
@@ -835,7 +836,7 @@ export async function fetchGmxPositionHistory(
       }
     })
   } catch (err) {
-    console.warn(`[enrichment] GMX position history failed: ${err}`)
+    logger.warn(`[enrichment] GMX position history failed: ${err}`)
     return []
   }
 }
@@ -946,7 +947,7 @@ export async function fetchBinanceStatsDetail(
       totalPositions: positions.length,
     }
   } catch (err) {
-    console.warn(`[enrichment] Binance stats detail failed for ${traderId}: ${err}`)
+    logger.warn(`[enrichment] Binance stats detail failed for ${traderId}: ${err}`)
     return null
   }
 }
@@ -995,12 +996,12 @@ export async function fetchBybitStatsDetail(
 
     // Check for API error codes
     if (data?.retCode !== 0 && data?.retCode !== undefined) {
-      console.warn(`[enrichment] Bybit stats detail API error for ${traderId}: retCode=${data.retCode}`)
+      logger.warn(`[enrichment] Bybit stats detail API error for ${traderId}: retCode=${data.retCode}`)
       return null
     }
 
     if (!data?.result) {
-      console.warn(`[enrichment] Bybit stats detail empty for ${traderId}`)
+      logger.warn(`[enrichment] Bybit stats detail empty for ${traderId}`)
       return null
     }
 
@@ -1030,7 +1031,7 @@ export async function fetchBybitStatsDetail(
       totalPositions: null,
     }
   } catch (err) {
-    console.warn(`[enrichment] Bybit stats detail failed for ${traderId}: ${err}`)
+    logger.warn(`[enrichment] Bybit stats detail failed for ${traderId}: ${err}`)
     return null
   }
 }
@@ -1101,7 +1102,7 @@ export async function fetchOkxStatsDetail(
       totalPositions: null,
     }
   } catch (err) {
-    console.warn(`[enrichment] OKX stats detail failed: ${err}`)
+    logger.warn(`[enrichment] OKX stats detail failed: ${err}`)
     return null
   }
 }

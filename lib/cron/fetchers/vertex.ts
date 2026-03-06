@@ -23,8 +23,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   type FetchResult,
-  
+
 } from './shared'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'vertex'
 const _TARGET = 500
@@ -63,16 +65,23 @@ export async function fetchVertex(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    try {
-      result.periods[period] = await fetchPeriod(supabase, period)
-    } catch (err) {
-      result.periods[period] = {
-        total: 0,
-        saved: 0,
-        error: err instanceof Error ? err.message : String(err),
+  try {
+    for (const period of periods) {
+      try {
+        result.periods[period] = await fetchPeriod(supabase, period)
+      } catch (err) {
+        result.periods[period] = {
+          total: 0,
+          saved: 0,
+          error: err instanceof Error ? err.message : String(err),
+        }
       }
     }
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

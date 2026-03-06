@@ -22,19 +22,6 @@ function getSupabase() {
   return _supabaseInstance
 }
 
-// Lazy-initialized reference - all helper functions use this
-// Safe: initialized on first access, not at module load time
-const _supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop: string) {
-    const client = getSupabase()
-    const value = (client as unknown as Record<string, unknown>)[prop]
-    if (typeof value === 'function') {
-      return value.bind(client)
-    }
-    return value
-  },
-})
-
 // 禁用 body 解析，因为我们需要原始 body 来验证签名
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -336,7 +323,7 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
   }
 
   // 更新用户订阅状态为已取消
-  await getSupabase()
+  const { error: subError } = await getSupabase()
     .from('subscriptions')
     .update({
       status: 'canceled',
@@ -346,14 +333,22 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
     .eq('user_id', profile.id)
     .eq('stripe_subscription_id', subscription.id)
 
+  if (subError) {
+    logger.error('Failed to update subscription status to canceled', { userId: profile.id, error: subError.message })
+  }
+
   // 更新用户 tier 为 free
-  await getSupabase()
+  const { error: profileError } = await getSupabase()
     .from('user_profiles')
     .update({
       subscription_tier: 'free',
       updated_at: new Date().toISOString(),
     })
     .eq('id', profile.id)
+
+  if (profileError) {
+    logger.error('Failed to downgrade user tier to free', { userId: profile.id, error: profileError.message })
+  }
 
   // 离开 Pro 会员官方群
   try {

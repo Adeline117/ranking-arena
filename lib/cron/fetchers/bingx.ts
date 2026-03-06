@@ -196,9 +196,44 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
-  // Stealth browser fallback when HTTP fetch fails
+  // VPS proxy fallback when HTTP fetch fails
   if (allTraders.size === 0) {
-    console.warn(`[${SOURCE}] HTTP fetch failed, trying stealth browser fallback...`)
+    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
+    if (vpsUrl) {
+      logger.warn(`[${SOURCE}] HTTP fetch failed, trying VPS proxy...`)
+      for (const buildUrl of API_ENDPOINTS) {
+        if (allTraders.size >= TARGET) break
+        try {
+          const url = buildUrl(1, periodType)
+          const res = await fetch(vpsUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+            },
+            body: JSON.stringify({ url, method: 'GET', headers: HEADERS }),
+          })
+          if (!res.ok) continue
+          const data = (await res.json()) as BingxResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+          }
+          if (allTraders.size > 0) {
+            logger.warn(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
+            break
+          }
+        } catch (err) {
+          logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
+  }
+
+  // Stealth browser fallback when all HTTP methods fail
+  if (allTraders.size === 0) {
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying stealth browser fallback...`)
     try {
       const interceptApiResponses = await getInterceptApiResponses()
       const { responses } = await interceptApiResponses(
@@ -217,10 +252,10 @@ async function fetchPeriod(
         } catch { /* skip unparseable */ }
       }
       if (allTraders.size > 0) {
-        console.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
+        logger.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
       }
     } catch (err) {
-      console.warn(`[${SOURCE}] Stealth browser fallback failed:`, err)
+      logger.warn(`[${SOURCE}] Stealth browser fallback failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -245,7 +280,7 @@ async function fetchPeriod(
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
@@ -269,7 +304,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: top.length, saved, error }
@@ -282,9 +317,16 @@ export async function fetchBingx(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    result.periods[period] = await fetchPeriod(supabase, period)
-    if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+  try {
+    for (const period of periods) {
+      result.periods[period] = await fetchPeriod(supabase, period)
+      if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+    }
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

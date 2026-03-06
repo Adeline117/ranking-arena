@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import logger from '@/lib/logger'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
 
 // Only select fields the frontend needs (avoid transferring large text fields like ai_summary)
 const LIBRARY_LIST_FIELDS = 'id,title,title_en,title_zh,author,description,category,subcategory,cover_url,language,tags,publish_date,rating,rating_count,view_count,download_count,is_free,epub_url,pdf_url,file_key,content_url,created_at'
@@ -48,6 +43,7 @@ export async function GET(req: NextRequest) {
 async function fetchLibraryData({ category, search, lang, sort, hasFile, page, limit, offset }: {
   category: string; search: string; lang: string; sort: string; hasFile: boolean; page: number; limit: number; offset: number
 }) {
+  const supabase = getSupabaseAdmin()
   // Use RPC for language-priority sorting when user has a language preference
   if (lang && !search) {
     // Preferred language items first, then others, sorted by creation date

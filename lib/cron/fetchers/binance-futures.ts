@@ -57,7 +57,7 @@ const HEADERS: Record<string, string> = {
   Referer: 'https://www.binance.com/en/copy-trading',
 }
 
-// Helper to fetch with proxy fallback
+// Helper to fetch with proxy fallback (direct → CF proxy → VPS proxy)
 async function fetchWithProxyFallback<T>(
   url: string,
   opts: { method?: string; headers?: Record<string, string>; body?: unknown }
@@ -65,20 +65,56 @@ async function fetchWithProxyFallback<T>(
   // Try direct first
   try {
     return await fetchJson<T>(url, opts)
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : ''
-    // If geo-blocked or WAF blocked, try proxy
-    if (msg.includes('451') || msg.includes('403') || msg.includes('Access Denied')) {
-      if (PROXY_URL) {
-        const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(url)}`
+  } catch (directErr) {
+    const msg = directErr instanceof Error ? directErr.message : ''
+    const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('geo-blocked')
+
+    if (!isBlocked) throw directErr
+
+    // Try CF Worker proxy
+    if (PROXY_URL) {
+      try {
+        const proxyTarget = `${PROXY_URL}/binance/copy-trading`
         return await fetchJson<T>(proxyTarget, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: opts.body,
         })
+      } catch (cfErr) {
+        logger.warn(`[binance-futures] CF proxy failed: ${cfErr instanceof Error ? cfErr.message : String(cfErr)}`)
       }
     }
-    throw err
+
+    // Try VPS proxy as last resort
+    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+    if (vpsUrl) {
+      try {
+        logger.warn(`[binance-futures] Trying VPS proxy for ${url.slice(0, 80)}...`)
+        const res = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+          },
+          body: JSON.stringify({
+            url,
+            method: opts.method || 'POST',
+            headers: opts.headers || {},
+            body: opts.body || null,
+          }),
+        })
+        if (!res.ok) throw new Error(`VPS proxy HTTP ${res.status}`)
+        return (await res.json()) as T
+      } catch (vpsErr) {
+        logger.warn(`[binance-futures] VPS proxy failed: ${vpsErr instanceof Error ? vpsErr.message : String(vpsErr)}`)
+      }
+    }
+
+    // All failed
+    throw new Error(
+      `Geo-blocked (HTTP 451) — direct, CF proxy, and VPS proxy all failed. ` +
+      `Set VPS_PROXY_URL or VPS_PROXY_JP to enable VPS fallback.`
+    )
   }
 }
 
@@ -185,7 +221,8 @@ async function fetchPeriod(
 
       if (allTraders.length >= TARGET) break
       await sleep(500)
-    } catch {
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Pagination stopped at page ${page}: ${err instanceof Error ? err.message : String(err)}`)
       break
     }
   }
@@ -233,7 +270,7 @@ async function fetchPeriod(
   // Extended to all periods (not just 90D)
   if (saved > 0) {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
+    logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     let enrichedCount = 0
     for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
@@ -281,7 +318,7 @@ async function fetchPeriod(
               enrichedCount++
             }
           } catch (err) {
-            console.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err}`)
+            logger.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err instanceof Error ? err.message : String(err)}`)
           }
         })
       )
@@ -289,7 +326,7 @@ async function fetchPeriod(
         await sleep(ENRICH_DELAY_MS)
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
+    logger.info(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
   }
 
   return { total: top.length, saved, error }

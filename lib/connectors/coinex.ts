@@ -183,29 +183,43 @@ export class CoinExConnector extends BaseConnectorLegacy implements LegacyPlatfo
   ): Promise<CoinExLeaderboardResponse> {
     const url = `${this.baseUrl}/rank?period=${period}&page=${page}&limit=${pageSize}&sort=roi`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`CoinEx API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`CoinEx API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchTraderDetailApi(traderId: string): Promise<{ code: number; data: CoinExTraderEntry }> {
     const url = `${this.baseUrl}/trader/detail?trader_id=${traderId}`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`CoinEx detail API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`CoinEx detail API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private getRandomUA(): string {

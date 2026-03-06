@@ -182,7 +182,7 @@ async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
       })
 
       if (data.code !== '00000' && data.code !== 0 && data.code !== '0') {
-        console.warn(`[bitget-futures] Authenticated API error: ${data.code} ${data.msg}`)
+        logger.warn(`[bitget-futures] Authenticated API error: ${data.code} ${data.msg}`)
         break
       }
 
@@ -193,7 +193,7 @@ async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
       if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
       await sleep(300)
     } catch (err) {
-      console.warn(`[bitget-futures] Auth fetch error: ${err}`)
+      logger.warn(`[bitget-futures] Auth fetch error: ${err instanceof Error ? err.message : String(err)}`)
       break
     }
   }
@@ -253,7 +253,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
 
         // Check if proxy returned an error object
         if ((data as unknown as { error?: string }).error) {
-          console.warn(`[bitget-futures] Proxy error: ${(data as unknown as { error: string }).error}`)
+          logger.warn(`[bitget-futures] Proxy error: ${(data as unknown as { error: string }).error}`)
           break
         }
 
@@ -266,7 +266,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(300)
       } catch (err) {
-        console.warn(`[bitget-futures] Proxy fetch error: ${err}`)
+        logger.warn(`[bitget-futures] Proxy fetch error: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
     }
@@ -324,7 +324,7 @@ async function fetchPeriod(
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
@@ -348,7 +348,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: top.length, saved, error }
@@ -365,9 +365,16 @@ export async function fetchBitgetFutures(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    result.periods[period] = await fetchPeriod(supabase, period)
-    if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+  try {
+    for (const period of periods) {
+      result.periods[period] = await fetchPeriod(supabase, period)
+      if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+    }
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start
