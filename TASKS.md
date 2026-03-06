@@ -29,8 +29,8 @@ _No critical issues currently_
 ## 🟡 P2 - Should Do Soon
 
 ### Features
-- [ ] Improve search ranking algorithm
-- [ ] Add more filter options to leaderboard
+- [x] Improve search ranking algorithm (exact > prefix > arena_score ranking)
+- [x] Add more filter options to leaderboard (min_roi, min_pnl, min_win_rate, max_drawdown, min_score)
 
 ### UI/UX
 - [ ] Loading skeleton improvements
@@ -83,6 +83,14 @@ _Move items here when done, then archive weekly_
 - [x] Orphaned trader_sources cleanup script (already existed)
 - [x] SEO + OG for trader pages (already fully implemented)
 - [x] First-screen load optimization (ISR + two-phase rendering already done)
+- [x] Search ranking: exact match > prefix > arena_score performance ranking
+- [x] V2 rankings API: added 5 new filter params (min_roi, min_pnl, min_win_rate, max_drawdown, min_score)
+- [x] Fix O(n*m) indexOf in exchange ranking render (useMemo rankMap)
+- [x] Composite index for exchange ranking queries (source, season_id, arena_score)
+- [x] Stagger fetch-details cron to avoid :30 triple collision
+- [x] HTX enrichment module (equity curve + stats detail from profitList)
+- [x] Restored 18 files incorrectly deleted + reinstalled 4 npm packages
+- [x] Fix broken TypeScript build (missing modules from cleanup commit)
 
 ---
 
