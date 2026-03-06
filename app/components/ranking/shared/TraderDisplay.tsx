@@ -287,14 +287,12 @@ export function ArenaScoreCircle({
   score,
   roi,
   pnl,
-  language,
   showConfidence,
   trader,
 }: {
   score: number | undefined
   roi?: number | null
   pnl?: number | null
-  language?: string
   showConfidence?: boolean
   trader?: Trader
 }) {
@@ -303,6 +301,7 @@ export function ArenaScoreCircle({
   const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0 })
   const ref = useRef<HTMLDivElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
+  const { t } = useLanguage()
 
   // Position tooltip after it renders
   useEffect(() => {
@@ -341,7 +340,6 @@ export function ArenaScoreCircle({
     ? Math.min(40, Math.max(0, Math.round((pnl / 100000) * 40)))
     : null
   const hasBreakdown = roiScore !== null || pnlScore !== null
-  const { t } = useLanguage()
 
   const tooltipContent = show ? (
     <div
