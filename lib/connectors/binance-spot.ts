@@ -180,48 +180,62 @@ export class BinanceSpotConnector extends BaseConnectorLegacy implements LegacyP
     page: number,
     pageSize: number,
   ): Promise<BinanceSpotListResponse> {
-    const response = await fetch(`${this.baseUrl}/common/home-page-list`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': this.getRandomUA(),
-      },
-      body: JSON.stringify({
-        pageNumber: page,
-        pageSize,
-        timeRange: period,
-        dataType: 'ROI',
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(`${this.baseUrl}/common/home-page-list`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': this.getRandomUA(),
+        },
+        body: JSON.stringify({
+          pageNumber: page,
+          pageSize,
+          timeRange: period,
+          dataType: 'ROI',
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Binance Spot API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Binance Spot API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchDetailApi(
     portfolioId: string,
     window: RankingWindow,
   ): Promise<{ data: BinanceSpotEntry; success: boolean }> {
-    const response = await fetch(`${this.baseUrl}/common/portfolio-detail`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': this.getRandomUA(),
-      },
-      body: JSON.stringify({
-        portfolioId,
-        timeRange: WINDOW_TO_PERIOD[window],
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(`${this.baseUrl}/common/portfolio-detail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': this.getRandomUA(),
+        },
+        body: JSON.stringify({
+          portfolioId,
+          timeRange: WINDOW_TO_PERIOD[window],
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Binance Spot detail API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Binance Spot detail API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private getRandomUA(): string {

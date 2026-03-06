@@ -200,7 +200,7 @@ async function fetchPeriod(
 
   // Stealth browser fallback when HTTP fetch fails
   if (allTraders.size === 0) {
-    console.warn(`[${SOURCE}] HTTP fetch failed, trying stealth browser fallback...`)
+    logger.warn(`[${SOURCE}] HTTP fetch failed, trying stealth browser fallback...`)
     try {
       const interceptApiResponses = await getInterceptApiResponses()
       const { responses } = await interceptApiResponses(
@@ -219,10 +219,10 @@ async function fetchPeriod(
         } catch { /* skip unparseable */ }
       }
       if (allTraders.size > 0) {
-        console.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
+        logger.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
       }
     } catch (err) {
-      console.warn(`[${SOURCE}] Stealth browser fallback failed:`, err)
+      logger.warn(`[${SOURCE}] Stealth browser fallback failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -242,7 +242,7 @@ async function fetchPeriod(
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
@@ -266,7 +266,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: top.length, saved, error: error || lastError || undefined }
@@ -279,9 +279,16 @@ export async function fetchBlofin(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    result.periods[period] = await fetchPeriod(supabase, period)
-    if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+  try {
+    for (const period of periods) {
+      result.periods[period] = await fetchPeriod(supabase, period)
+      if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+    }
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

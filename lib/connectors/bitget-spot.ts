@@ -183,39 +183,53 @@ export class BitgetSpotConnector extends BaseConnectorLegacy implements LegacyPl
   ): Promise<BitgetSpotListResponse> {
     const url = `${this.baseUrl}/trader/list`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': this.getRandomUA(),
-      },
-      body: JSON.stringify({
-        pageNo: page,
-        pageSize,
-        sortField: 'ROI',
-        sortType: sortPeriod,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': this.getRandomUA(),
+        },
+        body: JSON.stringify({
+          pageNo: page,
+          pageSize,
+          sortField: 'ROI',
+          sortType: sortPeriod,
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Bitget Spot API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Bitget Spot API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchTraderDetailApi(traderId: string): Promise<{ code: string; data: BitgetSpotEntry }> {
     const url = `${this.baseUrl}/trader/detail?traderId=${traderId}`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Bitget Spot detail API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Bitget Spot detail API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private getRandomUA(): string {

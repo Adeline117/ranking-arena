@@ -115,7 +115,7 @@ async function fetchLeaderboardData(
     if (entries.length > 0) return { entries }
   } catch (err) {
     // Continue to next attempt
-    console.warn('[Drift] Main API failed:', err)
+    logger.warn(`[Drift] Main API failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Attempt 2: DLOB server leaderboard
@@ -128,7 +128,7 @@ async function fetchLeaderboardData(
       data?.data || data?.leaderboard || data?.result || data?.users || []
     if (entries.length > 0) return { entries }
   } catch (err) {
-    console.warn('[Drift] DLOB API failed:', err)
+    logger.warn(`[Drift] DLOB API failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Attempt 3: Users endpoint with PnL sorting
@@ -141,7 +141,7 @@ async function fetchLeaderboardData(
       data?.data || data?.leaderboard || data?.result || data?.users || []
     if (entries.length > 0) return { entries }
   } catch (err) {
-    console.warn('[Drift] Users API failed:', err)
+    logger.warn(`[Drift] Users API failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   return {
@@ -209,7 +209,7 @@ async function fetchPeriod(
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
@@ -233,7 +233,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: top.length, saved, error }
@@ -248,17 +248,24 @@ export async function fetchDrift(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    try {
-      result.periods[period] = await fetchPeriod(supabase, period)
-    } catch (err) {
-      result.periods[period] = {
-        total: 0,
-        saved: 0,
-        error: err instanceof Error ? err.message : String(err),
+  try {
+    for (const period of periods) {
+      try {
+        result.periods[period] = await fetchPeriod(supabase, period)
+      } catch (err) {
+        result.periods[period] = {
+          total: 0,
+          saved: 0,
+          error: err instanceof Error ? err.message : String(err),
+        }
       }
+      if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
     }
-    if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

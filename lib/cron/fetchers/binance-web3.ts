@@ -147,9 +147,9 @@ async function tryLeaderboardApi(
     const msg = err instanceof Error ? err.message : String(err)
     // Binance returns HTTP 451 for geo-blocked requests
     if (msg.includes('451') || msg.includes('403')) {
-      console.warn(`[binance-web3] Geo-blocked (HTTP 451/403) — proxy fallback failed`)
+      logger.warn(`[binance-web3] Geo-blocked (HTTP 451/403) — proxy fallback failed`)
     } else {
-      console.warn(`[binance-web3] leaderboard API failed: ${msg}`)
+      logger.warn(`[binance-web3] leaderboard API failed: ${msg}`)
     }
   }
   return []
@@ -166,7 +166,7 @@ async function fetchPeriod(
   const entries = await tryLeaderboardApi(period)
 
   if (entries.length === 0) {
-    console.warn(`[binance-web3] No data for ${period}`)
+    logger.warn(`[binance-web3] No data for ${period}`)
     return { total: 0, saved: 0, error: 'No data — likely geo-blocked (HTTP 451). Deploy to Vercel Japan/SG.' }
   }
 
@@ -220,7 +220,7 @@ async function fetchPeriod(
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
@@ -244,7 +244,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: top.length, saved, error }

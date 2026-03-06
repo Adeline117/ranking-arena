@@ -12,6 +12,7 @@ import {
   type NormalizedTrade,
   type NormalizedTicker,
 } from './exchange-feeds'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 类型
@@ -107,7 +108,7 @@ export class FeedManager extends EventEmitter {
       feed.on('disconnected', (info) => this.emit('disconnected', info))
       feed.on('reconnecting', (info) => this.emit('reconnecting', info))
       feed.on('error', (info) => {
-        console.warn(`[ws] Feed error for ${exchangeId}:`, info)
+        logger.warn(`[ws] Feed error for ${exchangeId}: ${JSON.stringify(info)}`)
         // Only emit if there are listeners — unhandled 'error' events crash Node.js
         if (this.listenerCount('error') > 0) {
           this.emit('error', info)

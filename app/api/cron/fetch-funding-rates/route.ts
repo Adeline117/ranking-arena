@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/api'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -142,14 +142,14 @@ async function fetchFundingRate(
 
     if (!response.ok) {
       // 403/451 are expected (WAF/geo-block) — don't send to Sentry
-      console.warn(`[funding] ${exchange.name} ${symbol}: HTTP ${response.status}`)
+      logger.warn(`[funding] ${exchange.name} ${symbol}: HTTP ${response.status}`)
       return []
     }
 
     const data = await response.json()
     return exchange.responseMapper(data, symbol)
   } catch (error) {
-    console.warn(`[funding] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`)
+    logger.warn(`[funding] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`)
     return []
   }
 }
@@ -165,9 +165,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseAdmin()
 
   const startTime = Date.now()
   let fetched = 0

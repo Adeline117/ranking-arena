@@ -469,7 +469,9 @@ export async function getOrSetWithLock<T>(
   dataLogger.warn(`[Cache] Lock timeout for ${key}, executing without lock`)
   const data = await fetcher()
   // 异步缓存，不阻塞返回
-  set(key, data, { ...options, ttl: actualTtl }).catch(() => {})
+  set(key, data, { ...options, ttl: actualTtl }).catch((err) => {
+    dataLogger.warn(`[Cache] Failed to set cache after lock timeout for ${key}: ${err instanceof Error ? err.message : String(err)}`)
+  })
   return data
 }
 

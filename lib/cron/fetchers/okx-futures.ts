@@ -228,7 +228,7 @@ async function fetchPeriod(
   if (saved > 0) {
     const tradersArray = Array.from(allTraders.entries())
     const toEnrich = tradersArray.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
+    logger.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     let curvesSaved = 0
     let statsSaved = 0
@@ -275,7 +275,7 @@ async function fetchPeriod(
         if (s) statsSaved++
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${curvesSaved} curves, ${statsSaved} stats`)
+    logger.warn(`[${SOURCE}] Enrichment complete for ${period}: ${curvesSaved} curves, ${statsSaved} stats`)
   }
 
   return { total: top.length, saved, error }
@@ -290,17 +290,24 @@ export async function fetchOkxFutures(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    try {
-      result.periods[period] = await fetchPeriod(supabase, period)
-    } catch (err) {
-      result.periods[period] = {
-        total: 0,
-        saved: 0,
-        error: err instanceof Error ? err.message : String(err),
+  try {
+    for (const period of periods) {
+      try {
+        result.periods[period] = await fetchPeriod(supabase, period)
+      } catch (err) {
+        result.periods[period] = {
+          total: 0,
+          saved: 0,
+          error: err instanceof Error ? err.message : String(err),
+        }
       }
+      if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
     }
-    if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

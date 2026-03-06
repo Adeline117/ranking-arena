@@ -233,26 +233,33 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
     page: number,
     pageSize: number,
   ): Promise<BitgetLeaderboardResponse> {
-    const response = await fetch(`${this.baseUrl}/trader/list`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': this.getRandomUA(),
-      },
-      body: JSON.stringify({
-        pageNo: page,
-        pageSize,
-        sortField: 'ROI',
-        sortType: sortPeriod,
-        rule: 2,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(`${this.baseUrl}/trader/list`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': this.getRandomUA(),
+        },
+        body: JSON.stringify({
+          pageNo: page,
+          pageSize,
+          sortField: 'ROI',
+          sortType: sortPeriod,
+          rule: 2,
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Bitget API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Bitget API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchTraderDetailApi(
@@ -260,15 +267,22 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
   ): Promise<BitgetTraderDetailResponse> {
     const url = `${this.baseUrl}/trader/detail?traderId=${traderId}`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Bitget detail API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Bitget detail API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchPerformanceCurve(
@@ -276,14 +290,21 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
   ): Promise<Array<{ time: number; value: number }>> {
     const url = `${this.baseUrl}/trader/profit-chart?traderId=${traderId}&timeRange=90`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) return [];
+      if (!response.ok) return [];
 
-    const json = await response.json();
-    return json.data?.list || [];
+      const json = await response.json();
+      return json.data?.list || [];
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private getRandomUA(): string {

@@ -4,6 +4,188 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { dataLogger } from '@/lib/utils/logger'
+
+// ============================================
+// Failure Classification
+// ============================================
+
+export type FailureReason =
+  | 'geo_blocked'      // 451/403 + geo-block indicators
+  | 'waf_blocked'      // Cloudflare/Akamai WAF (HTML response)
+  | 'auth_required'    // 401 — needs API key
+  | 'endpoint_gone'    // 404 — API changed
+  | 'rate_limited'     // 429 — too many requests
+  | 'timeout'          // Request timed out
+  | 'empty_data'       // 200 but no usable data
+  | 'parse_error'      // Response couldn't be parsed
+  | 'unknown'
+
+export interface FetchDiagnostic {
+  url: string
+  httpStatus?: number
+  failureReason: FailureReason
+  hasCloudflareHeaders: boolean
+  responseIsHtml: boolean
+  durationMs: number
+  error?: string
+}
+
+export function classifyFetchError(
+  error: unknown,
+  responseStatus?: number,
+  responseBody?: string,
+  responseHeaders?: Record<string, string>
+): FailureReason {
+  const msg = error instanceof Error ? error.message : String(error || '')
+  const body = responseBody || ''
+  const hasCfRay = !!responseHeaders?.['cf-ray']
+  const isHtml = body.trimStart().startsWith('<') || body.includes('<!DOCTYPE')
+
+  // Timeout
+  if (msg.includes('abort') || msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
+    return 'timeout'
+  }
+
+  // Rate limit
+  if (responseStatus === 429 || msg.includes('429') || msg.includes('rate limit')) {
+    return 'rate_limited'
+  }
+
+  // Geo-block
+  if (
+    responseStatus === 451 ||
+    msg.includes('451') ||
+    msg.includes('restricted location') ||
+    msg.includes('Geo-blocked') ||
+    (responseStatus === 403 && (msg.includes('geo') || body.includes('restricted')))
+  ) {
+    return 'geo_blocked'
+  }
+
+  // Auth required
+  if (responseStatus === 401 || msg.includes('401') || msg.includes('Unauthorized')) {
+    return 'auth_required'
+  }
+
+  // Endpoint gone
+  if (responseStatus === 404 || msg.includes('404') || msg.includes('Not Found')) {
+    return 'endpoint_gone'
+  }
+
+  // WAF / Cloudflare block
+  if (
+    isHtml ||
+    (responseStatus === 403 && hasCfRay) ||
+    msg.includes('Access Denied') ||
+    msg.includes('WAF') ||
+    msg.includes('Cloudflare') ||
+    (responseStatus === 403 && body.includes('challenge'))
+  ) {
+    return 'waf_blocked'
+  }
+
+  // Generic 403 (likely geo or WAF)
+  if (responseStatus === 403 || msg.includes('403')) {
+    return 'geo_blocked'
+  }
+
+  return 'unknown'
+}
+
+// ============================================
+// VPS Proxy Support
+// ============================================
+
+const VPS_PROXY_URL = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP || ''
+
+export async function fetchViaVpsProxy<T = unknown>(
+  targetUrl: string,
+  opts?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: unknown
+    timeoutMs?: number
+  }
+): Promise<T> {
+  if (!VPS_PROXY_URL) {
+    throw new Error('VPS_PROXY_URL not configured')
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), opts?.timeoutMs || 30000)
+
+  try {
+    const res = await fetch(VPS_PROXY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+      },
+      body: JSON.stringify({
+        url: targetUrl,
+        method: opts?.method || 'GET',
+        headers: opts?.headers || {},
+        body: opts?.body || null,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      throw new Error(`VPS proxy returned HTTP ${res.status}`)
+    }
+
+    return (await res.json()) as T
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+/**
+ * Smart fetch: direct → VPS proxy fallback
+ * Only falls back to VPS proxy for geo/WAF blocks.
+ */
+export async function fetchWithFallback<T = unknown>(
+  url: string,
+  opts?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: unknown
+    timeoutMs?: number
+    platform?: string
+  }
+): Promise<{ data: T; via: 'direct' | 'vps_proxy' }> {
+  // Try direct first
+  try {
+    const data = await fetchJson<T>(url, opts)
+    return { data, via: 'direct' }
+  } catch (directErr) {
+    const reason = classifyFetchError(directErr)
+
+    // Only fallback to VPS for blockable errors
+    if (
+      (reason === 'geo_blocked' || reason === 'waf_blocked') &&
+      VPS_PROXY_URL
+    ) {
+      dataLogger.warn(
+        `[${opts?.platform || 'fetcher'}] Direct blocked (${reason}), trying VPS proxy for ${url.slice(0, 80)}...`
+      )
+      try {
+        const data = await fetchViaVpsProxy<T>(url, opts)
+        return { data, via: 'vps_proxy' }
+      } catch (proxyErr) {
+        // Both failed — throw with combined context
+        throw new Error(
+          `Direct: ${directErr instanceof Error ? directErr.message : String(directErr)}; ` +
+          `VPS proxy: ${proxyErr instanceof Error ? proxyErr.message : String(proxyErr)}`
+        )
+      }
+    }
+
+    // Not a blockable error, re-throw original
+    throw directErr
+  }
+}
 
 // ============================================
 // Types
@@ -165,7 +347,7 @@ export async function upsertTraders(
       .from('trader_profiles_v2')
       .upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
 
-    if (profileErr) console.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
+    if (profileErr) dataLogger.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
 
     // Upsert trader_snapshots_v2
     const snapshots = batch.map((t) => ({
@@ -199,7 +381,7 @@ export async function upsertTraders(
       .insert(snapshots)
 
     if (snapErr && !snapErr.message.includes('duplicate key') && !snapErr.message.includes('violates unique constraint')) {
-      console.warn(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
+      dataLogger.warn(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
       return { saved, error: snapErr.message }
     }
 
@@ -240,7 +422,18 @@ export async function fetchJson<T = unknown>(
     })
 
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status} from ${url}`)
+      // Read body for diagnostic context
+      const body = await res.text().catch(() => '')
+      const isHtml = body.trimStart().startsWith('<')
+      const hasCfRay = !!res.headers.get('cf-ray')
+
+      let detail = `HTTP ${res.status} from ${url}`
+      if (isHtml) detail += ' (response is HTML, likely WAF/CF block)'
+      if (hasCfRay) detail += ` [cf-ray: ${res.headers.get('cf-ray')}]`
+      if (res.status === 451) detail += ' (geo-blocked)'
+      if (res.status === 401) detail += ' (auth required)'
+
+      throw new Error(detail)
     }
 
     return (await res.json()) as T

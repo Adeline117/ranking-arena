@@ -78,11 +78,11 @@ async function fetchLeaderboard(period: string): Promise<DydxLeaderboardEntry[]>
     const proxyUrl = `${PROXY_URL}/dydx/leaderboard?period=${dydxPeriod}&limit=${TARGET}`
     const data = await fetchJson<DydxLeaderboardResponse>(proxyUrl, { timeoutMs: 20000 })
     if (data?.leaderboard && data.leaderboard.length > 0) {
-      console.warn(`[dydx] Proxy success: ${data.leaderboard.length} entries`)
+      logger.warn(`[dydx] Proxy success: ${data.leaderboard.length} entries`)
       return data.leaderboard
     }
   } catch (err) {
-    console.warn(`[dydx] Proxy failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[dydx] Proxy failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Try direct API
@@ -90,11 +90,11 @@ async function fetchLeaderboard(period: string): Promise<DydxLeaderboardEntry[]>
     const directUrl = `${INDEXER_URL}/v4/leaderboard/pnl?period=${dydxPeriod}&limit=${TARGET}`
     const data = await fetchJson<DydxLeaderboardResponse>(directUrl, { timeoutMs: 20000 })
     if (data?.leaderboard && data.leaderboard.length > 0) {
-      console.warn(`[dydx] Direct API success: ${data.leaderboard.length} entries`)
+      logger.warn(`[dydx] Direct API success: ${data.leaderboard.length} entries`)
       return data.leaderboard
     }
   } catch (err) {
-    console.warn(`[dydx] Direct API failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[dydx] Direct API failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   return []
@@ -223,7 +223,7 @@ async function fetchPeriod(
   await enrichTraders(topTraders)
 
   // Phase 3: Save equity curves and stats_detail for ALL periods (extended from 90D only)
-  console.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
+  logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
   let curvesSaved = 0
   let statsSaved = 0
   for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
@@ -253,7 +253,7 @@ async function fetchPeriod(
     const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
     if (s) statsSaved++
   }
-  console.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
+  logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
 
   // Build TraderData
   const capturedAt = new Date().toISOString()
@@ -293,17 +293,24 @@ export async function fetchDydx(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    try {
-      result.periods[period] = await fetchPeriod(supabase, period)
-    } catch (err) {
-      result.periods[period] = {
-        total: 0,
-        saved: 0,
-        error: err instanceof Error ? err.message : String(err),
+  try {
+    for (const period of periods) {
+      try {
+        result.periods[period] = await fetchPeriod(supabase, period)
+      } catch (err) {
+        result.periods[period] = {
+          total: 0,
+          saved: 0,
+          error: err instanceof Error ? err.message : String(err),
+        }
       }
+      if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
     }
-    if (periods.indexOf(period) < periods.length - 1) await sleep(2000)
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

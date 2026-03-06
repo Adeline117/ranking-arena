@@ -166,6 +166,8 @@ STRIPE_SECRET_KEY
 - `/add-connector` - Add new exchange connector
 - `/debug-cron` - Troubleshoot cron job failures
 - `/code-review` - Review code for style/security
+- `/implement-spec specs/xxx.md` - Autonomously implement a feature spec
+- `/weekly-self-check` - Analyze pipeline/anomalies/code quality, auto-fix low-risk issues
 
 ## Agent Work Rules (MUST FOLLOW)
 
@@ -212,8 +214,40 @@ node scripts/pipeline-health-check.mjs --fix
 
 ### 自动验证 Hooks
 `.claude/settings.json` 配置了自动验证：
+- **PreToolUse**: 写入 migrations/.env/payment 文件时自动拦截，需确认
 - **PostToolUse**: 每次修改 `.ts` 文件后自动运行 TypeScript 检查
-- **Stop**: 完成任务前自动运行 `npm run type-check`
+- **Stop**: 完成任务前自动运行 `npm run type-check` + `npm test`
+
+### Spec-Driven Development
+```bash
+# 1. Write a spec file
+cp specs/_template.md specs/my-feature.md
+# Edit specs/my-feature.md with requirements + acceptance criteria
+
+# 2. Run it
+/implement-spec specs/my-feature.md
+# Agent implements autonomously, commits after each criterion
+```
+
+### OpenClaw Autonomous Operations (Mac Mini)
+- **Health Monitor**: Every 30 min, checks `/api/health/pipeline`, alerts via Telegram
+- **Daily Report**: 8 AM, pipeline success rates + anomaly summary
+- **Auto-Fix**: On pipeline failure, opens Claude Code session to diagnose and fix
+- **Weekly Self-Check**: Fridays, runs `/weekly-self-check` to find and fix recurring issues
+- Scripts: `scripts/openclaw/`
+
+### Pipeline Logging
+Cron jobs use `PipelineLogger` to record execution:
+```typescript
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
+const log = await PipelineLogger.start('my-job-name')
+try {
+  const count = await doWork()
+  await log.success(count)
+} catch (error) {
+  await log.error(error)
+}
+```
 
 ### Fetcher 修复流程
 1. 运行 `node scripts/pipeline-health-check.mjs` 识别问题
@@ -228,6 +262,15 @@ node scripts/pipeline-health-check.mjs --fix
 | `scripts/check-data-distribution.mjs` | 数据分布检查 |
 | `scripts/backfill-sharpe-ratio.mjs` | Sharpe ratio 回填 |
 
+## Self-Improvement Rules
+Every Friday (via `/weekly-self-check` or OpenClaw cron):
+- Read `pipeline_job_stats` view: find lowest success rates, recurring errors
+- Read `trader_anomalies`: find data quality patterns
+- Check Sentry/logs for repeated errors
+- Write findings to `/docs/IMPROVEMENTS.md`
+- Auto-fix low-risk issues (error handling, logging, <3 files)
+- Flag high-risk changes for human confirmation
+
 ## Quick Reference
 | Action | Command/Location |
 |--------|------------------|
@@ -238,3 +281,6 @@ node scripts/pipeline-health-check.mjs --fix
 | Check logs | `vercel logs` or Sentry dashboard |
 | Fix pipeline | `/fix-pipeline` |
 | Deploy preview | `/deploy-staging` |
+| Implement feature | `/implement-spec specs/xxx.md` |
+| Weekly self-check | `/weekly-self-check` |
+| Health dashboard | `/admin/monitoring` |

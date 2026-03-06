@@ -184,44 +184,58 @@ export class MEXCConnector extends BaseConnectorLegacy implements LegacyPlatform
   ): Promise<MEXCLeaderboardResponse> {
     const url = `${this.baseUrl}/rank/list`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': this.getRandomUA(),
-      },
-      body: JSON.stringify({
-        pageNum: page,
-        pageSize,
-        periodType: sortPeriod,
-        sortField: 'ROI',
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': this.getRandomUA(),
+        },
+        body: JSON.stringify({
+          pageNum: page,
+          pageSize,
+          periodType: sortPeriod,
+          sortField: 'ROI',
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`MEXC leaderboard API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`MEXC leaderboard API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchTraderDetailApi(traderUid: string): Promise<{ code: number; data: MEXCTraderEntry }> {
     const url = `${this.baseUrl}/trader/detail?traderUid=${traderUid}`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`MEXC trader detail API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`MEXC trader detail API returned ${response.status}`);
+      }
+
+      const json: { code: number; data: MEXCTraderEntry } = await response.json();
+      if (json.code !== 0 || !json.data) {
+        throw new Error(`MEXC trader detail API returned no data for ${traderUid}`);
+      }
+
+      return json;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const json: { code: number; data: MEXCTraderEntry } = await response.json();
-    if (json.code !== 0 || !json.data) {
-      throw new Error(`MEXC trader detail API returned no data for ${traderUid}`);
-    }
-
-    return json;
   }
 
   private getRandomUA(): string {
