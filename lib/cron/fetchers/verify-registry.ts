@@ -286,16 +286,18 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  okx_web3: () =>
-    verifyEndpoint(
-      'okx_web3',
-      'https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=MARGIN&page=1',
-      {
-        headers: { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
-        validateResponse: (d: ApiResponse) =>
-          d?.code === '0' && Array.isArray(d?.data) && d.data.length > 0,
-      }
-    ),
+  // OKX Web3: try SWAP first (more data), fall back to MARGIN
+  okx_web3: async () => {
+    const base = 'https://www.okx.com/api/v5/copytrading/public-lead-traders'
+    const opts = {
+      headers: { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
+      validateResponse: (d: ApiResponse) =>
+        d?.code === '0' && Array.isArray(d?.data) && d.data.length > 0,
+    }
+    const result = await verifyEndpoint('okx_web3', `${base}?instType=SWAP&page=1`, opts)
+    if (result.healthy) return result
+    return verifyEndpoint('okx_web3', `${base}?instType=MARGIN&page=1`, opts)
+  },
 
   htx: () =>
     verifyEndpoint(
@@ -480,47 +482,17 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // Crypto.com behind Cloudflare challenge — uses VPS proxy fallback
+  // Crypto.com: no public API — requires stealth browser (CF challenge + session cookies)
   cryptocom: () =>
-    verifyEndpointWithProxy(
-      'cryptocom',
-      'https://crypto.com/fe-ex-api/copy/leader/list?sort=roi&period=30d&page=1&pageSize=1',
-      {
-        headers: {
-          Referer: 'https://crypto.com/exchange/copy-trading',
-          Origin: 'https://crypto.com',
-        },
-        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
-      }
-    ),
+    skipResult('cryptocom', 'endpoint_gone', 'No public API — requires stealth browser (CF challenge + session cookies)'),
 
-  // Toobit: returns HTML instead of JSON (geo/CF block)
+  // Toobit: CF WAF returns HTML — requires stealth browser
   toobit: () =>
-    verifyEndpoint(
-      'toobit',
-      'https://www.toobit.com/api/v1/copy/leader/rank?sortBy=roi&period=30&page=1&pageSize=1',
-      {
-        headers: {
-          Referer: 'https://www.toobit.com/en-US/copy-trading',
-          Origin: 'https://www.toobit.com',
-        },
-        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
-      }
-    ),
+    skipResult('toobit', 'endpoint_gone', 'CF WAF returns HTML — requires stealth browser'),
 
-  // LBank: CF-protected — uses VPS proxy fallback
+  // LBank: no public API — all endpoints return HTML (CF challenge)
   lbank: () =>
-    verifyEndpointWithProxy(
-      'lbank',
-      'https://www.lbank.com/api/copy-trading/trader/ranking?period=30d&page=1&size=1&sort=roi',
-      {
-        headers: {
-          Referer: 'https://www.lbank.com/copy-trading',
-          Origin: 'https://www.lbank.com',
-        },
-        validateResponse: (d: ApiResponse) => !!d?.data,
-      }
-    ),
+    skipResult('lbank', 'endpoint_gone', 'No public API — all endpoints return HTML (CF challenge)'),
 
   // =============================================
   // CEX — Discontinued
