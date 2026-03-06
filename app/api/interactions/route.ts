@@ -3,7 +3,10 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
 import { z } from 'zod'
+
+const logger = createLogger('api:interactions')
 
 const InteractionSchema = z.object({
   action: z.enum(['like', 'dislike', 'view', 'share', 'bookmark', 'follow', 'unfollow']),
@@ -62,7 +65,8 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json({ ok: true }, { status: 201 })
-  } catch {
+  } catch (error) {
+    logger.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:admin-reports')
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +24,8 @@ export async function GET(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ data })
-  } catch {
+  } catch (error) {
+    logger.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -49,7 +53,8 @@ export async function POST(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
-  } catch {
+  } catch (error) {
+    logger.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

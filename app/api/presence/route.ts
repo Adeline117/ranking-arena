@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:presence')
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +25,8 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
 
     return NextResponse.json({ ok: true })
-  } catch {
+  } catch (error) {
+    logger.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

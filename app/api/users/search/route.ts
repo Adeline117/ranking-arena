@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:users-search')
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +27,8 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     return NextResponse.json({ users: users || [] })
-  } catch {
+  } catch (error) {
+    logger.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
