@@ -21,15 +21,19 @@ export interface DexTrader {
 const THEGRAPH_API_KEY = process.env.THEGRAPH_API_KEY || ''
 
 // Subgraph IDs on TheGraph decentralized network
+// Uniswap V3: official deployment per docs.uniswap.org
 const UNISWAP_V3_SUBGRAPH_ID = '5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV'
-const PANCAKESWAP_SUBGRAPH_ID = 'A1fADqYS1xgeRbGQ4hMDqbqrGacEi4WsMJvMiKvHcEq2'
+// PancakeSwap V3 BSC: updated per developer.pancakeswap.finance (old ID was removed)
+const PANCAKESWAP_SUBGRAPH_ID = 'Hv1GncLY5docZoGtXjo4kwbTvxm3MAhVZqBZE4sUT9eZ'
+
+const THEGRAPH_GATEWAY = 'https://gateway.thegraph.com/api'
 
 export const UNISWAP_V3_SUBGRAPH = THEGRAPH_API_KEY
-  ? `https://gateway-arbitrum.network.thegraph.com/api/${THEGRAPH_API_KEY}/subgraphs/id/${UNISWAP_V3_SUBGRAPH_ID}`
+  ? `${THEGRAPH_GATEWAY}/${THEGRAPH_API_KEY}/subgraphs/id/${UNISWAP_V3_SUBGRAPH_ID}`
   : ''
 
 export const PANCAKESWAP_SUBGRAPH = THEGRAPH_API_KEY
-  ? `https://gateway-arbitrum.network.thegraph.com/api/${THEGRAPH_API_KEY}/subgraphs/id/${PANCAKESWAP_SUBGRAPH_ID}`
+  ? `${THEGRAPH_GATEWAY}/${THEGRAPH_API_KEY}/subgraphs/id/${PANCAKESWAP_SUBGRAPH_ID}`
   : ''
 
 // ── GraphQL helpers ──

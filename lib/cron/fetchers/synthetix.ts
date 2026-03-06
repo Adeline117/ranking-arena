@@ -71,7 +71,7 @@ interface GraphQLResponse {
 function getSubgraphUrl(): string | null {
   const apiKey = process.env.THEGRAPH_API_KEY || ''
   if (!apiKey) return null
-  return `https://gateway-arbitrum.network.thegraph.com/api/${apiKey}/subgraphs/id/${SUBGRAPH_ID}`
+  return `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/${SUBGRAPH_ID}`
 }
 
 function toNum(v: string | undefined | null): number {
