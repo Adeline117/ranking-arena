@@ -557,6 +557,12 @@ a:hover {
   color: var(--color-accent-primary);
 }
 
+/* HomeSubNav pill hover */
+.home-subnav-pill:hover {
+  background: var(--color-bg-hover) !important;
+  color: var(--color-text-primary) !important;
+}
+
 /* Unified input focus ring */
 input:focus-visible,
 textarea:focus-visible,

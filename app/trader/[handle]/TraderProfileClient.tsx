@@ -27,6 +27,7 @@ import {
 } from '@/lib/seo'
 
 const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), { ssr: false })
+const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), { ssr: false })
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 const ClaimTraderButton = dynamic(() => import('@/app/components/trader/ClaimTraderButton'), { ssr: false })
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
@@ -306,6 +307,30 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                     traderHandle={traderProfile?.handle || data.handle}
                     delay={0}
                   />
+                )}
+
+                {/* Trading Style Radar */}
+                {(data.profitability_score || data.risk_control_score || data.execution_score) && (
+                  <Box
+                    className="glass-card"
+                    style={{
+                      padding: tokens.spacing[5],
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: tokens.radius.xl,
+                      border: `1px solid ${tokens.colors.border.primary}60`,
+                    }}
+                  >
+                    <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3], textAlign: 'center' }}>
+                      {language === 'zh' ? '交易风格' : 'Trading Style'}
+                    </Text>
+                    <TradingStyleRadar
+                      profitability={data.profitability_score}
+                      riskControl={data.risk_control_score}
+                      execution={data.execution_score}
+                      winRate={data.win_rate}
+                      maxDrawdown={data.max_drawdown}
+                    />
+                  </Box>
                 )}
 
                 {/* Claim this profile CTA */}
