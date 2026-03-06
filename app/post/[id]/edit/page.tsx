@@ -303,7 +303,7 @@ export default function EditPostPage() {
     }
 
     loadPost()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; loadPost defined inside effect
   }, [postId, userId, router, showToast])
 
   // 处理图片上传

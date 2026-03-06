@@ -81,7 +81,7 @@ const fetcher = async (url: string) => {
 export default function TopTraders() {
   const { t } = useLanguage()
 
-  const { data, error, isLoading } = useSWR<{ traders: Trader[] }>(
+  const { data, error, isLoading, mutate } = useSWR<{ traders: Trader[] }>(
     '/api/sidebar/top-traders',
     fetcher,
     {
@@ -105,7 +105,13 @@ export default function TopTraders() {
         </div>
       ) : error ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {t('sidebarLoadFailed')}
+          <div>{t('sidebarLoadFailed')}</div>
+          <button
+            onClick={() => mutate()}
+            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+          >
+            {t('retry') || 'Retry'}
+          </button>
         </div>
       ) : traders.length === 0 ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>

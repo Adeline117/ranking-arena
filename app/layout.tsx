@@ -175,9 +175,9 @@ export default function RootLayout({
 
         {/* Non-critical CSS loaded via AsyncStylesheets component after hydration */}
         <noscript>
-          {/* eslint-disable-next-line @next/next/no-css-tags */}
+          {/* eslint-disable-next-line @next/next/no-css-tags -- noscript fallback requires static CSS link tags */}
           <link rel="stylesheet" href="/styles/responsive.css" />
-          {/* eslint-disable-next-line @next/next/no-css-tags */}
+          {/* eslint-disable-next-line @next/next/no-css-tags -- noscript fallback requires static CSS link tags */}
           <link rel="stylesheet" href="/styles/animations.css" />
         </noscript>
 

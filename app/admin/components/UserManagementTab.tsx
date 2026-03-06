@@ -34,7 +34,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
     if (accessToken) {
       loadUsers(1, search, filter)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- search is intentionally excluded; only filter changes should auto-reload
   }, [accessToken, loadUsers, filter])
 
   const handleSearch = () => {

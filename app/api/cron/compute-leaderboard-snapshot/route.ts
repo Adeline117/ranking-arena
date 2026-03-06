@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -25,12 +26,14 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin()
   const start = Date.now()
+  const plog = await PipelineLogger.start('compute-leaderboard-snapshot')
 
   try {
     const { data, error } = await supabase.rpc('compute_leaderboard_snapshot')
 
     if (error) {
       logger.error('Failed to compute leaderboard snapshot', { error: error.message })
+      await plog.error(new Error(error.message))
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -38,12 +41,14 @@ export async function GET(req: NextRequest) {
     const insertedCount = data ?? 0
     logger.info('Leaderboard snapshot computed', { insertedCount, duration })
 
+    await plog.success(insertedCount)
     return NextResponse.json({
       ok: true,
       insertedCount,
       duration,
     })
   } catch (err: unknown) {
+    await plog.error(err instanceof Error ? err : new Error(String(err)))
     logger.error('Compute leaderboard snapshot failed', { error: (err instanceof Error ? err.message : String(err)) })
     return NextResponse.json({ error: (err instanceof Error ? err.message : String(err)) }, { status: 500 })
   }

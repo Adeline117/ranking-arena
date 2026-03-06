@@ -30,7 +30,7 @@ export class KucoinFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const pageNo = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       `https://www.kucoin.com/_api/copy-trade/leader/public/list?pageNo=${pageNo}&pageSize=${limit}&orderBy=ROI&period=${WINDOW_MAP[window]}`,
       { method: 'GET' }
     )
@@ -49,7 +49,7 @@ export class KucoinFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const _rawProfile = await this.request<any>(
+    const _rawProfile = await this.request<Record<string, unknown>>(
       `https://www.kucoin.com/_api/copy-trade/leader/public/detail?uid=${traderKey}`,
       { method: 'GET' }
     )
@@ -71,7 +71,7 @@ export class KucoinFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const _rawSnap = await this.request<any>(
+    const _rawSnap = await this.request<Record<string, unknown>>(
       `https://www.kucoin.com/_api/copy-trade/leader/public/detail?uid=${traderKey}&period=${WINDOW_MAP[window]}`,
       { method: 'GET' }
     )

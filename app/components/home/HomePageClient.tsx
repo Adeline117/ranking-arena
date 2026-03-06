@@ -41,7 +41,7 @@ export default function HomePageClient() {
     if (urlTimeRange && ['90D', '30D', '7D'].includes(urlTimeRange) && urlTimeRange !== activeTimeRange) {
       changeTimeRange(urlTimeRange)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to sync URL param; changeTimeRange and activeTimeRange are initial values only
   }, []) // Only run once on mount
 
   // Custom handler to update both state and URL

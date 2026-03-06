@@ -58,7 +58,7 @@ export default function FollowListModal({
         abortControllerRef.current.abort()
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadUsers is defined in closure, not a stable ref
   }, [isOpen, handle, type])
 
   // Focus trap + escape key

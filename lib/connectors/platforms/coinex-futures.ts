@@ -42,7 +42,7 @@ export class CoinexFuturesConnector extends BaseConnector {
     }
 
     const page = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       `https://www.coinex.com/res/copy-trading/traders?page=${page}&limit=${limit}&sort_by=roi&period=${window}`,
       { method: 'GET' }
     )
@@ -62,7 +62,7 @@ export class CoinexFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const _rawProfile = await this.request<any>(
+    const _rawProfile = await this.request<Record<string, unknown>>(
       `https://www.coinex.com/res/copy-trading/trader/${traderKey}/detail`,
       { method: 'GET' }
     )
@@ -102,7 +102,7 @@ export class CoinexFuturesConnector extends BaseConnector {
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
     }
 
-    const _rawSnap = await this.request<any>(
+    const _rawSnap = await this.request<Record<string, unknown>>(
       `https://www.coinex.com/res/copy-trading/trader/${traderKey}/detail?period=${window}`,
       { method: 'GET' }
     )

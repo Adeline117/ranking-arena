@@ -198,7 +198,7 @@ export function useHotPageData() {
     } finally {
       setLoadingPosts(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [showToast, language, accessToken])
 
   useEffect(() => {
@@ -444,7 +444,7 @@ export function useHotPageData() {
     } finally {
       setTranslating(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [translationCache, showToast])
 
   // Track whether this modal was opened via navigation
@@ -536,7 +536,7 @@ export function useHotPageData() {
         translateContent(openPost.id, openPost.body, language)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-translate when language changes; openPost and translateContent are stable refs
   }, [language])
 
   // Submit comment

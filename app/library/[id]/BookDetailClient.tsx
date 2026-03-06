@@ -130,7 +130,7 @@ export default function BookDetailClient({
           .catch(err => console.warn('[BookDetailClient] fetch failed', err))
       }
     }).catch(() => { /* Intentionally swallowed: session check non-critical for book detail */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; id/supabase are stable, session state initialized here
   }, [])
 
   const getAuthHeaders = useCallback((): Record<string, string> => {

@@ -220,7 +220,7 @@ function HotContent() {
     } finally {
       setLoadingPosts(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [showToast, language, accessToken])
 
   useEffect(() => {
@@ -470,7 +470,7 @@ function HotContent() {
     } finally {
       setTranslating(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [translationCache, showToast])
 
   // Track whether this modal was opened via navigation
@@ -562,7 +562,7 @@ function HotContent() {
         translateContent(openPost.id, openPost.body, language)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-translate when language changes; openPost and translateContent are stable refs
   }, [language])
 
   // Submit comment

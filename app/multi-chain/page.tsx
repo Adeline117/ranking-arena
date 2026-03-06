@@ -22,11 +22,13 @@ export default function MultiChainPage() {
   const [data, setData] = useState<MultiChainResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastAddress, setLastAddress] = useState<string | null>(null)
 
   const handleAnalyze = useCallback(async (address: string) => {
     setIsLoading(true)
     setError(null)
     setData(null)
+    setLastAddress(address)
 
     try {
       const res = await fetch(`/api/multi-chain/${encodeURIComponent(address)}`)
@@ -96,8 +98,30 @@ export default function MultiChainPage() {
           color: 'var(--color-accent-error)',
           fontSize: tokens.typography.fontSize.sm,
           marginBottom: tokens.spacing[4],
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: tokens.spacing[3],
         }}>
-          {error}
+          <span>{error}</span>
+          {lastAddress && (
+            <button
+              onClick={() => handleAnalyze(lastAddress)}
+              style={{
+                padding: '6px 16px',
+                borderRadius: 8,
+                border: '1px solid var(--color-accent-error)',
+                background: 'transparent',
+                color: 'var(--color-accent-error)',
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 

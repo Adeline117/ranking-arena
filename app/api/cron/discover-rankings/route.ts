@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -55,8 +56,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const plog = await PipelineLogger.start('discover-rankings')
+
   try {
     if (!SUPABASE_KEY) {
+      await plog.error(new Error('Service not configured'))
       return NextResponse.json({ error: 'Service not configured' }, { status: 500 });
     }
 
@@ -104,6 +108,8 @@ export async function GET(request: Request) {
     // Also release any stale locks
     await supabase.rpc('release_stale_locks');
 
+    await plog.success(jobs.length, { blocked: Array.from(blockedPlatforms) })
+
     return NextResponse.json({
       message: `Created ${jobs.length} discovery jobs`,
       blocked: Array.from(blockedPlatforms),
@@ -111,6 +117,7 @@ export async function GET(request: Request) {
     });
   } catch (error: unknown) {
     logger.error('[cron/discover] Error:', error);
+    await plog.error(error)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

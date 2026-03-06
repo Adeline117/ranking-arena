@@ -144,7 +144,7 @@ export function VoteButton({
     } finally {
       setIsVoting(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [address, spaceId, proposalId, choice, signTypedDataAsync, onVoted])
 
   if (!isConnected) {

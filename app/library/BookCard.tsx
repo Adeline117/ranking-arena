@@ -102,7 +102,7 @@ const BookCard = memo(function BookCard({ item, priority = false }: BookCardProp
             background: tokens.colors.accent.brandMuted, color: tokens.colors.accent.brand,
             fontWeight: 600, letterSpacing: '0.03em',
           }}>
-            {CATEGORY_I18N_KEYS[item.category] ? t(CATEGORY_I18N_KEYS[item.category] as any) : item.category}
+            {CATEGORY_I18N_KEYS[item.category] ? t(CATEGORY_I18N_KEYS[item.category]) : item.category}
           </span>
           {item.category === 'event' && item.subcategory && (
             <span style={{
@@ -110,7 +110,7 @@ const BookCard = memo(function BookCard({ item, priority = false }: BookCardProp
               background: item.subcategory === 'hack' ? `${tokens.colors.accent.error}18` : item.subcategory === 'regulation' ? `${tokens.colors.accent.brand}18` : `${tokens.colors.accent.success}18`,
               color: item.subcategory === 'hack' ? tokens.colors.accent.error : item.subcategory === 'regulation' ? tokens.colors.accent.brand : tokens.colors.accent.success,
             }}>
-              {SUBCAT_I18N_KEYS[item.subcategory!] ? t(SUBCAT_I18N_KEYS[item.subcategory!] as any) : item.subcategory}
+              {SUBCAT_I18N_KEYS[item.subcategory!] ? t(SUBCAT_I18N_KEYS[item.subcategory!]) : item.subcategory}
             </span>
           )}
           {/* Permission label moved to cover badge */}

@@ -5,18 +5,29 @@
  * DELETE /api/posts/[id]/comments - 删除评论
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   requireAuth,
   success,
   successWithPagination,
   handleError,
-  validateString,
   validateNumber,
 } from '@/lib/api'
 import { getPostComments, createComment, deleteComment } from '@/lib/data/comments'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+
+// Zod schema for POST (create comment)
+const CreateCommentSchema = z.object({
+  content: z.string().min(1, 'Comment content is required').max(2000, 'Comment must be at most 2000 characters'),
+  parent_id: z.string().uuid().optional().nullable(),
+})
+
+// Zod schema for DELETE (delete comment)
+const DeleteCommentSchema = z.object({
+  comment_id: z.string().uuid('Invalid comment ID'),
+})
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -86,13 +97,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json()
-    const content = validateString(body.content, {
-      required: true,
-      minLength: 1,
-      maxLength: 2000,
-      fieldName: 'comment content',
-    })!
-    const parent_id = validateString(body.parent_id) ?? undefined
+    const parsed = CreateCommentSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+    const { content } = parsed.data
+    const parent_id = parsed.data.parent_id ?? undefined
 
     const comment = await createComment(supabase, user.id, {
       post_id: id,
@@ -115,10 +128,14 @@ export async function DELETE(request: NextRequest, _context: RouteContext) {
     const supabase = getSupabaseAdmin()
 
     const body = await request.json()
-    const commentId = validateString(body.comment_id, {
-      required: true,
-      fieldName: 'comment ID',
-    })!
+    const parsed = DeleteCommentSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+    const commentId = parsed.data.comment_id
 
     await deleteComment(supabase, commentId, user.id)
 

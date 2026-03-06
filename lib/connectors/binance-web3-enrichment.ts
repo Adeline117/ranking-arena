@@ -50,12 +50,12 @@ export class BinanceWeb3Connector extends BaseExchangeConnector {
       if (json.code !== '000000') return []
 
       const items = json.data?.data || []
-      return items.map((item: any) => {
+      return items.map((item: { address?: string; winRate?: string; realizedPnlPercent?: string; realizedPnl?: string; totalTxCnt?: string; addressLabel?: string; addressLogo?: string }) => {
         const address = (item.address || '').toLowerCase()
         let winRate = this.parseNum(item.winRate)
         let roi = this.parseNum(item.realizedPnlPercent)
         const pnl = this.parseNum(item.realizedPnl)
-        const tradesCount = parseInt(item.totalTxCnt) || null
+        const tradesCount = parseInt(item.totalTxCnt || '') || null
 
         // Binance returns decimals → convert to %
         if (winRate != null && winRate > 0 && winRate <= 1) {

@@ -36,7 +36,7 @@ export class BitmartFuturesConnector extends BaseConnector {
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
     }
     const page = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       `https://www.bitmart.com/api/copy-trade/v1/public/trader/list?page=${page}&size=${limit}&sortBy=roi&period=${window}`,
       { method: 'GET' }
     )
@@ -54,7 +54,7 @@ export class BitmartFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const _rawProfile = await this.request<any>(
+    const _rawProfile = await this.request<Record<string, unknown>>(
       `https://www.bitmart.com/api/copy-trade/v1/public/trader/detail?traderId=${traderKey}`,
       { method: 'GET' }
     )
@@ -82,7 +82,7 @@ export class BitmartFuturesConnector extends BaseConnector {
         fetched_at: new Date().toISOString(),
       }
     }
-    const _rawSnap = await this.request<any>(
+    const _rawSnap = await this.request<Record<string, unknown>>(
       `https://www.bitmart.com/api/copy-trade/v1/public/trader/detail?traderId=${traderKey}&period=${window}`,
       { method: 'GET' }
     )

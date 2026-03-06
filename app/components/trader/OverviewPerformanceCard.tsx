@@ -783,7 +783,7 @@ function ScoreBar({
     setAnimatedWidth(0)
     const timer = setTimeout(() => setAnimatedWidth(clampedWidth), Math.max(delay, 16))
     return () => clearTimeout(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- delay is static per render; only re-animate on score change
   }, [clampedWidth])
 
   return (

@@ -230,7 +230,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       } else {
         setHasMore(false)
       }
-    } catch { /* ignore */ } finally { setLoadingMore(false) }
+    } catch { /* Pagination load failed — keep existing messages visible */ } finally { setLoadingMore(false) }
   }
 
   const handleRemoveMember = async (targetId: string) => {
@@ -245,7 +245,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         setMembers(prev => prev.filter(m => m.user_id !== targetId))
         showToast(t('memberRemoved'), 'success')
       }
-    } catch { /* ignore */ }
+    } catch {
+      showToast(t('operationFailed') || 'Operation failed', 'error')
+    }
   }
 
   const handleLeave = async () => {
@@ -260,7 +262,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         showToast(t('leftGroup'), 'success')
         router.push('/inbox')
       }
-    } catch { /* ignore */ }
+    } catch {
+      showToast(t('operationFailed') || 'Operation failed', 'error')
+    }
   }
 
   const handleToggleRole = async (targetId: string, currentRole: string) => {
@@ -272,7 +276,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         body: JSON.stringify({ userId: targetId, role: newRole }),
       })
       setMembers(prev => prev.map(m => m.user_id === targetId ? { ...m, role: newRole } : m))
-    } catch { /* ignore */ }
+    } catch {
+      showToast(t('operationFailed') || 'Operation failed', 'error')
+    }
   }
 
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })

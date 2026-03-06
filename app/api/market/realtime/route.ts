@@ -104,7 +104,7 @@ function handleSSE(request: NextRequest, origin: string | null): Response {
             controller.enqueue(encoder.encode(data))
           })
           .catch(() => {
-            // Silently skip failed updates
+            // Silently skip failed updates to keep stream alive
           })
       }, 3000)
 

@@ -77,7 +77,9 @@ export async function fetchLeaderboardFromDB(
     return result
   } catch (err: unknown) {
     clearTimeout(timer)
-    if ((err as any)?.name === 'AbortError' || (err as any)?.message?.includes('timeout')) {
+    const isTimeout = err instanceof Error &&
+      (err.name === 'AbortError' || err.message.includes('timeout'))
+    if (isTimeout) {
       logger.warn('[getInitialTraders] Timed out — returning empty (ISR will fill on next request)')
     } else {
       logger.error('[getInitialTraders] Error:', err)

@@ -51,7 +51,7 @@ export class BitgetFuturesConnector extends BaseConnector {
     const timeRange = WINDOW_MAP[window]
     const pageNo = Math.floor(offset / limit) + 1
 
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${pageNo}&pageSize=${limit}&sortType=2&timeRange=${timeRange}`,
       { method: 'GET' }
     )
@@ -80,7 +80,7 @@ export class BitgetFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const _rawProfile = await this.request<any>(
+    const _rawProfile = await this.request<Record<string, unknown>>(
       `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}`,
       { method: 'GET' }
     )
@@ -119,7 +119,7 @@ export class BitgetFuturesConnector extends BaseConnector {
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     const timeRange = WINDOW_MAP[window]
 
-    const _rawSnap = await this.request<any>(
+    const _rawSnap = await this.request<Record<string, unknown>>(
       `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}&timeRange=${timeRange}`,
       { method: 'GET' }
     )
@@ -158,7 +158,7 @@ export class BitgetFuturesConnector extends BaseConnector {
   }
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
-    const _rawTs = await this.request<any>(
+    const _rawTs = await this.request<Record<string, unknown>>(
       `https://www.bitget.com/v1/trigger/trace/public/trader/profitList?traderId=${traderKey}`,
       { method: 'GET' }
     )

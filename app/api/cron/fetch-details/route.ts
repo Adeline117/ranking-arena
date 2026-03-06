@@ -39,7 +39,7 @@ import { sleep } from '@/lib/cron/fetchers/shared'
 const logger = createLogger('FetchDetails')
 
 export const runtime = 'nodejs'
-export const preferredRegion = 'sfo1'
+export const preferredRegion = 'hnd1' // Tokyo — avoids exchange geo-blocking
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 

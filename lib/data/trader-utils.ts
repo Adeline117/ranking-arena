@@ -6,6 +6,8 @@
 import { supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('trader-utils')
 import {
   TRADER_SOURCES,
   TRADER_SOURCES_WITH_WEB3,
@@ -73,7 +75,8 @@ export async function findTraderAcrossSources(
     }
 
     return data[0] as TraderSourceRecord
-  } catch (_error) {
+  } catch (error) {
+    logger.warn('findTraderAcrossSources failed', { error: error instanceof Error ? error.message : String(error) })
     return null
   }
 }
@@ -120,7 +123,8 @@ export async function findTradersAcrossSources(
     })
 
     return result
-  } catch (_error) {
+  } catch (error) {
+    logger.warn('findTradersAcrossSources failed', { error: error instanceof Error ? error.message : String(error) })
     return result
   }
 }
@@ -149,7 +153,8 @@ export async function getTraderArenaFollowersCountBatch(
     })
 
     return counts
-  } catch (_error) {
+  } catch (error) {
+    logger.warn('getTraderArenaFollowersCountBatch failed', { error: error instanceof Error ? error.message : String(error) })
     return result
   }
 }

@@ -59,7 +59,7 @@ function buildAuthHeaders(
 
   // Gate.io v4 requires: KEY, SIGN, Timestamp
   // SIGN = HMAC-SHA512(apiSecret, method + '\n' + path + '\n' + query + '\n' + sha512(body) + '\n' + timestamp)
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- crypto is a Node.js built-in; dynamic require avoids bundler issues
   const crypto = require('crypto')
   const timestamp = Math.floor(Date.now() / 1000).toString()
   const bodyHash = crypto.createHash('sha512').update(body).digest('hex')

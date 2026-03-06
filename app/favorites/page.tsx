@@ -106,7 +106,7 @@ export default function FavoritesPage() {
     }
 
     load()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load is defined inside effect; showToast/t are stable refs
   }, [accessToken, authChecked])
 
   const createFolder = async () => {
@@ -129,7 +129,8 @@ export default function FavoritesPage() {
       
       const data = await response.json()
       if (response.ok) {
-        setFolders(prev => [...prev, data.data?.folder])
+        const newFolder = data.data?.folder
+        if (newFolder) setFolders(prev => [...prev, newFolder])
         setNewFolderName('')
         setNewFolderPublic(false)
         setShowCreateForm(false)

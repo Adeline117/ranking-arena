@@ -12,6 +12,10 @@ import { logger } from '@/lib/logger'
 
 // ── Types ──
 
+/** Loose JSON response type for API validation callbacks (replaces `any`) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ApiResponse = Record<string, any>
+
 export interface VerifyResult {
   platform: string
   healthy: boolean
@@ -22,9 +26,6 @@ export interface VerifyResult {
 }
 
 type VerifyFn = () => Promise<VerifyResult>
-
-/** Loose shape for external API responses checked by validators */
-type ApiResponse = Record<string, any>
 
 // ── Helpers ──
 
