@@ -101,24 +101,16 @@ export async function GET(request: NextRequest) {
 
     // Send Telegram alert if degradation detected
     if (warnings.length > 0) {
-      const tgToken = process.env.TELEGRAM_BOT_TOKEN
-      const tgChatId = process.env.TELEGRAM_ALERT_CHAT_ID
-      if (tgToken && tgChatId) {
-        try {
-          await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: tgChatId,
-              text: `🚨 <b>排行榜降级告警</b>\n\n${warnings.join('\n')}`,
-              parse_mode: 'HTML',
-            }),
-          })
-        } catch (e) {
-          logger.error('[compute-leaderboard] Telegram alert failed:', e)
-        }
-      } else {
-        logger.error('[compute-leaderboard] DEGRADATION WARNING:', warnings)
+      try {
+        const { sendTelegramAlert } = await import('@/lib/notifications/telegram')
+        await sendTelegramAlert({
+          level: 'critical',
+          source: 'Leaderboard',
+          title: '排行榜降级告警',
+          message: warnings.join('\n'),
+        })
+      } catch (e) {
+        logger.error('[compute-leaderboard] 告警发送失败:', e)
       }
     }
 
