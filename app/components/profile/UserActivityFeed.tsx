@@ -46,7 +46,7 @@ function getActivityLink(activity: Activity): string {
   }
 }
 
-function ActivityDescription({ activity, t: _t }: { activity: Activity; t: (key: string) => string }) {
+function ActivityDescription({ activity, t }: { activity: Activity; t: (key: string) => string }) {
   const meta = activity.metadata
   const bookTitle = (meta.book_title as string) || ''
   const rating = meta.rating as number | null
@@ -147,7 +147,7 @@ function ActivityDescription({ activity, t: _t }: { activity: Activity; t: (key:
 }
 
 export default function UserActivityFeed({ handle }: { handle: string }) {
-  const { language, t: _t } = useLanguage()
+  const { language, t } = useLanguage()
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(false)

@@ -12,6 +12,8 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import { PionexFuturesDiscoverResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource,
@@ -59,10 +61,11 @@ export class PionexFuturesConnector extends BaseConnector {
     // The CopyBot discovery is entirely UI-based
     try {
       // Attempt internal endpoint (likely won't work)
-      const data = await this.request<{ data?: { bots?: PionexBotEntry[] } }>(
+      const _rawLb = await this.request<{ data?: { bots?: PionexBotEntry[] } }>(
         `https://www.pionex.com/api/v1/copybot/discover`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(PionexFuturesDiscoverResponseSchema, _rawLb, 'pionex-futures/discover')
 
       const bots = data?.data?.bots || []
       const traders: TraderSource[] = bots.map((item) => ({

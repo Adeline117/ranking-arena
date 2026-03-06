@@ -4203,6 +4203,31 @@ instSortReviews: '评价最多',
 // Institutions page - no ratings (机构页-暂无评分)
 instNoRatingsYet: '暂无评分',
 
+// Library i18n migration - remaining isZh patterns
+audioReaderTitle: '朗读模式',
+epubSessionLabel: '本次阅读 ',
+epubRemainingLabel: '预计剩余 ',
+epubAudioModeLabel: '朗读模式',
+epubHighlightsCountSuffix: ' 条',
+epubNoHighlightsMessage: '暂无高亮或笔记。\n选中文字即可添加。',
+readerShortcutsHint: '快捷键: 左右方向键/空格翻页, B 书签, F 全屏',
+bookSubcatHack: '安全事件',
+bookSubcatRegulation: '监管',
+bookSubcatQuote: '人物发言',
+bookSubcatMilestone: '里程碑',
+bookCardFree: '免费',
+bookCardPro: 'Pro',
+bookMonthsAgoShort: '{n}个月前',
+bookReviewWriteReview: '写评价',
+bookReviewLoadMore: '加载更多',
+bookReviewAnonymous: '匿名',
+
+// ProfileBookshelf (个人书架)
+bookshelfSectionTitle: '书架',
+bookshelfBooksCount: '本',
+bookshelfNoBooks: '还没有添加书籍',
+bookshelfViewAllLink: '查看全部',
+
 } as const
 
 export default zh

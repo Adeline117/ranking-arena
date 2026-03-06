@@ -36,17 +36,17 @@ export default function PostDetailClient({ postId }: { postId: string }) {
   }, [postId])
 
   useEffect(() => {
-    supabase
-      .from('posts')
-      .select('id, title, content, author_handle, created_at, updated_at, like_count, comment_count, view_count')
-      .eq('id', postId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setPostData(data as PostData)
-        }
-      })
-      .catch(() => { /* Post fetch non-critical */ })
+    Promise.resolve(
+      supabase
+        .from('posts')
+        .select('id, title, content, author_handle, created_at, updated_at, like_count, comment_count, view_count')
+        .eq('id', postId)
+        .maybeSingle()
+    ).then(({ data }) => {
+      if (data) {
+        setPostData(data as PostData)
+      }
+    }).catch(() => { /* Post fetch non-critical */ })
   }, [postId])
 
   const structuredData = postData ? combineSchemas(

@@ -3,15 +3,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { TTSController, TTSState, splitSentences, getVoices, isChinese } from '@/lib/utils/tts-reader'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type AudioReaderProps = {
   text: string
-  isZh: boolean
   themeIsDark: boolean
   onClose: () => void
 }
 
-export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioReaderProps) {
+export default function AudioReader({ text, themeIsDark, onClose }: AudioReaderProps) {
+  const { t } = useLanguage()
   const [ttsState, setTtsState] = useState<TTSState>('idle')
   const [currentSentence, setCurrentSentence] = useState(0)
   const [rate, setRate] = useState(1.0)
@@ -134,12 +135,12 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
         flexShrink: 0,
       }}>
         <span style={{ fontSize: 16, fontWeight: 700 }}>
-          {isZh ? '朗读模式' : 'Audio Reader'}
+          {t('audioReaderTitle')}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {ttsState === 'playing' && (
             <span style={{ fontSize: 12, opacity: 0.5 }}>
-              {isZh ? '朗读中' : 'Reading'}
+              {t('audioReading')}
               {' '}{currentSentence + 1}/{sentences.length}
             </span>
           )}
@@ -200,7 +201,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
         {/* Voice selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, opacity: 0.5, flexShrink: 0 }}>
-            {isZh ? '语音' : 'Voice'}
+            {t('audioVoice')}
           </span>
           <select
             value={selectedVoiceURI}
@@ -211,23 +212,23 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
               color: panelText, fontSize: 12, outline: 'none',
             }}
           >
-            <option value="">{isZh ? '自动选择' : 'Auto'}</option>
+            <option value="">{t('audioVoiceAuto')}</option>
             {groupedVoices.zh.length > 0 && (
-              <optgroup label={isZh ? '中文' : 'Chinese'}>
+              <optgroup label={t('audioVoiceChinese')}>
                 {groupedVoices.zh.map(v => (
                   <option key={v.voiceURI} value={v.voiceURI}>{voiceLabel(v)}</option>
                 ))}
               </optgroup>
             )}
             {groupedVoices.en.length > 0 && (
-              <optgroup label={isZh ? '英文' : 'English'}>
+              <optgroup label={t('audioVoiceEnglish')}>
                 {groupedVoices.en.map(v => (
                   <option key={v.voiceURI} value={v.voiceURI}>{voiceLabel(v)}</option>
                 ))}
               </optgroup>
             )}
             {groupedVoices.others.length > 0 && (
-              <optgroup label={isZh ? '其他' : 'Other'}>
+              <optgroup label={t('audioVoiceOther')}>
                 {groupedVoices.others.map(v => (
                   <option key={v.voiceURI} value={v.voiceURI}>{voiceLabel(v)}</option>
                 ))}
@@ -239,7 +240,7 @@ export default function AudioReader({ text, isZh, themeIsDark, onClose }: AudioR
         {/* Speed control */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, opacity: 0.5, flexShrink: 0 }}>
-            {isZh ? '速度' : 'Speed'}
+            {t('audioSpeed')}
           </span>
           <input
             type="range" min="0.5" max="3" step="0.1" value={rate}

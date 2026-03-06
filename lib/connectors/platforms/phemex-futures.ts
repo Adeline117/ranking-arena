@@ -31,10 +31,11 @@ export class PhemexFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const page = Math.floor(offset / limit) + 1
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://api.phemex.com/copy-trading/public/traders?page=${page}&pageSize=${limit}&sortBy=roi&sortOrder=desc&period=${window}`,
       { method: 'GET' }
     )
+    const data = warnValidate(PhemexFuturesLeaderboardResponseSchema, _rawLb, 'phemex-futures/leaderboard')
     const list = data?.data?.rows || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
@@ -48,10 +49,11 @@ export class PhemexFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://api.phemex.com/copy-trading/public/trader/${traderKey}/detail`,
       { method: 'GET' }
     )
+    const data = warnValidate(PhemexFuturesDetailResponseSchema, _rawProfile, 'phemex-futures/profile')
     const info = data?.data
     if (!info) return null
 
@@ -68,10 +70,11 @@ export class PhemexFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://api.phemex.com/copy-trading/public/trader/${traderKey}/detail?period=${window}`,
       { method: 'GET' }
     )
+    const data = warnValidate(PhemexFuturesDetailResponseSchema, _rawSnap, 'phemex-futures/snapshot')
     const info = data?.data
     if (!info) return null
 

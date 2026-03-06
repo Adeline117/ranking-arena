@@ -102,7 +102,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
   // Trader data - SWR with server fallback
   const isTrader = !!serverProfile?.traderHandle
-  const { data: traderData } = useSWR<TraderPageData>(
+  const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
     isTrader ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}` : null,
     fetcher,
     {
@@ -296,6 +296,39 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     { key: 'portfolio', label: t('portfolio') },
     /* bookshelf/followers/groups/bookmarks tabs removed per Adeline */
   ]
+
+  // ============================================================
+  // TRADER MODE: loading / error states for SWR trader data
+  // ============================================================
+  const isTraderDataLoading = isTrader && traderLoading && !serverTraderData
+  const isTraderDataError = isTrader && traderError && !traderData
+
+  if (isTraderDataLoading) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <RankingSkeleton />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (isTraderDataError) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav email={email} />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
+          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+            {t('loadFailedRetryMsg')}
+          </Text>
+          <Link href="/" style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontSize: tokens.typography.fontSize.sm }}>
+            {t('backToHome')}
+          </Link>
+        </Box>
+      </Box>
+    )
+  }
 
   // ============================================================
   // TRADER MODE: identical to TraderPageClient layout

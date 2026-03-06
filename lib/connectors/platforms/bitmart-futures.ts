@@ -5,6 +5,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  BitmartFuturesLeaderboardResponseSchema,
+  BitmartFuturesDetailResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -31,10 +36,11 @@ export class BitmartFuturesConnector extends BaseConnector {
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
     }
     const page = Math.floor(offset / limit) + 1
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://www.bitmart.com/api/copy-trade/v1/public/trader/list?page=${page}&size=${limit}&sortBy=roi&period=${window}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BitmartFuturesLeaderboardResponseSchema, _rawLb, 'bitmart-futures/leaderboard')
     const list = data?.data?.list || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
@@ -48,10 +54,11 @@ export class BitmartFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://www.bitmart.com/api/copy-trade/v1/public/trader/detail?traderId=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BitmartFuturesDetailResponseSchema, _rawProfile, 'bitmart-futures/profile')
     const info = data?.data
     if (!info) return null
 
@@ -75,10 +82,11 @@ export class BitmartFuturesConnector extends BaseConnector {
         fetched_at: new Date().toISOString(),
       }
     }
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://www.bitmart.com/api/copy-trade/v1/public/trader/detail?traderId=${traderKey}&period=${window}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BitmartFuturesDetailResponseSchema, _rawSnap, 'bitmart-futures/snapshot')
     const info = data?.data
     if (!info) return null
 

@@ -12,6 +12,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  XtFuturesLeaderboardResponseSchema,
+  XtFuturesDetailResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -62,10 +67,11 @@ export class XtFuturesConnector extends BaseConnector {
 
     try {
       // Attempt to use XT internal API endpoint (may not work without Puppeteer)
-      const data = await this.request<{ data?: { list?: XTLeaderboardEntry[] } }>(
+      const _rawLb = await this.request<{ data?: { list?: XTLeaderboardEntry[] } }>(
         `https://www.xt.com/sapi/v1/copy-trading/leader/list?page=1&pageSize=${limit}&period=${period}&sortBy=roi`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(XtFuturesLeaderboardResponseSchema, _rawLb, 'xt-futures/leaderboard')
 
       const list = data?.data?.list || []
       const traders: TraderSource[] = list.map((item) => ({
@@ -89,10 +95,11 @@ export class XtFuturesConnector extends BaseConnector {
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     try {
-      const data = await this.request<{ data?: XTLeaderboardEntry }>(
+      const _rawProfile = await this.request<{ data?: XTLeaderboardEntry }>(
         `https://www.xt.com/sapi/v1/copy-trading/leader/${traderKey}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(XtFuturesDetailResponseSchema, _rawProfile, 'xt-futures/profile')
 
       const info = data?.data
       if (!info) return null
@@ -130,10 +137,11 @@ export class XtFuturesConnector extends BaseConnector {
     const period = periodMap[window] || '30'
 
     try {
-      const data = await this.request<{ data?: XTLeaderboardEntry }>(
+      const _rawSnap = await this.request<{ data?: XTLeaderboardEntry }>(
         `https://www.xt.com/sapi/v1/copy-trading/leader/${traderKey}?period=${period}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(XtFuturesDetailResponseSchema, _rawSnap, 'xt-futures/snapshot')
 
       const info = data?.data
       if (!info) {

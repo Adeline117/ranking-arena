@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/hooks/useSWR'
@@ -106,7 +107,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
   const traderApiUrl = platform
     ? `/api/traders/${encodeURIComponent(data.source_trader_id || data.handle)}?source=${encodeURIComponent(platform)}`
     : `/api/traders/${encodeURIComponent(data.source_trader_id || data.handle)}`
-  const { data: traderData } = useSWR<TraderPageData>(
+  const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
     traderApiUrl,
     fetcher,
     {
@@ -126,6 +127,36 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
   const traderEquityCurve = traderData?.equityCurve
   const traderAssetBreakdown = traderData?.assetBreakdown
   const traderSimilar = traderData?.similarTraders ?? []
+
+  // Loading state: only when SWR is loading AND no server fallback
+  const isInitialLoading = traderLoading && !serverTraderData
+  if (isInitialLoading) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <RankingSkeleton />
+        </Box>
+      </Box>
+    )
+  }
+
+  // Error state: only when SWR errored AND no cached data available
+  if (traderError && !traderData) {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+        <TopNav />
+        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
+          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+            {t('loadFailedRetryMsg')}
+          </Text>
+          <Link href="/rankings" style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontSize: tokens.typography.fontSize.sm }}>
+            {t('leaderboardBreadcrumb')}
+          </Link>
+        </Box>
+      </Box>
+    )
+  }
 
   // Structured data for SEO
   const structuredData = combineSchemas(

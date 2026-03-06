@@ -50,14 +50,15 @@ function formatValue(notional: number): string {
   return `$${notional.toFixed(0)}`
 }
 
-function timeAgo(ts: number, isZh = true): string {
+function timeAgo(ts: number, tFn: (key: string) => string): string {
   const sec = Math.floor((Date.now() - ts) / 1000)
-  if (sec < 1) return isZh ? '刚刚' : 'now'
-  if (sec < 60) return isZh ? `${sec}秒前` : `${sec}s ago`
-  return isZh ? `${Math.floor(sec / 60)}分前` : `${Math.floor(sec / 60)}m ago`
+  if (sec < 1) return tFn('tradeJustNow')
+  if (sec < 60) return `${sec}${tFn('tradeSecondsAgo')}`
+  return `${Math.floor(sec / 60)}${tFn('tradeMinutesAgo')}`
 }
 
-const TradeRow = memo(function TradeRow({ trade, index, isZh }: { trade: NormalizedTrade; index: number; isZh: boolean }) {
+const TradeRow = memo(function TradeRow({ trade, index }: { trade: NormalizedTrade; index: number }) {
+  const { t } = useLanguage()
   const isBuy = trade.side === 'buy'
   const sideColor = isBuy ? tokens.colors.accent.success : tokens.colors.accent.error
   const isEven = index % 2 === 0
@@ -128,7 +129,7 @@ const TradeRow = memo(function TradeRow({ trade, index, isZh }: { trade: Normali
 
       {/* 时间 */}
       <span style={{ color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 9 }}>
-        {timeAgo(trade.timestamp, isZh)}
+        {timeAgo(trade.timestamp, t as (key: string) => string)}
       </span>
     </div>
   )
@@ -148,8 +149,7 @@ function ConnectionDot({ connected }: { connected: boolean }) {
 }
 
 export default function LiveTradesFeed() {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const { trades, connected, error } = useMarketFeed({ maxTrades: 150 })
   const containerRef = useRef<HTMLDivElement>(null)
   const [paused, setPaused] = useState(false)
