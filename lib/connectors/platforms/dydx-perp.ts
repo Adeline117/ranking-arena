@@ -99,7 +99,7 @@ export class DydxPerpConnector extends BaseConnector {
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     const period = WINDOW_MAP[window]
     const url = this.buildUrl('/v4/leaderboard/pnl', { period, limit: String(limit) })
-    const _rawLb = await this.request<any>(url, { method: 'GET' })
+    const _rawLb = await this.request<Record<string, unknown>>(url, { method: 'GET' })
     const data = warnValidate(DydxLeaderboardResponseSchema, _rawLb, 'dydx-perp/leaderboard')
     const rankings = data?.pnlRanking || []
 
@@ -135,14 +135,14 @@ export class DydxPerpConnector extends BaseConnector {
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     // Get subaccount for equity (through proxy if configured)
     const subUrl = this.buildUrl(`/v4/addresses/${traderKey}/subaccounts/0`)
-    const _rawSub = await this.request<any>(subUrl, { method: 'GET' })
+    const _rawSub = await this.request<Record<string, unknown>>(subUrl, { method: 'GET' })
     const subData = warnValidate(DydxSubaccountResponseSchema, _rawSub, 'dydx-perp/subaccount')
     const equity = Number(subData?.subaccount?.equity) || 0
 
     // Get PnL from leaderboard for this address (through proxy if configured)
     const period = WINDOW_MAP[window]
     const lbUrl = this.buildUrl('/v4/leaderboard/pnl', { period, limit: '1000' })
-    const _rawLb2 = await this.request<any>(lbUrl, { method: 'GET' })
+    const _rawLb2 = await this.request<Record<string, unknown>>(lbUrl, { method: 'GET' })
     const lbData = warnValidate(DydxLeaderboardResponseSchema, _rawLb2, 'dydx-perp/snapshot-leaderboard')
     const rankings = lbData?.pnlRanking || []
     const entry = rankings.find((r: Record<string, unknown>) => String(r.address) === traderKey)
@@ -182,7 +182,7 @@ export class DydxPerpConnector extends BaseConnector {
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
     const tsUrl = this.buildUrl('/v4/historical-pnl', { address: traderKey, subaccountNumber: '0', limit: '90' })
-    const _rawTs = await this.request<any>(tsUrl, { method: 'GET' })
+    const _rawTs = await this.request<Record<string, unknown>>(tsUrl, { method: 'GET' })
     const data = warnValidate(DydxHistoricalPnlResponseSchema, _rawTs, 'dydx-perp/timeseries')
     const historicalPnl = data?.historicalPnl || []
 

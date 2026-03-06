@@ -31,7 +31,7 @@ export class PhemexFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const page = Math.floor(offset / limit) + 1
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       `https://api.phemex.com/copy-trading/public/traders?page=${page}&pageSize=${limit}&sortBy=roi&sortOrder=desc&period=${window}`,
       { method: 'GET' }
     )
@@ -49,7 +49,7 @@ export class PhemexFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const _rawProfile = await this.request<any>(
+    const _rawProfile = await this.request<Record<string, unknown>>(
       `https://api.phemex.com/copy-trading/public/trader/${traderKey}/detail`,
       { method: 'GET' }
     )
@@ -70,7 +70,7 @@ export class PhemexFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const _rawSnap = await this.request<any>(
+    const _rawSnap = await this.request<Record<string, unknown>>(
       `https://api.phemex.com/copy-trading/public/trader/${traderKey}/detail?period=${window}`,
       { method: 'GET' }
     )

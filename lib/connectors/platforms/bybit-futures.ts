@@ -51,7 +51,7 @@ export class BybitFuturesConnector extends BaseConnector {
     const timeRange = WINDOW_MAP[window]
     const page = Math.floor(offset / limit) + 1
 
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`,
       { method: 'GET' }
     )
@@ -80,7 +80,7 @@ export class BybitFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const _rawProfile = await this.request<any>(
+    const _rawProfile = await this.request<Record<string, unknown>>(
       `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark=${traderKey}`,
       { method: 'GET' }
     )
@@ -119,7 +119,7 @@ export class BybitFuturesConnector extends BaseConnector {
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     const timeRange = WINDOW_MAP[window]
 
-    const _rawSnap = await this.request<any>(
+    const _rawSnap = await this.request<Record<string, unknown>>(
       `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark=${traderKey}&timeRange=${timeRange}`,
       { method: 'GET' }
     )
@@ -158,7 +158,7 @@ export class BybitFuturesConnector extends BaseConnector {
   }
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
-    const _rawTs = await this.request<any>(
+    const _rawTs = await this.request<Record<string, unknown>>(
       `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-history-pnl?leaderMark=${traderKey}`,
       { method: 'GET' }
     )

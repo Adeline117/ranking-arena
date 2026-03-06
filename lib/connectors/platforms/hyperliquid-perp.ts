@@ -42,7 +42,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     const timeWindow = window === '7d' ? 'day' : window === '30d' ? 'month' : 'allTime'
 
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       'https://api.hyperliquid.xyz/info',
       {
         method: 'POST',
@@ -88,7 +88,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     // Get clearinghouse state for current equity
-    const _rawState = await this.request<any>(
+    const _rawState = await this.request<Record<string, unknown>>(
       'https://api.hyperliquid.xyz/info',
       {
         method: 'POST',
@@ -135,7 +135,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
     // Get user fills for trade history
-    const _rawFills = await this.request<any>(
+    const _rawFills = await this.request<Record<string, unknown>>(
       'https://api.hyperliquid.xyz/info',
       {
         method: 'POST',

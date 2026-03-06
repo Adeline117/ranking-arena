@@ -48,7 +48,7 @@ export class GmxPerpConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     // Use the REST leaderboard endpoint
-    const _rawLb = await this.request<any>(
+    const _rawLb = await this.request<Record<string, unknown>>(
       `${this.getSubgraphUrl()}/leaderboard/pnl?period=${window}&limit=${limit}`,
       { method: 'GET' }
     )
@@ -85,7 +85,7 @@ export class GmxPerpConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const _rawSnap = await this.request<any>(
+    const _rawSnap = await this.request<Record<string, unknown>>(
       `${this.getSubgraphUrl()}/leaderboard/pnl?period=${window}&limit=1000`,
       { method: 'GET' }
     )
@@ -163,7 +163,7 @@ export class GmxPerpConnector extends BaseConnector {
         }
       }`
 
-      const _rawSubgraph = await this.request<any>(
+      const _rawSubgraph = await this.request<Record<string, unknown>>(
         'https://subgraph.satsuma-prod.com/gmx/synthetics-arbitrum-stats/api',
         {
           method: 'POST',
