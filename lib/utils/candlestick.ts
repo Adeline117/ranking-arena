@@ -42,7 +42,7 @@ export function convertTimeframe(
       ? candles
       : batchCandles(candles, fromSec, toSec)
 
-  return result.map(([time, open, high, low, close, volume]) => ({
+  return result.map(([time, open, high, low, close, volume]: [number, number, number, number, number, number]) => ({
     time,
     open,
     high,
