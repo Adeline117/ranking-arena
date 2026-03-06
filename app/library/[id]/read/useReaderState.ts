@@ -123,7 +123,7 @@ export function useReaderState() {
       })
       .catch(() => setError(t('readerLoadFailed')))
       .finally(() => setLoading(false))
-  }, [id, language]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, language]) // eslint-disable-line react-hooks/exhaustive-deps -- t/supabase are stable; fetch only when id or language changes
 
   // Check membership
   useEffect(() => {
@@ -197,7 +197,8 @@ export function useReaderState() {
 
     async function loadPdf() {
       try {
-        const pdfjsLib = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs' as any)
+        // @ts-expect-error -- CDN dynamic import
+        const pdfjsLib = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs')
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
         const loadingTask = pdfjsLib.getDocument({ url: url!, disableAutoFetch: false, disableStream: false })
         loadingTask.onProgress = (progress: { loaded: number; total: number }) => {
@@ -237,7 +238,7 @@ export function useReaderState() {
 
     loadPdf()
     return () => { cancelled = true }
-  }, [book, contentMode, language, id, extractToc]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [book, contentMode, language, id, extractToc]) // eslint-disable-line react-hooks/exhaustive-deps -- t/loadProgressFromServer are stable; re-run only on content source changes
 
   // ─── Load HTML/text content ────────────────────────────────────────
   useEffect(() => {
@@ -300,7 +301,7 @@ export function useReaderState() {
 
     loadHtml()
     return () => { cancelled = true }
-  }, [book, contentMode, language, id, fontSize]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [book, contentMode, language, id, fontSize]) // eslint-disable-line react-hooks/exhaustive-deps -- t/loadProgressFromServer are stable; re-run only on content source or fontSize changes
 
   // ─── Render PDF page ──────────────────────────────────────────────
   const renderCurrentPage = useCallback(async () => {

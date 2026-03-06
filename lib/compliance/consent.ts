@@ -1,4 +1,12 @@
 import { logger } from '@/lib/logger'
+
+/** Extend Window to include GA disable flags */
+declare global {
+  interface Window {
+    [gaDisableKey: `ga-disable-${string}`]: boolean | undefined
+  }
+}
+
 /**
  * 用户同意状态管理
  * 管理 Cookie 和数据处理同意
@@ -218,7 +226,6 @@ class ConsentManager {
     // 分析追踪
     if (!this.state.analytics) {
       // 禁用 Google Analytics
-      // @ts-expect-error - GA disable flag on window
       window['ga-disable-GA_MEASUREMENT_ID'] = true
       
       // 通知 analytics 模块
@@ -230,7 +237,6 @@ class ConsentManager {
       } catch { /* intentionally empty */ }
     } else {
       // 启用分析
-      // @ts-expect-error - GA disable flag on window
       delete window['ga-disable-GA_MEASUREMENT_ID']
       
       try {

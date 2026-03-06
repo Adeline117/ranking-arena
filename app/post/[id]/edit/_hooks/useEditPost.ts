@@ -85,7 +85,7 @@ export function useEditPost() {
     }
 
     loadPost()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; loadPost defined inside effect
   }, [postId, userId, router, showToast])
 
   // Handle image upload

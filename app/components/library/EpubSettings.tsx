@@ -81,7 +81,7 @@ export function EpubSettings({
                   border: 'none', cursor: 'default', fontSize: 14,
                   fontFamily: css, fontWeight: 600, transition: 'all 0.15s',
                 }}>
-                  {t(labelKeys[key] as any)}
+                  {t(labelKeys[key])}
                 </button>
               )
             })}
@@ -108,7 +108,7 @@ export function EpubSettings({
                   border: 'none', cursor: 'pointer', fontSize: 12,
                   fontWeight: 600, transition: 'all 0.15s',
                 }}>
-                  {t(labelKeys[lh] as any)}
+                  {t(labelKeys[lh])}
                 </button>
               )
             })}
@@ -135,7 +135,7 @@ export function EpubSettings({
                   border: 'none', cursor: 'pointer', fontSize: 12,
                   fontWeight: 600, transition: 'all 0.15s',
                 }}>
-                  {t(labelKeys[pm] as any)}
+                  {t(labelKeys[pm])}
                 </button>
               )
             })}

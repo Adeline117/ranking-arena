@@ -138,10 +138,11 @@ export async function getWeightedPosts(
     user_profiles.weight as author_weight
   `
 
-  let query = supabase
+  let query = (supabase
     .from('posts')
-    .select(selectFields)
-    // @ts-expect-error -- custom join not in Supabase types
+    .select(selectFields) as unknown as ReturnType<SupabaseClient['from']> & {
+      join: (table: string, opts: Record<string, string>) => ReturnType<SupabaseClient['from']>
+    })
     .join('user_profiles', { column: 'author_id', on: 'id', type: 'left' })
     .join('groups', { column: 'group_id', on: 'id', type: 'left' })
     .range(offset, offset + limit - 1)

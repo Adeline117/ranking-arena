@@ -105,7 +105,7 @@ export default function ConversationPage({ params }: { params: Promise<{ convers
     if (userId && conversationId && accessToken) {
       msgHook.loadMessages(userId, conversationId, accessToken)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- msgHook.loadMessages is stable, excluding to avoid infinite loop
   }, [conversationId, userId, accessToken])
 
   // Load settings

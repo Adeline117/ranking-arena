@@ -132,8 +132,8 @@ async function saveTraders(traders: MexcTrader[], period: string) {
       })
       
       saved++
-    } catch (_error) {
-      // 忽略重复错误
+    } catch {
+      // Expected: Supabase upsert may throw on duplicate key conflict; safe to skip
     }
   }
   

@@ -61,8 +61,8 @@ export async function GET(request: Request) {
             const data = `data: ${JSON.stringify(prices)}\n\n`
             controller.enqueue(encoder.encode(data))
           }
-        } catch (_err) {
-          // skip errors, keep streaming
+        } catch {
+          // Skip individual tick errors to keep SSE stream alive; next interval will retry
         }
       }
 

@@ -288,7 +288,7 @@ export default function ResourcesClient({
           {CATEGORY_KEYS.map(catKey => {
             const active = category === catKey
             const count = categoryCounts[catKey]
-            const label = t(CATEGORY_I18N[catKey] as any)
+            const label = t(CATEGORY_I18N[catKey])
             const displayLabel = count != null && count > 0
               ? `${label} (${formatCount(count)})`
               : label
@@ -338,7 +338,7 @@ export default function ResourcesClient({
             }}
           >
             {SORT_KEYS.map(sortKey => (
-              <option key={sortKey} value={sortKey}>{t(SORT_I18N[sortKey] as any)}</option>
+              <option key={sortKey} value={sortKey}>{t(SORT_I18N[sortKey])}</option>
             ))}
           </select>
         </div>

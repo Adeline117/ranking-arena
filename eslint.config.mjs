@@ -15,7 +15,7 @@ const eslintConfig = defineConfig([
       // Disabled rules (legacy patterns)
       // ----------------------------------------
       // This repo contains many pragmatic uses of `any` across UI + scripts.
-      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-explicit-any": "warn",
 
       // These rules are helpful, but currently too strict for the codebase patterns.
       "react-hooks/set-state-in-effect": "off",
