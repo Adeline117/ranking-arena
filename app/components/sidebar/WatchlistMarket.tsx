@@ -160,7 +160,15 @@ export default function WatchlistMarket() {
         </div>
       ) : swrError ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          Failed to load market data
+          {t('sidebarLoadFailedShort')}
+        </div>
+      ) : coins.length === 0 ? (
+        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+          {t('noData')}
+        </div>
+      ) : coins.length === 0 ? (
+        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+          {t('noDataAvailable')}
         </div>
       ) : (
         <>

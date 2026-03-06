@@ -18,6 +18,12 @@ import type {
   TimeseriesPoint,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  BinanceLeaderboardResponseSchema,
+  BinanceTraderDetailWrapperSchema,
+  BinancePerformanceResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // Binance API types (internal)
@@ -98,10 +104,11 @@ export class BinanceFuturesConnector extends BaseConnectorLegacy implements Lega
     const maxPages = 5; // 100 traders per window
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await this.requestWithCircuitBreaker<BinanceLeaderboardResponse>(
+      const raw = await this.requestWithCircuitBreaker<BinanceLeaderboardResponse>(
         () => this.fetchLeaderboardPage(period, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
+      const data = warnValidate(BinanceLeaderboardResponseSchema, raw, 'binance/leaderboard') as unknown as BinanceLeaderboardResponse;
 
       if (!data.success || !data.data?.length) break;
 
@@ -293,13 +300,14 @@ export class BinanceFuturesConnector extends BaseConnectorLegacy implements Lega
       }
 
       const json = await response.json();
-      if (!json.success || !json.data) {
+      const validated = warnValidate(BinanceTraderDetailWrapperSchema, json, 'binance/trader-detail');
+      if (!validated.success || !validated.data) {
         throw new Error(
           `Binance trader detail API returned no data for ${encryptedUid}`,
         );
       }
 
-      return json.data;
+      return validated.data as unknown as BinanceTraderDetail;
     } finally {
       clearTimeout(timeout);
     }
@@ -335,7 +343,8 @@ export class BinanceFuturesConnector extends BaseConnectorLegacy implements Lega
       }
 
       const json = await response.json();
-      return json.data || [];
+      const validated = warnValidate(BinancePerformanceResponseSchema, json, 'binance/performance');
+      return validated.data || [];
     } finally {
       clearTimeout(timeout);
     }

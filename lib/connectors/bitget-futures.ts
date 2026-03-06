@@ -17,6 +17,12 @@ import type {
   SnapshotMetricsLegacy,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  BitgetLeaderboardResponseSchema,
+  BitgetTraderDetailResponseSchema,
+  BitgetPerformanceResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // Bitget API types
@@ -100,10 +106,11 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
     const maxPages = 5;
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await this.requestWithCircuitBreaker<BitgetLeaderboardResponse>(
+      const raw = await this.requestWithCircuitBreaker<BitgetLeaderboardResponse>(
         () => this.fetchLeaderboardPage(sortPeriod, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
+      const data = warnValidate(BitgetLeaderboardResponseSchema, raw, 'bitget/leaderboard') as unknown as BitgetLeaderboardResponse;
 
       if (data.code !== '0' || !data.data?.list?.length) break;
 
@@ -129,10 +136,11 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
     traderKey: string,
     window: RankingWindow,
   ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
-    const detail = await this.requestWithCircuitBreaker<BitgetTraderDetailResponse>(
+    const rawDetail = await this.requestWithCircuitBreaker<BitgetTraderDetailResponse>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
+    const detail = warnValidate(BitgetTraderDetailResponseSchema, rawDetail, 'bitget/trader-detail') as unknown as BitgetTraderDetailResponse;
 
     const d = detail.data || {} as BitgetTraderDetailResponse['data'];
 
@@ -171,10 +179,11 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.requestWithCircuitBreaker<BitgetTraderDetailResponse>(
+    const rawProfile = await this.requestWithCircuitBreaker<BitgetTraderDetailResponse>(
       () => this.fetchTraderDetailApi(traderKey),
       { label: `fetchTraderProfile(${traderKey})` },
     );
+    const detail = warnValidate(BitgetTraderDetailResponseSchema, rawProfile, 'bitget/trader-detail') as unknown as BitgetTraderDetailResponse;
 
     const d = detail.data || {} as BitgetTraderDetailResponse['data'];
 
@@ -301,7 +310,8 @@ export class BitgetFuturesConnector extends BaseConnectorLegacy implements Legac
       if (!response.ok) return [];
 
       const json = await response.json();
-      return json.data?.list || [];
+      const validated = warnValidate(BitgetPerformanceResponseSchema, json, 'bitget/performance');
+      return validated.data?.list || [];
     } finally {
       clearTimeout(timeout);
     }
