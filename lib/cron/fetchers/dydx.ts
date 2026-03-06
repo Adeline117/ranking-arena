@@ -131,7 +131,8 @@ async function fetchHistoricalPnl(address: string): Promise<EquityCurvePoint[]> 
         const roi = initialPnl !== 0 ? (pnlDiff / Math.abs(initialPnl)) * 100 : 0
         return { ...point, roi }
       })
-  } catch {
+  } catch (err) {
+    logger.warn(`[${SOURCE}] Error: ${err instanceof Error ? err.message : String(err)}`)
     return []
   }
 }
