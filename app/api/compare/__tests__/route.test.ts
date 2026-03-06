@@ -131,7 +131,7 @@ describe('GET /api/compare', () => {
 
     const req = new NextRequest('http://localhost/api/compare?ids=t1,t2')
     const res = await GET(req)
-    const body = await res.json()
+    await res.json()
 
     expect(res.status).toBe(401)
   })
@@ -163,7 +163,7 @@ describe('GET /api/compare', () => {
   it('returns 400 when ids is empty after parsing', async () => {
     const req = new NextRequest('http://localhost/api/compare?ids=')
     const res = await GET(req)
-    const body = await res.json()
+    await res.json()
 
     expect(res.status).toBe(400)
   })
