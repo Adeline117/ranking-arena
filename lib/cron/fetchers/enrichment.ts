@@ -57,6 +57,12 @@ export {
   fetchBitgetStatsDetail,
 } from './enrichment-bitget'
 
+// HTX
+export {
+  fetchHtxEquityCurve,
+  fetchHtxStatsDetail,
+} from './enrichment-htx'
+
 // DEX (Hyperliquid + GMX)
 export {
   fetchHyperliquidPositionHistory,
