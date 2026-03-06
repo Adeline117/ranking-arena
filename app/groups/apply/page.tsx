@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
@@ -14,16 +13,10 @@ import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
-
-type RoleNames = {
-  admin: { zh: string; en: string }
-  member: { zh: string; en: string }
-}
-
-type Rule = {
-  zh: string
-  en: string
-}
+import { AvatarUploadSection } from './components/AvatarUploadSection'
+import { ProGroupOption } from './components/ProGroupOption'
+import { RoleNameSettings } from './components/RoleNameSettings'
+import type { RoleNames, Rule } from './types'
 
 export default function ApplyGroupPage() {
   const _router = useRouter()
@@ -772,285 +765,26 @@ export default function ApplyGroupPage() {
               </Box>
 
               {/* 小组头像 */}
-              <Box>
-                <label style={labelStyle}>
-                  {t('groupAvatar')}
-                </label>
-                <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                  {t('avatarUploadDesc')}
-                </Text>
-                
-                {avatarUrl && (
-                  <Box style={{ marginBottom: tokens.spacing[3] }}>
-                    <Box
-                      style={{
-                        position: 'relative',
-                        display: 'inline-block',
-                      }}
-                    >
-                      <Image
-                        src={avatarUrl}
-                        alt="Avatar preview"
-                        width={120}
-                        height={120}
-                        style={{
-                          width: 120,
-                          height: 120,
-                          borderRadius: tokens.radius.lg,
-                          objectFit: 'cover',
-                          border: ('1px solid ' + tokens.colors.border.primary),
-                        }}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none'
-                        }}
-                        unoptimized
-                      />
-                      <Button aria-label="Close"
-                        type="button"
-                        variant="text"
-                        size="sm"
-                        onClick={() => setAvatarUrl('')}
-                        style={{
-                          position: 'absolute',
-                          top: -8,
-                          right: -8,
-                          padding: tokens.spacing[1],
-                          minWidth: 'auto',
-                          width: 24,
-                          height: 24,
-                          borderRadius: '50%',
-                          background: tokens.colors.accent.error,
-                          color: tokens.colors.white,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: 'none',
-                        }}
-                      >
-                        ×
-                      </Button>
-                    </Box>
-                  </Box>
-                )}
-
-                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                  <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                      onChange={handleImageUpload}
-                      style={{ display: 'none' }}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      style={{ flexShrink: 0 }}
-                    >
-                      {uploading ? t('uploadingImage') : t('uploadImage')}
-                    </Button>
-                    <Box style={{ flex: 1, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                      <Box
-                        style={{
-                          flex: 1,
-                          height: 1,
-                          background: tokens.colors.border.primary,
-                        }}
-                      />
-                      <Text size="xs" color="tertiary" style={{ whiteSpace: 'nowrap' }}>
-                        {t('orWord')}
-                      </Text>
-                      <Box
-                        style={{
-                          flex: 1,
-                          height: 1,
-                          background: tokens.colors.border.primary,
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                  <input
-                    type="url"
-                    value={avatarUrl}
-                    onChange={(e) => setAvatarUrl(e.target.value)}
-                    placeholder="https://example.com/avatar.png"
-                    style={inputStyle}
-                  />
-                </Box>
-              </Box>
+              <AvatarUploadSection
+                avatarUrl={avatarUrl}
+                setAvatarUrl={setAvatarUrl}
+                uploading={uploading}
+                fileInputRef={fileInputRef}
+                onImageUpload={handleImageUpload}
+              />
 
               {/* Pro 专属小组选项 */}
-              {isPro && (
-                <Box
-                  style={{
-                    padding: tokens.spacing[4],
-                    background: 'var(--color-pro-glow)',
-                    borderRadius: tokens.radius.lg,
-                    border: '1px solid var(--color-pro-gradient-start)',
-                  }}
-                >
-                  <Box style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[3] }}>
-                    <Box
-                      onClick={() => setIsPremiumOnly(!isPremiumOnly)}
-                      style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: tokens.radius.sm,
-                        border: isPremiumOnly 
-                          ? '2px solid var(--color-pro-gradient-start)' 
-                          : '2px solid var(--color-border-secondary)',
-                        background: isPremiumOnly ? 'var(--color-pro-gradient-start)' : 'transparent',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                        marginTop: 2,
-                        transition: 'all 0.2s',
-                      }}
-                    >
-                      {isPremiumOnly && (
-                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--color-on-accent)" strokeWidth="3">
-                          <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </Box>
-                    <Box style={{ flex: 1 }}>
-                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
-                        <Text weight="bold" style={{ color: 'var(--color-pro-gradient-start)' }}>
-                          {t('proExclusiveGroup')}
-                        </Text>
-                        <Box
-                          style={{
-                            padding: '2px 6px',
-                            borderRadius: tokens.radius.full,
-                            background: 'var(--color-pro-badge-bg)',
-                            fontSize: 10,
-                            fontWeight: 700,
-                            color: tokens.colors.white,
-                          }}
-                        >
-                          Pro
-                        </Box>
-                      </Box>
-                      <Text size="sm" color="secondary" style={{ lineHeight: 1.5 }}>
-                        {t('proExclusiveGroupDesc')}
-                      </Text>
-                    </Box>
-                  </Box>
-                </Box>
-              )}
-
-              {/* 非 Pro 用户提示 */}
-              {!isPro && (
-                <Box
-                  style={{
-                    padding: tokens.spacing[4],
-                    background: 'var(--color-bg-secondary)',
-                    borderRadius: tokens.radius.lg,
-                    border: '1px solid var(--color-border-primary)',
-                  }}
-                >
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                    <Box
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: tokens.radius.md,
-                        background: 'var(--color-pro-glow)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <svg width={18} height={18} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start)">
-                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                      </svg>
-                    </Box>
-                    <Box style={{ flex: 1 }}>
-                      <Text size="sm" weight="semibold" style={{ marginBottom: 2 }}>
-                        {t('upgradeProForGroups')}
-                      </Text>
-                      <Text size="xs" color="tertiary">
-                        {t('proGroupDescFree')}
-                      </Text>
-                    </Box>
-                    <Link href="/pricing" style={{ textDecoration: 'none' }}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        style={{
-                          background: 'var(--color-pro-glow)',
-                          border: '1px solid var(--color-pro-gradient-start)',
-                          color: 'var(--color-pro-gradient-start)',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {t('upgrade')}
-                      </Button>
-                    </Link>
-                  </Box>
-                </Box>
-              )}
+              <ProGroupOption
+                isPro={isPro}
+                isPremiumOnly={isPremiumOnly}
+                setIsPremiumOnly={setIsPremiumOnly}
+              />
 
               {/* 角色称呼设置 */}
-              <Box>
-                <Text weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                  {t('roleNameSettings')}
-                </Text>
-                <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-                  {t('roleNameSettingsDesc')}
-                </Text>
-
-                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-                  <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
-                    <Text size="sm" color="secondary">
-                      {t('adminRole')}
-                    </Text>
-                    <input
-                      type="text"
-                      value={roleNames.admin.zh}
-                      onChange={(e) => setRoleNames({ ...roleNames, admin: { ...roleNames.admin, zh: e.target.value } })}
-                      placeholder={t('adminRoleZhPlaceholder')}
-                      style={{ ...inputStyle, padding: tokens.spacing[2] }}
-                      maxLength={20}
-                    />
-                    <input
-                      type="text"
-                      value={roleNames.admin.en}
-                      onChange={(e) => setRoleNames({ ...roleNames, admin: { ...roleNames.admin, en: e.target.value } })}
-                      placeholder="English (e.g., Leader)"
-                      style={{ ...inputStyle, padding: tokens.spacing[2] }}
-                      maxLength={20}
-                    />
-                  </Box>
-
-                  <Box style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: tokens.spacing[2], alignItems: 'center' }}>
-                    <Text size="sm" color="secondary">
-                      {t('groupMember')}
-                    </Text>
-                    <input
-                      type="text"
-                      value={roleNames.member.zh}
-                      onChange={(e) => setRoleNames({ ...roleNames, member: { ...roleNames.member, zh: e.target.value } })}
-                      placeholder={t('memberRoleZhPlaceholder')}
-                      style={{ ...inputStyle, padding: tokens.spacing[2] }}
-                      maxLength={20}
-                    />
-                    <input
-                      type="text"
-                      value={roleNames.member.en}
-                      onChange={(e) => setRoleNames({ ...roleNames, member: { ...roleNames.member, en: e.target.value } })}
-                      placeholder="English (e.g., Disciple)"
-                      style={{ ...inputStyle, padding: tokens.spacing[2] }}
-                      maxLength={20}
-                    />
-                  </Box>
-                </Box>
-              </Box>
+              <RoleNameSettings
+                roleNames={roleNames}
+                setRoleNames={setRoleNames}
+              />
 
               {error && (
                 <Box

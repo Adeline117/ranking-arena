@@ -64,6 +64,18 @@
 - [x] Orphaned trader_sources cleanup script
 - [x] OpenClaw health monitor + auto-fix
 
+## Recently Completed (Session 2026-03-06b)
+
+### Observability & Logging
+- [x] Correlation ID system: `lib/api/correlation.ts` using AsyncLocalStorage
+- [x] Middleware integration: `withApiMiddleware` wraps handlers in correlation context, adds X-Correlation-ID header
+- [x] Logger auto-injection: every log line includes `[cid:xxx]` from AsyncLocalStorage
+- [x] Structured JSON logging: production server-side emits single-line JSON (`{level, msg, ts, logger, correlationId, ...}`)
+
+### Verified Already Complete
+- [x] Loading skeletons: 30+ page-level skeletons with shimmer animation, DataStateWrapper component
+- [x] pipeline_logs migration: confirmed present in Supabase production
+
 ## In Progress
 _(Nothing — all tasks completed or verified as already done)_
 
@@ -97,7 +109,8 @@ Legend: ✅ Complete | 🔄 In Progress | ❌ Blocked | - Not Needed
 - Last updated: 2026-03-06
 - Massive batch: all P0/P1 + most P2 tasks completed
 - 13 cron jobs now have PipelineLogger (was 2)
-- Pipeline_logs migration exists but needs to be run on Supabase
+- Pipeline_logs migration confirmed in Supabase production
 - N+1 audit: no issues found (already batched/parallelized)
 - 36+ indexes on trader_snapshots, no missing indexes identified
-- Next: run pipeline_logs migration, set up Telegram bot, configure OpenClaw on Mac Mini
+- Correlation ID + structured JSON logging added for full observability
+- Next: set up Telegram bot, configure OpenClaw on Mac Mini

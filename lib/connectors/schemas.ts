@@ -12,6 +12,9 @@
  */
 
 import { z } from 'zod'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('connector-schemas')
 
 // ============================================
 // Validation helper
@@ -32,7 +35,7 @@ export function warnValidate<T>(
       .slice(0, 3)
       .map(i => `${i.path.join('.')}: ${i.message}`)
       .join('; ')
-    console.warn(`[connector:${context}] Response validation warning: ${issues}`)
+    logger.warn(`[${context}] Response validation warning: ${issues}`)
     return data as T
   }
   return result.data

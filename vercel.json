@@ -139,6 +139,46 @@
     {
       "path": "/api/cron/check-enrichment-freshness",
       "schedule": "15 */6 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=binance_futures&limit=200",
+      "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=bybit&limit=200",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=bitget_futures&limit=200",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=okx_futures&limit=200",
+      "schedule": "30 5 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=mexc&limit=200",
+      "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=kucoin&limit=200",
+      "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=htx_futures&limit=200",
+      "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=bingx&limit=200",
+      "schedule": "30 9 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=coinex&limit=200",
+      "schedule": "30 10 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=lbank&limit=200",
+      "schedule": "30 11 * * *"
     }
   ],
   "headers": [
