@@ -3528,7 +3528,9 @@ const en = {
     bookLoadMore: 'Load more',
     bookSimilar: 'Similar Books',
     bookAnonymous: 'Anonymous',
-typing: 'typing...',
+    typing: 'typing...',
+    selected: 'Selected',
+    next: 'Next',
 
 // Filter
 grade: 'Grade',

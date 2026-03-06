@@ -394,10 +394,10 @@ const nextConfig: NextConfig = {
     const cspDirectives = [
       "default-src 'self'",
       `script-src 'self' 'unsafe-inline' ${process.env.NODE_ENV === 'development' ? "'unsafe-eval'" : ''} https://js.stripe.com https://challenges.cloudflare.com`,
-      "style-src 'self' 'unsafe-inline' blob: https://fonts.googleapis.com",
-      "style-src-elem 'self' 'unsafe-inline' blob: https://fonts.googleapis.com",
+      "style-src 'self' 'unsafe-inline' blob:",
+      "style-src-elem 'self' 'unsafe-inline' blob:",
       "img-src 'self' data: blob: https: http:",
-      "font-src 'self' https://fonts.gstatic.com",
+      "font-src 'self'",
       "connect-src 'self' blob: https://*.supabase.co https://*.stripe.com https://*.sentry.io https://*.ingest.us.sentry.io wss://*.supabase.co https://api.coingecko.com",
       "frame-src 'self' https://js.stripe.com https://challenges.cloudflare.com",
       "frame-ancestors 'none'",

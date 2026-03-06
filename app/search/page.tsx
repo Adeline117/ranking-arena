@@ -241,7 +241,7 @@ function SearchContent() {
         abortControllerRef.current.abort()
       }
     }
-  }, [query, t, showToast]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [query, t, showToast])  
 
   const getHref = (result: SearchResult) => {
     if (result.type === 'library') return `/library/${result.id}`

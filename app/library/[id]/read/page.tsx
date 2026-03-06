@@ -382,7 +382,7 @@ export default function ReadPage() {
     } else {
       setNeedsUpgrade(false)
     }
-  }, [isPremium, premiumLoading, book]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [isPremium, premiumLoading, book])  
 
   // Bookshelf prompt after 2 min
   useEffect(() => {
