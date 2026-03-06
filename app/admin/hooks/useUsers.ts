@@ -120,7 +120,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
     } finally {
       setActionLoading(prev => ({ ...prev, [userId]: false }))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setUsers/setActionLoading use updater form
   }, [accessToken, showToast])
 
   const unbanUser = useCallback(async (userId: string) => {
@@ -156,7 +156,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
     } finally {
       setActionLoading(prev => ({ ...prev, [userId]: false }))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setUsers/setActionLoading use updater form
   }, [accessToken, showToast])
 
   return {

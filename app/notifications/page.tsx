@@ -208,8 +208,7 @@ export default function NotificationsPage() {
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ notification_id: notification.id }),
-      }).catch(() => {
-        // 回滚
+      }).catch(() => { // eslint-disable-line no-restricted-syntax -- optimistic UI: rollback on failure
         setNotifications((prev) =>
           prev.map((n) => (n.id === notification.id ? { ...n, read: false } : n))
         )

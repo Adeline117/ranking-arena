@@ -64,7 +64,7 @@ export default function ThemeToggle() {
 
       transition.finished.then(() => {
         setAnimating(false)
-      }).catch(() => {
+      }).catch(() => { // eslint-disable-line no-restricted-syntax -- view transition may abort; ensure animating state resets
         setAnimating(false)
       })
 
