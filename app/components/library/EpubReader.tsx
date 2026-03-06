@@ -517,7 +517,7 @@ export default function EpubReader({
         renditionRef.current = null
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- heavy init effect; theme/font changes applied via separate useEffect
   }, [url, bookId])
 
   // ─── Apply theme/font changes ──────────────────────────────────
@@ -551,7 +551,7 @@ export default function EpubReader({
     if (goToHref && renditionRef.current) {
       renditionRef.current.display(goToHref)
     }
-  }, [goToHref])
+  }, [goToHref]) // eslint-disable-line react-hooks/exhaustive-deps -- renditionRef is a stable ref
 
   // ─── Navigation ────────────────────────────────────────────────
   const goNext = useCallback(() => { renditionRef.current?.next() }, [])

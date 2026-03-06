@@ -237,7 +237,7 @@ export default function FlashNewsPage() {
     if (news.length > 0) {
       translateNewsContent(news)
     }
-  }, [news, language]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [news, language]) // eslint-disable-line react-hooks/exhaustive-deps -- translateNewsContent changes on every render; only trigger on news/language change
 
   // Clear translation cache on language change
   useEffect(() => {
