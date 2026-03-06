@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -27,6 +27,7 @@ import {
 } from '@/lib/seo'
 
 const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), { ssr: false })
+const TradingStyleRadar = dynamic(() => import('@/app/components/trader/TradingStyleRadar'), { ssr: false })
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 const ClaimTraderButton = dynamic(() => import('@/app/components/trader/ClaimTraderButton'), { ssr: false })
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
@@ -83,6 +84,20 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
+
+  // Sticky mini header on mobile — appears when scrolled past main header
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [showMiniHeader, setShowMiniHeader] = useState(false)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => setShowMiniHeader(!entry.isIntersecting),
+      { threshold: 0 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
 
   // Tabs
   const urlTab = searchParams.get('tab')
@@ -195,7 +210,25 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           { label: displayName },
         ]} />
 
+        {/* Sticky mini header for mobile */}
+        <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>
+          <div className="mini-avatar" style={{ background: 'var(--color-bg-tertiary)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+            {data.avatar_url ? (
+              <img src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt="" width={28} height={28} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              displayName.charAt(0).toUpperCase()
+            )}
+          </div>
+          <span className="mini-name">{displayName}</span>
+          {data.roi != null && (
+            <span className="mini-roi" style={{ color: data.roi >= 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
+              {data.roi >= 0 ? '+' : ''}{(data.roi * 100).toFixed(1)}%
+            </span>
+          )}
+        </div>
+
         {/* Trader Header */}
+        <div ref={headerRef}>
         <TraderHeader
           handle={traderProfile?.handle || data.handle}
           displayName={displayName}
@@ -212,6 +245,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           rank={data.rank ?? null}
           currentUserId={currentUserId}
         />
+        </div>
 
         {/* Tabs */}
         <TraderTabs
@@ -273,6 +307,30 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
                     traderHandle={traderProfile?.handle || data.handle}
                     delay={0}
                   />
+                )}
+
+                {/* Trading Style Radar */}
+                {(data.profitability_score || data.risk_control_score || data.execution_score) && (
+                  <Box
+                    className="glass-card"
+                    style={{
+                      padding: tokens.spacing[5],
+                      background: tokens.colors.bg.secondary,
+                      borderRadius: tokens.radius.xl,
+                      border: `1px solid ${tokens.colors.border.primary}60`,
+                    }}
+                  >
+                    <Text size="sm" weight="bold" style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3], textAlign: 'center' }}>
+                      {language === 'zh' ? '交易风格' : 'Trading Style'}
+                    </Text>
+                    <TradingStyleRadar
+                      profitability={data.profitability_score}
+                      riskControl={data.risk_control_score}
+                      execution={data.execution_score}
+                      winRate={data.win_rate}
+                      maxDrawdown={data.max_drawdown}
+                    />
+                  </Box>
                 )}
 
                 {/* Claim this profile CTA */}
