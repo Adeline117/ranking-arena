@@ -108,7 +108,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: nextjs-build
           path: .next

@@ -201,13 +201,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download Android AAB
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: android-release-aab
           path: ./artifacts/android
 
       - name: Download iOS IPA
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ios-release-ipa
           path: ./artifacts/ios
