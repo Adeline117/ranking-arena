@@ -82,23 +82,23 @@ export async function GET(request: Request) {
         const level: 'critical' | 'warning' = isCritical ? 'critical' : 'warning'
 
         await sendAlert({
-          title: `${isCritical ? 'CRITICAL' : 'WARNING'}: ${result.platform} API down`,
+          title: `${result.platform} API 不可用`,
           message: [
-            `Platform: ${result.platform}`,
-            `Consecutive failures: ${consecutiveFails}`,
-            `Failure reason: ${result.failureReason || 'unknown'}`,
-            `Latency: ${result.latencyMs}ms`,
-            result.details ? `Details: ${result.details.slice(0, 200)}` : '',
+            `平台: ${result.platform}`,
+            `连续失败: ${consecutiveFails} 次`,
+            `失败原因: ${result.failureReason || '未知'}`,
+            `延迟: ${result.latencyMs}ms`,
+            result.details ? `详情: ${result.details.slice(0, 200)}` : '',
           ]
             .filter(Boolean)
             .join('\n'),
           level,
           details: {
-            platform: result.platform,
-            consecutiveFails,
-            failureReason: result.failureReason,
-            latencyMs: result.latencyMs,
-            checkedAt: result.checkedAt,
+            '平台': result.platform,
+            '连续失败': consecutiveFails,
+            '失败原因': result.failureReason || '未知',
+            '延迟': `${result.latencyMs}ms`,
+            '检查时间': result.checkedAt,
           },
         })
       }
