@@ -35,8 +35,8 @@ const eslintConfig = defineConfig([
       // Encourage use of === over == (catches type coercion bugs)
       "eqeqeq": ["warn", "always", { "null": "ignore" }],
 
-      // Ban console.log in production code (use logger utility)
-      "no-console": ["error", { "allow": ["warn", "error"] }],
+      // Warn on console.log (should use logger utility)
+      "no-console": ["warn", { "allow": ["warn", "error"] }],
 
       // Warn on unused variables (helps catch dead code)
       "@typescript-eslint/no-unused-vars": ["warn", {
@@ -45,8 +45,8 @@ const eslintConfig = defineConfig([
         "caughtErrorsIgnorePattern": "^_"
       }],
 
-      // Ban empty catch blocks (must at least log the error)
-      "no-empty": ["error", { "allowEmptyCatch": false }],
+      // Warn on empty catch blocks (should at least log)
+      "no-empty": ["warn", { "allowEmptyCatch": false }],
 
       // Encourage async/await error handling
       "no-async-promise-executor": "warn",

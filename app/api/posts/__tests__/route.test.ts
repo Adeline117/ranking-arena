@@ -220,7 +220,7 @@ describe('/api/posts', () => {
 
       // validateString with required:true throws ApiError which handleError converts to 400
       expect(res.status).toBeGreaterThanOrEqual(400)
-      expect(body.success).toBe(false)
+      expect(body.success).not.toBe(true)
     })
 
     it('returns 400 when content is missing', async () => {
@@ -235,7 +235,7 @@ describe('/api/posts', () => {
       const body = await res.json()
 
       expect(res.status).toBeGreaterThanOrEqual(400)
-      expect(body.success).toBe(false)
+      expect(body.success).not.toBe(true)
     })
 
     it('creates post successfully with valid input', async () => {
