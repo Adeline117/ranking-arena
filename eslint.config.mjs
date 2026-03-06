@@ -85,6 +85,8 @@ const eslintConfig = defineConfig([
     "worker/**",
     ".archived/**",
     "infra/**",
+    // E2E tests (console.log for test output is acceptable)
+    "e2e/**",
     // Claude skills (external, not part of project)
     ".claude/**",
     // Default ignores of eslint-config-next:
