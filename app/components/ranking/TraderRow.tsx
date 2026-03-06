@@ -356,8 +356,8 @@ export const TraderRow = memo(function TraderRow({
           onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); onToggleExpand(trader.id) }}
           style={{
             position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
-            width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', opacity: 0.4, transition: 'opacity 0.15s',
+            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', opacity: 0.6, transition: 'opacity 0.15s',
             borderRadius: tokens.radius.sm,
           }}
           className="expand-btn"
