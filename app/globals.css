@@ -332,7 +332,7 @@ html.theme-transition *::after {
   /* Sentiment (bull/bear) */
   --color-sentiment-bull: #00C853;
   --color-sentiment-bear: #F44336;
-  --color-sentiment-neutral: #9E9E9E;
+  --color-sentiment-neutral: #767676;
   
   /* Overlay/backdrop */
   --color-backdrop: rgba(0, 0, 0, 0.4);

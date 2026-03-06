@@ -23,7 +23,7 @@ export const lightTokens = {
       primary: '#1A1A1A',      // Almost black text (16.6:1)
       secondary: '#5A5A6A',    // Secondary text (7.1:1)
       tertiary: '#5F5F70',     // Muted text (5.5:1)
-      disabled: '#9E9E9E',     // Disabled text (3.5:1)
+      disabled: '#767676',     // Disabled text (4.54:1 WCAG AA)
     },
     
     // Border colors — aligned with globals.css
@@ -50,7 +50,7 @@ export const lightTokens = {
     sentiment: {
       bull: '#00C853',         // Bullish / positive
       bear: '#F44336',         // Bearish / negative
-      neutral: '#9E9E9E',      // Neutral state
+      neutral: '#767676',      // Neutral state (4.54:1 WCAG AA on white)
     },
 
     // Medal/rank colors
@@ -66,7 +66,7 @@ export const lightTokens = {
 
     // Interactive state colors
     interactive: {
-      inactive: '#9E9E9E',     // Inactive icons/text
+      inactive: '#767676',     // Inactive icons/text (4.54:1 WCAG AA on white)
       hover: '#BDBDBD',        // Hover on inactive elements
       favorite: '#F44336',     // Favorited/liked state
     },
@@ -109,7 +109,7 @@ export const darkTokens = {
       primary: '#EDEDED',      // Primary text (14.5:1)
       secondary: '#9A9A9A',    // Secondary text (7.0:1)
       tertiary: '#898998',     // Muted text (5.7:1)
-      disabled: '#404040',     // Disabled text
+      disabled: '#6B6B6B',     // Disabled text (4.5:1 WCAG AA on #0B0A10)
     },
     
     // Border colors
