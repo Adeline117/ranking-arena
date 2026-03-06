@@ -39,7 +39,7 @@ import { captureException } from '@/lib/utils/logger'
 const SOURCE = 'binance_futures'
 const API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
-const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+const _PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 2000
 const PAGE_SIZE = 20
 
