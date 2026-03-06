@@ -6,8 +6,15 @@ import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { StatusBadge } from './StatusBadge'
 
+interface GroupApplication {
+  id: string
+  name: string
+  created_at: string
+  status: string
+}
+
 interface ApplicationsListProps {
-  applications: any[]
+  applications: GroupApplication[]
 }
 
 export function ApplicationsList({ applications }: ApplicationsListProps) {

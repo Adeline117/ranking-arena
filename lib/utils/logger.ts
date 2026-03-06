@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* eslint-disable no-console -- this is the logger implementation; console usage is intentional */
 /**
  * 统一日志工具
  * 生产环境自动关闭 debug/log，保留 warn/error
@@ -9,7 +9,7 @@ let _getCorrelationId: (() => string | undefined) | null = null
 function correlationId(): string | undefined {
   if (!_getCorrelationId) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- lazy require to avoid circular dependency at module load time
       _getCorrelationId = require('@/lib/api/correlation').getCorrelationId
     } catch {
       _getCorrelationId = () => undefined
