@@ -8,6 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:channels:channelId:members')
 
 export const dynamic = 'force-dynamic'
 
@@ -66,7 +69,8 @@ export async function POST(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     return NextResponse.json({ ok: true, added: userIds.length })
-  } catch {
+  } catch (error) {
+    logger.error('ADD_MEMBERS failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -145,7 +149,8 @@ export async function DELETE(
       .eq('user_id', targetUserId)
 
     return NextResponse.json({ ok: true, action: 'removed' })
-  } catch {
+  } catch (error) {
+    logger.error('REMOVE_MEMBER failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -188,7 +193,8 @@ export async function PATCH(
       .eq('user_id', targetUserId)
 
     return NextResponse.json({ ok: true })
-  } catch {
+  } catch (error) {
+    logger.error('UPDATE_MEMBER_ROLE failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
