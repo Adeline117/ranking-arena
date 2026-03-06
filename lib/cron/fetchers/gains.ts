@@ -65,10 +65,10 @@ async function fetchLeaderboardApi(): Promise<GainsLeaderboardEntry[]> {
   for (const chain of CHAIN_BACKENDS) {
     try {
       const data = await fetchJson<GainsLeaderboardEntry[]>(`${chain.base}/leaderboard`)
-      console.warn(`[${SOURCE}] ${chain.name} leaderboard: ${data.length}`)
+      logger.warn(`[${SOURCE}] ${chain.name} leaderboard: ${data.length}`)
       all.push(...data)
     } catch {
-      console.warn(`[${SOURCE}] ${chain.name} leaderboard failed`)
+      logger.warn(`[${SOURCE}] ${chain.name} leaderboard failed`)
     }
   }
   return all
@@ -80,7 +80,7 @@ async function fetchOpenTradesApi(): Promise<ActiveTrader[]> {
   for (const chain of CHAIN_BACKENDS) {
     try {
       const trades = await fetchJson<GainsOpenTrade[]>(`${chain.base}/open-trades`)
-      console.warn(`[${SOURCE}] ${chain.name} open-trades: ${trades.length}`)
+      logger.warn(`[${SOURCE}] ${chain.name} open-trades: ${trades.length}`)
 
       for (const t of trades) {
         const addr = (t.trade?.user || '').toLowerCase()
@@ -99,7 +99,7 @@ async function fetchOpenTradesApi(): Promise<ActiveTrader[]> {
         trader.totalCollateral += collateral / Math.pow(10, decimals)
       }
     } catch {
-      console.warn(`[${SOURCE}] ${chain.name} open-trades failed`)
+      logger.warn(`[${SOURCE}] ${chain.name} open-trades failed`)
     }
   }
 
@@ -225,7 +225,7 @@ async function fetchPeriod(
 
   // Save stats_detail for all periods (Phase 1: extended from 90D only)
   if (saved > 0) {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(sorted.length, 100)} traders (${period})...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(sorted.length, 100)} traders (${period})...`)
     let statsSaved = 0
     for (const t of sorted.slice(0, 100)) {
       const stats: StatsDetail = {
@@ -251,7 +251,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, t.traderId, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
   }
 
   return { total: traders.length, saved, error }

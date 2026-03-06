@@ -233,15 +233,22 @@ export class BybitConnector extends BaseConnectorLegacy implements LegacyPlatfor
   ): Promise<BybitLeaderboardResponse> {
     const url = `${this.baseUrl}/leader-board?timeRange=${period}&page=${page}&pageSize=${pageSize}&sortField=ROI&sortType=DESC`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Bybit API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Bybit API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchTraderDetailApi(
@@ -250,15 +257,22 @@ export class BybitConnector extends BaseConnectorLegacy implements LegacyPlatfor
   ): Promise<BybitTraderDetailResponse> {
     const url = `${this.baseUrl}/leader/${leaderId}?timeRange=${WINDOW_TO_PERIOD[window]}`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`Bybit detail API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Bybit detail API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchPerformanceCurve(
@@ -266,14 +280,21 @@ export class BybitConnector extends BaseConnectorLegacy implements LegacyPlatfor
   ): Promise<Array<{ time: number; value: number }>> {
     const url = `${this.baseUrl}/leader/${leaderId}/performance?dataType=ROI&timeRange=90`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) return [];
+      if (!response.ok) return [];
 
-    const json = await response.json();
-    return json.result?.list || [];
+      const json = await response.json();
+      return json.result?.list || [];
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private getRandomUA(): string {
