@@ -103,8 +103,13 @@ export default function GuestSignupPrompt() {
             color: tokens.colors.text.tertiary,
             fontSize: 20,
             cursor: 'pointer',
-            padding: 8,
-            lineHeight: 1.2,
+            padding: 12,
+            minWidth: 44,
+            minHeight: 44,
+            lineHeight: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
           aria-label="Close"
         >

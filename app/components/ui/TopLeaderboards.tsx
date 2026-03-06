@@ -26,9 +26,9 @@ interface TopLeaderboardsProps {
 
 function RankBadge({ rank }: { rank: number }) {
   const isTop3 = rank <= 3
-  const colors = ['#D4AF37', '#A0AEC0', '#CD7F32']
+  const colors = ['var(--color-rank-gold, #D4AF37)', 'var(--color-rank-silver, #A0AEC0)', 'var(--color-rank-bronze, #CD7F32)']
   const bg = isTop3 ? colors[rank - 1] : 'var(--color-bg-tertiary)'
-  const color = isTop3 ? '#fff' : 'var(--color-text-tertiary)'
+  const color = isTop3 ? 'var(--color-on-accent, #fff)' : 'var(--color-text-tertiary)'
 
   return (
     <span style={{

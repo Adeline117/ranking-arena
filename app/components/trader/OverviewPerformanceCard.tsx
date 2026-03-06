@@ -315,7 +315,7 @@ export default function OverviewPerformanceCard({
                     disabled={isDisabled}
                     style={{
                       padding: `6px 14px`,
-                      minHeight: 36,
+                      minHeight: 44,
                       borderRadius: tokens.radius.md,
                       border: 'none',
                       background: period === p ? tokens.colors.bg.primary : 'transparent',
@@ -800,7 +800,7 @@ function ScoreBar({
       <Box
         style={{
           height: 6,
-          background: 'var(--color-bg-hover, #2a2a3a)',
+          background: 'var(--color-bg-hover, var(--color-bg-tertiary))',
           borderRadius: tokens.radius.full,
           overflow: 'hidden',
           position: 'relative',

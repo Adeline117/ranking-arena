@@ -44,7 +44,7 @@ interface Props {
   traders: InitialTrader[]
 }
 
-const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32']
+const RANK_COLORS = ['var(--color-rank-gold, #FFD700)', 'var(--color-rank-silver, #C0C0C0)', 'var(--color-rank-bronze, #CD7F32)']
 
 export default function SSRRankingTable({ traders }: Props) {
   if (!traders.length) return null
