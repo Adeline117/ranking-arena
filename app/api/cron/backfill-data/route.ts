@@ -18,6 +18,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { INLINE_FETCHERS } from '@/lib/cron/fetchers'
 import { sleep } from '@/lib/cron/fetchers/shared'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -319,6 +320,14 @@ export async function GET(req: NextRequest) {
   }
 
   const duration = Date.now() - startTime
+
+  // Pipeline logging
+  const plog = await PipelineLogger.start(`backfill-data-${type}`, { platforms: platformParam, period: periodParam })
+  if (totalFailed > 0) {
+    await plog.error(new Error(`${totalFailed} failures`), { totalSuccess, totalFailed, gapsFound })
+  } else {
+    await plog.success(totalSuccess, { gapsFound })
+  }
 
   // Determine if there are more gaps to fill
   const hasMoreGaps = gapsFound > 0 && totalSuccess < gapsFound
