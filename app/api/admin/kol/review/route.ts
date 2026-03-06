@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-kol-review')
 
 export const dynamic = 'force-dynamic'
 

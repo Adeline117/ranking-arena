@@ -191,9 +191,40 @@ describe('POST /api/cron/fetch-market-data', () => {
     expect(body.success).toBe(true)
   })
 
-  it('returns 500 when an unhandled error occurs', async () => {
+  it('handles fetch throwing for individual symbols without crashing', async () => {
     mockFetch.mockImplementation(() => {
       throw new Error('Network failure')
+    })
+
+    mockFrom.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+        }),
+      }),
+    })
+
+    const res = await POST(createCronRequest(CRON_SECRET, { type: 'prices' }))
+    const body = await res.json()
+
+    // Individual symbol errors are caught, route still returns 200
+    expect(res.status).toBe(200)
+    expect(body.success).toBe(true)
+    expect(body.results.prices).toBeDefined()
+  })
+
+  it('returns 500 when an unhandled error occurs', async () => {
+    // Force an error in the supabase client creation path
+    mockFrom.mockImplementation(() => {
+      throw new Error('Fatal error')
+    })
+
+    // Mock fetch to succeed so we get past the price fetch into conditions
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ prices: [[Date.now() - 86400000, 60000], [Date.now(), 61000]] }),
     })
 
     const res = await POST(createCronRequest(CRON_SECRET, { type: 'all' }))

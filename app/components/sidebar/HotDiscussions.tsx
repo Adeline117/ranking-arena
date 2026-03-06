@@ -300,6 +300,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                       width={18}
                       height={18}
                       style={{ borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                     />
                   ) : post.author_handle ? (
                     <div style={{

@@ -40,6 +40,7 @@ export default function MyPostsPage() {
   const [userHandle, setUserHandle] = useState<string | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)

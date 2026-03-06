@@ -169,36 +169,22 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { receiverId, content, media_url, media_type, media_name } = body
+    const parsed = SendMessageSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', error_code: 'VALIDATION_ERROR', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+    const { receiverId, content, media_url, media_type, media_name } = parsed.data
 
     // SECURITY: Use authenticated user's ID as sender, ignoring any client-provided senderId.
     // This prevents users from sending messages impersonating other users.
     const senderId = user.id
 
-    if (!receiverId || !content) {
-      return NextResponse.json(
-        { error: 'Missing recipient or message content', error_code: 'VALIDATION_ERROR' },
-        { status: 400 }
-      )
-    }
-
     if (senderId === receiverId) {
       return NextResponse.json(
         { error: 'Cannot send message to yourself', error_code: 'VALIDATION_ERROR' },
-        { status: 400 }
-      )
-    }
-
-    if (content.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Message content cannot be empty', error_code: 'VALIDATION_ERROR' },
-        { status: 400 }
-      )
-    }
-
-    if (content.length > 2000) {
-      return NextResponse.json(
-        { error: 'Message too long, max 2000 characters', error_code: 'VALIDATION_ERROR' },
         { status: 400 }
       )
     }
@@ -309,7 +295,7 @@ export async function POST(request: NextRequest) {
     if (media_url) {
       messageData.media_url = media_url
       messageData.media_type = media_type || 'file'
-      messageData.media_name = media_name
+      messageData.media_name = media_name ?? undefined
     }
 
     const { data: message, error: msgError } = await supabase
