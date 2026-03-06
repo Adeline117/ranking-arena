@@ -3656,6 +3656,30 @@ dataDisclaimer: '数据仅供参考，不构成任何投资建议。',
 selected: '已选择',
 next: '下一步',
 
+// Search page
+searchPostBy: '作者',
+searchViewAll: '查看全部',
+searchTabAll: '全部',
+searchTabPosts: '帖子',
+searchErrorTitle: '搜索出错',
+searchTryAgainLater: '请稍后再试',
+searchPrompt: '搜索书库、小组、帖子、交易员...',
+searchRecentSearches: '搜索历史',
+searchClearHistory: '清除',
+searchPopularSearches: '热门搜索',
+searchNoResultsTitle: '未找到结果',
+searchNoResultsFor: '未找到与"{query}"相关的内容',
+searchSuggestions: '建议',
+searchCheckTypos: '检查是否有拼写错误',
+searchTryShorterKeywords: '尝试使用更短或更通用的关键词',
+searchTryTraderHandle: '尝试使用交易员的handle或平台名称搜索',
+searchPostsSection: '动态/帖子',
+searchFailedToast: '搜索失败',
+
+// Book detail - language labels
+bookLanguageChinese: '中文',
+bookLanguageEnglish: '英文',
+
 } as const
 
 export default zh

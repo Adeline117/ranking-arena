@@ -3649,6 +3649,30 @@ dataDisclaimer: 'Data is for informational purposes only. Not financial advice.'
 selected: 'Selected',
 next: 'Next',
 
+// Search page
+searchPostBy: 'by',
+searchViewAll: 'View all',
+searchTabAll: 'All',
+searchTabPosts: 'Posts',
+searchErrorTitle: 'Search failed',
+searchTryAgainLater: 'Please try again later',
+searchPrompt: 'Search library, groups, posts, traders...',
+searchRecentSearches: 'Recent searches',
+searchClearHistory: 'Clear',
+searchPopularSearches: 'Popular searches',
+searchNoResultsTitle: 'No results',
+searchNoResultsFor: 'No results for "{query}"',
+searchSuggestions: 'Suggestions',
+searchCheckTypos: 'Check for typos',
+searchTryShorterKeywords: 'Try shorter or more general keywords',
+searchTryTraderHandle: 'Try searching by trader handle or platform name',
+searchPostsSection: 'Posts',
+searchFailedToast: 'Search failed',
+
+// Book detail - language labels
+bookLanguageChinese: 'Chinese',
+bookLanguageEnglish: 'English',
+
 } as const
 
 export default en
