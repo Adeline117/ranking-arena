@@ -4,10 +4,10 @@
  *
  * CoinEx copy trading page: https://www.coinex.com/en/copy-trading/futures
  *
- * [WARN] BROWSER-ONLY: The original script uses pure DOM scraping (no API endpoint).
- * CoinEx perpetual API returns "unknown method" (code 4009) for all copy-trading paths.
- * The website internal API (www.coinex.com/res/) returns 404.
- * Needs browser/proxy infrastructure to work.
+ * Working endpoints (from lib/connectors/coinex.ts + platforms/coinex-futures.ts):
+ * 1. GET https://www.coinex.com/res/copy-trade/rank (period=7d/30d/90d)
+ * 2. GET https://www.coinex.com/res/copy-trading/traders (period=7d/30d)
+ * Note: CoinEx does NOT support 90d on the platform endpoint.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -16,7 +16,7 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
+  fetchWithFallback,
   sleep,
   parseNum,
   normalizeWinRate,
@@ -71,8 +71,9 @@ interface CoinexApiResponse {
   code?: number
   message?: string
   data?: {
+    data?: CoinexTrader[]     // legacy endpoint: { code: 0, data: { data: [...] } }
+    items?: CoinexTrader[]    // platform endpoint: { data: { items: [...] } }
     list?: CoinexTrader[]
-    items?: CoinexTrader[]
     traders?: CoinexTrader[]
     rows?: CoinexTrader[]
     total?: number
@@ -82,10 +83,10 @@ interface CoinexApiResponse {
 
 /* ---------- parser ---------- */
 
-function extractList(data: CoinexApiResponse): CoinexTrader[] {
-  if (!data?.data) return []
-  if (Array.isArray(data.data)) return data.data
-  return data.data.list || data.data.items || data.data.traders || data.data.rows || []
+function extractList(resp: CoinexApiResponse): CoinexTrader[] {
+  if (!resp?.data) return []
+  if (Array.isArray(resp.data)) return resp.data
+  return resp.data.data || resp.data.items || resp.data.list || resp.data.traders || resp.data.rows || []
 }
 
 function parseTrader(item: CoinexTrader, period: string): TraderData | null {
@@ -133,23 +134,22 @@ function parseTrader(item: CoinexTrader, period: string): TraderData | null {
 
 /* ---------- fetching ---------- */
 
-// CoinEx API endpoint candidates
+/**
+ * Working CoinEx API endpoints (from lib/connectors/coinex.ts + platforms/coinex-futures.ts):
+ * 1. GET https://www.coinex.com/res/copy-trade/rank (period=7d/30d/90d, page, limit, sort=roi)
+ *    Response: { code: 0, data: { data: [...] } }
+ * 2. GET https://www.coinex.com/res/copy-trading/traders (page, limit, sort_by=roi, period=7d/30d)
+ *    Response: { data: { items: [...] } }
+ */
+const PERIOD_MAP: Record<string, string> = { '7D': '7d', '30D': '30d', '90D': '90d' }
+
 const API_ENDPOINTS = [
-  // Perpetual API — known to respond (even if currently "unknown method")
-  (page: number) =>
-    `https://api.coinex.com/perpetual/v1/market/copy_trading/trader?page=${page}&limit=${PAGE_SIZE}&sort_by=roi`,
-  (page: number) =>
-    `https://api.coinex.com/perpetual/v1/copy_trading/trader/list?page=${page}&limit=${PAGE_SIZE}`,
-  (page: number) =>
-    `https://api.coinex.com/perpetual/v1/copy_trading/ranking?page=${page}&limit=${PAGE_SIZE}`,
-  // Website internal API
-  (page: number) =>
-    `https://www.coinex.com/res/copy-trading/futures/ranking?page=${page}&limit=${PAGE_SIZE}&sort_by=roi_rate`,
-  (page: number) =>
-    `https://www.coinex.com/res/copy/trader/list?page=${page}&limit=${PAGE_SIZE}`,
-  // V2 API
-  (page: number) =>
-    `https://api.coinex.com/v2/futures/copy-trading/trader/ranking?page=${page}&limit=${PAGE_SIZE}`,
+  // Primary — legacy connector (copy-trade/rank)
+  (page: number, period: string) =>
+    `https://www.coinex.com/res/copy-trade/rank?period=${PERIOD_MAP[period] || '30d'}&page=${page}&limit=${PAGE_SIZE}&sort=roi`,
+  // Fallback — platform connector (copy-trading/traders)
+  (page: number, period: string) =>
+    `https://www.coinex.com/res/copy-trading/traders?page=${page}&limit=${PAGE_SIZE}&sort_by=roi&period=${PERIOD_MAP[period] || '30d'}`,
 ]
 
 async function fetchPeriod(
@@ -165,8 +165,8 @@ async function fetchPeriod(
     const maxPages = Math.ceil(TARGET / PAGE_SIZE)
     for (let page = 1; page <= maxPages; page++) {
       try {
-        const url = makeUrl(page)
-        const data = await fetchJson<CoinexApiResponse>(url, { headers: HEADERS })
+        const url = makeUrl(page, period)
+        const { data } = await fetchWithFallback<CoinexApiResponse>(url, { headers: HEADERS, platform: SOURCE })
 
         // Skip "unknown method" responses (code 4009)
         if (data?.code === 4009) break

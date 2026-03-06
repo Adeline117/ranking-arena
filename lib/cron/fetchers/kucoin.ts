@@ -5,12 +5,9 @@
  * KuCoin copy trading page: https://www.kucoin.com/copytrading
  * The browser intercepts API responses containing 'leaderboard/query'.
  *
- * [WARN] BROWSER-ONLY: All known API endpoints return 404.
- * The original script uses Puppeteer to browse the page and intercept internal API calls.
- * The leaderboard/query endpoint is only accessible via browser context with session cookies.
- * Needs browser/proxy infrastructure to work.
- *
- * KuCoin API gateway: www.kucoin.com/_api/ (returns JSON 404 for all copy-trading paths)
+ * Working endpoints (from lib/connectors/kucoin.ts + platforms/kucoin-futures.ts):
+ * 1. GET https://www.kucoin.com/_api/copy-trade/leader/rank-list (period=7/30/90)
+ * 2. GET https://www.kucoin.com/_api/copy-trade/leader/public/list (period=SEVEN_DAY/THIRTY_DAY/NINETY_DAY)
  * Period config: Uses "days as lead" filter — 7D/30D/90D correspond to minimum days.
  */
 
@@ -20,7 +17,7 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
+  fetchWithFallback,
   sleep,
   parseNum,
   normalizeWinRate,
@@ -47,9 +44,13 @@ const PERIOD_MIN_DAYS: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 
 
 interface KucoinTrader {
   leadConfigId?: string
+  leaderId?: string
+  uid?: string
   nickName?: string
   avatarUrl?: string
-  thirtyDayPnlRatio?: number
+  avatar?: string
+  roi?: number | string          // from rank-list / public/list endpoints
+  thirtyDayPnlRatio?: number     // from browser-intercepted API
   totalPnlRatio?: number
   daysAsLeader?: number
   winRatio?: number
@@ -57,9 +58,11 @@ interface KucoinTrader {
   maxDrawdown?: number
   mdd?: number
   totalPnl?: number | string
+  pnl?: number | string
   thirtyDayPnl?: number | string
   followerCount?: number
   copierCount?: number
+  currentCopyCount?: number
   totalProfit?: number | string
 }
 
@@ -78,15 +81,15 @@ interface KucoinApiResponse {
 /* ---------- parser ---------- */
 
 function parseTrader(item: KucoinTrader, period: string): TraderData | null {
-  const id = String(item.leadConfigId || '')
+  const id = String(item.leadConfigId || item.leaderId || item.uid || '')
   if (!id) return null
 
-  // thirtyDayPnlRatio is in decimal (e.g. 0.5 = 50%)
-  let roi = parseNum(item.thirtyDayPnlRatio ?? item.totalPnlRatio)
+  // roi field from rank-list/public/list; thirtyDayPnlRatio from browser-intercepted API
+  let roi = parseNum(item.roi ?? item.thirtyDayPnlRatio ?? item.totalPnlRatio)
   if (roi === null || roi === 0) return null
   roi = normalizeROI(roi, SOURCE) ?? roi
 
-  const pnl = parseNum(item.totalPnl ?? item.thirtyDayPnl ?? item.totalProfit)
+  const pnl = parseNum(item.totalPnl ?? item.pnl ?? item.thirtyDayPnl ?? item.totalProfit)
 
   let winRate = parseNum(item.winRatio ?? item.winRate)
   if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
@@ -98,13 +101,13 @@ function parseTrader(item: KucoinTrader, period: string): TraderData | null {
     if (maxDrawdown > 0 && maxDrawdown <= 1) maxDrawdown *= 100
   }
 
-  const followers = parseNum(item.followerCount ?? item.copierCount)
+  const followers = parseNum(item.followerCount ?? item.copierCount ?? item.currentCopyCount)
 
   return {
     source: SOURCE,
     source_trader_id: id,
     handle: item.nickName || `KuCoin_${id.slice(0, 8)}`,
-    profile_url: `https://www.kucoin.com/copytrading/trader/${id}`,
+    profile_url: `https://www.kucoin.com/copy-trading/leader/${id}`,
     season_id: period,
     roi,
     pnl,
@@ -113,26 +116,30 @@ function parseTrader(item: KucoinTrader, period: string): TraderData | null {
     followers: followers ? Math.round(followers) : null,
     arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
     captured_at: new Date().toISOString(),
-      avatar_url: item.avatarUrl || null,
+    avatar_url: item.avatarUrl || item.avatar || null,
   }
 }
 
 /* ---------- fetching ---------- */
 
-// Multiple API endpoint candidates — KuCoin may use various gateway prefixes
+/**
+ * Working KuCoin API endpoints (from lib/connectors/kucoin.ts + platforms/kucoin-futures.ts):
+ * 1. GET https://www.kucoin.com/_api/copy-trade/leader/rank-list
+ *    Query: period=7/30/90, pageNo, pageSize, sortField=ROI
+ * 2. GET https://www.kucoin.com/_api/copy-trade/leader/public/list
+ *    Query: pageNo, pageSize, orderBy=ROI, period=SEVEN_DAY/THIRTY_DAY/NINETY_DAY
+ * Both return: { code: "200000", data: { items: [...] } }
+ */
+const PERIOD_DAYS: Record<string, string> = { '7D': '7', '30D': '30', '90D': '90' }
+const PERIOD_NAMES: Record<string, string> = { '7D': 'SEVEN_DAY', '30D': 'THIRTY_DAY', '90D': 'NINETY_DAY' }
+
 const API_ENDPOINTS = [
-  // KuCoin website gateway variants — the original script intercepted "leaderboard/query"
-  (page: number) =>
-    `https://www.kucoin.com/_api/copy-trading/leaderboard/query?pageNo=${page}&pageSize=${PAGE_SIZE}`,
-  (page: number) =>
-    `https://www.kucoin.com/_api/copytrading/leaderboard/query?pageNo=${page}&pageSize=${PAGE_SIZE}`,
-  (page: number) =>
-    `https://www.kucoin.com/_api/copy-trade/leaderboard/query?pageNo=${page}&pageSize=${PAGE_SIZE}`,
-  // Public API variants
-  (page: number) =>
-    `https://api.kucoin.com/api/v1/copy-trading/leaderboard/query?pageNo=${page}&pageSize=${PAGE_SIZE}`,
-  (page: number) =>
-    `https://api-futures.kucoin.com/api/v1/copy-trading/leaderboard/query?pageNo=${page}&pageSize=${PAGE_SIZE}`,
+  // Primary — legacy connector (rank-list)
+  (page: number, period: string) =>
+    `https://www.kucoin.com/_api/copy-trade/leader/rank-list?period=${PERIOD_DAYS[period] || '30'}&pageNo=${page}&pageSize=${PAGE_SIZE}&sortField=ROI`,
+  // Fallback — platform connector (public/list)
+  (page: number, period: string) =>
+    `https://www.kucoin.com/_api/copy-trade/leader/public/list?pageNo=${page}&pageSize=${PAGE_SIZE}&orderBy=ROI&period=${PERIOD_NAMES[period] || 'THIRTY_DAY'}`,
 ]
 
 async function fetchFromEndpoint(
@@ -141,13 +148,13 @@ async function fetchFromEndpoint(
   minDays: number
 ): Promise<{ found: boolean; error?: string }> {
   try {
-    const data = await fetchJson<KucoinApiResponse>(url, { headers: HEADERS })
+    const { data } = await fetchWithFallback<KucoinApiResponse>(url, { headers: HEADERS, platform: SOURCE })
 
     const items = data?.data?.items || data?.data?.list || []
     if (items.length === 0) return { found: false }
 
     for (const item of items) {
-      const id = String(item.leadConfigId || '')
+      const id = String(item.leadConfigId || item.leaderId || item.uid || '')
       if (!id || allTraders.has(id)) continue
       if (item.daysAsLeader != null && item.daysAsLeader < minDays) continue
       allTraders.set(id, item)
@@ -172,7 +179,7 @@ async function fetchPeriod(
     const maxPages = Math.ceil(TARGET / PAGE_SIZE)
 
     for (let page = 1; page <= maxPages; page++) {
-      const url = makeUrl(page)
+      const url = makeUrl(page, period)
       const { found, error } = await fetchFromEndpoint(url, allTraders, minDays)
 
       if (error) {
