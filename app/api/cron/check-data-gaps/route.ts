@@ -35,12 +35,9 @@ const ALL_PLATFORMS = [
   'aevo',
   'coinex',
   'xt',
-  'lbank',
   'blofin',
   'bingx',
   'gateio',
-  'phemex',
-  'weex',
   'htx_futures',
 ]
 

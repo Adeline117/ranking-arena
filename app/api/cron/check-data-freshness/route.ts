@@ -49,13 +49,10 @@ const PLATFORM_NAMES: Record<string, string> = {
   kucoin: 'KuCoin',
   gmx: 'GMX',
   htx: 'HTX',
-  weex: 'WEEX',
-  phemex: 'Phemex',
   bingx: 'BingX',
   gateio: 'Gate.io',
   xt: 'XT',
   gains: 'Gains Network',
-  lbank: 'LBank',
   blofin: 'BloFin',
 }
 

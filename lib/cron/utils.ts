@@ -119,11 +119,7 @@ export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: stri
     { name: 'okx_futures_30d', script: 'scripts/import/import_okx_futures.mjs', args: ['30D'] },
     { name: 'okx_futures_90d', script: 'scripts/import/import_okx_futures.mjs', args: ['90D'] },
   ],
-  weex: [
-    { name: 'weex_7d', script: 'scripts/import/import_weex.mjs', args: ['7D'] },
-    { name: 'weex_30d', script: 'scripts/import/import_weex.mjs', args: ['30D'] },
-    { name: 'weex_90d', script: 'scripts/import/import_weex.mjs', args: ['90D'] },
-  ],
+  // weex: Discontinued (2026-02) — copy trading API returns 404/521
   bingx: [
     { name: 'bingx_7d', script: 'scripts/import/import_bingx.mjs', args: ['7D'] },
     { name: 'bingx_30d', script: 'scripts/import/import_bingx.mjs', args: ['30D'] },
@@ -134,21 +130,13 @@ export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: stri
     { name: 'gateio_30d', script: 'scripts/import/import_gateio.mjs', args: ['30D'] },
     { name: 'gateio_90d', script: 'scripts/import/import_gateio.mjs', args: ['90D'] },
   ],
-  phemex: [
-    { name: 'phemex_7d', script: 'scripts/import/import_phemex.mjs', args: ['7D'] },
-    { name: 'phemex_30d', script: 'scripts/import/import_phemex.mjs', args: ['30D'] },
-    { name: 'phemex_90d', script: 'scripts/import/import_phemex.mjs', args: ['90D'] },
-  ],
+  // phemex: Discontinued (2026-02) — copy trading API returns 401/403/404
   xt: [
     { name: 'xt_7d', script: 'scripts/import/import_xt.mjs', args: ['7D'] },
     { name: 'xt_30d', script: 'scripts/import/import_xt.mjs', args: ['30D'] },
     { name: 'xt_90d', script: 'scripts/import/import_xt.mjs', args: ['90D'] },
   ],
-  pionex: [
-    { name: 'pionex_7d', script: 'scripts/import/import_pionex_v2.mjs', args: ['7D'] },
-    { name: 'pionex_30d', script: 'scripts/import/import_pionex_v2.mjs', args: ['30D'] },
-    { name: 'pionex_90d', script: 'scripts/import/import_pionex_v2.mjs', args: ['90D'] },
-  ],
+  // pionex: No public leaderboard API (bot-only CopyBot platform)
   kwenta: [
     { name: 'kwenta_7d', script: 'scripts/import/import_kwenta.mjs', args: ['7D'] },
     { name: 'kwenta_30d', script: 'scripts/import/import_kwenta.mjs', args: ['30D'] },
@@ -164,11 +152,7 @@ export const PLATFORM_SCRIPTS: Record<string, Array<{ name: string; script: stri
     { name: 'mux_30d', script: 'scripts/import/import_mux.mjs', args: ['30D'] },
     { name: 'mux_90d', script: 'scripts/import/import_mux.mjs', args: ['90D'] },
   ],
-  lbank: [
-    { name: 'lbank_7d', script: 'scripts/import/import_lbank.mjs', args: ['7D'] },
-    { name: 'lbank_30d', script: 'scripts/import/import_lbank.mjs', args: ['30D'] },
-    { name: 'lbank_90d', script: 'scripts/import/import_lbank.mjs', args: ['90D'] },
-  ],
+  // lbank: No public copy trading API (all endpoints return HTML/CF challenge)
   blofin: [
     { name: 'blofin_7d', script: 'scripts/import/import_blofin.mjs', args: ['7D'] },
     { name: 'blofin_30d', script: 'scripts/import/import_blofin.mjs', args: ['30D'] },
