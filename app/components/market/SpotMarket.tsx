@@ -345,6 +345,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('searchCoin') || '搜索币种...'}
+            aria-label={t('searchCoin') || 'Search coins'}
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]} ${tokens.spacing[3]} 40px`,
               background: tokens.glass.bg.medium,

@@ -3,7 +3,7 @@
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '@/app/components/base'
+import { from '@/app/components/base'
 import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/ui/icons'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
