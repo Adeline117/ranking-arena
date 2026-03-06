@@ -284,7 +284,7 @@ export async function executeFetcherJob(job: Job): Promise<JobResult> {
 
   const supabase = getSupabase()
 
-  console.log(`[FetcherRunner] Executing ${platform} for periods: ${periods.join(', ')}`)
+  logger.info(`[FetcherRunner] Executing ${platform} for periods: ${periods.join(', ')}`)
 
   try {
     // Cast to any to handle type mismatch between worker and main app supabase versions

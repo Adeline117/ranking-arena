@@ -70,7 +70,7 @@ async function scrapeAll(): Promise<void> {
 }
 
 function printUsage(): void {
-  console.log(`
+  logger.info(`
 Arena Worker CLI
 
 Usage:
