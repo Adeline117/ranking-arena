@@ -35,7 +35,7 @@ function getFeedItemHref(item: TraderFeedItem): string {
   return item.groupId ? `/groups/${item.groupId}` : `/posts/${postId}`
 }
 
-function formatRelativeTime(dateString: string, isZh: boolean, t: (key: string) => string): string {
+function formatRelativeTime(dateString: string, language: string, t: (key: string) => string): string {
   const date = new Date(dateString)
   const now = new Date()
   const diff = now.getTime() - date.getTime()
@@ -45,7 +45,7 @@ function formatRelativeTime(dateString: string, isZh: boolean, t: (key: string) 
   if (hours < 1) return t('justNow')
   if (hours < 24) return t('hoursAgoShort').replace('{n}', String(hours))
   if (days < 7) return t('daysAgoShort').replace('{n}', String(days))
-  return date.toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' })
 }
 
 export default function TraderFeed({ items, title, showPostButton = false, onPostClick, isRegistered, traderId, traderHandle, source }: TraderFeedProps) {
@@ -53,7 +53,6 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const { t, language } = useLanguage()
-  const isZh = language === 'zh'
 
   useEffect(() => {
      
@@ -368,7 +367,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       </Box>
                     )}
                     <Text size="xs" color="tertiary">
-                      {formatRelativeTime(item.time, isZh, t)}
+                      {formatRelativeTime(item.time, language, t)}
                     </Text>
                   </Box>
                 </Box>

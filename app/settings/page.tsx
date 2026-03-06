@@ -52,6 +52,7 @@ function ExchangeBindingBanner({ userId }: { userId: string | null }) {
       .then(({ data }) => {
         setShow(!data || data.length === 0)
       })
+      .catch(() => { /* Exchange connection check non-critical */ })
   }, [userId])
 
   if (!show) return null
@@ -294,7 +295,7 @@ function SettingsContent() {
       setUserId(data.user?.id ?? null)
       if (!data.user) { router.push('/login?redirect=/settings'); return }
       loadProfile(data.user.id)
-    })
+    }).catch(() => { /* Auth check failure on settings page */ })
   }, [router])
 
   // ===== Reset countdown timer =====

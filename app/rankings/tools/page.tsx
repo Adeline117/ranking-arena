@@ -225,7 +225,7 @@ export default function ToolsPage() {
     } finally {
       setLoading(false)
     }
-  }, [category, sort, debouncedSearch, isZh])
+  }, [category, sort, debouncedSearch])
 
   useEffect(() => {
     fetchData()

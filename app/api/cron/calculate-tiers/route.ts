@@ -20,6 +20,7 @@ import { createLogger } from '@/lib/utils/logger'
 const logger = createLogger('CalculateTiers')
 
 export const runtime = 'nodejs'
+export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // 60 seconds timeout
 

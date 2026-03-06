@@ -46,6 +46,7 @@ export default function PostDetailClient({ postId }: { postId: string }) {
           setPostData(data as PostData)
         }
       })
+      .catch(() => { /* Post fetch non-critical */ })
   }, [postId])
 
   const structuredData = postData ? combineSchemas(

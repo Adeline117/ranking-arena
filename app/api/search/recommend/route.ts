@@ -16,6 +16,7 @@ const logger = createLogger('search-recommend')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const preferredRegion = ['sfo1', 'hnd1']
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL

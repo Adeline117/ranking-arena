@@ -15,6 +15,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { checkNFTMembership } from '@/lib/web3/nft'
 
 export const runtime = 'nodejs'
+export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 

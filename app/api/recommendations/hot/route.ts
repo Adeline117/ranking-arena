@@ -15,6 +15,7 @@ const logger = createLogger('api-rec-hot')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const preferredRegion = ['sfo1', 'hnd1']
 
 const CACHE_KEY = 'recommendations:hot'
 

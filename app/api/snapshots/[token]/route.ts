@@ -117,6 +117,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       .then(() => {
         // View count incremented
       })
+      .catch(() => { /* View count increment is fire-and-forget */ })
 
     const response = NextResponse.json({
       success: true,
