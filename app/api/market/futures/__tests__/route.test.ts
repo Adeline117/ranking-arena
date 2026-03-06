@@ -1,11 +1,16 @@
 jest.mock('next/server', () => {
+  class MockHeaders {
+    private _headers: Record<string, string> = {}
+    set(key: string, value: string) { this._headers[key] = value }
+    get(key: string) { return this._headers[key] }
+  }
   class MockNextResponse {
-    _body: unknown; status: number
-    constructor(body?: unknown, init: any = {}) {
-      this._body = body; this.status = init.status || 200
+    _body: unknown; status: number; headers: MockHeaders
+    constructor(body?: unknown, init: { status?: number } = {}) {
+      this._body = body; this.status = init.status || 200; this.headers = new MockHeaders()
     }
     async json() { return this._body }
-    static json(data: unknown, init?: any) { return new MockNextResponse(data, init) }
+    static json(data: unknown, init?: { status?: number }) { return new MockNextResponse(data, init) }
   }
   return { NextResponse: MockNextResponse }
 })

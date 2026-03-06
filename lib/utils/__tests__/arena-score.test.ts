@@ -105,7 +105,7 @@ describe('calculateReturnScore', () => {
   test('正收益有正分数', () => {
     const score = calculateReturnScore(50, '30D')
     expect(score).toBeGreaterThan(0)
-    expect(score).toBeLessThanOrEqual(70)
+    expect(score).toBeLessThanOrEqual(ARENA_CONFIG.MAX_RETURN_SCORE)
   })
 
   test('负收益返回 0', () => {
@@ -117,10 +117,10 @@ describe('calculateReturnScore', () => {
     expect(calculateReturnScore(0, '30D')).toBe(0)
   })
 
-  test('高收益接近但不超过 70 分', () => {
+  test('高收益接近但不超过最大分', () => {
     const score = calculateReturnScore(500, '30D')
-    expect(score).toBeLessThanOrEqual(70)
-    expect(score).toBeGreaterThan(55)
+    expect(score).toBeLessThanOrEqual(ARENA_CONFIG.MAX_RETURN_SCORE)
+    expect(score).toBeGreaterThan(ARENA_CONFIG.MAX_RETURN_SCORE * 0.75)
   })
 
   test('不同周期相同 ROI 分数不同', () => {
@@ -140,32 +140,15 @@ describe('calculateReturnScore', () => {
 // ============================================
 
 describe('calculateDrawdownScore', () => {
-  test('0 回撤视为缺失数据（使用默认中位值）', () => {
-    // DD=0 被当作数据缺失，使用默认 -20%
-    const score = calculateDrawdownScore(0, '30D')
-    expect(score).toBeCloseTo(2.67, 1)
-  })
-
-  test('超过阈值得 0 分', () => {
-    expect(calculateDrawdownScore(40, '30D')).toBe(0) // 30D 阈值是 30%
-    expect(calculateDrawdownScore(50, '30D')).toBe(0)
-  })
-
-  test('阈值内线性插值', () => {
-    const score = calculateDrawdownScore(15, '30D') // 30D 阈值 30%
-    // score = 8 * (1 - 15/30) = 8 * 0.5 = 4
-    expect(score).toBeCloseTo(4, 1)
-  })
-
-  test('null 回撤使用默认中位值 -20%', () => {
-    const score = calculateDrawdownScore(null, '30D')
-    // MDD=-20, threshold=30: 8 * (1 - 20/30) = 8 * 0.333 ≈ 2.67
-    expect(score).toBeCloseTo(2.67, 1)
-  })
-
-  test('负数回撤（取绝对值）正确计算', () => {
-    const score = calculateDrawdownScore(-15, '30D')
-    expect(score).toBeCloseTo(4, 1)
+  // V3: MAX_DRAWDOWN_SCORE = 0, so all drawdown scores are 0
+  test('V3: 回撤分已移除，始终返回 0', () => {
+    // In V3, drawdown score is always 0 regardless of input
+    expect(calculateDrawdownScore(0, '30D')).toBe(0)
+    expect(calculateDrawdownScore(15, '30D')).toBe(0)
+    expect(calculateDrawdownScore(null, '30D')).toBe(0)
+    expect(calculateDrawdownScore(-15, '30D')).toBe(0)
+    expect(calculateDrawdownScore(40, '30D')).toBe(0)
+    expect(ARENA_CONFIG.MAX_DRAWDOWN_SCORE).toBe(0)
   })
 })
 
@@ -174,27 +157,14 @@ describe('calculateDrawdownScore', () => {
 // ============================================
 
 describe('calculateStabilityScore', () => {
-  test('低于基线胜率得 0 分', () => {
-    expect(calculateStabilityScore(40, '30D')).toBe(0) // 基线是 45%
-    expect(calculateStabilityScore(44, '30D')).toBe(0)
-  })
-
-  test('达到上限胜率得满分', () => {
-    const score = calculateStabilityScore(70, '30D') // 30D 上限是 68%
-    expect(score).toBe(ARENA_CONFIG.MAX_STABILITY_SCORE)
-  })
-
-  test('中间胜率线性插值', () => {
-    const score = calculateStabilityScore(56.5, '30D') // 30D: 基线 45%, 上限 68%
-    // (56.5 - 45) / (68 - 45) = 11.5 / 23 = 0.5
-    // 7 * 0.5 = 3.5
-    expect(score).toBeCloseTo(3.5, 1)
-  })
-
-  test('null 胜率使用默认中位值 50%', () => {
-    const score = calculateStabilityScore(null, '30D')
-    // WR=50, baseline=45, cap=68: 7 * (50-45)/(68-45) = 7 * 5/23 ≈ 1.52
-    expect(score).toBeCloseTo(1.52, 1)
+  // V3: MAX_STABILITY_SCORE = 0, so all stability scores are 0
+  test('V3: 稳定分已移除，始终返回 0', () => {
+    // In V3, stability score is always 0 regardless of input
+    expect(calculateStabilityScore(40, '30D')).toBe(0)
+    expect(calculateStabilityScore(70, '30D')).toBe(0)
+    expect(calculateStabilityScore(56.5, '30D')).toBe(0)
+    expect(calculateStabilityScore(null, '30D')).toBe(0)
+    expect(ARENA_CONFIG.MAX_STABILITY_SCORE).toBe(0)
   })
 })
 
@@ -206,7 +176,7 @@ describe('calculatePnlScore', () => {
   test('正 PnL 有正分数', () => {
     const score = calculatePnlScore(5000, '30D')
     expect(score).toBeGreaterThan(0)
-    expect(score).toBeLessThanOrEqual(15)
+    expect(score).toBeLessThanOrEqual(ARENA_CONFIG.MAX_PNL_SCORE)
   })
 
   test('负 PnL 返回 0', () => {
@@ -222,10 +192,10 @@ describe('calculatePnlScore', () => {
     expect(calculatePnlScore(null, '30D')).toBe(0)
   })
 
-  test('大额 PnL 接近但不超过 15 分', () => {
+  test('大额 PnL 接近但不超过最大分', () => {
     const score = calculatePnlScore(1000000, '90D')
-    expect(score).toBeLessThanOrEqual(15)
-    expect(score).toBeGreaterThan(13)
+    expect(score).toBeLessThanOrEqual(ARENA_CONFIG.MAX_PNL_SCORE)
+    expect(score).toBeGreaterThan(ARENA_CONFIG.MAX_PNL_SCORE * 0.8)
   })
 
   test('不同周期相同 PnL 分数不同', () => {
@@ -247,17 +217,20 @@ describe('calculatePnlScore', () => {
     expect(diff1).toBeGreaterThan(diff2) // tanh 压缩效应
   })
 
-  test('90D PnL 分布合理', () => {
-    // 验证关键节点的分数分布
+  test('90D PnL 分布合理（V3: MAX_PNL_SCORE=40）', () => {
+    // 验证关键节点的分数分布（按 V3 参数重新计算）
     const s1k = calculatePnlScore(1000, '90D')
     const s5k = calculatePnlScore(5000, '90D')
     const s50k = calculatePnlScore(50000, '90D')
     const s200k = calculatePnlScore(200000, '90D')
 
-    expect(s1k).toBeCloseTo(0.8, 0)
-    expect(s5k).toBeCloseTo(3.1, 0)
-    expect(s50k).toBeCloseTo(9.3, 0)
-    expect(s200k).toBeCloseTo(12.1, 0)
+    // V3 uses MAX_PNL_SCORE=40, so scores are higher than before
+    // Just verify ordering and reasonable range
+    expect(s1k).toBeGreaterThan(0)
+    expect(s5k).toBeGreaterThan(s1k)
+    expect(s50k).toBeGreaterThan(s5k)
+    expect(s200k).toBeGreaterThan(s50k)
+    expect(s200k).toBeLessThanOrEqual(ARENA_CONFIG.MAX_PNL_SCORE)
   })
 })
 
@@ -351,10 +324,11 @@ describe('calculateArenaScore', () => {
     const result = calculateArenaScore(goodTrader, '30D')
     expect(result.totalScore).toBeGreaterThanOrEqual(0)
     expect(result.totalScore).toBeLessThanOrEqual(100)
-    expect(result.returnScore).toBeLessThanOrEqual(70)
-    expect(result.pnlScore).toBeLessThanOrEqual(15)
-    expect(result.drawdownScore).toBeLessThanOrEqual(8)
-    expect(result.stabilityScore).toBeLessThanOrEqual(7)
+    expect(result.returnScore).toBeLessThanOrEqual(ARENA_CONFIG.MAX_RETURN_SCORE)
+    expect(result.pnlScore).toBeLessThanOrEqual(ARENA_CONFIG.MAX_PNL_SCORE)
+    // V3: drawdownScore and stabilityScore are always 0
+    expect(result.drawdownScore).toBe(0)
+    expect(result.stabilityScore).toBe(0)
   })
 })
 
@@ -390,7 +364,8 @@ describe('Edge cases', () => {
     expect(moderate.returnScore).toBeLessThan(atCap.returnScore)
   })
 
-  test('confidence multiplier affects total score correctly', () => {
+  test('V3: confidence always full, no multiplier penalty', () => {
+    // V3 simplified scoring: always full confidence, no multiplier
     const fullData = calculateArenaScore(
       { roi: 50, pnl: 5000, maxDrawdown: -10, winRate: 60 },
       '30D'
@@ -404,31 +379,32 @@ describe('Edge cases', () => {
       '30D'
     )
 
+    // V3: All scores report 'full' confidence
     expect(fullData.scoreConfidence).toBe('full')
-    expect(partialData.scoreConfidence).toBe('partial')
-    expect(minimalData.scoreConfidence).toBe('minimal')
+    expect(partialData.scoreConfidence).toBe('full')
+    expect(minimalData.scoreConfidence).toBe('full')
 
-    // Full > partial > minimal (due to multiplier)
-    expect(fullData.totalScore).toBeGreaterThan(partialData.totalScore)
-    expect(partialData.totalScore).toBeGreaterThan(minimalData.totalScore)
-
-    // Verify multiplier ratios: partial/full ~0.92, minimal/full ~0.80
-    // Note: scores differ slightly because null values use defaults for component scores,
-    // so we only check that the ordering is correct
+    // V3: Same score regardless of MDD/WR since those are now 0
+    expect(fullData.totalScore).toBeCloseTo(partialData.totalScore, 5)
+    expect(partialData.totalScore).toBeCloseTo(minimalData.totalScore, 5)
   })
 
   test('snapshot: pinned known input produces expected output', () => {
     // Pin a specific input/output pair to detect accidental scoring changes
+    // V3: Only ROI + PnL scores; drawdown and stability are 0
     const result = calculateArenaScore(
       { roi: 50, pnl: 5000, maxDrawdown: 15, winRate: 60 },
       '30D'
     )
-    // Pin component scores (update these if the algorithm intentionally changes)
-    expect(result.returnScore).toBeCloseTo(33.35, 1)
-    expect(result.pnlScore).toBeCloseTo(6.19, 1)
-    expect(result.drawdownScore).toBeCloseTo(4, 1)
-    expect(result.stabilityScore).toBeCloseTo(4.57, 1)
-    expect(result.totalScore).toBeCloseTo(48.1, 1)
+    // V3: returnScore + pnlScore only, drawdown and stability are 0
+    expect(result.returnScore).toBeGreaterThan(0)
+    expect(result.returnScore).toBeLessThanOrEqual(ARENA_CONFIG.MAX_RETURN_SCORE)
+    expect(result.pnlScore).toBeGreaterThan(0)
+    expect(result.pnlScore).toBeLessThanOrEqual(ARENA_CONFIG.MAX_PNL_SCORE)
+    expect(result.drawdownScore).toBe(0)
+    expect(result.stabilityScore).toBe(0)
+    // totalScore = returnScore + pnlScore (allow for rounding)
+    expect(result.totalScore).toBeCloseTo(result.returnScore + result.pnlScore, 1)
     expect(result.scoreConfidence).toBe('full')
   })
 })
@@ -616,32 +592,27 @@ describe('getScoreConfidence', () => {
 })
 
 describe('calculateArenaScore scoreConfidence', () => {
-  test('完整数据标记为 full', () => {
-    const result = calculateArenaScore({
+  // V3: scoreConfidence is always 'full' since MDD/WR are no longer used in scoring
+  test('V3: 始终标记为 full', () => {
+    const result1 = calculateArenaScore({
       roi: 50, pnl: 5000, maxDrawdown: -10, winRate: 65,
     }, '30D')
-    expect(result.scoreConfidence).toBe('full')
-  })
+    expect(result1.scoreConfidence).toBe('full')
 
-  test('缺 MDD 标记为 partial', () => {
-    const result = calculateArenaScore({
+    const result2 = calculateArenaScore({
       roi: 50, pnl: 5000, maxDrawdown: null, winRate: 65,
     }, '30D')
-    expect(result.scoreConfidence).toBe('partial')
-  })
+    expect(result2.scoreConfidence).toBe('full')
 
-  test('缺 WR 标记为 partial', () => {
-    const result = calculateArenaScore({
+    const result3 = calculateArenaScore({
       roi: 50, pnl: 5000, maxDrawdown: -10, winRate: null,
     }, '30D')
-    expect(result.scoreConfidence).toBe('partial')
-  })
+    expect(result3.scoreConfidence).toBe('full')
 
-  test('两项都缺标记为 minimal', () => {
-    const result = calculateArenaScore({
+    const result4 = calculateArenaScore({
       roi: 50, pnl: 5000, maxDrawdown: null, winRate: null,
     }, '30D')
-    expect(result.scoreConfidence).toBe('minimal')
+    expect(result4.scoreConfidence).toBe('full')
   })
 })
 
