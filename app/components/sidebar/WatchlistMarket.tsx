@@ -166,10 +166,6 @@ export default function WatchlistMarket() {
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
           {t('noData')}
         </div>
-      ) : coins.length === 0 ? (
-        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {t('noDataAvailable')}
-        </div>
       ) : (
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
