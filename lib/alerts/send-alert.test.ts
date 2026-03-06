@@ -27,6 +27,9 @@ beforeEach(() => {
     ...originalEnv,
     SUPABASE_URL: 'https://test.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
+    // Ensure Telegram env vars are cleared to avoid interference
+    TELEGRAM_BOT_TOKEN: '',
+    TELEGRAM_ALERT_CHAT_ID: '',
   }
   ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
 })
