@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       const res = await fetch(`${baseUrl}/api/cron/fetch-traders/${platform}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${cronSecret || ''}`,
+          'Authorization': `Bearer ${cronSecret}`,
         },
       })
 
