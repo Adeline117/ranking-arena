@@ -163,7 +163,7 @@ export default function TokenSidePanel({ token, onClose }: {
     fetch(`/api/market/coin/${token.id}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => d && setCoinDetail(d))
-      .catch(() => {})
+      .catch(err => console.warn('[TokenSidePanel] fetch failed', err))
   // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
   }, [token?.id])
 

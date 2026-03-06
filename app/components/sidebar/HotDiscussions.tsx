@@ -130,7 +130,7 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: needsTranslation.slice(0, 20), targetLang }),
-      }).catch(() => {})
+      }).catch(err => console.warn('[HotDiscussions] fetch failed', err))
     }
   }
 

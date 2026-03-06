@@ -32,7 +32,7 @@ export default function FearGreedGauge() {
     fetch('/api/market/fear-greed')
       .then((r) => r.json())
       .then((json) => { if (json.current) setData(json.current) })
-      .catch(() => {})
+      .catch(err => console.warn('[FearGreedGauge] fetch failed', err))
   }, [])
 
   useEffect(() => {

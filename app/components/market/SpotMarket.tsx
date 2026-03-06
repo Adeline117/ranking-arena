@@ -105,7 +105,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
     fetch('/api/market/spot')
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setData(d) })
-      .catch(() => {})
+      .catch(err => console.warn('[SpotMarket] fetch failed', err))
       .finally(() => setLoading(false))
   }, [])
 

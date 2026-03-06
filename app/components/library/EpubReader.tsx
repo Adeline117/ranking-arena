@@ -378,7 +378,7 @@ export default function EpubReader({
                 const style = doc.createElement('style')
                 style.textContent = css
                 link.parentNode?.replaceChild(style, link)
-              }).catch(() => {})
+              }).catch(err => console.warn('[EpubReader] op failed', err))
             }
           })
         } catch { /* silent */ }

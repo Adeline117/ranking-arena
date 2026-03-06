@@ -78,7 +78,7 @@ export default function ArbitrageOpportunities() {
           setOpps(json.opportunities.slice(0, 4))
         }
       })
-      .catch(() => {})
+      .catch(err => console.warn('[ArbitrageOpportunities] fetch failed', err))
       .finally(() => setLoading(false))
 
     fetchPriceComparisons()
