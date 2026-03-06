@@ -26,7 +26,7 @@ config({ path: join(projectRoot, '.env.local') })
 
 // Supabase 配置
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://iknktzifjdyujdccyhsv.supabase.co'
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_SUPABASE_JWT'
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 

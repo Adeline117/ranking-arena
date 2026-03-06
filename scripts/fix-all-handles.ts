@@ -13,7 +13,7 @@ const { Client: PgClient } = pg
 
 const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_SUPABASE_JWT'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const args = process.argv.slice(2)
 const DRY_RUN = args.includes('--dry-run')

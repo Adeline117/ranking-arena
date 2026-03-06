@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   'https://iknktzifjdyujdccyhsv.supabase.co',
-  'REDACTED_SUPABASE_JWT'
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));

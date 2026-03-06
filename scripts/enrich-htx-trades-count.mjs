@@ -19,7 +19,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 puppeteer.use(StealthPlugin());
 
 const SB_URL = 'https://iknktzifjdyujdccyhsv.supabase.co';
-const SB_KEY = 'REDACTED_SUPABASE_JWT';
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SB_HDR = {
   apikey: SB_KEY,
   Authorization: `Bearer ${SB_KEY}`,

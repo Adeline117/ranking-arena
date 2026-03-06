@@ -7,7 +7,7 @@
  */
 
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-const SUPABASE_KEY = 'REDACTED_SUPABASE_JWT'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))

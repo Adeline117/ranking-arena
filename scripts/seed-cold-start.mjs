@@ -5,7 +5,7 @@
  */
 
 const SB_URL = process.env.SUPABASE_URL || 'https://iknktzifjdyujdccyhsv.supabase.co';
-const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_SUPABASE_JWT';
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const headers = {
   'apikey': SB_KEY,

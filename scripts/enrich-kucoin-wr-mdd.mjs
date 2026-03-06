@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const sb = createClient(
   'https://iknktzifjdyujdccyhsv.supabase.co',
-  'REDACTED_SUPABASE_JWT'
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 function clip(v, min, max) { return Math.max(min, Math.min(max, v)) }

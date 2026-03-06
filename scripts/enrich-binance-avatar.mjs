@@ -14,7 +14,7 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 const SB_URL = 'https://iknktzifjdyujdccyhsv.supabase.co';
-const SB_KEY = 'REDACTED_SUPABASE_JWT';
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SB_HDR = {
   apikey: SB_KEY,
   Authorization: `Bearer ${SB_KEY}`,

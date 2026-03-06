@@ -7,7 +7,7 @@ import fs from 'fs'
 import path from 'path'
 
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-const SERVICE_KEY = 'REDACTED_SUPABASE_JWT'
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const BUCKET = 'library'
 const STORAGE_BASE = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}`
 

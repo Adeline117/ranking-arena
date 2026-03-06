@@ -12,7 +12,7 @@ const OUT = '/tmp/arena-round2-screenshots'
 const REPORT_PATH = '/tmp/arena-perf-report.json'
 
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-const SUPABASE_KEY = 'REDACTED_SUPABASE_JWT'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 // Pages to test
 const PAGES = [

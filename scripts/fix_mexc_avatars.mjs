@@ -24,7 +24,7 @@ const CACHE_FILE = '/tmp/mexc_avatar_map.json'
 
 const supabase = createClient(
   'https://iknktzifjdyujdccyhsv.supabase.co',
-  'REDACTED_SUPABASE_JWT'
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 async function launchBrowser() {

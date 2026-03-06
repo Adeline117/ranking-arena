@@ -34,7 +34,14 @@ export class HTXFuturesConnector extends BaseExchangeConnector {
     const url = `${API_URL}?rankType=${rankType}&pageNo=${pageNo}&pageSize=${pageSize}`
 
     try {
-      const response = await fetch(url, { headers: this.headers })
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30_000)
+      let response: Response
+      try {
+        response = await fetch(url, { headers: this.headers, signal: controller.signal })
+      } finally {
+        clearTimeout(timeout)
+      }
       if (!response.ok) return []
 
       const json = await response.json()
