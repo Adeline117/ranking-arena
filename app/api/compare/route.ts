@@ -17,6 +17,7 @@ import { hasFeatureAccess, getFeatureLimits } from '@/lib/types/premium'
 import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
+export const preferredRegion = ['sfo1', 'hnd1']
 
 const MAX_TRADERS_TO_COMPARE = 5
 

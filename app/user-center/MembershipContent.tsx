@@ -446,14 +446,14 @@ export default function MembershipContent() {
 
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box>
-                  <Text size="sm" weight="bold" style={{ color: '#f59e0b' }}>{isZh ? '创始会员终身' : 'Founding Member Lifetime'}</Text>
-                  <Text size="xs" color="tertiary">{isZh ? '一次付款 · 永久有效' : 'One-time · Forever'}</Text>
+                  <Text size="sm" weight="bold" style={{ color: '#f59e0b' }}>{t('membershipFoundingLifetime')}</Text>
+                  <Text size="xs" color="tertiary">{t('membershipOneTimeForever')}</Text>
                 </Box>
                 <Box style={{ textAlign: 'right' }}>
                   <Text size="xl" weight="black" style={{ color: '#f59e0b' }}>
                     ${PRICING.lifetime.price}
                   </Text>
-                  <Text size="xs" color="tertiary">{isZh ? '一次性' : 'one-time'}</Text>
+                  <Text size="xs" color="tertiary">{t('membershipOneTime')}</Text>
                 </Box>
               </Box>
             </Box>
@@ -477,14 +477,14 @@ export default function MembershipContent() {
             {subscribing
               ? t('processing')
               : selectedPlan === 'lifetime'
-                ? (isZh ? `立即成为创始会员 - $${PRICING.lifetime.price}` : `Get Founding Access - $${PRICING.lifetime.price}`)
+                ? t('membershipGetFoundingAccess').replace('{price}', String(PRICING.lifetime.price))
                 : `${t('startSubscription')} - $${selectedPlan === 'yearly' ? PRICING.yearly.price : PRICING.monthly.price}`}
           </Button>
 
           <Box style={{ marginTop: tokens.spacing[3], textAlign: 'center' }}>
             <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
               {selectedPlan === 'lifetime'
-                ? (isZh ? '一次付款，终身有效，价格以后不会再有' : 'One-time payment. Lifetime access. Price will not return.')
+                ? t('membershipLifetimeNote')
                 : `${t('cancelAnytime')} · ${t('securePayment')}`}
             </Text>
           </Box>
@@ -577,7 +577,7 @@ export default function MembershipContent() {
               </div>
               {info.nft.expiresAt && (
                 <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-                  {t('validUntil')} {new Date(info.nft.expiresAt).toLocaleDateString(isZh ? 'zh-CN' : 'en-US')}
+                  {t('validUntil')} {new Date(info.nft.expiresAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}
                 </div>
               )}
             </div>

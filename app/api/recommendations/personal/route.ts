@@ -16,6 +16,7 @@ const logger = createLogger('api-rec-personal')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const preferredRegion = ['sfo1', 'hnd1']
 
 function getSupabaseAdmin() {
   return createClient(

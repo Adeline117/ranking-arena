@@ -4100,6 +4100,25 @@ userActivityJoinedGroup: '加入了小组 ',
 userActivityPublishedPost: '发布了帖子 ',
 userActivityView: '查看',
 
+// Disclaimer page
+disclaimerTitle: '免责声明',
+disclaimerGeneral: '一般声明',
+disclaimerGeneralBody: 'Arena 平台提供的所有数据、排名、分析和信息仅供参考和教育目的，不构成任何投资建议、金融建议或交易建议。',
+disclaimerRiskWarning: '风险警告',
+disclaimerRiskWarningBody: '加密货币交易存在极高的风险，包括但不限于价格波动风险、流动性风险和技术风险。过往的交易业绩不代表未来表现。您可能会损失全部或部分投资资金。',
+disclaimerDataAccuracy: '数据准确性',
+disclaimerDataAccuracyBody: '我们尽力确保数据的准确性和及时性，但不保证所有信息完全准确、完整或最新。交易员排名基于各交易所公开数据计算得出，可能存在延迟或误差。',
+disclaimerLiability: '责任限制',
+disclaimerLiabilityBody: 'Arena 及其运营方不对因使用本平台信息而导致的任何直接或间接损失承担责任。用户应自行承担所有投资决策的风险和后果。',
+
+// Membership page (lifetime plan)
+membershipLifetimeSpots: '前{spots}名',
+membershipFoundingLifetime: '创始会员终身',
+membershipOneTimeForever: '一次付款 · 永久有效',
+membershipOneTime: '一次性',
+membershipGetFoundingAccess: '立即成为创始会员 - ${price}',
+membershipLifetimeNote: '一次付款，终身有效，价格以后不会再有',
+
 } as const
 
 export default zh

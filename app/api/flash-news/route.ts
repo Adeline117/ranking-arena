@@ -18,6 +18,7 @@ import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
+export const preferredRegion = ['sfo1', 'hnd1']
 
 // 快讯类型定义
 interface FlashNews {

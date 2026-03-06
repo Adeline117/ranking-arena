@@ -72,6 +72,7 @@ type Comment = {
 
 function HotContent() {
   const { t, language } = useLanguage()
+  const localizedName = (zh: string, en?: string | null) => language === 'zh' ? zh : (en || zh)
   const { showToast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -894,11 +895,11 @@ function HotContent() {
                                     transition: 'background 0.15s ease',
                                   }}
                                 >
-                                  {language === 'zh' ? p.group : (p.group_en || p.group)}
+                                  {localizedName(p.group, p.group_en)}
                                 </Link>
                               ) : (
                                 <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `var(--color-text-tertiary-10)`, borderRadius: 999 }}>
-                                  {language === 'zh' ? p.group : (p.group_en || p.group)}
+                                  {localizedName(p.group, p.group_en)}
                                 </Text>
                               )}
                             </Box>
@@ -933,7 +934,7 @@ function HotContent() {
                                   color: 'var(--color-text-tertiary)',
                                   verticalAlign: 'middle',
                                 }}>
-                                  {language === 'zh' ? '译' : 'TR'}
+                                  {t('hotTranslatedBadge')}
                                 </span>
                               )}
                             </Text>
@@ -1046,7 +1047,7 @@ function HotContent() {
                                   <Text size="sm" weight="black" style={{ color: 'var(--color-text-secondary)' }}>
                                     #{rank}
                                   </Text>
-                                  <Text size="xs" color="secondary">{language === 'zh' ? p.group : (p.group_en || p.group)}</Text>
+                                  <Text size="xs" color="secondary">{localizedName(p.group, p.group_en)}</Text>
                                   <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                                 </Box>
                                 <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
@@ -1144,7 +1145,7 @@ function HotContent() {
                                 #{idx + 1}
                               </Text>
                               <Text size="base" weight="bold">
-                                {language === 'zh' ? group.name : (group.name_en || group.name)}
+                                {localizedName(group.name, group.name_en)}
                               </Text>
                             </Box>
                             <Text size="xs" color="tertiary">
@@ -1232,11 +1233,11 @@ function HotContent() {
                   display: 'inline-block',
                 }}
               >
-                {language === 'zh' ? openPost.group : (openPost.group_en || openPost.group)}
+                {localizedName(openPost.group, openPost.group_en)}
               </Link>
             ) : (
               <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-                {language === 'zh' ? openPost.group : (openPost.group_en || openPost.group)}
+                {localizedName(openPost.group, openPost.group_en)}
               </div>
             )}
 

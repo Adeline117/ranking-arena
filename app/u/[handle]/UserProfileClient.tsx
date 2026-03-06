@@ -84,8 +84,7 @@ interface UserProfileClientProps {
 export default function UserProfileClient({ handle, serverProfile, serverTraderData }: UserProfileClientProps) {
   const router = useRouter()
   const { showToast } = useToast()
-  const { t, language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const { isPro } = useSubscription()
 
   const [email, setEmail] = useState<string | null>(null)
@@ -292,9 +291,9 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     : 'overview'
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
-    { key: 'overview', label: t('overview') || (isZh ? '概览' : 'Overview') },
-    { key: 'stats', label: t('stats') || (isZh ? '统计' : 'Stats') },
-    { key: 'portfolio', label: t('portfolio') || (isZh ? '持仓' : 'Portfolio') },
+    { key: 'overview', label: t('overview') },
+    { key: 'stats', label: t('stats') },
+    { key: 'portfolio', label: t('portfolio') },
     /* bookshelf/followers/groups/bookmarks tabs removed per Adeline */
   ]
 
@@ -315,7 +314,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
         <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
           <Breadcrumb items={[
-            { label: language === 'zh' ? '排行榜' : 'Leaderboard', href: '/rankings' },
+            { label: t('userProfileLeaderboard'), href: '/rankings' },
             { label: traderProfile?.handle || profile.handle || handle },
           ]} />
 
@@ -384,7 +383,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                               borderRadius: tokens.radius.lg, cursor: 'pointer', textAlign: 'center',
                             }}>
                               <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                                {language === 'zh' ? '注册查看完整历史数据' : 'Sign up to view full history'}
+                                {t('userProfileSignUpViewHistory')}
                               </Text>
                             </Box>
                           </Link>
@@ -501,7 +500,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
 
       <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
         <Breadcrumb items={[
-          { label: isZh ? '社区' : 'Community', href: '/' },
+          { label: t('userProfileCommunity'), href: '/' },
           { label: `@${profile.handle}` },
         ]} />
         {/* Profile Header with gradient extending to tabs */}
@@ -626,7 +625,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                       <polyline points="16 18 22 12 16 6" />
                       <polyline points="8 6 2 12 8 18" />
                     </svg>
-                    {isZh ? '开发者' : 'Developer'}
+                    {t('userProfileDeveloper')}
                   </span>
                 )}
 
@@ -641,7 +640,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 1l3.22 6.636 7.28.96-5.25 5.18 1.24 7.224L12 17.77 5.51 21l1.24-7.224L1.5 8.596l7.28-.96z" />
                     </svg>
-                    {isZh ? '管理员' : 'Admin'}
+                    {t('admin')}
                   </span>
                 )}
               </Box>
@@ -743,7 +742,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                   transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
               >
-                {isZh ? '登录后关注' : 'Login to Follow'}
+                {t('userProfileLoginToFollow')}
               </Link>
             )}
           </Box>
@@ -880,7 +879,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
                 />
               ) : (
                 <Box style={{ padding: tokens.spacing[6], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.xl, border: `1px solid ${tokens.colors.border.primary}`, textAlign: 'center' }}>
-                  <Text size="sm" color="tertiary">{isZh ? '暂无统计数据，绑定交易所后可查看' : 'No stats data yet. Link an exchange to view.'}</Text>
+                  <Text size="sm" color="tertiary">{t('userProfileNoStatsYet')}</Text>
                 </Box>
               )}
             </Box>

@@ -4093,6 +4093,25 @@ userActivityJoinedGroup: 'Joined group ',
 userActivityPublishedPost: 'Published post ',
 userActivityView: 'View',
 
+// Disclaimer page
+disclaimerTitle: 'Disclaimer',
+disclaimerGeneral: 'General',
+disclaimerGeneralBody: 'All data, rankings, analyses, and information provided on the Arena platform are for informational and educational purposes only and do not constitute investment advice, financial advice, or trading advice.',
+disclaimerRiskWarning: 'Risk Warning',
+disclaimerRiskWarningBody: 'Cryptocurrency trading involves a very high degree of risk, including but not limited to price volatility, liquidity risk, and technological risk. Past trading performance is not indicative of future results. You may lose all or part of your invested capital.',
+disclaimerDataAccuracy: 'Data Accuracy',
+disclaimerDataAccuracyBody: 'We strive to ensure the accuracy and timeliness of our data, but we do not guarantee that all information is completely accurate, complete, or up to date. Trader rankings are calculated from publicly available exchange data and may be subject to delays or inaccuracies.',
+disclaimerLiability: 'Limitation of Liability',
+disclaimerLiabilityBody: 'Arena and its operators shall not be liable for any direct or indirect losses arising from the use of information provided on this platform. Users assume all risks and consequences of their own investment decisions.',
+
+// Membership page (lifetime plan)
+membershipLifetimeSpots: 'First {spots}',
+membershipFoundingLifetime: 'Founding Member Lifetime',
+membershipOneTimeForever: 'One-time · Forever',
+membershipOneTime: 'one-time',
+membershipGetFoundingAccess: 'Get Founding Access - ${price}',
+membershipLifetimeNote: 'One-time payment. Lifetime access. Price will not return.',
+
 } as const
 
 export default en

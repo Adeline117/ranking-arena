@@ -127,6 +127,10 @@
     {
       "path": "/api/notifications/ranking-changes",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-report",
+      "schedule": "0 8 * * 1"
     }
   ],
   "headers": [

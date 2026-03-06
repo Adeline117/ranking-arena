@@ -10,6 +10,7 @@ import { checkRateLimit } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
+export const preferredRegion = ['sfo1', 'hnd1']
 
 type ExportFormat = 'csv' | 'json'
 type ExportType = 'traders' | 'snapshots'

@@ -16,6 +16,7 @@ import { logger } from '@/lib/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 
 export const runtime = 'nodejs'
+export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 min (Pro plan)
 

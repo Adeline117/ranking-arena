@@ -31,6 +31,7 @@ const logger = createLogger('search-advanced')
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const preferredRegion = ['sfo1', 'hnd1']
 
 // Initialize Supabase client
 function getSupabaseClient() {

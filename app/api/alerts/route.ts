@@ -16,6 +16,7 @@ import {
 import logger from '@/lib/logger'
 
 export const runtime = 'nodejs'
+export const preferredRegion = ['sfo1', 'hnd1']
 
 /**
  * GET - 获取提醒触发历史

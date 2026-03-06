@@ -29,6 +29,7 @@ import {
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
+export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 

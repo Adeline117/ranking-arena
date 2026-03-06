@@ -16,20 +16,22 @@ import { logger } from '@/lib/logger'
 const MobileBottomNav = dynamic(() => import('@/app/components/layout/MobileBottomNav'), { ssr: false })
 
 // Filter tabs aligned with Top 10 sections (Books, Papers, Whitepapers) + additional categories
-const CATEGORIES = [
-  { key: 'all', en: 'All', zh: '全部' },
-  { key: 'book', en: 'Books', zh: '书籍' },
-  { key: 'paper', en: 'Papers', zh: '论文' },
-  { key: 'whitepaper', en: 'Whitepapers', zh: '白皮书' },
-  { key: 'research', en: 'Research', zh: '研报' },
-  { key: 'academic_paper', en: 'Academic', zh: '学术论文' },
-]
+const CATEGORY_KEYS = ['all', 'book', 'paper', 'whitepaper', 'research', 'academic_paper'] as const
+const CATEGORY_I18N: Record<string, string> = {
+  all: 'resourcesCategoryAll',
+  book: 'resourcesCategoryBooks',
+  paper: 'resourcesCategoryPapers',
+  whitepaper: 'resourcesCategoryWhitepapers',
+  research: 'resourcesCategoryResearch',
+  academic_paper: 'resourcesCategoryAcademic',
+}
 
-const SORT_OPTIONS = [
-  { key: 'recent', en: 'Recently Added', zh: '最新添加' },
-  { key: 'popular', en: 'Most Popular', zh: '最受欢迎' },
-  { key: 'rating', en: 'Highest Rated', zh: '评分最高' },
-]
+const SORT_KEYS = ['recent', 'popular', 'rating'] as const
+const SORT_I18N: Record<string, string> = {
+  recent: 'resourcesSortRecent',
+  popular: 'resourcesSortPopular',
+  rating: 'resourcesSortRating',
+}
 
 const PAGE_SIZE = 24
 
@@ -79,7 +81,7 @@ export default function ResourcesClient({
   recentItems,
   categoryCounts = {},
 }: ResourcesClientProps) {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const searchParams = useSearchParams()
 
   const [items, setItems] = useState<LibraryItem[]>(initialItems)

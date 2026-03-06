@@ -17,6 +17,13 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  BinanceFuturesLeaderboardResponseSchema,
+  BinanceFuturesBaseInfoResponseSchema,
+  BinanceFuturesPerformanceResponseSchema,
+  BinanceFuturesPositionResponseSchema,
+} from './schemas'
 import type {
   LeaderboardPlatform,
   MarketType,
@@ -175,7 +182,7 @@ export class BinanceFuturesConnector extends BaseConnector {
   ): Promise<DiscoverResult> {
     const periodType = this.mapWindowToPlatform(window)
 
-    const response = await this.request<BinanceLeaderboardResponse>(
+    const _rawLb = await this.request<BinanceLeaderboardResponse>(
       `${this.BASE_URL}/v3/public/future/leaderboard/getLeaderboardRank`,
       {
         method: 'POST',
@@ -189,6 +196,7 @@ export class BinanceFuturesConnector extends BaseConnector {
         }),
       }
     )
+    const response = warnValidate(BinanceFuturesLeaderboardResponseSchema, _rawLb, 'binance-futures/leaderboard')
 
     if (!response.success || !response.data?.list) {
       return {
@@ -222,7 +230,7 @@ export class BinanceFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const response = await this.request<BinanceBaseInfoResponse>(
+    const _rawProfile = await this.request<BinanceBaseInfoResponse>(
       `${this.BASE_URL}/v2/public/future/leaderboard/getOtherLeaderboardBaseInfo`,
       {
         method: 'POST',
@@ -230,6 +238,7 @@ export class BinanceFuturesConnector extends BaseConnector {
         body: JSON.stringify({ encryptedUid: traderKey }),
       }
     )
+    const response = warnValidate(BinanceFuturesBaseInfoResponseSchema, _rawProfile, 'binance-futures/baseInfo')
 
     if (!response.success || !response.data) {
       return null
@@ -266,7 +275,7 @@ export class BinanceFuturesConnector extends BaseConnector {
     window: Window
   ): Promise<SnapshotResult | null> {
     // Fetch performance data
-    const perfResponse = await this.request<BinancePerformanceResponse>(
+    const _rawPerf = await this.request<BinancePerformanceResponse>(
       `${this.BASE_URL}/v1/public/future/leaderboard/getOtherPerformance`,
       {
         method: 'POST',
@@ -274,6 +283,7 @@ export class BinanceFuturesConnector extends BaseConnector {
         body: JSON.stringify({ encryptedUid: traderKey }),
       }
     )
+    const perfResponse = warnValidate(BinanceFuturesPerformanceResponseSchema, _rawPerf, 'binance-futures/performance')
 
     if (!perfResponse.success || !perfResponse.data) {
       return null
@@ -346,7 +356,7 @@ export class BinanceFuturesConnector extends BaseConnector {
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
     // Fetch performance for all periods to build equity curve
-    const perfResponse = await this.request<BinancePerformanceResponse>(
+    const _rawPerfTs = await this.request<BinancePerformanceResponse>(
       `${this.BASE_URL}/v1/public/future/leaderboard/getOtherPerformance`,
       {
         method: 'POST',
@@ -354,6 +364,7 @@ export class BinanceFuturesConnector extends BaseConnector {
         body: JSON.stringify({ encryptedUid: traderKey }),
       }
     )
+    const perfResponse = warnValidate(BinanceFuturesPerformanceResponseSchema, _rawPerfTs, 'binance-futures/timeseries')
 
     if (!perfResponse.success || !perfResponse.data) {
       return { series: [], fetched_at: new Date().toISOString() }
@@ -417,7 +428,7 @@ export class BinanceFuturesConnector extends BaseConnector {
    * Fetch current positions for a trader (if shared).
    */
   async fetchPositions(traderKey: string): Promise<BinancePositionResponse['data'] | null> {
-    const response = await this.request<BinancePositionResponse>(
+    const _rawPos = await this.request<BinancePositionResponse>(
       `${this.BASE_URL}/v1/public/future/leaderboard/getOtherPosition`,
       {
         method: 'POST',
@@ -428,6 +439,7 @@ export class BinanceFuturesConnector extends BaseConnector {
         }),
       }
     )
+    const response = warnValidate(BinanceFuturesPositionResponseSchema, _rawPos, 'binance-futures/positions')
 
     return response.success ? response.data : null
   }
