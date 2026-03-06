@@ -4,7 +4,7 @@
  * Creates 20 simulated users, joins groups, creates posts & comments, follows
  */
 
-const SB_URL = process.env.SUPABASE_URL || 'https://iknktzifjdyujdccyhsv.supabase.co';
+const SB_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const headers = {
