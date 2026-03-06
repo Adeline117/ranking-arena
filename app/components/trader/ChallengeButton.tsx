@@ -353,7 +353,7 @@ export default function ChallengeButton({
                       border: 'none',
                       borderBottom:
                         i < results.length - 1
-                          ? '1px solid rgba(255,255,255,0.05)'
+                          ? '1px solid var(--glass-border-light)'
                           : 'none',
                       cursor: 'pointer',
                       textAlign: 'left',
@@ -481,7 +481,7 @@ export default function ChallengeButton({
                       >
                         {selected.title}
                       </div>
-                      <div style={{ fontSize: 11, color: '#888' }}>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                         Opponent selected
                       </div>
                     </div>
@@ -585,7 +585,7 @@ export default function ChallengeButton({
                       borderRadius: 8,
                       background: 'transparent',
                       border: '1px solid var(--glass-border-light)',
-                      color: copied ? '#4DFF9A' : '#888',
+                      color: copied ? 'var(--color-accent-success)' : 'var(--color-text-tertiary)',
                       fontSize: 13,
                       fontWeight: 600,
                       cursor: 'pointer',

@@ -98,12 +98,12 @@ export default function PKPageClient({
           transition: 'all 0.2s ease',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'
+          e.currentTarget.style.background = 'var(--glass-bg-medium)'
+          e.currentTarget.style.borderColor = 'var(--color-border-secondary)'
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'
+          e.currentTarget.style.background = 'var(--glass-bg-light)'
+          e.currentTarget.style.borderColor = 'var(--glass-border-medium)'
         }}
       >
         {/* X (Twitter) icon */}
@@ -130,7 +130,7 @@ export default function PKPageClient({
           borderRadius: 10,
           background: 'rgba(139,111,168,0.12)',
           border: '1px solid rgba(139,111,168,0.35)',
-          color: '#c9b8db',
+          color: 'var(--color-text-secondary)',
           fontSize: 14,
           fontWeight: 600,
           cursor: downloading ? 'not-allowed' : 'pointer',
@@ -174,7 +174,7 @@ export default function PKPageClient({
           padding: '10px 20px',
           borderRadius: 10,
           background: 'var(--glass-bg-light)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid var(--glass-border-light)',
           color: 'var(--color-text-tertiary)',
           fontSize: 14,
           fontWeight: 600,
@@ -182,12 +182,12 @@ export default function PKPageClient({
           transition: 'all 0.2s ease',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.07)'
+          e.currentTarget.style.background = 'var(--glass-bg-medium)'
           e.currentTarget.style.color = 'var(--color-text-primary)'
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
-          e.currentTarget.style.color = '#888888'
+          e.currentTarget.style.background = 'var(--glass-bg-light)'
+          e.currentTarget.style.color = 'var(--color-text-tertiary)'
         }}
       >
         {/* Link icon */}
