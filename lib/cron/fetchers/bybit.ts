@@ -1,15 +1,15 @@
 /**
  * Bybit Copy Trading — Inline fetcher for Vercel serverless
- * API: https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list
+ * API: https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list
  *
- * Uses the beehive public API directly (no puppeteer).
+ * Uses the beehive public API directly via api2.bybit.com (no WAF).
  * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
  *
- * [WARN] WAF-BLOCKED from US residential IPs (Akamai "Access Denied").
  * Strategy:
- * 1. Try direct API (works from Vercel SG/JP regions)
+ * 1. Try api2.bybit.com (bypasses Akamai WAF on www.bybit.com)
  * 2. Fall back to Cloudflare Worker proxy
- * 3. Return appropriate error if all methods fail
+ * 3. Fall back to VPS proxy
+ * 4. Fall back to www.bybit.com/x-api (may be WAF-blocked)
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -26,12 +26,11 @@ import {
 import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
-// Dynamic import to avoid bundling puppeteer on Vercel
-const getCloudflareBypass = () => import('../scrapers/cloudflare-bypass')
 
 const SOURCE = 'bybit'
+// api2.bybit.com bypasses Akamai WAF that blocks www.bybit.com/x-api
 const DIRECT_API_URL =
-  'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list'
+  'https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 500
 const PAGE_SIZE = 50
@@ -149,17 +148,12 @@ async function fetchBybitPage(
     }
   }
 
-  // Strategy 4: Stealth browser bypass (last resort)
+  // Strategy 4: Try www.bybit.com/x-api fallback (original endpoint, may be WAF-blocked)
   try {
-    logger.warn(`[bybit] Trying stealth browser to bypass Akamai WAF...`)
-    const { bypassCloudflare, cookiesToHeader } = await getCloudflareBypass()
-    const { cookies } = await bypassCloudflare('https://www.bybit.com/en/copy-trading', {
-      proxy: process.env.STEALTH_PROXY || undefined,
-    })
-    const cookieHeader = cookiesToHeader(cookies)
-    const data = await fetchJson<BybitApiResponse>(directUrl, {
+    const wwwUrl = directUrl.replace('api2.bybit.com/fapi', 'www.bybit.com/x-api/fapi')
+    const data = await fetchJson<BybitApiResponse>(wwwUrl, {
       headers: {
-        Cookie: cookieHeader,
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         Referer: 'https://www.bybit.com/en/copy-trading',
         Origin: 'https://www.bybit.com',
       },
@@ -168,7 +162,7 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    logger.warn(`[bybit] Stealth browser fallback failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[bybit] www.bybit.com fallback failed: ${err instanceof Error ? err.message : err}`)
   }
 
   return null

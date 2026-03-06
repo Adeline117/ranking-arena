@@ -4,8 +4,7 @@
  * Same authentication strategy as bitget-futures.ts.
  * See that file for detailed notes on API status.
  *
- * [WARN] Public endpoints return 404 as of 2025.
- * Requires BITGET_API_KEY, BITGET_API_SECRET, BITGET_API_PASSPHRASE for broker API.
+ * Strategy: auth broker API → V1 public → V2 public → CF/VPS proxy
  *
  * Original: scripts/import/import_bitget_spot_v2.mjs (Puppeteer-based)
  */
@@ -202,6 +201,9 @@ async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
 
   const urls = [
+    // V1 public endpoint (still working as of 2026)
+    'https://api.bitget.com/api/mix/v1/trace/traderList',
+    // V2 endpoints (may return 404)
     'https://api.bitget.com/api/v2/copy/spot-trader/trader-profit-ranking',
     'https://api.bitget.com/api/v2/copy/spot-trader/query-trader-list',
   ]
@@ -211,7 +213,11 @@ async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
 
     for (let page = 1; page <= maxPages; page++) {
       try {
-        const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
+        const isV1 = apiUrl.includes('/mix/v1/trace/')
+        const queryParams = isV1
+          ? `sortRule=roi&sortFlag=desc&pageNo=${page}&pageSize=${PAGE_SIZE}`
+          : `period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
+        const url = `${apiUrl}?${queryParams}`
         const data = await fetchJson<BitgetResponse>(url, {
           headers: {
             Referer: 'https://www.bitget.com/',
