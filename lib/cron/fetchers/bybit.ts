@@ -117,7 +117,39 @@ async function fetchBybitPage(
     logger.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
   }
 
-  // Strategy 3: Stealth browser bypass (extract cookies then retry direct API)
+  // Strategy 3: VPS proxy (Tokyo/Singapore VPS with clean IP)
+  const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+  if (vpsUrl) {
+    try {
+      logger.warn(`[bybit] Trying VPS proxy...`)
+      const res = await fetch(vpsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+        },
+        body: JSON.stringify({
+          url: directUrl,
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            Referer: 'https://www.bybit.com/en/copy-trading',
+            Accept: 'application/json',
+          },
+        }),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as BybitApiResponse
+        if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+          return data
+        }
+      }
+    } catch (err) {
+      logger.warn(`[bybit] VPS proxy failed: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+
+  // Strategy 4: Stealth browser bypass (last resort)
   try {
     logger.warn(`[bybit] Trying stealth browser to bypass Akamai WAF...`)
     const { bypassCloudflare, cookiesToHeader } = await getCloudflareBypass()
@@ -159,7 +191,7 @@ async function fetchPeriod(
     const data = await fetchBybitPage(pageNo, PAGE_SIZE, duration)
     
     if (!data) {
-      lastError = 'WAF-blocked from both direct API and proxy'
+      lastError = 'WAF-blocked from direct API, CF proxy, and VPS proxy'
       break
     }
 
