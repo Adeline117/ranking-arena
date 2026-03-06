@@ -6,6 +6,12 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  BybitFuturesLeaderboardResponseSchema,
+  BybitFuturesDetailResponseSchema,
+  BybitFuturesTimeseriesResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult,
   ProfileResult,
@@ -45,10 +51,11 @@ export class BybitFuturesConnector extends BaseConnector {
     const timeRange = WINDOW_MAP[window]
     const page = Math.floor(offset / limit) + 1
 
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?timeRange=${timeRange}&dataType=DATA_ROI&page=${page}&pageSize=${limit}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BybitFuturesLeaderboardResponseSchema, _rawLb, 'bybit-futures/leaderboard')
 
     const list = data?.result?.data || []
 
