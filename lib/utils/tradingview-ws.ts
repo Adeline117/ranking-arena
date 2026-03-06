@@ -75,8 +75,10 @@ interface TradingViewClientWrapper {
   ta: Map<string, TechnicalAnalysis>
   lastTaFetch: number
    
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic optional TradingView lib
   client: any
-   
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TradingView chart instances
   charts: Map<string, any>
   connected: boolean
   destroy: () => void
@@ -145,6 +147,7 @@ async function fetchTechnicalAnalysis(
 // ============================================
 
 function createTVClient(): TradingViewClientWrapper {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- optional dynamic dep
   let TradingView: any
   try {
      
