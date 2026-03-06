@@ -257,7 +257,7 @@ function CompareChart({
       }
 
       window.addEventListener('resize', resizeHandler)
-    }).catch(() => {})
+    }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
 
     return () => {
       disposed = true

@@ -10,7 +10,7 @@ import { logger } from '@/lib/logger'
 
 export const revalidate = 3600 // ISR: 1 hour
 
-let _supabaseInstance: any = null
+let _supabaseInstance: import('@supabase/supabase-js').SupabaseClient | null = null
 
 function getSupabase() {
   if (_supabaseInstance) return _supabaseInstance
@@ -117,16 +117,16 @@ async function fetchExchangeTraders(exchange: string): Promise<TraderData[]> {
 
     // Map to TraderData shape — use handle as trader_key for correct routing to /trader/[handle]
     return (data || []).map((row: Record<string, unknown>) => ({
-      trader_key: row.handle || row.source_trader_id,
-      display_name: row.handle || null,
-      avatar_url: row.avatar_url,
-      platform: row.source,
-      roi: row.roi ?? 0,
-      pnl: row.pnl ?? 0,
-      win_rate: row.win_rate,
-      max_drawdown: row.max_drawdown,
-      arena_score: row.arena_score,
-      followers: row.followers,
+      trader_key: String(row.handle || row.source_trader_id || ''),
+      display_name: row.handle ? String(row.handle) : null,
+      avatar_url: row.avatar_url as string | null,
+      platform: String(row.source || ''),
+      roi: Number(row.roi ?? 0),
+      pnl: Number(row.pnl ?? 0),
+      win_rate: row.win_rate as number | null,
+      max_drawdown: row.max_drawdown as number | null,
+      arena_score: row.arena_score as number | null,
+      followers: row.followers as number | null,
     }))
   } catch (e) {
     logger.error(`[ExchangeRanking] Exception for ${exchange}:`, e)

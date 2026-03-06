@@ -121,7 +121,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
         })
         setSparklines(map)
       })
-      .catch(() => {/* sparklines are non-critical; fail silently */})
+      .catch(() => {/* sparklines are non-critical; fail silently */}) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   useEffect(() => {

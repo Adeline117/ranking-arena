@@ -319,7 +319,7 @@ export default function TraderHeader({
     navigator.clipboard.writeText(handle).then(() => {
       setHandleCopied(true)
       setTimeout(() => setHandleCopied(false), 2000)
-    }).catch(() => {
+    }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
       // fallback
     })
   }, [handle])
@@ -334,7 +334,7 @@ export default function TraderHeader({
      
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader header */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader header */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [externalUserId])
 
   const sourceLabelKey = source ? SOURCE_CONFIG[source.toLowerCase()] : null

@@ -123,7 +123,7 @@ export default function ReadPage() {
   useEffect(() => {
     if (!id) return
     setLoading(true)
-    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user)).catch(() => { /* non-critical */ })
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user)).catch(() => { /* non-critical */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
 
     fetch(`/api/library/${id}`)
       .then(r => r.json())

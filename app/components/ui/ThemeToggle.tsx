@@ -57,7 +57,7 @@ export default function ThemeToggle() {
             pseudoElement: '::view-transition-new(root)',
           }
         )
-      }).catch(() => {
+      }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
         // Animation failed, theme still applied
         // View transition animation failed, falling back to instant switch
       })

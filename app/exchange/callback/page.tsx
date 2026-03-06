@@ -30,7 +30,7 @@ function ExchangeCallbackPageContent() {
         router.push('/login')
         return
       }
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for exchange callback */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for exchange callback */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
 
     const exchangeParam = searchParams.get('exchange')
     if (exchangeParam) {

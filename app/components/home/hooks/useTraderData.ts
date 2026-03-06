@@ -353,7 +353,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           setLastUpdated(cached.lastUpdated)
           setAvailableSources(cached.availableSources || [])
         })
-        .catch(() => {
+        .catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
           // Silent refresh failure - loadTimeRange already sets error
         })
     }

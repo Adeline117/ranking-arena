@@ -54,7 +54,7 @@ export default function MyPostsPage() {
       if (data.user?.id) {
         loadUserHandle(data.user.id)
       }
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for my-posts page init */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for my-posts page init */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   const loadUserHandle = async (uid: string) => {

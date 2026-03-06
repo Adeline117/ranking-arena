@@ -393,7 +393,7 @@ function ReviewForm({
 
     supabase.auth.getSession().then(({ data }) => {
       setAccessToken(data.session?.access_token ?? null)
-    }).catch(() => { /* Intentionally swallowed: session check non-critical for reviews */ })
+    }).catch(() => { /* Intentionally swallowed: session check non-critical for reviews */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   const handleSubmit = async () => {
@@ -522,11 +522,11 @@ export default function TraderReviews({ traderHandle }: TraderReviewsProps) {
 
     supabase.auth.getSession().then(({ data }) => {
       setAccessToken(data.session?.access_token ?? null)
-    }).catch(() => { /* Intentionally swallowed: session check non-critical */ })
+    }).catch(() => { /* Intentionally swallowed: session check non-critical */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
 
     supabase.auth.getUser().then(({ data }) => {
       setCurrentUserId(data.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical */ })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   // Load reviews

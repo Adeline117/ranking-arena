@@ -404,7 +404,7 @@ export default function EpubReader({
 
       book.loaded.navigation.then((nav) => {
         if (!cancelled && onTocLoaded) onTocLoaded(nav.toc)
-      }).catch(() => { /* Intentionally swallowed: TOC loading is non-critical for reading */ })
+      }).catch(() => { /* Intentionally swallowed: TOC loading is non-critical for reading */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
 
       rendition.on('relocated', (location: { start?: { cfi: string; displayed?: { page: number; total: number } }; end?: { cfi: string } }) => {
         if (cancelled) return
@@ -470,7 +470,7 @@ export default function EpubReader({
           sessionStartTime: Date.now(),
         }))
         onReady?.()
-      }).catch(() => { /* Intentionally swallowed: location generation non-critical for reading */ })
+      }).catch(() => { /* Intentionally swallowed: location generation non-critical for reading */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
 
       rendition.on('selected', (cfiRange: string, contents: Contents) => {
         if (cancelled) return

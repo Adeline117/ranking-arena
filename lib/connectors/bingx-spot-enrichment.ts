@@ -50,7 +50,7 @@ export class BingXSpotConnector extends BaseExchangeConnector {
     const pageSize = params?.pageSize || 20
     const sortType = params?.sortType
 
-    const body: any = { pageId, pageSize }
+    const body: Record<string, unknown> = { pageId, pageSize }
     if (sortType !== undefined) body.sortType = sortType
 
     try {

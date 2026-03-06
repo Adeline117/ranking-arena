@@ -72,7 +72,7 @@ function SearchContent() {
      
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
-    }).catch(() => { /* Auth check non-critical on search page */ })
+    }).catch(() => { /* Auth check non-critical on search page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
     setSearchHistory(getSearchHistory())
     
     // 加载热门搜索数据

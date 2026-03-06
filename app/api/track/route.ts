@@ -8,10 +8,15 @@ import { NextRequest } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { z } from 'zod'
 
 const logger = createLogger('track-api')
 
-const VALID_ACTIONS = ['impression', 'click', 'dwell'] as const
+const TrackSchema = z.object({
+  type: z.enum(['impression', 'click', 'dwell']),
+  post_id: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+})
 
 export async function POST(request: NextRequest) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
@@ -23,18 +28,18 @@ export async function POST(request: NextRequest) {
       return new Response(null, { status: 204 })
     }
 
-    let body: { type?: string; post_id?: string; metadata?: Record<string, unknown> }
+    let raw: unknown
     try {
-      body = await request.json()
+      raw = await request.json()
     } catch {
       return new Response(null, { status: 204 })
     }
 
-    const { type, post_id, metadata } = body
-
-    if (!type || !post_id || !(VALID_ACTIONS as readonly string[]).includes(type)) {
+    const parsed = TrackSchema.safeParse(raw)
+    if (!parsed.success) {
       return new Response(null, { status: 204 })
     }
+    const { type, post_id, metadata } = parsed.data
 
     const supabase = getSupabaseAdmin()
 
