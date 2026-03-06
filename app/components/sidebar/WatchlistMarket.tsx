@@ -159,7 +159,13 @@ export default function WatchlistMarket() {
         </div>
       ) : swrError ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {t('sidebarLoadFailedShort')}
+          <div>{t('sidebarLoadFailedShort')}</div>
+          <button
+            onClick={() => mutateMarket()}
+            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+          >
+            {t('retry') || 'Retry'}
+          </button>
         </div>
       ) : coins.length === 0 ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>

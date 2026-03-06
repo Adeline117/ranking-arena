@@ -44,7 +44,7 @@ const fetcher = async (url: string) => {
 export default function NewsFlash() {
   const { language, t } = useLanguage()
 
-  const { data, error, isLoading } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     '/api/flash-news?limit=5&sort=published_at',
     fetcher,
     {
