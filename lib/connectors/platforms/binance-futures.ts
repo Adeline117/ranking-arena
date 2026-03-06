@@ -441,6 +441,6 @@ export class BinanceFuturesConnector extends BaseConnector {
     )
     const response = warnValidate(BinanceFuturesPositionResponseSchema, _rawPos, 'binance-futures/positions')
 
-    return response.success ? response.data : null
+    return response.success ? (response.data as Record<string, unknown> | null) : null
   }
 }

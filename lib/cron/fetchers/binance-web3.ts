@@ -32,6 +32,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  normalizeROI,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -188,7 +189,7 @@ async function fetchPeriod(
     )
     if (roi == null) continue
     // If ROI is in decimal form (< 10), convert to percentage
-    if (Math.abs(roi) < 10) roi = roi * 100
+    roi = normalizeROI(roi, SOURCE) ?? roi
 
     const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl)
     const wrRaw = parseNum(item.winRate ?? item.win_rate ?? item.successRate)

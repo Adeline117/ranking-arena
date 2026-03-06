@@ -26,6 +26,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  normalizeROI,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -101,7 +102,7 @@ function parseTrader(item: BlofinTrader, period: string): TraderData | null {
 
   let roi = parseNum(item.roi ?? item.returnRate ?? item.pnlRatio)
   if (roi === null || roi === 0) return null
-  if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+  roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl)
 

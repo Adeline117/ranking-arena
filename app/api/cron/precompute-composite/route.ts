@@ -1,6 +1,6 @@
 /**
  * Cron: Precompute composite rankings and store in Redis
- * Schedule: Every 2 hours
+ * Schedule: Every 2 hours (see vercel.json cron config)
  *
  * Composite = weighted average of 7D/30D/90D arena_score:
  *   7D×0.20 + 30D×0.45 + 90D×0.35
@@ -23,7 +23,7 @@ const logger = createLogger('precompute-composite')
 
 const COMPOSITE_WEIGHTS = { '7D': 0.20, '30D': 0.45, '90D': 0.35 } as const
 const ROI_ANOMALY_THRESHOLD = 5000
-const CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
+const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
