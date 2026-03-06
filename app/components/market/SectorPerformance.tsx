@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CryptoCategory } from '@/lib/utils/coingecko'
-import { uiLogger } from '@/lib/utils/logger'
 
 const SECTOR_LABELS: Record<string, string> = {
   'layer-1': 'L1',
@@ -17,27 +16,56 @@ const SECTOR_LABELS: Record<string, string> = {
   'stablecoins': 'Stable',
 }
 
+const cardStyle = {
+  padding: '10px 12px',
+  background: tokens.glass.bg.secondary,
+  backdropFilter: tokens.glass.blur.md,
+  borderRadius: tokens.radius.md,
+  border: tokens.glass.border.light,
+}
+
 export default function SectorPerformance() {
   const { t } = useLanguage()
   const [sectors, setSectors] = useState<CryptoCategory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/market/sectors')
       .then((r) => r.json())
       .then((json) => { if (Array.isArray(json)) setSectors(json.slice(0, 4)) })
-      .catch(err => console.warn('[SectorPerformance] fetch failed', err))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load')
+      })
+      .finally(() => setLoading(false))
   }, [])
 
-  if (sectors.length === 0) return null
+  if (loading) {
+    return (
+      <div style={cardStyle}>
+        <div className="skeleton" style={{ height: 12, width: '55%', marginBottom: 8, borderRadius: 4 }} />
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="skeleton" style={{ height: 14, width: `${100 - i * 5}%`, marginBottom: 4, borderRadius: 4 }} />
+        ))}
+      </div>
+    )
+  }
+
+  if (error || sectors.length === 0) {
+    return (
+      <div style={cardStyle}>
+        <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+          {t('sectorPerformance')}
+        </div>
+        <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '4px 0' }}>
+          {error ? t('sidebarLoadFailed') : t('noDataGeneric')}
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div style={{
-      padding: '10px 12px',
-      background: tokens.glass.bg.secondary,
-      backdropFilter: tokens.glass.blur.md,
-      borderRadius: tokens.radius.md,
-      border: tokens.glass.border.light,
-    }}>
+    <div style={cardStyle}>
       <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
         {t('sectorPerformance')}
       </div>
