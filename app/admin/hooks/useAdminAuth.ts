@@ -18,7 +18,7 @@ export function useAdminAuth() {
 
   useEffect(() => {
     checkAuth()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; checkAuth uses router/supabase which are stable
   }, [])
 
   async function checkAuth() {

@@ -163,7 +163,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
     }).catch((err) => {
       logger.error('[UserProfile] Auth check failed:', err)
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; handle/serverProfile are initial props, supabase is stable
   }, [])
 
   async function handleOwnProfileCreation(userId: string, emailHandle?: string) {

@@ -106,7 +106,7 @@ export default function FavoritesPage() {
     }
 
     load()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load is defined inside effect; showToast/t are stable refs
   }, [accessToken, authChecked])
 
   const createFolder = async () => {

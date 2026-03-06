@@ -109,7 +109,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         return
       }
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- supabase/t/loadUserHandle are stable; auth check runs on mount
   }, [router, groupId, showToast, language])
 
   // Load group name

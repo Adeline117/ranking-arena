@@ -114,7 +114,7 @@ export function usePostTranslation({ posts, language, translatingEnabled = true 
     if (translatingEnabled && posts.length > 0 && !translatingPosts) {
       translatePosts(posts, language as 'zh' | 'en')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- translatePosts excluded to avoid infinite loop; only trigger on posts/language change
   }, [posts, language])
 
   return { translatedPosts, translatingPosts }
