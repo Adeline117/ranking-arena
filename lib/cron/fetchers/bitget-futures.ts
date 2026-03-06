@@ -272,6 +272,46 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
     }
   }
 
+  // Strategy 3: VPS proxy fallback for geo/WAF blocks
+  if (allTraders.length === 0) {
+    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
+    if (vpsUrl) {
+      logger.warn('[bitget-futures] All direct/CF endpoints failed, trying VPS proxy...')
+      for (const apiUrl of PUBLIC_API_URLS) {
+        if (allTraders.length > 0) break
+        try {
+          const url = `${apiUrl}?period=${periodParam}&pageNo=1&pageSize=${PAGE_SIZE}`
+          const res = await fetch(vpsUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+            },
+            body: JSON.stringify({
+              url,
+              method: 'GET',
+              headers: {
+                Referer: 'https://www.bitget.com/',
+                Origin: 'https://www.bitget.com',
+                Accept: 'application/json',
+              },
+            }),
+          })
+          if (!res.ok) continue
+          const data = (await res.json()) as BitgetResponse
+          if (data.code !== '00000' && data.code !== 0 && data.code !== '0') continue
+          const list = data.data?.traderList || data.data?.list || []
+          allTraders.push(...list)
+          if (allTraders.length > 0) {
+            logger.warn(`[bitget-futures] VPS proxy got ${allTraders.length} traders`)
+          }
+        } catch (err) {
+          logger.warn(`[bitget-futures] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
+  }
+
   return allTraders
 }
 
