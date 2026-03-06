@@ -26,21 +26,21 @@ interface Tool {
 }
 
 const CATEGORY_FILTERS = [
-  { key: 'all', zh: '全部', en: 'All' },
-  { key: 'trading_tool', zh: '交易工具', en: 'Trading Tools' },
-  { key: 'trading-bot', zh: '交易机器人', en: 'Trading Bots' },
-  { key: 'copytrading', zh: '跟单', en: 'Copy Trading' },
-  { key: 'quant_platform', zh: '量化平台', en: 'Quant Platforms' },
-  { key: 'analytics', zh: '分析工具', en: 'Analytics', isGroup: true },
-  { key: 'wallets', zh: '钱包', en: 'Wallets', isGroup: true },
-  { key: 'dev-tools', zh: '开发工具', en: 'Dev Tools', isGroup: true },
-  { key: 'compliance-tax', zh: '合规/税务', en: 'Compliance & Tax', isGroup: true },
-  { key: 'info', zh: '资讯', en: 'News & Info', isGroup: true },
-  { key: 'strategy', zh: '策略', en: 'Strategies' },
-  { key: 'script', zh: '脚本', en: 'Scripts' },
-  { key: 'charting', zh: '图表', en: 'Charting' },
-  { key: 'signal', zh: '信号', en: 'Signals' },
-]
+  { key: 'all', labelKey: 'toolsCatAll' },
+  { key: 'trading_tool', labelKey: 'toolsCatTradingTool' },
+  { key: 'trading-bot', labelKey: 'toolsCatTradingBot' },
+  { key: 'copytrading', labelKey: 'toolsCatCopytrading' },
+  { key: 'quant_platform', labelKey: 'toolsCatQuantPlatform' },
+  { key: 'analytics', labelKey: 'toolsCatAnalytics', isGroup: true },
+  { key: 'wallets', labelKey: 'toolsCatWallets', isGroup: true },
+  { key: 'dev-tools', labelKey: 'toolsCatDevTools', isGroup: true },
+  { key: 'compliance-tax', labelKey: 'toolsCatComplianceTax', isGroup: true },
+  { key: 'info', labelKey: 'toolsCatInfo', isGroup: true },
+  { key: 'strategy', labelKey: 'toolsCatStrategy' },
+  { key: 'script', labelKey: 'toolsCatScript' },
+  { key: 'charting', labelKey: 'toolsCatCharting' },
+  { key: 'signal', labelKey: 'toolsCatSignal' },
+] as const
 
 const TOOL_CATEGORY_GROUPS: Record<string, string[]> = {
   analytics: ['on-chain-analytics', 'defi-analytics', 'portfolio-tracker', 'whale-tracking', 'sentiment'],
@@ -51,17 +51,22 @@ const TOOL_CATEGORY_GROUPS: Record<string, string[]> = {
 }
 
 const SORT_OPTIONS = [
-  { key: 'rating', zh: '评分最高', en: 'Highest Rated' },
-  { key: 'newest', zh: '最新', en: 'Newest' },
-  { key: 'reviews', zh: '评价最多', en: 'Most Reviews' },
-]
+  { key: 'rating', labelKey: 'toolsSortRating' },
+  { key: 'newest', labelKey: 'toolsSortNewest' },
+  { key: 'reviews', labelKey: 'toolsSortReviews' },
+] as const
 
-const PRICING_LABELS: Record<string, { zh: string; en: string }> = {
-  free: { zh: '免费', en: 'Free' },
-  freemium: { zh: '免费增值', en: 'Freemium' },
-  paid: { zh: '付费', en: 'Paid' },
-  open_source: { zh: '开源', en: 'Open Source' },
+const PRICING_LABEL_KEYS: Record<string, string> = {
+  free: 'toolsPricingFree',
+  freemium: 'toolsPricingFreemium',
+  paid: 'toolsPricingPaid',
+  open_source: 'toolsPricingOpenSource',
 }
+
+// Map from category filter key to its labelKey for reverse lookup in ToolCard
+const CATEGORY_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  CATEGORY_FILTERS.map(f => [f.key, f.labelKey])
+)
 
 const TradingIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -81,10 +86,10 @@ const CodeIcon = () => (
   </svg>
 )
 
-function toolToEntry(tool: Tool, isZh: boolean): LeaderboardEntry {
+function toolToEntry(tool: Tool, lang: 'zh' | 'en'): LeaderboardEntry {
   return {
     id: tool.id,
-    name: isZh ? (tool.name_zh || tool.name) : tool.name,
+    name: lang === 'zh' ? (tool.name_zh || tool.name) : tool.name,
     rating: tool.avg_rating,
     logoUrl: tool.logo_url,
     href: tool.website || tool.github_url,
@@ -93,8 +98,7 @@ function toolToEntry(tool: Tool, isZh: boolean): LeaderboardEntry {
 
 
 export default function ToolsPage() {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { language, t } = useLanguage()
   const [tools, setTools] = useState<Tool[]>([])
   const [loading, setLoading] = useState(true)
   const [category, setCategory] = useState('all')
@@ -225,7 +229,7 @@ export default function ToolsPage() {
     } finally {
       setLoading(false)
     }
-  }, [category, sort, debouncedSearch])
+  }, [category, sort, debouncedSearch, t])
 
   useEffect(() => {
     fetchData()
@@ -240,21 +244,21 @@ export default function ToolsPage() {
           {
             title: t('top10TradingTools'),
             icon: <TradingIcon />,
-            entries: topTrading.map(t => toolToEntry(t, isZh)),
+            entries: topTrading.map(tool => toolToEntry(tool, language)),
             loading: leaderboardLoading,
             emptyText: t('comingSoon'),
           },
           {
             title: t('top10QuantPlatforms'),
             icon: <QuantIcon />,
-            entries: topQuant.map(t => toolToEntry(t, isZh)),
+            entries: topQuant.map(tool => toolToEntry(tool, language)),
             loading: leaderboardLoading,
             emptyText: t('comingSoon'),
           },
           {
             title: t('top10Scripts'),
             icon: <CodeIcon />,
-            entries: topScripts.map(t => toolToEntry(t, isZh)),
+            entries: topScripts.map(tool => toolToEntry(tool, language)),
             loading: leaderboardLoading,
             emptyText: t('comingSoon'),
           },
@@ -337,7 +341,7 @@ export default function ToolsPage() {
                   }
                 }}
               >
-                {isZh ? f.zh : f.en}
+                {t(f.labelKey)}
                 {count != null && count > 0 && (
                   <span style={{
                     fontSize: tokens.typography.fontSize.xs,
@@ -368,7 +372,7 @@ export default function ToolsPage() {
             }}
           >
             {SORT_OPTIONS.map(opt => (
-              <option key={opt.key} value={opt.key}>{isZh ? opt.zh : opt.en}</option>
+              <option key={opt.key} value={opt.key}>{t(opt.labelKey)}</option>
             ))}
           </select>
         </div>
@@ -427,7 +431,7 @@ export default function ToolsPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: 20 }}>
             {tools.map(tool => (
-              <ToolCard key={tool.id} tool={tool} isZh={isZh} />
+              <ToolCard key={tool.id} tool={tool} language={language} />
             ))}
           </div>
         )}
@@ -436,10 +440,12 @@ export default function ToolsPage() {
   )
 }
 
-function ToolCard({ tool, isZh }: { tool: Tool; isZh: boolean }) {
-  const name = isZh ? (tool.name_zh || tool.name) : tool.name
-  const desc = isZh ? (tool.description_zh || tool.description) : tool.description
-  const pricingLabel = tool.pricing ? PRICING_LABELS[tool.pricing]?.[isZh ? 'zh' : 'en'] || tool.pricing : null
+function ToolCard({ tool, language }: { tool: Tool; language: 'zh' | 'en' }) {
+  const { t } = useLanguage()
+  const name = language === 'zh' ? (tool.name_zh || tool.name) : tool.name
+  const desc = language === 'zh' ? (tool.description_zh || tool.description) : tool.description
+  const pricingLabelKey = tool.pricing ? PRICING_LABEL_KEYS[tool.pricing] : null
+  const pricingLabel = pricingLabelKey ? t(pricingLabelKey) : (tool.pricing || null)
 
   return (
     <a
@@ -494,7 +500,7 @@ function ToolCard({ tool, isZh }: { tool: Tool; isZh: boolean }) {
             color: 'var(--color-text-primary)', marginBottom: 4, lineHeight: tokens.typography.lineHeight.tight,
           }}>{name}</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)' }}>
-            <span>{CATEGORY_FILTERS.find(f => f.key === tool.category)?.[isZh ? 'zh' : 'en'] || tool.category}</span>
+            <span>{CATEGORY_LABEL_MAP[tool.category] ? t(CATEGORY_LABEL_MAP[tool.category]) : tool.category}</span>
             {pricingLabel && (
               <span style={{
                 padding: '2px 8px',

@@ -3,6 +3,8 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import { KucoinFuturesLeaderboardResponseSchema, KucoinFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -28,10 +30,11 @@ export class KucoinFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const pageNo = Math.floor(offset / limit) + 1
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://www.kucoin.com/_api/copy-trade/leader/public/list?pageNo=${pageNo}&pageSize=${limit}&orderBy=ROI&period=${WINDOW_MAP[window]}`,
       { method: 'GET' }
     )
+    const data = warnValidate(KucoinFuturesLeaderboardResponseSchema, _rawLb, 'kucoin-futures/leaderboard')
     const list = data?.data?.items || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
@@ -46,10 +49,11 @@ export class KucoinFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://www.kucoin.com/_api/copy-trade/leader/public/detail?uid=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(KucoinFuturesDetailResponseSchema, _rawProfile, 'kucoin-futures/profile')
     const info = data?.data
     if (!info) return null
 
@@ -67,10 +71,11 @@ export class KucoinFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://www.kucoin.com/_api/copy-trade/leader/public/detail?uid=${traderKey}&period=${WINDOW_MAP[window]}`,
       { method: 'GET' }
     )
+    const data = warnValidate(KucoinFuturesDetailResponseSchema, _rawSnap, 'kucoin-futures/snapshot')
     const info = data?.data
     if (!info) return null
 

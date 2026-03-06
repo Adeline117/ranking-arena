@@ -6,6 +6,8 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import { MexcFuturesLeaderboardResponseSchema, MexcFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -31,10 +33,11 @@ export class MexcFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const page = Math.floor(offset / limit) + 1
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${limit}&sortField=yield&sortType=DESC&timeType=${WINDOW_MAP[window]}`,
       { method: 'GET' }
     )
+    const data = warnValidate(MexcFuturesLeaderboardResponseSchema, _rawLb, 'mexc-futures/leaderboard')
     const list = data?.data?.list || []
 
     const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
@@ -53,10 +56,11 @@ export class MexcFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/detail?uid=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(MexcFuturesDetailResponseSchema, _rawProfile, 'mexc-futures/profile')
     const info = data?.data
     if (!info) return null
 
@@ -75,10 +79,11 @@ export class MexcFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/detail?uid=${traderKey}&timeType=${WINDOW_MAP[window]}`,
       { method: 'GET' }
     )
+    const data = warnValidate(MexcFuturesDetailResponseSchema, _rawSnap, 'mexc-futures/snapshot')
     const info = data?.data
     if (!info) return null
 
