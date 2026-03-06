@@ -142,7 +142,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
 
   const targetLang = language
-  const { data: posts = [], isLoading: loading, error: swrError } = useSWR(
+  const { data: posts = [], isLoading: loading, error: swrError, mutate } = useSWR(
     ['hot-discussions', limit, language],
     ([key, lim, _lang]) => fetchHotPosts(key, lim, targetLang),
     {
@@ -181,14 +181,20 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           ))}
         </div>
       ) : swrError ? (
-        <p style={{
+        <div style={{
           fontSize: tokens.typography.fontSize.sm,
           color: 'var(--color-text-tertiary)',
           textAlign: 'center',
           padding: '16px 0',
         }}>
-          {t('loadFailed')}
-        </p>
+          <div>{t('loadFailed')}</div>
+          <button
+            onClick={() => mutate()}
+            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: '1px solid var(--glass-border-light)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: 12, cursor: 'pointer' }}
+          >
+            {t('retry') || 'Retry'}
+          </button>
+        </div>
       ) : posts.length === 0 ? (
         <p style={{
           fontSize: tokens.typography.fontSize.sm,
@@ -330,7 +336,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    {post.comment_count}
+                    {post.comment_count || 0}
                   </span>
                 </div>
               </Link>

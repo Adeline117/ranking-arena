@@ -141,6 +141,7 @@ export async function GET(request: NextRequest) {
 
     if (updateErrors > recentPosts.length / 2) {
       logger.error('Too many hot score update failures', { errors: updateErrors, total: recentPosts.length })
+      await plog.error(new Error(`${updateErrors}/${recentPosts.length} updates failed`))
       return NextResponse.json({ success: false, error: `${updateErrors}/${recentPosts.length} updates failed` }, { status: 500 })
     }
 
@@ -150,9 +151,11 @@ export async function GET(request: NextRequest) {
       // non-critical
     }
 
+    await plog.success(recentPosts.length, { method: 'fallback' })
     return NextResponse.json({ success: true, method: 'fallback' })
   } catch (err: unknown) {
     logger.error('Hot score refresh failed', { error: String(err) })
+    await plog.error(err)
     return NextResponse.json({ success: false, error: String(err) }, { status: 500 })
   }
 }

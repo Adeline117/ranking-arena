@@ -34,6 +34,8 @@ global.fetch = mockFetch
 // ---------------------------------------------------------------------------
 
 let GET: typeof import('../route').GET
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamically imported after mock setup
+let NextRequest: any
 
 async function loadRoute() {
   // Reset module registry so the route re-reads CRON_SECRET
@@ -54,6 +56,10 @@ async function loadRoute() {
 
   const mod = await import('../route')
   GET = mod.GET
+
+  // Import NextRequest after mocks are set up
+  const { NextRequest: NR } = await import('next/server')
+  NextRequest = NR
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +67,6 @@ async function loadRoute() {
 // ---------------------------------------------------------------------------
 
 function createCronRequest(secret?: string) {
-  const { NextRequest } = require('next/server')
   const headers = new Headers()
   if (secret) headers.set('authorization', `Bearer ${secret}`)
   return new NextRequest('http://localhost:3000/api/cron/flash-news-fetch', { headers })
