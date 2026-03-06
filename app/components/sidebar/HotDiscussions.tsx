@@ -21,23 +21,24 @@ type HotPost = {
   translated?: boolean
 }
 
-function HotTag({ score, isZh }: { score: number; isZh: boolean }) {
+function HotTag({ score }: { score: number }) {
+  const { t } = useLanguage()
   const level = score >= 100 ? 'hot' : score >= 50 ? 'warm' : 'normal'
   const config = {
     hot: {
-      label: isZh ? '热门' : 'Hot',
+      label: t('hotDiscussionsTagHot'),
       bg: 'var(--color-red-subtle)',
       color: 'var(--color-accent-error)',
       border: 'var(--color-red-border)',
     },
     warm: {
-      label: isZh ? '升温' : 'Rising',
+      label: t('hotDiscussionsTagRising'),
       bg: 'var(--color-orange-subtle)',
       color: 'var(--color-accent-warning)',
       border: 'var(--color-orange-border)',
     },
     normal: {
-      label: isZh ? '讨论' : 'Active',
+      label: t('hotDiscussionsTagActive'),
       bg: 'var(--glass-bg-light)',
       color: 'var(--color-text-tertiary)',
       border: 'var(--glass-border-light)',
@@ -139,9 +140,8 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
 
 export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
-  const isZh = language === 'zh'
 
-  const targetLang = isZh ? 'zh' : 'en'
+  const targetLang = language
   const { data: posts = [], isLoading: loading, error: swrError } = useSWR(
     ['hot-discussions', limit, language],
     ([key, lim, _lang]) => fetchHotPosts(key, lim, targetLang),
@@ -263,7 +263,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                       flexShrink: 0,
                     }}>译</span>
                   )}
-                  <HotTag score={post.hot_score} isZh={isZh} />
+                  <HotTag score={post.hot_score} />
                 </div>
 
                 {/* Content preview */}

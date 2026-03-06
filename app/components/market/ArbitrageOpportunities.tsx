@@ -30,8 +30,7 @@ interface PriceCompare {
 }
 
 export default function ArbitrageOpportunities() {
-  const { t, language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const [opps, setOpps] = useState<ArbOpp[]>([])
   const [priceComparisons, setPriceComparisons] = useState<PriceCompare[]>([])
   const [loading, setLoading] = useState(true)
@@ -124,7 +123,7 @@ export default function ArbitrageOpportunities() {
           color: tokens.colors.text.primary,
           letterSpacing: '0.3px',
         }}>
-          {t('arbitrageOpportunities') || (isZh ? '套利机会' : 'Arbitrage Opportunities')}
+          {t('arbitrageOpportunities')}
         </span>
         <span style={{
           fontSize: tokens.typography.fontSize.xs,
@@ -134,7 +133,7 @@ export default function ArbitrageOpportunities() {
           borderRadius: tokens.radius.sm,
           background: hasOpps ? 'var(--color-accent-success-10)' : tokens.colors.bg.tertiary,
         }}>
-          {hasOpps ? `${opps.length}${isZh ? '个机会' : ' opps'}` : showComparisons ? `${priceComparisons.length}${isZh ? '个币种' : ' coins'}` : isZh ? '0个机会' : '0 opps'}
+          {hasOpps ? t('arbitrageOppsCount').replace('{n}', String(opps.length)) : showComparisons ? t('arbitrageCoinsCount').replace('{n}', String(priceComparisons.length)) : t('arbitrageOppsCount').replace('{n}', '0')}
         </span>
       </div>
 
@@ -268,7 +267,7 @@ export default function ArbitrageOpportunities() {
             textAlign: 'center',
             lineHeight: 1.5,
           }}>
-            {isZh ? '市场均衡中' : 'Market in Equilibrium'}
+            {t('arbitrageEquilibrium')}
           </div>
           <div style={{
             fontSize: tokens.typography.fontSize.xs,
@@ -276,7 +275,7 @@ export default function ArbitrageOpportunities() {
             opacity: 0.6,
             textAlign: 'center',
           }}>
-            {isZh ? '暂无显著套利机会' : 'No significant arbitrage opportunities'}
+            {t('arbitrageNoOpps')}
           </div>
         </div>
       )}

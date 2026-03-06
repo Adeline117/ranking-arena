@@ -315,7 +315,6 @@ function HotContent() {
 
   // 热度标签: 新(刚上榜) / 热(热度攀升) / 沸(广泛讨论)
   const getHotTag = useCallback((post: Post, _rank: number): { label: string; color: string } | null => {
-    const isZh = language === 'zh'
     const createdAt = post.created_at ? new Date(post.created_at) : null
     const hoursAgo = createdAt ? (Date.now() - createdAt.getTime()) / 3600000 : 999
     const score = post.hotScore ?? 0
@@ -323,18 +322,18 @@ function HotContent() {
 
     // 沸: 极高热度，真正的广泛讨论 (top 3 only, score>95 且 comments>=150)
     if (score >= 95 && comments >= 150) {
-      return { label: isZh ? '沸' : 'BOOM', color: 'var(--color-accent-error)' }
+      return { label: t('hotPageTagBoom'), color: 'var(--color-accent-error)' }
     }
     // 热: 短时间内热度持续攀升 (score>80 且不到24小时)
     if (score >= 80 && hoursAgo < 24) {
-      return { label: isZh ? '热' : 'HOT', color: 'var(--color-chart-orange)' }
+      return { label: t('hotPageTagHot'), color: 'var(--color-chart-orange)' }
     }
     // 新: 最近上榜的新鲜内容 (不到6小时)
     if (hoursAgo < 6) {
-      return { label: isZh ? '新' : 'NEW', color: 'var(--color-chart-blue)' }
+      return { label: t('hotPageTagNew'), color: 'var(--color-chart-blue)' }
     }
     return null
-  }, [language])
+  }, [t])
 
   const visibleHot = useMemo(() => {
     return loggedIn ? hotPosts : hotPosts.slice(0, 10)

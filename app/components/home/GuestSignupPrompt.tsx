@@ -14,11 +14,9 @@ export default function GuestSignupPrompt() {
   const { isLoggedIn, user } = useAuthSession()
   const session = isLoggedIn && user
   const loading = false
-  const { language } = useLanguage()
+  const { t } = useLanguage()
   const [show, setShow] = useState(false)
   const [dismissed, setDismissed] = useState(false)
-
-  const isZh = language === 'zh'
 
   // Check if already dismissed this session
   useEffect(() => {
@@ -119,7 +117,7 @@ export default function GuestSignupPrompt() {
           color: tokens.colors.text.primary,
           margin: '0 0 8px',
         }}>
-          {isZh ? '加入 Arena' : 'Join Arena'}
+          {t('guestSignupTitle')}
         </h2>
 
         <p style={{
@@ -128,9 +126,7 @@ export default function GuestSignupPrompt() {
           margin: '0 0 16px',
           lineHeight: 1.6,
         }}>
-          {isZh
-            ? '免费注册，解锁更多功能'
-            : 'Sign up free to unlock more features'}
+          {t('guestSignupSubtitle')}
         </p>
 
         <div style={{
@@ -140,10 +136,7 @@ export default function GuestSignupPrompt() {
           flexDirection: 'column',
           gap: 8,
         }}>
-          {(isZh
-            ? ['关注交易员，追踪实时动态', '加入社区，与高手交流策略', '访问专属图书馆和学习资源']
-            : ['Follow traders and track their moves', 'Join communities to discuss strategies', 'Access the Library and learning resources']
-          ).map((item, i) => (
+          {[t('guestSignupFeature1'), t('guestSignupFeature2'), t('guestSignupFeature3')].map((item, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: tokens.colors.text.secondary }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
@@ -168,7 +161,7 @@ export default function GuestSignupPrompt() {
               textAlign: 'center',
             }}
           >
-            {isZh ? '免费注册' : 'Sign Up Free'}
+            {t('guestSignupButton')}
           </Link>
 
           <button
@@ -184,7 +177,7 @@ export default function GuestSignupPrompt() {
               cursor: 'pointer',
             }}
           >
-            {isZh ? '稍后再说' : 'Maybe later'}
+            {t('guestSignupDismiss')}
           </button>
         </div>
       </div>
