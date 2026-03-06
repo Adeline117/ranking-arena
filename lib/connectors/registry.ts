@@ -138,6 +138,8 @@ export async function initializeConnectors(): Promise<void> {
   const { GateioFuturesConnector } = await import('./platforms/gateio-futures')
   const { XtFuturesConnector } = await import('./platforms/xt-futures')
   const { GainsPerpConnector } = await import('./platforms/gains-perp')
+  const { KwentaPerpConnector } = await import('./platforms/kwenta-perp')
+  const { MuxPerpConnector } = await import('./platforms/mux-perp')
   const { LbankFuturesConnector } = await import('./platforms/lbank-futures')
   const { BlofinFuturesConnector } = await import('./platforms/blofin-futures')
 
@@ -164,6 +166,8 @@ export async function initializeConnectors(): Promise<void> {
   connectorRegistry.register(new DydxPerpConnector())
   connectorRegistry.register(new GmxPerpConnector())
   connectorRegistry.register(new GainsPerpConnector())
+  connectorRegistry.register(new KwentaPerpConnector())
+  connectorRegistry.register(new MuxPerpConnector())
 }
 
 // ============================================

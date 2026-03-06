@@ -105,6 +105,10 @@
       "schedule": "30 */6 * * *"
     },
     {
+      "path": "/api/cron/batch-enrich?all=true",
+      "schedule": "40 3,15 * * *"
+    },
+    {
       "path": "/api/cron/check-trader-alerts",
       "schedule": "0 */6 * * *"
     },
@@ -179,6 +183,30 @@
     {
       "path": "/api/cron/backfill-avatars?platform=lbank&limit=200",
       "schedule": "30 11 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=binance_spot&limit=200",
+      "schedule": "30 12 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=bitget_spot&limit=200",
+      "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=weex&limit=200",
+      "schedule": "30 14 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=phemex&limit=200",
+      "schedule": "30 15 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=blofin&limit=200",
+      "schedule": "30 16 * * *"
+    },
+    {
+      "path": "/api/cron/backfill-avatars?platform=xt&limit=200",
+      "schedule": "30 17 * * *"
     }
   ],
   "headers": [
