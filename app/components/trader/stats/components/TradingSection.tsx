@@ -101,8 +101,24 @@ export function TradingSection({
         </Box>
       )}
 
-      {positionHistory.length > 0 && (
+      {positionHistory.length > 0 ? (
         <PositionHistorySection positionHistory={positionHistory} t={t} />
+      ) : (
+        <Box style={{
+          padding: tokens.spacing[8],
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+        }}>
+          <Text size="sm" color="secondary" style={{ fontWeight: tokens.typography.fontWeight.medium }}>
+            {t('noPositionHistory')}
+          </Text>
+          <Text size="xs" color="tertiary">
+            {t('noPositionHistoryDesc')}
+          </Text>
+        </Box>
       )}
 
       {/* Additional Stats */}
