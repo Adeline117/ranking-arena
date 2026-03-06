@@ -32,8 +32,12 @@ const logger = createLogger('trader-api')
 // Next.js 缓存配置
 export const revalidate = 60 // 1分钟，与 Cache-Control s-maxage 一致
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+function getSupabaseUrl() {
+  return process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+}
+function getSupabaseKey() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+}
 
 // 缓存键前缀
 const CACHE_PREFIX = 'trader:'
@@ -53,7 +57,9 @@ export async function GET(
     }
     const handle = parsed.data
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
+    const supabaseUrl = getSupabaseUrl()
+    const supabaseKey = getSupabaseKey()
+    if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
     }
 
@@ -69,7 +75,7 @@ export async function GET(
       return NextResponse.json({ ...await cached, cached: true })
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
     // 查找交易员 — if source is specified, try that source first
     let found: Awaited<ReturnType<typeof findTraderSource>> = null
