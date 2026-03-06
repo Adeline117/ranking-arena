@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -83,6 +83,20 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
 
   const displayName = formatDisplayName(data.handle, data.source)
   const _exchangeName = EXCHANGE_NAMES[data.source] || data.source
+
+  // Sticky mini header on mobile — appears when scrolled past main header
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [showMiniHeader, setShowMiniHeader] = useState(false)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => setShowMiniHeader(!entry.isIntersecting),
+      { threshold: 0 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
 
   // Tabs
   const urlTab = searchParams.get('tab')
@@ -195,7 +209,25 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           { label: displayName },
         ]} />
 
+        {/* Sticky mini header for mobile */}
+        <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>
+          <div className="mini-avatar" style={{ background: 'var(--color-bg-tertiary)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+            {data.avatar_url ? (
+              <img src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt="" width={28} height={28} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              displayName.charAt(0).toUpperCase()
+            )}
+          </div>
+          <span className="mini-name">{displayName}</span>
+          {data.roi != null && (
+            <span className="mini-roi" style={{ color: data.roi >= 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
+              {data.roi >= 0 ? '+' : ''}{(data.roi * 100).toFixed(1)}%
+            </span>
+          )}
+        </div>
+
         {/* Trader Header */}
+        <div ref={headerRef}>
         <TraderHeader
           handle={traderProfile?.handle || data.handle}
           displayName={displayName}
@@ -212,6 +244,7 @@ export default function TraderProfileClient({ data, serverTraderData }: TraderPr
           rank={data.rank ?? null}
           currentUserId={currentUserId}
         />
+        </div>
 
         {/* Tabs */}
         <TraderTabs
