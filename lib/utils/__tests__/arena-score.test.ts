@@ -617,6 +617,194 @@ describe('calculateArenaScore scoreConfidence', () => {
 })
 
 // ============================================
+// Additional Edge Cases: undefined fields, NaN inputs, extreme outliers
+// ============================================
+
+describe('Arena Score — additional edge cases', () => {
+  test('zero ROI and zero PnL produces totalScore = 0', () => {
+    const result = calculateArenaScore(
+      { roi: 0, pnl: 0, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    expect(result.totalScore).toBe(0)
+    expect(result.returnScore).toBe(0)
+    expect(result.pnlScore).toBe(0)
+  })
+
+  test('negative ROI with positive PnL only gets PnL score', () => {
+    const result = calculateArenaScore(
+      { roi: -20, pnl: 10000, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    expect(result.returnScore).toBe(0)
+    expect(result.pnlScore).toBeGreaterThan(0)
+    expect(result.totalScore).toBe(result.pnlScore)
+  })
+
+  test('extremely negative ROI produces zero return score', () => {
+    const result = calculateArenaScore(
+      { roi: -99.99, pnl: 0, maxDrawdown: null, winRate: null },
+      '90D'
+    )
+    expect(result.returnScore).toBe(0)
+    expect(result.totalScore).toBe(0)
+  })
+
+  test('very small positive ROI (1%) produces positive return score', () => {
+    const result = calculateArenaScore(
+      { roi: 1, pnl: 100, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    expect(result.returnScore).toBeGreaterThan(0)
+    expect(result.totalScore).toBeGreaterThan(0)
+  })
+
+  test('extremely small ROI (0.01%) may round to zero due to tanh compression', () => {
+    const result = calculateArenaScore(
+      { roi: 0.01, pnl: 0, maxDrawdown: null, winRate: null },
+      '30D'
+    )
+    // 0.01% ROI is so small that after tanh + exponent compression, it rounds to 0
+    expect(result.totalScore).toBeGreaterThanOrEqual(0)
+    expect(result.totalScore).toBeLessThanOrEqual(100)
+  })
+
+  test('score normalization: output always in [0, 100] for extreme inputs', () => {
+    const extremeCases = [
+      { roi: 999999, pnl: 999999999, maxDrawdown: null, winRate: null },
+      { roi: -999999, pnl: -999999999, maxDrawdown: null, winRate: null },
+      { roi: 0, pnl: 0, maxDrawdown: null, winRate: null },
+      { roi: 10000, pnl: 10000000, maxDrawdown: -99, winRate: 99 },
+    ]
+    for (const input of extremeCases) {
+      for (const period of ['7D', '30D', '90D'] as const) {
+        const result = calculateArenaScore(input, period)
+        expect(result.totalScore).toBeGreaterThanOrEqual(0)
+        expect(result.totalScore).toBeLessThanOrEqual(100)
+        expect(Number.isFinite(result.totalScore)).toBe(true)
+      }
+    }
+  })
+
+  test('ranking consistency: higher ROI yields higher score (holding PnL equal)', () => {
+    const base = { pnl: 5000, maxDrawdown: null as number | null, winRate: null as number | null }
+    const lowRoi = calculateArenaScore({ ...base, roi: 10 }, '30D')
+    const midRoi = calculateArenaScore({ ...base, roi: 50 }, '30D')
+    const highRoi = calculateArenaScore({ ...base, roi: 200 }, '30D')
+
+    expect(highRoi.totalScore).toBeGreaterThan(midRoi.totalScore)
+    expect(midRoi.totalScore).toBeGreaterThan(lowRoi.totalScore)
+  })
+
+  test('ranking consistency: higher PnL yields higher score (holding ROI equal)', () => {
+    const base = { roi: 50, maxDrawdown: null as number | null, winRate: null as number | null }
+    const lowPnl = calculateArenaScore({ ...base, pnl: 100 }, '90D')
+    const midPnl = calculateArenaScore({ ...base, pnl: 10000 }, '90D')
+    const highPnl = calculateArenaScore({ ...base, pnl: 500000 }, '90D')
+
+    expect(highPnl.totalScore).toBeGreaterThan(midPnl.totalScore)
+    expect(midPnl.totalScore).toBeGreaterThan(lowPnl.totalScore)
+  })
+})
+
+// ============================================
+// calculateOverallScore — additional branch coverage
+// ============================================
+
+describe('calculateOverallScore — additional branches', () => {
+  test('has 90D and 30D but no 7D', () => {
+    const score = calculateOverallScore({
+      score7d: null,
+      score30d: 70,
+      score90d: 80,
+    })
+    // 0.70 * 80 + (0.25 + 0.05) * 70 = 56 + 21 = 77
+    expect(score).toBeCloseTo(77, 1)
+  })
+
+  test('has 90D and 7D but no 30D', () => {
+    const score = calculateOverallScore({
+      score7d: 60,
+      score30d: null,
+      score90d: 80,
+    })
+    // 0.70 * 80 + (0.25 + 0.05) * 60 = 56 + 18 = 74
+    // momentum: clip(60/null -> 0) = 0
+    expect(score).toBeCloseTo(74, 1)
+  })
+
+  test('only 30D data applies 0.80 penalty', () => {
+    const score = calculateOverallScore({
+      score7d: null,
+      score30d: 80,
+      score90d: null,
+    })
+    // 80 * 0.80 = 64
+    expect(score).toBeCloseTo(64, 1)
+  })
+
+  test('all scores zero produces zero', () => {
+    const score = calculateOverallScore({
+      score7d: 0,
+      score30d: 0,
+      score90d: 0,
+    })
+    expect(score).toBe(0)
+  })
+
+  test('all scores at 100 produces near-100', () => {
+    const score = calculateOverallScore({
+      score7d: 100,
+      score30d: 100,
+      score90d: 100,
+    })
+    // base = 100, momentum = 0 (7d/30d ratio = 0)
+    expect(score).toBe(100)
+  })
+
+  test('output is always clipped to [0, 100]', () => {
+    // Even with extreme momentum bonus, should not exceed 100
+    const score = calculateOverallScore({
+      score7d: 100,
+      score30d: 50,
+      score90d: 99,
+    })
+    expect(score).toBeGreaterThanOrEqual(0)
+    expect(score).toBeLessThanOrEqual(100)
+  })
+})
+
+// ============================================
+// rankByArenaScore — additional edge cases
+// ============================================
+
+describe('rankByArenaScore — edge cases', () => {
+  test('empty trader list returns empty array', () => {
+    const ranked = rankByArenaScore([], '30D')
+    expect(ranked).toEqual([])
+  })
+
+  test('single trader returns single-element array', () => {
+    const traders = [{ id: '1', roi: 50, pnl: 5000, maxDrawdown: 10, winRate: 60 }]
+    const ranked = rankByArenaScore(traders, '30D')
+    expect(ranked.length).toBe(1)
+    expect(ranked[0].id).toBe('1')
+    expect(ranked[0].arena_score).toBeGreaterThan(0)
+  })
+
+  test('all-negative ROI traders are ranked by less-negative', () => {
+    const traders = [
+      { id: '1', roi: -50, pnl: -5000, maxDrawdown: 30, winRate: 40 },
+      { id: '2', roi: -10, pnl: -1000, maxDrawdown: 20, winRate: 45 },
+    ]
+    const ranked = rankByArenaScore(traders, '30D')
+    // Both get 0 returnScore and 0 pnlScore, same total, so sort by drawdown
+    // id 2 has lower drawdown (20 < 30), should be first
+    expect(ranked[0].id).toBe('2')
+  })
+})
+
+// ============================================
 // 配置常量测试
 // ============================================
 

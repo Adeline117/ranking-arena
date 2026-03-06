@@ -85,7 +85,7 @@ export default function MyGroups() {
   const isZh = language === 'zh'
   const { user } = useAuthSession()
 
-  const { data: groups = [], isLoading } = useSWR(
+  const { data: groups = [], isLoading, error: swrError } = useSWR(
     user ? ['my-groups', user.id] : null,
     ([, userId]) => fetchMyGroups(userId),
     {
@@ -111,6 +111,10 @@ export default function MyGroups() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {[1, 2].map(i => <div key={i} className="skeleton" style={{ height: 40, borderRadius: tokens.radius.md }} />)}
         </div>
+      ) : swrError ? (
+        <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
+          {t('loadFailed')}
+        </p>
       ) : groups.length === 0 ? (
         <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
           {t('sidebarNoGroupsJoined')}

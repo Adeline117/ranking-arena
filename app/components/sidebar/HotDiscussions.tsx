@@ -142,7 +142,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const isZh = language === 'zh'
 
   const targetLang = isZh ? 'zh' : 'en'
-  const { data: posts = [], isLoading: loading } = useSWR(
+  const { data: posts = [], isLoading: loading, error: swrError } = useSWR(
     ['hot-discussions', limit, language],
     ([key, lim, _lang]) => fetchHotPosts(key, lim, targetLang),
     {
@@ -180,6 +180,15 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
             <div key={i} className="skeleton" style={{ height: 56, borderRadius: tokens.radius.md }} />
           ))}
         </div>
+      ) : swrError ? (
+        <p style={{
+          fontSize: tokens.typography.fontSize.sm,
+          color: 'var(--color-text-tertiary)',
+          textAlign: 'center',
+          padding: '16px 0',
+        }}>
+          {t('loadFailed')}
+        </p>
       ) : posts.length === 0 ? (
         <p style={{
           fontSize: tokens.typography.fontSize.sm,
