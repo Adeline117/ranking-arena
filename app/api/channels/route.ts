@@ -7,6 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:channels')
 
 export const dynamic = 'force-dynamic'
 
@@ -70,7 +73,8 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.json({ channels })
-  } catch {
+  } catch (error) {
+    logger.error('GET /api/channels failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -138,7 +142,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ channel })
-  } catch {
+  } catch (error) {
+    logger.error('POST /api/channels failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
