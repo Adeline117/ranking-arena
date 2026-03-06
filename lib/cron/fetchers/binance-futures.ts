@@ -185,7 +185,8 @@ async function fetchPeriod(
 
       if (allTraders.length >= TARGET) break
       await sleep(500)
-    } catch {
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Pagination stopped at page ${page}: ${err instanceof Error ? err.message : String(err)}`)
       break
     }
   }
@@ -233,7 +234,7 @@ async function fetchPeriod(
   // Extended to all periods (not just 90D)
   if (saved > 0) {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
+    logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     let enrichedCount = 0
     for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
@@ -281,7 +282,7 @@ async function fetchPeriod(
               enrichedCount++
             }
           } catch (err) {
-            console.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err}`)
+            logger.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err instanceof Error ? err.message : String(err)}`)
           }
         })
       )
@@ -289,7 +290,7 @@ async function fetchPeriod(
         await sleep(ENRICH_DELAY_MS)
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
+    logger.info(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
   }
 
   return { total: top.length, saved, error }
