@@ -100,8 +100,9 @@ async function fetchBybitPage(
     `${PROXY_URL}/bybit/copy-trading?pageNo=${pageNo}&pageSize=${pageSize}&period=${duration}`
 
   // Strategy 1: Try VPS Playwright scraper (single page, ~65s per page)
-  // Only use for first 3 pages to stay within Vercel function timeout
-  if (VPS_SCRAPER_KEY && pageNo <= 3) {
+  // Only use for first page to stay within Vercel function timeout (300s)
+  // Pages 2+ fall through to faster direct API / proxy strategies
+  if (VPS_SCRAPER_KEY && pageNo <= 1) {
     try {
       const url = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${pageSize}&duration=${duration}`
       const res = await fetch(url, {
