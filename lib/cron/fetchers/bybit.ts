@@ -2,14 +2,14 @@
  * Bybit Copy Trading — Inline fetcher for Vercel serverless
  * API: https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list
  *
- * Uses the beehive public API directly via api2.bybit.com (no WAF).
  * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
  *
  * Strategy:
- * 1. Try api2.bybit.com (bypasses Akamai WAF on www.bybit.com)
- * 2. Fall back to Cloudflare Worker proxy
- * 3. Fall back to VPS proxy
- * 4. Fall back to www.bybit.com/x-api (may be WAF-blocked)
+ * 1. Try VPS Playwright scraper (bybitglobal.com — bypasses Akamai WAF)
+ * 2. Try api2.bybit.com direct
+ * 3. Fall back to Cloudflare Worker proxy
+ * 4. Fall back to VPS generic proxy
+ * 5. Fall back to www.bybit.com/x-api (may be WAF-blocked)
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -32,6 +32,9 @@ const SOURCE = 'bybit'
 const DIRECT_API_URL =
   'https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+// VPS Playwright scraper: uses bybitglobal.com + browser to bypass Akamai WAF
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 const TARGET = 500
 const PAGE_SIZE = 50
 
@@ -83,6 +86,39 @@ interface BybitApiResponse {
 // Fetch helpers with proxy fallback
 // ---------------------------------------------------------------------------
 
+/**
+ * Fetch all pages at once via VPS Playwright scraper (multi-page mode).
+ * Returns all trader details in a single call.
+ */
+async function fetchBybitViaScraper(
+  duration: string,
+  maxPages: number = 10,
+  pageSize: number = PAGE_SIZE
+): Promise<BybitLeaderDetail[]> {
+  if (!VPS_SCRAPER_KEY) return []
+
+  try {
+    const url = `${VPS_SCRAPER_URL}/bybit/leaderboard?multiPage=true&pages=${maxPages}&pageSize=${pageSize}&duration=${duration}`
+    const res = await fetch(url, {
+      headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+      signal: AbortSignal.timeout(120_000), // 2 min timeout for multi-page
+    })
+    if (!res.ok) {
+      logger.warn(`[bybit] VPS scraper returned ${res.status}`)
+      return []
+    }
+    const data = (await res.json()) as BybitApiResponse
+    const details = data?.result?.leaderDetails || []
+    if (details.length > 0) {
+      logger.info(`[bybit] VPS scraper got ${details.length} traders`)
+    }
+    return details
+  } catch (err) {
+    logger.warn(`[bybit] VPS scraper failed: ${err instanceof Error ? err.message : err}`)
+    return []
+  }
+}
+
 async function fetchBybitPage(
   pageNo: number,
   pageSize: number,
@@ -96,7 +132,26 @@ async function fetchBybitPage(
   const proxyUrl =
     `${PROXY_URL}/bybit/copy-trading?pageNo=${pageNo}&pageSize=${pageSize}&period=${duration}`
 
-  // Strategy 1: Try direct API first (works from non-US IPs)
+  // Strategy 1: Try VPS Playwright scraper (single page)
+  if (VPS_SCRAPER_KEY) {
+    try {
+      const url = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${pageSize}&duration=${duration}`
+      const res = await fetch(url, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(60_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as BybitApiResponse
+        if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
+          return data
+        }
+      }
+    } catch (err) {
+      logger.warn(`[bybit] VPS scraper failed: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+
+  // Strategy 2: Try direct API (api2.bybit.com, works from non-US IPs)
   try {
     const data = await fetchJson<BybitApiResponse>(directUrl)
     if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
@@ -106,7 +161,7 @@ async function fetchBybitPage(
     logger.warn(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
   }
 
-  // Strategy 2: Try Cloudflare Worker proxy
+  // Strategy 3: Try Cloudflare Worker proxy
   try {
     const data = await fetchJson<BybitApiResponse>(proxyUrl)
     if (data?.result?.leaderDetails && data.result.leaderDetails.length > 0) {
@@ -116,11 +171,10 @@ async function fetchBybitPage(
     logger.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
   }
 
-  // Strategy 3: VPS proxy (Tokyo/Singapore VPS with clean IP)
+  // Strategy 4: VPS generic proxy (Tokyo/Singapore VPS)
   const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
   if (vpsUrl) {
     try {
-      logger.warn(`[bybit] Trying VPS proxy...`)
       const res = await fetch(vpsUrl, {
         method: 'POST',
         headers: {
@@ -148,7 +202,7 @@ async function fetchBybitPage(
     }
   }
 
-  // Strategy 4: Try www.bybit.com/x-api fallback (original endpoint, may be WAF-blocked)
+  // Strategy 5: Try www.bybit.com/x-api fallback (may be WAF-blocked)
   try {
     const wwwUrl = directUrl.replace('api2.bybit.com/fapi', 'www.bybit.com/x-api/fapi')
     const data = await fetchJson<BybitApiResponse>(wwwUrl, {
@@ -181,25 +235,38 @@ async function fetchPeriod(
   const allTraders = new Map<string, BybitLeaderDetail>()
   let lastError: string | undefined
 
-  for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
-    const data = await fetchBybitPage(pageNo, PAGE_SIZE, duration)
-    
-    if (!data) {
-      lastError = 'WAF-blocked from direct API, CF proxy, and VPS proxy'
-      break
-    }
-
-    const details = data.result?.leaderDetails || []
-    if (details.length === 0) break
-
-    for (const item of details) {
+  // Strategy A: Try VPS scraper bulk fetch first (most efficient)
+  const scraperDetails = await fetchBybitViaScraper(duration, maxPages, PAGE_SIZE)
+  if (scraperDetails.length > 0) {
+    for (const item of scraperDetails) {
       const id = String(item.leaderUserId || item.leaderMark || '')
       if (!id || allTraders.has(id)) continue
       allTraders.set(id, item)
     }
+  }
 
-    if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
-    await sleep(500)
+  // Strategy B: Fall back to page-by-page if scraper didn't get enough
+  if (allTraders.size < PAGE_SIZE) {
+    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+      const data = await fetchBybitPage(pageNo, PAGE_SIZE, duration)
+
+      if (!data) {
+        lastError = 'All strategies failed (VPS scraper, direct API, CF proxy, VPS proxy)'
+        break
+      }
+
+      const details = data.result?.leaderDetails || []
+      if (details.length === 0) break
+
+      for (const item of details) {
+        const id = String(item.leaderUserId || item.leaderMark || '')
+        if (!id || allTraders.has(id)) continue
+        allTraders.set(id, item)
+      }
+
+      if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
+      await sleep(500)
+    }
   }
 
   if (allTraders.size === 0) {

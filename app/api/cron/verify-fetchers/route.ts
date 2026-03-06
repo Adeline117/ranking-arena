@@ -49,16 +49,32 @@ export async function GET(request: Request) {
     const results: VerifyResult[] = await verifyAll()
 
     const healthy = results.filter((r: VerifyResult) => r.healthy)
-    const unhealthy = results.filter((r: VerifyResult) => !r.healthy)
+    // Separate expected skips (missing API keys, discontinued endpoints) from real failures
+    const SKIP_REASONS = new Set(['auth_required', 'endpoint_gone'])
+    const skipped = results.filter((r: VerifyResult) => !r.healthy && SKIP_REASONS.has(r.failureReason || ''))
+    const failed = results.filter((r: VerifyResult) => !r.healthy && !SKIP_REASONS.has(r.failureReason || ''))
 
     logger.info(
-      `[${JOB_NAME}] Completed: ${healthy.length}/${results.length} healthy, ${unhealthy.length} unhealthy`
+      `[${JOB_NAME}] Completed: ${healthy.length} healthy, ${skipped.length} skipped, ${failed.length} failed (of ${results.length} total)`
     )
 
-    // Check consecutive failures and alert
+    // Log skipped platforms (informational only, no alerts)
+    for (const result of skipped) {
+      const jobKey = `verify-${result.platform}`
+      const platformLog = await PipelineLogger.start(jobKey, {
+        latencyMs: result.latencyMs,
+        skipped: true,
+      })
+      await platformLog.success(0, {
+        verifyResult: result as unknown as Record<string, unknown>,
+        skipped: true,
+      })
+    }
+
+    // Check consecutive failures and alert — only for real failures
     const alertsPlatforms: string[] = []
 
-    for (const result of unhealthy) {
+    for (const result of failed) {
       const jobKey = `verify-${result.platform}`
 
       // Log individual platform failure
@@ -117,12 +133,14 @@ export async function GET(request: Request) {
     const summary = {
       total: results.length,
       healthy: healthy.length,
-      unhealthy: unhealthy.length,
+      skipped: skipped.length,
+      failed: failed.length,
       alertsSent: alertsPlatforms.length,
       alertedPlatforms: alertsPlatforms,
       results: results.map((r: VerifyResult) => ({
         platform: r.platform,
         healthy: r.healthy,
+        skipped: !r.healthy && SKIP_REASONS.has(r.failureReason || ''),
         failureReason: r.failureReason || null,
         latencyMs: r.latencyMs,
       })),

@@ -28,6 +28,9 @@ const SOURCE = 'bybit_spot'
 const API_URL =
   'https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+// VPS Playwright scraper: uses bybitglobal.com + browser to bypass Akamai WAF
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 const TARGET = 500
 const PAGE_SIZE = 50
 
@@ -100,6 +103,35 @@ async function fetchPeriod(
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
   const allTraders = new Map<string, BybitLeaderDetail>()
 
+  // Strategy A: Try VPS Playwright scraper bulk fetch first
+  if (VPS_SCRAPER_KEY) {
+    try {
+      const scraperUrl = `${VPS_SCRAPER_URL}/bybit/leaderboard?multiPage=true&pages=${maxPages}&pageSize=${PAGE_SIZE}&duration=${duration}`
+      const res = await fetch(scraperUrl, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(120_000),
+      })
+      if (res.ok) {
+        const scraperData = (await res.json()) as BybitApiResponse
+        const details = scraperData?.result?.leaderDetails || []
+        if (details.length > 0) {
+          logger.info(`[${SOURCE}] VPS scraper got ${details.length} traders`)
+          for (const item of details) {
+            const id = String(item.leaderUserId || item.leaderMark || '')
+            if (!id || allTraders.has(id)) continue
+            allTraders.set(id, item)
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+
+  // Strategy B: Fall back to page-by-page if scraper didn't get enough
+  if (allTraders.size >= PAGE_SIZE) {
+    // Skip direct API, scraper got enough data
+  } else {
   for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
     try {
       const url =
@@ -113,7 +145,10 @@ async function fetchPeriod(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         if (msg.includes('403') || msg.includes('Access Denied')) {
-          return { total: 0, saved: 0, error: 'WAF-blocked — proxy fallback failed or not configured' }
+          if (allTraders.size === 0) {
+            return { total: 0, saved: 0, error: 'WAF-blocked — all strategies failed' }
+          }
+          break
         }
         throw err
       }
@@ -134,6 +169,7 @@ async function fetchPeriod(
       break
     }
   }
+  } // end else (scraper didn't get enough)
 
   // Map to TraderData
   const capturedAt = new Date().toISOString()
