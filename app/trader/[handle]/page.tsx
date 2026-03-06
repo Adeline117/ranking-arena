@@ -57,9 +57,9 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
         : `${name} is a ${exchange} crypto trader. View performance analytics and rankings on Arena.`
 
       const ogParams = new URLSearchParams({ handle: decoded })
-      if (roi \!= null) ogParams.set('roi', roi.toFixed(2))
-      if (score \!= null) ogParams.set('score', score.toFixed(0))
-      if (rank \!= null) ogParams.set('rank', String(rank))
+      if (roi != null) ogParams.set('roi', roi.toFixed(2))
+      if (score != null) ogParams.set('score', score.toFixed(0))
+      if (rank != null) ogParams.set('rank', String(rank))
       if (ts.source) ogParams.set('source', ts.source)
       const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
 
