@@ -679,7 +679,7 @@ export async function safeExecute<T>(
  * @param options - 可选配置
  */
 export function fireAndForget<T>(
-  promise: Promise<T>,
+  promise: PromiseLike<T> | Promise<T>,
   context: string,
   options?: {
     /** 是否发送到 Sentry (默认 false，仅 warn 级别日志) */
@@ -689,7 +689,7 @@ export function fireAndForget<T>(
   }
 ): void {
   const log = options?.log ?? logger
-  promise.catch((error) => {
+  Promise.resolve(promise).catch((error) => {
     const err = error instanceof Error ? error : new Error(String(error))
     log.warn(`[FireAndForget] ${context} failed:`, err.message)
     if (options?.reportToSentry) {
