@@ -8,8 +8,6 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text, Button } from '../base'
 import CopyTradeButton from './CopyTradeButton'
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
-const CopyTradeConfig = dynamic(() => import('../trading/CopyTradeConfig'), { ssr: false })
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { EXCHANGE_NAMES, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
@@ -20,19 +18,13 @@ import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import ShareButton from '../common/ShareButton'
 import ShareOnXButton from './ShareOnXButton'
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
-const AddToCollectionButton = dynamic(() => import('../features/AddToCollectionButton'), { ssr: false })
 
 // Lazy-load rarely-used components
 const ClaimTraderButton = dynamic(() => import('./ClaimTraderButton'), { ssr: false })
 const ChallengeButton = dynamic(() => import('./ChallengeButton'), { ssr: false })
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
-const MessageButton = dynamic(() => import('../ui/MessageButton'), { ssr: false })
 const OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
 const Web3VerifiedBadge = dynamic(() => import('./Web3VerifiedBadge').then(m => ({ default: m.Web3VerifiedBadge })), { ssr: false })
 const BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
-const AlertConfig = dynamic(() => import('../alerts/AlertConfig'), { ssr: false })
 
 interface TraderHeaderProps {
   handle: string
@@ -308,8 +300,6 @@ export default function TraderHeader({
   const [avatarHovered, setAvatarHovered] = useState(false)
   const [avatarError, setAvatarError] = useState(false)
   const [followerCount, setFollowerCount] = useState(followers)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
-  const [showAlertConfig, setShowAlertConfig] = useState(false)
   const router = useRouter()
   const [handleCopied, setHandleCopied] = useState(false)
   const { t } = useLanguage()
