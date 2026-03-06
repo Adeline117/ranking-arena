@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/utils/logger'
 import PricingPageClient from './PricingPageClient'
+
+const logger = createLogger('pricing-page')
 
 export const metadata: Metadata = {
   title: 'Pricing | Arena',
@@ -28,13 +31,13 @@ async function getLifetimeMemberCount(): Promise<number> {
       .eq('pro_plan', 'lifetime')
 
     if (error) {
-      console.error('[pricing] Failed to fetch lifetime count:', error.message)
+      logger.error('[pricing] Failed to fetch lifetime count:', error.message)
       return 0
     }
 
     return count ?? 0
   } catch (err) {
-    console.error('[pricing] Unexpected error fetching lifetime count:', err)
+    logger.error('[pricing] Unexpected error fetching lifetime count:', err)
     return 0
   }
 }

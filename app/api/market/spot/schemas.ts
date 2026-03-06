@@ -7,6 +7,9 @@
  */
 
 import { z } from 'zod'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('market-spot-schemas')
 
 export const CoinGeckoMarketEntrySchema = z.object({
   id: z.string(),
@@ -41,7 +44,7 @@ export function validateCoinGeckoResponse<T>(
       .slice(0, 5)
       .map(i => `${i.path.join('.')}: ${i.message}`)
       .join('; ')
-    console.warn(`[market:${context}] CoinGecko response validation warning: ${issues}`)
+    logger.warn(`[${context}] CoinGecko response validation warning: ${issues}`)
     return data as T
   }
   return result.data
