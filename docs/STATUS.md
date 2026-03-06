@@ -234,8 +234,8 @@ Line 188: `catch { break }` silently stops pagination without logging what happe
 1. ✅ Add timeouts to all connector fetch calls (15 connectors + 4 enrichment connectors)
 2. ✅ Fix non-null assertions on env vars (funding-rates, open-interest routes)
 3. ✅ Add error checking to Stripe webhook DB operations
-4. ✅ Fix silent `catch {}` blocks — added logging before break in binance-futures fetcher
-5. ✅ Silent catch blocks across remaining fetchers (in progress via agent)
+4. ✅ Fix silent `catch {}` blocks — 32 bare catches across 23 fetcher files now log errors
+   - 4 intentional silent catches remain: BigInt conversion fallbacks (gmx, enrichment) and JSON.parse skips (bingx, blofin)
 
 ### Batch 2: Code Consolidation ✅ COMPLETE
 6. ✅ Remove unused `_supabase` proxy in webhook
@@ -269,13 +269,13 @@ Line 188: `catch { break }` silently stops pagination without logging what happe
 | Metric | Count |
 |--------|-------|
 | Total issues found | 17 categories |
-| Fixed | 11 categories |
-| Deferred (low risk) | 5 categories (circuit breaker, schema validation, UA, hardcoded values, Redis) |
+| Fixed | 12 categories |
+| Deferred (low risk) | 4 categories (circuit breaker, schema validation, UA/hardcoded values, Redis) |
 | High risk (need decision) | 3 (Stripe webhook endpoint, arena score formula, DB schema) |
-| Files modified | 50+ |
+| Files modified | 60+ |
 | console.warn → logger | ~135 replacements |
 | Timeouts added | 19 connector/enrichment methods |
-| Error handling improved | 10+ silent catch/empty catch blocks |
+| Silent catch blocks fixed | 32 across 23 fetcher files (4 intentional silent catches remain) |
 
 **Current state:** The codebase is significantly more observable and resilient:
 - All external API calls now have 30s timeouts (prevents hung requests)
