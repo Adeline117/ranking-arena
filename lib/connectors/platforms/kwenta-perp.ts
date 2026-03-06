@@ -100,9 +100,9 @@ export class KwentaPerpConnector extends BaseConnector {
       const traders: TraderSource[] = stats.map((item) => ({
         platform: 'kwenta',
         market_type: 'perp' as const,
-        trader_key: (item.account ?? '').toLowerCase(),
-        display_name: `${(item.account ?? '').slice(0, 6)}...${(item.account ?? '').slice(-4)}`,
-        profile_url: `https://kwenta.io/stats/${item.account ?? ''}`,
+        trader_key: item.account.toLowerCase(),
+        display_name: `${item.account.slice(0, 6)}...${item.account.slice(-4)}`,
+        profile_url: `https://kwenta.io/stats/${item.account}`,
         discovered_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString(),
         is_active: true,

@@ -24,6 +24,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  normalizeROI,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -83,7 +84,7 @@ function parseTrader(item: KucoinTrader, period: string): TraderData | null {
   // thirtyDayPnlRatio is in decimal (e.g. 0.5 = 50%)
   let roi = parseNum(item.thirtyDayPnlRatio ?? item.totalPnlRatio)
   if (roi === null || roi === 0) return null
-  if (Math.abs(roi) <= 10) roi *= 100
+  roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.totalPnl ?? item.thirtyDayPnl ?? item.totalProfit)
 

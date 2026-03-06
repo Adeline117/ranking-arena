@@ -19,6 +19,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  normalizeROI,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -97,7 +98,7 @@ function parseTrader(item: MexcTrader, period: string): TraderData | null {
   let roi = parseNum(item.roi ?? item.totalRoi ?? item.pnlRate)
   if (roi === null || roi === 0) return null
   // If ROI is in decimal form (0.5432 = 54.32%), convert to percentage
-  if (Math.abs(roi) < 10) roi *= 100
+  roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.pnl ?? item.totalPnl ?? item.profit)
 

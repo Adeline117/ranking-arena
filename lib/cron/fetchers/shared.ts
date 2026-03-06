@@ -260,30 +260,27 @@ export function getSupabaseClient(): SupabaseClient | null {
 }
 
 // ============================================
-// Arena Score V2 Calculation
-// (Synced with lib/utils/arena-score.ts and scripts/lib/shared.mjs)
+// Arena Score V3 Calculation
+// (Synced with lib/utils/arena-score.ts — 2-component: ROI:60 + PnL:40)
 // ============================================
 
 const clip = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
 const safeLog1p = (x: number) => (x <= -1 ? 0 : Math.log(1 + x))
 
-const ARENA_PARAMS: Record<string, { tanhCoeff: number; roiExponent: number; mddThreshold: number; winRateCap: number }> = {
-  '7D': { tanhCoeff: 0.08, roiExponent: 1.8, mddThreshold: 15, winRateCap: 62 },
-  '30D': { tanhCoeff: 0.15, roiExponent: 1.6, mddThreshold: 30, winRateCap: 68 },
-  '90D': { tanhCoeff: 0.18, roiExponent: 1.6, mddThreshold: 40, winRateCap: 70 },
+const ARENA_PARAMS: Record<string, { tanhCoeff: number; roiExponent: number }> = {
+  '7D': { tanhCoeff: 0.08, roiExponent: 1.8 },
+  '30D': { tanhCoeff: 0.15, roiExponent: 1.6 },
+  '90D': { tanhCoeff: 0.18, roiExponent: 1.6 },
 }
 
 const PNL_PARAMS: Record<string, { base: number; coeff: number }> = {
-  '7D': { base: 500, coeff: 0.40 },
-  '30D': { base: 2000, coeff: 0.35 },
-  '90D': { base: 5000, coeff: 0.30 },
+  '7D': { base: 300, coeff: 0.42 },
+  '30D': { base: 600, coeff: 0.30 },
+  '90D': { base: 650, coeff: 0.27 },
 }
 
-const MAX_RETURN = 70
-const MAX_PNL = 15
-const MAX_DD = 8
-const MAX_STAB = 7
-const WR_BASELINE = 45
+const MAX_RETURN = 60
+const MAX_PNL = 40
 
 function calcPnlScore(pnl: number | null, period: string): number {
   if (pnl == null || pnl <= 0) return 0
@@ -296,37 +293,25 @@ function calcPnlScore(pnl: number | null, period: string): number {
 export function calculateArenaScore(
   roi: number,
   pnl: number | null,
-  maxDrawdown: number | null,
-  winRate: number | null,
+  _maxDrawdown: number | null,
+  _winRate: number | null,
   period: string
 ): number {
   const params = ARENA_PARAMS[period] || ARENA_PARAMS['90D']
   const days = period === '7D' ? 7 : period === '30D' ? 30 : 90
 
-  // Normalize win rate
-  const wr = winRate != null ? (winRate <= 1 ? winRate * 100 : winRate) : null
+  // Cap ROI to prevent extreme values (e.g. Hyperliquid 1M%+)
+  const cappedRoi = Math.min(roi, 10000)
 
-  // Return score (0-70)
-  const intensity = (365 / days) * safeLog1p(roi / 100)
+  // Return score (0-60)
+  const intensity = (365 / days) * safeLog1p(cappedRoi / 100)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
   const returnScore = r0 > 0 ? clip(MAX_RETURN * Math.pow(r0, params.roiExponent), 0, MAX_RETURN) : 0
 
-  // PnL score (0-15)
+  // PnL score (0-40)
   const pnlScore = calcPnlScore(pnl, period)
 
-  // Drawdown score (0-8)
-  const drawdownScore =
-    maxDrawdown != null
-      ? clip(MAX_DD * clip(1 - Math.abs(maxDrawdown) / params.mddThreshold, 0, 1), 0, MAX_DD)
-      : 4
-
-  // Stability score (0-7)
-  const stabilityScore =
-    wr != null
-      ? clip(MAX_STAB * clip((wr - WR_BASELINE) / (params.winRateCap - WR_BASELINE), 0, 1), 0, MAX_STAB)
-      : 3.5
-
-  return Math.round((returnScore + pnlScore + drawdownScore + stabilityScore) * 100) / 100
+  return Math.round((returnScore + pnlScore) * 100) / 100
 }
 
 // ============================================
@@ -503,24 +488,20 @@ export function normalizeWinRate(wr: number | null): number | null {
 }
 
 /**
- * 归一化ROI值，统一各平台的小数/百分比格式差异
- * 输出：百分比形式（如 50 表示 50%）
- *
- * 各平台差异：
- * - binance/bybit/okx: 已经是百分比形式（50 = 50%）
- * - hyperliquid/dydx/drift: 小数形式（0.5 = 50%）
- * - gmx/gains/vertex: 小数形式（0.5 = 50%）
+ * Normalize ROI to percentage form (50 = 50%).
+ * Platforms that return decimal ROI (0.5 = 50%) are listed in DECIMAL_ROI_PLATFORMS.
+ * Heuristic: |value| < 10 → likely decimal → multiply by 100.
  */
 const DECIMAL_ROI_PLATFORMS = new Set([
   'hyperliquid', 'dydx', 'drift', 'gmx', 'gains', 'vertex',
-  'jupiter-perps', 'aevo',
+  'jupiter-perps', 'aevo', 'gateio', 'toobit', 'bingx', 'coinex',
+  'mexc', 'btse', 'cryptocom', 'bitget_futures', 'bitget_spot',
+  'kucoin', 'pionex',
 ])
 
-export function normalizeROI(rawRoi: number | null, platform: string): number | null {
+export function normalizeROI(rawRoi: number | null, platform?: string): number | null {
   if (rawRoi == null) return null
-  if (DECIMAL_ROI_PLATFORMS.has(platform)) {
-    // 小数形式 -> 百分比（0.5 -> 50）
-    // 安全检查：如果值已经大于10，可能已经是百分比
+  if (platform && DECIMAL_ROI_PLATFORMS.has(platform)) {
     return Math.abs(rawRoi) < 10 ? rawRoi * 100 : rawRoi
   }
   return rawRoi

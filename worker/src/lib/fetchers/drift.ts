@@ -114,7 +114,7 @@ async function fetchLeaderboardData(
     if (entries.length > 0) return { entries }
   } catch (err) {
     // Continue to next attempt
-    logger.warn('[Drift] Main API failed:', err)
+    logger.warn(`[Drift] Main API failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Attempt 2: DLOB server leaderboard
@@ -127,7 +127,7 @@ async function fetchLeaderboardData(
       data?.data || data?.leaderboard || data?.result || data?.users || []
     if (entries.length > 0) return { entries }
   } catch (err) {
-    logger.warn('[Drift] DLOB API failed:', err)
+    logger.warn(`[Drift] DLOB API failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   // Attempt 3: Users endpoint with PnL sorting
@@ -140,7 +140,7 @@ async function fetchLeaderboardData(
       data?.data || data?.leaderboard || data?.result || data?.users || []
     if (entries.length > 0) return { entries }
   } catch (err) {
-    logger.warn('[Drift] Users API failed:', err)
+    logger.warn(`[Drift] Users API failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   return {

@@ -20,6 +20,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  normalizeROI,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -97,7 +98,7 @@ function parseTrader(item: CoinexTrader, period: string): TraderData | null {
   let roi = parseNum(item.roi ?? item.roi_rate ?? item.return_rate)
   if (roi === null || roi === 0) return null
   // CoinEx may use decimal or percentage — normalize
-  if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+  roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.pnl ?? item.profit ?? item.total_pnl)
 

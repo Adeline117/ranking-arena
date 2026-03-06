@@ -17,7 +17,7 @@
  *   min_trades: number (optional)
  *
  * Response:
- *   { data: RankedTraderRow[], meta: { window, category, platform, totalcount, ... } }
+ *   { data:[], meta: { window, category, platform, totalcount, ... } }
  *
  * Caching: s-maxage=60, stale-while-revalidate=300
  */

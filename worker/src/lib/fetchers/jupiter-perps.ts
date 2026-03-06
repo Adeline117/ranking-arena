@@ -167,7 +167,7 @@ async function fetchMarketTraders(
 
     return Array.from(traders.values())
   } catch (err) {
-    logger.warn(`[JupiterPerps] Failed to fetch ${market}:`, err)
+    logger.warn(`[JupiterPerps] Failed to fetch ${market}: ${err instanceof Error ? err.message : String(err)}`)
     return []
   }
 }

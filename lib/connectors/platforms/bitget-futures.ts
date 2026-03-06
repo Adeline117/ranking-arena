@@ -57,8 +57,7 @@ export class BitgetFuturesConnector extends BaseConnector {
     )
     const data = warnValidate(BitgetFuturesLeaderboardResponseSchema, _rawLb, 'bitget-futures/leaderboard')
 
-    const rawData = data?.data
-    const list = (rawData && 'list' in rawData ? (rawData as Record<string, unknown>).list : rawData) || []
+    const list = data?.data?.list || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
       platform: 'bitget' as const,
@@ -74,7 +73,7 @@ export class BitgetFuturesConnector extends BaseConnector {
 
     return {
       traders,
-      total_available: (rawData && 'total' in rawData ? Number((rawData as Record<string, unknown>).total) : null) || null,
+      total_available: data?.data?.total ?? null,
       window,
       fetched_at: new Date().toISOString(),
     }

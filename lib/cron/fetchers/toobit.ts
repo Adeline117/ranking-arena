@@ -18,6 +18,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  normalizeROI,
 } from './shared'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
@@ -90,7 +91,7 @@ function parseTrader(item: ToobitTrader, period: string, rank: number): TraderDa
 
   let roi = parseNum(item.roi ?? item.returnRate)
   if (roi === null) return null
-  if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+  roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.pnl ?? item.profit)
   const winRate = normalizeWinRate(parseNum(item.winRate ?? item.win_rate))

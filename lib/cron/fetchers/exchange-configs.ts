@@ -7,7 +7,7 @@
 
 import { type ExchangeConfig, createConfigDrivenFetcher } from './config-driven-fetcher'
 import type { PlatformFetcher } from './shared'
-import { parseNum, normalizeWinRate } from './shared'
+import { parseNum, normalizeWinRate, normalizeROI } from './shared'
 
 function genericExtractList(response: unknown): unknown[] {
   if (!response || typeof response !== 'object') return []
@@ -47,7 +47,7 @@ const toobitConfig: ExchangeConfig = {
       if (!id || id === 'undefined') return null
       let roi = parseNum(item.roi)
       if (roi === null) return null
-      if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+      roi = normalizeROI(roi, 'toobit') ?? roi
       return {
         source_trader_id: id,
         handle: item.nickname || item.nickName || item.name || `Trader_${id.slice(0, 8)}`,
@@ -85,7 +85,7 @@ const btseConfig: ExchangeConfig = {
       if (!id || id === 'undefined') return null
       let roi = parseNum(item.roi)
       if (roi === null) return null
-      if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+      roi = normalizeROI(roi, 'btse') ?? roi
       return {
         source_trader_id: id,
         handle: item.nickname || `Trader_${id.slice(0, 8)}`,
@@ -123,7 +123,7 @@ const cryptocomConfig: ExchangeConfig = {
       if (!id || id === 'undefined') return null
       let roi = parseNum(item.roi)
       if (roi === null) return null
-      if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+      roi = normalizeROI(roi, 'cryptocom') ?? roi
       return {
         source_trader_id: id,
         handle: item.nickname || `Trader_${id.slice(0, 8)}`,

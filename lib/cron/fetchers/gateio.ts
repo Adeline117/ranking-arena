@@ -19,6 +19,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  normalizeROI,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -164,8 +165,8 @@ function parseTrader(item: GateTrader, period: string, rank: number): TraderData
   // profit_rate from gate.com API is decimal (e.g. 9.5402 = 954.02%)
   let roi = parseNum(item.roi ?? item.profit_rate ?? item.pnl_ratio ?? item.returnRate)
   if (roi === null) return null
-  // Gate.com profit_rate is a ratio (1.0 = 100%), convert to percentage
-  if (Math.abs(roi) > 0 && Math.abs(roi) < 100) roi *= 100
+  // Normalize ROI (Gate.io returns ratio: 1.0 = 100%)
+  roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl ?? item.follow_profit)
 

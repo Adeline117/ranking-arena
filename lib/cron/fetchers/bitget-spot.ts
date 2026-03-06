@@ -20,6 +20,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  normalizeROI,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { createHmac } from 'crypto'
@@ -104,7 +105,7 @@ function parseTrader(item: BitgetSpotTrader, period: string, rank: number): Trad
 
   let roi = parseNum(item.profitRate ?? item.roi ?? item.yieldRate)
   if (roi === null) return null
-  if (Math.abs(roi) > 0 && Math.abs(roi) < 10) roi *= 100
+  roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.totalProfit ?? item.profit)
 
