@@ -809,7 +809,8 @@ export async function fetchGmxPositionHistory(
       if (!a.basePnlUsd) return false
       try {
         return Number(BigInt(a.basePnlUsd)) / GMX_VALUE_SCALE !== 0
-      } catch {
+      } catch (err) {
+        logger.warn(`[enrichment] Error: ${err instanceof Error ? err.message : String(err)}`)
         return false
       }
     })
