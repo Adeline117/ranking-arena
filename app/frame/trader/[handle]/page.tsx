@@ -9,9 +9,7 @@ import { Metadata } from 'next'
 import { Pool } from 'pg'
 
 const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres',
+  connectionString: process.env.DATABASE_URL,
   max: 3,
 })
 
