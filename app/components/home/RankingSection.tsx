@@ -7,9 +7,9 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useToast } from '../ui/Toast'
 import { RankingTable, type Trader } from '../ranking/RankingTable'
-import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
 import TimeRangeSelector from './TimeRangeSelector'
+import FoundingMemberBanner from './FoundingMemberBanner'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
@@ -557,26 +557,6 @@ export default function RankingSection({
         contain: 'layout style',
       }}
     >
-      {/* Beta notice: Pro features free */}
-      {BETA_PRO_FEATURES_FREE && (
-        <Box style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 6,
-          padding: '6px 12px',
-          marginBottom: tokens.spacing[3],
-          borderRadius: tokens.radius.md,
-          background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
-          fontSize: tokens.typography.fontSize.xs,
-          color: 'var(--color-text-secondary)',
-        }}>
-          <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)', fontSize: 11 }}>Pro</span>
-          <span>{language === 'zh' ? '全部功能开放中 · 限时免费体验' : 'All Pro features unlocked · Free during open beta'}</span>
-        </Box>
-      )}
-
       {/* 紧凑工具栏 - 所有筛选器整合在一行 */}
       <Box
         className="ranking-toolbar"
@@ -664,7 +644,26 @@ export default function RankingSection({
         </Box>
       </Box>
 
-      {/* Exchange filter removed - use advanced filter only */}
+      {/* Founding member banner + Pro notice — below time range selector */}
+      <FoundingMemberBanner />
+      {BETA_PRO_FEATURES_FREE && (
+        <Box style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          padding: '6px 12px',
+          marginBottom: tokens.spacing[2],
+          borderRadius: tokens.radius.md,
+          background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
+          fontSize: tokens.typography.fontSize.xs,
+          color: 'var(--color-text-secondary)',
+        }}>
+          <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)', fontSize: 11 }}>Pro</span>
+          <span>{language === 'zh' ? '全部功能开放中 · 限时免费体验' : 'All Pro features unlocked · Free during open beta'}</span>
+        </Box>
+      )}
 
       {/* 高级筛选面板 */}
       {showAdvancedFilter && (
@@ -735,59 +734,6 @@ export default function RankingSection({
           </button>
         </Box>
       )}
-
-      {/* Exchange coverage strip */}
-      {!loading && traders.length > 0 && (() => {
-        // Count traders per exchange (merge _futures/_spot/_web3 variants)
-        const counts: Record<string, number> = {}
-        for (const trader of traders) {
-          if (!trader.source) continue
-          counts[trader.source] = (counts[trader.source] || 0) + 1
-        }
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
-        const totalEx = sorted.length
-        const topEx = sorted.slice(0, 8)
-        return (
-          <Box style={{
-            display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-            padding: `6px ${tokens.spacing[4]}`,
-            borderBottom: '1px solid var(--color-border-primary)',
-            background: 'var(--color-bg-secondary)',
-          }}>
-            <Text size="xs" color="tertiary" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-              {totalEx} {language === 'zh' ? '个平台' : 'exchanges'}
-            </Text>
-            {topEx.map(([src, count]) => {
-              const label = EXCHANGE_NAMES[src] || src.split('_')[0].charAt(0).toUpperCase() + src.split('_')[0].slice(1)
-              const isActive = selectedExchange === src
-              return (
-                <button
-                  key={src}
-                  onClick={() => {
-                    setSelectedExchange(isActive ? null : src)
-                    syncStateToUrl({ ex: isActive ? null : src, page: 1 })
-                  }}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    padding: '2px 8px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                    fontSize: '11px', fontWeight: 600, lineHeight: 1.4,
-                    background: isActive ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary, var(--color-bg-secondary))',
-                    color: isActive ? 'var(--color-on-accent, #fff)' : 'var(--color-text-secondary)',
-                    transition: 'all 0.15s',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {label}
-                  <span style={{ opacity: 0.65, fontWeight: 400 }}>{count}</span>
-                </button>
-              )
-            })}
-            {sorted.length > 8 && (
-              <Text size="xs" color="tertiary">+{sorted.length - 8}</Text>
-            )}
-          </Box>
-        )
-      })()}
 
       <RankingTable
         traders={filteredTraders}

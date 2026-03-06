@@ -9,7 +9,6 @@ import TopNav from '../layout/TopNav'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const Footer = lazy(() => import('../layout/Footer'))
 import HomeSubNav from './HomeSubNav'
-import FoundingMemberBanner from './FoundingMemberBanner'
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
 const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 import HomePageClient from './HomePageClient'
@@ -60,9 +59,6 @@ export default function HomePage() {
         <h1 className="sr-only">Arena — Crypto Trader Rankings</h1>
         <HomeSubNav />
         <Suspense fallback={null}><ExchangePartners /></Suspense>
-        <div style={{ height: 8 }} />
-        <FoundingMemberBanner />
-        <div style={{ height: 8 }} />
         <ThreeColumnLayout
           leftSidebar={
             <SectionErrorBoundary>
