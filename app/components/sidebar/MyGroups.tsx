@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import useSWR from 'swr'
@@ -18,8 +19,9 @@ type Group = {
 }
 
 function GroupAvatar({ name, avatarUrl, size = 32 }: { name: string; avatarUrl: string | null; size?: number }) {
+  const [imgError, setImgError] = useState(false)
   const initial = (name || '?').charAt(0).toUpperCase()
-  if (avatarUrl) {
+  if (avatarUrl && !imgError) {
     return (
       <Image
         src={avatarUrl}
@@ -31,6 +33,7 @@ function GroupAvatar({ name, avatarUrl, size = 32 }: { name: string; avatarUrl: 
           objectFit: 'cover',
           minWidth: size,
         }}
+        onError={() => setImgError(true)}
       />
     )
   }

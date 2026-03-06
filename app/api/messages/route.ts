@@ -8,11 +8,21 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('messages-api')
+
+// Zod schema for POST /api/messages (send message)
+const SendMessageSchema = z.object({
+  receiverId: z.string().uuid('Invalid receiver ID'),
+  content: z.string().min(1, 'Message content cannot be empty').max(2000, 'Message too long, max 2000 characters'),
+  media_url: z.string().url().max(2000).optional().nullable(),
+  media_type: z.string().max(50).optional().nullable(),
+  media_name: z.string().max(255).optional().nullable(),
+})
 
 export const dynamic = 'force-dynamic'
 

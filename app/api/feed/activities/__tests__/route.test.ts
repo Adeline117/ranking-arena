@@ -126,34 +126,31 @@ describe('GET /api/feed/activities', () => {
   })
 
   it('filters by platform', async () => {
-    const chain = createQueryChain({ data: [], error: null })
-    mockSupabaseFrom.mockReturnValue(chain)
+    resetQueryChain({ data: [], error: null })
 
     const req = new NextRequest('http://localhost/api/feed/activities?platform=binance_futures')
     await GET(req)
 
-    expect(chain.eq).toHaveBeenCalledWith('source', 'binance_futures')
+    expect(queryChain.eq).toHaveBeenCalledWith('source', 'binance_futures')
   })
 
   it('filters by handle', async () => {
-    const chain = createQueryChain({ data: [], error: null })
-    mockSupabaseFrom.mockReturnValue(chain)
+    resetQueryChain({ data: [], error: null })
 
     const req = new NextRequest('http://localhost/api/feed/activities?handle=toptrader')
     await GET(req)
 
-    expect(chain.eq).toHaveBeenCalledWith('handle', 'toptrader')
+    expect(queryChain.eq).toHaveBeenCalledWith('handle', 'toptrader')
   })
 
   it('supports cursor-based pagination', async () => {
-    const chain = createQueryChain({ data: [], error: null })
-    mockSupabaseFrom.mockReturnValue(chain)
+    resetQueryChain({ data: [], error: null })
 
     const cursor = '2026-03-05T12:00:00Z'
     const req = new NextRequest(`http://localhost/api/feed/activities?cursor=${cursor}`)
     await GET(req)
 
-    expect(chain.lt).toHaveBeenCalledWith('occurred_at', cursor)
+    expect(queryChain.lt).toHaveBeenCalledWith('occurred_at', cursor)
   })
 
   it('detects hasMore when extra item fetched', async () => {
@@ -165,7 +162,7 @@ describe('GET /api/feed/activities', () => {
       activity_type: 'roi_milestone',
       occurred_at: `2026-03-0${6 - i}T00:00:00Z`,
     }))
-    mockSupabaseFrom.mockReturnValue(createQueryChain({ data: activities, error: null }))
+    resetQueryChain({ data: activities, error: null })
 
     const req = new NextRequest('http://localhost/api/feed/activities?limit=5')
     const res = await GET(req)
@@ -178,9 +175,7 @@ describe('GET /api/feed/activities', () => {
   })
 
   it('handles database error gracefully', async () => {
-    mockSupabaseFrom.mockReturnValue(
-      createQueryChain({ data: null, error: { message: 'DB query failed' } })
-    )
+    resetQueryChain({ data: null, error: { message: 'DB query failed' } })
 
     const req = new NextRequest('http://localhost/api/feed/activities')
     const res = await GET(req)
