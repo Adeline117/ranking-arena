@@ -72,9 +72,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    || process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`
-    || 'http://localhost:3000'
+  // Use VERCEL_URL to bypass Cloudflare's ~120s proxy timeout
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000')
 
   const startTime = Date.now()
 
