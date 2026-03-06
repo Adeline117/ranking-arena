@@ -113,23 +113,23 @@ export default function TopTraders() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {traders.map((t, idx) => {
+          {traders.map((trader, idx) => {
             const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
             const isLongNumeric = (s: string) => /^\d{7,}$/.test(s)
             const formatAddr = (s: string) => `${s.slice(0, 6)}...${s.slice(-4)}`
             const formatId = (s: string) => isAddress(s) ? formatAddr(s) : isLongNumeric(s) ? `Trader ${s.slice(-6)}` : s
-            const displayName = t.handle && !isAddress(t.handle) && !isLongNumeric(t.handle)
-              ? t.handle
-              : t.handle
-                ? formatId(t.handle)
-                : formatId(t.source_trader_id)
-            const roiStr = t.roi != null
-              ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%`
+            const displayName = trader.handle && !isAddress(trader.handle) && !isLongNumeric(trader.handle)
+              ? trader.handle
+              : trader.handle
+                ? formatId(trader.handle)
+                : formatId(trader.source_trader_id)
+            const roiStr = trader.roi != null
+              ? `${trader.roi >= 0 ? '+' : ''}${trader.roi >= 1000 ? `${(trader.roi / 1000).toFixed(1)}K` : trader.roi.toFixed(1)}%`
               : null
             return (
               <Link prefetch={false}
-                key={`${t.source}-${t.source_trader_id}`}
-                href={`/trader/${encodeURIComponent(t.source_trader_id)}?platform=${t.source}`}
+                key={`${trader.source}-${trader.source_trader_id}`}
+                href={`/trader/${encodeURIComponent(trader.source_trader_id)}?platform=${trader.source}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -157,7 +157,7 @@ export default function TopTraders() {
                 </span>
 
                 {/* Avatar */}
-                <TraderAvatar name={displayName} avatarUrl={t.avatar_url} size={32} />
+                <TraderAvatar name={displayName} avatarUrl={trader.avatar_url} size={32} />
 
                 {/* Name only (no platform) */}
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -178,7 +178,7 @@ export default function TopTraders() {
 
                 {/* Arena Score + ROI */}
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  {t.arena_score != null && (
+                  {trader.arena_score != null && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
                       <span style={{
                         fontSize: 9,
@@ -193,11 +193,11 @@ export default function TopTraders() {
                       <span style={{
                         fontSize: 12,
                         fontWeight: 700,
-                        color: getScoreColor(t.arena_score!),
+                        color: getScoreColor(trader.arena_score!),
                         lineHeight: 1.3,
-                        ...(t.arena_score >= 90 ? { textShadow: '0 0 8px var(--color-accent-primary-60)' } : {}),
+                        ...(trader.arena_score >= 90 ? { textShadow: '0 0 8px var(--color-accent-primary-60)' } : {}),
                       }}>
-                        {t.arena_score.toFixed(0)}
+                        {trader.arena_score.toFixed(0)}
                       </span>
                     </div>
                   )}
@@ -206,7 +206,7 @@ export default function TopTraders() {
                       style={{
                         fontSize: 12,
                         fontWeight: 600,
-                        color: t.roi! >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                        color: trader.roi! >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                         lineHeight: 1.3,
                       }}
                     >
