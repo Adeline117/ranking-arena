@@ -41,9 +41,9 @@ npx playwright install --with-deps chromium
 
 # Create .env
 cat > .env << 'ENVFILE'
-SUPABASE_URL=https://iknktzifjdyujdccyhsv.supabase.co
+SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY=REPLACE_ME
-NEXT_PUBLIC_SUPABASE_URL=https://iknktzifjdyujdccyhsv.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENVFILE
 
 echo ""

@@ -8,7 +8,7 @@ import pg from 'pg'
 
 puppeteer.use(StealthPlugin())
 
-const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = process.env.DATABASE_URL
 const PERIOD_MAP = { '7D': '7d', '30D': '30d', '90D': '90d' }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }

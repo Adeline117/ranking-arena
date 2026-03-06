@@ -2,8 +2,8 @@
 // Phase 1: Fill known crypto whitepaper/regulatory document PDF URLs
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co';
-const SUPABASE_KEY = 'REDACTED_SUPABASE_JWT';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Map title patterns to known PDF/content URLs

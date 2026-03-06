@@ -3,7 +3,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 
 async function getServiceKey(): Promise<string> {
   const fs = await import('fs')

@@ -12,7 +12,7 @@ import psycopg2
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-DB = "postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
+DB = os.environ["DATABASE_URL"]
 
 def log(msg):
     print(msg, flush=True)

@@ -9,7 +9,7 @@ import pg from 'pg'
 
 const DATABASE_URL =
   process.env.DATABASE_URL ||
-  'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+  process.env.DATABASE_URL
 
 // DB CHECK constraint allows: hft, day_trader, swing, trend, scalping, scalper, position, unknown
 function classifyStyle(row: {

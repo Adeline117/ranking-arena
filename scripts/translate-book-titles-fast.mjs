@@ -5,7 +5,7 @@
 import pg from 'pg'
 const { Pool } = pg
 
-const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = process.env.DATABASE_URL
 const pool = new Pool({ connectionString: DB_URL })
 
 const BATCH = parseInt(process.argv[2] || '1000')

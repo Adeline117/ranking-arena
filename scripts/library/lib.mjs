@@ -1,7 +1,7 @@
 // Shared helpers for library collection scripts
 import pg from 'pg'
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DATABASE_URL = process.env.DATABASE_URL || process.env.DATABASE_URL
 
 export function getClient() {
   return new pg.Client({ connectionString: DATABASE_URL })

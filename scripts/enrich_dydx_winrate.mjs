@@ -14,8 +14,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co';
-const SUPABASE_KEY = 'REDACTED_SUPABASE_JWT';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const INDEXER = 'https://indexer.dydx.trade';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);

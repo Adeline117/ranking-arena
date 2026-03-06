@@ -10,8 +10,8 @@
  *   May return trades_count
  */
 
-const SB_URL = 'https://iknktzifjdyujdccyhsv.supabase.co';
-const SB_KEY = 'REDACTED_SUPABASE_JWT';
+const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SB_HEADERS = {
   apikey: SB_KEY,
   Authorization: `Bearer ${SB_KEY}`,

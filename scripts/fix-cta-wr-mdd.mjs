@@ -7,8 +7,8 @@ import { chromium } from 'playwright'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
-  'https://iknktzifjdyujdccyhsv.supabase.co',
-  'REDACTED_SUPABASE_JWT'
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
