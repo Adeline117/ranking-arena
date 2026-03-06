@@ -9,7 +9,8 @@
  *   category: 'futures' | 'spot' | 'onchain' (optional)
  *   platform: Platform string (optional, overrides category)
  *   limit: number (default 100, max 500)
- *   offset: number (default 0)
+ *   offset: number (default 0) — legacy, prefer cursor
+ *   cursor: string (optional, format: "score:id" for keyset pagination)
  *   sort_by: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers'
  *   sort_dir: 'asc' | 'desc'
  *   min_pnl: number (optional)
@@ -100,11 +101,12 @@ export async function GET(request: NextRequest) {
 
     const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10) || 100, 500);
     const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
+    const cursor = searchParams.get('cursor') || undefined; // format: "score:id" for keyset pagination
     const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
     const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
 
     // Use tiered cache (memory → Redis → DB) for rankings
-    const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${offset}:${minPnl || ''}:${minTrades || ''}`
+    const cacheKey = `api:rankings:${normalizedWindow}:${category || 'all'}:${platform || 'all'}:${sortBy}:${sortDir}:${limit}:${cursor || offset}:${minPnl || ''}:${minTrades || ''}`
 
      
     let result: unknown;
@@ -161,7 +163,7 @@ export async function GET(request: NextRequest) {
       };
       result = await tieredGetOrSet(
         cacheKey,
-        () => getRankingsFallback(query),
+        () => getRankingsFallback(query, cursor),
         'hot',
         ['rankings']
       );
@@ -187,7 +189,7 @@ export async function GET(request: NextRequest) {
  * Returns the same response shape as LeaderboardService.getRankings().
  * Queries trader_snapshots table (legacy) which has actual data.
  */
-async function getRankingsFallback(rankingsQuery: RankingsQuery) {
+async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string) {
   const {
     window,
     category,
@@ -227,7 +229,23 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     .gte('roi', -ROI_ANOMALY_THRESHOLD)
     .or('roi.neq.0,pnl.neq.0')
     .order(sortColumn, { ascending: sort_dir === 'asc', nullsFirst: false })
-    .range(offset, offset + safeLimit - 1);
+    .order('id', { ascending: true }); // tiebreaker for stable keyset pagination
+
+  // Keyset pagination (cursor) — faster than offset for deep pages
+  if (cursor) {
+    const [cursorValue, cursorId] = cursor.split(':');
+    if (cursorValue && cursorId) {
+      if (sort_dir === 'desc') {
+        // For DESC: get rows where sort_col < cursor OR (sort_col == cursor AND id > cursorId)
+        dbQuery = dbQuery.or(`${sortColumn}.lt.${cursorValue},and(${sortColumn}.eq.${cursorValue},id.gt.${cursorId})`);
+      } else {
+        dbQuery = dbQuery.or(`${sortColumn}.gt.${cursorValue},and(${sortColumn}.eq.${cursorValue},id.gt.${cursorId})`);
+      }
+    }
+    dbQuery = dbQuery.limit(safeLimit);
+  } else {
+    dbQuery = dbQuery.range(offset, offset + safeLimit - 1);
+  }
 
   if (platform) {
     dbQuery = dbQuery.eq('source', platform);
@@ -263,127 +281,99 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     return true;
   });
 
-  // Batch fetch display names from trader_sources (single query)
+  // Parallelize: display names + freshness + available sources (all independent)
   const traderKeys = [...new Set(paginatedRows.map(r => r.source_trader_id))];
   const platformKeys = [...new Set(paginatedRows.map(r => r.source))];
+  const seasonIdUpper = window.toUpperCase();
+
+  // Launch all independent queries in parallel (saves ~240ms cross-Pacific RTT)
+  const [displayNameResult, freshnessResult, sourcesResult] = await Promise.all([
+    // 1. Display names
+    traderKeys.length > 0
+      ? supabase.from('trader_sources').select('source, source_trader_id, handle, avatar_url').in('source', platformKeys).in('source_trader_id', traderKeys)
+      : Promise.resolve({ data: null }),
+    // 2. Freshness (latest captured_at for staleness check)
+    supabase.from('trader_snapshots').select('captured_at').eq('season_id', seasonId).not('arena_score', 'is', null).order('captured_at', { ascending: false }).limit(1).single(),
+    // 3. Available sources (with memory cache)
+    (async () => {
+      const cached = getCachedSources(seasonIdUpper);
+      if (cached) return cached;
+      const { data: sourceRows } = await supabase.from('trader_snapshots').select('source').eq('season_id', seasonIdUpper).not('arena_score', 'is', null).limit(500);
+      const sources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
+      setCachedSources(seasonIdUpper, sources);
+      return sources;
+    })(),
+  ]);
+
+  // Process display names
   const displayNameMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
-
-  if (traderKeys.length > 0) {
-    const { data: sources } = await supabase
-      .from('trader_sources')
-      .select('source, source_trader_id, handle, avatar_url')
-      .in('source', platformKeys)
-      .in('source_trader_id', traderKeys);
-
-    if (sources) {
-      for (const src of sources) {
-        const key = `${src.source}:${src.source_trader_id}`;
-        displayNameMap.set(key, {
-          display_name: src.handle,
-          avatar_url: src.avatar_url,
-        });
-      }
+  if (displayNameResult.data) {
+    for (const src of displayNameResult.data) {
+      displayNameMap.set(`${src.source}:${src.source_trader_id}`, {
+        display_name: src.handle,
+        avatar_url: src.avatar_url,
+      });
     }
   }
 
-  const rankedRows = paginatedRows.map((row, idx) => {
-    const sourceInfo = displayNameMap.get(`${row.source}:${row.source_trader_id}`);
-    const roi = row.roi ? parseFloat(row.roi) : 0;
-    const pnl = row.pnl ? parseFloat(row.pnl) : 0;
-    const winRate = row.win_rate ? parseFloat(row.win_rate) : null;
-    const maxDrawdown = row.max_drawdown ? parseFloat(row.max_drawdown) : null;
-    const arenaScore = row.arena_score ? parseFloat(row.arena_score) : null;
-
-    return {
-      rank: offset + idx + 1,
-      platform: row.source as Platform,
-      trader_key: row.source_trader_id,
-      display_name: sourceInfo?.display_name || null,
-      avatar_url: sourceInfo?.avatar_url || null,
-      category: PLATFORM_CATEGORY[row.source as unknown as GranularPlatform] || 'futures',
-      metrics: {
-        roi,
-        pnl,
-        win_rate: winRate,
-        max_drawdown: maxDrawdown,
-        trades_count: row.trades_count ?? null,
-        followers: row.followers ?? null,
-        copiers: null, // Not available in this table
-        aum: null, // Not available in this table
-        arena_score: arenaScore,
-        return_score: null, // Not available in this table
-        drawdown_score: null, // Not available in this table
-        stability_score: null, // Not available in this table
-        sharpe_ratio: null, // Not available in this table
-        sortino_ratio: null, // Not available in this table
-        platform_rank: offset + idx + 1,
-      },
-      quality: { is_complete: true, missing_fields: [], confidence: 1.0, is_interpolated: false },
-      as_of_ts: row.captured_at,
-    } as unknown as RankedTraderRow;
-  });
-  // Note: no longer filtering out traders without display_name.
-  // The frontend getTraderDisplayName() handles fallback to trader_key.
-
-  // Calculate staleness based on the latest captured_at across the ENTIRE season,
-  // not just the paginated rows (which may contain traders not recently re-scraped)
+  // Process freshness
   let latestCapturedAt: number;
-  const { data: freshnessRow } = await supabase
-    .from('trader_snapshots')
-    .select('captured_at')
-    .eq('season_id', seasonId)
-    .not('arena_score', 'is', null)
-    .order('captured_at', { ascending: false })
-    .limit(1)
-    .single();
-  
-  if (freshnessRow) {
-    latestCapturedAt = new Date(freshnessRow.captured_at).getTime();
+  if (freshnessResult.data) {
+    latestCapturedAt = new Date(freshnessResult.data.captured_at).getTime();
   } else if (paginatedRows.length > 0) {
     latestCapturedAt = Math.max(...paginatedRows.map(r => new Date(r.captured_at).getTime()));
   } else {
     latestCapturedAt = Date.now();
   }
   const stalenessMs = Date.now() - latestCapturedAt;
-  const isStale = stalenessMs > 3600 * 1000; // > 1 hour
+  const isStale = stalenessMs > 3600 * 1000;
 
-  // Transform to RankingsResponse format expected by frontend
-  const traders = rankedRows.map((row, idx) => {
-    const rawRow = paginatedRows[idx];
+  const availableSources = sourcesResult;
+
+  // Transform to response format
+  const traders = paginatedRows.map((row, idx) => {
+    const sourceInfo = displayNameMap.get(`${row.source}:${row.source_trader_id}`);
     return {
-      platform: row.platform,
-      trader_key: row.trader_key,
-      display_name: row.display_name,
-      avatar_url: row.avatar_url,
-      rank: row.rank,
-      metrics: row.metrics,
+      platform: row.source as Platform,
+      trader_key: row.source_trader_id,
+      display_name: sourceInfo?.display_name || null,
+      avatar_url: sourceInfo?.avatar_url || null,
+      rank: offset + idx + 1,
+      metrics: {
+        roi: row.roi ? parseFloat(row.roi) : 0,
+        pnl: row.pnl ? parseFloat(row.pnl) : 0,
+        win_rate: row.win_rate ? parseFloat(row.win_rate) : null,
+        max_drawdown: row.max_drawdown ? parseFloat(row.max_drawdown) : null,
+        trades_count: row.trades_count ?? null,
+        followers: row.followers ?? null,
+        copiers: null,
+        aum: null,
+        arena_score: row.arena_score ? parseFloat(row.arena_score) : null,
+        return_score: null,
+        drawdown_score: null,
+        stability_score: null,
+        sharpe_ratio: null,
+        sortino_ratio: null,
+        platform_rank: offset + idx + 1,
+      },
       quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
-      updated_at: row.as_of_ts,
-      // Score breakdown fields
-      profitability_score: rawRow?.profitability_score != null ? parseFloat(rawRow.profitability_score) : null,
-      risk_control_score: rawRow?.risk_control_score != null ? parseFloat(rawRow.risk_control_score) : null,
-      execution_score: rawRow?.execution_score != null ? parseFloat(rawRow.execution_score) : null,
-      score_completeness: rawRow?.score_completeness || null,
-      // Trading style fields
-      trading_style: rawRow?.trading_style || null,
-      avg_holding_hours: rawRow?.avg_holding_hours != null ? parseFloat(rawRow.avg_holding_hours) : null,
-      style_confidence: rawRow?.style_confidence != null ? parseFloat(rawRow.style_confidence) : null,
+      updated_at: row.captured_at,
+      profitability_score: row.profitability_score != null ? parseFloat(row.profitability_score) : null,
+      risk_control_score: row.risk_control_score != null ? parseFloat(row.risk_control_score) : null,
+      execution_score: row.execution_score != null ? parseFloat(row.execution_score) : null,
+      score_completeness: row.score_completeness || null,
+      trading_style: row.trading_style || null,
+      avg_holding_hours: row.avg_holding_hours != null ? parseFloat(row.avg_holding_hours) : null,
+      style_confidence: row.style_confidence != null ? parseFloat(row.style_confidence) : null,
     };
   });
 
-  // Collect available sources for UI filter — cached with 5-min TTL
-  const seasonIdUpper = window.toUpperCase();
-  let availableSources = getCachedSources(seasonIdUpper);
-  if (!availableSources) {
-    const { data: sourceRows } = await supabase
-      .from('trader_snapshots')
-      .select('source')
-      .eq('season_id', seasonIdUpper)
-      .not('arena_score', 'is', null)
-      .limit(500);
-
-    availableSources = [...new Set((sourceRows || []).map((r: { source: string }) => r.source))].sort();
-    setCachedSources(seasonIdUpper, availableSources);
+  // Build next_cursor for keyset pagination
+  let next_cursor: string | null = null;
+  if (paginatedRows.length === safeLimit) {
+    const lastRow = paginatedRows[paginatedRows.length - 1];
+    const lastSortValue = lastRow[sortColumn as keyof typeof lastRow] ?? '';
+    next_cursor = `${lastSortValue}:${lastRow.id}`;
   }
 
   return {
@@ -394,6 +384,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery) {
     as_of: new Date(latestCapturedAt).toISOString(),
     is_stale: isStale,
     availableSources,
+    next_cursor,
   };
 }
 
