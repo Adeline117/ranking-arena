@@ -107,6 +107,7 @@ export interface Trader {
   execution_score?: number | null
   score_completeness?: 'full' | 'partial' | 'minimal' | null
   avg_holding_hours?: number | null
+  sharpe_ratio?: number | null
 }
 
 // Debounce hook
