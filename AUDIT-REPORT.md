@@ -1,254 +1,181 @@
 # Comprehensive Codebase Audit Report
 
-Generated: 2026-03-05
+Generated: 2026-03-05 (Updated with agent findings)
 
 ## Executive Summary
 
 | Category | Findings | Critical | High | Medium | Low |
 |----------|----------|----------|------|--------|-----|
-| 1. Over-complex code | 15 god files | 0 | 5 | 7 | 3 |
-| 2. Dependencies | 0 unused (cleaned) | 0 | 0 | 0 | 0 |
-| 3. Environment vars | 27 files fixed | 0 | 0 | 0 | 0 |
-| 4. API routes | 295 total routes | 2 | 5 | 8 | - |
+| 1. Over-complex code | 15 god files, 40+ dup fetchers | 0 | 6 | 7 | 3 |
+| 2. Dependencies | 4 unused remain | 0 | 2 | 2 | 0 |
+| 3. Environment vars | 27 files fixed + .env issues | 1 | 3 | 2 | 0 |
+| 4. API routes | 295 total, 2 critical auth gaps | 2 | 3 | 5 | 3 |
 | 5. Styles | 6,497 inline styles | 0 | 3 | 5 | - |
-| 6. Data fetching | N+1 patterns found | 0 | 3 | 4 | - |
-| 7. Error handling | 15+ silent catches | 0 | 5 | 10 | - |
-| 8. Naming conventions | Mixed patterns | 0 | 0 | 5 | 5 |
-| 9. Security | Creds removed | 1 | 3 | 5 | - |
+| 6. Data fetching | N+1, missing AbortController | 0 | 3 | 4 | - |
+| 7. Error handling | 26+ silent catches | 0 | 5 | 10 | 5 |
+| 8. Naming conventions | Minor abbreviation issues | 0 | 0 | 2 | 3 |
+| 9. Security | Creds removed, cron auth gap | 2 | 3 | 5 | - |
 
 ---
 
 ## 1. Over-Complex Code
 
 ### God Files (500+ lines)
-These files are too large and should be split:
+| File | Lines | Severity | Issue |
+|------|-------|----------|-------|
+| `lib/cron/fetchers/enrichment.ts` | 1,636 | **HIGH** | 8+ exchange fetchers + equity curve + position history |
+| `app/u/[handle]/new/page.tsx` | 1,622 | **HIGH** | Monolithic page |
+| `app/hot/page.tsx` | 1,504 | **HIGH** | Should extract sub-components |
+| `app/library/[id]/read/page.tsx` | 1,363 | **HIGH** | Reader page |
+| `app/groups/[id]/new/page.tsx` | 1,262 | **HIGH** | Group creation wizard |
+| `app/api/traders/[handle]/route.ts` | 1,162 | MEDIUM | Large API route |
+| `app/api/stripe/webhook/route.ts` | 802 | **HIGH** | 8 concerns in one handler |
 
-| File | Lines | Issue |
-|------|-------|-------|
-| `lib/i18n/zh.ts` | 3,642 | Translation file - OK for i18n |
-| `lib/i18n/en.ts` | 3,635 | Translation file - OK for i18n |
-| `lib/cron/fetchers/enrichment.ts` | 1,636 | **HIGH** - Should split by exchange |
-| `app/u/[handle]/new/page.tsx` | 1,622 | **HIGH** - Monolithic page component |
-| `app/hot/page.tsx` | 1,504 | **HIGH** - Should extract sub-components |
-| `app/library/[id]/read/page.tsx` | 1,363 | **HIGH** - Reader page, complex but fixable |
-| `app/groups/[id]/new/page.tsx` | 1,262 | **HIGH** - Group creation wizard |
-| `app/api/traders/[handle]/route.ts` | 1,162 | **MEDIUM** - Large API route |
-| `app/settings/page.tsx` | 1,104 | **MEDIUM** - Settings page |
-| `app/groups/apply/page.tsx` | 1,086 | **MEDIUM** - Application form |
-| `lib/data/trader.ts` | 1,037 | **MEDIUM** - Data layer, many functions |
-| `app/pk/[trader_a]/[trader_b]/page.tsx` | 1,037 | **MEDIUM** - Comparison page |
-| `app/components/ui/PageSkeleton.tsx` | 961 | **MEDIUM** - 165 inline styles! |
-| `app/groups/[id]/ui/GroupPostList.tsx` | 960 | **MEDIUM** - Post list component |
-| `app/u/[handle]/UserProfileClient.tsx` | 957 | **MEDIUM** - Profile client |
+### Functions Over 100 Lines
+| File | Function | Lines |
+|------|----------|-------|
+| `app/api/cron/enrich/route.ts` | `handleEnrichment()` | ~220 |
+| `lib/cron/fetchers/binance-futures.ts` | `fetchPeriod()` | ~170 |
+| `lib/cron/fetchers/bybit.ts` | `fetchPeriod()` | ~160 |
+| `app/api/stripe/webhook/route.ts` | `POST()` | ~142 |
 
-### Recommendations
-- `enrichment.ts` (1,636 lines): Split into per-exchange enrichment modules
-- Page components >1000 lines: Extract form sections, data fetching, and sub-components
-- `PageSkeleton.tsx`: 165 inline styles - convert to Tailwind classes
+### Deep Nesting (4+ levels)
+- `lib/utils/arena-score.ts:calculateOverallScore()` - 7 if-else branches, should use lookup table
+- `app/api/stripe/webhook/route.ts:handleCheckoutComplete()` - 3 internal try-catch blocks
+- `lib/cron/fetchers/enrichment.ts:fetchBinanceStatsDetail()` - loop + nested ifs
+
+### Magic Numbers
+| File | Number | Context |
+|------|--------|---------|
+| `lib/cron/fetchers/shared.ts:64-67` | `0.08, 1.8, 15, 62` | Arena score tanh coefficients |
+| `lib/cron/fetchers/shared.ts:70-74` | `500, 2000, 5000` | PnL score bases |
+| `lib/cron/fetchers/enrichment.ts:923` | `720` | 30 days in hours |
+| `lib/scoring/anomaly-detection.ts:28-30` | `50000, -99` | ROI thresholds |
+
+### Duplicate Logic (40+ fetchers)
+Position stats calculation duplicated 3x in enrichment.ts. All 40+ exchange fetchers implement same pagination-transform-enrich-upsert flow independently.
 
 ---
 
-## 2. Dependencies (COMPLETED)
+## 2. Dependencies
 
-**Status: Fixed in previous session**
-- Removed 20 unused packages (14 @capacitor/*, node-fetch, fast-xml-parser, etc.)
-- `npm audit fix` resolved 8 vulnerabilities
-- Restored `@mathieuc/tradingview` (used via `require()`)
+### Remaining Unused
+| Package | Status |
+|---------|--------|
+| `html2canvas` | Never imported - remove |
+| `pdfjs-dist` | Never imported - remove |
+| `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` | Only in archive |
 
 ---
 
-## 3. Environment Variables (COMPLETED)
+## 3. Environment Variables
 
-**Status: Fixed this session**
+### Completed
 - Removed hardcoded DB passwords from 27 active files
-- Removed hardcoded VPS passwords
-- Removed hardcoded PostgreSQL connection strings
-- Archive files (`scripts/_archive/`) left as-is (dead code)
-- **ACTION NEEDED**: Rotate Supabase service_role key in dashboard (exposed in git history)
+- **ACTION NEEDED**: Rotate Supabase service_role key
+
+### .env.local Issues
+- Duplicate entries: `CRON_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` defined twice
+- `ENCRYPTION_KEY_PART` vs `ENCRYPTION_KEY_PART1` naming mismatch
+- Unused exchange API keys: `GATEIO_API_KEY`, `DRIFT_API_KEY`, `OKX_API_KEY`
 
 ---
 
 ## 4. API Routes Audit
 
-### Overview
-- **Total routes**: 295 (237 app + 47 cron + 11 other)
-- **With rate limiting**: 126 routes (43%)
-- **Using getSupabaseAdmin()**: 76+ occurrences (bypasses RLS)
-
-### Missing Rate Limiting (HIGH)
-169 routes lack rate limiting. Priority routes to add:
-
-| Route | Risk | Reason |
-|-------|------|--------|
-| `api/posts/[id]/like` | HIGH | Can be spammed |
-| `api/posts/[id]/bookmark` | HIGH | Can be spammed |
-| `api/posts/[id]/vote` | HIGH | Can be spammed |
-| `api/users/follow` | HIGH | Follow/unfollow spam |
-| `api/posts/[id]/comments/like` | HIGH | Can be spammed |
-
-### Response Format Inconsistency
-Most routes return `{ data: ... }` or `{ error: ... }` but some return bare objects. Should standardize to:
+### CRITICAL: CRON_SECRET Auth Bypass
 ```typescript
-// Success: { data: T }
-// Error: { error: string, code?: string }
+// DANGEROUS: if CRON_SECRET undefined, ANY request bypasses auth
+if (cronSecret && authHeader !== `Bearer ${cronSecret}`) { return 401 }
+// FIX: if (!cronSecret || authHeader !== `Bearer ${cronSecret}`)
 ```
+Affected: `batch-fetch-traders/route.ts`, `health/pipeline/route.ts`, potentially others
 
-### Auth Check Gaps
-Routes that handle user data but may have inconsistent auth:
-- Several cron routes use `CRON_SECRET` check (correct)
-- All user-facing routes should use `requireAuth()` or `getAuthUser()`
+### HIGH: Duplicate Stripe Webhook Routes
+Both `/api/webhook/stripe` and `/api/stripe/webhook` exist - risk of double processing
+
+### Rate Limiting: 275+ routes covered (93%)
+Missing: webhook routes, cdn-proxy
+
+### Response Format: Mostly consistent
+Uses `success()`, `handleError()` helpers. Some routes return bare `{ error: ... }` instead.
 
 ---
 
 ## 5. Styles Audit
 
-### Inline Styles
-- **6,497 `style={{}}` occurrences** across 368 files
-- Worst offenders:
-  - `PageSkeleton.tsx`: 165 inline styles
-  - `GroupPostList.tsx`: 91
-  - `MembershipContent.tsx`: 87
-  - `PortfolioTable.tsx`: 83
-  - `hot/page.tsx`: 80
-  - `groups/[id]/new/page.tsx`: 74
-  - `library/[id]/read/page.tsx`: 69
-  - `search/page.tsx`: 61
-  - `UserProfileClient.tsx`: 60
-  - `SecuritySection.tsx`: 59
+### Inline Styles: 6,497 across 368 files
+Top: PageSkeleton(165), GroupPostList(91), MembershipContent(87), login(50+)
 
-### Z-Index Management
-- **172 z-index values** across 107 files
-- No centralized z-index scale
-- Values range from z-[1] to z-[9999]
-- Key overlap areas:
-  - Modals, dropdowns, overlays compete for z-index space
-  - `library/[id]/read/page.tsx` has 11 z-index values alone
-
-### Recommendation
-- Create `lib/design-tokens.ts` z-index scale (already referenced in CLAUDE.md)
-- Migrate top-20 inline-style-heavy files to Tailwind
+### Z-Index: 172 values, no centralized scale
+Range: 0 to 9999 with no consistent layering
 
 ---
 
-## 6. Data Fetching Audit
+## 6. Data Fetching
 
-### N+1 Query Patterns (HIGH)
-Found in `app/api/traders/[handle]/route.ts` - fetches trader, then separate queries for:
-- Reviews
-- Performance data
-- Similar traders
-- User follow status
-
-These should be batched or use SQL joins.
-
-### React Query Configuration
-- Most hooks properly configure `staleTime`
-- Some missing `gcTime` (garbage collection time)
-
-### Client vs Server Components
-- Most data-heavy pages use server components (good)
-- Some client components re-fetch data that's available from server
+### Issues
+- Missing AbortController in `SentimentBar.tsx` useEffect
+- N+1 in trader metadata (sequential SELECT instead of JOIN)
+- Comments fetched twice in PostFeed.tsx with identical logic
+- Fire-and-forget fetches in FloatingActionButton, EpubReader
 
 ---
 
-## 7. Error Handling Audit
+## 7. Error Handling
 
-### Silent Catch Blocks (15+ occurrences)
-Files with `catch { /* ignore */ }` or similar:
+### 26+ silent `.catch(() => {})` locations
+Project has `fireAndForget()` utility but many components don't use it.
+HIGH: TokenSidePanel, SpotMarket, BookDetailClient, PostFeed, EpubReader, messages
+MEDIUM: FearGreedGauge, SectorPerformance, CoreCards, DefiOverview, HotDiscussions
 
-| File | Count | Risk |
-|------|-------|------|
-| `channels/[channelId]/page.tsx` | 4 | MEDIUM - channel operations silently fail |
-| `notifications/page.tsx` | 1 | LOW |
-| `flash-news/page.tsx` | 1 | LOW |
-| `logout/page.tsx` | 2 | LOW - localStorage cleanup |
-| `u/[handle]/page.tsx` | 1 | LOW |
-| `market/SentimentBar.tsx` | 1 | LOW |
-| `market/TokenSidePanel.tsx` | 1 | LOW |
-| `market/SpotMarket.tsx` | 1 | LOW |
-| `market/ArbitrageOpportunities.tsx` | 1 | MEDIUM |
-| `inbox/ConversationsList.tsx` | 1 | MEDIUM |
-| `alerts/AlertConfig.tsx` | 1 | MEDIUM |
-
-### `console.log` Usage
-ESLint rule `no-console` is set to "warn" - good. No `console.log` found in app/ (all cleaned or using `logger`).
-
-### Catch Blocks in API Routes
-- 37 catch blocks in app/ API routes
-- Most properly return error responses
-- Some catch blocks need more specific error status codes
+### 15+ `catch { /* ignore */ }` blocks
+Channels page (4), logout (2), market components (4+), inbox (1), alerts (1)
 
 ---
 
-## 8. Naming Conventions Audit
+## 8. Naming Conventions
 
-### File Naming
-- **Components**: PascalCase (correct) - `TraderHeader.tsx`, `RankingTable.tsx`
-- **Pages**: lowercase (correct for Next.js) - `page.tsx`
-- **Utilities**: camelCase (correct) - `formatNumber.ts`
-- **API routes**: kebab-case directories (correct) - `api/flash-news/`
-- **Hooks**: `use` prefix (correct) - `useAuthSession.ts`
-
-### Mixed Language
-- Code comments mix Chinese and English (by design - bilingual team)
-- Variable names are consistently English (good)
-- Error messages use i18n system (good)
-
-### Minor Issues
-- Some TypeScript interfaces use `I` prefix, others don't - inconsistent
-- Some files in `lib/` use kebab-case, others use camelCase
-  - `lib/design-tokens.ts` vs `lib/formatters.ts` - both kebab
-  - `lib/i18n.ts` vs `lib/i18n/` directory - OK
-
-### Verdict: Generally consistent, minor issues only
+Generally good. Issues limited to abbreviated variables in fetcher files:
+`d`, `n`, `dd`, `m`, `mv`, `wr`, `ph` should be descriptive names.
 
 ---
 
-## 9. Security Audit
+## 9. Security
 
-### CRITICAL: Credential Rotation Needed
-- Hardcoded Supabase service_role key exists in git history
-- **ACTION**: Rotate key in Supabase dashboard immediately
+### CRITICAL
+1. Fix CRON_SECRET auth bypass
+2. Rotate Supabase service_role key
 
-### HIGH: Rate Limiting Gaps
-- 57% of API routes lack rate limiting
-- User-action routes (like, follow, bookmark) are most vulnerable
+### HIGH
+3. Resolve duplicate Stripe webhook routes
+4. Verify CORS `getCorsOrigin()` implementation
 
-### HIGH: getSupabaseAdmin() Overuse
-- 76+ occurrences across API routes
-- This bypasses RLS policies
-- Some routes could use user-scoped clients instead
-
-### MEDIUM: Input Validation
-- Query parameters often used directly without validation
-- Body parsing relies on TypeScript types (no runtime validation)
-- Consider Zod schemas for critical routes
-
-### MEDIUM: CORS
-- No explicit CORS headers in most routes
-- Relying on Next.js defaults (same-origin)
-- External API consumers may need CORS headers
-
-### LOW: CSP Headers
-- No Content-Security-Policy headers configured
-- Would help prevent XSS
+### POSITIVE
+- CSRF protection in middleware
+- All admin routes verify admin role
+- Error messages redacted in 5xx responses
+- GDPR-compliant account deletion
 
 ---
 
 ## Priority Action Items
 
-### Immediate (P0)
-1. **Rotate Supabase service_role key** in dashboard
-2. Add rate limiting to user-action routes (like, follow, bookmark, vote)
+### P0 (Immediate)
+1. Fix CRON_SECRET auth bypass pattern
+2. Rotate Supabase service_role key
+3. Resolve duplicate Stripe webhook
 
-### Soon (P1)
-3. Split `enrichment.ts` (1,636 lines) into per-exchange modules
-4. Add Zod validation to critical API routes (payments, auth)
-5. Create centralized z-index scale in design tokens
+### P1 (Soon)
+4. Replace 26+ `.catch(() => {})` with `fireAndForget()`
+5. Split `enrichment.ts` (1,636 lines)
+6. Split `stripe/webhook/route.ts` (802 lines)
+7. Remove unused deps: `html2canvas`, `pdfjs-dist`
+8. Clean duplicate .env.local entries
 
-### Later (P2)
-6. Migrate top-20 inline-style files to Tailwind
-7. Split page components >1000 lines
-8. Add runtime input validation for all API routes
-9. Standardize API response format across all routes
-10. Review getSupabaseAdmin() usage - switch to user-scoped where possible
+### P2 (Later)
+9. Centralize z-index scale
+10. Migrate top-20 inline-style files to Tailwind
+11. Extract generic fetcher factory
+12. Document Arena Score calibration
+13. Add Zod schemas for API inputs
