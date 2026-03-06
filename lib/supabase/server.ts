@@ -28,12 +28,11 @@ let adminClientInstance: SupabaseClient | null = null
  */
 export function getSupabaseAdmin(): SupabaseClient {
   if (!adminClientInstance) {
-    // 检查是否使用占位符（构建时）
-    if (supabaseUrl.includes('placeholder') || supabaseServiceKey.includes('placeholder')) {
-      throw new Error('Supabase 环境变量未配置: NEXT_PUBLIC_SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY')
-    }
+    // Re-read env vars at runtime (build time uses placeholders, runtime has real values)
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || supabaseUrl
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseServiceKey
 
-    adminClientInstance = createClient(supabaseUrl, supabaseServiceKey, {
+    adminClientInstance = createClient(url, key, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,

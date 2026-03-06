@@ -9,15 +9,10 @@
  *   - itemId: the library_items.id to associate with
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { isR2Configured, uploadFile, libraryPdfKey } from '@/lib/r2'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
 
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -74,6 +69,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify item exists
+    const supabase = getSupabaseAdmin()
     const { data: item, error: itemErr } = await supabase
       .from('library_items')
       .select('id, title')
