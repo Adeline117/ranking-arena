@@ -4,6 +4,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { dataLogger } from '@/lib/utils/logger'
 
 // ============================================
 // Types
@@ -165,7 +166,7 @@ export async function upsertTraders(
       .from('trader_profiles_v2')
       .upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
 
-    if (profileErr) console.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
+    if (profileErr) dataLogger.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
 
     // Upsert trader_snapshots_v2
     const snapshots = batch.map((t) => ({
@@ -199,7 +200,7 @@ export async function upsertTraders(
       .insert(snapshots)
 
     if (snapErr && !snapErr.message.includes('duplicate key') && !snapErr.message.includes('violates unique constraint')) {
-      console.warn(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
+      dataLogger.warn(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
       return { saved, error: snapErr.message }
     }
 
