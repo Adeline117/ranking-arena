@@ -47,6 +47,7 @@ next-env.d.ts
 
 # data backups
 /data/backup/
+/data/snapshots/
 
 # 临时数据文件
 binance_copy_trading_*.json
