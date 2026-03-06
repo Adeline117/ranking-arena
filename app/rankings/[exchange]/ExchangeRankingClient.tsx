@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
@@ -250,6 +250,13 @@ export default function ExchangeRankingClient({
   const PAGE_SIZE = 50
   const [page, setPage] = useState(1)
 
+  // Pre-compute rank map to avoid O(n*m) indexOf in render loop
+  const rankMap = useMemo(() => {
+    const m = new Map<TraderData, number>()
+    traders.forEach((t, i) => m.set(t, i + 1))
+    return m
+  }, [traders])
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
@@ -342,7 +349,7 @@ export default function ExchangeRankingClient({
       {viewMode === 'card' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: tokens.spacing[3] }}>
           {pagedTraders.map((t, i) => {
-            const originalRank = traders.indexOf(t) + 1
+            const originalRank = rankMap.get(t) || 0
             return (
               <TraderCardItem key={`${t.platform}:${t.trader_key}:${i}`} trader={t} rank={originalRank} />
             )
@@ -386,7 +393,7 @@ export default function ExchangeRankingClient({
               ? t.win_rate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error
               : tokens.colors.text.tertiary
             // Determine original rank (index in unsorted array + 1)
-            const originalRank = traders.indexOf(t) + 1
+            const originalRank = rankMap.get(t) || 0
             return (
               <Link
                 key={`${t.platform}:${t.trader_key}:${i}`}

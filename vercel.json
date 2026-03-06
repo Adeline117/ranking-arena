@@ -26,7 +26,7 @@
     },
     {
       "path": "/api/cron/fetch-details?tier=normal&concurrency=25&limit=500",
-      "schedule": "30 */4 * * *"
+      "schedule": "22 */4 * * *"
     },
     {
       "path": "/api/cron/batch-5min",
