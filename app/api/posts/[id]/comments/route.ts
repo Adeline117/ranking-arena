@@ -13,7 +13,6 @@ import {
   success,
   successWithPagination,
   handleError,
-  validateString,
   validateNumber,
 } from '@/lib/api'
 import { getPostComments, createComment, deleteComment } from '@/lib/data/comments'

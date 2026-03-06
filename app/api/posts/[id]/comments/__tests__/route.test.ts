@@ -208,6 +208,9 @@ describe('/api/posts/[id]/comments', () => {
       const res = await POST(req, createContext('post-1'))
       const body = await res.json()
 
+      // Debug
+      if (res.status !== 201) console.log('parent_id test body:', JSON.stringify(body), 'status:', res.status)
+
       expect(res.status).toBe(201)
       expect(body.data.comment.parent_id).toBe('c1')
     })

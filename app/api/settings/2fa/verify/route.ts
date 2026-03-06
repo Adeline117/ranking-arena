@@ -50,12 +50,15 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    const body = (await request.json()) as VerifyRequestBody
-    const { code } = body
-
-    if (!code || typeof code !== 'string') {
-      return NextResponse.json({ error: 'Missing or invalid code' }, { status: 400 })
+    const body = await request.json()
+    const parsed = Verify2FASchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
+    const { code } = parsed.data
 
     // Get the stored TOTP secret
     const { data: profile, error: profileError } = await supabase

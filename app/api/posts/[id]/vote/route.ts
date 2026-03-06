@@ -10,7 +10,6 @@ import {
   requireAuth,
   success,
   handleError,
-  validateEnum,
 } from '@/lib/api'
 import { togglePostVote, getPostById } from '@/lib/data/posts'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'

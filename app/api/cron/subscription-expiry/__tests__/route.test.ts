@@ -28,6 +28,17 @@ jest.mock('@/lib/web3/nft', () => ({
   checkNFTMembership: jest.fn().mockResolvedValue(false),
 }))
 
+jest.mock('@/lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    dbError: jest.fn(),
+    apiError: jest.fn(),
+  },
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 

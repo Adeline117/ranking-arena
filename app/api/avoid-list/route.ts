@@ -15,7 +15,6 @@ import {
   handleError,
   validateString,
   validateNumber,
-  validateEnum,
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'

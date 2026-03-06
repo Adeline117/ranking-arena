@@ -88,7 +88,7 @@ export default function RecommendedGroups() {
   const { language, t } = useLanguage()
   const auth = useUnifiedAuth()
 
-  const { data, error, isLoading: loading } = useSWR(
+  const { data, error, isLoading: loading, mutate } = useSWR(
     ['recommended-groups', auth.accessToken],
     ([, token]) => fetchRecommendedGroups(token),
     {
@@ -116,7 +116,13 @@ export default function RecommendedGroups() {
         </div>
       ) : error ? (
         <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
-          {t('sidebarLoadFailedShort')}
+          <div>{t('sidebarLoadFailedShort')}</div>
+          <button
+            onClick={() => mutate()}
+            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+          >
+            {t('retry') || 'Retry'}
+          </button>
         </div>
       ) : groups.length === 0 ? (
         <div style={{ padding: '24px 12px', textAlign: 'center' }}>
