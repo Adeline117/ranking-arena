@@ -185,7 +185,7 @@ describe('Chat Settings API', () => {
 
       expect(response.status).toBe(400)
       const data = await response.json()
-      expect(data.error).toBe('备注名最多50个字符')
+      expect(data.error).toBe('Nickname max 50 characters')
     })
 
     it('creates settings record when none exists', async () => {
