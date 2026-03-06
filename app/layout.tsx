@@ -26,6 +26,7 @@ const WebVitals = dynamic(() => import("./components/Providers/WebVitals").then(
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })));
 const Analytics = dynamic(() => import("@vercel/analytics/next").then(m => ({ default: m.Analytics })));
 const NetworkStatusBanner = dynamic(() => import("./components/ui/NetworkStatusBanner"));
+const FeedbackWidget = dynamic(() => import("./components/common/FeedbackWidget"));
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
 import { AsyncStylesheets } from "./components/Providers/AsyncStylesheets";
 
@@ -222,6 +223,7 @@ export default function RootLayout({
             <MobileBottomNav />
             <CompareFloatingBar />
             <ScrollToTop />
+            <FeedbackWidget />
             <ScrollRestoration />
           </CapacitorProvider>
         </Providers>
