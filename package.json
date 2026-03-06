@@ -53,7 +53,9 @@
     "check:scripts-boundary": "node scripts/check-production-boundary.mjs",
     "backfill:24h": "npx tsx scripts/backfill-window-24h.ts",
     "backfill:risk:7d30d": "npx tsx scripts/backfill-risk-metrics-7d30d.ts",
-    "clean:outliers": "npx tsx scripts/clean-mdd-roi-outliers.ts"
+    "clean:outliers": "npx tsx scripts/clean-mdd-roi-outliers.ts",
+    "backup:r2": "node scripts/maintenance/backup-to-r2.mjs",
+    "backup:r2:full": "node scripts/maintenance/backup-to-r2.mjs --full"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.985.0",
