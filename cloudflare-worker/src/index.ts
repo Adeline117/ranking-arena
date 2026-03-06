@@ -66,6 +66,12 @@ const ALLOWED_HOSTS = [
   // GMX stats
   'arbitrum-api.gmxinfra.io',
   'gmx.squids.live',
+  // Pionex copy trading
+  'www.pionex.com',
+  // Crypto.com copy trading
+  'crypto.com',
+  // LBank copy trading
+  'www.lbank.com',
 ];
 
 const worker = {

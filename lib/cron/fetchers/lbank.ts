@@ -22,6 +22,8 @@ import {
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
+// Dynamic import to avoid bundling puppeteer on Vercel
+const getInterceptApiResponses = () => import('../scrapers/cloudflare-bypass').then(m => m.interceptApiResponses)
 
 const SOURCE = 'lbank'
 const TARGET = 500
@@ -215,6 +217,34 @@ async function fetchPeriod(
     }
 
     if (allTraders.size > 0) break
+  }
+
+  // Stealth browser fallback when all HTTP methods fail (CF JS challenge)
+  if (allTraders.size === 0) {
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying stealth browser fallback...`)
+    try {
+      const interceptApiResponses = await getInterceptApiResponses()
+      const { responses } = await interceptApiResponses(
+        'https://www.lbank.com/copy-trading',
+        ['copy', 'trader', 'ranking', 'leader'],
+        { proxy: process.env.STEALTH_PROXY || undefined, maxWaitMs: 20_000 }
+      )
+      for (const resp of responses) {
+        try {
+          const data = JSON.parse(resp.body) as LbankResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.uid || item.userId || item.traderId || item.id || item.memberId || '')
+            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+          }
+        } catch { /* skip unparseable */ }
+      }
+      if (allTraders.size > 0) {
+        logger.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Stealth browser fallback failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   if (allTraders.size === 0) {

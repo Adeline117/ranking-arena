@@ -22,6 +22,8 @@ import {
 } from './shared'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
+// Dynamic import to avoid bundling puppeteer on Vercel
+const getInterceptApiResponses = () => import('../scrapers/cloudflare-bypass').then(m => m.interceptApiResponses)
 
 const SOURCE = 'cryptocom'
 const TARGET = 500
@@ -167,8 +169,36 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
+  // Stealth browser fallback when all HTTP methods fail (CF JS challenge)
   if (allTraders.size === 0) {
-    return { total: 0, saved: 0, error: 'No public API available — needs browser scraping' }
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying stealth browser fallback...`)
+    try {
+      const interceptApiResponses = await getInterceptApiResponses()
+      const { responses } = await interceptApiResponses(
+        'https://crypto.com/exchange/copy-trading',
+        ['copy', 'leader', 'list', 'trader'],
+        { proxy: process.env.STEALTH_PROXY || undefined, maxWaitMs: 20_000 }
+      )
+      for (const resp of responses) {
+        try {
+          const data = JSON.parse(resp.body) as CryptoComResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.leaderId || item.uid || item.id || '')
+            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+          }
+        } catch { /* skip unparseable */ }
+      }
+      if (allTraders.size > 0) {
+        logger.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Stealth browser fallback failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (allTraders.size === 0) {
+    return { total: 0, saved: 0, error: 'No data from Crypto.com API endpoints' }
   }
 
   const traders: TraderData[] = []

@@ -26,6 +26,8 @@ import {
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
+// Dynamic import to avoid bundling puppeteer on Vercel
+const getInterceptApiResponses = () => import('../scrapers/cloudflare-bypass').then(m => m.interceptApiResponses)
 
 const SOURCE = 'pionex'
 const TARGET = 500
@@ -198,6 +200,36 @@ async function fetchPeriod(
         logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
+    }
+  }
+
+  // Stealth browser fallback when all HTTP methods fail (CF JS challenge)
+  if (allTraders.size === 0) {
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying stealth browser fallback...`)
+    try {
+      const interceptApiResponses = await getInterceptApiResponses()
+      const { responses } = await interceptApiResponses(
+        'https://www.pionex.com/en/copy-trade',
+        ['kol', 'copy_trading', 'trader', 'kol_list', 'kol_rank'],
+        { proxy: process.env.STEALTH_PROXY || undefined, maxWaitMs: 20_000 }
+      )
+      for (const resp of responses) {
+        try {
+          const data = JSON.parse(resp.body) as unknown
+          const arrays = findTraderArrays(data)
+          for (const list of arrays) {
+            for (const item of list) {
+              const id = String(item.uid || item.user_id || item.kol_user_id || item.traderId || item.userId || item.id || '')
+              if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+            }
+          }
+        } catch { /* skip unparseable */ }
+      }
+      if (allTraders.size > 0) {
+        logger.warn(`[${SOURCE}] Stealth browser got ${allTraders.size} traders`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Stealth browser fallback failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
