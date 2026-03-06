@@ -141,7 +141,8 @@ async function fetchLeaderboard(_period: string): Promise<OkxTrader[]> {
 
         if (allTraders.length >= TARGET) break
         await sleep(DELAY_MS)
-      } catch {
+      } catch (err) {
+        logger.warn(`[${SOURCE}] Pagination error: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
     }
