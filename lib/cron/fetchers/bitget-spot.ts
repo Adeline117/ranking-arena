@@ -185,7 +185,8 @@ async function fetchWithAuth(period: string): Promise<BitgetSpotTrader[]> {
         allTraders.push(...list)
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(300)
-      } catch {
+      } catch (err) {
+        logger.warn(`[${SOURCE}] Pagination error: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
     }
