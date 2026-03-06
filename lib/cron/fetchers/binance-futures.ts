@@ -64,6 +64,7 @@ let _cachedStrategy: 'direct' | 'vps' | null = null
 
 // Helper to fetch with proxy fallback (direct → VPS proxy)
 // Caches the working strategy to avoid wasting time on failed strategies for every page
+// Falls back on geo-block (451/403) AND timeouts — Vercel hnd1 often times out to Binance
 async function fetchWithProxyFallback<T>(
   url: string,
   opts: { method?: string; headers?: Record<string, string>; body?: unknown }
@@ -75,33 +76,39 @@ async function fetchWithProxyFallback<T>(
     return await fetchViaVps<T>(vpsUrl, url, opts)
   }
 
-  // Try direct first
-  try {
+  // If no VPS configured, go direct only
+  if (!vpsUrl) {
     const result = await fetchJson<T>(url, { ...opts, timeoutMs: 10000 })
+    _cachedStrategy = 'direct'
+    return result
+  }
+
+  // Try direct first (short timeout since we have VPS fallback)
+  try {
+    const result = await fetchJson<T>(url, { ...opts, timeoutMs: 8000 })
     _cachedStrategy = 'direct'
     return result
   } catch (directErr) {
     const msg = directErr instanceof Error ? directErr.message : ''
     const isBlocked = msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('geo-blocked')
+    const isTimeout = msg.includes('abort') || msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNRESET')
 
-    if (!isBlocked) throw directErr
+    // Only fallback for blockable/timeout errors
+    if (!isBlocked && !isTimeout) throw directErr
 
-    // Direct is geo-blocked → try VPS proxy
-    if (vpsUrl) {
-      try {
-        logger.warn(`[binance-futures] Direct geo-blocked, switching to VPS proxy`)
-        const result = await fetchViaVps<T>(vpsUrl, url, opts)
-        _cachedStrategy = 'vps'
-        return result
-      } catch (vpsErr) {
-        logger.warn(`[binance-futures] VPS proxy failed: ${vpsErr instanceof Error ? vpsErr.message : String(vpsErr)}`)
-      }
+    // Direct failed (geo-blocked or timeout) → try VPS proxy
+    try {
+      logger.warn(`[binance-futures] Direct failed (${isBlocked ? 'geo-blocked' : 'timeout'}), switching to VPS proxy`)
+      const result = await fetchViaVps<T>(vpsUrl, url, opts)
+      _cachedStrategy = 'vps'
+      return result
+    } catch (vpsErr) {
+      logger.warn(`[binance-futures] VPS proxy also failed: ${vpsErr instanceof Error ? vpsErr.message : String(vpsErr)}`)
     }
 
     throw new Error(
-      `Geo-blocked (HTTP 451) — direct and VPS proxy both failed. ` +
-      `Set VPS_PROXY_SG/VPS_PROXY_URL to enable VPS fallback.`
-    )
+      `Direct ${isBlocked ? 'geo-blocked' : 'timed out'} and VPS proxy failed. ` +
+      `Direct: ${msg}`)
   }
 }
 
