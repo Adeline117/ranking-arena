@@ -9,7 +9,7 @@
  *   group=b  → mexc, kucoin, okx_web3, hyperliquid, gmx, jupiter_perps, aevo (every 4h)
  *   group=c  → coinex, bitget_spot, xt, bybit_spot, binance_web3 (every 6h)
  *   group=d  → dydx, phemex, gains, htx_futures, weex, bitmart, kwenta, mux (every 6h)
- *   group=e  → blofin, bingx, gateio, cryptocom, bitfinex (every 8h)
+ *   group=e  → blofin, bingx, gateio, bitfinex (every 8h)
  *   group=f  → whitebit, btse, toobit, uniswap, pancakeswap (every 12h)
  * 
  * Each platform is called sequentially with a small delay to avoid rate limits.
@@ -31,8 +31,9 @@ const GROUPS: Record<string, string[]> = {
   c: ['coinex', 'bitget_spot', 'xt', 'bybit_spot', 'binance_web3'],
   // Group D: Lower-priority batch 2 (every 6h) — 8 platforms
   d: ['dydx', 'phemex', 'gains', 'htx_futures', 'weex', 'bitmart', 'kwenta', 'mux'],
-  // Group E: Lowest-priority (every 8h) — 5 platforms
-  e: ['blofin', 'bingx', 'gateio', 'cryptocom', 'bitfinex'],
+  // Group E: Lowest-priority (every 8h) — 4 platforms
+  // cryptocom removed: no public API, WAF-blocked (needs browser scraping)
+  e: ['blofin', 'bingx', 'gateio', 'bitfinex'],
   // Group F: Additional platforms (every 12h) — 3 platforms
   f: ['whitebit', 'btse', 'toobit'],
 }
