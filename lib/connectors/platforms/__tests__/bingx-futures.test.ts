@@ -6,7 +6,6 @@
  */
 
 import { BingxFuturesConnector } from '../bingx-futures'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally
