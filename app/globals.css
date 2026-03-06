@@ -295,11 +295,11 @@ html.theme-transition *::after {
   --background: #FFFFFF;
   --foreground: #111111;
   
-  /* Background colors */
-  --color-bg-primary: #FFFFFF;
-  --color-bg-secondary: #F8F8FA;
-  --color-bg-tertiary: #F0F0F4;
-  --color-bg-hover: #E8E8EC;
+  /* Background colors — softer than pure white for reduced glare */
+  --color-bg-primary: #FAFAFE;
+  --color-bg-secondary: #F4F4F8;
+  --color-bg-tertiary: #EEEEF2;
+  --color-bg-hover: #E5E5EB;
   
   /* Text colors (WCAG AA on #FFFFFF) */
   --color-text-primary: #111111;
@@ -311,13 +311,13 @@ html.theme-transition *::after {
   --color-border-primary: #E0E0E6;
   --color-border-secondary: #D0D0D8;
   
-  /* Accent colors */
-  --color-accent-primary: #7B5F98;
-  --color-accent-primary-08: rgba(123, 95, 152, 0.08);
-  --color-accent-primary-12: rgba(123, 95, 152, 0.12);
-  --color-accent-primary-30: rgba(123, 95, 152, 0.3);
-  --color-accent-primary-40: rgba(123, 95, 152, 0.4);
-  --color-accent-primary-60: rgba(123, 95, 152, 0.6);
+  /* Accent colors — slightly more saturated for visibility on light bg */
+  --color-accent-primary: #6F4E96;
+  --color-accent-primary-08: rgba(111, 78, 150, 0.08);
+  --color-accent-primary-12: rgba(111, 78, 150, 0.12);
+  --color-accent-primary-30: rgba(111, 78, 150, 0.3);
+  --color-accent-primary-40: rgba(111, 78, 150, 0.4);
+  --color-accent-primary-60: rgba(111, 78, 150, 0.6);
   --color-translated: #357574;
   --color-translated-08: rgba(53, 117, 116, 0.08);
   --color-translated-20: rgba(53, 117, 116, 0.2);
@@ -2099,6 +2099,25 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 
 [data-theme='light'] {
   color-scheme: light;
+}
+
+/* Light mode: cards use shadows instead of borders for depth */
+[data-theme='light'] .glass-card,
+[data-theme='light'] .sidebar-card {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+}
+
+[data-theme='light'] .glass-card:hover,
+[data-theme='light'] .sidebar-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+}
+
+[data-theme='light'] .ranking-row:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme='light'] .ssr-t {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 /* ============================================
