@@ -321,6 +321,7 @@ export default function GroupsFeedPage() {
               onClick={() => setSubTab(tab.key)}
               style={{
                 padding: `${tokens.spacing[2]} 0 ${tokens.spacing[2]}`,
+                minHeight: tokens.touchTarget.min,
                 border: 'none',
                 background: 'transparent',
                 color: subTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.tertiary,

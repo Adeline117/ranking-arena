@@ -1352,7 +1352,7 @@ function ToolbarBtn({ children, onClick, active, title }: {
       title={title}
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 36, height: 36, borderRadius: 10,
+        width: 44, height: 44, minWidth: 44, minHeight: 44, borderRadius: 10,
         background: active ? 'var(--glass-bg-light)' : 'transparent',
         border: 'none', color: 'var(--color-text-primary)',
         cursor: 'pointer', transition: 'background 0.15s', flexShrink: 0,
