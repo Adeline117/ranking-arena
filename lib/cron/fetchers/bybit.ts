@@ -104,7 +104,7 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    console.warn(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[bybit] Direct API failed: ${err instanceof Error ? err.message : err}`)
   }
 
   // Strategy 2: Try Cloudflare Worker proxy
@@ -114,12 +114,12 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    console.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[bybit] Proxy failed: ${err instanceof Error ? err.message : err}`)
   }
 
   // Strategy 3: Stealth browser bypass (extract cookies then retry direct API)
   try {
-    console.warn(`[bybit] Trying stealth browser to bypass Akamai WAF...`)
+    logger.warn(`[bybit] Trying stealth browser to bypass Akamai WAF...`)
     const { bypassCloudflare, cookiesToHeader } = await getCloudflareBypass()
     const { cookies } = await bypassCloudflare('https://www.bybit.com/en/copy-trading', {
       proxy: process.env.STEALTH_PROXY || undefined,
@@ -136,7 +136,7 @@ async function fetchBybitPage(
       return data
     }
   } catch (err) {
-    console.warn(`[bybit] Stealth browser fallback failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[bybit] Stealth browser fallback failed: ${err instanceof Error ? err.message : err}`)
   }
 
   return null
@@ -224,7 +224,7 @@ async function fetchPeriod(
   // Extended to all periods (not just 90D)
   if (saved > 0) {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
+    logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     // Map period to days for equity curve API
     const daysMap: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
@@ -254,7 +254,7 @@ async function fetchPeriod(
               enrichedCount++
             }
           } catch (err) {
-            console.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err}`)
+            logger.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err instanceof Error ? err.message : String(err)}`)
           }
         })
       )
@@ -262,7 +262,7 @@ async function fetchPeriod(
         await sleep(ENRICH_DELAY_MS)
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
+    logger.info(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
   }
 
   return { total: top.length, saved, error }
