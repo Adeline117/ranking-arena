@@ -232,6 +232,25 @@ export default function TopNav({ email = null }: { email?: string | null }) {
     }
   }, [showUserMenu, showSearchDropdown])
 
+  // ⌘K / Ctrl+K keyboard shortcut to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        const input = searchRef.current?.querySelector('input')
+        if (input) {
+          input.focus()
+          setShowSearchDropdown(true)
+        } else {
+          // Mobile: open mobile search overlay
+          setShowMobileSearch(true)
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     const trimmedQuery = searchQuery.trim()
