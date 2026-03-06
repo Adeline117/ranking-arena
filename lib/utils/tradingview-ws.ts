@@ -145,9 +145,11 @@ async function fetchTechnicalAnalysis(
 // ============================================
 
 function createTVClient(): TradingViewClientWrapper {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
   let TradingView: any
-  try { TradingView = require('@mathieuc/' + 'tradingview') } catch { /* optional dep */ }
+  try {
+    // Dynamic require to avoid Turbopack static analysis; eslint-disable-next-line
+    TradingView = globalThis.require?.('@mathieuc/' + 'tradingview')
+  } catch { /* optional dep */ }
 
   const wrapper: TradingViewClientWrapper = {
     prices: new Map(),
