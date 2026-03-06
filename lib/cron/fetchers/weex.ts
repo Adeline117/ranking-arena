@@ -30,6 +30,8 @@ import {
   normalizeWinRate,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
+import { logger } from '@/lib/logger'
+import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'weex'
 const TARGET = 500
@@ -338,17 +340,24 @@ export async function fetchWeex(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  // Weex only supports 30D and 90D (no 7D data)
-  const supportedPeriods = periods.filter(p => p !== '7D')
+  try {
+    // Weex only supports 30D and 90D (no 7D data)
+    const supportedPeriods = periods.filter(p => p !== '7D')
 
-  for (const period of supportedPeriods) {
-    result.periods[period] = await fetchPeriod(supabase, period)
-    if (supportedPeriods.indexOf(period) < supportedPeriods.length - 1) await sleep(1000)
-  }
+    for (const period of supportedPeriods) {
+      result.periods[period] = await fetchPeriod(supabase, period)
+      if (supportedPeriods.indexOf(period) < supportedPeriods.length - 1) await sleep(1000)
+    }
 
-  // For 7D, return empty with note
-  if (periods.includes('7D') && !result.periods['7D']) {
-    result.periods['7D'] = { total: 0, saved: 0, error: 'Weex does not provide 7D data' }
+    // For 7D, return empty with note
+    if (periods.includes('7D') && !result.periods['7D']) {
+      result.periods['7D'] = { total: 0, saved: 0, error: 'Weex does not provide 7D data' }
+    }
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

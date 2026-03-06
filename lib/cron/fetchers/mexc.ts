@@ -237,9 +237,16 @@ export async function fetchMexc(
   const start = Date.now()
   const result: FetchResult = { source: SOURCE, periods: {}, duration: 0 }
 
-  for (const period of periods) {
-    result.periods[period] = await fetchPeriod(supabase, period)
-    if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+  try {
+    for (const period of periods) {
+      result.periods[period] = await fetchPeriod(supabase, period)
+      if (periods.indexOf(period) < periods.length - 1) await sleep(1000)
+    }
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start

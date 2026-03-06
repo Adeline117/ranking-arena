@@ -75,38 +75,45 @@ export const fetchPancakeSwap: (
     duration: 0,
   }
 
-  const addrMap = await aggregateTraders()
-  const sorted = Array.from(addrMap.entries())
-    .sort((a, b) => b[1].volume - a[1].volume)
-    .slice(0, TARGET)
+  try {
+    const addrMap = await aggregateTraders()
+    const sorted = Array.from(addrMap.entries())
+      .sort((a, b) => b[1].volume - a[1].volume)
+      .slice(0, TARGET)
 
-  for (const period of periods) {
-    try {
-      const traders: TraderData[] = sorted.map(([addr, d], i) => ({
-        source: SOURCE,
-        source_trader_id: addr,
-        handle: addr,
-        profile_url: `https://bscscan.com/address/${addr}`,
-        season_id: period,
-        rank: i + 1,
-        roi: null,
-        pnl: null,
-        win_rate: null,
-        max_drawdown: null,
-        trades_count: d.count,
-        arena_score: calculateArenaScore(0, null, null, null, period),
-        captured_at: new Date().toISOString(),
-      }))
+    for (const period of periods) {
+      try {
+        const traders: TraderData[] = sorted.map(([addr, d], i) => ({
+          source: SOURCE,
+          source_trader_id: addr,
+          handle: addr,
+          profile_url: `https://bscscan.com/address/${addr}`,
+          season_id: period,
+          rank: i + 1,
+          roi: null,
+          pnl: null,
+          win_rate: null,
+          max_drawdown: null,
+          trades_count: d.count,
+          arena_score: calculateArenaScore(0, null, null, null, period),
+          captured_at: new Date().toISOString(),
+        }))
 
-      const upsertResult = await upsertTraders(supabase, traders)
-      result.periods[period] = { total: traders.length, saved: upsertResult.saved }
-    } catch (err) {
-      result.periods[period] = {
-        total: 0,
-        saved: 0,
-        error: err instanceof Error ? err.message : String(err),
+        const upsertResult = await upsertTraders(supabase, traders)
+        result.periods[period] = { total: traders.length, saved: upsertResult.saved }
+      } catch (err) {
+        result.periods[period] = {
+          total: 0,
+          saved: 0,
+          error: err instanceof Error ? err.message : String(err),
+        }
       }
     }
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { platform: SOURCE },
+    })
+    logger.error(`[${SOURCE}] Fetch failed`, err instanceof Error ? err : new Error(String(err)))
   }
 
   result.duration = Date.now() - start
