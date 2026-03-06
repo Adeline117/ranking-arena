@@ -29,19 +29,11 @@ export function exportToJSON(data: unknown, filename: string): void {
   downloadBlob(json, `${filename}.json`, 'application/json;charset=utf-8;')
 }
 
-// ── PDF (html2canvas) ──────────────────────────────────────
+// ── Screenshot export (canvas capture) ───────────────────────
+// html2canvas removed — use native browser screenshot or a lighter alternative if needed
 
-export async function exportToPDF(element: HTMLElement, filename: string): Promise<void> {
-  const html2canvas = (await import('html2canvas')).default
-  const canvas = await html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-    backgroundColor: 'var(--color-bg-primary)',
-  })
-  const link = document.createElement('a')
-  link.download = `${filename}.png`
-  link.href = canvas.toDataURL('image/png')
-  link.click()
+export async function exportToPDF(_element: HTMLElement, _filename: string): Promise<void> {
+  throw new Error('PDF export is not available. html2canvas has been removed.')
 }
 
 // ── Blob download helper ───────────────────────────────────

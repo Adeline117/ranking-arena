@@ -15,9 +15,11 @@ import ReaderSettings from './components/ReaderSettings'
 
 const EpubReader = dynamic(() => import('@/app/components/library/EpubReader'), { ssr: false })
 
-// pdfjs-dist types (dynamically imported)
-type PDFDocumentProxy = import('pdfjs-dist').PDFDocumentProxy
-type PDFRenderTask = ReturnType<import('pdfjs-dist/types/src/display/api').PDFPageProxy['render']>
+// pdfjs-dist types (stubbed — package removed, loaded from CDN at runtime)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PDFDocumentProxy = { numPages: number; getPage(n: number): Promise<PDFPageProxy>; getDestination(dest: string): Promise<any[] | null>; getPageIndex(ref: any): Promise<number>; destroy(): void }
+type PDFPageProxy = { getViewport(params: { scale: number }): { width: number; height: number }; render(params: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }): PDFRenderTask }
+type PDFRenderTask = { promise: Promise<void>; cancel(): void }
 
 interface EpubTocEntry {
   label: string
@@ -451,7 +453,8 @@ export default function ReadPage() {
 
     async function loadPdf() {
       try {
-        const pdfjsLib = await import('pdfjs-dist')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pdfjsLib = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs' as any)
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
         const loadingTask = pdfjsLib.getDocument({ url: url!, disableAutoFetch: false, disableStream: false })
         loadingTask.onProgress = (progress: { loaded: number; total: number }) => {

@@ -339,7 +339,6 @@ const nextConfig: NextConfig = {
       'zustand',
       'swr',
       'isomorphic-dompurify',
-      'html2canvas',
       'react-easy-crop',
       'otpauth',
       'lightweight-charts',
