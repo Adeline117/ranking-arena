@@ -312,7 +312,8 @@ async function getTraderArenaFollowersCountBatch(
     })
 
     return counts
-  } catch (_error) {
+  } catch (error) {
+    logger.warn('getTraderArenaFollowersCountBatch failed', { error: error instanceof Error ? error.message : String(error) })
     return result
   }
 }
