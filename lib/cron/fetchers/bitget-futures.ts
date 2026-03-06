@@ -200,10 +200,10 @@ async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
 // Public fallback endpoints (may return 404 but kept for future recovery)
 // ---------------------------------------------------------------------------
 
+// V1 decommissioned (30032), V2 public endpoints return 404
+// Only the authenticated broker API works: /api/v2/copy/mix-broker/query-traders
+// These are kept as fallback in case Bitget restores them
 const PUBLIC_API_URLS = [
-  // V1 public endpoint (still working as of 2026)
-  'https://api.bitget.com/api/mix/v1/trace/traderList',
-  // V2 endpoints (may return 404)
   'https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking',
   'https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list',
 ]
@@ -219,12 +219,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
 
     for (let page = 1; page <= maxPages; page++) {
       try {
-        // V1 traderList uses sortRule/sortFlag params, V2 uses period
-        const isV1 = apiUrl.includes('/mix/v1/trace/')
-        const queryParams = isV1
-          ? `sortRule=roi&sortFlag=desc&pageNo=${page}&pageSize=${PAGE_SIZE}`
-          : `period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
-        const url = `${apiUrl}?${queryParams}`
+        const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
         const data = await fetchJson<BitgetResponse>(url, {
           headers: {
             Referer: 'https://www.bitget.com/',
@@ -342,7 +337,7 @@ async function fetchPeriod(
       saved: 0,
       error: hasCreds
         ? 'Bitget broker API returned no data'
-        : 'No data — set BITGET_API_KEY/SECRET/PASSPHRASE for broker API, or public endpoints are 404',
+        : 'No data — public endpoints return 404. Set BITGET_API_KEY/SECRET/PASSPHRASE for broker API (/api/v2/copy/mix-broker/query-traders)',
     }
   }
 
