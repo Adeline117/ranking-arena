@@ -7,7 +7,7 @@
  * Query params:
  *   group=a  → bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
- *   group=c  → okx_web3, aevo, xt (every 6h)
+ *   group=c  → okx_web3, okx_spot, aevo, xt (every 4h)
  *   group=d  → gains, htx_futures, dydx (every 6h)
  *   group=e  → coinex, bitget_spot, binance_web3 (every 8h)
  *   group=f  → mexc, kucoin, phemex, weex, blofin, bingx, gateio, lbank (every 12h)
@@ -30,8 +30,8 @@ const GROUPS: Record<string, string[]> = {
   a: ['bitget_futures', 'okx_futures'],
   // Group B: DEX + slow APIs (every 4h) — 3 platforms, ~110s parallel
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
-  // Group C: Mid-priority CEX (every 4h) — 3 platforms, ~70s parallel
-  c: ['okx_web3', 'aevo', 'xt'],
+  // Group C: Mid-priority CEX (every 4h) — 4 platforms, ~70s parallel
+  c: ['okx_web3', 'okx_spot', 'aevo', 'xt'],
   // Group D: Working CEX (every 6h) — 3 platforms, ~35s parallel
   d: ['gains', 'htx_futures', 'dydx'],
   // Group E: Lower-priority (every 8h) — 3 platforms

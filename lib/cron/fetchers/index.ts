@@ -8,6 +8,7 @@ import type { PlatformFetcher } from './shared'
 
 // CEX - Pure API
 import { fetchOkxFutures } from './okx-futures'
+import { fetchOkxSpot } from './okx-spot'
 import { fetchHtx } from './htx'
 import { fetchBinanceFutures } from './binance-futures'
 import { fetchBinanceSpot } from './binance-spot'
@@ -54,6 +55,7 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   binance_web3: fetchBinanceWeb3,
   bybit: fetchBybit,
   bybit_spot: fetchBybitSpot,
+  okx_spot: fetchOkxSpot,
   okx_web3: fetchOkxWeb3,
   bitget_futures: fetchBitgetFutures,
   bitget_spot: fetchBitgetSpot,

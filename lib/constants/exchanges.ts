@@ -176,6 +176,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'binance_spot',
   'bitget_spot',
   'bybit_spot',
+  'okx_spot',
   // Web3 / DEX
   'gmx',
   'hyperliquid',
