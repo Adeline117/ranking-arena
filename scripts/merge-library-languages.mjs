@@ -8,7 +8,7 @@
 import pg from 'pg'
 const { Client } = pg
 
-const DB_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:5432/postgres'
+const DB_URL = process.env.DATABASE_URL
 
 const client = new Client({ connectionString: DB_URL, statement_timeout: 600000 })
 
