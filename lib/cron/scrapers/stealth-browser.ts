@@ -6,6 +6,7 @@
 import puppeteerExtra from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import type { Browser, Page } from 'puppeteer'
+import { logger } from '@/lib/logger'
 
 puppeteerExtra.use(StealthPlugin())
 
@@ -124,7 +125,7 @@ export async function navigateWithRetry(
       return
     } catch (err) {
       if (i === retries - 1) throw err
-      console.warn(`[stealth-browser] Navigate attempt ${i + 1} failed, retrying...`)
+      logger.warn(`[stealth-browser] Navigate attempt ${i + 1} failed, retrying...`)
       await new Promise((r) => setTimeout(r, 2000))
     }
   }

@@ -7,6 +7,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { createStealthBrowser, configurePage, navigateWithRetry, type StealthBrowserOptions } from './stealth-browser'
 import type { CookieParam } from 'puppeteer'
+import { logger } from '@/lib/logger'
 
 const COOKIE_DIR = '/tmp/arena-cookies'
 
@@ -83,7 +84,7 @@ export async function bypassCloudflare(
       content.includes('Checking your browser')
 
     if (isChallenged) {
-      console.warn('[cf-bypass] Cloudflare challenge detected, waiting for resolution...')
+      logger.warn('[cf-bypass] Cloudflare challenge detected, waiting for resolution...')
       // Wait up to 30s for the challenge to resolve
       try {
         await page.waitForFunction(
@@ -100,7 +101,7 @@ export async function bypassCloudflare(
         // Extra settle time
         await new Promise((r) => setTimeout(r, 3000))
       } catch {
-        console.warn('[cf-bypass] Challenge did not resolve in 30s')
+        logger.warn('[cf-bypass] Challenge did not resolve in 30s')
       }
     }
 
