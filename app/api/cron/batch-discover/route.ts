@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -56,6 +57,14 @@ export async function GET(request: NextRequest) {
         error: err instanceof Error ? err.message : String(err),
       })
     }
+  }
+
+  const plog = await PipelineLogger.start('batch-discover')
+  const succeeded = results.filter((r) => r.status === 'success').length
+  if (succeeded === results.length) {
+    await plog.success(succeeded)
+  } else {
+    await plog.error(new Error(`${results.length - succeeded}/${results.length} failed`), { results })
   }
 
   return NextResponse.json({

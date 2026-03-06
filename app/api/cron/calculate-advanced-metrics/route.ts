@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import {
   calculateSortinoRatio,
   calculateCalmarRatio,
@@ -230,6 +231,13 @@ export async function POST(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
+    const plog = await PipelineLogger.start('calculate-advanced-metrics')
+    if (errors > 0) {
+      await plog.error(new Error(`${errors} errors in ${processed} processed`), { updated, errors })
+    } else {
+      await plog.success(updated, { processed })
+    }
+
     return NextResponse.json({
       success: true,
       processed,
@@ -239,6 +247,8 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     logger.apiError('/api/cron/calculate-advanced-metrics', err, {})
+    const plog = await PipelineLogger.start('calculate-advanced-metrics')
+    await plog.error(err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }
