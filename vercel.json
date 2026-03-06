@@ -135,6 +135,10 @@
     {
       "path": "/api/cron/precompute-composite",
       "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/check-enrichment-freshness",
+      "schedule": "15 */6 * * *"
     }
   ],
   "headers": [

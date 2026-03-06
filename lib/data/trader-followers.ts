@@ -34,22 +34,15 @@ export async function getTradersArenaFollowersCount(
   traderIds.forEach(id => resultMap.set(id, 0))
 
   try {
-    // Use individual count queries (head: true) to avoid fetching all rows
-    // Batch in parallel with concurrency limit
-    const BATCH_SIZE = 10
-    for (let i = 0; i < traderIds.length; i += BATCH_SIZE) {
-      const batch = traderIds.slice(i, i + BATCH_SIZE)
-      const results = await Promise.all(
-        batch.map(async (traderId) => {
-          const { count } = await supabase
-            .from('trader_follows')
-            .select('*', { count: 'exact', head: true })
-            .eq('trader_id', traderId)
-          return { traderId, count: count || 0 }
-        })
-      )
-      for (const { traderId, count } of results) {
-        resultMap.set(traderId, count)
+    // Single query: fetch all follow rows for these traders, then count in JS
+    const { data } = await supabase
+      .from('trader_follows')
+      .select('trader_id')
+      .in('trader_id', traderIds)
+
+    if (data) {
+      for (const row of data) {
+        resultMap.set(row.trader_id, (resultMap.get(row.trader_id) || 0) + 1)
       }
     }
   } catch {
