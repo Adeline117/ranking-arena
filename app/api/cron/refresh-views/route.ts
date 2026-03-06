@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -25,17 +26,21 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin()
   const start = Date.now()
+  const plog = await PipelineLogger.start('refresh-views')
 
   try {
     const { error } = await supabase.rpc('refresh_materialized_views')
 
     if (error) {
       logger.error('Failed to refresh materialized views', { error: error.message })
+      await plog.error(new Error(error.message))
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     const duration = Date.now() - start
     logger.info('Materialized views refreshed', { duration })
+
+    await plog.success(2, { views: ['mv_hourly_prices', 'mv_daily_rankings'] })
 
     return NextResponse.json({
       ok: true,
@@ -44,6 +49,7 @@ export async function GET(req: NextRequest) {
     })
   } catch (err: unknown) {
     logger.error('Refresh views failed', { error: (err instanceof Error ? err.message : String(err)) })
+    await plog.error(err)
     return NextResponse.json({ error: (err instanceof Error ? err.message : String(err)) }, { status: 500 })
   }
 }

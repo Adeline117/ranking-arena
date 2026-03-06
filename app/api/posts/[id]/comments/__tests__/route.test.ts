@@ -198,21 +198,19 @@ describe('/api/posts/[id]/comments', () => {
 
     it('supports parent_id for nested replies', async () => {
       mockRequireAuth.mockResolvedValue(mockUser)
-      const mockComment = { id: 'c-reply', content: 'Reply!', parent_id: 'c1' }
+      const parentId = '11111111-1111-1111-1111-111111111111'
+      const mockComment = { id: 'c-reply', content: 'Reply!', parent_id: parentId }
       mockCreateComment.mockResolvedValue(mockComment)
 
       const req = new NextRequest('http://localhost/api/posts/post-1/comments', {
         method: 'POST',
-        body: { content: 'Reply!', parent_id: 'c1' },
+        body: { content: 'Reply!', parent_id: parentId },
       })
       const res = await POST(req, createContext('post-1'))
       const body = await res.json()
 
-      // Debug
-      if (res.status !== 201) console.log('parent_id test body:', JSON.stringify(body), 'status:', res.status)
-
       expect(res.status).toBe(201)
-      expect(body.data.comment.parent_id).toBe('c1')
+      expect(body.data.comment.parent_id).toBe(parentId)
     })
   })
 

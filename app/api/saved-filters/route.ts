@@ -33,14 +33,6 @@ interface FilterConfig {
   min_win_rate?: number    // 最小胜率
 }
 
-interface SavedFilter {
-  id?: string
-  name: string
-  description?: string
-  filter_config: FilterConfig
-  is_default?: boolean
-}
-
 const MAX_SAVED_FILTERS = 10
 
 // Zod schema for filter_config
