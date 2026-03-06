@@ -142,17 +142,42 @@ class Logger {
   private output(level: LogLevel, message: string, ...data: unknown[]): void {
     if (!this.shouldLog(level)) return
 
+    // Production server-side: structured JSON for log aggregation (Vercel Logs, Datadog, etc.)
+    if (isServer && isProduction) {
+      const entry: Record<string, unknown> = {
+        level,
+        msg: message,
+        ts: new Date().toISOString(),
+      }
+      if (this.name) entry.logger = this.name
+      const cid = correlationId()
+      if (cid) entry.correlationId = cid
+      // Merge first data arg if it's an object, append rest as extra
+      if (data.length > 0) {
+        const first = data[0]
+        if (first && typeof first === 'object' && !Array.isArray(first) && !(first instanceof Error)) {
+          Object.assign(entry, first)
+          if (data.length > 1) entry.extra = data.slice(1)
+        } else {
+          entry.data = data.length === 1 ? data[0] : data
+        }
+      }
+      const consoleFn = level === 'debug' ? console.log : console[level]
+      consoleFn(JSON.stringify(entry))
+      return
+    }
+
     const formattedMessage = this.formatMessage(level, message)
 
-    // 服务端使用颜色
-    if (isServer && !isProduction) {
+    // Dev server-side: colored text
+    if (isServer) {
       const color = LOG_COLORS[level]
       console[level === 'debug' ? 'log' : level](
         `${color}${formattedMessage}${RESET_COLOR}`,
         ...data
       )
     } else {
-      // 客户端使用原生 console
+      // Client-side: native console
       const consoleFn = level === 'debug' ? console.log : console[level]
       if (data.length > 0) {
         consoleFn(formattedMessage, ...data)
