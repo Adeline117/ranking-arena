@@ -193,7 +193,7 @@ export function ReviewCard({
                 border: 'none',
                 cursor: accessToken ? 'pointer' : 'default',
                 fontSize: 12,
-                padding: '2px 4px',
+                padding: '6px 8px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
@@ -221,7 +221,7 @@ export function ReviewCard({
                   cursor: 'pointer',
                   fontSize: 12,
                   color: tokens.colors.text.tertiary,
-                  padding: '2px 4px',
+                  padding: '6px 8px',
                 }}
               >
                 {t('deleteReview')}

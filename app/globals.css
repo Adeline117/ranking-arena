@@ -171,7 +171,10 @@ html.theme-transition *::after {
   --color-silver-bg: rgba(192, 192, 192, 0.08);
   --color-bronze-bg: rgba(205, 127, 50, 0.08);
   --color-gold-highlight: rgba(255,215,0,0.15);
-  
+  --color-rank-gold: #FFD700;
+  --color-rank-silver: #C0C0C0;
+  --color-rank-bronze: #CD7F32;
+
   /* Pro badge */
   --color-pro-gold-glow: rgba(212, 168, 71, 0.3);
   --color-pro-gold-bg: rgba(212, 168, 71, 0.12);
@@ -379,7 +382,10 @@ html.theme-transition *::after {
   --color-silver-bg: rgba(128, 128, 128, 0.08);
   --color-bronze-bg: rgba(139, 90, 43, 0.08);
   --color-gold-highlight: rgba(184,134,11,0.12);
-  
+  --color-rank-gold: #D4AF37;
+  --color-rank-silver: #A0AEC0;
+  --color-rank-bronze: #CD7F32;
+
   /* Pro badge */
   --color-pro-gold-glow: rgba(180, 140, 50, 0.25);
   --color-pro-gold-bg: rgba(180, 140, 50, 0.1);

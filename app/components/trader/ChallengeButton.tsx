@@ -316,7 +316,7 @@ export default function ChallengeButton({
                       width: 16,
                       height: 16,
                       border: '2px solid var(--color-accent-primary-30)',
-                      borderTopColor: '#8b6fa8',
+                      borderTopColor: 'var(--color-accent-primary, #8b6fa8)',
                       borderRadius: '50%',
                       animation: 'spin 0.8s linear infinite',
                     }}
@@ -373,13 +373,13 @@ export default function ChallengeButton({
                         height: 36,
                         borderRadius: '50%',
                         background:
-                          'linear-gradient(135deg, #8b6fa8 0%, #6366f1 100%)',
+                          'linear-gradient(135deg, var(--color-accent-primary, #8b6fa8) 0%, #6366f1 100%)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 14,
                         fontWeight: 800,
-                        color: '#fff',
+                        color: 'var(--color-on-accent, #fff)',
                         flexShrink: 0,
                       }}
                     >
@@ -466,7 +466,7 @@ export default function ChallengeButton({
                         justifyContent: 'center',
                         fontSize: 13,
                         fontWeight: 800,
-                        color: '#fff',
+                        color: 'var(--color-on-accent, #fff)',
                       }}
                     >
                       {selected.title.charAt(0).toUpperCase()}
