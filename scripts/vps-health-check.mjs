@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 /**
  * VPS Data Freshness Health Check + Auto-Recovery
- * 
+ *
  * Checks if any platform data is stale (>4h) and re-runs the import.
  * Designed to run via cron every 2 hours on VPS.
- * 
+ *
  * Usage: node scripts/vps-health-check.mjs
+ *
+ * Environment:
+ *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY - DB access
+ *   TELEGRAM_BOT_TOKEN, TELEGRAM_ALERT_CHAT_ID - optional alerting
  */
 import { createClient } from '@supabase/supabase-js'
 import { execSync } from 'child_process'
@@ -66,18 +70,21 @@ async function recover(stale) {
   
   console.log(`\n🔄 Recovering ${stale.length} stale platforms...`)
   
-  for (const { source, script } of stale) {
-    const scriptPath = `/opt/ranking-arena/scripts/import/${script}`
-    console.log(`  Running ${script}...`)
+  for (const item of stale) {
+    const scriptPath = `/opt/ranking-arena/scripts/import/${item.script}`
+    console.log(`  Running ${item.script}...`)
     try {
       execSync(`timeout 600 node ${scriptPath} ALL`, {
         cwd: '/opt/ranking-arena',
         stdio: 'pipe',
         timeout: 620000,
       })
-      console.log(`  ✅ ${source} recovered`)
+      console.log(`  ✅ ${item.source} recovered`)
     } catch (e) {
-      console.log(`  ❌ ${source} recovery failed: ${e.message?.slice(0, 100)}`)
+      const errMsg = e.message?.slice(0, 100) || 'unknown'
+      console.log(`  ❌ ${item.source} recovery failed: ${errMsg}`)
+      item.recoveryFailed = true
+      item.error = errMsg
     }
   }
   
@@ -95,10 +102,34 @@ async function recover(stale) {
   }
 }
 
+async function sendTelegramAlert(message) {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.TELEGRAM_ALERT_CHAT_ID
+  if (!token || !chatId) return
+
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' }),
+    })
+  } catch (e) {
+    console.log(`  Alert send failed: ${e.message}`)
+  }
+}
+
 async function main() {
   console.log(`=== VPS Health Check at ${new Date().toISOString()} ===\n`)
   const stale = await checkFreshness()
   await recover(stale)
+
+  // Alert on recovery failures
+  const failed = stale.filter(s => s.recoveryFailed)
+  if (failed.length > 0) {
+    const msg = `<b>VPS Recovery Failures</b>\n${failed.map(f => `${f.source}: ${f.error || 'unknown'}`).join('\n')}`
+    await sendTelegramAlert(msg)
+  }
+
   console.log('\n=== Done ===')
 }
 

@@ -20,9 +20,9 @@ _No critical issues currently_
 ## 🟠 P1 - High Priority
 
 ### Data Pipeline
-- [ ] Complete HTX Futures enrichment coverage
-- [ ] Monitor data freshness across all platforms
-- [ ] Verify backfill scripts cover all edge cases
+- [x] Complete HTX Futures enrichment coverage
+- [x] Monitor data freshness across all platforms
+- [x] Verify backfill scripts cover all edge cases
 
 ### Infrastructure
 - [ ] Optimize VPS cron deployment scripts
@@ -33,13 +33,13 @@ _No critical issues currently_
 ## 🟡 P2 - Should Do Soon
 
 ### Performance
-- [ ] Audit N+1 queries in ranking pages
+- [ ] Audit N+1 queries in ranking pages (in progress - perf review)
 - [ ] Add missing database indexes for slow queries
 - [ ] Review React component re-renders
 
 ### Data Quality
-- [ ] Add data validation for incoming trader snapshots
-- [ ] Implement anomaly detection for ROI/PnL spikes
+- [x] Add data validation for incoming trader snapshots (Zod schema in shared.ts)
+- [x] Implement anomaly detection for ROI/PnL spikes (detect-anomalies cron)
 - [ ] Clean up orphaned trader_sources entries
 
 ### Features
@@ -51,7 +51,7 @@ _No critical issues currently_
 ## 🟢 P3 - Nice to Have
 
 ### Developer Experience
-- [ ] Add more E2E tests for critical flows
+- [x] Add more E2E tests for critical flows (smoke.spec.ts + visual-regression.spec.ts)
 - [ ] Improve error messages in API responses
 - [ ] Add API documentation (OpenAPI spec)
 
@@ -80,6 +80,14 @@ _Move items here when done, then archive weekly_
 - [x] 7 missing platforms to batch groups
 - [x] OKX Futures MDD enrichment 100%
 - [x] Cleanup unused code
+- [x] HTX Futures enrichment (equity curve + stats detail + batch-enrich)
+- [x] Data freshness monitoring (cron + admin dashboards + alerts)
+- [x] PipelineLogger integrated into 6 core cron jobs
+- [x] Dependencies health API (/api/health/dependencies)
+- [x] E2E smoke test + visual regression test
+- [x] Data validation (Zod schema for trader snapshots)
+- [x] Anomaly detection cron job
+- [x] Product priority section in CLAUDE.md
 
 ---
 
