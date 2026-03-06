@@ -77,7 +77,7 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
         onClick={() => setShowMenu(!showMenu)}
         aria-expanded={showMenu}
         aria-haspopup="true"
-        aria-label={isZh ? '导出排名' : 'Export Ranking'}
+        aria-label={t('exportRanking')}
         style={{
           padding: '6px 12px', borderRadius: tokens.radius.sm,
           border: `1px solid ${tokens.colors.border.primary}`,
@@ -86,7 +86,7 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
           fontSize: 12, fontWeight: 600, cursor: 'pointer',
         }}
       >
-        {isZh ? '导出排名' : 'Export Ranking'}
+        {t('exportRanking')}
       </button>
       {showMenu && (
         <div style={{
@@ -308,7 +308,7 @@ export function RankingFilters({
                 title={t('proFeature')}
               >
                 <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor"><path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" /></svg>
-                {language === 'zh' ? '导出排名' : 'Export'}
+                {t('exportRankingShort')}
               </button>
             )
           )}
@@ -324,10 +324,10 @@ export function RankingFilters({
           flexWrap: 'wrap', background: tokens.glass.bg.light, minHeight: 32,
         }}>
           <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
-            {language === 'zh' ? '风格' : 'Style'}:
+            {t('rankingStyleLabel')}:
           </Text>
           {[
-            { value: 'all' as const, label: language === 'zh' ? '全部' : 'All' },
+            { value: 'all' as const, label: t('rankingStyleAll') },
             ...getFilterableStyles().map(s => ({ value: s.style, label: language === 'zh' ? s.label : s.labelEn })),
           ].map(opt => (
             <button
