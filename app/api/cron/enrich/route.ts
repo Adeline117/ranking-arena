@@ -34,6 +34,8 @@ import {
   fetchBitgetPositionHistory,
   fetchHyperliquidPositionHistory,
   fetchGmxPositionHistory,
+  fetchHtxEquityCurve,
+  fetchHtxStatsDetail,
   upsertEquityCurve,
   upsertStatsDetail,
   upsertPositionHistory,
@@ -221,6 +223,13 @@ const PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     // Aevo DEX
     concurrency: 2,
     delayMs: 1500,
+  },
+  htx_futures: {
+    platform: 'htx_futures',
+    fetchEquityCurve: fetchHtxEquityCurve,
+    fetchStatsDetail: fetchHtxStatsDetail,
+    concurrency: 2,
+    delayMs: 2000,
   },
 }
 
