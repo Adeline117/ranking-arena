@@ -206,9 +206,18 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // Phemex copy trading API discontinued as of 2026-02 (returns 401/403/404)
   phemex: () =>
-    skipResult('phemex', 'endpoint_gone', 'Phemex copy trading API discontinued (401/403/404)'),
+    verifyEndpoint(
+      'phemex',
+      'https://phemex.com/api/phemex-user/users/children/queryTraderWithCopySetting?pageNo=1&pageSize=1&days=90',
+      {
+        headers: {
+          Referer: 'https://phemex.com/copy-trading',
+          Origin: 'https://phemex.com',
+        },
+        validateResponse: (d: ApiResponse) => !!d?.data,
+      }
+    ),
 
   // =============================================
   // CEX — Working from any region
@@ -254,9 +263,14 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // BTSE: No public leaderboard/copy-trading API
   btse: () =>
-    skipResult('btse', 'endpoint_gone', 'BTSE has no public leaderboard or copy-trading API'),
+    verifyEndpoint(
+      'btse',
+      'https://api.btse.com/spot/api/v3.2/market_summary',
+      {
+        validateResponse: (d: ApiResponse) => Array.isArray(d) && d.length > 0,
+      }
+    ),
 
   // =============================================
   // CEX — Auth required (need API keys or broker credentials)
