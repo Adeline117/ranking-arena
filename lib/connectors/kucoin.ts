@@ -187,15 +187,22 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
   ): Promise<KuCoinLeaderboardResponse> {
     const url = `${this.baseUrl}/rank-list?period=${period}&pageNo=${page}&pageSize=${pageSize}&sortField=ROI`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`KuCoin leaderboard API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`KuCoin leaderboard API returned ${response.status}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchTraderDetailApi(
@@ -204,20 +211,27 @@ export class KuCoinConnector extends BaseConnectorLegacy implements LegacyPlatfo
   ): Promise<{ code: string; data: KuCoinTraderEntry }> {
     const url = `${this.baseUrl}/detail?leaderId=${leaderId}&period=${WINDOW_TO_PERIOD[window]}`;
 
-    const response = await fetch(url, {
-      headers: { 'User-Agent': this.getRandomUA() },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': this.getRandomUA() },
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`KuCoin trader detail API returned ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`KuCoin trader detail API returned ${response.status}`);
+      }
+
+      const json: { code: string; data: KuCoinTraderEntry } = await response.json();
+      if (json.code !== '200000' || !json.data) {
+        throw new Error(`KuCoin trader detail API returned no data for ${leaderId}`);
+      }
+
+      return json;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const json: { code: string; data: KuCoinTraderEntry } = await response.json();
-    if (json.code !== '200000' || !json.data) {
-      throw new Error(`KuCoin trader detail API returned no data for ${leaderId}`);
-    }
-
-    return json;
   }
 
   private getRandomUA(): string {
