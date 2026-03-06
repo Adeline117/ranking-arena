@@ -16,6 +16,7 @@ import { isAuthorized, getSupabaseEnv, getSupportedPlatforms } from '@/lib/cron/
 import { sendScraperAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -204,6 +205,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
+  const plog = await PipelineLogger.start('check-data-freshness')
+
   try {
     const report = await buildFreshnessReport()
 
@@ -310,8 +313,17 @@ export async function GET(req: Request) {
       }
     }
 
+    const critCount = report.summary.critical
+    const staleCount = report.summary.stale
+    if (critCount > 0) {
+      await plog.error(new Error(`${critCount} critical, ${staleCount} stale`), { summary: report.summary })
+    } else {
+      await plog.success(report.summary.fresh, { summary: report.summary })
+    }
+
     return NextResponse.json(report)
   } catch (error: unknown) {
+    await plog.error(error)
     const message =
       error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
