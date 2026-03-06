@@ -211,7 +211,7 @@ export default function InstitutionsPage() {
       if (queryError) throw queryError
       setInstitutions(data || [])
     } catch {
-      setError(isZh ? '加载失败，请重试' : 'Failed to load, please retry')
+      setError(t('failedToLoadRetry'))
     } finally {
       setLoading(false)
     }
@@ -228,33 +228,33 @@ export default function InstitutionsPage() {
         {/* Top Leaderboards */}
         <TopLeaderboards columns={[
           {
-            title: isZh ? '顶级基金 Top 10' : 'Top 10 Funds',
+            title: t('top10Funds'),
             icon: <FundIcon />,
             entries: topFunds.map(i => instToEntry(i, isZh)),
             loading: leaderboardLoading,
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
           {
-            title: isZh ? '顶级项目方 Top 10' : 'Top 10 Projects',
+            title: t('top10Projects'),
             icon: <ProjectIcon />,
             entries: topProjects.map(i => instToEntry(i, isZh)),
             loading: leaderboardLoading,
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
           {
-            title: isZh ? '顶级交易所 Top 10' : 'Top 10 Exchanges',
+            title: t('top10Exchanges'),
             icon: <ExchangeIcon />,
             entries: topExchanges.map(i => instToEntry(i, isZh)),
             loading: leaderboardLoading,
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
         ]} />
 
         <h1 style={{ fontSize: tokens.typography.fontSize['3xl'], fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 8, letterSpacing: '-0.02em' }}>
-          {isZh ? '机构' : 'Institutions'}
+          {t('institutions')}
         </h1>
         <p style={{ fontSize: tokens.typography.fontSize.base, color: 'var(--color-text-tertiary)', marginBottom: 24, lineHeight: tokens.typography.lineHeight.normal }}>
-          {isZh ? '发现并评价加密行业中的顶级机构' : 'Discover and rate top institutions in crypto'}
+          {t('discoverRateInstitutions')}
         </p>
 
         {/* Filters */}
@@ -344,7 +344,7 @@ export default function InstitutionsPage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder={isZh ? '搜索机构...' : 'Search institutions...'}
+            placeholder={t('searchInstitutions')}
             onFocus={e => {
               e.currentTarget.style.borderColor = 'var(--color-brand)'
               e.currentTarget.style.boxShadow = `0 0 0 3px var(--color-brand-muted)`
@@ -376,7 +376,7 @@ export default function InstitutionsPage() {
                 fontSize: tokens.typography.fontSize.sm,
               }}
             >
-              {isZh ? '重试' : 'Retry'}
+              {t('retry')}
             </button>
           </div>
         ) : loading ? (
@@ -387,7 +387,7 @@ export default function InstitutionsPage() {
           </div>
         ) : institutions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.base }}>
-            {isZh ? '暂无数据' : 'No institutions found'}
+            {t('noInstitutionsFound')}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap: 20 }}>
@@ -498,7 +498,7 @@ function InstitutionCard({ institution, isZh }: { institution: Institution; isZh
         />
       ) : (
         <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
-          {isZh ? '暂无评分' : 'No ratings yet'}
+          {t('noRatingsYet')}
         </span>
       )}
     </a>

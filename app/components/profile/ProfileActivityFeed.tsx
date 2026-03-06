@@ -24,7 +24,7 @@ const ICONS: Record<string, string> = {
 function formatRelativeTime(ts: string, isZh: boolean): string {
   const diff = Date.now() - new Date(ts).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return isZh ? '刚刚' : 'just now'
+  if (mins < 1) return t('justNow')
   if (mins < 60) return isZh ? `${mins}分钟前` : `${mins}m ago`
   const hours = Math.floor(mins / 60)
   if (hours < 24) return isZh ? `${hours}小时前` : `${hours}h ago`
@@ -41,13 +41,13 @@ function ActivityDescription({ item, isZh }: { item: ActivityItem; isZh: boolean
       const groupName = isZh ? (group?.name || '') : (group?.name_en || group?.name || '')
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-          {isZh ? '发表了帖子' : 'Published a post'}{' '}
+          {t('publishedAPost')}{' '}
           <Link href={`/groups/${item.data.postId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
-            {item.data.title || (isZh ? '无标题' : 'Untitled')}
+            {item.data.title || (t('untitled'))}
           </Link>
           {groupName && (
             <span style={{ color: tokens.colors.text.tertiary }}>
-              {' '}{isZh ? '在' : 'in'} {groupName}
+              {' '}{t('inGroup')} {groupName}
             </span>
           )}
         </Text>
@@ -65,7 +65,7 @@ function ActivityDescription({ item, isZh }: { item: ActivityItem; isZh: boolean
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
           {isZh ? statusText.zh : statusText.en}{' '}
           <Link href={`/library/${item.data.itemId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
-            {book?.title || (isZh ? '一本书' : 'a book')}
+            {book?.title || (t('aBook'))}
           </Link>
           {item.data.rating && (
             <span style={{ color: tokens.colors.accent.warning, marginLeft: 4 }}>
@@ -79,9 +79,9 @@ function ActivityDescription({ item, isZh }: { item: ActivityItem; isZh: boolean
       const trader = item.data.trader
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-          {isZh ? '关注了交易员' : 'Followed trader'}{' '}
+          {t('followedTrader')}{' '}
           <Link href={`/trader/${trader?.handle || item.data.traderId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
-            {trader?.display_name || trader?.handle || (isZh ? '未知' : 'Unknown')}
+            {trader?.display_name || trader?.handle || (t('unknown'))}
           </Link>
         </Text>
       )
@@ -91,9 +91,9 @@ function ActivityDescription({ item, isZh }: { item: ActivityItem; isZh: boolean
       const name = isZh ? (group?.name || '') : (group?.name_en || group?.name || '')
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-          {isZh ? '加入了小组' : 'Joined group'}{' '}
+          {t('joinedGroup')}{' '}
           <Link href={`/groups/${item.data.groupId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
-            {name || (isZh ? '未知小组' : 'Unknown group')}
+            {name || (t('unknownGroup'))}
           </Link>
         </Text>
       )
@@ -121,7 +121,7 @@ export default function ProfileActivityFeed({ handle }: { handle: string }) {
     return (
       <Box bg="secondary" p={4} radius="lg" border="primary">
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-          <Text size="lg" weight="black">🕐 {isZh ? '动态' : 'Activity'}</Text>
+          <Text size="lg" weight="black">🕐 {t('activity')}</Text>
         </Box>
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
           {[1, 2, 3].map(i => (
@@ -142,9 +142,9 @@ export default function ProfileActivityFeed({ handle }: { handle: string }) {
     return (
       <Box bg="secondary" p={4} radius="lg" border="primary">
         <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-          🕐 {isZh ? '动态' : 'Activity'}
+          🕐 {t('activity')}
         </Text>
-        <Text size="sm" color="tertiary">{isZh ? '暂无动态' : 'No recent activity'}</Text>
+        <Text size="sm" color="tertiary">{t('noRecentActivity')}</Text>
       </Box>
     )
   }
@@ -152,7 +152,7 @@ export default function ProfileActivityFeed({ handle }: { handle: string }) {
   return (
     <Box bg="secondary" p={4} radius="lg" border="primary">
       <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
-        🕐 {isZh ? '动态' : 'Activity'}
+        🕐 {t('activity')}
       </Text>
       <Box style={{ display: 'flex', flexDirection: 'column', position: 'relative', paddingLeft: tokens.spacing[4] }}>
         {/* Timeline vertical line */}

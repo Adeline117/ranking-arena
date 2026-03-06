@@ -210,27 +210,27 @@ export default function ResourcesClient({
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 100px' }}>
-        <h1 className="sr-only">{isZh ? '交易知识库' : 'Trading Library'}</h1>
+        <h1 className="sr-only">{t('tradingLibrary')}</h1>
 
         {/* Top Leaderboards — aligned with filter tabs: Books / Papers / Whitepapers */}
         <TopLeaderboards columns={[
           {
-            title: isZh ? '热门书籍 Top 10' : 'Top 10 Books',
+            title: t('top10Books'),
             icon: <BookIcon />,
             entries: topBooks.map(item => libItemToEntry(item, isZh)),
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
           {
-            title: isZh ? '热门论文 Top 10' : 'Top 10 Papers',
+            title: t('top10Papers'),
             icon: <PaperIcon />,
             entries: topPapers.map(item => libItemToEntry(item, isZh)),
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
           {
-            title: isZh ? '热门白皮书 Top 10' : 'Top 10 Whitepapers',
+            title: t('top10Whitepapers'),
             icon: <PaperIcon />,
             entries: recentItems.map(item => libItemToEntry(item, isZh)),
-            emptyText: isZh ? '即将上线' : 'Coming soon',
+            emptyText: t('comingSoon'),
           },
         ]} />
 
@@ -250,8 +250,8 @@ export default function ResourcesClient({
             type="text"
             value={searchInput}
             onChange={e => handleSearchInput(e.target.value)}
-            aria-label={isZh ? '搜索书名、作者或关键词' : 'Search by title, author, or keyword'}
-            placeholder={isZh ? '搜索书名、作者或关键词...' : 'Search by title, author, or keyword...'}
+            aria-label={t('searchByTitleAuthor')}
+            placeholder={t('searchByTitleAuthor')}
             onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-accent-primary)'; e.currentTarget.style.boxShadow = `0 0 0 ${tokens.focusRing.width} ${tokens.focusRing.color}` }}
             onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border-secondary)'; e.currentTarget.style.boxShadow = 'none' }}
             style={{
@@ -316,7 +316,7 @@ export default function ResourcesClient({
           })}
           <select
             value={sort}
-            aria-label={isZh ? '排序方式' : 'Sort by'}
+            aria-label={t('sortBy')}
             onChange={e => handleSortChange(e.target.value)}
             style={{
               padding: '8px 28px 8px 14px',
@@ -346,7 +346,7 @@ export default function ResourcesClient({
         {featured.length > 0 && !search && category === 'all' && (
           <section style={{ marginBottom: 40 }}>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 20, letterSpacing: '-0.01em' }}>
-              {isZh ? '精选推荐' : 'Featured'}
+              {t('featured')}
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 45%), 1fr))', gap: 20 }}>
               {featured.slice(0, 6).map(item => (
@@ -410,10 +410,10 @@ export default function ResourcesClient({
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 6 }}>
-              {isZh ? '暂无内容' : 'No items found'}
+              {t('noItemsFound')}
             </p>
             <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', margin: 0 }}>
-              {search ? (isZh ? '换个关键词试试' : 'Try different keywords') : (isZh ? '试试其他分类' : 'Try a different category')}
+              {search ? (t('tryDifferentKeywords')) : (t('tryDifferentCategory'))}
             </p>
           </div>
         ) : (
@@ -449,7 +449,7 @@ export default function ResourcesClient({
               onClick={() => { const p = page - 1; setPage(p); fetchItems({ targetPage: p }) }}
               style={{ padding: '8px 18px', borderRadius: tokens.radius.full, border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.35 : 1, fontSize: 13, fontWeight: 500, transition: `all ${tokens.transition.fast}` }}
             >
-              {isZh ? '上一页' : 'Prev'}
+              {t('prev')}
             </button>
             <span style={{ padding: '8px 14px', fontSize: 13, fontWeight: 500, color: 'var(--color-text-tertiary)' }}>
               {page} / {totalPages}
@@ -459,7 +459,7 @@ export default function ResourcesClient({
               onClick={() => { const p = page + 1; setPage(p); fetchItems({ targetPage: p }) }}
               style={{ padding: '8px 18px', borderRadius: tokens.radius.full, border: '1px solid var(--color-border-secondary)', background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.35 : 1, fontSize: 13, fontWeight: 500, transition: `all ${tokens.transition.fast}` }}
             >
-              {isZh ? '下一页' : 'Next'}
+              {t('next')}
             </button>
 
             {/* Desktop: Load more button as alternative to pagination */}
@@ -481,7 +481,7 @@ export default function ResourcesClient({
                   marginLeft: 8,
                 }}
               >
-                {loadingMore ? (isZh ? '加载中...' : 'Loading...') : (isZh ? '加载更多' : 'Load more')}
+                {loadingMore ? (t('loading')) : (t('loadMore'))}
               </button>
             )}
           </div>
@@ -490,7 +490,7 @@ export default function ResourcesClient({
         {/* Mobile pagination fallback when no more items to scroll-load */}
         {isMobile && !hasMore && items.length > 0 && (
           <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--color-text-tertiary)', marginTop: 32, paddingBottom: 8 }}>
-            {isZh ? '已加载全部内容' : 'All items loaded'}
+            {t('allItemsLoaded')}
           </p>
         )}
       </main>
