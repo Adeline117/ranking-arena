@@ -238,6 +238,7 @@ export default function ChatSearchOverlay({
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('searchChatRecords')}
+            aria-label={t('searchChatRecords')}
             style={{
               flex: 1,
               border: 'none',

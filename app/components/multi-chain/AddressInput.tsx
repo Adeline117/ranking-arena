@@ -43,6 +43,7 @@ export default function AddressInput({ onSubmit, isLoading }: AddressInputProps)
           onChange={(e) => { setValue(e.target.value); setError(null) }}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
           placeholder={t('enterEvmOrSolanaAddress')}
+          aria-label={t('enterEvmOrSolanaAddress')}
           disabled={isLoading}
           style={{
             flex: 1,

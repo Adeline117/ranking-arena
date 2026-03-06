@@ -305,6 +305,7 @@ export default function ChatSettingsDrawer({
                     onChange={(e) => setRemarkInput(e.target.value)}
                     maxLength={50}
                     placeholder={t('enterRemarkName')}
+                    aria-label={t('enterRemarkName')}
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleRemarkSave()

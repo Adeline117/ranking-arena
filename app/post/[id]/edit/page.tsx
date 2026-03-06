@@ -258,7 +258,7 @@ export default function EditPostPage() {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for edit page init */ })
   }, [])
 
   // 加载帖子数据

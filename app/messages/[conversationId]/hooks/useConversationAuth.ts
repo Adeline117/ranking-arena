@@ -23,13 +23,13 @@ export function useConversationAuth() {
         setAccessToken(auth.accessToken)
         supabase.auth.getSession().then(({ data }) => {
           setEmail(data.session?.user?.email ?? null)
-        })
+        }).catch(() => { /* Intentionally swallowed: email fetch non-critical */ })
       } else {
         setUserId(null)
         setAccessToken(null)
       }
       setAuthChecked(true)
-    })
+    }).catch(() => { /* Intentionally swallowed: auth session check non-critical */ })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         setUserId(session.user.id)

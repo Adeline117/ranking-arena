@@ -88,6 +88,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
               }
             }}
             placeholder={t('searchPlaceholder')}
+            aria-label={t('searchPlaceholder')}
             style={{
               width: '100%',
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,

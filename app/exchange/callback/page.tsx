@@ -30,7 +30,7 @@ function ExchangeCallbackPageContent() {
         router.push('/login')
         return
       }
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for exchange callback */ })
 
     const exchangeParam = searchParams.get('exchange')
     if (exchangeParam) {

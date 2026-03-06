@@ -184,7 +184,7 @@ function ApiKeyAuthContent() {
         return
       }
       setUserId(data.user.id)
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for api-key page */ })
   }, [router])
 
   useEffect(() => {

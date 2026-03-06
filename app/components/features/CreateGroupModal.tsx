@@ -180,6 +180,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                 value={searchQuery}
                 onChange={e => { setSearchQuery(e.target.value); debouncedSearch(e.target.value) }}
                 placeholder={t('searchUsers')}
+                aria-label={t('searchUsers')}
                 style={{
                   width: '100%', padding: '10px 14px', borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
@@ -258,6 +259,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                   onChange={e => setGroupName(e.target.value)}
                   placeholder={t('groupNamePlaceholder')}
                   maxLength={50}
+                  aria-label={t('groupName')}
                   style={{
                     width: '100%', padding: '10px 14px', borderRadius: tokens.radius.md,
                     border: `1px solid ${tokens.colors.border.primary}`,

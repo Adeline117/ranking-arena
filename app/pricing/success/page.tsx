@@ -67,7 +67,7 @@ function PaymentSuccessContent() {
      
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for success page */ })
   }, [])
 
   // 直接查询订阅状态（避免 React 状态闭包问题）

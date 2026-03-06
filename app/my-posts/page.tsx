@@ -50,11 +50,11 @@ export default function MyPostsPage() {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
       setUserId(data.user?.id ?? null)
-      
+
       if (data.user?.id) {
         loadUserHandle(data.user.id)
       }
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for my-posts page init */ })
   }, [])
 
   const loadUserHandle = async (uid: string) => {

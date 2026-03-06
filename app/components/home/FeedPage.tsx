@@ -24,7 +24,7 @@ export default function FeedPage() {
     // Use getSession() — reads from local storage, no network request
     supabase.auth.getSession().then(({ data }) => {
       setEmail(data.session?.user?.email ?? null)
-    })
+    }).catch(() => { /* Intentionally swallowed: session check non-critical for feed page */ })
   }, [])
 
   const sortBy = activeTab === 'following' ? 'created_at' : (activeTab === 'hot' ? 'hot_score' : 'created_at')

@@ -176,7 +176,7 @@ export default function HelpPage() {
      
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for help page */ })
   }, [])
 
   // Filter FAQ items by search query
