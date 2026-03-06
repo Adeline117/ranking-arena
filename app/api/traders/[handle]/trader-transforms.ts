@@ -455,7 +455,7 @@ function buildPerformanceObj(
   statsDetail7d: StatsDetailData | null | undefined,
 ) {
   return {
-    roi_90d: snapshot?.roi || 0,
+    roi_90d: snapshot?.roi ?? 0,
     roi_7d: snapshot7d?.roi ?? undefined,
     roi_30d: snapshot30d?.roi ?? undefined,
     pnl: snapshot?.pnl ?? undefined,

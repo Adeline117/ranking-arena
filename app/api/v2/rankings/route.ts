@@ -14,6 +14,11 @@
  *   trading_style: 'scalper' | 'swing' | 'trend' | 'position' (optional filter, legacy names also accepted)
  *   min_alpha: number (optional minimum alpha threshold)
  *   min_sortino: number (optional minimum sortino threshold)
+ *   min_roi: number (optional minimum ROI %)
+ *   min_pnl: number (optional minimum PnL $)
+ *   min_win_rate: number (optional minimum win rate %)
+ *   max_drawdown: number (optional maximum drawdown %)
+ *   min_score: number (optional minimum arena score)
  *
  * Response includes:
  *   - traders: RankingEntry[]
@@ -46,6 +51,12 @@ export async function GET(request: NextRequest) {
   const tradingStyle = searchParams.get('trading_style')
   const minAlpha = searchParams.get('min_alpha') ? parseFloat(searchParams.get('min_alpha')!) : null
   const minSortino = searchParams.get('min_sortino') ? parseFloat(searchParams.get('min_sortino')!) : null
+  // Additional filters (used by AdvancedFilter component)
+  const minRoi = searchParams.get('min_roi') ? parseFloat(searchParams.get('min_roi')!) : null
+  const minPnl = searchParams.get('min_pnl') ? parseFloat(searchParams.get('min_pnl')!) : null
+  const minWinRate = searchParams.get('min_win_rate') ? parseFloat(searchParams.get('min_win_rate')!) : null
+  const maxDrawdown = searchParams.get('max_drawdown') ? parseFloat(searchParams.get('max_drawdown')!) : null
+  const minScore = searchParams.get('min_score') ? parseFloat(searchParams.get('min_score')!) : null
 
   // Validation
   if (!window || !WINDOWS.includes(window)) {
@@ -103,6 +114,21 @@ export async function GET(request: NextRequest) {
   }
   if (minSortino !== null) {
     query = query.gte('sortino_ratio', minSortino)
+  }
+  if (minRoi !== null) {
+    query = query.gte('roi', minRoi)
+  }
+  if (minPnl !== null) {
+    query = query.gte('pnl', minPnl)
+  }
+  if (minWinRate !== null) {
+    query = query.gte('win_rate', minWinRate)
+  }
+  if (maxDrawdown !== null) {
+    query = query.lte('max_drawdown', maxDrawdown)
+  }
+  if (minScore !== null) {
+    query = query.gte('arena_score', minScore)
   }
 
   // Sort

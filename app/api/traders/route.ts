@@ -161,8 +161,8 @@ async function fetchFromLeaderboard(
   const traders = (data || []).map((row: Record<string, unknown>) => ({
     id: row.source_trader_id as string,
     handle: (row.handle as string) || null,
-    roi: Number(row.roi) || 0,
-    pnl: Number(row.pnl) || 0,
+    roi: row.roi != null ? Number(row.roi) : 0,
+    pnl: row.pnl != null ? Number(row.pnl) : null,
     win_rate: row.win_rate != null ? Number(row.win_rate) : null,
     max_drawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
     trades_count: row.trades_count != null ? Number(row.trades_count) : null,

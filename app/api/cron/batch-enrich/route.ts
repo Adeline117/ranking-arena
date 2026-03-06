@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
         `${baseUrl}/api/cron/enrich?platform=${platform}&period=${period}&limit=${limit}`,
         {
           method: 'GET',
-          headers: { Authorization: `Bearer ${cronSecret || ''}` },
+          headers: { Authorization: `Bearer ${cronSecret}` },
         }
       )
       results.push({

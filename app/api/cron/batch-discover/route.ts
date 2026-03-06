@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     try {
       const res = await fetch(`${baseUrl}${endpoint}`, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${cronSecret || ''}` },
+        headers: { 'Authorization': `Bearer ${cronSecret}` },
       })
       results.push({
         name: endpoint,

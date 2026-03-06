@@ -218,7 +218,7 @@ async function backfillEnrichment(
     ? `https://${process.env.VERCEL_URL}`
     : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-  const cronSecret = process.env.CRON_SECRET || ''
+  const cronSecret = process.env.CRON_SECRET!
 
   try {
     const res = await fetch(
