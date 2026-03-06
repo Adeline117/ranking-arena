@@ -43,31 +43,6 @@ const TraderAlertSchema = z.object({
   enabled: z.boolean().optional().default(true),
 })
 
-// 提醒配置类型
-interface TraderAlertConfig {
-  id?: string
-  trader_id: string
-  source?: string
-  alert_roi_change?: boolean
-  roi_change_threshold?: number
-  alert_drawdown?: boolean
-  drawdown_threshold?: number
-  alert_pnl_change?: boolean
-  pnl_change_threshold?: number
-  alert_score_change?: boolean
-  score_change_threshold?: number
-  alert_rank_change?: boolean
-  rank_change_threshold?: number
-  alert_new_position?: boolean
-  alert_price_above?: boolean
-  price_above_value?: number | null
-  alert_price_below?: boolean
-  price_below_value?: number | null
-  price_symbol?: string | null
-  one_time?: boolean
-  enabled?: boolean
-}
-
 /**
  * GET - 获取用户的提醒配置列表
  */

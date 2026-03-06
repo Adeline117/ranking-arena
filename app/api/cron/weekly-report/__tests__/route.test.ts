@@ -31,9 +31,8 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
   },
 }))
 
-const mockSendAlert = jest.fn().mockResolvedValue(undefined)
 jest.mock('@/lib/alerts/send-alert', () => ({
-  sendAlert: mockSendAlert,
+  sendAlert: jest.fn().mockResolvedValue(undefined),
 }))
 
 jest.mock('@/lib/logger', () => ({
