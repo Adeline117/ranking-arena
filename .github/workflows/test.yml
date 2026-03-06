@@ -26,7 +26,7 @@ jobs:
           node-version: '20'
 
       - name: Cache node_modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-modules
         with:
           path: node_modules
@@ -59,7 +59,7 @@ jobs:
           node-version: '20'
 
       - name: Cache node_modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-modules
         with:
           path: node_modules
@@ -97,7 +97,7 @@ jobs:
           node-version: '20'
 
       - name: Cache node_modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-modules
         with:
           path: node_modules
@@ -113,7 +113,7 @@ jobs:
         run: npm run build
 
       - name: Cache .next build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .next
           key: ${{ runner.os }}-nextjs-${{ github.sha }}
@@ -134,7 +134,7 @@ jobs:
           node-version: '20'
 
       - name: Cache node_modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-modules
         with:
           path: node_modules
@@ -147,7 +147,7 @@ jobs:
         run: npm ci --ignore-scripts || npm install --legacy-peer-deps
 
       - name: Restore .next build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .next
           key: ${{ runner.os }}-nextjs-${{ github.sha }}
