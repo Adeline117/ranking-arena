@@ -159,7 +159,8 @@ async function fetchPeriod(
 
         if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
         await sleep(300)
-      } catch {
+      } catch (err) {
+        logger.warn(`[${SOURCE}] Pagination error: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
     }
