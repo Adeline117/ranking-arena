@@ -489,6 +489,38 @@ export async function fetchJson<T = unknown>(
   }
 }
 
+/**
+ * fetchJson with automatic retry + exponential backoff.
+ * Retries on 5xx, network errors, and timeouts. Does NOT retry 4xx.
+ */
+export async function fetchJsonWithRetry<T = unknown>(
+  url: string,
+  opts?: Parameters<typeof fetchJson>[1] & { maxRetries?: number }
+): Promise<T> {
+  const { maxRetries = 2, ...fetchOpts } = opts ?? {}
+
+  let lastError: unknown
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchJson<T>(url, fetchOpts)
+    } catch (error) {
+      lastError = error
+      const msg = error instanceof Error ? error.message : ''
+      const is5xx = /HTTP 5\d\d/.test(msg)
+      const isNetwork = /abort|timeout|ECONNRESET|ETIMEDOUT|fetch failed/i.test(msg)
+
+      if (attempt >= maxRetries || (!is5xx && !isNetwork)) {
+        throw error
+      }
+
+      const delay = Math.min(1000 * Math.pow(2, attempt), 8000) * (0.5 + Math.random() * 0.5)
+      dataLogger.warn(`[fetchJsonWithRetry] Attempt ${attempt + 1} failed for ${url}, retrying in ${Math.round(delay)}ms`)
+      await sleep(delay)
+    }
+  }
+  throw lastError
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
