@@ -3498,7 +3498,7 @@ const en = {
     bookCategoryWhitepaper: 'Whitepaper',
     bookCategoryEvent: 'Event',
     bookCategoryResearch: 'Research',
-    bookCategoryAcademic: 'Academic Paper',
+    bookCategoryAcademic: 'Academic',
     bookCategoryFinance: 'Finance',
     bookCategoryRegulatory: 'Regulatory',
     bookPages: 'pages',
@@ -3526,7 +3526,7 @@ const en = {
     bookReviews: 'Reviews',
     bookWriteReview: 'Write Review',
     bookLoadMore: 'Load more',
-    bookSimilar: 'You might also like',
+    bookSimilar: 'Similar Books',
     bookAnonymous: 'Anonymous',
 typing: 'typing...',
 
@@ -3668,6 +3668,13 @@ searchTryShorterKeywords: 'Try shorter or more general keywords',
 searchTryTraderHandle: 'Try searching by trader handle or platform name',
 searchPostsSection: 'Posts',
 searchFailedToast: 'Search failed',
+searchTabTraders: 'Traders',
+searchTabLibrary: 'Library',
+searchTabGroups: 'Groups',
+searchLibrarySection: 'Library',
+searchGroupsSection: 'Groups',
+searchTradersSection: 'Traders',
+searchGroupMembers: 'members',
 
 // Book detail - language labels
 bookLanguageChinese: 'Chinese',
@@ -3732,6 +3739,56 @@ userCenterWaysToEarnExp: 'Ways to Earn EXP',
 userCenterPerDay: 'd',
 userCenterLevelOverview: 'Level Overview',
 userCenterCurrent: 'Current',
+
+// Duration formatting
+durationSeconds: '{n}s',
+durationMinutes: '{n}min',
+durationHours: '{h}h {m}',
+durationHoursOnly: '{h}h',
+
+// Footer
+footerProduct: 'Product',
+footerCommunity: 'Community',
+footerLegal: 'Legal',
+footerAbout: 'About',
+footerRankings: 'Rankings',
+footerMarket: 'Market',
+footerLibrary: 'Library',
+footerGroups: 'Groups',
+footerHot: 'Hot',
+footerTerms: 'Terms',
+footerPrivacy: 'Privacy',
+footerDisclaimer: 'Disclaimer',
+footerDmca: 'DMCA',
+footerContact: 'Contact',
+footerHelp: 'Help',
+footerStatus: 'Status',
+footerSlogan: 'All rankings in crypto',
+footerDisclaimerText: 'Data provided is for informational purposes only and does not constitute investment advice. Cryptocurrency trading involves significant risk.',
+
+// Score breakdown
+scoreNoDetails: 'No score details available',
+scoreBreakdownTitle: 'Score Breakdown',
+scoreProfit: 'Profit',
+scoreRisk: 'Risk',
+scoreExecution: 'Execution',
+scoreDataConfidence: 'Data Confidence:',
+scoreRadarProfit: 'Profit',
+scoreRadarRisk: 'Risk',
+scoreRadarExec: 'Exec',
+scoreRoiScore: 'ROI Score',
+scorePnlScore: 'PnL Score',
+scoreTotal: 'Total',
+
+// Export ranking
+exportRanking: 'Export Ranking',
+
+// Pro / Paywall
+proUpgradeTitle: 'Upgrade to Pro to unlock all features',
+proFeatureExclusive: '{feature} is a Pro-only feature',
+proStartingPrice: 'Starting at $4.99/mo',
+proViewPlans: 'View Plans',
+proFreeNow: 'Free Now',
 
 } as const
 

@@ -48,8 +48,7 @@ export default function UserCenterPageWrapper() {
 function UserCenterPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
   const tabFromUrl = searchParams.get('tab') as Tab | null
   const initialTab: Tab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'level'
@@ -63,9 +62,9 @@ function UserCenterPage() {
 
   // Sync tab from URL param changes
   useEffect(() => {
-    const t = searchParams.get('tab') as Tab | null
-    if (t && VALID_TABS.includes(t)) {
-      setActiveTab(t)
+    const tabParam = searchParams.get('tab') as Tab | null
+    if (tabParam && VALID_TABS.includes(tabParam)) {
+      setActiveTab(tabParam)
     }
   }, [searchParams])
 
@@ -145,11 +144,11 @@ function UserCenterPage() {
   }, [])
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'level', label: isZh ? '我的等级' : 'My Level' },
-    { key: 'membership', label: isZh ? '会员管理' : 'Membership' },
-    { key: 'badges', label: isZh ? '成就徽章' : 'Badges' },
-    { key: 'bookmarks', label: isZh ? '收藏夹' : 'Bookmarks' },
-    { key: 'settings', label: isZh ? '设置' : 'Settings' },
+    { key: 'level', label: t('userCenterMyLevel') },
+    { key: 'membership', label: t('userCenterMembership') },
+    { key: 'badges', label: t('userCenterBadges') },
+    { key: 'bookmarks', label: t('userCenterBookmarksTab') },
+    { key: 'settings', label: t('settings') },
   ]
 
   // Auth required screen
@@ -183,16 +182,16 @@ function UserCenterPage() {
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </Box>
-            <Text size="xl" weight="bold">{isZh ? '请先登录' : 'Login Required'}</Text>
+            <Text size="xl" weight="bold">{t('userCenterLoginRequired')}</Text>
             <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
-              {isZh ? '登录后可查看等级进度、管理会员和个人数据' : 'Sign in to view your level progress, manage membership and personal data'}
+              {t('userCenterLoginDescription')}
             </Text>
             <Button
               variant="primary"
               onClick={() => router.push('/login?redirect=/user-center')}
               style={{ marginTop: tokens.spacing[2] }}
             >
-              {isZh ? '去登录' : 'Sign In'}
+              {t('userCenterSignIn')}
             </Button>
           </Box>
         </Box>
@@ -232,14 +231,14 @@ function UserCenterPage() {
           <div className="flex-1 text-center sm:text-left">
             <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
               <span className="text-xl font-bold" style={{ color: tokens.colors.text.primary }}>
-                {userHandle || (isZh ? '用户' : 'User')}
+                {userHandle || t('userCenterDefaultUser')}
               </span>
               <LevelBadge exp={info.currentExp} isPro={levelData?.isPro} size="md" showName />
             </div>
             <div className="w-full max-w-md">
               <div className="flex justify-between text-xs mb-1" style={{ color: tokens.colors.text.tertiary }}>
                 <span>EXP {info.currentExp.toLocaleString()}</span>
-                <span>{info.nextExp ? `${isZh ? '下一级' : 'Next'} ${info.nextExp.toLocaleString()}` : (isZh ? '已满级' : 'Max Level')}</span>
+                <span>{info.nextExp ? `${t('userCenterNextLevel')} ${info.nextExp.toLocaleString()}` : t('userCenterMaxLevel')}</span>
               </div>
               <div className="h-2 rounded-full overflow-hidden" style={{ background: tokens.colors.bg.tertiary }}>
                 <div
@@ -257,12 +256,12 @@ function UserCenterPage() {
           style={{ borderTop: `1px solid ${tokens.colors.border.primary}` }}
         >
           {[
-            { label: isZh ? '动态' : 'Posts', value: stats.posts },
-            { label: isZh ? '粉丝' : 'Followers', value: stats.followers },
-            { label: isZh ? '关注' : 'Following', value: stats.following },
-            { label: isZh ? '收藏' : 'Bookmarks', value: stats.bookmarks },
-            { label: isZh ? '获赞' : 'Likes', value: stats.likes },
-            { label: isZh ? '阅读' : 'Reads', value: stats.reads },
+            { label: t('posts'), value: stats.posts },
+            { label: t('followers'), value: stats.followers },
+            { label: t('following'), value: stats.following },
+            { label: t('bookmarks'), value: stats.bookmarks },
+            { label: t('userCenterLikes'), value: stats.likes },
+            { label: t('userCenterReads'), value: stats.reads },
           ].map((item) => (
             <div key={item.label} className="text-center">
               <div className="text-lg font-bold" style={{ color: tokens.colors.text.primary }}>{item.value}</div>
@@ -295,26 +294,26 @@ function UserCenterPage() {
 
       {/* Content */}
       <div className="rounded-xl p-4 sm:p-6" style={{ background: tokens.colors.bg.secondary }}>
-        {activeTab === 'level' && <LevelTab info={info} dailyEarned={levelData?.dailyExpEarned ?? 0} isZh={isZh} />}
+        {activeTab === 'level' && <LevelTab info={info} dailyEarned={levelData?.dailyExpEarned ?? 0} />}
         {activeTab === 'membership' && <MembershipContent />}
-        {activeTab === 'badges' && <div className="text-center py-12" style={{ color: tokens.colors.text.tertiary }}>{isZh ? '成就徽章功能即将上线' : 'Achievement badges coming soon'}</div>}
+        {activeTab === 'badges' && <div className="text-center py-12" style={{ color: tokens.colors.text.tertiary }}>{t('userCenterBadgesComingSoon')}</div>}
         {activeTab === 'bookmarks' && (
           <div className="text-center py-12">
             <p style={{ color: tokens.colors.text.tertiary, marginBottom: 16 }}>
-              {isZh ? '在收藏夹页面管理您收藏的内容' : 'Manage your bookmarked content in the Favorites page'}
+              {t('userCenterBookmarksDescription')}
             </p>
             <Button variant="primary" onClick={() => router.push('/favorites')}>
-              {isZh ? '打开收藏夹' : 'Open Favorites'}
+              {t('userCenterOpenFavorites')}
             </Button>
           </div>
         )}
         {activeTab === 'settings' && (
           <div className="text-center py-12">
             <p style={{ color: tokens.colors.text.tertiary, marginBottom: 16 }}>
-              {isZh ? '前往设置页面管理您的账户' : 'Go to Settings to manage your account'}
+              {t('userCenterSettingsDescription')}
             </p>
             <Button variant="primary" onClick={() => router.push('/settings')}>
-              {isZh ? '打开设置' : 'Open Settings'}
+              {t('userCenterOpenSettings')}
             </Button>
           </div>
         )}
@@ -324,7 +323,8 @@ function UserCenterPage() {
   )
 }
 
-function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp: number }; dailyEarned: number; isZh: boolean }) {
+function LevelTab({ info, dailyEarned }: { info: LevelInfo & { currentExp: number }; dailyEarned: number }) {
+  const { t } = useLanguage()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[8] }}>
       {/* Current Level Card */}
@@ -335,7 +335,7 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
           color: tokens.colors.text.primary,
           marginBottom: tokens.spacing[4],
         }}>
-          {isZh ? '当前等级' : 'Current Level'}
+          {t('userCenterCurrentLevel')}
         </h3>
         <div style={{
           background: tokens.colors.bg.tertiary,
@@ -373,7 +373,7 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
               }}>
                 <span>EXP {info.currentExp.toLocaleString()}{info.nextExp ? ` / ${info.nextExp.toLocaleString()}` : ''}</span>
                 <span style={{ color: tokens.colors.accent.success, fontWeight: tokens.typography.fontWeight.semibold }}>
-                  +{dailyEarned} {isZh ? '今日' : 'today'}
+                  +{dailyEarned} {t('userCenterToday')}
                 </span>
               </div>
               {/* Gradient progress bar */}
@@ -404,7 +404,7 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
           color: tokens.colors.text.primary,
           marginBottom: tokens.spacing[4],
         }}>
-          {isZh ? '经验获取途径' : 'Ways to Earn EXP'}
+          {t('userCenterWaysToEarnExp')}
         </h3>
         <div style={{
           display: 'grid',
@@ -445,7 +445,7 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
                     background: tokens.colors.bg.hover,
                     color: tokens.colors.text.tertiary,
                   }}>
-                    {action.dailyLimit}/{isZh ? '天' : 'd'}
+                    {action.dailyLimit}/{t('userCenterPerDay')}
                   </span>
                 )}
               </div>
@@ -462,7 +462,7 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
           color: tokens.colors.text.primary,
           marginBottom: tokens.spacing[4],
         }}>
-          {isZh ? '等级一览' : 'Level Overview'}
+          {t('userCenterLevelOverview')}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
           {LEVELS.map((lvl) => {
@@ -525,7 +525,7 @@ function LevelTab({ info, dailyEarned, isZh }: { info: LevelInfo & { currentExp:
                       background: lvl.colorHex,
                       color: tokens.colors.white,
                     }}>
-                      {isZh ? '当前' : 'Current'}
+                      {t('userCenterCurrent')}
                     </span>
                   )}
                   <span style={{
