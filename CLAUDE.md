@@ -167,10 +167,17 @@ STRIPE_SECRET_KEY
 - `data-auditor`: Data quality sampling
 
 ## Custom Skills (`.claude/skills/`)
-- `arena-supabase-ops`: DB operations patterns
-- `arena-enrichment-patterns`: Enrichment job patterns
+- `arena-supabase-ops`: DB operations, RLS, migrations
+- `arena-enrichment-patterns`: Enrichment jobs + script development
 - `arena-vps-cron`: VPS cron deployment
-- `ccxt-typescript`: Exchange API patterns
+- `arena-anti-block`: Geo-blocking bypass patterns
+- `arena-cf-worker-patterns`: Cloudflare Worker proxy
+- `arena-vercel-deploy`: Vercel deployment + pitfalls
+- `arena-fetcher-error-handling`: Fetcher error handling templates
+- `ccxt-typescript`: Market data via CCXT
+- `security-review`: Auth/payment/RLS security
+- `data-quality`: Data quality audit
+- `fix-issue`: GitHub issue fix flow
 
 ## Slash Commands (`.claude/commands/`)
 - `/fix-pipeline` - Diagnose and fix data pipeline issues
@@ -226,9 +233,8 @@ node scripts/pipeline-health-check.mjs --fix
 
 ### 自动验证 Hooks
 `.claude/settings.json` 配置了自动验证：
-- **PreToolUse**: 写入 migrations/.env/payment 文件时自动拦截，需确认
-- **PostToolUse**: 每次修改 `.ts` 文件后自动运行 TypeScript 检查
-- **Stop**: 完成任务前自动运行 `npm run type-check` + `npm test`
+- **PreToolUse**: 写入 `supabase/migrations/` 时自动拦截，需确认
+- **Stop**: 完成任务前自动运行 `npx tsc --noEmit`（类型检查）
 
 ### Spec-Driven Development
 ```bash

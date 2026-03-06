@@ -130,5 +130,7 @@ financial_publications_summary.md
 !.claude/skills/
 !.claude/commands/
 !.claude/agents/
+!.claude/hooks/
 !.claude/settings.json
+!.claude/ARENA_SKILL_SYSTEM.md
 .backup-*

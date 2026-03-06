@@ -82,7 +82,19 @@ node scripts/import/backfill_daily_snapshots.mjs --limit=5000
 0 */2 * * * curl -H "Authorization: Bearer $CRON_SECRET" https://www.arenafi.org/api/monitoring/freshness
 ```
 
-## 更新日志
+## 脚本开发规范
 
-- 2026-02-23: 创建 skill，记录 Gains/Hyperliquid/dYdX/BitMart 坑点
-- 2026-02-23: 添加 CF Worker 部署说明
+- 脚本路径: `scripts/`，ESM (.mjs) 或 TypeScript (.ts via tsx)
+- 命名: `scripts/<action>-<exchange>-<field>.mjs`（如 `backfill-binance-avatars.mjs`）
+- 初始化: `createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)`
+- 增量运行: `WHERE field IS NULL LIMIT 100`
+- 并发控制: `p-limit`，默认 concurrency 3
+- 写入: 永远 `UPSERT`，不用 `INSERT`
+- 干跑模式: 加 `--dry-run` 参数
+- 运行: `node --env-file=.env.local scripts/<script>.mjs`
+
+## Debug Checklist
+- `SUPABASE_SERVICE_ROLE_KEY` 已加载？
+- RLS 阻止写入？用 service role key
+- 交易所 API 返回 429？降低并发 + sleep
+- 数据未持久化？检查 upsert conflict keys
