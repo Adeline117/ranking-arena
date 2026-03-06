@@ -3945,8 +3945,17 @@ bookshelfBrowse: '去书城',
 // Relative time (相对时间)
 longAgo: '很久以前',
 
-// ResourcesClient (资源结果计数)
+// ResourcesClient (资源页面)
 resourcesResultsCount: '{count} 个结果',
+resourcesCategoryAll: '全部',
+resourcesCategoryBooks: '书籍',
+resourcesCategoryPapers: '论文',
+resourcesCategoryWhitepapers: '白皮书',
+resourcesCategoryResearch: '研报',
+resourcesCategoryAcademic: '学术论文',
+resourcesSortRecent: '最新添加',
+resourcesSortPopular: '最受欢迎',
+resourcesSortRating: '评分最高',
 
 // Bots rankings page (机器人排行榜)
 botsTitle: 'Web3 机器人排行榜',
@@ -3958,6 +3967,14 @@ botsBot: '机器人',
 botsUsers: '用户',
 botsVolume: '交易量',
 botsTotalCount: '共 {count} 个机器人',
+botsCategoryAll: '全部',
+botsCategoryTgBot: 'TG交易Bot',
+botsCategoryAiAgent: 'AI Agent',
+botsCategoryVault: '链上金库',
+botsTagTgBot: 'TG Bot',
+botsTagAiAgent: 'AI Agent',
+botsTagVault: '金库',
+botsTagStrategy: '策略',
 
 // Library i18n migration - EpubSettings font labels
 epubFontSans: '黑体',
@@ -4118,6 +4135,14 @@ membershipOneTimeForever: '一次付款 · 永久有效',
 membershipOneTime: '一次性',
 membershipGetFoundingAccess: '立即成为创始会员 - ${price}',
 membershipLifetimeNote: '一次付款，终身有效，价格以后不会再有',
+
+// UserProfile page
+userProfileLeaderboard: '排行榜',
+userProfileSignUpViewHistory: '注册查看完整历史数据',
+userProfileCommunity: '社区',
+userProfileDeveloper: '开发者',
+userProfileLoginToFollow: '登录后关注',
+userProfileNoStatsYet: '暂无统计数据，绑定交易所后可查看',
 
 } as const
 

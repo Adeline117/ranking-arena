@@ -3938,8 +3938,17 @@ bookshelfBrowse: 'Browse',
 // Relative time
 longAgo: 'long ago',
 
-// ResourcesClient (results count)
+// ResourcesClient
 resourcesResultsCount: '{count} results',
+resourcesCategoryAll: 'All',
+resourcesCategoryBooks: 'Books',
+resourcesCategoryPapers: 'Papers',
+resourcesCategoryWhitepapers: 'Whitepapers',
+resourcesCategoryResearch: 'Research',
+resourcesCategoryAcademic: 'Academic',
+resourcesSortRecent: 'Recently Added',
+resourcesSortPopular: 'Most Popular',
+resourcesSortRating: 'Highest Rated',
 
 // Bots rankings page
 botsTitle: 'Web3 Bot Rankings',
@@ -3951,6 +3960,14 @@ botsBot: 'Bot',
 botsUsers: 'Users',
 botsVolume: 'Volume',
 botsTotalCount: '{count} bots total',
+botsCategoryAll: 'All',
+botsCategoryTgBot: 'TG Bots',
+botsCategoryAiAgent: 'AI Agents',
+botsCategoryVault: 'Vaults',
+botsTagTgBot: 'TG Bot',
+botsTagAiAgent: 'AI Agent',
+botsTagVault: 'Vault',
+botsTagStrategy: 'Strategy',
 
 // Library i18n migration - EpubSettings font labels
 epubFontSans: 'Sans',
@@ -4111,6 +4128,14 @@ membershipOneTimeForever: 'One-time · Forever',
 membershipOneTime: 'one-time',
 membershipGetFoundingAccess: 'Get Founding Access - ${price}',
 membershipLifetimeNote: 'One-time payment. Lifetime access. Price will not return.',
+
+// UserProfile page
+userProfileLeaderboard: 'Leaderboard',
+userProfileSignUpViewHistory: 'Sign up to view full history',
+userProfileCommunity: 'Community',
+userProfileDeveloper: 'Developer',
+userProfileLoginToFollow: 'Login to Follow',
+userProfileNoStatsYet: 'No stats data yet. Link an exchange to view.',
 
 } as const
 

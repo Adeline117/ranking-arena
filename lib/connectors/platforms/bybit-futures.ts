@@ -158,10 +158,11 @@ export class BybitFuturesConnector extends BaseConnector {
   }
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
-    const data = await this.request<any>(
+    const _rawTs = await this.request<any>(
       `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-history-pnl?leaderMark=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BybitFuturesTimeseriesResponseSchema, _rawTs, 'bybit-futures/timeseries')
 
     const pnlList = data?.result?.pnlList || []
 

@@ -6,6 +6,8 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import { OkxFuturesLeaderboardResponseSchema, OkxFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags, TraderTimeseries,
@@ -31,10 +33,11 @@ export class OkxFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 20, offset = 0): Promise<DiscoverResult> {
     const pageNo = Math.floor(offset / limit) + 1
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://www.okx.com/priapi/v5/ecotrade/public/trader-list?sortType=profitRatio&dataRange=${WINDOW_MAP[window]}&pageNo=${pageNo}&pageSize=${limit}`,
       { method: 'GET' }
     )
+    const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')
     const list = data?.data?.ranks || data?.data || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
@@ -50,10 +53,11 @@ export class OkxFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://www.okx.com/priapi/v5/ecotrade/public/trader-detail?uniqueName=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(OkxFuturesDetailResponseSchema, _rawProfile, 'okx-futures/profile')
     const info = data?.data
     if (!info) return null
 
@@ -72,10 +76,11 @@ export class OkxFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://www.okx.com/priapi/v5/ecotrade/public/profit-detail?uniqueName=${traderKey}&dataRange=${WINDOW_MAP[window]}`,
       { method: 'GET' }
     )
+    const data = warnValidate(OkxFuturesDetailResponseSchema, _rawSnap, 'okx-futures/snapshot')
     const info = data?.data
     if (!info) return null
 
@@ -99,10 +104,11 @@ export class OkxFuturesConnector extends BaseConnector {
   }
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
-    const data = await this.request<any>(
+    const _rawTs = await this.request<any>(
       `https://www.okx.com/priapi/v5/ecotrade/public/profit-detail?uniqueName=${traderKey}&dataRange=90`,
       { method: 'GET' }
     )
+    const data = warnValidate(OkxFuturesDetailResponseSchema, _rawTs, 'okx-futures/timeseries')
     const dailyList = data?.data?.dailyProfitList || []
 
     const series: TraderTimeseries[] = []
