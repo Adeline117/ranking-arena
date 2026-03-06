@@ -27,7 +27,6 @@ const AlertConfig = dynamic(() => import('@/app/components/alerts/AlertConfig'),
 const _TraderAboutCard = dynamic(() => import('@/app/components/trader/TraderAboutCard'))
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
-const TraderActivityTimeline = dynamic(() => import('@/app/components/feed/TraderActivityTimeline'), { ssr: false })
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
 })
@@ -450,10 +449,6 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
                   traderHandle={profile.handle}
                   source={profile.source}
                 />
-                {/* Auto-generated trader activity timeline */}
-                {profile.handle && (
-                  <TraderActivityTimeline handle={profile.handle} source={profile.source} />
-                )}
               </Box>
 
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>

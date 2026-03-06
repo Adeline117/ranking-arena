@@ -81,7 +81,16 @@ async function fetchRSSFeed(feed: FeedConfig): Promise<{
   }
 }
 
+// Vercel Cron sends GET requests
+export async function GET(req: NextRequest) {
+  return handleFetch(req)
+}
+
 export async function POST(req: NextRequest) {
+  return handleFetch(req)
+}
+
+async function handleFetch(req: NextRequest) {
   // Auth check
   const authHeader = req.headers.get('authorization')
   if (!CRON_SECRET) {
