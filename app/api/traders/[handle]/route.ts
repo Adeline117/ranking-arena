@@ -692,7 +692,7 @@ async function getTraderDetails(
       market_type: source.market_type || undefined,
     },
     performance: {
-      roi_90d: snapshot?.roi || 0,
+      roi_90d: snapshot?.roi ?? 0,
       roi_7d: snapshot7d?.roi ?? undefined,
       roi_30d: snapshot30d?.roi ?? undefined,
       pnl: snapshot?.pnl ?? undefined,
@@ -982,7 +982,7 @@ async function getTraderDetailsFromSnapshots(
       source: sourceType,
     },
     performance: {
-      roi_90d: snapshot?.roi || 0,
+      roi_90d: snapshot?.roi ?? 0,
       roi_7d: snapshot7d?.roi ?? undefined,
       roi_30d: snapshot30d?.roi ?? undefined,
       pnl: snapshot?.pnl ?? undefined,
