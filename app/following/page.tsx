@@ -251,7 +251,7 @@ export default function FollowingPage() {
     }
 
     load()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchFollowing excluded to avoid refetch loop on callback identity change
   }, [userId])
 
   // 可用平台列表
