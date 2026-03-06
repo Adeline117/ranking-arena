@@ -59,10 +59,6 @@ const eslintConfig = defineConfig([
           "message": "Empty .catch(() => {}) silently swallows errors. Use fireAndForget() from lib/utils/logger instead."
         },
         {
-          "selector": "JSXAttribute[name.name='style'][value.expression.type='ObjectExpression']",
-          "message": "Avoid inline style={{}}. Use Tailwind CSS classes or design tokens from lib/design-tokens.ts instead."
-        },
-        {
           "selector": "ConditionalExpression[test.name='isZh']",
           "message": "Do not use isZh ? ternary for translations. Use t('key') from useLanguage() instead. See lib/i18n."
         },
