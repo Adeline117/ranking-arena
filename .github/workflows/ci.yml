@@ -85,6 +85,10 @@ jobs:
           if [ "$TOTAL" -gt 5242880 ]; then
             echo "::warning::Bundle size exceeds 5MB threshold ($((TOTAL / 1024))KB)"
           fi
+      - name: Clean build artifacts for upload
+        run: |
+          # Remove files with colons in names (node: externals) — invalid for artifact upload
+          find .next -name '*:*' -delete 2>/dev/null || true
       - uses: actions/upload-artifact@v6
         with:
           name: nextjs-build
