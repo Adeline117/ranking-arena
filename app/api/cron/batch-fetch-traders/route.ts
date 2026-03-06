@@ -61,22 +61,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: `Unknown group: ${group}`, available: Object.keys(GROUPS) }, { status: 400 })
   }
 
-  const supabase = createSupabaseAdmin()
-  if (!supabase) {
+  const supabaseOrNull = createSupabaseAdmin()
+  if (!supabaseOrNull) {
     return NextResponse.json({ error: 'Supabase env vars missing' }, { status: 500 })
   }
+  const supabase = supabaseOrNull
 
-  const results: BatchResult[] = []
   const overallStart = Date.now()
   const plog = await PipelineLogger.start(`batch-fetch-traders-${group}`, { group, platforms })
 
-  for (const platform of platforms) {
+  // Run a single platform fetch and return the result
+  async function runPlatform(platform: string): Promise<BatchResult> {
     const start = Date.now()
     try {
       const fetcher = getInlineFetcher(platform)
       if (!fetcher) {
-        results.push({ platform, status: 'error', durationMs: Date.now() - start, error: `No fetcher for ${platform}` })
-        continue
+        return { platform, status: 'error', durationMs: Date.now() - start, error: `No fetcher for ${platform}` }
       }
 
       const result = await fetcher(supabase, ['7D', '30D', '90D'])
@@ -93,33 +93,39 @@ export async function GET(request: NextRequest) {
         metadata: { periods: result.periods, batchGroup: group },
       })
 
+      logger.info(`[batch-fetch-traders-${group}] ${platform}: saved=${totalSaved} duration=${Date.now() - start}ms`)
+
       if (hasErrors && totalSaved === 0) {
         const errDetail = Object.entries(result.periods).filter(([, p]) => p.error).map(([k, p]) => `${k}: ${p.error}`).join('; ')
-        results.push({ platform, status: 'error', durationMs: Date.now() - start, totalSaved, error: errDetail })
-      } else {
-        results.push({ platform, status: 'success', durationMs: Date.now() - start, totalSaved })
+        return { platform, status: 'error', durationMs: Date.now() - start, totalSaved, error: errDetail }
       }
-
-      logger.info(`[batch-fetch-traders-${group}] ${platform}: saved=${totalSaved} duration=${Date.now() - start}ms`)
+      return { platform, status: 'success', durationMs: Date.now() - start, totalSaved }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       logger.error(`[batch-fetch-traders-${group}] ${platform} error: ${errMsg}`)
 
       try {
         await recordFetchResult(supabase, platform, {
-          success: false,
-          durationMs: Date.now() - start,
-          recordCount: 0,
-          error: errMsg,
+          success: false, durationMs: Date.now() - start, recordCount: 0, error: errMsg,
         })
       } catch { /* ignore metric recording failures */ }
 
-      results.push({ platform, status: 'error', durationMs: Date.now() - start, error: errMsg })
+      return { platform, status: 'error', durationMs: Date.now() - start, error: errMsg }
     }
+  }
 
-    // Small delay between platforms to be nice to upstream APIs
-    if (platforms.indexOf(platform) < platforms.length - 1) {
-      await new Promise((r) => setTimeout(r, 1000))
+  // Small groups (≤3): run in parallel to maximize use of 300s budget
+  // Large groups: run sequentially with delays to avoid upstream rate limits
+  let results: BatchResult[]
+  if (platforms.length <= 3) {
+    results = await Promise.all(platforms.map(runPlatform))
+  } else {
+    results = []
+    for (const platform of platforms) {
+      results.push(await runPlatform(platform))
+      if (platforms.indexOf(platform) < platforms.length - 1) {
+        await new Promise((r) => setTimeout(r, 1000))
+      }
     }
   }
 
