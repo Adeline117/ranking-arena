@@ -2798,7 +2798,10 @@ const zh = {
   selectMembers: '选择成员',
   selectedCount: '已选 {n} 人',
   createGroup: '创建',
-  
+  maxGroupMembers: '最多50人',
+  minGroupMembers: '至少选择1位成员',
+  createGroupFailed: '创建群组失败',
+
   // File & image
   dragDropHint: '拖拽文件到此处发送',
   pasteImageHint: '粘贴图片发送',

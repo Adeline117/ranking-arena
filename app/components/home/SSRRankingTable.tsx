@@ -129,11 +129,11 @@ export default function SSRRankingTable({ traders }: Props) {
               </div>
 
               <span className="hide-mobile ssr-wr">
-                {trader.win_rate != null ? `${trader.win_rate.toFixed(0)}%` : '--'}
+                {trader.win_rate != null ? `${trader.win_rate.toFixed(1)}%` : '—'}
               </span>
 
               <span className="hide-mobile ssr-mdd">
-                {trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`) : '--'}
+                {trader.max_drawdown != null ? (Math.abs(trader.max_drawdown) < 0.05 ? '< 0.1%' : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`) : '—'}
               </span>
             </a>
           )
