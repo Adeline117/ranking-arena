@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:user-activities')
 
 export async function GET(
   request: NextRequest,
@@ -35,7 +38,8 @@ export async function GET(
     }
 
     return NextResponse.json({ activities: activities || [], hasMore: (activities?.length || 0) === limit })
-  } catch {
+  } catch (error) {
+    logger.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

@@ -6,6 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api:messages-read')
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +61,8 @@ export async function POST(request: NextRequest) {
       marked_count: updated?.length || 0,
       read_at: now,
     })
-  } catch {
+  } catch (error) {
+    logger.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
