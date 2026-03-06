@@ -70,7 +70,7 @@ test.describe('移动端排行榜测试', () => {
     await page.goto('/')
     await page.waitForLoadState('domcontentloaded')
     // Ranking section may take time to load on mobile - use catch to avoid beforeEach crash
-    await page.waitForSelector('.home-ranking-section', { timeout: 30_000 }).catch(() => {})
+    await page.waitForSelector('.home-ranking-section', { timeout: 30_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
   })
 
   test('排行榜内容正确显示', async ({ page }) => {

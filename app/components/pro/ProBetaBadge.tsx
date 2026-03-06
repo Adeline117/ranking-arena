@@ -13,8 +13,7 @@ interface ProBetaBadgeProps {
  * Beta 期间代替 PaywallOverlay 使用。
  */
 export default function ProBetaBadge({ style, size = 'xs' }: ProBetaBadgeProps) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
   const fontSize = size === 'xs' ? 10 : 11
 
@@ -37,7 +36,7 @@ export default function ProBetaBadge({ style, size = 'xs' }: ProBetaBadgeProps) 
         ...style,
       }}
     >
-      Pro · {isZh ? '限时免费' : 'Free Now'}
+      Pro · {t('proFreeNow')}
     </span>
   )
 }

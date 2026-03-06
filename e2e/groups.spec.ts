@@ -22,7 +22,7 @@ test.describe('小组功能', () => {
     await page.goto('/groups')
     await page.waitForLoadState('domcontentloaded')
 
-    await page.waitForSelector('[data-testid="group-item"], .group-card, article', { timeout: 15_000 }).catch(() => {})
+    await page.waitForSelector('[data-testid="group-item"], .group-card, article', { timeout: 15_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     const content = await page.textContent('body')
     expect(content).toBeTruthy()
@@ -87,7 +87,7 @@ test.describe('小组详情', () => {
       await firstGroup.click()
       await page.waitForLoadState('domcontentloaded')
 
-      await page.waitForSelector('[data-testid="post-item"], article, .post', { timeout: 10_000 }).catch(() => {})
+      await page.waitForSelector('[data-testid="post-item"], article, .post', { timeout: 10_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
     }
   })
 })

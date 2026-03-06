@@ -51,7 +51,7 @@ export function SWRConfigProvider({ children }: { children: ReactNode }) {
                 tags: { source: 'swr', swr_key: String(key) },
                 level: 'warning',
               })
-            }).catch(() => {})
+            }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget, failure is non-critical
           }
         },
         

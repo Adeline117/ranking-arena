@@ -29,15 +29,14 @@ const CrownIcon = ({ size = 20 }: { size?: number }) => (
 
 export default function PaywallOverlay({ feature, compact = false, style }: PaywallOverlayProps) {
   const router = useRouter()
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
-  const title = isZh ? '升级 Pro，解锁全部功能' : 'Upgrade to Pro to unlock all features'
+  const title = t('proUpgradeTitle')
   const featureText = feature
-    ? (isZh ? `${feature} 为 Pro 专属功能` : `${feature} is a Pro-only feature`)
+    ? t('proFeatureExclusive').replace('{feature}', feature)
     : undefined
-  const priceText = isZh ? '低至 $4.99/月' : 'Starting at $4.99/mo'
-  const buttonText = isZh ? '查看方案' : 'View Plans'
+  const priceText = t('proStartingPrice')
+  const buttonText = t('proViewPlans')
 
   // Beta: all Pro features are free — show a small badge instead of the paywall
   if (BETA_PRO_FEATURES_FREE) {
@@ -53,7 +52,7 @@ export default function PaywallOverlay({ feature, compact = false, style }: Payw
             color: 'var(--color-pro-gradient-start, #a78bfa)',
             whiteSpace: 'nowrap',
           }}>
-            Pro · {isZh ? '限时免费' : 'Free Now'}
+            Pro · {t('proFreeNow')}
           </span>
         </Box>
       )

@@ -5,7 +5,6 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Link from 'next/link'
-import { uiLogger } from '@/lib/utils/logger'
 
 interface CoinRow {
   symbol: string

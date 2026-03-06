@@ -30,5 +30,5 @@ export function trackInteraction(event: InteractionEvent): void {
     headers: { 'Content-Type': 'application/json' },
     body,
     keepalive: true,
-  }).catch(() => {})
+  }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget, failure is non-critical
 }

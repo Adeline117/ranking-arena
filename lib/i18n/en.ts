@@ -3647,10 +3647,6 @@ feedbackScreenshot: 'Add screenshot (optional)',
 // Data disclaimer
 dataDisclaimer: 'Data is for informational purposes only. Not financial advice.',
 
-// Missing keys referenced in code
-selected: 'Selected',
-next: 'Next',
-
 // Search page
 searchPostBy: 'by',
 searchViewAll: 'View all',
@@ -3784,6 +3780,11 @@ scoreTotal: 'Total',
 
 // Export ranking
 exportRanking: 'Export Ranking',
+exportRankingShort: 'Export',
+
+// Ranking style filter
+rankingStyleLabel: 'Style',
+rankingStyleAll: 'All',
 
 // Pro / Paywall
 proUpgradeTitle: 'Upgrade to Pro to unlock all features',

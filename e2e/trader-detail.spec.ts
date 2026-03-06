@@ -7,7 +7,7 @@ test.describe('交易员详情页测试', () => {
 
     // Wait for ranking data to appear (links to trader pages)
     const traderLinks = page.locator('a[href*="/trader/"]')
-    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
+    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     if (await traderLinks.count() > 0) {
       const firstTraderLink = traderLinks.first()
@@ -39,7 +39,7 @@ test.describe('交易员详情页测试', () => {
     await page.waitForLoadState('domcontentloaded')
 
     const traderLinks = page.locator('a[href*="/trader/"]')
-    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
+    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     if (await traderLinks.count() > 0) {
       await traderLinks.first().click()
@@ -61,7 +61,7 @@ test.describe('交易员详情页测试', () => {
     await page.waitForLoadState('domcontentloaded')
 
     const traderLinks = page.locator('a[href*="/trader/"]')
-    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
+    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     if (await traderLinks.count() > 0) {
       await traderLinks.first().click()
@@ -103,7 +103,7 @@ test.describe('交易员详情页性能', () => {
     await page.waitForLoadState('domcontentloaded')
 
     const traderLinks = page.locator('a[href*="/trader/"]')
-    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {})
+    await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     if (await traderLinks.count() > 0) {
       const href = await traderLinks.first().getAttribute('href')

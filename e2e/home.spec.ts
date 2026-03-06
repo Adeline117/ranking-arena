@@ -110,7 +110,7 @@ test.describe('性能测试', () => {
     // Wait for ranking section or skeleton to appear
     await page.waitForSelector('.home-ranking-section', {
       timeout: 30_000,
-    }).catch(() => {})
+    }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     const loadTime = Date.now() - startTime
 

@@ -34,7 +34,7 @@ export function interceptUnhandledPromises() {
         Sentry.captureException(error, {
           tags: { source: 'unhandledPromise' },
         })
-      }).catch(() => {})
+      }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget, failure is non-critical
     }
 
     // Do NOT preventDefault — let errors show in console for debugging
@@ -67,7 +67,7 @@ export function interceptGlobalErrors() {
             }
           }
         })
-      }).catch(() => {})
+      }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget, failure is non-critical
     }
   })
 }

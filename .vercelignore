@@ -2,6 +2,8 @@
 # 这些文件不会上传到 Vercel
 
 # 开发文件
+.env
+.env.*
 .env.local
 .env.development
 .env.test

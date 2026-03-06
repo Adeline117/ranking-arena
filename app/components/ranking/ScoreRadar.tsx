@@ -23,8 +23,7 @@ export const ScoreRadar = memo(function ScoreRadar({
   arenaScore,
   size = 120,
 }: ScoreRadarProps) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const cx = size / 2
   const cy = size / 2
   const r = size * 0.38 // max radius
@@ -67,13 +66,13 @@ export const ScoreRadar = memo(function ScoreRadar({
   // Label positions (slightly outside the triangle)
   const labelOffset = r + 14
   const labels = [
-    { text: isZh ? '收益' : 'Profit', x: cx, y: cy - labelOffset },
-    { text: isZh ? '风控' : 'Risk', x: cx + labelOffset * Math.cos(angles[1]) - 4, y: cy + labelOffset * Math.sin(angles[1]) + 4 },
-    { text: isZh ? '执行' : 'Exec', x: cx + labelOffset * Math.cos(angles[2]) + 4, y: cy + labelOffset * Math.sin(angles[2]) + 4 },
+    { text: t('scoreRadarProfit'), x: cx, y: cy - labelOffset },
+    { text: t('scoreRadarRisk'), x: cx + labelOffset * Math.cos(angles[1]) - 4, y: cy + labelOffset * Math.sin(angles[1]) + 4 },
+    { text: t('scoreRadarExec'), x: cx + labelOffset * Math.cos(angles[2]) + 4, y: cy + labelOffset * Math.sin(angles[2]) + 4 },
   ]
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Score radar: ${isZh ? '收益' : 'Profit'} ${profitability}/35, ${isZh ? '风控' : 'Risk'} ${riskControl}/40, ${isZh ? '执行' : 'Exec'} ${execution}/25`} style={{ overflow: 'visible' }}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Score radar: ${t('scoreRadarProfit')} ${profitability}/35, ${t('scoreRadarRisk')} ${riskControl}/40, ${t('scoreRadarExec')} ${execution}/25`} style={{ overflow: 'visible' }}>
       {/* Grid */}
       {gridPaths.map((d, i) => (
         <path key={i} d={d} fill="none" stroke="var(--color-border-secondary)" strokeWidth={0.5} opacity={0.5} />

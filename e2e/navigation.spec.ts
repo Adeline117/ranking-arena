@@ -95,7 +95,7 @@ test.describe('404 Page', () => {
     // The not-found component uses useState(false) → useEffect → setMounted(true)
     // Wait up to 15s for the client JS to mount and render the 404 content
     const content = page.locator('.number-404, .content-section, a[href="/"]')
-    await content.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
+    await content.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     // Even if hydration is slow, the page should have *some* rendered HTML
     const bodyText = await page.textContent('body')
@@ -119,7 +119,7 @@ test.describe('404 Page', () => {
 
     // Wait for hydration
     const homeLink = page.locator('a[href="/"]')
-    await homeLink.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
+    await homeLink.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     if (await homeLink.count() > 0) {
       // Verify the link href is correct

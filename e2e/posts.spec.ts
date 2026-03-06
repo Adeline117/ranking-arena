@@ -11,7 +11,7 @@ test.describe('帖子功能', () => {
   })
 
   test('显示帖子列表', async ({ page }) => {
-    await page.waitForSelector('[data-testid="post-item"], article, .post, .hot-post-item', { timeout: 15_000 }).catch(() => {})
+    await page.waitForSelector('[data-testid="post-item"], article, .post, .hot-post-item', { timeout: 15_000 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
     const posts = page.locator('[data-testid="post-item"], article, .post, .hot-post-item')
     const count = await posts.count()

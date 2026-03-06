@@ -122,7 +122,7 @@ test.describe('搜索性能', () => {
 
       await page.waitForSelector('[class*="dropdown"], [class*="suggestion"]', {
         timeout: 5000,
-      }).catch(() => {})
+      }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- Playwright: element may not exist
 
       const responseTime = Date.now() - startTime
       expect(responseTime).toBeLessThan(10_000)

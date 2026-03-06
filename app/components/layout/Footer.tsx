@@ -10,40 +10,39 @@ interface FooterColumn {
 }
 
 export default function Footer() {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t, language } = useLanguage()
 
   const columns: FooterColumn[] = [
     {
-      title: isZh ? '产品' : 'Product',
+      title: t('footerProduct'),
       links: [
-        { href: '/rankings', label: isZh ? '排行榜' : 'Rankings' },
-        { href: '/market', label: isZh ? '市场' : 'Market' },
-        { href: '/library', label: isZh ? '知识库' : 'Library' },
+        { href: '/rankings', label: t('footerRankings') },
+        { href: '/market', label: t('footerMarket') },
+        { href: '/library', label: t('footerLibrary') },
       ],
     },
     {
-      title: isZh ? '社区' : 'Community',
+      title: t('footerCommunity'),
       links: [
-        { href: '/groups', label: isZh ? '小组' : 'Groups' },
-        { href: '/hot', label: isZh ? '热门' : 'Hot' },
+        { href: '/groups', label: t('footerGroups') },
+        { href: '/hot', label: t('footerHot') },
       ],
     },
     {
-      title: isZh ? '法律' : 'Legal',
+      title: t('footerLegal'),
       links: [
-        { href: '/terms', label: isZh ? '服务条款' : 'Terms' },
-        { href: '/privacy', label: isZh ? '隐私政策' : 'Privacy' },
-        { href: '/disclaimer', label: isZh ? '风险免责声明' : 'Disclaimer' },
-        { href: '/dmca', label: isZh ? '版权政策' : 'DMCA' },
+        { href: '/terms', label: t('footerTerms') },
+        { href: '/privacy', label: t('footerPrivacy') },
+        { href: '/disclaimer', label: t('footerDisclaimer') },
+        { href: '/dmca', label: t('footerDmca') },
       ],
     },
     {
-      title: isZh ? '关于' : 'About',
+      title: t('footerAbout'),
       links: [
-        { href: '/u/adelinewen1107', label: isZh ? '联系我们' : 'Contact' },
-      { href: '/help', label: isZh ? '帮助中心' : 'Help' },
-      { href: '/status', label: isZh ? '系统状态' : 'Status' },
+        { href: '/u/adelinewen1107', label: t('footerContact') },
+        { href: '/help', label: t('footerHelp') },
+        { href: '/status', label: t('footerStatus') },
       ],
     },
   ]
@@ -143,7 +142,7 @@ export default function Footer() {
             margin: 0,
           }}
         >
-          &copy; {new Date().getFullYear()} Arena. {isZh ? '加密万物排行榜' : 'All rankings in crypto'}
+          &copy; {new Date().getFullYear()} Arena. {t('footerSlogan')}
         </p>
 
         {/* X / Twitter */}
@@ -176,9 +175,7 @@ export default function Footer() {
           marginBottom: 0,
         }}
       >
-        {isZh
-          ? '本站数据仅供参考，不构成任何投资建议。加密货币交易存在高风险，请谨慎决策。'
-          : 'Data provided is for informational purposes only and does not constitute investment advice. Cryptocurrency trading involves significant risk.'}
+        {t('footerDisclaimerText')}
       </p>
     </footer>
   )
