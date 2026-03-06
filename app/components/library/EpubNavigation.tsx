@@ -32,7 +32,6 @@ const HIGHLIGHT_COLORS = [
 interface EpubSearchPanelProps {
   show: boolean
   onClose: () => void
-  isZh: boolean
   panelBg: string
   panelText: string
   panelBorder: string
@@ -47,7 +46,7 @@ interface EpubSearchPanelProps {
 }
 
 export function EpubSearchPanel({
-  show, onClose, isZh,
+  show, onClose,
   panelBg, panelText, panelBorder, panelSubtle, accent,
   searchQuery, onSearchQueryChange, onSearch, searching, searchResults, onJumpTo,
 }: EpubSearchPanelProps) {
@@ -122,7 +121,6 @@ export function EpubSearchPanel({
 interface EpubNotesPanelProps {
   show: boolean
   onClose: () => void
-  isZh: boolean
   panelBg: string
   panelText: string
   panelBorder: string
@@ -145,7 +143,7 @@ interface EpubNotesPanelProps {
 }
 
 export function EpubNotesPanel({
-  show, onClose, isZh,
+  show, onClose, _isZh,
   panelBg, panelText, panelBorder, panelSubtle, accent,
   highlights, highlightSort, highlightFilter, filteredHighlights,
   editingNoteIdx, editNoteText,
@@ -371,7 +369,7 @@ function formatDur(seconds: number, isZh: boolean): string {
 }
 
 export function EpubStatsPanel({
-  show, onClose, isZh,
+  show, onClose, _isZh,
   panelBg, panelText, panelBorder, panelSubtle,
   accent, progressPercent, currentPage, totalPages,
   sessionElapsedSec, totalSessionTime, sessionsCount, timeRemainingStr,

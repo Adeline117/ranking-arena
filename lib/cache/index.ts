@@ -438,9 +438,7 @@ export async function getOrSetWithLock<T>(
           return data
         } finally {
           // 释放锁
-          await redis.del(lockKey).catch(() => {
-            // 忽略锁释放失败
-          })
+          await redis.del(lockKey).catch(() => {}) // eslint-disable-line no-restricted-syntax -- lock release, non-critical
         }
       }
 

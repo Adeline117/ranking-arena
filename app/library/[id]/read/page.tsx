@@ -268,7 +268,7 @@ export default function ReadPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { language, t } = useLanguage()
-  const isZh = language === 'zh'
+  const isZh = language === 'zh' // kept for EpubReader prop and locale-dependent text indent
   const { isFeaturesUnlocked: isPremium, isLoading: premiumLoading } = usePremium()
 
   // Book data
@@ -355,7 +355,7 @@ export default function ReadPage() {
   useEffect(() => {
     if (!id) return
     setLoading(true)
-    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user))
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user)).catch(() => { /* Auth check non-critical for reader */ })
 
     fetch(`/api/library/${id}`)
       .then(r => r.json())
@@ -382,7 +382,7 @@ export default function ReadPage() {
     } else {
       setNeedsUpgrade(false)
     }
-  }, [isPremium, premiumLoading, book]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [isPremium, premiumLoading, book])
 
   // Bookshelf prompt after 2 min
   useEffect(() => {
@@ -1105,7 +1105,6 @@ export default function ReadPage() {
           fontFamily={fontFamily}
           lineHeight={lineHeight}
           contentMode={contentMode}
-          isZh={isZh}
           onThemeChange={setTheme}
           onFontSizeChange={setFontSize}
           onFontFamilyChange={setFontFamily}

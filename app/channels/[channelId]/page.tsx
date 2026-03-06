@@ -73,7 +73,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
 
   useEffect(() => {
     if (params && typeof params === 'object' && 'then' in params) {
-      (params as Promise<{ channelId: string }>).then(r => setChannelId(r.channelId))
+      (params as Promise<{ channelId: string }>).then(r => setChannelId(r.channelId)).catch(() => { /* params resolution should not fail */ })
     }
   }, [params])
 
@@ -100,7 +100,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     } finally {
       setLoading(false)
     }
-  }, [channelId, accessToken, showToast, router])
+  }, [channelId, accessToken, showToast, router]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   useEffect(() => { loadChannel() }, [loadChannel])
 
