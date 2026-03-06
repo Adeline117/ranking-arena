@@ -3839,6 +3839,226 @@ proStartingPrice: 'Starting at $4.99/mo',
 proViewPlans: 'View Plans',
 proFreeNow: 'Free Now',
 
+// LiveTradesFeed
+tradeJustNow: 'now',
+tradeSecondsAgo: 's ago',
+tradeMinutesAgo: 'm ago',
+tradeCountSuffix: '',
+tradeExchange: 'Exchange',
+tradePair: 'Pair',
+tradeSide: 'Side',
+tradePrice: 'Price',
+tradeQty: 'Qty',
+tradeValue: 'Value',
+tradeTime: 'Time',
+tradePaused: 'Paused',
+
+// ProfileBookshelf status labels
+bookshelfStatusReading: 'Reading',
+
+// ProfileActivityFeed book status
+profileActivityWantsToRead: 'wants to read',
+profileActivityIsReading: 'is reading',
+profileActivityFinishedReading: 'finished reading',
+profileActivityRated: 'rated',
+
+// Following feed
+followingFeedLoginPrompt: 'Login to see your following feed',
+followingFeedLoginButton: 'Login',
+followingFeedNoFollowing: "You haven't followed anyone yet",
+followingFeedDiscoverTraders: 'Discover interesting traders on the leaderboard',
+followingFeedViewRankings: 'View Rankings',
+followingFeedNoPosts: 'No posts from people you follow yet',
+
+// Hot discussions tags
+hotDiscussionsTagHot: 'Hot',
+hotDiscussionsTagRising: 'Rising',
+hotDiscussionsTagActive: 'Active',
+
+// Guest signup prompt
+guestSignupTitle: 'Join Arena',
+guestSignupSubtitle: 'Sign up free to unlock more features',
+guestSignupFeature1: 'Follow traders and track their moves',
+guestSignupFeature2: 'Join communities to discuss strategies',
+guestSignupFeature3: 'Access the Library and learning resources',
+guestSignupButton: 'Sign Up Free',
+guestSignupDismiss: 'Maybe later',
+
+// News flash labels
+newsFlash_imp_breaking: 'Breaking',
+newsFlash_imp_important: 'Important',
+newsFlash_cat_btc_eth: 'BTC/ETH',
+newsFlash_cat_altcoin: 'Altcoins',
+newsFlash_cat_defi: 'DeFi',
+newsFlash_cat_macro: 'Macro/Regulation',
+newsFlash_cat_exchange: 'Exchanges',
+newsFlash_cat_crypto: 'BTC/ETH',
+newsFlash_cat_regulation: 'Macro/Regulation',
+newsFlash_cat_market: 'Altcoins',
+
+// Arbitrage
+arbitrageOppsCount: '{n} opps',
+arbitrageCoinsCount: '{n} coins',
+arbitrageEquilibrium: 'Market in Equilibrium',
+arbitrageNoOpps: 'No significant arbitrage opportunities',
+
+// Hot page tags
+hotPageTagBoom: 'BOOM',
+hotPageTagHot: 'HOT',
+hotPageTagNew: 'NEW',
+
+// Sub nav
+subNavContentCategories: 'Content categories',
+subNavFollowing: 'Following',
+subNavHot: 'Hot',
+subNavLibrary: 'Library',
+subNavHotSub: 'Trending posts',
+
+// Founding member banner
+foundingMemberFirst200: 'First 200 only',
+
+// Share text templates
+shareTraderText: 'Found a top trader {name} on Arena, {period} ROI {roi}% {url}',
+sharePostText: '{title} - from Arena Community {url}',
+shareLibraryText: 'Recommended reading: "{title}" by {author} {url}',
+
+// BookshelfTab
+bookshelfLoginPrompt: 'Login to see your bookshelf',
+bookshelfLogin: 'Login',
+bookshelfAll: 'All',
+bookshelfWantToRead: 'Want to Read',
+bookshelfRead: 'Read',
+bookshelfExploreLibrary: 'Explore Library',
+bookshelfExploreDesc: '60,000+ books, papers & whitepapers await',
+bookshelfBrowseNow: 'Browse Now',
+bookshelfStatusRead: 'Read',
+bookshelfStatusWantToRead: 'Want to Read',
+bookshelfBrowse: 'Browse',
+
+// Relative time
+longAgo: 'long ago',
+
+// ResourcesClient (results count)
+resourcesResultsCount: '{count} results',
+
+// Bots rankings page
+botsTitle: 'Web3 Bot Rankings',
+botsSubtitle: 'TG Bots / AI Agents / On-chain Vaults Rankings',
+botsBackToTraders: '< Trader Rankings',
+botsSearchPlaceholder: 'Search bots or tokens...',
+botsNoData: 'No bot data available',
+botsBot: 'Bot',
+botsUsers: 'Users',
+botsVolume: 'Volume',
+botsTotalCount: '{count} bots total',
+
+// Library i18n migration - EpubSettings font labels
+epubFontSans: 'Sans',
+epubFontSerif: 'Serif',
+epubFontMono: 'Mono',
+epubFontKai: 'Kai',
+
+// Library i18n migration - EpubSettings line height labels
+epubLineHeightCompact: 'Compact',
+epubLineHeightNormal: 'Normal',
+epubLineHeightRelaxed: 'Relaxed',
+
+// Library i18n migration - EpubSettings keyboard shortcuts
+epubShortcutsHelp: 'Keys: Arrows/Space nav | S search | N notes | I stats | T typography | Esc close',
+
+// Library i18n migration - Duration formatting suffixes
+durationSec: 's',
+durationMin: 'min',
+durationHour: 'h',
+durationMinSuffix: 'm',
+
+// Library i18n migration - AudioReader
+audioReading: 'Reading',
+audioVoice: 'Voice',
+audioVoiceAuto: 'Auto',
+audioVoiceChinese: 'Chinese',
+audioVoiceEnglish: 'English',
+audioVoiceOther: 'Other',
+audioSpeed: 'Speed',
+
+// RankingsSubNav
+rankingsSubNavAriaLabel: 'Rankings category navigation',
+rankingsSubNavTraders: 'Traders',
+rankingsSubNavResources: 'Resources',
+rankingsSubNavInstitutions: 'Institutions',
+rankingsSubNavTools: 'Tools',
+
+// WelcomeGuide steps
+welcomeGuideLeaderboardTitle: 'Leaderboard',
+welcomeGuideLeaderboardDesc: 'Top traders ranked by Arena Score, filterable by exchange and time range',
+welcomeGuideSearchTitle: 'Search Traders',
+welcomeGuideSearchDesc: 'Quickly find traders using the search bar at the top',
+welcomeGuideFollowTitle: 'Follow & Copy Trade',
+welcomeGuideFollowDesc: 'Follow traders you like and start copy trading on the exchange',
+welcomeGuideCommunityTitle: 'Community',
+welcomeGuideCommunityDesc: 'Join groups to discuss strategies with other traders',
+
+// MobileMarketTabs
+mobileMarketOverview: 'Overview',
+mobileMarketMovers: 'Movers',
+mobileMarketSectors: 'Sectors',
+mobileMarketWatchlist: 'Watchlist',
+
+// HomeSubNav
+homeSubNavAriaLabel: 'Category navigation',
+homeSubNavTraders: 'Traders',
+homeSubNavResources: 'Resources',
+homeSubNavInstitutions: 'Institutions',
+homeSubNavTools: 'Tools',
+
+// Bot detail page
+botNotFound: 'Bot not found',
+botBackToRankings: '← Back to Bot Rankings',
+botBreadcrumb: '← Bot Rankings',
+botWebsite: 'Website',
+botKeyMetrics90D: 'Key Metrics (90D)',
+botUsers: 'Users',
+botVolume: 'Volume',
+botRevenue: 'Revenue',
+botMaxDrawdown: 'Max Drawdown',
+botTokenPrice: 'Token Price',
+botMarketCap: 'Market Cap',
+botWindowComparison: 'Window Comparison',
+botWindowLabel: 'Window',
+botOnchainInfo: 'On-chain Info',
+botContractLabel: 'Contract: ',
+botTokenLabel: 'Token: ',
+
+// Portfolio page
+portfolioPageTitle: 'Portfolio',
+portfolioConnectExchange: 'Connect Exchange',
+portfolioConnectedExchanges: 'Connected Exchanges',
+portfolioAddFailed: 'Failed to add exchange',
+portfolioConnectSuccess: 'Exchange connected successfully',
+portfolioSyncFailed: 'Sync failed, please try again',
+portfolioSyncSuccess: 'Synced successfully',
+portfolioNetworkError: 'Network error',
+portfolioRemoveExchange: 'Remove Exchange',
+portfolioRemoveConfirm: 'Are you sure you want to remove this exchange connection? Related position data will also be cleared.',
+portfolioRemoveFailed: 'Remove failed',
+portfolioRemoved: 'Removed',
+portfolioSyncing: 'Syncing...',
+portfolioSync: 'Sync',
+portfolioRemove: 'Remove',
+
+// AddToCollectionButton
+collectionLoginFirst: 'Please login first',
+collectionAddedSuccess: 'Added to collection',
+collectionAlreadyIn: 'Already in collection',
+collectionAddFailed: 'Failed to add',
+collectionSaveTo: 'Save to...',
+collectionChoose: 'Choose collection',
+collectionLoading: 'Loading...',
+collectionEmpty: 'No collections',
+
+// Hot page translated badge
+hotTranslatedBadge: 'TR',
+
 } as const
 
 export default en

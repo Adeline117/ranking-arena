@@ -3846,6 +3846,226 @@ proStartingPrice: '低至 $4.99/月',
 proViewPlans: '查看方案',
 proFreeNow: '限时免费',
 
+// LiveTradesFeed (实时交易流)
+tradeJustNow: '刚刚',
+tradeSecondsAgo: '秒前',
+tradeMinutesAgo: '分前',
+tradeCountSuffix: '笔',
+tradeExchange: '交易所',
+tradePair: '交易对',
+tradeSide: '方向',
+tradePrice: '价格',
+tradeQty: '数量',
+tradeValue: '价值',
+tradeTime: '时间',
+tradePaused: '已暂停',
+
+// ProfileBookshelf status labels (书架状态)
+bookshelfStatusReading: '在读',
+
+// ProfileActivityFeed book status (个人动态 - 书籍状态)
+profileActivityWantsToRead: '想读',
+profileActivityIsReading: '在读',
+profileActivityFinishedReading: '读过',
+profileActivityRated: '评价了',
+
+// Following feed (关注动态)
+followingFeedLoginPrompt: '登录后查看关注动态',
+followingFeedLoginButton: '去登录',
+followingFeedNoFollowing: '关注你感兴趣的交易员',
+followingFeedDiscoverTraders: '去排行榜发现有趣的交易员吧',
+followingFeedViewRankings: '去看排行榜',
+followingFeedNoPosts: '关注的人还没有发布内容',
+
+// Hot discussions tags (热门讨论标签)
+hotDiscussionsTagHot: '热门',
+hotDiscussionsTagRising: '升温',
+hotDiscussionsTagActive: '讨论',
+
+// Guest signup prompt (访客注册提示)
+guestSignupTitle: '加入 Arena',
+guestSignupSubtitle: '免费注册，解锁更多功能',
+guestSignupFeature1: '关注交易员，追踪实时动态',
+guestSignupFeature2: '加入社区，与高手交流策略',
+guestSignupFeature3: '访问专属图书馆和学习资源',
+guestSignupButton: '免费注册',
+guestSignupDismiss: '稍后再说',
+
+// News flash labels (快讯标签)
+newsFlash_imp_breaking: '突发',
+newsFlash_imp_important: '重要',
+newsFlash_cat_btc_eth: 'BTC/ETH',
+newsFlash_cat_altcoin: '山寨币',
+newsFlash_cat_defi: 'DeFi',
+newsFlash_cat_macro: '宏观/监管',
+newsFlash_cat_exchange: '交易所',
+newsFlash_cat_crypto: 'BTC/ETH',
+newsFlash_cat_regulation: '宏观/监管',
+newsFlash_cat_market: '山寨币',
+
+// Arbitrage (套利)
+arbitrageOppsCount: '{n}个机会',
+arbitrageCoinsCount: '{n}个币种',
+arbitrageEquilibrium: '市场均衡中',
+arbitrageNoOpps: '暂无显著套利机会',
+
+// Hot page tags (热榜标签)
+hotPageTagBoom: '沸',
+hotPageTagHot: '热',
+hotPageTagNew: '新',
+
+// Sub nav (子导航)
+subNavContentCategories: '内容分类',
+subNavFollowing: '关注',
+subNavHot: '热榜',
+subNavLibrary: '书架',
+subNavHotSub: '全站热门帖子',
+
+// Founding member banner (创始会员横幅)
+foundingMemberFirst200: '前 200 名专属',
+
+// Share text templates (分享文案模板)
+shareTraderText: '在Arena发现了一位表现优异的交易员 {name}，{period} ROI {roi}% {url}',
+sharePostText: '{title} - 来自Arena社区 {url}',
+shareLibraryText: '推荐阅读《{title}》by {author} {url}',
+
+// BookshelfTab (书架)
+bookshelfLoginPrompt: '登录后查看你的书架',
+bookshelfLogin: '去登录',
+bookshelfAll: '全部',
+bookshelfWantToRead: '想读',
+bookshelfRead: '已读',
+bookshelfExploreLibrary: '探索书城',
+bookshelfExploreDesc: '60,000+ 本书籍、论文、白皮书等你发现',
+bookshelfBrowseNow: '立即探索',
+bookshelfStatusRead: '已读',
+bookshelfStatusWantToRead: '想读',
+bookshelfBrowse: '去书城',
+
+// Relative time (相对时间)
+longAgo: '很久以前',
+
+// ResourcesClient (资源结果计数)
+resourcesResultsCount: '{count} 个结果',
+
+// Bots rankings page (机器人排行榜)
+botsTitle: 'Web3 机器人排行榜',
+botsSubtitle: 'TG交易Bot / AI Agent / 链上金库 综合排名',
+botsBackToTraders: '< 交易员排行榜',
+botsSearchPlaceholder: '搜索机器人名称或代币...',
+botsNoData: '暂无机器人数据',
+botsBot: '机器人',
+botsUsers: '用户',
+botsVolume: '交易量',
+botsTotalCount: '共 {count} 个机器人',
+
+// Library i18n migration - EpubSettings font labels
+epubFontSans: '黑体',
+epubFontSerif: '宋体',
+epubFontMono: '等宽',
+epubFontKai: '楷体',
+
+// Library i18n migration - EpubSettings line height labels
+epubLineHeightCompact: '紧凑',
+epubLineHeightNormal: '标准',
+epubLineHeightRelaxed: '宽松',
+
+// Library i18n migration - EpubSettings keyboard shortcuts
+epubShortcutsHelp: '快捷键: 方向键/空格 翻页 | S 搜索 | N 笔记 | I 统计 | T 排版 | Esc 关闭',
+
+// Library i18n migration - Duration formatting suffixes
+durationSec: '秒',
+durationMin: '分钟',
+durationHour: '小时',
+durationMinSuffix: '分钟',
+
+// Library i18n migration - AudioReader
+audioReading: '朗读中',
+audioVoice: '语音',
+audioVoiceAuto: '自动选择',
+audioVoiceChinese: '中文',
+audioVoiceEnglish: '英文',
+audioVoiceOther: '其他',
+audioSpeed: '速度',
+
+// RankingsSubNav
+rankingsSubNavAriaLabel: '排名分类导航',
+rankingsSubNavTraders: '交易员',
+rankingsSubNavResources: '资料',
+rankingsSubNavInstitutions: '机构',
+rankingsSubNavTools: '工具',
+
+// WelcomeGuide steps
+welcomeGuideLeaderboardTitle: '排行榜',
+welcomeGuideLeaderboardDesc: '按 Arena Score 排名的顶级交易员，支持按交易所、时间范围筛选',
+welcomeGuideSearchTitle: '搜索交易员',
+welcomeGuideSearchDesc: '使用顶部搜索栏快速查找交易员，支持按名称或代号搜索',
+welcomeGuideFollowTitle: '关注与跟单',
+welcomeGuideFollowDesc: '关注心仪的交易员，跳转至交易所开始跟单',
+welcomeGuideCommunityTitle: '社区讨论',
+welcomeGuideCommunityDesc: '加入小组，与其他交易者讨论策略和经验',
+
+// MobileMarketTabs
+mobileMarketOverview: '概览',
+mobileMarketMovers: '涨跌',
+mobileMarketSectors: '板块',
+mobileMarketWatchlist: '自选',
+
+// HomeSubNav
+homeSubNavAriaLabel: '分类导航',
+homeSubNavTraders: '交易员',
+homeSubNavResources: '资料',
+homeSubNavInstitutions: '机构',
+homeSubNavTools: '工具',
+
+// Bot detail page (机器人详情页)
+botNotFound: '未找到机器人',
+botBackToRankings: '← 返回机器人排行榜',
+botBreadcrumb: '← 机器人排行榜',
+botWebsite: '官网',
+botKeyMetrics90D: '关键指标 (90D)',
+botUsers: '用户',
+botVolume: '交易量',
+botRevenue: '手续费收入',
+botMaxDrawdown: '最大回撤',
+botTokenPrice: '代币价格',
+botMarketCap: '市值',
+botWindowComparison: '时间窗口对比',
+botWindowLabel: '窗口',
+botOnchainInfo: '链上信息',
+botContractLabel: '合约地址: ',
+botTokenLabel: '代币地址: ',
+
+// Portfolio page (投资组合)
+portfolioPageTitle: '投资组合',
+portfolioConnectExchange: '连接交易所',
+portfolioConnectedExchanges: '已连接交易所',
+portfolioAddFailed: '添加交易所失败',
+portfolioConnectSuccess: '交易所连接成功',
+portfolioSyncFailed: '同步失败，请稍后重试',
+portfolioSyncSuccess: '同步成功',
+portfolioNetworkError: '网络错误',
+portfolioRemoveExchange: '移除交易所',
+portfolioRemoveConfirm: '确定要移除此交易所连接吗？相关仓位数据也会被清除。',
+portfolioRemoveFailed: '移除失败',
+portfolioRemoved: '已移除',
+portfolioSyncing: '同步中...',
+portfolioSync: '同步',
+portfolioRemove: '移除',
+
+// AddToCollectionButton (收藏按钮)
+collectionLoginFirst: '请先登录',
+collectionAddedSuccess: '已添加到收藏夹',
+collectionAlreadyIn: '已在收藏夹中',
+collectionAddFailed: '添加失败',
+collectionSaveTo: '收藏到...',
+collectionChoose: '选择收藏夹',
+collectionLoading: '加载中...',
+collectionEmpty: '暂无收藏夹',
+
+// Hot page translated badge (热榜翻译标记)
+hotTranslatedBadge: '译',
+
 } as const
 
 export default zh

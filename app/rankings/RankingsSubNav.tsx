@@ -5,28 +5,27 @@ import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-const TABS = [
-  { href: '/', labelZh: '交易员', labelEn: 'Traders' },
-  { href: '/rankings/resources', labelZh: '资料', labelEn: 'Resources' },
-  { href: '/rankings/institutions', labelZh: '机构', labelEn: 'Institutions' },
-  { href: '/rankings/tools', labelZh: '工具', labelEn: 'Tools' },
+const TAB_KEYS = [
+  { href: '/', key: 'rankingsSubNavTraders' as const },
+  { href: '/rankings/resources', key: 'rankingsSubNavResources' as const },
+  { href: '/rankings/institutions', key: 'rankingsSubNavInstitutions' as const },
+  { href: '/rankings/tools', key: 'rankingsSubNavTools' as const },
 ]
 
 export default function RankingsSubNav() {
   const pathname = usePathname()
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
   return (
     <nav
-      aria-label={isZh ? '排名分类导航' : 'Rankings category navigation'}
+      aria-label={t('rankingsSubNavAriaLabel')}
       style={{
         display: 'flex',
         gap: tokens.spacing[1],
         marginTop: 4,
       }}
     >
-      {TABS.map((tab) => {
+      {TAB_KEYS.map((tab) => {
         const isActive = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
         return (
           <Link
@@ -44,7 +43,7 @@ export default function RankingsSubNav() {
               transition: `all ${tokens.transition.fast}`,
             }}
           >
-            {isZh ? tab.labelZh : tab.labelEn}
+            {t(tab.key)}
           </Link>
         )
       })}

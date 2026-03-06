@@ -79,8 +79,7 @@ const fetcher = async (url: string) => {
 }
 
 export default function TopTraders() {
-  const { language, t } = useLanguage()
-  const _isZh = language === 'zh'
+  const { t } = useLanguage()
 
   const { data, error, isLoading } = useSWR<{ traders: Trader[] }>(
     '/api/sidebar/top-traders',
