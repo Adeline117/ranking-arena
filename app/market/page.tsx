@@ -89,6 +89,7 @@ function MobileMoversTab() {
 function MobileSectorsTab() {
   const [sectors, setSectors] = useState<{ name: string; change: number }[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
 
   useEffect(() => {
     const CATEGORY_MAP: Record<string, string> = {
@@ -116,11 +117,15 @@ function MobileSectorsTab() {
           .sort((a, b) => b.change - a.change)
         setSectors(result)
       })
-      .catch(err => console.warn('[MarketPage] fetch failed', err))
+      .catch(err => {
+        console.warn('[MarketPage] fetch failed', err)
+        setFetchError(true)
+      })
       .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>加载中...</div>
+  if (fetchError) return <div style={{ padding: 20, textAlign: 'center', color: tokens.colors.text.tertiary }}>加载失败</div>
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 16px' }}>

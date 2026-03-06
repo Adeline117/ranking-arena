@@ -20,7 +20,7 @@ _No critical issues currently_
 ## 🟠 P1 - High Priority
 
 ### Infrastructure
-- [ ] Run pipeline_logs migration on Supabase production
+- [x] Run pipeline_logs migration on Supabase production (verified present)
 - [ ] Set up Telegram bot + chat ID for alerts
 - [ ] Configure OpenClaw skills on Mac Mini
 
@@ -33,11 +33,15 @@ _No critical issues currently_
 - [x] Add more filter options to leaderboard (min_roi, min_pnl, min_win_rate, max_drawdown, min_score)
 
 ### UI/UX
-- [ ] Loading skeleton improvements
+- [x] Loading skeleton improvements (already comprehensive — 30+ page skeletons, shimmer animation, DataStateWrapper)
 - [ ] Mobile pull-to-refresh consistency
 
+### Observability
+- [x] Correlation ID system (AsyncLocalStorage + middleware + auto-inject into logs)
+- [x] Structured JSON logging in production (for Vercel Logs / log aggregation)
+
 ### Developer Experience
-- [ ] Add API documentation (OpenAPI spec)
+- [ ] Add API documentation (OpenAPI spec) — 295 routes, consider auto-generation
 
 ---
 
@@ -91,6 +95,11 @@ _Move items here when done, then archive weekly_
 - [x] HTX enrichment module (equity curve + stats detail from profitList)
 - [x] Restored 18 files incorrectly deleted + reinstalled 4 npm packages
 - [x] Fix broken TypeScript build (missing modules from cleanup commit)
+- [x] Correlation ID tracing (AsyncLocalStorage + middleware X-Correlation-ID header)
+- [x] Structured JSON logging in production
+- [x] Logger auto-injects correlation ID into every log line
+- [x] Loading skeletons verified comprehensive (30+ page skeletons)
+- [x] pipeline_logs migration verified in Supabase production
 
 ---
 
