@@ -1,6 +1,6 @@
 /**
  * Cron: Precompute composite rankings and store in Redis
- * Schedule: Every 2 hours (0 */2 * * *)
+ * Schedule: Every 2 hours
  *
  * Composite = weighted average of 7D/30D/90D arena_score:
  *   7D×0.20 + 30D×0.45 + 90D×0.35
