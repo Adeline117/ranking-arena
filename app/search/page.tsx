@@ -49,8 +49,7 @@ function clearSearchHistory() {
 function SearchContent() {
   const searchParams = useSearchParams()
   const _router = useRouter()
-  const { t: _t, language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const query = searchParams.get('q') || ''
   const activeTab = searchParams.get('tab') || 'all'
   const [loading, setLoading] = useState(false)
@@ -191,16 +190,16 @@ function SearchContent() {
             type: 'post' as const,
             id: p.id,
             title: p.title,
-            subtitle: p.subtitle ? `${isZh ? '作者' : 'by'}: ${p.subtitle}` : undefined,
+            subtitle: p.subtitle ? `${t('searchPostBy')}: ${p.subtitle}` : undefined,
           })))
 
           // Traders
           setTraderTotal(data.results.traders.length)
-          setTraderResults(data.results.traders.map(t => ({
+          setTraderResults(data.results.traders.map(tr => ({
             type: 'trader' as const,
-            id: t.href.replace('/trader/', ''),
-            title: t.title,
-            subtitle: t.subtitle || undefined,
+            id: tr.href.replace('/trader/', ''),
+            title: tr.title,
+            subtitle: tr.subtitle || undefined,
           })))
 
           // Groups
@@ -210,7 +209,7 @@ function SearchContent() {
             type: 'group' as const,
             id: g.id,
             title: g.title,
-            subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString()} ${isZh ? '成员' : 'members'}` : undefined,
+            subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString()} ${t('members')}` : undefined,
             meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
           })))
         } else {
@@ -227,7 +226,7 @@ function SearchContent() {
         if (error instanceof Error && error.name === 'AbortError') return
         logger.error('Search error:', error)
         setSearchError(true)
-        showToast(isZh ? '搜索失败' : 'Search failed', 'error')
+        showToast(t('searchFailedToast'), 'error')
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false)
@@ -242,7 +241,7 @@ function SearchContent() {
         abortControllerRef.current.abort()
       }
     }
-  }, [query, isZh, showToast])
+  }, [query, t, showToast])
 
   const getHref = (result: SearchResult) => {
     if (result.type === 'library') return `/library/${result.id}`
@@ -306,7 +305,7 @@ function SearchContent() {
                 textDecoration: 'none', fontWeight: 500,
               }}
             >
-              {isZh ? '查看全部' : 'View all'}
+              {t('searchViewAll')}
             </Link>
           )}
         </div>
@@ -368,7 +367,7 @@ function SearchContent() {
         pointerEvents: 'none', zIndex: 0,
       }} />
       <TopNav email={email} />
-      <h1 className="sr-only">{t('search')}</h1>
+      <h1 className="sr-only">{t('searchResults')}</h1>
 
       <main style={{
         maxWidth: 900, margin: '0 auto',
@@ -381,7 +380,7 @@ function SearchContent() {
             fontSize: 13, color: tokens.colors.text.tertiary,
             padding: '16px 0 8px', fontWeight: 500,
           }}>
-            {isZh ? '搜索结果' : 'Search results'}: <span style={{ color: tokens.colors.text.primary, fontWeight: 600 }}>&quot;{query}&quot;</span>
+            {t('searchResults')}: <span style={{ color: tokens.colors.text.primary, fontWeight: 600 }}>&quot;{query}&quot;</span>
           </div>
         )}
 
@@ -391,15 +390,16 @@ function SearchContent() {
             display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap',
           }}>
             {[
-              { key: 'all', label: isZh ? '全部' : 'All', count: libTotal + groupTotal + postTotal + traderTotal },
-              { key: 'traders', label: isZh ? '交易员' : 'Traders', count: traderTotal },
-              { key: 'posts', label: isZh ? '帖子' : 'Posts', count: postTotal },
-              { key: 'library', label: isZh ? '书库' : 'Library', count: libTotal },
-              { key: 'groups', label: isZh ? '小组' : 'Groups', count: groupTotal },
+              { key: 'all', label: t('searchTabAll'), count: libTotal + groupTotal + postTotal + traderTotal },
+              { key: 'traders', label: t('traders'), count: traderTotal },
+              { key: 'posts', label: t('searchTabPosts'), count: postTotal },
+              { key: 'library', label: t('library'), count: libTotal },
+              { key: 'groups', label: t('groups'), count: groupTotal },
             ].filter(tab => tab.key === 'all' || tab.count > 0).map(tab => (
               <Link
                 key={tab.key}
                 href={`/search?q=${encodeURIComponent(query)}${tab.key !== 'all' ? `&tab=${tab.key}` : ''}`}
+                className="touch-target"
                 style={{
                   padding: '6px 16px', borderRadius: tokens.radius.full,
                   background: activeTab === tab.key ? 'var(--color-accent-primary-15, var(--color-accent-primary-15))' : tokens.colors.bg.secondary,
@@ -446,10 +446,10 @@ function SearchContent() {
               </svg>
             </div>
             <div style={{ fontSize: 17, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 6 }}>
-              {isZh ? '搜索出错' : 'Search failed'}
+              {t('searchErrorTitle')}
             </div>
             <div style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-              {isZh ? '请稍后再试' : 'Please try again later'}
+              {t('searchTryAgainLater')}
             </div>
           </div>
         ) : !query ? (
@@ -465,10 +465,10 @@ function SearchContent() {
               </svg>
             </div>
             <div style={{ fontSize: 20, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 8 }}>
-              {isZh ? '搜索' : 'Search'}
+              {t('search')}
             </div>
             <div style={{ fontSize: 14, color: tokens.colors.text.tertiary, maxWidth: 340, margin: '0 auto 32px' }}>
-              {isZh ? '搜索书库、小组、帖子、交易员...' : 'Search library, groups, posts, traders...'}
+              {t('searchPrompt')}
             </div>
 
             {/* Search history */}
@@ -479,7 +479,7 @@ function SearchContent() {
                     fontSize: 11, fontWeight: 600, color: tokens.colors.text.secondary,
                     textTransform: 'uppercase', letterSpacing: '0.06em',
                   }}>
-                    {isZh ? '搜索历史' : 'Recent searches'}
+                    {t('searchRecentSearches')}
                   </div>
                   <button
                     onClick={() => { clearSearchHistory(); setSearchHistory([]) }}
@@ -488,7 +488,7 @@ function SearchContent() {
                       border: 'none', cursor: 'pointer', padding: '2px 6px',
                     }}
                   >
-                    {isZh ? '清除' : 'Clear'}
+                    {t('searchClearHistory')}
                   </button>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -526,7 +526,7 @@ function SearchContent() {
                 fontSize: 11, fontWeight: 600, color: tokens.colors.text.secondary,
                 textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10,
               }}>
-                {isZh ? '热门搜索' : 'Popular searches'}
+                {t('searchPopularSearches')}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {trendingSearches.map(term => (
@@ -569,25 +569,25 @@ function SearchContent() {
               </svg>
             </div>
             <div style={{ fontSize: 17, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 6 }}>
-              {isZh ? '未找到结果' : 'No results'}
+              {t('searchNoResultsTitle')}
             </div>
             <div style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 24 }}>
-              {isZh ? `未找到与"${query}"相关的内容` : `No results for "${query}"`}
+              {t('searchNoResultsFor').replace('{query}', query)}
             </div>
             <div style={{ maxWidth: 360, margin: '0 auto', textAlign: 'left' }}>
               <div style={{ fontSize: 12, color: tokens.colors.text.secondary, marginBottom: 10, fontWeight: 600 }}>
-                {isZh ? '建议' : 'Suggestions'}:
+                {t('searchSuggestions')}:
               </div>
               <ul style={{ fontSize: 13, color: tokens.colors.text.tertiary, lineHeight: 2, paddingLeft: 18, margin: 0 }}>
-                <li>{isZh ? '检查是否有拼写错误' : 'Check for typos'}</li>
-                <li>{isZh ? '尝试使用更短或更通用的关键词' : 'Try shorter or more general keywords'}</li>
-                <li>{isZh ? '尝试使用交易员的handle或平台名称搜索' : 'Try searching by trader handle or platform name'}</li>
+                <li>{t('searchCheckTypos')}</li>
+                <li>{t('searchTryShorterKeywords')}</li>
+                <li>{t('searchTryTraderHandle')}</li>
               </ul>
             </div>
             {searchHistory.length > 0 && (
               <div style={{ marginTop: 24 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: tokens.colors.text.secondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-                  {isZh ? '最近搜索' : 'Recent searches'}
+                  {t('searchRecentSearches')}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
                   {searchHistory.slice(0, 5).map(term => (
@@ -611,22 +611,22 @@ function SearchContent() {
             gap: 16, marginTop: 16,
           }}>
             {(activeTab === 'all' || activeTab === 'library') && renderSection(
-              isZh ? '书库' : 'Library',
+              t('library'),
               libraryResults, libTotal, 'library',
               'L', tokens.colors.accent.brand, tokens.colors.accent.brandMuted || 'var(--color-accent-primary-15)',
             )}
             {(activeTab === 'all' || activeTab === 'groups') && renderSection(
-              isZh ? '小组' : 'Groups',
+              t('groups'),
               groupResults, groupTotal, 'groups',
               'G', tokens.colors.accent.warning || 'var(--color-score-average)', 'var(--color-orange-subtle)',
             )}
             {(activeTab === 'all' || activeTab === 'posts') && renderSection(
-              isZh ? '动态/帖子' : 'Posts',
+              t('searchPostsSection'),
               postResults, postTotal, 'posts',
               'P', tokens.colors.accent.primary, tokens.gradient.primarySubtle || 'var(--color-indigo-subtle)',
             )}
             {(activeTab === 'all' || activeTab === 'traders') && renderSection(
-              isZh ? '交易员' : 'Traders',
+              t('traders'),
               traderResults, traderTotal, 'traders',
               'T', tokens.colors.accent.success || 'var(--color-score-great)', 'var(--color-accent-success-12)',
             )}
