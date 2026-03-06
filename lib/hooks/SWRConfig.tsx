@@ -45,6 +45,7 @@ export function SWRConfigProvider({ children }: { children: ReactNode }) {
           
           if (process.env.NODE_ENV === 'production') {
             logger.error('SWR Error:', { key, error })
+            // eslint-disable-next-line no-restricted-syntax -- Intentional: dynamic import, failure is non-critical
             import('@sentry/nextjs').then((Sentry) => {
               Sentry.captureException(error, {
                 tags: { source: 'swr', swr_key: String(key) },
