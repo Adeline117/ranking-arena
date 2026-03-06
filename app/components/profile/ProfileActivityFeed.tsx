@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { t as tModule } from '@/lib/i18n'
+import { formatTimeAgo } from '@/lib/utils/date'
 import { logger } from '@/lib/logger'
 
 type ActivityItem = {
@@ -22,18 +22,6 @@ const ICONS: Record<string, string> = {
   join_group: '●',
 }
 
-function formatRelativeTime(ts: string): string {
-  const diff = Date.now() - new Date(ts).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return tModule('justNow')
-  if (mins < 60) return `${mins}${tModule('profileActivityMinutesAgo')}`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}${tModule('profileActivityHoursAgo')}`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}${tModule('profileActivityDaysAgo')}`
-  const months = Math.floor(days / 30)
-  return `${months}${tModule('profileActivityMonthsAgo')}`
-}
 
 const BOOK_STATUS_I18N: Record<string, string> = {
   want_to_read: 'profileActivityWantsToRead',
@@ -107,7 +95,7 @@ function ActivityDescription({ item }: { item: ActivityItem }) {
 }
 
 export default function ProfileActivityFeed({ handle }: { handle: string }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -186,7 +174,7 @@ export default function ProfileActivityFeed({ handle }: { handle: string }) {
             <Box style={{ flex: 1, minWidth: 0 }}>
               <ActivityDescription item={item} />
               <Text size="xs" color="tertiary" style={{ marginTop: 3 }}>
-                {formatRelativeTime(item.timestamp)}
+                {formatTimeAgo(item.timestamp, language)}
               </Text>
             </Box>
           </Box>

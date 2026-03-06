@@ -213,7 +213,7 @@ export class BinanceFuturesConnector extends BaseConnector {
         platform: this.platform,
         market_type: this.marketType,
         trader_key: entry.encryptedUid,
-        display_name: entry.nickName,
+        display_name: entry.nickName ?? null,
         profile_url: `https://www.binance.com/en/futures-activity/leaderboard/user?encryptedUid=${entry.encryptedUid}`,
         discovered_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString(),
@@ -249,12 +249,12 @@ export class BinanceFuturesConnector extends BaseConnector {
       platform: this.platform,
       market_type: this.marketType,
       trader_key: traderKey,
-      display_name: data.nickName,
-      avatar_url: data.userPhotoUrl,
-      bio: data.introduction,
+      display_name: data.nickName ?? null,
+      avatar_url: data.userPhotoUrl ?? null,
+      bio: data.introduction ?? null,
       tags: [],
       profile_url: `https://www.binance.com/en/futures-activity/leaderboard/user?encryptedUid=${traderKey}`,
-      followers: data.followerCount,
+      followers: data.followerCount ?? null,
       copiers: null,  // Not directly available from base info
       aum: null,
       updated_at: new Date().toISOString(),
@@ -302,8 +302,8 @@ export class BinanceFuturesConnector extends BaseConnector {
       return null
     }
 
-    const roi = roiEntry ? roiEntry.value * 100 : null  // Convert to percentage
-    const pnl = pnlEntry ? pnlEntry.value : null
+    const roi = roiEntry?.value != null ? roiEntry.value * 100 : null  // Convert to percentage
+    const pnl = pnlEntry?.value ?? null
 
     // Calculate Arena Score if we have enough data
     let arenaScore = null
@@ -375,7 +375,7 @@ export class BinanceFuturesConnector extends BaseConnector {
     const roiPoints: TimeseriesPoint[] = []
 
     for (const entry of perfResponse.data) {
-      if (entry.statisticsType === 'ROI') {
+      if (entry.statisticsType === 'ROI' && entry.periodType && entry.value != null) {
         const window = this.mapPlatformToWindow(entry.periodType)
         if (window) {
           roiPoints.push({
@@ -427,7 +427,7 @@ export class BinanceFuturesConnector extends BaseConnector {
   /**
    * Fetch current positions for a trader (if shared).
    */
-  async fetchPositions(traderKey: string): Promise<BinancePositionResponse['data'] | null> {
+  async fetchPositions(traderKey: string): Promise<Record<string, unknown> | null> {
     const _rawPos = await this.request<BinancePositionResponse>(
       `${this.BASE_URL}/v1/public/future/leaderboard/getOtherPosition`,
       {

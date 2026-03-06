@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import StarRating from '@/app/components/ui/StarRating'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type Review = {
   id: string
@@ -13,32 +14,32 @@ type Review = {
   users: { id: string; nickname: string | null; avatar_url: string | null } | null
 }
 
-function formatRelativeTime(dateStr: string, isZh: boolean): string {
-  const now = Date.now()
-  const diff = now - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return isZh ? '刚刚' : 'just now'
-  if (mins < 60) return isZh ? `${mins}分钟前` : `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return isZh ? `${hours}小时前` : `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return isZh ? `${days}天前` : `${days}d ago`
-  const months = Math.floor(days / 30)
-  if (months < 12) return isZh ? `${months}个月前` : `${months}mo ago`
-  return new Date(dateStr).toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-}
-
 interface BookReviewsProps {
   reviews: Review[]
   bookId: string
   bookTitle: string
-  isZh: boolean
   hasSession: boolean
   hasMoreReviews: boolean
   onLoadMore: () => void
 }
 
-export default function BookReviews({ reviews, bookId, bookTitle, isZh, hasSession, hasMoreReviews, onLoadMore }: BookReviewsProps) {
+export default function BookReviews({ reviews, bookId, bookTitle, hasSession, hasMoreReviews, onLoadMore }: BookReviewsProps) {
+  const { t, language } = useLanguage()
+
+  function formatRelativeTime(dateStr: string): string {
+    const now = Date.now()
+    const diff = now - new Date(dateStr).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return t('justNow')
+    if (mins < 60) return t('minutesAgoShort').replace('{n}', String(mins))
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return t('hoursAgoShort').replace('{n}', String(hours))
+    const days = Math.floor(hours / 24)
+    if (days < 30) return t('daysAgoShort').replace('{n}', String(days))
+    const months = Math.floor(days / 30)
+    if (months < 12) return t('bookMonthsAgoShort').replace('{n}', String(months))
+    return new Date(dateStr).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  }
   if (reviews.length === 0) return null
 
   return (
@@ -53,7 +54,7 @@ export default function BookReviews({ reviews, bookId, bookTitle, isZh, hasSessi
               borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.accent.brand}`,
             }}
           >
-            Write Review
+            {t('bookReviewWriteReview')}
           </Link>
         </div>
       )}
@@ -83,12 +84,12 @@ export default function BookReviews({ reviews, bookId, bookTitle, isZh, hasSessi
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary }}>
-                    {(r.users as Record<string, unknown> | null)?.nickname as string || 'Anonymous'}
+                    {(r.users as Record<string, unknown> | null)?.nickname as string || t('bookReviewAnonymous')}
                   </span>
                   {r.rating && <StarRating rating={r.rating} size={13} readonly showCount={false} />}
                 </div>
                 <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2, display: 'block' }}>
-                  {formatRelativeTime(r.created_at, isZh)}
+                  {formatRelativeTime(r.created_at)}
                 </span>
               </div>
             </div>
@@ -110,7 +111,7 @@ export default function BookReviews({ reviews, bookId, bookTitle, isZh, hasSessi
             transition: `all ${tokens.transition.fast}`,
           }}
         >
-          Load more
+          {t('bookReviewLoadMore')}
         </button>
       )}
     </>

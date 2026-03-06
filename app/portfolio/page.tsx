@@ -45,8 +45,7 @@ export default function PortfolioPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
-  const { language, t } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
@@ -112,9 +111,9 @@ export default function PortfolioPage() {
     })
     if (!res.ok) {
       const json = await res.json()
-      throw new Error(json.error || (isZh ? '添加交易所失败' : 'Failed to add exchange'))
+      throw new Error(json.error || (t('portfolioAddFailed')))
     }
-    showToast(isZh ? '交易所连接成功' : 'Exchange connected successfully', 'success')
+    showToast(t('portfolioConnectSuccess'), 'success')
     await loadPortfolios()
   }
 
@@ -128,13 +127,13 @@ export default function PortfolioPage() {
         body: JSON.stringify({ portfolio_id: portfolioId }),
       })
       if (!res.ok) {
-        showToast(isZh ? '同步失败，请稍后重试' : 'Sync failed, please try again', 'error')
+        showToast(t('portfolioSyncFailed'), 'error')
         return
       }
       await loadPositions()
-      showToast(isZh ? '同步成功' : 'Synced successfully', 'success')
+      showToast(t('portfolioSyncSuccess'), 'success')
     } catch {
-      showToast(isZh ? '网络错误' : 'Network error', 'error')
+      showToast(t('portfolioNetworkError'), 'error')
     } finally {
       setSyncingId(null)
     }
@@ -143,8 +142,8 @@ export default function PortfolioPage() {
   const handleDelete = async (portfolioId: string) => {
     if (!token || deletingId) return
     const confirmed = await showConfirm(
-      isZh ? '移除交易所' : 'Remove Exchange',
-      isZh ? '确定要移除此交易所连接吗？相关仓位数据也会被清除。' : 'Are you sure you want to remove this exchange connection? Related position data will also be cleared.'
+      t('portfolioRemoveExchange'),
+      t('portfolioRemoveConfirm')
     )
     if (!confirmed) return
     setDeletingId(portfolioId)
@@ -154,13 +153,13 @@ export default function PortfolioPage() {
         headers: fetchHeaders(),
       })
       if (!res.ok) {
-        showToast(isZh ? '移除失败' : 'Remove failed', 'error')
+        showToast(t('portfolioRemoveFailed'), 'error')
         return
       }
       await Promise.all([loadPortfolios(), loadPositions()])
-      showToast(isZh ? '已移除' : 'Removed', 'success')
+      showToast(t('portfolioRemoved'), 'success')
     } catch {
-      showToast(isZh ? '网络错误' : 'Network error', 'error')
+      showToast(t('portfolioNetworkError'), 'error')
     } finally {
       setDeletingId(null)
     }
@@ -177,9 +176,9 @@ export default function PortfolioPage() {
       <div style={styles.page}>
         <div style={styles.container}>
           <div style={styles.header}>
-            <h1 style={styles.title}>{isZh ? '投资组合' : 'Portfolio'}</h1>
+            <h1 style={styles.title}>{t('portfolioTitle')}</h1>
             <button style={styles.addBtn} onClick={() => setShowAddModal(true)}>
-              + {isZh ? '连接交易所' : 'Connect Exchange'}
+              + {t('portfolioConnectExchange')}
             </button>
           </div>
 
@@ -194,7 +193,7 @@ export default function PortfolioPage() {
           {/* Connected exchanges */}
           {portfolios.length > 0 && (
             <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>{isZh ? '已连接交易所' : 'Connected Exchanges'}</h2>
+              <h2 style={styles.sectionTitle}>{t('portfolioConnectedExchanges')}</h2>
               <div style={styles.exchangeList}>
                 {portfolios.map(p => (
                   <div key={p.id} style={styles.exchangeCard}>
@@ -208,10 +207,10 @@ export default function PortfolioPage() {
                     </div>
                     <div style={styles.exchangeActions}>
                       <button style={{ ...styles.syncBtn, opacity: syncingId === p.id ? 0.6 : 1 }} onClick={() => handleSync(p.id)} disabled={!!syncingId}>
-                        {syncingId === p.id ? (isZh ? '同步中...' : 'Syncing...') : (isZh ? '同步' : 'Sync')}
+                        {syncingId === p.id ? t('portfolioSyncing') : t('portfolioSync')}
                       </button>
                       <button style={{ ...styles.deleteBtn, opacity: deletingId === p.id ? 0.6 : 1 }} onClick={() => handleDelete(p.id)} disabled={!!deletingId}>
-                        {deletingId === p.id ? '...' : (isZh ? '移除' : 'Remove')}
+                        {deletingId === p.id ? '...' : t('portfolioRemove')}
                       </button>
                     </div>
                   </div>

@@ -66,7 +66,7 @@ export function EpubToolbar({
         {t('epubSessionLabel')}{formatDur(elapsed)}
       </span>
       <span>
-        {isZh ? '预计剩余 ' : 'Remaining: '}{timeRemainingStr}
+        {t('epubRemainingLabel')}{timeRemainingStr}
       </span>
       <button
         onClick={onToggleAudio}
@@ -78,7 +78,7 @@ export function EpubToolbar({
           cursor: 'pointer', transition: 'all 0.15s',
         }}
       >
-        {isZh ? '朗读模式' : 'Audio'}
+        {t('epubAudioModeLabel')}
       </button>
     </div>
   )

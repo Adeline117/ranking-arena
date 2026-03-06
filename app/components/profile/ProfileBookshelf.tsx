@@ -18,9 +18,10 @@ type ShelfItem = {
   user_rating: number | null
 }
 
-const STATUS_LABELS = {
-  zh: { want_to_read: '想读', reading: '在读', read: '读过' },
-  en: { want_to_read: 'Want to Read', reading: 'Reading', read: 'Read' },
+const STATUS_I18N_KEYS: Record<string, string> = {
+  want_to_read: 'bookshelfStatusWantToRead',
+  reading: 'bookshelfStatusReading',
+  read: 'bookshelfStatusRead',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,8 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function ProfileBookshelf({ handle, expanded }: { handle: string; expanded?: boolean }) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const [items, setItems] = useState<ShelfItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'want_to_read' | 'reading' | 'read'>('all')
@@ -55,7 +55,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
     return (
       <Box bg="secondary" p={4} radius="lg" border="primary">
         <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
-          {isZh ? '书架' : 'Bookshelf'}
+          {t('bookshelfSectionTitle')}
         </Text>
         <Box style={{ display: 'grid', gridTemplateColumns: expanded ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(3, 1fr)', gap: tokens.spacing[3] }}>
           {[1, 2, 3].map(i => (
@@ -73,9 +73,9 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
     return (
       <Box bg="secondary" p={4} radius="lg" border="primary">
         <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-          {isZh ? '书架' : 'Bookshelf'}
+          {t('bookshelfSectionTitle')}
         </Text>
-        <Text size="sm" color="tertiary">{isZh ? '还没有添加书籍' : 'No books yet'}</Text>
+        <Text size="sm" color="tertiary">{t('bookshelfNoBooks')}</Text>
       </Box>
     )
   }
@@ -86,16 +86,16 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
     <Box bg="secondary" p={4} radius="lg" border="primary">
       {/* Header */}
       <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[3] }}>
-        <Text size="lg" weight="black">{isZh ? '书架' : 'Bookshelf'}</Text>
-        <Text size="xs" color="tertiary">{items.length} {isZh ? '本' : 'books'}</Text>
+        <Text size="lg" weight="black">{t('bookshelfSectionTitle')}</Text>
+        <Text size="xs" color="tertiary">{items.length} {t('bookshelfBooksCount')}</Text>
       </Box>
 
       {/* Status filter tabs */}
       <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
         {(['all', 'want_to_read', 'reading', 'read'] as const).map(status => {
           const label = status === 'all'
-            ? (isZh ? '全部' : 'All')
-            : (STATUS_LABELS[isZh ? 'zh' : 'en'] as Record<string, string>)[status]
+            ? t('bookshelfAll')
+            : t(STATUS_I18N_KEYS[status] as any)
           const count = status === 'all' ? items.length : counts[status]
           return (
             <button
@@ -161,7 +161,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
                   boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                 }}>
                   <Text style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-on-accent)', letterSpacing: '0.02em' }}>
-                    {(STATUS_LABELS[isZh ? 'zh' : 'en'] as Record<string, string>)[book.status]}
+                    {t(STATUS_I18N_KEYS[book.status] as any)}
                   </Text>
                 </Box>
               </Box>
@@ -190,7 +190,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
             textDecoration: 'none',
             fontWeight: 600,
           }}>
-            {isZh ? '查看全部' : 'View all'} →
+            {t('bookshelfViewAllLink')} →
           </Link>
         </Box>
       )}

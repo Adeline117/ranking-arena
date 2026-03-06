@@ -8,7 +8,6 @@
 import { useRef, useState, useEffect, useCallback, memo } from 'react'
 import { useMarketFeed } from '@/lib/hooks/useMarketFeed'
 import { tokens } from '@/lib/design-tokens'
-import { t } from '@/lib/i18n'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { NormalizedTrade, ExchangeId } from '@/lib/ws/exchange-feeds'
 
@@ -225,7 +224,7 @@ export default function LiveTradesFeed() {
               borderRadius: 3,
               background: tokens.colors.bg.tertiary,
             }}>
-              {filteredTrades.length}{isZh ? '笔' : ''}
+              {filteredTrades.length}{t('tradeCountSuffix')}
             </span>
           )}
         </div>
@@ -271,13 +270,13 @@ export default function LiveTradesFeed() {
         fontWeight: 600,
         letterSpacing: '0.3px',
       }}>
-        <span>{isZh ? '交易所' : 'Exchange'}</span>
-        <span>{isZh ? '交易对' : 'Pair'}</span>
-        <span>{isZh ? '方向' : 'Side'}</span>
-        <span style={{ textAlign: 'right' }}>{isZh ? '价格' : 'Price'}</span>
-        <span style={{ textAlign: 'right' }}>{isZh ? '数量' : 'Qty'}</span>
-        <span style={{ textAlign: 'right' }}>{isZh ? '价值' : 'Value'}</span>
-        <span style={{ textAlign: 'right' }}>{isZh ? '时间' : 'Time'}</span>
+        <span>{t('tradeExchange')}</span>
+        <span>{t('tradePair')}</span>
+        <span>{t('tradeSide')}</span>
+        <span style={{ textAlign: 'right' }}>{t('tradePrice')}</span>
+        <span style={{ textAlign: 'right' }}>{t('tradeQty')}</span>
+        <span style={{ textAlign: 'right' }}>{t('tradeValue')}</span>
+        <span style={{ textAlign: 'right' }}>{t('tradeTime')}</span>
       </div>
 
       {/* Trade list */}
@@ -328,7 +327,7 @@ export default function LiveTradesFeed() {
             {t('waitingForData') || '等待交易数据...'}
           </div>
         ) : (
-          filteredTrades.map((trade, i) => <TradeRow key={trade.id} trade={trade} index={i} isZh={isZh} />)
+          filteredTrades.map((trade, i) => <TradeRow key={trade.id} trade={trade} index={i} />)
         )}
       </div>
 
@@ -345,7 +344,7 @@ export default function LiveTradesFeed() {
           borderRadius: 3,
           background: 'var(--color-orange-subtle)',
         }}>
-          {isZh ? '已暂停' : 'Paused'}
+          {t('tradePaused')}
         </div>
       )}
     </div>

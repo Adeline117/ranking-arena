@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase/client'
 import { EpubToolbar } from './EpubToolbar'
 import { EpubSettings } from './EpubSettings'
 import { EpubSearchPanel, EpubNotesPanel, EpubStatsPanel, type EpubHighlight } from './EpubNavigation'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { t as moduleT } from '@/lib/i18n'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -56,7 +58,6 @@ type HighlightFilterColor = string | 'all'
 export type EpubReaderProps = {
   url: string
   bookId: string
-  isZh: boolean
   theme: ReadingTheme
   fontSize: FontSize
   fontFamily: FontFamily
@@ -167,20 +168,24 @@ async function syncReadingStatsToServer(bookId: string, stats: ReadingStats) {
   } catch { /* empty */ }
 }
 
-function formatDuration(seconds: number, isZh: boolean): string {
-  if (seconds < 60) return isZh ? `${seconds}秒` : `${seconds}s`
+function formatDuration(seconds: number): string {
+  const sec = moduleT('durationSec')
+  const min = moduleT('durationMin')
+  const hour = moduleT('durationHour')
+  const minSuffix = moduleT('durationMinSuffix')
+  if (seconds < 60) return `${seconds}${sec}`
   const m = Math.floor(seconds / 60)
-  if (m < 60) return isZh ? `${m}分钟` : `${m}min`
+  if (m < 60) return `${m}${min}`
   const h = Math.floor(m / 60)
   const rm = m % 60
-  return isZh ? `${h}小时${rm > 0 ? rm + '分钟' : ''}` : `${h}h ${rm > 0 ? rm + 'm' : ''}`
+  return `${h}${hour}${rm > 0 ? ` ${rm}${minSuffix}` : ''}`
 }
 
-function estimateTimeRemaining(percent: number, elapsedSec: number, isZh: boolean): string {
-  if (percent <= 0 || elapsedSec < 30) return isZh ? '计算中...' : 'Calculating...'
+function estimateTimeRemaining(percent: number, elapsedSec: number): string {
+  if (percent <= 0 || elapsedSec < 30) return moduleT('epubCalculating')
   const totalEstimate = elapsedSec / (percent / 100)
   const remaining = Math.max(0, totalEstimate - elapsedSec)
-  return formatDuration(Math.round(remaining), isZh)
+  return formatDuration(Math.round(remaining))
 }
 
 // ─── Component ───────────────────────────────────────────────────────
@@ -188,7 +193,6 @@ function estimateTimeRemaining(percent: number, elapsedSec: number, isZh: boolea
 export default function EpubReader({
   url,
   bookId,
-  isZh,
   theme,
   fontSize,
   fontFamily,
@@ -200,6 +204,7 @@ export default function EpubReader({
   lineHeight = 'normal',
   pageMargin = 'normal',
 }: EpubReaderProps) {
+  const { t } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const bookRef = useRef<Book | null>(null)
   const renditionRef = useRef<Rendition | null>(null)
@@ -688,7 +693,7 @@ export default function EpubReader({
   const panelSubtle = themeIsDark ? 'var(--overlay-hover)' : 'var(--overlay-hover)'
   const accent = 'var(--color-accent-primary, #6366f1)'
   const totalSessionTime = readingStats.totalReadingTimeSec + sessionElapsedSec
-  const timeRemainingStr = estimateTimeRemaining(progressPercent, totalSessionTime, isZh)
+  const timeRemainingStr = estimateTimeRemaining(progressPercent, totalSessionTime)
 
   // ─── Render ────────────────────────────────────────────────────
   return (
@@ -719,7 +724,7 @@ export default function EpubReader({
             animation: 'epubSpin 0.8s linear infinite',
           }} />
           <span style={{ fontSize: 13, color: panelText, opacity: 0.5 }}>
-            {isZh ? '正在加载...' : 'Loading...'}
+            {t('epubLoading')}
           </span>
         </div>
       )}
@@ -728,7 +733,6 @@ export default function EpubReader({
       {showAudioReader && currentPageText && (
         <AudioReader
           text={currentPageText}
-          isZh={isZh}
           themeIsDark={themeIsDark}
           onClose={() => setShowAudioReader(false)}
         />
@@ -741,7 +745,6 @@ export default function EpubReader({
         currentPage={currentPage}
         totalPages={totalPages}
         sessionElapsedSec={sessionElapsedSec}
-        isZh={isZh}
         showAudioReader={showAudioReader}
         themeIsDark={themeIsDark}
         panelBorder={panelBorder}
@@ -756,14 +759,14 @@ export default function EpubReader({
           <div onClick={() => { setShowNoteInput(false); setPendingHighlight(null) }}
             role="presentation"
             style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-          <div role="dialog" aria-modal="true" aria-label={isZh ? '添加高亮和笔记' : 'Add Highlight & Note'} style={{
+          <div role="dialog" aria-modal="true" aria-label={t('epubAddHighlight')} style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             background: panelBg, color: panelText, borderRadius: 16, padding: '24px 28px',
             width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: '0 12px 40px var(--color-overlay-medium)',
             border: `1px solid ${panelBorder}`,
           }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
-              {isZh ? '添加高亮和笔记' : 'Add Highlight & Note'}
+              {t('epubAddHighlight')}
             </h3>
             <p style={{
               fontSize: 13, lineHeight: 1.6, marginBottom: 12, padding: '8px 12px',
@@ -786,7 +789,7 @@ export default function EpubReader({
             <textarea
               value={noteText}
               onChange={e => setNoteText(e.target.value)}
-              placeholder={isZh ? '添加笔记（可选）...' : 'Add a note (optional)...'}
+              placeholder={t('epubAddNotePlaceholder')}
               style={{
                 width: '100%', minHeight: 72, padding: '10px 12px', borderRadius: 8,
                 border: `1px solid ${panelBorder}`, background: panelSubtle,
@@ -798,14 +801,14 @@ export default function EpubReader({
                 padding: '8px 18px', borderRadius: 8, border: `1px solid ${panelBorder}`,
                 background: 'transparent', color: panelText, cursor: 'pointer', fontSize: 13,
               }}>
-                {isZh ? '取消' : 'Cancel'}
+                {t('epubCancel')}
               </button>
               <button onClick={confirmHighlight} style={{
                 padding: '8px 18px', borderRadius: 8, border: 'none',
                 background: accent, color: 'var(--foreground)',
                 cursor: 'pointer', fontSize: 13, fontWeight: 600,
               }}>
-                {isZh ? '保存' : 'Save'}
+                {t('epubSave')}
               </button>
             </div>
           </div>
@@ -833,7 +836,6 @@ export default function EpubReader({
       <EpubNotesPanel
         show={showNotes}
         onClose={() => setShowNotes(false)}
-        isZh={isZh}
         panelBg={panelBg}
         panelText={panelText}
         panelBorder={panelBorder}
@@ -859,7 +861,6 @@ export default function EpubReader({
       <EpubStatsPanel
         show={showStats}
         onClose={() => setShowStats(false)}
-        isZh={isZh}
         panelBg={panelBg}
         panelText={panelText}
         panelBorder={panelBorder}
@@ -878,7 +879,6 @@ export default function EpubReader({
       <EpubSettings
         show={showTypography}
         onClose={() => setShowTypography(false)}
-        isZh={isZh}
         panelBg={panelBg}
         panelText={panelText}
         panelBorder={panelBorder}

@@ -3862,6 +3862,12 @@ profileActivityIsReading: 'is reading',
 profileActivityFinishedReading: 'finished reading',
 profileActivityRated: 'rated',
 
+// ProfileActivityFeed relative time
+profileActivityMinutesAgo: 'm ago',
+profileActivityHoursAgo: 'h ago',
+profileActivityDaysAgo: 'd ago',
+profileActivityMonthsAgo: 'mo ago',
+
 // Following feed
 followingFeedLoginPrompt: 'Login to see your following feed',
 followingFeedLoginButton: 'Login',
@@ -4198,8 +4204,6 @@ instNoRatingsYet: 'No ratings yet',
 
 // Library i18n migration - remaining isZh patterns
 audioReaderTitle: 'Audio Reader',
-epubSessionLabel: 'Session: ',
-epubRemainingLabel: 'Remaining: ',
 epubAudioModeLabel: 'Audio',
 epubHighlightsCountSuffix: '',
 epubNoHighlightsMessage: 'No highlights yet.\nSelect text to add.',

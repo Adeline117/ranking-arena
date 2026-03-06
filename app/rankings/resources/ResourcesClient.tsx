@@ -57,10 +57,10 @@ const PaperIcon = () => (
   </svg>
 )
 
-function libItemToEntry(item: LibraryItem, isZh: boolean) {
+function libItemToEntry(item: LibraryItem, lang: string) {
   return {
     id: item.id,
-    name: isZh ? (item.title_zh || item.title) : (item.title_en || item.title),
+    name: lang === 'zh' ? (item.title_zh || item.title) : (item.title_en || item.title),
     rating: item.rating ?? null,
     logoUrl: item.cover_url,
     href: `/library/${item.id}`,
@@ -104,7 +104,6 @@ export default function ResourcesClient({
   // preventing a double-fetch when infinite scroll / load-more increments the page.
   const pageRef = useRef(page)
   useEffect(() => { pageRef.current = page }, [page])
-  const isZh = language === 'zh'
 
   // Detect mobile
   useEffect(() => {
@@ -219,19 +218,19 @@ export default function ResourcesClient({
           {
             title: t('top10Books'),
             icon: <BookIcon />,
-            entries: topBooks.map(item => libItemToEntry(item, isZh)),
+            entries: topBooks.map(item => libItemToEntry(item, language)),
             emptyText: t('comingSoon'),
           },
           {
             title: t('top10Papers'),
             icon: <PaperIcon />,
-            entries: topPapers.map(item => libItemToEntry(item, isZh)),
+            entries: topPapers.map(item => libItemToEntry(item, language)),
             emptyText: t('comingSoon'),
           },
           {
             title: t('top10Whitepapers'),
             icon: <PaperIcon />,
-            entries: recentItems.map(item => libItemToEntry(item, isZh)),
+            entries: recentItems.map(item => libItemToEntry(item, language)),
             emptyText: t('comingSoon'),
           },
         ]} />
@@ -374,7 +373,7 @@ export default function ResourcesClient({
                       />
                     </div>
                     <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', lineHeight: 1.35, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
-                      {isZh ? (item.title_zh || item.title) : (item.title_en || item.title)}
+                      {language === 'zh' ? (item.title_zh || item.title) : (item.title_en || item.title)}
                     </p>
                     {item.author && <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', margin: '4px 0 0' }}>{item.author}</p>}
                     {(item.rating != null && item.rating > 0) && (
@@ -421,7 +420,7 @@ export default function ResourcesClient({
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(180px, 45%), 1fr))', gap: 20 }}>
             {items.map((item, idx) => (
-              <BookCard key={item.id} item={item} isZh={isZh} priority={idx < 6} />
+              <BookCard key={item.id} item={item} priority={idx < 6} />
             ))}
           </div>
         )}

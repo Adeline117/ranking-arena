@@ -142,27 +142,21 @@ export const BybitFuturesTimeseriesResponseSchema = z.object({
 
 export const OkxFuturesLeaderboardResponseSchema = z.object({
   code: optStr,
-  data: z.union([
-    z.object({
-      ranks: z.array(z.object({
-        uniqueName: optStr,
-        nickName: optStr,
-        portrait: optStr,
-        profitRatio: optNum,
-        profit: optNum,
-        winRatio: optNum,
-        maxDrawdown: optNum,
-        copyTraderNum: optInt,
-        followerNum: optInt,
-        aum: optNum,
-      }).passthrough()).optional().default([]),
-      total: optInt,
-    }).passthrough(),
-    z.array(z.object({
+  data: z.object({
+    ranks: z.array(z.object({
       uniqueName: optStr,
       nickName: optStr,
-    }).passthrough()),
-  ]).optional().nullable(),
+      portrait: optStr,
+      profitRatio: optNum,
+      profit: optNum,
+      winRatio: optNum,
+      maxDrawdown: optNum,
+      copyTraderNum: optInt,
+      followerNum: optInt,
+      aum: optNum,
+    }).passthrough()).optional().default([]),
+    total: optInt,
+  }).passthrough().optional().nullable(),
 }).passthrough()
 
 export const OkxFuturesDetailResponseSchema = z.object({
@@ -193,27 +187,22 @@ export const OkxFuturesDetailResponseSchema = z.object({
 
 export const BitgetFuturesLeaderboardResponseSchema = z.object({
   code: optStr,
-  data: z.union([
-    z.object({
-      list: z.array(z.object({
-        traderId: optStr,
-        traderName: optStr,
-        headUrl: optStr,
-        roi: optNum,
-        profit: optNum,
-        winRate: optNum,
-        drawDown: optNum,
-        followerNum: optInt,
-        copyTraderNum: optInt,
-        totalOrder: optInt,
-        totalFollowAssets: optNum,
-      }).passthrough()).optional().default([]),
-      total: optInt,
-    }).passthrough(),
-    z.array(z.object({
+  data: z.object({
+    list: z.array(z.object({
       traderId: optStr,
-    }).passthrough()),
-  ]).optional().nullable(),
+      traderName: optStr,
+      headUrl: optStr,
+      roi: optNum,
+      profit: optNum,
+      winRate: optNum,
+      drawDown: optNum,
+      followerNum: optInt,
+      copyTraderNum: optInt,
+      totalOrder: optInt,
+      totalFollowAssets: optNum,
+    }).passthrough()).optional().default([]),
+    total: optInt,
+  }).passthrough().optional().nullable(),
 }).passthrough()
 
 export const BitgetFuturesDetailResponseSchema = z.object({
@@ -481,7 +470,7 @@ export const DydxSubaccountResponseSchema = z.object({
   subaccount: z.object({
     equity: optStr,
     freeCollateral: optStr,
-    openPerpetualPositions: z.record(z.unknown()).optional(),
+    openPerpetualPositions: z.record(z.string(), z.unknown()).optional(),
   }).passthrough().optional().nullable(),
 }).passthrough()
 
@@ -563,7 +552,7 @@ export const KwentaStatsResponseSchema = z.object({
   data: z.object({
     futuresStats: z.array(z.object({
       id: optStr,
-      account: optStr,
+      account: z.string(),
       pnl: optStr,
       pnlWithFeesPaid: optStr,
       totalVolume: optStr,
@@ -854,7 +843,7 @@ export const PionexFuturesDiscoverResponseSchema = z.object({
 export const MuxAccountsResponseSchema = z.object({
   data: z.object({
     accounts: z.array(z.object({
-      id: optStr,
+      id: z.string(),
       cumulativeVolumeUSD: optStr,
       cumulativePnlUSD: optStr,
       cumulativeFeeUSD: optStr,

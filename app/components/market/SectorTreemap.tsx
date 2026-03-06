@@ -128,8 +128,7 @@ function squarify(
 }
 
 export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (category: string) => void }) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const [timeframe, setTimeframe] = useState<TimeFrame>('24h')
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -201,9 +200,9 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
   const nodes = squarify(coinsWithPct, 0, 0, size.width, size.height)
 
   const timeframes: { key: TimeFrame; label: string }[] = [
-    { key: '1h', label: isZh ? '1小时' : '1H' },
-    { key: '24h', label: isZh ? '24小时' : '24H' },
-    { key: '7d', label: isZh ? '7天' : '7D' },
+    { key: '1h', label: t('sectorTreemap1h') },
+    { key: '24h', label: t('sectorTreemap24h') },
+    { key: '7d', label: t('sectorTreemap7d') },
   ]
 
   return (
@@ -216,7 +215,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
         marginBottom: 12,
       }}>
         <span style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.text.primary }}>
-          {isZh ? '板块热力图' : 'Sector Heatmap'}
+          {t('sectorTreemapTitle')}
         </span>
         <div style={{ display: 'flex', gap: 2, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.md, padding: 2 }}>
           {timeframes.map(tf => (
@@ -259,7 +258,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: tokens.colors.text.tertiary, fontSize: 14,
           }}>
-            加载中...
+            {t('sectorTreemapLoading')}
           </div>
         ) : nodes.map(node => {
           const isHovered = hoveredNode === node.name
@@ -363,7 +362,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
             whiteSpace: 'nowrap',
           }}>
             <strong>{node.name}</strong> / {node.category}<br />
-            {isZh ? '市值' : 'MCap'}: ${(node.marketCap / 1e9).toFixed(1)}B &middot; {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(2)}%
+            {t('sectorTreemapMCap')}: ${(node.marketCap / 1e9).toFixed(1)}B &middot; {node.changePct >= 0 ? '+' : ''}{node.changePct.toFixed(2)}%
           </div>
         )
       })()}
@@ -378,10 +377,10 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
         color: tokens.colors.text.tertiary,
       }}>
         {[
-          { label: isZh ? '大跌' : 'Big Drop', val: -8 },
-          { label: isZh ? '小跌' : 'Dip', val: -2 },
-          { label: isZh ? '小涨' : 'Rise', val: 2 },
-          { label: isZh ? '大涨' : 'Rally', val: 8 },
+          { label: t('sectorTreemapBigDrop'), val: -8 },
+          { label: t('sectorTreemapDip'), val: -2 },
+          { label: t('sectorTreemapRise'), val: 2 },
+          { label: t('sectorTreemapRally'), val: 8 },
         ].map(item => (
           <span key={item.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 12, height: 12, borderRadius: 2, background: getChangeColor(item.val, isLight) }} />

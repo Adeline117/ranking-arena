@@ -12,6 +12,12 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  MuxAccountsResponseSchema,
+  MuxAccountResponseSchema,
+  MuxPositionsResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -85,7 +91,7 @@ export class MuxPerpConnector extends BaseConnector {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables: { limit } }),
       })
-      const response =(, _rawLb, 'mux-perp/discover')
+      const response = warnValidate(MuxAccountsResponseSchema, _rawLb, 'mux-perp/discover')
 
       const accounts = response?.data?.accounts || []
       const traders: TraderSource[] = accounts.map((item) => ({
@@ -128,7 +134,7 @@ export class MuxPerpConnector extends BaseConnector {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables: { id: traderKey.toLowerCase() } }),
       })
-      const response =(, _rawProfile, 'mux-perp/profile')
+      const response = warnValidate(MuxAccountResponseSchema, _rawProfile, 'mux-perp/profile')
 
       const info = response?.data?.account
       if (!info) return null
@@ -217,8 +223,8 @@ export class MuxPerpConnector extends BaseConnector {
           body: JSON.stringify({ query: positionsQuery, variables: { account: traderKey.toLowerCase(), windowStart: String(windowStart) } }),
         }),
       ])
-      const accountResponse =(, _rawAccount, 'mux-perp/snapshot-account')
-      const positionsResponse =(, _rawPositions, 'mux-perp/snapshot-positions')
+      const accountResponse = warnValidate(MuxAccountResponseSchema, _rawAccount, 'mux-perp/snapshot-account')
+      const positionsResponse = warnValidate(MuxPositionsResponseSchema, _rawPositions, 'mux-perp/snapshot-positions')
 
       const info = accountResponse?.data?.account
       if (!info) {

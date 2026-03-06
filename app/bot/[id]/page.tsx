@@ -71,8 +71,7 @@ const CATEGORY_LABELS: Record<string, { zh: string; en: string }> = {
 }
 
 function BotDetailContent({ id }: { id: string }) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { language, t } = useLanguage()
   const { data, error, isLoading } = useBotDetail(id)
 
   if (isLoading) {
@@ -91,9 +90,9 @@ function BotDetailContent({ id }: { id: string }) {
       <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
         <TopNav email={null} />
         <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-          <h2 style={{ fontSize: tokens.typography.fontSize.xl }}>{isZh ? '机器人未找到' : 'Bot not found'}</h2>
+          <h2 style={{ fontSize: tokens.typography.fontSize.xl }}>{t('botNotFound')}</h2>
           <Link href="/rankings/bots" style={{ color: 'var(--color-accent-brand)', marginTop: 16, display: 'inline-block' }}>
-            {isZh ? '< 返回排行榜' : '< Back to Rankings'}
+            {t('botBackToRankings')}
           </Link>
         </div>
       </Box>
@@ -115,7 +114,7 @@ function BotDetailContent({ id }: { id: string }) {
           href="/rankings/bots"
           style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-accent-brand)', textDecoration: 'none', display: 'inline-block', marginBottom: tokens.spacing[4] }}
         >
-          {isZh ? '< 机器人排行榜' : '< Bot Rankings'}
+          {t('botBreadcrumb')}
         </Link>
 
         {/* Header */}
@@ -140,7 +139,7 @@ function BotDetailContent({ id }: { id: string }) {
                 background: 'var(--color-accent-brand-bg, rgba(99,102,241,0.15))',
                 color: 'var(--color-accent-brand)',
               }}>
-                {isZh ? catLabel.zh : catLabel.en}
+                {language === 'zh' ? catLabel.zh : catLabel.en}
               </span>
               {bot.chain && (
                 <span style={{
@@ -189,7 +188,7 @@ function BotDetailContent({ id }: { id: string }) {
                 background: 'var(--glass-bg-light)', border: `1px solid var(--color-border-primary)`,
                 color: 'var(--color-text-primary)', textDecoration: 'none',
               }}>
-              {isZh ? '官网' : 'Website'}
+              {t('botWebsite')}
             </a>
           )}
           {bot.twitter_handle && (
@@ -220,31 +219,31 @@ function BotDetailContent({ id }: { id: string }) {
         {snap && (
           <>
             <h2 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: 700, marginBottom: tokens.spacing[3] }}>
-              {isZh ? '核心指标 (90D)' : 'Key Metrics (90D)'}
+              {t('botKeyMetrics90D')}
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
               <StatCard label="TVL" value={formatLargeNumber(snap.tvl)} />
-              <StatCard label={isZh ? '用户数' : 'Users'} value={formatUsers(snap.unique_users)} />
+              <StatCard label={t('botUsers')} value={formatUsers(snap.unique_users)} />
               <StatCard
                 label="APY"
                 value={formatPercent(snap.apy)}
                 color={snap.apy != null && snap.apy > 0 ? 'var(--color-accent-success)' : undefined}
               />
-              <StatCard label={isZh ? '交易量' : 'Volume'} value={formatLargeNumber(snap.total_volume)} />
-              <StatCard label={isZh ? '手续费收入' : 'Revenue'} value={formatLargeNumber(snap.revenue)} />
+              <StatCard label={t('botVolume')} value={formatLargeNumber(snap.total_volume)} />
+              <StatCard label={t('botRevenue')} value={formatLargeNumber(snap.revenue)} />
               <StatCard
-                label={isZh ? '最大回撤' : 'Max Drawdown'}
+                label={t('botMaxDrawdown')}
                 value={snap.max_drawdown != null ? `-${Number(snap.max_drawdown).toFixed(1)}%` : '--'}
                 color={snap.max_drawdown != null ? 'var(--color-accent-error)' : undefined}
               />
               {snap.token_price != null && (
                 <StatCard
-                  label={isZh ? '代币价格' : 'Token Price'}
+                  label={t('botTokenPrice')}
                   value={`$${Number(snap.token_price).toFixed(4)}`}
                 />
               )}
               {snap.market_cap != null && (
-                <StatCard label={isZh ? '市值' : 'Market Cap'} value={formatLargeNumber(snap.market_cap)} />
+                <StatCard label={t('botMarketCap')} value={formatLargeNumber(snap.market_cap)} />
               )}
             </div>
           </>
@@ -254,7 +253,7 @@ function BotDetailContent({ id }: { id: string }) {
         {snapshots.length > 1 && (
           <>
             <h2 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: 700, marginBottom: tokens.spacing[3] }}>
-              {isZh ? '时间窗口对比' : 'Window Comparison'}
+              {t('botWindowComparison')}
             </h2>
             <div className="rounded-xl overflow-hidden mb-8" style={{
               background: 'var(--glass-bg-secondary, rgba(255,255,255,0.03))',
@@ -264,8 +263,8 @@ function BotDetailContent({ id }: { id: string }) {
                 color: 'var(--color-text-tertiary)', borderColor: 'var(--color-border-primary)',
                 textTransform: 'uppercase',
               }}>
-                <div>{isZh ? '窗口' : 'Window'}</div>
-                <div style={{ textAlign: 'right' }}>{isZh ? '交易量' : 'Volume'}</div>
+                <div>{t('botWindow')}</div>
+                <div style={{ textAlign: 'right' }}>{t('botVolume')}</div>
                 <div style={{ textAlign: 'right' }}>APY/ROI</div>
                 <div style={{ textAlign: 'right' }}>Score</div>
               </div>
@@ -298,7 +297,7 @@ function BotDetailContent({ id }: { id: string }) {
         {(bot.contract_address || bot.token_address) && (
           <>
             <h2 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: 700, marginBottom: tokens.spacing[3] }}>
-              {isZh ? '链上信息' : 'On-chain Info'}
+              {t('botOnChainInfo')}
             </h2>
             <div style={{
               padding: tokens.spacing[4], borderRadius: tokens.radius.lg,
@@ -307,13 +306,13 @@ function BotDetailContent({ id }: { id: string }) {
             }}>
               {bot.contract_address && (
                 <div style={{ marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{isZh ? '合约地址: ' : 'Contract: '}</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{t('botContractAddress')}</span>
                   <code style={{ fontSize: 12, color: 'var(--color-text-secondary)', wordBreak: 'break-all' }}>{bot.contract_address}</code>
                 </div>
               )}
               {bot.token_address && (
                 <div>
-                  <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{isZh ? '代币地址: ' : 'Token: '}</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{t('botTokenAddress')}</span>
                   <code style={{ fontSize: 12, color: 'var(--color-text-secondary)', wordBreak: 'break-all' }}>{bot.token_address}</code>
                 </div>
               )}
