@@ -9,15 +9,12 @@
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockFetchLeaderboardFromDB = jest.fn()
-const mockSetCachedLeaderboard = jest.fn()
-
 jest.mock('@/lib/getInitialTraders', () => ({
-  fetchLeaderboardFromDB: mockFetchLeaderboardFromDB,
+  fetchLeaderboardFromDB: jest.fn(),
 }))
 
 jest.mock('@/lib/cache/leaderboard-cache', () => ({
-  setCachedLeaderboard: mockSetCachedLeaderboard,
+  setCachedLeaderboard: jest.fn(),
 }))
 
 jest.mock('@/lib/services/pipeline-logger', () => ({
@@ -30,6 +27,11 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
+import { fetchLeaderboardFromDB } from '@/lib/getInitialTraders'
+import { setCachedLeaderboard } from '@/lib/cache/leaderboard-cache'
+
+const mockFetchLeaderboardFromDB = fetchLeaderboardFromDB as jest.MockedFunction<typeof fetchLeaderboardFromDB>
+const mockSetCachedLeaderboard = setCachedLeaderboard as jest.MockedFunction<typeof setCachedLeaderboard>
 
 // ---------------------------------------------------------------------------
 // Helpers

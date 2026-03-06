@@ -14,8 +14,8 @@ const eslintConfig = defineConfig([
       // ----------------------------------------
       // Disabled rules (legacy patterns)
       // ----------------------------------------
-      // This repo contains many pragmatic uses of `any` across UI + scripts.
-      "@typescript-eslint/no-explicit-any": "warn",
+      // Enforce strict typing - use proper types instead of `any`.
+      "@typescript-eslint/no-explicit-any": "error",
 
       // These rules are helpful, but currently too strict for the codebase patterns.
       "react-hooks/set-state-in-effect": "off",
@@ -35,8 +35,8 @@ const eslintConfig = defineConfig([
       // Encourage use of === over == (catches type coercion bugs)
       "eqeqeq": ["warn", "always", { "null": "ignore" }],
 
-      // Warn on console.log (should use logger utility)
-      "no-console": ["warn", { "allow": ["warn", "error"] }],
+      // Ban console.log (use logger utility)
+      "no-console": ["error", { "allow": ["warn", "error"] }],
 
       // Warn on unused variables (helps catch dead code)
       "@typescript-eslint/no-unused-vars": ["warn", {
@@ -45,8 +45,8 @@ const eslintConfig = defineConfig([
         "caughtErrorsIgnorePattern": "^_"
       }],
 
-      // Warn on empty catch blocks (should at least log)
-      "no-empty": ["warn", { "allowEmptyCatch": false }],
+      // Ban empty catch blocks (must at least log)
+      "no-empty": ["error", { "allowEmptyCatch": false }],
 
       // Encourage async/await error handling
       "no-async-promise-executor": "warn",

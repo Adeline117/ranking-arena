@@ -148,7 +148,9 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      expect(body.data?.following || body.following).toBe(false)
+      // withApiMiddleware wraps result as { success: true, data: { following: false } }
+      const following = body.data?.following ?? body.following
+      expect(following).toBe(false)
     })
 
     it('returns following: true when already following', async () => {
@@ -160,8 +162,8 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      // The handler returns { following: true } wrapped in middleware
-      expect(body.data?.following ?? body.following).toBe(true)
+      const following = body.data?.following ?? body.following
+      expect(following).toBe(true)
     })
   })
 
@@ -224,7 +226,8 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      expect(body.data?.following ?? body.following).toBe(true)
+      const followResult = body.data?.following ?? body.following
+      expect(followResult).toBe(true)
     })
 
     it('successfully unfollows a trader', async () => {
@@ -239,7 +242,8 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      expect(body.data?.following ?? body.following).toBe(false)
+      const unfollowResult = body.data?.following ?? body.following
+      expect(unfollowResult).toBe(false)
     })
   })
 })
