@@ -55,8 +55,8 @@ function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
       if (!config.exchange.some(ex => src === ex || src.startsWith(ex))) return false
     }
     // ROI range
-    if (config.roi_min != null && (trader.roi || 0) < config.roi_min) return false
-    if (config.roi_max != null && (trader.roi || 0) > config.roi_max) return false
+    if (config.roi_min != null && (trader.roi ?? 0) < config.roi_min) return false
+    if (config.roi_max != null && (trader.roi ?? 0) > config.roi_max) return false
     // Drawdown range
     if (config.drawdown_min != null && trader.max_drawdown != null && Math.abs(trader.max_drawdown) < config.drawdown_min) return false
     if (config.drawdown_max != null && trader.max_drawdown != null && Math.abs(trader.max_drawdown) > config.drawdown_max) return false

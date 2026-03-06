@@ -443,7 +443,7 @@ export async function getTraderPerformance(
         const data30d = snapshot30d.data
 
         return {
-          roi_90d: data90d?.roi || 0,
+          roi_90d: data90d?.roi ?? 0,
           roi_7d: data7d?.roi ?? undefined,
           roi_30d: data30d?.roi ?? undefined,
           pnl: data90d?.pnl ?? undefined,
