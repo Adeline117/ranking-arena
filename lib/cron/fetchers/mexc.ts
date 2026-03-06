@@ -4,9 +4,9 @@
  *
  * MEXC copy trading page: https://www.mexc.com/futures/copyTrade/home
  *
- * [WARN] CDN-BLOCKED: API behind Akamai CDN, returns empty from US IPs.
- * Endpoints: contract.mexc.com/api/v1/private/copyTrade/traderRank/list (primary)
- * May work from Vercel datacenter IPs — needs testing on deployment.
+ * Working endpoints (from lib/connectors/mexc.ts + platforms/mexc-futures.ts):
+ * 1. POST https://www.mexc.com/api/platform/copy-trade/rank/list (periodType: 1=7d, 2=30d, 3=90d)
+ * 2. GET https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -16,6 +16,7 @@ import {
   calculateArenaScore,
   upsertTraders,
   fetchJson,
+  fetchWithFallback,
   sleep,
   parseNum,
   normalizeWinRate,
@@ -69,10 +70,12 @@ interface MexcApiResponse {
   success?: boolean
   code?: number
   data?: {
-    list?: MexcTrader[]
+    resultList?: MexcTrader[]  // legacy endpoint: { code: 0, data: { resultList: [...] } }
+    list?: MexcTrader[]        // futures endpoint: { data: { list: [...] } }
     items?: MexcTrader[]
     traders?: MexcTrader[]
     rows?: MexcTrader[]
+    total?: number
     totalPage?: number
     totalCount?: number
   } | MexcTrader[]
@@ -83,7 +86,7 @@ interface MexcApiResponse {
 function extractList(data: MexcApiResponse): MexcTrader[] {
   if (!data?.data) return []
   if (Array.isArray(data.data)) return data.data
-  return data.data.list || data.data.items || data.data.traders || data.data.rows || []
+  return data.data.resultList || data.data.list || data.data.items || data.data.traders || data.data.rows || []
 }
 
 function parseTrader(item: MexcTrader, period: string): TraderData | null {
@@ -133,20 +136,16 @@ function parseTrader(item: MexcTrader, period: string): TraderData | null {
 
 /* ---------- fetching ---------- */
 
-const API_ENDPOINTS = [
-  // Primary — platform recommend API (used by scrape route, more reliable)
-  (page: number) =>
-    `https://www.mexc.com/api/platform/copy/v1/recommend/traders?pageNum=${page}&pageSize=${PAGE_SIZE}&sortType=ROI&days=90`,
-  // Fallback — traderRank endpoint with rankType
-  (page: number) =>
-    `https://contract.mexc.com/api/v1/private/copyTrade/traderRank/list?pageNo=${page}&pageSize=${PAGE_SIZE}&rankType=1`,
-  // Fallback — trader list
-  (page: number) =>
-    `https://contract.mexc.com/api/v1/private/copyTrade/trader/list?pageNo=${page}&pageSize=${PAGE_SIZE}&rankType=1`,
-  // Fallback 2 — pageTrader
-  (page: number) =>
-    `https://contract.mexc.com/api/v1/private/copyTrade/pageTrader?pageNo=${page}&pageSize=${PAGE_SIZE}`,
-]
+/**
+ * MEXC has two working API patterns (from lib/connectors/):
+ * 1. POST https://www.mexc.com/api/platform/copy-trade/rank/list
+ *    Body: { pageNum, pageSize, periodType: 1|2|3, sortField: "ROI" }
+ *    Response: { code: 0, data: { resultList: [...] } }
+ * 2. GET https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list
+ *    Query: page, pageSize, sortField=yield, sortType=DESC, timeType=1|2|3
+ *    Response: { data: { list: [...] } }
+ */
+const PERIOD_TYPE: Record<string, number> = { '7D': 1, '30D': 2, '90D': 3 }
 
 async function fetchPeriod(
   supabase: SupabaseClient,
@@ -154,24 +153,36 @@ async function fetchPeriod(
 ): Promise<{ total: number; saved: number; error?: string }> {
   const allTraders = new Map<string, MexcTrader>()
   let lastError = ''
+  const periodType = PERIOD_TYPE[period] ?? 3
 
-  for (const makeUrl of API_ENDPOINTS) {
-    if (allTraders.size >= TARGET) break
-
+  // Strategy 1: POST to legacy copy-trade rank/list endpoint
+  const tryLegacyApi = async () => {
     const maxPages = Math.ceil(TARGET / PAGE_SIZE)
     for (let page = 1; page <= maxPages; page++) {
       try {
-        const url = makeUrl(page)
-        const data = await fetchJson<MexcApiResponse>(url, { headers: HEADERS })
-
+        const url = 'https://www.mexc.com/api/platform/copy-trade/rank/list'
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: {
+            ...HEADERS,
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+          },
+          body: JSON.stringify({
+            pageNum: page,
+            pageSize: PAGE_SIZE,
+            periodType,
+            sortField: 'ROI',
+          }),
+        })
+        if (!resp.ok) throw new Error(`MEXC legacy API returned ${resp.status}`)
+        const data: MexcApiResponse = await resp.json()
         const list = extractList(data)
         if (list.length === 0) break
 
         for (const item of list) {
           const id = String(item.traderId || item.uid || item.id || item.userId || '')
-          if (id && !allTraders.has(id)) {
-            allTraders.set(id, item)
-          }
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
         }
 
         if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
@@ -181,8 +192,36 @@ async function fetchPeriod(
         break
       }
     }
+  }
 
-    if (allTraders.size > 0) break // found data from this endpoint, no need to try fallbacks
+  // Strategy 2: GET from futures.mexc.com copy-trading trader/list
+  const tryFuturesApi = async () => {
+    const maxPages = Math.ceil(TARGET / PAGE_SIZE)
+    for (let page = 1; page <= maxPages; page++) {
+      try {
+        const url = `https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/list?page=${page}&pageSize=${PAGE_SIZE}&sortField=yield&sortType=DESC&timeType=${periodType}`
+        const { data } = await fetchWithFallback<MexcApiResponse>(url, { headers: HEADERS, platform: SOURCE })
+        const list = extractList(data)
+        if (list.length === 0) break
+
+        for (const item of list) {
+          const id = String(item.traderId || item.uid || item.id || item.userId || '')
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
+        }
+
+        if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
+        await sleep(500)
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err)
+        break
+      }
+    }
+  }
+
+  // Try each strategy in order; stop at first success
+  await tryLegacyApi()
+  if (allTraders.size === 0) {
+    await tryFuturesApi()
   }
 
   if (allTraders.size === 0) {
