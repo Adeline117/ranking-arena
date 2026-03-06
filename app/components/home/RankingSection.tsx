@@ -9,7 +9,6 @@ import { useToast } from '../ui/Toast'
 import { RankingTable, type Trader } from '../ranking/RankingTable'
 
 import TimeRangeSelector from './TimeRangeSelector'
-import FoundingMemberBanner from './FoundingMemberBanner'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
@@ -581,8 +580,25 @@ export default function RankingSection({
           />
         </Box>
 
-        {/* 右侧: 操作按钮 */}
+        {/* 右侧: Pro 标签 + 操作按钮 */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
+          {BETA_PRO_FEATURES_FREE && (
+            <Box style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 10px',
+              borderRadius: tokens.radius.md,
+              background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
+              fontSize: 11,
+              color: 'var(--color-text-tertiary)',
+              whiteSpace: 'nowrap',
+            }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)' }}>Pro</span>
+              <span>{language === 'zh' ? '限时免费' : 'Free beta'}</span>
+            </Box>
+          )}
           {/* Copy Filter Link Button */}
           {!loading && (
             <button
@@ -646,27 +662,6 @@ export default function RankingSection({
           {/* DataFreshnessIndicator removed from toolbar — bottom timestamp is less intrusive */}
         </Box>
       </Box>
-
-      {/* Founding member banner + Pro notice — below time range selector */}
-      <FoundingMemberBanner />
-      {BETA_PRO_FEATURES_FREE && (
-        <Box style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 6,
-          padding: '6px 12px',
-          marginBottom: tokens.spacing[2],
-          borderRadius: tokens.radius.md,
-          background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
-          fontSize: tokens.typography.fontSize.xs,
-          color: 'var(--color-text-secondary)',
-        }}>
-          <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)', fontSize: 11 }}>Pro</span>
-          <span>{language === 'zh' ? '全部功能开放中 · 限时免费体验' : 'All Pro features unlocked · Free during open beta'}</span>
-        </Box>
-      )}
 
       {/* 高级筛选面板 */}
       {showAdvancedFilter && (
