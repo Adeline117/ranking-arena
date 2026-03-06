@@ -147,7 +147,7 @@ async function fetchTechnicalAnalysis(
 function createTVClient(): TradingViewClientWrapper {
   let TradingView: any
   try {
-    // Dynamic require to avoid Turbopack static analysis; eslint-disable-next-line
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic optional dep
     TradingView = globalThis.require?.('@mathieuc/' + 'tradingview')
   } catch { /* optional dep */ }
 
