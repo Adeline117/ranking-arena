@@ -31,7 +31,7 @@ function snapshotToTrader(
   const trader: Trader = {
     id: snapshot.source_trader_id,
     handle: displayHandle,
-    roi: snapshot.roi || 0,
+    roi: snapshot.roi ?? 0,
     pnl: snapshot.pnl ?? undefined,
     win_rate: snapshot.win_rate ?? undefined,
     max_drawdown: snapshot.max_drawdown ?? undefined,
