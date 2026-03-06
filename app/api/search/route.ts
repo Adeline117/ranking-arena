@@ -85,6 +85,9 @@ export const GET = withPublic(
       }
     }
 
+    // Fetch more traders to allow relevance ranking, then trim to limit
+    const traderFetchLimit = Math.max(limitPerCategory * 4, 20)
+
     const [tradersData, postsData, libraryData, usersData, groupsData] = await Promise.all([
       safeQuery(supabase
         .from('trader_sources')
@@ -92,7 +95,7 @@ export const GET = withPublic(
         .or(
           `handle.ilike.%${sanitizedQuery}%,source_trader_id.ilike.%${sanitizedQuery}%`
         )
-        .limit(limitPerCategory)),
+        .limit(traderFetchLimit)),
 
       safeQuery(supabase
         .from('posts')
@@ -145,32 +148,74 @@ export const GET = withPublic(
     interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
     interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
 
-    // Enrich traders with display_name from leaderboard_ranks when handle is missing
+    // Enrich traders with display_name and arena_score for ranking
     const tradersTyped = tradersData as TraderSourceRow[]
-    const missingHandleTraderIds = tradersTyped.filter(t => !t.handle).map(t => t.source_trader_id)
+    const traderIds = tradersTyped.map(t => t.source_trader_id)
+
+    // Fetch display names and arena scores in parallel
+    const [lrRows, scoreRows] = await Promise.all([
+      // Display names for traders without handles
+      (async () => {
+        const missing = tradersTyped.filter(t => !t.handle).map(t => t.source_trader_id)
+        if (missing.length === 0) return []
+        const { data } = await supabase
+          .from('leaderboard_ranks')
+          .select('source_trader_id, display_name')
+          .in('source_trader_id', missing)
+          .not('display_name', 'is', null)
+          .limit(missing.length)
+        return data || []
+      })(),
+      // Arena scores for relevance ranking
+      (async () => {
+        if (traderIds.length === 0) return []
+        const { data } = await supabase
+          .from('trader_snapshots')
+          .select('source_trader_id, source, arena_score')
+          .in('source_trader_id', traderIds)
+          .eq('season_id', '90D')
+          .not('arena_score', 'is', null)
+          .order('arena_score', { ascending: false })
+          .limit(traderIds.length)
+        return data || []
+      })(),
+    ])
+
     const lrNameMap = new Map<string, string>()
-    if (missingHandleTraderIds.length > 0) {
-      const { data: lrRows } = await supabase
-        .from('leaderboard_ranks')
-        .select('source_trader_id, display_name')
-        .in('source_trader_id', missingHandleTraderIds)
-        .not('display_name', 'is', null)
-        .limit(missingHandleTraderIds.length)
-      for (const lr of (lrRows || [])) {
-        if (lr.display_name) lrNameMap.set(lr.source_trader_id, lr.display_name)
-      }
+    for (const lr of lrRows) {
+      if (lr.display_name) lrNameMap.set(lr.source_trader_id, lr.display_name)
     }
 
-    const traders: UnifiedSearchResult[] = tradersTyped.map((t) => {
-      const name = t.handle || lrNameMap.get(t.source_trader_id) || t.source_trader_id
-      return {
-        id: `${t.source}:${t.source_trader_id}`,
-        type: 'trader' as const,
-        title: `@${name}`,
-        subtitle: sourceLabels[t.source] || t.source,
-        href: `/trader/${encodeURIComponent(t.source_trader_id)}?platform=${t.source}`,
-      }
-    })
+    // Build score map (source:trader_id → arena_score)
+    const scoreMap = new Map<string, number>()
+    for (const row of scoreRows) {
+      const key = `${row.source}:${row.source_trader_id}`
+      if (!scoreMap.has(key)) scoreMap.set(key, row.arena_score)
+    }
+
+    // Rank traders: exact handle match first, then by arena_score
+    const queryLower = sanitizedQuery.toLowerCase()
+    const rankedTraders = tradersTyped
+      .map((t) => {
+        const name = t.handle || lrNameMap.get(t.source_trader_id) || t.source_trader_id
+        const key = `${t.source}:${t.source_trader_id}`
+        const score = scoreMap.get(key) ?? 0
+        const handleLower = (t.handle || '').toLowerCase()
+        // Exact match gets massive boost, starts-with gets medium boost
+        const exactBonus = handleLower === queryLower ? 10000 : 0
+        const prefixBonus = handleLower.startsWith(queryLower) ? 1000 : 0
+        return { t, name, relevance: exactBonus + prefixBonus + score }
+      })
+      .sort((a, b) => b.relevance - a.relevance)
+      .slice(0, limitPerCategory)
+
+    const traders: UnifiedSearchResult[] = rankedTraders.map(({ t, name }) => ({
+      id: `${t.source}:${t.source_trader_id}`,
+      type: 'trader' as const,
+      title: `@${name}`,
+      subtitle: sourceLabels[t.source] || t.source,
+      href: `/trader/${encodeURIComponent(t.source_trader_id)}?platform=${t.source}`,
+    }))
 
      
     const posts: UnifiedSearchResult[] = (postsData as PostRow[]).map((p) => ({
