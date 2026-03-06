@@ -109,6 +109,18 @@ Arena Score = (ROI_percentile * 0.6) + (PnL_percentile * 0.4)
 ```
 Higher score = better risk-adjusted performance.
 
+## Product Priority (Bug Triage & Feature Priority)
+**Core Path** (highest priority — fix/ship first):
+1. Homepage → Rankings → Trader Detail → Period Switch → Search
+2. Login/Auth → Pro Subscription flow
+
+**Secondary Path**:
+3. Market Overview, Market Events
+4. Social (Groups, Posts, Comments)
+5. Library (educational resources)
+
+**Rule**: Always fix core path bugs before secondary. When prioritizing features, core path UX > secondary features.
+
 ## Conventions
 
 ### API Routes
