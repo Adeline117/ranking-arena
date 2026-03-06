@@ -233,7 +233,7 @@ export default function ChallengeButton({
                 right: 16,
                 background: 'none',
                 border: 'none',
-                color: '#888',
+                color: 'var(--color-text-tertiary)',
                 cursor: 'pointer',
                 padding: 4,
                 display: 'flex',
@@ -259,7 +259,7 @@ export default function ChallengeButton({
               <div
                 style={{
                   fontSize: 11,
-                  color: '#888',
+                  color: 'var(--color-text-tertiary)',
                   letterSpacing: 3,
                   textTransform: 'uppercase',
                   marginBottom: 6,
@@ -271,12 +271,12 @@ export default function ChallengeButton({
                 style={{
                   fontSize: 20,
                   fontWeight: 800,
-                  color: '#EDEDED',
+                  color: 'var(--color-text-primary)',
                 }}
               >
                 Challenge a Trader
               </div>
-              <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>
+              <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
                 Search for an opponent to compare stats head-to-head
               </div>
             </div>
@@ -294,9 +294,9 @@ export default function ChallengeButton({
                     width: '100%',
                     padding: '10px 36px 10px 14px',
                     borderRadius: 8,
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: '#EDEDED',
+                    background: 'var(--glass-bg-light)',
+                    border: '1px solid var(--glass-border-medium)',
+                    color: 'var(--color-text-primary)',
                     fontSize: 14,
                     outline: 'none',
                     boxSizing: 'border-box',
@@ -328,7 +328,7 @@ export default function ChallengeButton({
                   maxHeight: 220,
                   overflowY: 'auto',
                   borderRadius: 8,
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  border: '1px solid var(--glass-border-light)',
                   marginBottom: 16,
                 }}
               >
@@ -386,7 +386,7 @@ export default function ChallengeButton({
                         style={{
                           fontSize: 14,
                           fontWeight: 600,
-                          color: '#EDEDED',
+                          color: 'var(--color-text-primary)',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
@@ -398,7 +398,7 @@ export default function ChallengeButton({
                         <div
                           style={{
                             fontSize: 12,
-                            color: '#888',
+                            color: 'var(--color-text-tertiary)',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
@@ -419,7 +419,7 @@ export default function ChallengeButton({
                 style={{
                   textAlign: 'center',
                   padding: '16px',
-                  color: '#888',
+                  color: 'var(--color-text-tertiary)',
                   fontSize: 13,
                   marginBottom: 12,
                 }}
@@ -472,7 +472,7 @@ export default function ChallengeButton({
                         style={{
                           fontSize: 14,
                           fontWeight: 700,
-                          color: '#EDEDED',
+                          color: 'var(--color-text-primary)',
                         }}
                       >
                         {selected.title}
@@ -487,7 +487,7 @@ export default function ChallengeButton({
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#888',
+                      color: 'var(--color-text-tertiary)',
                       cursor: 'pointer',
                       fontSize: 13,
                       padding: 4,
@@ -501,11 +501,11 @@ export default function ChallengeButton({
                 <div
                   style={{
                     padding: '8px 12px',
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: 'var(--glass-bg-light)',
+                    border: '1px solid var(--glass-border-light)',
                     borderRadius: 8,
                     fontSize: 12,
-                    color: '#888',
+                    color: 'var(--color-text-tertiary)',
                     wordBreak: 'break-all',
                     fontFamily: 'monospace',
                   }}
@@ -532,7 +532,7 @@ export default function ChallengeButton({
                       background:
                         'linear-gradient(135deg, rgba(139,111,168,0.3) 0%, rgba(99,102,241,0.3) 100%)',
                       border: '1px solid rgba(139,111,168,0.5)',
-                      color: '#EDEDED',
+                      color: 'var(--color-text-primary)',
                       fontSize: 13,
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -549,9 +549,9 @@ export default function ChallengeButton({
                       minWidth: 120,
                       padding: '10px 16px',
                       borderRadius: 8,
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      color: '#EDEDED',
+                      background: 'var(--glass-bg-light)',
+                      border: '1px solid var(--glass-border-medium)',
+                      color: 'var(--color-text-primary)',
                       fontSize: 13,
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -580,7 +580,7 @@ export default function ChallengeButton({
                       padding: '8px 14px',
                       borderRadius: 8,
                       background: 'transparent',
-                      border: '1px solid rgba(255,255,255,0.1)',
+                      border: '1px solid var(--glass-border-light)',
                       color: copied ? '#4DFF9A' : '#888',
                       fontSize: 13,
                       fontWeight: 600,

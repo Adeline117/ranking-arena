@@ -9,17 +9,17 @@ import type { PKTraderData, MetricRow, OverallResult } from './pk-types'
 // ─── Design tokens ──────────────────────────────────────────────────────────
 
 export const COLOR = {
-  bg: '#0A0912',
-  card: '#12111A',
+  bg: 'var(--color-bg-primary)',
+  card: 'var(--color-bg-secondary)',
   border: 'rgba(139,111,168,0.2)',
-  text: '#EDEDED',
-  sub: '#888888',
+  text: 'var(--color-text-primary)',
+  sub: 'var(--color-text-tertiary)',
   brand: '#8b6fa8',
   gold: '#FFD700',
-  success: '#4DFF9A',
-  error: '#FF4D4D',
+  success: 'var(--color-accent-success)',
+  error: 'var(--color-accent-error)',
   winnerGold: '#FFD700',
-  loser: 'rgba(237,237,237,0.35)',
+  loser: 'var(--color-text-tertiary)',
 }
 
 // ─── Avatar ─────────────────────────────────────────────────────────────────
@@ -202,8 +202,8 @@ export function MetricsTable({ metrics, nameA, nameB }: MetricsTableProps) {
           display: 'grid',
           gridTemplateColumns: '1fr 120px 1fr',
           padding: '12px 24px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          background: 'rgba(255,255,255,0.02)',
+          borderBottom: '1px solid var(--glass-border-light)',
+          background: 'var(--glass-bg-light)',
         }}
       >
         <div
@@ -274,7 +274,7 @@ function MetricRowItem({ metric: m, isLast }: MetricRowItemProps) {
         gridTemplateColumns: '1fr 120px 1fr',
         padding: '16px 24px',
         borderBottom: !isLast
-          ? '1px solid rgba(255,255,255,0.04)'
+          ? '1px solid var(--glass-border-light)'
           : 'none',
         background: aWins
           ? 'rgba(255,215,0,0.025)'
@@ -434,13 +434,13 @@ export function WinnerBanner({ overall, nameA, nameB }: WinnerBannerProps) {
             ? 'linear-gradient(135deg, rgba(255,215,0,0.08) 0%, rgba(255,215,0,0.03) 100%)'
             : overall.winner === nameB
             ? 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.03) 100%)'
-            : 'rgba(255,255,255,0.03)',
+            : 'var(--glass-bg-light)',
         border:
           overall.winner === nameA
             ? '1px solid rgba(255,215,0,0.3)'
             : overall.winner === nameB
             ? '1px solid rgba(99,102,241,0.3)'
-            : '1px solid rgba(255,255,255,0.1)',
+            : '1px solid var(--glass-border-light)',
         borderRadius: 16,
       }}
     >

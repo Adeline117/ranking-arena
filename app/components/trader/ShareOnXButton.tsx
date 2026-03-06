@@ -99,10 +99,6 @@ export default function ShareOnXButton({
     window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500')
   }, [buildXUrl])
 
-  const bg = 'rgba(0,0,0,0.6)'
-  const bgHover = 'rgba(255,255,255,0.08)'
-  const borderColor = 'rgba(255,255,255,0.18)'
-
   return (
     <button
       onClick={handleClick}
@@ -113,8 +109,8 @@ export default function ShareOnXButton({
         gap: 6,
         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
         borderRadius: tokens.radius.lg,
-        background: bg,
-        border: `1px solid ${borderColor}`,
+        background: 'var(--glass-bg-medium)',
+        border: '1px solid var(--glass-border-medium)',
         color: tokens.colors.text.primary,
         fontSize: tokens.typography.fontSize.sm,
         fontWeight: tokens.typography.fontWeight.bold,
@@ -124,12 +120,12 @@ export default function ShareOnXButton({
         lineHeight: 1,
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.background = bgHover
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.30)'
+        e.currentTarget.style.background = 'var(--glass-bg-heavy)'
+        e.currentTarget.style.borderColor = 'var(--color-border-secondary)'
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.background = bg
-        e.currentTarget.style.borderColor = borderColor
+        e.currentTarget.style.background = 'var(--glass-bg-medium)'
+        e.currentTarget.style.borderColor = 'var(--glass-border-medium)'
       }}
     >
       <XIcon />

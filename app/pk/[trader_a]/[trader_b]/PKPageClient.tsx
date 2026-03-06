@@ -89,9 +89,9 @@ export default function PKPageClient({
           gap: 8,
           padding: '10px 20px',
           borderRadius: 10,
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.15)',
-          color: '#EDEDED',
+          background: 'var(--glass-bg-light)',
+          border: '1px solid var(--glass-border-medium)',
+          color: 'var(--color-text-primary)',
           fontSize: 14,
           fontWeight: 600,
           cursor: 'pointer',
@@ -173,9 +173,9 @@ export default function PKPageClient({
           gap: 8,
           padding: '10px 20px',
           borderRadius: 10,
-          background: 'rgba(255,255,255,0.03)',
+          background: 'var(--glass-bg-light)',
           border: '1px solid rgba(255,255,255,0.1)',
-          color: '#888888',
+          color: 'var(--color-text-tertiary)',
           fontSize: 14,
           fontWeight: 600,
           cursor: 'pointer',
@@ -183,7 +183,7 @@ export default function PKPageClient({
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = 'rgba(255,255,255,0.07)'
-          e.currentTarget.style.color = '#EDEDED'
+          e.currentTarget.style.color = 'var(--color-text-primary)'
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
