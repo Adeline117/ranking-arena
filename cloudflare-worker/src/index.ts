@@ -10,6 +10,21 @@ interface Env {
   PROXY_SECRET?: string;
 }
 
+// Default allowed origins for CORS (override via ALLOWED_ORIGINS env var)
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://www.arenafi.org',
+  'https://arenafi.org',
+  'https://ranking-arena.vercel.app',
+];
+
+// Thread-local request origin (set per-request in fetch handler)
+let _requestOrigin = '*';
+
+/** Return CORS header value scoped to validated origin */
+function corsOrigin(): string {
+  return _requestOrigin;
+}
+
 // Supported exchange API allow-list
 const ALLOWED_HOSTS = [
   'www.binance.com',
@@ -63,9 +78,21 @@ const worker = {
 
     // 验证来源
     const origin = request.headers.get('Origin') || '';
-    const allowedOrigins = (env.ALLOWED_ORIGINS || '').split(',');
+    const allowedOrigins = env.ALLOWED_ORIGINS
+      ? (env.ALLOWED_ORIGINS).split(',').map(o => o.trim())
+      : DEFAULT_ALLOWED_ORIGINS;
 
-    if (!allowedOrigins.some(o => origin.includes(o.trim())) && origin !== '') {
+    // Determine CORS origin for this request
+    if (origin && allowedOrigins.some(o => origin === o || origin.endsWith(o))) {
+      _requestOrigin = origin;
+    } else if (origin === '') {
+      // Server-to-server (no Origin header) — use wildcard
+      _requestOrigin = '*';
+    } else {
+      _requestOrigin = allowedOrigins[0] || '*';
+    }
+
+    if (!allowedOrigins.some(o => origin === o || origin.endsWith(o)) && origin !== '') {
       // 也允许没有 Origin 的请求（服务器到服务器）
       const proxySecret = request.headers.get('X-Proxy-Secret');
       if (env.PROXY_SECRET && proxySecret !== env.PROXY_SECRET) {
@@ -174,11 +201,17 @@ const worker = {
   },
 };
 
-function handleCORS(request: Request, _env: Env): Response {
-  const origin = request.headers.get('Origin') || '*';
+function handleCORS(request: Request, env: Env): Response {
+  const origin = request.headers.get('Origin') || '';
+  const allowedOrigins = env.ALLOWED_ORIGINS
+    ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : DEFAULT_ALLOWED_ORIGINS;
+  const safeOrigin = (origin && allowedOrigins.some(o => origin === o || origin.endsWith(o)))
+    ? origin
+    : allowedOrigins[0] || '';
   return new Response(null, {
     headers: {
-      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Origin': safeOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Proxy-Secret',
       'Access-Control-Max-Age': '86400',
@@ -226,13 +259,13 @@ async function handleProxy(request: Request, _env: Env): Promise<Response> {
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
   } catch (error) {
     return Response.json({
       error: 'Proxy error',
-      details: error instanceof Error ? error.message : 'Unknown'
+      details: 'Upstream API unavailable'
     }, { status: 500 });
   }
 }
@@ -265,15 +298,15 @@ async function handleBinanceCopyTrading(request: Request, url: URL): Promise<Res
     const data = await response.json();
 
     return Response.json(data, {
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   } catch (error) {
     return Response.json({
       error: 'Binance API error',
-      details: error instanceof Error ? error.message : 'Unknown'
+      details: 'Upstream API unavailable'
     }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -316,11 +349,11 @@ async function handleBybitCopyTrading(request: Request, url: URL): Promise<Respo
       if (text.includes('Access Denied') || text.includes('<!DOCTYPE') || text.includes('<html')) {
         return Response.json({
           error: 'Bybit API error',
-          details: 'WAF blocked - received HTML instead of JSON. Bybit may be blocking Cloudflare IPs.',
+          details: 'Upstream API unavailable',
           status: response.status,
         }, {
           status: 502,
-          headers: { 'Access-Control-Allow-Origin': '*' },
+          headers: { 'Access-Control-Allow-Origin': corsOrigin() },
         });
       }
     }
@@ -328,15 +361,15 @@ async function handleBybitCopyTrading(request: Request, url: URL): Promise<Respo
     const data = await response.json();
 
     return Response.json(data, {
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   } catch (error) {
     return Response.json({
       error: 'Bybit API error',
-      details: error instanceof Error ? error.message : 'Unknown'
+      details: 'Upstream API unavailable'
     }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -393,7 +426,7 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
       // Check for valid response
       if (data.code === '00000' || data.code === 0 || data.code === '0') {
         return Response.json(data, {
-          headers: { 'Access-Control-Allow-Origin': '*' },
+          headers: { 'Access-Control-Allow-Origin': corsOrigin() },
         });
       }
       
@@ -404,7 +437,7 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
 
       // Return whatever we got
       return Response.json(data, {
-        headers: { 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Access-Control-Allow-Origin': corsOrigin() },
       });
     } catch (_err) {
       // Try next endpoint
@@ -415,11 +448,10 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
   // All endpoints failed
   return Response.json({
     error: 'Bitget API error',
-    details: 'All Bitget API endpoints failed. V1 is deprecated, V2 requires authentication, web endpoints are CF protected.',
-    suggestion: 'Consider using authenticated broker API with BITGET_API_KEY',
+    details: 'Upstream API unavailable',
   }, {
     status: 502,
-    headers: { 'Access-Control-Allow-Origin': '*' },
+    headers: { 'Access-Control-Allow-Origin': corsOrigin() },
   });
 }
 
@@ -451,15 +483,15 @@ async function handleKuCoinCopyTrading(request: Request, url: URL): Promise<Resp
     const data = await response.json();
 
     return Response.json(data, {
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   } catch (error) {
     return Response.json({
       error: 'KuCoin API error',
-      details: error instanceof Error ? error.message : 'Unknown'
+      details: 'Upstream API unavailable'
     }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -493,15 +525,15 @@ async function handleBinanceSpotCopyTrading(request: Request, url: URL): Promise
     const data = await response.json();
 
     return Response.json(data, {
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   } catch (error) {
     return Response.json({
       error: 'Binance Spot API error',
-      details: error instanceof Error ? error.message : 'Unknown'
+      details: 'Upstream API unavailable'
     }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -533,15 +565,15 @@ async function handleDydxLeaderboard(request: Request, url: URL): Promise<Respon
 
     return Response.json(data, {
       status: response.status,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   } catch (error) {
     return Response.json({
       error: 'dYdX leaderboard proxy error',
-      details: error instanceof Error ? error.message : 'Unknown'
+      details: 'Upstream API unavailable'
     }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -554,7 +586,7 @@ async function handleDydxHistoricalPnl(request: Request, url: URL): Promise<Resp
   if (!address) {
     return Response.json({ error: 'Missing address parameter' }, {
       status: 400,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 
@@ -570,15 +602,15 @@ async function handleDydxHistoricalPnl(request: Request, url: URL): Promise<Resp
 
     return Response.json(data, {
       status: response.status,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   } catch (error) {
     return Response.json({
       error: 'dYdX historical PnL proxy error',
-      details: error instanceof Error ? error.message : 'Unknown'
+      details: 'Upstream API unavailable'
     }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -590,7 +622,7 @@ async function handleDydxSubaccount(request: Request, url: URL): Promise<Respons
   if (!address) {
     return Response.json({ error: 'Missing address parameter' }, {
       status: 400,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 
@@ -606,15 +638,15 @@ async function handleDydxSubaccount(request: Request, url: URL): Promise<Respons
 
     return Response.json(data, {
       status: response.status,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   } catch (error) {
     return Response.json({
       error: 'dYdX subaccount proxy error',
-      details: error instanceof Error ? error.message : 'Unknown'
+      details: 'Upstream API unavailable'
     }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -645,7 +677,7 @@ async function handleBingxLeaderboard(_request: Request, url: URL): Promise<Resp
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
   } catch (error) {
@@ -656,12 +688,12 @@ async function handleBingxLeaderboard(_request: Request, url: URL): Promise<Resp
       const fallbackData = await fallbackResp.text();
       return new Response(fallbackData, {
         status: fallbackResp.status,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': corsOrigin() },
       });
     } catch (_fallbackError) {
       return Response.json({ error: 'BingX leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
         status: 500,
-        headers: { 'Access-Control-Allow-Origin': '*' },
+        headers: { 'Access-Control-Allow-Origin': corsOrigin() },
       });
     }
   }
@@ -672,7 +704,7 @@ async function handleBingxTraderDetail(_request: Request, url: URL): Promise<Res
   const timeType = url.searchParams.get('timeType') || '2';
 
   if (!uid) {
-    return Response.json({ error: 'Missing uid' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return Response.json({ error: 'Missing uid' }, { status: 400, headers: { 'Access-Control-Allow-Origin': corsOrigin() } });
   }
 
   const apiUrl = `https://api-app.qq-os.com/api/copy-trade-facade/v2/trader/new/stat?uid=${uid}&timeType=${timeType}`;
@@ -684,13 +716,13 @@ async function handleBingxTraderDetail(_request: Request, url: URL): Promise<Res
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
   } catch (error) {
     return Response.json({ error: 'BingX trader detail proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -720,13 +752,13 @@ async function handleBlofinLeaderboard(_request: Request, url: URL): Promise<Res
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
   } catch (error) {
     return Response.json({ error: 'BloFin leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -735,7 +767,7 @@ async function handleBlofinTraderInfo(_request: Request, url: URL): Promise<Resp
   const uniqueCode = url.searchParams.get('uniqueCode') || '';
 
   if (!uniqueCode) {
-    return Response.json({ error: 'Missing uniqueCode' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return Response.json({ error: 'Missing uniqueCode' }, { status: 400, headers: { 'Access-Control-Allow-Origin': corsOrigin() } });
   }
 
   const apiUrl = `${BLOFIN_API}/api/v1/copytrading/public-lead-traders/detail?uniqueCode=${uniqueCode}`;
@@ -747,13 +779,13 @@ async function handleBlofinTraderInfo(_request: Request, url: URL): Promise<Resp
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
   } catch (error) {
     return Response.json({ error: 'BloFin trader info proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -781,13 +813,13 @@ async function handleGainsLeaderboardAll(_request: Request, url: URL): Promise<R
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
   } catch (error) {
     return Response.json({ error: 'Gains leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -806,13 +838,13 @@ async function handleGainsOpenTrades(_request: Request, url: URL): Promise<Respo
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
   } catch (error) {
     return Response.json({ error: 'Gains open-trades proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
@@ -822,7 +854,7 @@ async function handleGainsTraderStats(_request: Request, url: URL): Promise<Resp
   const chainId = url.searchParams.get('chainId') || '42161';
 
   if (!address) {
-    return Response.json({ error: 'Missing address' }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return Response.json({ error: 'Missing address' }, { status: 400, headers: { 'Access-Control-Allow-Origin': corsOrigin() } });
   }
 
   const apiUrl = `https://backend-global.gains.trade/api/personal-trading-history/${address}/stats?chainId=${chainId}`;
@@ -834,13 +866,13 @@ async function handleGainsTraderStats(_request: Request, url: URL): Promise<Resp
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
   } catch (error) {
     return Response.json({ error: 'Gains trader stats proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
       status: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
 }
