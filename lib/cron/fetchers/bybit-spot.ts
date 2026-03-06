@@ -107,7 +107,8 @@ async function fetchPeriod(
     let data: BybitApiResponse | null = null
 
     // Strategy 1: VPS Playwright scraper (bypasses Akamai WAF)
-    if (VPS_SCRAPER_KEY) {
+    // Only page 1 to stay within Vercel function timeout (300s)
+    if (VPS_SCRAPER_KEY && pageNo <= 1) {
       try {
         const scraperUrl = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${PAGE_SIZE}&duration=${duration}`
         const res = await fetch(scraperUrl, {
