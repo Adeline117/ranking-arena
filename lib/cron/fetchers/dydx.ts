@@ -73,19 +73,19 @@ interface DydxSubaccountResponse {
 async function fetchLeaderboard(period: string): Promise<DydxLeaderboardEntry[]> {
   const dydxPeriod = PERIOD_MAP[period] || 'PERIOD_30D'
 
-  // Try proxy first (for geo-blocked regions)
+  // Strategy 1: CF Worker proxy (for geo-blocked regions)
   try {
     const proxyUrl = `${PROXY_URL}/dydx/leaderboard?period=${dydxPeriod}&limit=${TARGET}`
     const data = await fetchJson<DydxLeaderboardResponse>(proxyUrl, { timeoutMs: 20000 })
     if (data?.leaderboard && data.leaderboard.length > 0) {
-      logger.warn(`[dydx] Proxy success: ${data.leaderboard.length} entries`)
+      logger.warn(`[dydx] CF Worker proxy success: ${data.leaderboard.length} entries`)
       return data.leaderboard
     }
   } catch (err) {
-    logger.warn(`[dydx] Proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(`[dydx] CF Worker proxy failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
-  // Try direct API
+  // Strategy 2: Direct indexer API
   try {
     const directUrl = `${INDEXER_URL}/v4/leaderboard/pnl?period=${dydxPeriod}&limit=${TARGET}`
     const data = await fetchJson<DydxLeaderboardResponse>(directUrl, { timeoutMs: 20000 })
@@ -95,6 +95,33 @@ async function fetchLeaderboard(period: string): Promise<DydxLeaderboardEntry[]>
     }
   } catch (err) {
     logger.warn(`[dydx] Direct API failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Strategy 3: VPS proxy fallback (route indexer request through SG/JP VPS)
+  const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+  if (vpsUrl) {
+    try {
+      logger.warn(`[dydx] Trying VPS proxy fallback...`)
+      const targetUrl = `${INDEXER_URL}/v4/leaderboard/pnl?period=${dydxPeriod}&limit=${TARGET}`
+      const res = await fetch(vpsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+        },
+        body: JSON.stringify({ url: targetUrl, method: 'GET', headers: { Accept: 'application/json' } }),
+        signal: AbortSignal.timeout(30000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as DydxLeaderboardResponse
+        if (data?.leaderboard && data.leaderboard.length > 0) {
+          logger.warn(`[dydx] VPS proxy success: ${data.leaderboard.length} entries`)
+          return data.leaderboard
+        }
+      }
+    } catch (err) {
+      logger.warn(`[dydx] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   return []

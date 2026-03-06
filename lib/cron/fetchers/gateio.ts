@@ -15,7 +15,7 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
+  fetchWithFallback,
   sleep,
   parseNum,
   normalizeWinRate,
@@ -28,6 +28,8 @@ import { captureException } from '@/lib/utils/logger'
 const SOURCE = 'gateio'
 const TARGET = 500
 const PAGE_SIZE = 50
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
 /** Gate.io period mapping */
 const PERIOD_MAP: Record<string, string> = {
@@ -85,6 +87,9 @@ const API_ENDPOINTS = [
   // Discovered working endpoint (gate.com/apiw/v2/copy) — no auth needed
   (page: number, period: string) =>
     `https://www.gate.com/apiw/v2/copy/leader/list?page=${page}&page_size=${PAGE_SIZE}&order_by=profit_rate&sort_by=desc&cycle=${CYCLE_MAP[period] || 'month'}&status=running`,
+  // gate.io domain variant (same internal API)
+  (page: number, period: string) =>
+    `https://www.gate.io/apiw/v2/copy/leader/list?page=${page}&page_size=${PAGE_SIZE}&order_by=profit_rate&sort_by=desc&cycle=${CYCLE_MAP[period] || 'month'}&status=running`,
   // Alternative sort orders on same endpoint
   (page: number, period: string) =>
     `https://www.gate.com/apiw/v2/copy/leader/list?page=${page}&page_size=${PAGE_SIZE}&order_by=profit&sort_by=desc&cycle=${CYCLE_MAP[period] || 'month'}&status=running`,
@@ -254,7 +259,7 @@ async function fetchPeriod(
           }
         }
 
-        const data = await fetchJson<GateResponse>(url, { headers: reqHeaders, timeoutMs: 10000 })
+        const { data } = await fetchWithFallback<GateResponse>(url, { headers: reqHeaders, timeoutMs: 10000, platform: SOURCE })
 
         const list = extractList(data)
         if (list.length === 0) {
@@ -327,8 +332,35 @@ async function fetchPeriod(
     }
   }
 
+  // VPS Playwright scraper fallback (browser-based bypass for Akamai WAF)
+  if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
+    logger.warn(`[${SOURCE}] All HTTP+VPS proxy methods failed, trying VPS Playwright scraper...`)
+    try {
+      const scraperUrl = `${VPS_SCRAPER_URL}/gateio/leaderboard?pageSize=${PAGE_SIZE}&cycle=${CYCLE_MAP[periodStr] || 'month'}`
+      const res = await fetch(scraperUrl, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(120_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as GateResponse
+        const list = extractList(data)
+        for (const item of list) {
+          const id = String(item.leader_id || item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
+          if (id && id !== 'undefined' && !allTraders.has(id)) {
+            allTraders.set(id, item)
+          }
+        }
+        if (allTraders.size > 0) {
+          logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   if (allTraders.size === 0) {
-    return { total: 0, saved: 0, error: 'No data from Gate.io — all endpoints and VPS proxy failed' }
+    return { total: 0, saved: 0, error: 'No data from Gate.io — all endpoints, VPS proxy, and VPS scraper failed' }
   }
 
   const traders: TraderData[] = []
