@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
   const startTime = Date.now()
+  const plog = await PipelineLogger.start('aggregate-daily-snapshots')
 
   try {
     const yesterday = new Date()
@@ -177,6 +179,12 @@ export async function POST(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
+    if (errors > 0) {
+      await plog.error(new Error(`${errors} upsert errors`), { inserted, errors, date: dateStr })
+    } else {
+      await plog.success(inserted, { date: dateStr })
+    }
+
     return NextResponse.json({
       success: true,
       date: dateStr,
@@ -188,6 +196,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     logger.apiError('/api/cron/aggregate-daily-snapshots', error, {})
+    await plog.error(error)
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

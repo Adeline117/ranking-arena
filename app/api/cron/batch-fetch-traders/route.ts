@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest) {
 
   const results: BatchResult[] = []
   const overallStart = Date.now()
+  const plog = await PipelineLogger.start(`batch-fetch-traders-${group}`, { group, platforms })
 
   for (const platform of platforms) {
     const start = Date.now()
@@ -96,12 +98,23 @@ export async function GET(request: NextRequest) {
   }
 
   const succeeded = results.filter((r) => r.status === 'success').length
+  const failed = results.length - succeeded
+
+  if (failed === 0) {
+    await plog.success(succeeded, { results })
+  } else {
+    await plog.error(
+      new Error(`${failed}/${results.length} platforms failed`),
+      { results }
+    )
+  }
+
   return NextResponse.json({
     ok: succeeded === results.length,
     group,
     platforms: platforms.length,
     succeeded,
-    failed: results.length - succeeded,
+    failed,
     totalDurationMs: Date.now() - overallStart,
     results,
   })

@@ -23,6 +23,7 @@ import {
   SOURCE_TRUST_WEIGHT,
 } from '@/lib/constants/exchanges'
 import { createLogger } from '@/lib/utils/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -64,6 +65,7 @@ export async function GET(request: NextRequest) {
   const stats = { seasons: {} as Record<string, number> }
   const warnings: string[] = []
   const rolledBack: string[] = []
+  const plog = await PipelineLogger.start('compute-leaderboard')
 
   try {
     // P0-2: Record current counts before computing
@@ -120,6 +122,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
+    if (warnings.length > 0) {
+      await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
+    } else {
+      await plog.success(totalRanked, { stats })
+    }
+
     return NextResponse.json({
       ok: warnings.length === 0,
       elapsed_ms: elapsed,
@@ -130,6 +139,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('Failed to compute leaderboard', error)
+    await plog.error(error)
     return NextResponse.json(
       { error: 'Compute failed', detail: String(error) },
       { status: 500 }

@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fetchLeaderboardFromDB } from '@/lib/getInitialTraders'
 import { setCachedLeaderboard } from '@/lib/cache/leaderboard-cache'
 import type { Period } from '@/lib/utils/arena-score'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
 
   const start = Date.now()
   const results: Record<string, { traders: number; durationMs: number; error?: string }> = {}
+  const plog = await PipelineLogger.start('refresh-leaderboard-cache')
 
   for (const period of PERIODS) {
     const periodStart = Date.now()
@@ -44,6 +46,15 @@ export async function GET(request: NextRequest) {
         error: err instanceof Error ? err.message : String(err),
       }
     }
+  }
+
+  const totalTraders = Object.values(results).reduce((s, r) => s + r.traders, 0)
+  const hasErrors = Object.values(results).some((r) => r.error)
+
+  if (hasErrors) {
+    await plog.error(new Error('Some periods failed to cache'), { results })
+  } else {
+    await plog.success(totalTraders, { results })
   }
 
   return NextResponse.json({

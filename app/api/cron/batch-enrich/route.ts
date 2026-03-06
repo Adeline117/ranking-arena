@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -26,6 +27,7 @@ const PLATFORM_CONFIGS: Record<string, { limit90: number; limit30: number; limit
   hyperliquid: { limit90: 120, limit30: 100, limit7: 60 },
   gmx: { limit90: 100, limit30: 80, limit7: 50 },
   mexc: { limit90: 80, limit30: 60, limit7: 40 },
+  htx_futures: { limit90: 80, limit30: 60, limit7: 40 },
   kucoin: { limit90: 60, limit30: 50, limit7: 30 },
   dydx: { limit90: 80, limit30: 60, limit7: 40 },
   gains: { limit90: 60, limit30: 50, limit7: 30 },
@@ -37,7 +39,7 @@ const PLATFORM_CONFIGS: Record<string, { limit90: number; limit30: number; limit
 const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx']
 
 // Medium priority (enriched with all=true or period=90D)
-const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'bitget_spot', 'mexc', 'dydx']
+const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'bitget_spot', 'mexc', 'htx_futures', 'dydx']
 
 // Lower priority (enriched only with all=true)
 const LOWER_PRIORITY = ['kucoin', 'gains', 'jupiter_perps', 'aevo']
@@ -81,6 +83,7 @@ export async function GET(request: NextRequest) {
   }
 
   const results: BatchResult[] = []
+  const plog = await PipelineLogger.start(`batch-enrich-${period}`, { period, enrichAll, platforms })
 
   for (const [index, platform] of platforms.entries()) {
     const config = PLATFORM_CONFIGS[platform]
@@ -121,12 +124,23 @@ export async function GET(request: NextRequest) {
   }
 
   const succeeded = results.filter(r => r.status === 'success').length
+  const failed = results.length - succeeded
+
+  if (failed === 0) {
+    await plog.success(succeeded, { results })
+  } else {
+    await plog.error(
+      new Error(`${failed}/${results.length} enrichments failed`),
+      { results }
+    )
+  }
+
   return NextResponse.json({
     ok: succeeded === results.length,
     period,
     platforms: platforms.length,
     succeeded,
-    failed: results.length - succeeded,
+    failed,
     results,
   })
 }
