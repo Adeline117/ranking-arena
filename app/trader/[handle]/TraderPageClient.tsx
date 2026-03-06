@@ -13,8 +13,6 @@ import { useToast } from '@/app/components/ui/Toast'
 import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- planned feature
-import ExportButton from '@/app/components/common/ExportButton'
 import TraderTabs from '@/app/components/trader/TraderTabs'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 // Phase 3A: Lazy-load heavy tab components (StatsPage imports lightweight-charts ~300KB)

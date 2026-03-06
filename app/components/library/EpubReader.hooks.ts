@@ -22,8 +22,6 @@ import {
   syncEpubPositionToServer,
   loadEpubPositionFromServer,
   syncReadingStatsToServer,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  estimateTimeRemaining,
 } from './EpubReader.types'
 
 // ─── Reading Stats Hook ─────────────────────────────────────────────
