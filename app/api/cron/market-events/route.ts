@@ -8,6 +8,7 @@ export const maxDuration = 30
 
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 const SYSTEM_USER_ID = 'ae6b996d-0000-0000-0000-000000000000'
 const COINGECKO_API = 'https://api.coingecko.com/api/v3'
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } })
   }
 
+  const plog = await PipelineLogger.start('market-events')
   try {
     const supabase = getSupabaseAdmin()
 
@@ -112,11 +114,13 @@ export async function GET(request: NextRequest) {
       created++
     }
 
+    await plog.success(created, { significantMoves: significantMoves.length })
     return new Response(
       JSON.stringify({ message: `Created ${created} market discussion posts`, created }),
       { headers: { 'Content-Type': 'application/json' } }
     )
   } catch (error: unknown) {
+    await plog.error(error instanceof Error ? error : new Error(String(error)))
     return new Response(JSON.stringify({ error: (error instanceof Error ? error.message : String(error)) }), { status: 500 })
   }
 }

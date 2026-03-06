@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const plog = await PipelineLogger.start('discover-traders');
   try {
     const runner = new JobRunner();
     const platforms = getAvailablePlatforms();
@@ -52,6 +53,7 @@ export async function GET(request: NextRequest) {
       });
     } catch { /* ignore */ }
 
+    await plog.success(enqueuedCount, { platforms: results });
     return NextResponse.json({
       success: true,
       enqueued: enqueuedCount,
@@ -59,6 +61,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (error: unknown) {
+    await plog.error(error instanceof Error ? error : new Error(String(error)));
     logger.error('[Cron /discover-traders] Error:', error);
 
     // Record error metric

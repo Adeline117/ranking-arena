@@ -49,6 +49,7 @@ import { sleep } from '@/lib/cron/fetchers/shared'
 import { captureMessage } from '@/lib/utils/logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 // Retry configuration
 const RETRY_CONFIG = {
@@ -267,6 +268,8 @@ export async function POST(req: Request) {
 
 async function handleEnrichment(req: Request) {
   const startTime = Date.now()
+  const url0 = new URL(req.url)
+  const plog = await PipelineLogger.start(`enrich-${url0.searchParams.get('platform') || 'all'}`)
 
   // 1) Authorize
   if (!isAuthorized(req)) {
@@ -465,6 +468,15 @@ async function handleEnrichment(req: Request) {
       },
       `enrichment:${period}`,
       600000 // 10 minutes
+    )
+  }
+
+  if (totalFailed === 0) {
+    await plog.success(totalEnriched, { period, duration })
+  } else {
+    await plog.error(
+      new Error(`${totalFailed}/${totalEnriched + totalFailed} enrichments failed`),
+      { period, duration, totalEnriched, totalFailed }
     )
   }
 
