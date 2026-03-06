@@ -21,7 +21,7 @@ import { logger } from '@/lib/logger'
 import { verifyAll, type VerifyResult } from '@/lib/cron/fetchers/verify-registry'
 
 export const runtime = 'nodejs'
-export const preferredRegion = 'sfo1'
+export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 

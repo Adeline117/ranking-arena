@@ -5,6 +5,14 @@
  * reachability and response format without heavy load.
  *
  * Used by /api/cron/verify-fetchers to monitor API health.
+ *
+ * Notes on verify vs fetch discrepancies:
+ * - Some platforms are geo-blocked from US IPs but work from Vercel hnd1 (Tokyo).
+ *   Verify runs from sfo1 so these will report geo_blocked — this is expected.
+ * - Some platforms use authenticated broker APIs (Bitget) or require API keys
+ *   (Drift, BloFin, TheGraph). These report auth_required.
+ * - Some platforms have Cloudflare WAF that blocks non-browser requests.
+ *   The actual fetchers use browser-like headers or proxy fallback.
  */
 
 import { fetchJson, type FailureReason, classifyFetchError } from './shared'
@@ -79,10 +87,30 @@ async function verifyEndpoint(
   }
 }
 
+/** Helper: return a known-skip result for platforms requiring env vars */
+function skipResult(
+  platform: string,
+  reason: FailureReason,
+  details: string
+): Promise<VerifyResult> {
+  return Promise.resolve({
+    platform,
+    healthy: false,
+    latencyMs: 0,
+    failureReason: reason,
+    details,
+    checkedAt: new Date().toISOString(),
+  })
+}
+
 // ── Platform Verifiers ──
 
 const VERIFY_REGISTRY: Record<string, VerifyFn> = {
-  // -- CEX Futures --
+  // =============================================
+  // CEX — Geo-blocked from US but work from Vercel hnd1
+  // These will report geo_blocked when verify runs from sfo1.
+  // The actual fetchers work because batch-fetch-traders runs from hnd1.
+  // =============================================
 
   binance_futures: () =>
     verifyEndpoint(
@@ -178,6 +206,23 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
+  phemex: () =>
+    verifyEndpoint(
+      'phemex',
+      'https://phemex.com/api/phemex-user/users/children/queryTraderWithCopySetting?pageNo=1&pageSize=1&days=90',
+      {
+        headers: {
+          Referer: 'https://phemex.com/copy-trading',
+          Origin: 'https://phemex.com',
+        },
+        validateResponse: (d: ApiResponse) => !!d?.data,
+      }
+    ),
+
+  // =============================================
+  // CEX — Working from any region
+  // =============================================
+
   okx_futures: () =>
     verifyEndpoint(
       'okx_futures',
@@ -209,34 +254,6 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  bitget_futures: () =>
-    verifyEndpoint(
-      'bitget_futures',
-      'https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking?period=THIRTY_DAYS&pageNo=1&pageSize=1',
-      {
-        headers: {
-          Referer: 'https://www.bitget.com/',
-          Origin: 'https://www.bitget.com',
-        },
-        validateResponse: (d: ApiResponse) =>
-          d?.code === '00000' || d?.code === 0 || d?.code === '0' || !!d?.data,
-      }
-    ),
-
-  bitget_spot: () =>
-    verifyEndpoint(
-      'bitget_spot',
-      'https://api.bitget.com/api/v2/copy/spot-trader/trader-profit-ranking?period=THIRTY_DAYS&pageNo=1&pageSize=1',
-      {
-        headers: {
-          Referer: 'https://www.bitget.com/',
-          Origin: 'https://www.bitget.com',
-        },
-        validateResponse: (d: ApiResponse) =>
-          d?.code === '00000' || d?.code === 0 || d?.code === '0' || !!d?.data,
-      }
-    ),
-
   xt: () =>
     verifyEndpoint(
       'xt',
@@ -246,41 +263,101 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  bingx: () =>
+  btse: () =>
     verifyEndpoint(
-      'bingx',
-      'https://bingx.com/api/strategy/api/v1/copy/trader/topRanking?type=ALL&pageIndex=1&pageSize=1',
+      'btse',
+      'https://api.btse.com/spot/api/v3.2/market_summary',
       {
-        headers: {
-          Referer: 'https://bingx.com/en/CopyTrading/leaderBoard',
-          Origin: 'https://bingx.com',
-        },
-        validateResponse: (d: ApiResponse) => !!d?.data,
+        validateResponse: (d: ApiResponse) => Array.isArray(d) && d.length > 0,
       }
     ),
 
+  // =============================================
+  // CEX — Auth required (need API keys or broker credentials)
+  // =============================================
+
+  // Bitget public copy-trading endpoints return 404 since late 2025.
+  // Only the authenticated broker API works: /api/v2/copy/mix-broker/query-traders
+  // Requires BITGET_API_KEY, BITGET_SECRET, BITGET_PASSPHRASE env vars.
+  bitget_futures: () => {
+    if (!process.env.BITGET_API_KEY) {
+      return skipResult('bitget_futures', 'auth_required', 'BITGET_API_KEY not set — public endpoints return 404, broker API required')
+    }
+    return verifyEndpoint(
+      'bitget_futures',
+      'https://api.bitget.com/api/v2/copy/mix-broker/query-traders?pageNo=1&pageSize=1&period=THIRTY_DAYS',
+      {
+        headers: {
+          Referer: 'https://www.bitget.com/',
+          Origin: 'https://www.bitget.com',
+        },
+        validateResponse: (d: ApiResponse) =>
+          d?.code === '00000' || d?.code === 0 || d?.code === '0' || !!d?.data,
+      }
+    )
+  },
+
+  bitget_spot: () => {
+    if (!process.env.BITGET_API_KEY) {
+      return skipResult('bitget_spot', 'auth_required', 'BITGET_API_KEY not set — public endpoints return 404, broker API required')
+    }
+    return verifyEndpoint(
+      'bitget_spot',
+      'https://api.bitget.com/api/v2/copy/spot-broker/query-traders?pageNo=1&pageSize=1&period=THIRTY_DAYS',
+      {
+        headers: {
+          Referer: 'https://www.bitget.com/',
+          Origin: 'https://www.bitget.com',
+        },
+        validateResponse: (d: ApiResponse) =>
+          d?.code === '00000' || d?.code === 0 || d?.code === '0' || !!d?.data,
+      }
+    )
+  },
+
+  // BloFin openapi returns 401 Unauthorized without API credentials
+  blofin: () =>
+    skipResult('blofin', 'auth_required', 'openapi.blofin.com requires authentication (401)'),
+
+  // Drift leaderboard API requires DRIFT_API_KEY
+  drift: () => {
+    if (!process.env.DRIFT_API_KEY) {
+      return skipResult('drift', 'auth_required', 'DRIFT_API_KEY not set')
+    }
+    return verifyEndpoint(
+      'drift',
+      'https://mainnet-beta.api.drift.trade/leaderboard?resolution=allTime',
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.DRIFT_API_KEY}`,
+        },
+        validateResponse: (d: ApiResponse) => Array.isArray(d) || !!d?.data,
+      }
+    )
+  },
+
+  // =============================================
+  // CEX — Cloudflare WAF / endpoint changes
+  // Fetchers use multi-URL fallback strategies with browser headers and proxies.
+  // Verify probes the primary endpoint — CF challenge is expected from serverless.
+  // =============================================
+
+  // Gate.io v4 API now requires API KEY header for copy_trading endpoints.
+  // Fetcher uses www.gate.com/apiw/v2/copy/leader/list (internal web API, no key needed).
   gateio: () =>
     verifyEndpoint(
       'gateio',
-      'https://api.gateio.ws/api/v4/copy_trading/leader_board?sort_by=roi&period=30D&page=1&limit=1',
-      {
-        validateResponse: (d: ApiResponse) => Array.isArray(d) || !!d?.data,
-      }
-    ),
-
-  mexc: () =>
-    verifyEndpoint(
-      'mexc',
-      'https://www.mexc.com/api/platform/copy/v1/recommend/traders?pageNum=1&pageSize=1&sortType=ROI&days=90',
+      'https://www.gate.com/apiw/v2/copy/leader/list?page=1&page_size=1&order_by=profit_rate&sort_by=desc&cycle=month&status=running',
       {
         headers: {
-          Referer: 'https://www.mexc.com/futures/copyTrade/home',
-          Origin: 'https://www.mexc.com',
+          Referer: 'https://www.gate.io/copy_trading',
+          Origin: 'https://www.gate.io',
         },
-        validateResponse: (d: ApiResponse) => !!d?.data,
+        validateResponse: (d: ApiResponse) => d?.code === 0 && !!d?.data,
       }
     ),
 
+  // KuCoin internal API — may return 404 if endpoint changed
   kucoin: () =>
     verifyEndpoint(
       'kucoin',
@@ -294,105 +371,50 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
+  // CoinEx perpetual copy trading API
   coinex: () =>
     verifyEndpoint(
       'coinex',
-      'https://www.coinex.com/res/copy-trading/traders?page=1&limit=1',
+      'https://api.coinex.com/perpetual/v1/market/copy_trading/trader?page=1&limit=1&sort_by=roi',
       {
-        validateResponse: (d: ApiResponse) => !!d?.data,
+        headers: {
+          Referer: 'https://www.coinex.com/en/copy-trading/futures',
+          Origin: 'https://www.coinex.com',
+        },
+        validateResponse: (d: ApiResponse) => d?.code === 0 || !!d?.data,
       }
     ),
 
-  phemex: () =>
+  // MEXC: primary fetcher URL uses www.mexc.com/api/platform/copy/v1/
+  // with fallback to contract.mexc.com. Both are geo-sensitive.
+  mexc: () =>
     verifyEndpoint(
-      'phemex',
-      'https://phemex.com/api/phemex-user/users/children/queryTraderWithCopySetting?pageNo=1&pageSize=1&days=90',
+      'mexc',
+      'https://www.mexc.com/api/platform/copy/v1/recommend/traders?pageNum=1&pageSize=1&sortType=ROI&days=90',
       {
         headers: {
-          Referer: 'https://phemex.com/copy-trading',
-          Origin: 'https://phemex.com',
+          Referer: 'https://www.mexc.com/futures/copyTrade/home',
+          Origin: 'https://www.mexc.com',
         },
         validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
-  weex: () =>
+  // BingX behind Cloudflare challenge — fetcher uses proxy fallback
+  bingx: () =>
     verifyEndpoint(
-      'weex',
-      'https://http-gateway1.janapw.com/api/v1/public/trace/traderListView',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Referer: 'https://www.weex.com/zh-CN/copy-trading',
-          Origin: 'https://www.weex.com',
-        },
-        body: { pageNo: 1, pageSize: 1 },
-        validateResponse: (d: ApiResponse) => !!d?.data,
-      }
-    ),
-
-  lbank: () =>
-    verifyEndpoint(
-      'lbank',
-      'https://www.lbank.com/api/copy-trading/trader/ranking?period=30d&page=1&size=1&sort=roi',
+      'bingx',
+      'https://bingx.com/api/strategy/api/v1/copy/trader/topRanking?type=ALL&pageIndex=1&pageSize=1',
       {
         headers: {
-          Referer: 'https://www.lbank.com/copy-trading',
-          Origin: 'https://www.lbank.com',
+          Referer: 'https://bingx.com/en/CopyTrading/leaderBoard',
+          Origin: 'https://bingx.com',
         },
         validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
-  blofin: () =>
-    verifyEndpoint(
-      'blofin',
-      'https://openapi.blofin.com/api/v1/copytrading/current-traders?pageNo=1&pageSize=1&range=2',
-      {
-        headers: {
-          Referer: 'https://blofin.com/en/copy-trade',
-          Origin: 'https://blofin.com',
-        },
-        validateResponse: (d: ApiResponse) => !!d?.data,
-      }
-    ),
-
-  cryptocom: () =>
-    verifyEndpoint(
-      'cryptocom',
-      'https://crypto.com/fe-ex-api/copy/leader/list?sort=roi&period=30d&page=1&pageSize=1',
-      {
-        headers: {
-          Referer: 'https://crypto.com/exchange/copy-trading',
-          Origin: 'https://crypto.com',
-        },
-        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
-      }
-    ),
-
-  toobit: () =>
-    verifyEndpoint(
-      'toobit',
-      'https://www.toobit.com/api/v1/copy/leader/rank?sortBy=roi&period=30&page=1&pageSize=1',
-      {
-        headers: {
-          Referer: 'https://www.toobit.com/en-US/copy-trading',
-          Origin: 'https://www.toobit.com',
-        },
-        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
-      }
-    ),
-
-  btse: () =>
-    verifyEndpoint(
-      'btse',
-      'https://api.btse.com/spot/api/v3.2/market_summary',
-      {
-        validateResponse: (d: ApiResponse) => Array.isArray(d) && d.length > 0,
-      }
-    ),
-
+  // Pionex behind Cloudflare challenge
   pionex: () =>
     verifyEndpoint(
       'pionex',
@@ -406,7 +428,60 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // -- DEX --
+  // Crypto.com behind Cloudflare challenge
+  cryptocom: () =>
+    verifyEndpoint(
+      'cryptocom',
+      'https://crypto.com/fe-ex-api/copy/leader/list?sort=roi&period=30d&page=1&pageSize=1',
+      {
+        headers: {
+          Referer: 'https://crypto.com/exchange/copy-trading',
+          Origin: 'https://crypto.com',
+        },
+        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
+      }
+    ),
+
+  // Toobit: returns HTML instead of JSON (geo/CF block)
+  toobit: () =>
+    verifyEndpoint(
+      'toobit',
+      'https://www.toobit.com/api/v1/copy/leader/rank?sortBy=roi&period=30&page=1&pageSize=1',
+      {
+        headers: {
+          Referer: 'https://www.toobit.com/en-US/copy-trading',
+          Origin: 'https://www.toobit.com',
+        },
+        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
+      }
+    ),
+
+  // LBank: all API endpoints return HTML (CF protection or endpoint migration)
+  // Fetcher uses multi-URL fallback with 5 different paths
+  lbank: () =>
+    verifyEndpoint(
+      'lbank',
+      'https://www.lbank.com/api/copy-trading/trader/ranking?period=30d&page=1&size=1&sort=roi',
+      {
+        headers: {
+          Referer: 'https://www.lbank.com/copy-trading',
+          Origin: 'https://www.lbank.com',
+        },
+        validateResponse: (d: ApiResponse) => !!d?.data,
+      }
+    ),
+
+  // =============================================
+  // CEX — Discontinued
+  // =============================================
+
+  // Weex copy trading API discontinued (all endpoints return 404/521)
+  weex: () =>
+    skipResult('weex', 'endpoint_gone', 'Weex copy trading API discontinued (404/521)'),
+
+  // =============================================
+  // DEX — Working
+  // =============================================
 
   hyperliquid: () =>
     verifyEndpoint(
@@ -434,6 +509,8 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
+  // dYdX v4 indexer: /v4/leaderboard/pnl endpoint was removed.
+  // Fetcher uses proxy fallback. Test the base indexer health.
   dydx: () =>
     verifyEndpoint(
       'dydx',
@@ -462,19 +539,11 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  drift: () =>
-    verifyEndpoint(
-      'drift',
-      'https://mainnet-beta.api.drift.trade/leaderboard?resolution=allTime',
-      {
-        validateResponse: (d: ApiResponse) => Array.isArray(d) || !!d?.data,
-      }
-    ),
-
+  // Jupiter Perps: now requires marketMint parameter
   jupiter_perps: () =>
     verifyEndpoint(
       'jupiter_perps',
-      'https://perps-api.jup.ag/v1/top-traders?year=2025&week=current',
+      'https://perps-api.jup.ag/v1/top-traders?marketMint=So11111111111111111111111111111111111111112&year=2026&week=current',
       {
         timeoutMs: 15000,
         validateResponse: (d: ApiResponse) =>
@@ -482,17 +551,14 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
+  // =============================================
+  // DEX — TheGraph dependent (require THEGRAPH_API_KEY)
+  // =============================================
+
   uniswap: () => {
     const apiKey = process.env.THEGRAPH_API_KEY || ''
     if (!apiKey) {
-      return Promise.resolve({
-        platform: 'uniswap',
-        healthy: false,
-        latencyMs: 0,
-        failureReason: 'auth_required' as FailureReason,
-        details: 'THEGRAPH_API_KEY not set',
-        checkedAt: new Date().toISOString(),
-      })
+      return skipResult('uniswap', 'auth_required', 'THEGRAPH_API_KEY not set')
     }
     return verifyEndpoint(
       'uniswap',
@@ -512,14 +578,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   pancakeswap: () => {
     const apiKey = process.env.THEGRAPH_API_KEY || ''
     if (!apiKey) {
-      return Promise.resolve({
-        platform: 'pancakeswap',
-        healthy: false,
-        latencyMs: 0,
-        failureReason: 'auth_required' as FailureReason,
-        details: 'THEGRAPH_API_KEY not set',
-        checkedAt: new Date().toISOString(),
-      })
+      return skipResult('pancakeswap', 'auth_required', 'THEGRAPH_API_KEY not set')
     }
     return verifyEndpoint(
       'pancakeswap',
@@ -536,18 +595,10 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     )
   },
 
-  // TheGraph-dependent platforms (require THEGRAPH_API_KEY)
   kwenta: () => {
     const apiKey = process.env.THEGRAPH_API_KEY || ''
     if (!apiKey) {
-      return Promise.resolve({
-        platform: 'kwenta',
-        healthy: false,
-        latencyMs: 0,
-        failureReason: 'auth_required' as FailureReason,
-        details: 'THEGRAPH_API_KEY not set',
-        checkedAt: new Date().toISOString(),
-      })
+      return skipResult('kwenta', 'auth_required', 'THEGRAPH_API_KEY not set')
     }
     return verifyEndpoint(
       'kwenta',
@@ -567,14 +618,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   synthetix: () => {
     const apiKey = process.env.THEGRAPH_API_KEY || ''
     if (!apiKey) {
-      return Promise.resolve({
-        platform: 'synthetix',
-        healthy: false,
-        latencyMs: 0,
-        failureReason: 'auth_required' as FailureReason,
-        details: 'THEGRAPH_API_KEY not set',
-        checkedAt: new Date().toISOString(),
-      })
+      return skipResult('synthetix', 'auth_required', 'THEGRAPH_API_KEY not set')
     }
     return verifyEndpoint(
       'synthetix',
@@ -594,14 +638,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   mux: () => {
     const apiKey = process.env.THEGRAPH_API_KEY || ''
     if (!apiKey) {
-      return Promise.resolve({
-        platform: 'mux',
-        healthy: false,
-        latencyMs: 0,
-        failureReason: 'auth_required' as FailureReason,
-        details: 'THEGRAPH_API_KEY not set',
-        checkedAt: new Date().toISOString(),
-      })
+      return skipResult('mux', 'auth_required', 'THEGRAPH_API_KEY not set')
     }
     return verifyEndpoint(
       'mux',
@@ -618,8 +655,6 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     )
   },
 }
-
- 
 
 // ── Public API ──
 
