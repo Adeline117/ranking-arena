@@ -23,6 +23,13 @@ export const runtime = 'nodejs'
 export const preferredRegion = ['iad1', 'sfo1', 'hnd1']
 export const dynamic = 'force-dynamic'
 
+// In-memory cache for available sources (shared across requests, TTL 5 min)
+const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>()
+const SOURCES_TTL = 5 * 60 * 1000
+
+// Select only needed columns from leaderboard_ranks (avoid SELECT *)
+const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, is_outlier, computed_at, season_id'
+
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
@@ -95,10 +102,10 @@ async function fetchFromLeaderboard(
 ) {
   const { timeRange, exchangeFilter, sortBy, order, cursor, limit, useLegacyPaging, page } = params
 
-  // Build query
+  // Build query — select only needed columns (avoid SELECT *)
   let query = supabase
     .from('leaderboard_ranks')
-    .select('*', { count: 'estimated' })
+    .select(LEADERBOARD_COLUMNS, { count: 'estimated' })
     .eq('season_id', timeRange)
 
   if (exchangeFilter) {
@@ -192,26 +199,23 @@ async function fetchFromLeaderboard(
     ? (page + 1) * limit < totalCount
     : traders.length === limit
 
-  // Available sources (for UI filter) — filter by current season_id for accuracy
-  // Also query trader_snapshots as fallback since leaderboard_ranks may not have all sources
-  const [{ data: sourceRows }, { data: snapshotSourceRows }] = await Promise.all([
-    supabase
+  // Available sources (for UI filter) — cached in-memory with 5-min TTL
+  // Avoids scanning 2000+ rows on every request
+  const sourceCacheEntry = availableSourcesCache.get(timeRange)
+  let availableSources: string[]
+  if (sourceCacheEntry && Date.now() - sourceCacheEntry.ts < SOURCES_TTL) {
+    availableSources = sourceCacheEntry.sources
+  } else {
+    const { data: sourceRows } = await supabase
       .from('leaderboard_ranks')
       .select('source')
       .eq('season_id', timeRange)
-      .limit(2000),
-    supabase
-      .from('trader_snapshots')
-      .select('source')
-      .eq('season_id', timeRange)
-      .not('arena_score', 'is', null)
-      .limit(2000),
-  ])
-
-  const allSourceSet = new Set<string>()
-  for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
-  for (const r of (snapshotSourceRows || [])) allSourceSet.add((r as { source: string }).source)
-  const availableSources = [...allSourceSet].sort()
+      .limit(2000)
+    const allSourceSet = new Set<string>()
+    for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
+    availableSources = [...allSourceSet].sort()
+    availableSourcesCache.set(timeRange, { sources: availableSources, ts: Date.now() })
+  }
 
   // Latest computed_at
   const computedAt = data?.[0]?.computed_at || new Date().toISOString()

@@ -16,7 +16,7 @@ import ReaderSettings from './components/ReaderSettings'
 const EpubReader = dynamic(() => import('@/app/components/library/EpubReader'), { ssr: false })
 
 // pdfjs-dist types (stubbed — package removed, loaded from CDN at runtime)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type PDFDocumentProxy = { numPages: number; getPage(n: number): Promise<PDFPageProxy>; getDestination(dest: string): Promise<any[] | null>; getPageIndex(ref: any): Promise<number>; destroy(): void }
 type PDFPageProxy = { getViewport(params: { scale: number }): { width: number; height: number }; render(params: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }): PDFRenderTask }
 type PDFRenderTask = { promise: Promise<void>; cancel(): void }
@@ -372,7 +372,7 @@ export default function ReadPage() {
       })
       .catch(() => setError(t('readerLoadFailed')))
       .finally(() => setLoading(false))
-  }, [id, isZh])
+  }, [id, isZh]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   // Check membership
   useEffect(() => {
@@ -382,7 +382,7 @@ export default function ReadPage() {
     } else {
       setNeedsUpgrade(false)
     }
-  }, [isPremium, premiumLoading, book])
+  }, [isPremium, premiumLoading, book]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   // Bookshelf prompt after 2 min
   useEffect(() => {
@@ -453,7 +453,7 @@ export default function ReadPage() {
 
     async function loadPdf() {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const pdfjsLib = await import(/* webpackIgnore: true */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs' as any)
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
         const loadingTask = pdfjsLib.getDocument({ url: url!, disableAutoFetch: false, disableStream: false })
@@ -495,7 +495,7 @@ export default function ReadPage() {
 
     loadPdf()
     return () => { cancelled = true }
-  }, [book, contentMode, isZh, id, extractToc])
+  }, [book, contentMode, isZh, id, extractToc]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   // ─── Load HTML/text content ────────────────────────────────────────
   useEffect(() => {
@@ -563,7 +563,7 @@ export default function ReadPage() {
 
     loadHtml()
     return () => { cancelled = true }
-  }, [book, contentMode, isZh, id, fontSize])
+  }, [book, contentMode, isZh, id, fontSize]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   // ─── Render PDF page ──────────────────────────────────────────────
   const renderCurrentPage = useCallback(async () => {

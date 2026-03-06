@@ -24,17 +24,17 @@ export async function GET() {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    // Fetch latest funding rates
+    // Fetch latest funding rates — select only needed columns
     const { data: fundingRates } = await supabase
       .from('funding_rates')
-      .select('*')
+      .select('symbol, platform, funding_rate, funding_time')
       .order('funding_time', { ascending: false })
       .limit(200)
 
-    // Fetch latest open interest
+    // Fetch latest open interest — select only needed columns
     const { data: openInterest } = await supabase
       .from('open_interest')
-      .select('*')
+      .select('symbol, platform, open_interest_usd, timestamp')
       .order('timestamp', { ascending: false })
       .limit(200)
 
