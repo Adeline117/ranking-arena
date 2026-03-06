@@ -224,6 +224,22 @@ export interface AuthoredEntity extends BaseEntity {
 }
 
 // ============================================
+// Result Type (discriminated union for error handling)
+// ============================================
+
+export type Result<T, E = Error> =
+  | { ok: true; data: T }
+  | { ok: false; error: E }
+
+export function Ok<T>(data: T): Result<T, never> {
+  return { ok: true, data }
+}
+
+export function Err<E = Error>(error: E): Result<never, E> {
+  return { ok: false, error }
+}
+
+// ============================================
 // 操作结果类型
 // ============================================
 

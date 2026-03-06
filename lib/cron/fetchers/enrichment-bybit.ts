@@ -7,6 +7,8 @@ import { logger } from '@/lib/logger'
 import { sleep } from './shared'
 import { fetchWithProxyFallback, type EquityCurvePoint, type PositionHistoryItem, type StatsDetail } from './enrichment-types'
 import { upsertEquityCurve } from './enrichment-db'
+import { withRetry } from '@/lib/utils/circuit-breaker'
+import { type Result, Ok, Err } from '@/lib/types'
 
 interface BybitChartResponse {
   retCode?: number
@@ -209,6 +211,29 @@ export async function fetchBybitStatsDetail(
   }
 }
 
+async function enrichSingleBybitTrader(
+  supabase: SupabaseClient,
+  traderId: string,
+): Promise<Result<string>> {
+  try {
+    const curve = await withRetry(
+      () => fetchBybitEquityCurve(traderId, 90),
+      { maxRetries: 2, initialDelay: 2000, isRetryable: (e) => {
+        const msg = e instanceof Error ? e.message : ''
+        return msg.includes('timeout') || msg.includes('429') || msg.includes('ECONNRESET')
+      }}
+    )
+    if (curve.length > 0) {
+      await upsertEquityCurve(supabase, 'bybit', traderId, '90D', curve)
+    }
+    return Ok(traderId)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.warn(`[bybit] Equity curve fetch failed for ${traderId}: ${msg}`)
+    return Err(err instanceof Error ? err : new Error(msg))
+  }
+}
+
 export async function enrichBybitTraders(
   supabase: SupabaseClient,
   traderIds: string[],
@@ -216,34 +241,33 @@ export async function enrichBybitTraders(
     concurrency?: number
     delayMs?: number
   } = {}
-): Promise<{ success: number; failed: number }> {
+): Promise<{ success: number; failed: number; errors: string[] }> {
   const { concurrency = 3, delayMs = 1000 } = options
 
   let success = 0
   let failed = 0
+  const errors: string[] = []
 
   for (let i = 0; i < traderIds.length; i += concurrency) {
     const batch = traderIds.slice(i, i + concurrency)
 
-    await Promise.all(
-      batch.map(async (traderId) => {
-        try {
-          const curve = await fetchBybitEquityCurve(traderId, 90)
-          if (curve.length > 0) {
-            await upsertEquityCurve(supabase, 'bybit', traderId, '90D', curve)
-          }
-          success++
-        } catch (err) {
-          logger.warn(`[bybit] Equity curve fetch failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
-          failed++
-        }
-      })
+    const results = await Promise.all(
+      batch.map((traderId) => enrichSingleBybitTrader(supabase, traderId))
     )
+
+    for (const result of results) {
+      if (result.ok) {
+        success++
+      } else {
+        failed++
+        if (errors.length < 10) errors.push(result.error.message)
+      }
+    }
 
     if (i + concurrency < traderIds.length) {
       await sleep(delayMs)
     }
   }
 
-  return { success, failed }
+  return { success, failed, errors }
 }
