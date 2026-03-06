@@ -2,6 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { t as moduleT } from '@/lib/i18n'
 
 type HighlightSortMode = 'time' | 'position'
 type HighlightFilterColor = string | 'all'
@@ -121,7 +122,6 @@ export function EpubSearchPanel({
 interface EpubNotesPanelProps {
   show: boolean
   onClose: () => void
-  isZh: boolean
   panelBg: string
   panelText: string
   panelBorder: string
@@ -144,7 +144,7 @@ interface EpubNotesPanelProps {
 }
 
 export function EpubNotesPanel({
-  show, onClose, isZh,
+  show, onClose,
   panelBg, panelText, panelBorder, panelSubtle, accent,
   highlights, highlightSort, highlightFilter, filteredHighlights,
   editingNoteIdx, editNoteText,
@@ -152,7 +152,7 @@ export function EpubNotesPanel({
   onJumpToHighlight, onRemoveHighlight,
   onStartEditNote, onSaveNote, onCancelEditNote, onEditNoteTextChange,
 }: EpubNotesPanelProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   if (!show) return null
 
   return (
@@ -175,7 +175,7 @@ export function EpubNotesPanel({
               {t('epubHighlightsNotes')}
             </span>
             <span style={{ fontSize: 12, opacity: 0.4, marginLeft: 8 }}>
-              {highlights.length}{isZh ? ' 条' : ''}
+              {highlights.length}{t('epubHighlightsCountSuffix')}
             </span>
           </div>
           <button aria-label="Close notes panel" onClick={onClose} style={{
@@ -226,7 +226,7 @@ export function EpubNotesPanel({
                 <polyline points="14 2 14 8 20 8"/>
               </svg>
               <p style={{ fontSize: 13, opacity: 0.35, lineHeight: 1.6 }}>
-                {isZh ? '暂无高亮或笔记。\n选中文字即可添加。' : 'No highlights yet.\nSelect text to add.'}
+                {t('epubNoHighlightsMessage')}
               </p>
             </div>
           )}
@@ -280,7 +280,7 @@ export function EpubNotesPanel({
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingLeft: 13 }}>
                   <span style={{ fontSize: 11, opacity: 0.25 }}>
-                    {new Date(h.createdAt).toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {new Date(h.createdAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </span>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={e => { e.stopPropagation(); onStartEditNote(realIdx, h.note) }} style={{
@@ -307,7 +307,7 @@ export function EpubNotesPanel({
           <div style={{ padding: '10px 16px', borderTop: `1px solid ${panelBorder}` }}>
             <button onClick={() => {
               const text = highlights.map(h =>
-                `"${h.text}"${h.note ? `\n  -- ${h.note}` : ''}\n  [${new Date(h.createdAt).toLocaleDateString(isZh ? 'zh-CN' : 'en-US')}]`
+                `"${h.text}"${h.note ? `\n  -- ${h.note}` : ''}\n  [${new Date(h.createdAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')}]`
               ).join('\n\n---\n\n')
               navigator.clipboard?.writeText(text)
             }} style={{
@@ -332,7 +332,6 @@ export function EpubNotesPanel({
 interface EpubStatsPanelProps {
   show: boolean
   onClose: () => void
-  isZh: boolean
   panelBg: string
   panelText: string
   panelBorder: string
@@ -360,17 +359,21 @@ function StatCard({ label, value, themeIsDark }: { label: string; value: string;
   )
 }
 
-function formatDur(seconds: number, isZh: boolean): string {
-  if (seconds < 60) return isZh ? `${seconds}秒` : `${seconds}s`
+function formatDur(seconds: number): string {
+  const sec = moduleT('durationSec')
+  const min = moduleT('durationMin')
+  const hour = moduleT('durationHour')
+  const minSuffix = moduleT('durationMinSuffix')
+  if (seconds < 60) return `${seconds}${sec}`
   const m = Math.floor(seconds / 60)
-  if (m < 60) return isZh ? `${m}分钟` : `${m}min`
+  if (m < 60) return `${m}${min}`
   const h = Math.floor(m / 60)
   const rm = m % 60
-  return isZh ? `${h}小时${rm > 0 ? rm + '分钟' : ''}` : `${h}h ${rm > 0 ? rm + 'm' : ''}`
+  return `${h}${hour}${rm > 0 ? ` ${rm}${minSuffix}` : ''}`
 }
 
 export function EpubStatsPanel({
-  show, onClose, isZh,
+  show, onClose,
   panelBg, panelText, panelBorder, panelSubtle,
   accent, progressPercent, currentPage, totalPages,
   sessionElapsedSec, totalSessionTime, sessionsCount, timeRemainingStr,
@@ -398,8 +401,8 @@ export function EpubStatsPanel({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <StatCard label={t('epubProgress')} value={`${progressPercent}%`} themeIsDark={themeIsDark} />
           <StatCard label={t('epubCurrentPage')} value={`${currentPage}/${totalPages}`} themeIsDark={themeIsDark} />
-          <StatCard label={t('epubThisSession')} value={formatDur(sessionElapsedSec, isZh)} themeIsDark={themeIsDark} />
-          <StatCard label={t('epubTotalTime')} value={formatDur(totalSessionTime, isZh)} themeIsDark={themeIsDark} />
+          <StatCard label={t('epubThisSession')} value={formatDur(sessionElapsedSec)} themeIsDark={themeIsDark} />
+          <StatCard label={t('epubTotalTime')} value={formatDur(totalSessionTime)} themeIsDark={themeIsDark} />
           <StatCard label={t('epubSessions')} value={`${sessionsCount}`} themeIsDark={themeIsDark} />
           <StatCard label={t('epubRemaining')} value={timeRemainingStr} themeIsDark={themeIsDark} />
         </div>

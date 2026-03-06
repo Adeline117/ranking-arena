@@ -268,7 +268,7 @@ export default function ReadPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { language, t } = useLanguage()
-  const isZh = language === 'zh' // kept for EpubReader prop and locale-dependent text indent
+  const isZhLocale = language === 'zh' // kept for locale-dependent text indent
   const { isFeaturesUnlocked: isPremium, isLoading: premiumLoading } = usePremium()
 
   // Book data
@@ -372,7 +372,7 @@ export default function ReadPage() {
       })
       .catch(() => setError(t('readerLoadFailed')))
       .finally(() => setLoading(false))
-  }, [id, isZh]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [id, language]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   // Check membership
   useEffect(() => {
@@ -495,7 +495,7 @@ export default function ReadPage() {
 
     loadPdf()
     return () => { cancelled = true }
-  }, [book, contentMode, isZh, id, extractToc]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [book, contentMode, language, id, extractToc]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   // ─── Load HTML/text content ────────────────────────────────────────
   useEffect(() => {
@@ -563,7 +563,7 @@ export default function ReadPage() {
 
     loadHtml()
     return () => { cancelled = true }
-  }, [book, contentMode, isZh, id, fontSize]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [book, contentMode, language, id, fontSize]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
 
   // ─── Render PDF page ──────────────────────────────────────────────
   const renderCurrentPage = useCallback(async () => {
@@ -1105,13 +1105,11 @@ export default function ReadPage() {
           fontFamily={fontFamily}
           lineHeight={lineHeight}
           contentMode={contentMode}
-          isZh={isZh}
           onThemeChange={setTheme}
           onFontSizeChange={setFontSize}
           onFontFamilyChange={setFontFamily}
           onLineHeightChange={setLineHeight}
           onClose={() => setShowSettings(false)}
-          t={t}
         />
       )}
 
@@ -1192,7 +1190,7 @@ export default function ReadPage() {
                 <p key={i} style={{
                   margin: 0,
                   marginBottom: fontSizeConfig.body * 1.2,
-                  textIndent: isZh ? '2em' : undefined,
+                  textIndent: isZhLocale ? '2em' : undefined,
                 }}>
                   {para}
                 </p>
@@ -1207,7 +1205,6 @@ export default function ReadPage() {
             <EpubReader
               url={book.epub_url || `https://iknktzifjdyujdccyhsv.supabase.co/storage/v1/object/public/library-files/${book.file_key}`}
               bookId={id}
-              isZh={isZh}
               theme={theme}
               fontSize={fontSize}
               fontFamily={fontFamily}

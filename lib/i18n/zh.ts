@@ -3869,6 +3869,12 @@ profileActivityIsReading: '在读',
 profileActivityFinishedReading: '读过',
 profileActivityRated: '评价了',
 
+// ProfileActivityFeed relative time (个人动态 - 相对时间)
+profileActivityMinutesAgo: '分钟前',
+profileActivityHoursAgo: '小时前',
+profileActivityDaysAgo: '天前',
+profileActivityMonthsAgo: '个月前',
+
 // Following feed (关注动态)
 followingFeedLoginPrompt: '登录后查看关注动态',
 followingFeedLoginButton: '去登录',
@@ -4205,8 +4211,6 @@ instNoRatingsYet: '暂无评分',
 
 // Library i18n migration - remaining isZh patterns
 audioReaderTitle: '朗读模式',
-epubSessionLabel: '本次阅读 ',
-epubRemainingLabel: '预计剩余 ',
 epubAudioModeLabel: '朗读模式',
 epubHighlightsCountSuffix: ' 条',
 epubNoHighlightsMessage: '暂无高亮或笔记。\n选中文字即可添加。',

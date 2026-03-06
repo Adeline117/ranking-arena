@@ -38,7 +38,7 @@ export class OkxFuturesConnector extends BaseConnector {
       { method: 'GET' }
     )
     const data = warnValidate(OkxFuturesLeaderboardResponseSchema, _rawLb, 'okx-futures/leaderboard')
-    const list = data?.data?.ranks || data?.data || []
+    const list = data?.data?.ranks || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
       platform: 'okx' as const, market_type: 'futures' as const,

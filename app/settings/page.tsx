@@ -44,15 +44,15 @@ function ExchangeBindingBanner({ userId }: { userId: string | null }) {
 
   useEffect(() => {
     if (!userId) return
-    supabase
-      .from('user_exchange_connections')
-      .select('id')
-      .eq('user_id', userId)
-      .limit(1)
-      .then(({ data }) => {
-        setShow(!data || data.length === 0)
-      })
-      .catch(() => { /* Exchange connection check non-critical */ })
+    Promise.resolve(
+      supabase
+        .from('user_exchange_connections')
+        .select('id')
+        .eq('user_id', userId)
+        .limit(1)
+    ).then(({ data }) => {
+      setShow(!data || data.length === 0)
+    }).catch(() => { /* Exchange connection check non-critical */ })
   }, [userId])
 
   if (!show) return null

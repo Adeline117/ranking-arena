@@ -97,7 +97,7 @@ export default function BookDetailClient({
   canonicalUrl,
 }: BookDetailClientProps) {
   const { language, t } = useLanguage()
-  const isZh = language === 'zh'  // kept for locale-dependent title selection and date formatting
+  const isZhLocale = language === 'zh'  // kept for locale-dependent title selection
   const id = book.id
 
   const [overview, setOverview] = useState<RatingOverview | null>(initialOverview)
@@ -282,7 +282,7 @@ export default function BookDetailClient({
               marginBottom: 8, lineHeight: 1.25,
               letterSpacing: '-0.02em',
             }}>
-              {isZh ? (book.title_zh || book.title) : (book.title_en || book.title)}
+              {isZhLocale ? (book.title_zh || book.title) : (book.title_en || book.title)}
             </h1>
 
             {book.author && (
@@ -655,7 +655,6 @@ export default function BookDetailClient({
               reviews={reviews}
               bookId={id}
               bookTitle={book.title}
-              isZh={isZh}
               hasSession={!!session}
               hasMoreReviews={hasMoreReviews}
               onLoadMore={() => setReviewPage(p => p + 1)}

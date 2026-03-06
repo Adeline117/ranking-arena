@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type ReadingTheme = 'white' | 'sepia' | 'dark' | 'green'
 type FontSize = 'small' | 'medium' | 'large'
@@ -8,35 +9,29 @@ type FontFamily = 'sans' | 'serif' | 'mono' | 'kai'
 type ContentMode = 'pdf' | 'html' | 'epub' | 'none'
 
 const THEME_PRESETS: Record<ReadingTheme, {
-  dot: string; labelZh: string; label: string;
+  dot: string;
   settingsLabel: string; settingsOption: string; settingsOptionInactive: string;
   settingsControlBg: string; settingsHint: string;
 }> = {
-  white:  { dot: 'var(--color-on-accent)', label: 'White',  labelZh: '白色',
+  white:  { dot: 'var(--color-on-accent)',
     settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-secondary)', settingsOptionInactive: 'var(--color-text-primary)',
     settingsControlBg: 'var(--color-overlay-subtle)', settingsHint: 'var(--color-text-tertiary)' },
-  sepia:  { dot: 'var(--color-bg-secondary)', label: 'Sepia',  labelZh: '暖黄',
+  sepia:  { dot: 'var(--color-bg-secondary)',
     settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
     settingsControlBg: 'var(--glass-bg-light)', settingsHint: 'var(--color-overlay-light)' },
-  dark:   { dot: 'var(--color-bg-secondary)', label: 'Dark',   labelZh: '暗黑',
+  dark:   { dot: 'var(--color-bg-secondary)',
     settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
     settingsControlBg: 'var(--glass-bg-light)', settingsHint: 'var(--color-text-quaternary)' },
-  green:  { dot: 'var(--color-accent-success-20)', label: 'Green',  labelZh: '护眼绿',
+  green:  { dot: 'var(--color-accent-success-20)',
     settingsLabel: 'var(--color-text-secondary)', settingsOption: 'var(--color-text-tertiary)', settingsOptionInactive: 'var(--color-text-primary)',
     settingsControlBg: 'var(--glass-bg-light)', settingsHint: 'var(--color-text-quaternary)' },
 }
 
-const FONT_SIZES: Record<FontSize, { labelZh: string; label: string }> = {
-  small:  { labelZh: '小', label: 'S' },
-  medium: { labelZh: '中', label: 'M' },
-  large:  { labelZh: '大', label: 'L' },
-}
-
-const FONT_FAMILIES: Record<FontFamily, { css: string; labelZh: string; label: string }> = {
-  sans:  { css: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", sans-serif', labelZh: '黑体', label: 'Sans' },
-  serif: { css: 'Georgia, "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif', labelZh: '宋体', label: 'Serif' },
-  mono:  { css: '"SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace', labelZh: '等宽', label: 'Mono' },
-  kai:   { css: '"STKaiti", "KaiTi", "楷体", serif', labelZh: '楷体', label: 'Kai' },
+const FONT_FAMILIES: Record<FontFamily, { css: string }> = {
+  sans:  { css: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", sans-serif' },
+  serif: { css: 'Georgia, "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif' },
+  mono:  { css: '"SF Mono", "Fira Code", "Cascadia Code", Menlo, monospace' },
+  kai:   { css: '"STKaiti", "KaiTi", "楷体", serif' },
 }
 
 interface ReaderSettingsProps {
@@ -45,19 +40,18 @@ interface ReaderSettingsProps {
   fontFamily: FontFamily
   lineHeight: 'compact' | 'normal' | 'relaxed'
   contentMode: ContentMode
-  isZh: boolean
   onThemeChange: (theme: ReadingTheme) => void
   onFontSizeChange: (size: FontSize) => void
   onFontFamilyChange: (family: FontFamily) => void
   onLineHeightChange: (lh: 'compact' | 'normal' | 'relaxed') => void
   onClose: () => void
-  t: (key: string) => string
 }
 
 export default function ReaderSettings({
-  theme, fontSize, fontFamily, lineHeight, contentMode, isZh,
-  onThemeChange, onFontSizeChange, onFontFamilyChange, onLineHeightChange, onClose, t,
+  theme, fontSize, fontFamily, lineHeight, contentMode,
+  onThemeChange, onFontSizeChange, onFontFamilyChange, onLineHeightChange, onClose,
 }: ReaderSettingsProps) {
+  const { t } = useLanguage()
   const themeColors = THEME_PRESETS[theme]
   const pageBg = theme === 'dark' ? 'var(--color-bg-secondary)' : theme === 'sepia' ? 'var(--color-bg-secondary)' : theme === 'green' ? 'var(--color-accent-success-20)' : 'var(--color-on-accent)'
 
@@ -92,7 +86,7 @@ export default function ReaderSettings({
                 color: theme === themeKey ? 'var(--color-accent-primary)' : themeColors.settingsOption,
                 fontWeight: theme === themeKey ? 600 : 400,
               }}>
-                {isZh ? THEME_PRESETS[themeKey].labelZh : THEME_PRESETS[themeKey].label}
+                {({ white: t('readerThemeWhite'), sepia: t('readerThemeSepia'), dark: t('readerThemeDark'), green: t('readerThemeGreen') }[themeKey])}
               </span>
             </button>
           ))}
@@ -104,7 +98,7 @@ export default function ReaderSettings({
             {t('readerFontSize')}
           </p>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-            {(Object.keys(FONT_SIZES) as FontSize[]).map(s => (
+            {(['small', 'medium', 'large'] as FontSize[]).map(s => (
               <button key={s} onClick={() => onFontSizeChange(s)} style={{
                 flex: 1, padding: '8px 4px', borderRadius: 10,
                 background: fontSize === s ? 'var(--color-accent-primary)' : themeColors.settingsControlBg,
@@ -112,7 +106,7 @@ export default function ReaderSettings({
                 border: 'none', cursor: 'pointer', fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15,
                 fontWeight: 600, transition: 'all 0.15s',
               }}>
-                {isZh ? FONT_SIZES[s].labelZh : FONT_SIZES[s].label}
+                {({ small: t('readerFontSmall'), medium: t('readerFontMedium'), large: t('readerFontLarge') }[s])}
               </button>
             ))}
           </div>
@@ -147,18 +141,23 @@ export default function ReaderSettings({
               {t('readerFontFamily')}
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-              {(Object.keys(FONT_FAMILIES) as FontFamily[]).map(f => (
-                <button key={f} onClick={() => onFontFamilyChange(f)} style={{
-                  flex: 1, padding: '8px 4px', borderRadius: 10,
-                  background: fontFamily === f ? 'var(--color-accent-primary)' : themeColors.settingsControlBg,
-                  color: fontFamily === f ? 'var(--color-on-accent)' : themeColors.settingsOptionInactive,
-                  border: 'none', cursor: 'pointer', fontSize: 14,
-                  fontFamily: FONT_FAMILIES[f].css,
-                  fontWeight: 600, transition: 'all 0.15s',
-                }}>
-                  {isZh ? FONT_FAMILIES[f].labelZh : FONT_FAMILIES[f].label}
-              </button>
-              ))}
+              {(Object.keys(FONT_FAMILIES) as FontFamily[]).map(f => {
+                const labelKeys: Record<FontFamily, string> = {
+                  sans: 'readerFontSans', serif: 'readerFontSerif', mono: 'readerFontMono', kai: 'readerFontKai',
+                }
+                return (
+                  <button key={f} onClick={() => onFontFamilyChange(f)} style={{
+                    flex: 1, padding: '8px 4px', borderRadius: 10,
+                    background: fontFamily === f ? 'var(--color-accent-primary)' : themeColors.settingsControlBg,
+                    color: fontFamily === f ? 'var(--color-on-accent)' : themeColors.settingsOptionInactive,
+                    border: 'none', cursor: 'pointer', fontSize: 14,
+                    fontFamily: FONT_FAMILIES[f].css,
+                    fontWeight: 600, transition: 'all 0.15s',
+                  }}>
+                    {t(labelKeys[f] as any)}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -168,9 +167,7 @@ export default function ReaderSettings({
           borderTop: `1px solid ${theme === 'dark' ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)'}`,
         }}>
           <p style={{ fontSize: 11, color: themeColors.settingsHint, textAlign: 'center', lineHeight: 1.6 }}>
-            {isZh
-              ? '快捷键: 左右方向键/空格翻页, B 书签, F 全屏'
-              : 'Keys: Arrows/Space flip, B bookmark, F fullscreen'}
+            {t('readerShortcutsHint')}
           </p>
         </div>
       </div>

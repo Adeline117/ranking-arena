@@ -4,27 +4,35 @@ import React, { memo } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import type { LibraryItem } from '@/lib/types/library'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import BookCover from './BookCover'
 import StarRating from '@/app/components/ui/StarRating'
 
-const CATEGORY_LABELS_ZH: Record<string, string> = {
-  book: '书籍',
-  paper: '论文',
-  whitepaper: '白皮书',
-  event: '事件',
-  research: '研报',
-  academic_paper: '学术论文',
-  finance: '金融',
-  regulatory: '监管',
+const CATEGORY_I18N_KEYS: Record<string, string> = {
+  book: 'bookCategoryBook',
+  paper: 'bookCategoryPaper',
+  whitepaper: 'bookCategoryWhitepaper',
+  event: 'bookCategoryEvent',
+  research: 'bookCategoryResearch',
+  academic_paper: 'bookCategoryAcademic',
+  finance: 'bookCategoryFinance',
+  regulatory: 'bookCategoryRegulatory',
+}
+
+const SUBCAT_I18N_KEYS: Record<string, string> = {
+  hack: 'bookSubcatHack',
+  regulation: 'bookSubcatRegulation',
+  quote: 'bookSubcatQuote',
+  milestone: 'bookSubcatMilestone',
 }
 
 interface BookCardProps {
   item: LibraryItem
-  isZh: boolean
   priority?: boolean
 }
 
-const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCardProps) {
+const BookCard = memo(function BookCard({ item, priority = false }: BookCardProps) {
+  const { language, t } = useLanguage()
   return (
     <Link
       href={`/library/${item.id}`}
@@ -81,7 +89,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
             : { background: 'var(--color-accent-primary)', color: 'var(--foreground)' }),
           zIndex: 1,
         }}>
-          {item.is_free ? (isZh ? '免费' : 'Free') : 'Pro'}
+          {item.is_free ? t('bookCardFree') : t('bookCardPro')}
         </span>
       </div>
 
@@ -94,7 +102,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
             background: tokens.colors.accent.brandMuted, color: tokens.colors.accent.brand,
             fontWeight: 600, letterSpacing: '0.03em',
           }}>
-            {isZh ? CATEGORY_LABELS_ZH[item.category] || item.category : item.category}
+            {CATEGORY_I18N_KEYS[item.category] ? t(CATEGORY_I18N_KEYS[item.category] as any) : item.category}
           </span>
           {item.category === 'event' && item.subcategory && (
             <span style={{
@@ -102,11 +110,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
               background: item.subcategory === 'hack' ? `${tokens.colors.accent.error}18` : item.subcategory === 'regulation' ? `${tokens.colors.accent.brand}18` : `${tokens.colors.accent.success}18`,
               color: item.subcategory === 'hack' ? tokens.colors.accent.error : item.subcategory === 'regulation' ? tokens.colors.accent.brand : tokens.colors.accent.success,
             }}>
-              {item.subcategory === 'hack' ? (isZh ? '安全事件' : 'Hack')
-                : item.subcategory === 'regulation' ? (isZh ? '监管' : 'Regulation')
-                : item.subcategory === 'quote' ? (isZh ? '人物发言' : 'Quote')
-                : item.subcategory === 'milestone' ? (isZh ? '里程碑' : 'Milestone')
-                : item.subcategory}
+              {SUBCAT_I18N_KEYS[item.subcategory!] ? t(SUBCAT_I18N_KEYS[item.subcategory!] as any) : item.subcategory}
             </span>
           )}
           {/* Permission label moved to cover badge */}
@@ -119,7 +123,7 @@ const BookCard = memo(function BookCard({ item, isZh, priority = false }: BookCa
           overflow: 'hidden', textOverflow: 'ellipsis',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
         }}>
-          {isZh ? (item.title_zh || item.title) : (item.title_en || item.title)}
+          {language === 'zh' ? (item.title_zh || item.title) : (item.title_en || item.title)}
         </h3>
 
         {/* Author */}

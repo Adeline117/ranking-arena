@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type ReadingTheme = 'white' | 'sepia' | 'dark' | 'green'
 type FontSize = 'small' | 'medium' | 'large'
@@ -16,7 +17,6 @@ const FONT_FAMILY_MAP: Record<FontFamily, string> = {
 }
 
 interface EpubSettingsProps {
-  isZh: boolean
   show: boolean
   onClose: () => void
   // Theme-derived style vars
@@ -37,11 +37,12 @@ interface EpubSettingsProps {
 
 /** Typography settings panel (line height, page margin, font family display) */
 export function EpubSettings({
-  isZh, show, onClose,
+  show, onClose,
   panelBg, panelText, panelBorder, panelSubtle, accent,
   fontFamily, localLineHeight, localPageMargin,
   onLineHeightChange, onPageMarginChange,
 }: EpubSettingsProps) {
+  const { t } = useLanguage()
   if (!show) return null
 
   return (
@@ -49,28 +50,28 @@ export function EpubSettings({
       <div onClick={onClose}
         role="presentation"
         style={{ position: 'fixed', inset: 0, background: 'var(--color-backdrop-light)', zIndex: 300 }} />
-      <div role="dialog" aria-modal="true" aria-label={isZh ? '排版设置' : 'Typography'} style={{
+      <div role="dialog" aria-modal="true" aria-label={t('epubTypographyTitle')} style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         background: panelBg, color: panelText, borderRadius: tokens.radius['2xl'], padding: '28px 32px',
         width: 380, maxWidth: '90vw', zIndex: 301, boxShadow: 'var(--shadow-elevated)',
         border: `1px solid ${panelBorder}`,
       }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>
-          {isZh ? '排版设置' : 'Typography'}
+          {t('epubTypographyTitle')}
         </h3>
 
         {/* Font Family */}
         <div style={{ marginBottom: 18 }}>
           <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, opacity: 0.5 }}>
-            {isZh ? '字体' : 'Font Family'}
+            {t('epubFontFamily')}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {(Object.entries(FONT_FAMILY_MAP) as [FontFamily, string][]).map(([key, css]) => {
-              const labels: Record<FontFamily, { zh: string; en: string }> = {
-                sans: { zh: '黑体', en: 'Sans' },
-                serif: { zh: '宋体', en: 'Serif' },
-                mono: { zh: '等宽', en: 'Mono' },
-                kai: { zh: '楷体', en: 'Kai' },
+              const labelKeys: Record<FontFamily, string> = {
+                sans: 'epubFontSans',
+                serif: 'epubFontSerif',
+                mono: 'epubFontMono',
+                kai: 'epubFontKai',
               }
               return (
                 <button key={key} style={{
@@ -80,7 +81,7 @@ export function EpubSettings({
                   border: 'none', cursor: 'default', fontSize: 14,
                   fontFamily: css, fontWeight: 600, transition: 'all 0.15s',
                 }}>
-                  {isZh ? labels[key].zh : labels[key].en}
+                  {t(labelKeys[key] as any)}
                 </button>
               )
             })}
@@ -90,14 +91,14 @@ export function EpubSettings({
         {/* Line Height */}
         <div style={{ marginBottom: 18, borderTop: `1px solid ${panelBorder}`, paddingTop: 16 }}>
           <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, opacity: 0.5 }}>
-            {isZh ? '行间距' : 'Line Height'}
+            {t('epubLineHeight')}
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             {(['compact', 'normal', 'relaxed'] as LineHeight[]).map(lh => {
-              const labels: Record<LineHeight, { zh: string; en: string }> = {
-                compact: { zh: '紧凑', en: 'Compact' },
-                normal: { zh: '标准', en: 'Normal' },
-                relaxed: { zh: '宽松', en: 'Relaxed' },
+              const labelKeys: Record<LineHeight, string> = {
+                compact: 'epubLineHeightCompact',
+                normal: 'epubLineHeightNormal',
+                relaxed: 'epubLineHeightRelaxed',
               }
               return (
                 <button key={lh} onClick={() => onLineHeightChange(lh)} style={{
@@ -107,7 +108,7 @@ export function EpubSettings({
                   border: 'none', cursor: 'pointer', fontSize: 12,
                   fontWeight: 600, transition: 'all 0.15s',
                 }}>
-                  {isZh ? labels[lh].zh : labels[lh].en}
+                  {t(labelKeys[lh] as any)}
                 </button>
               )
             })}
@@ -117,14 +118,14 @@ export function EpubSettings({
         {/* Page Margin */}
         <div style={{ marginBottom: 18, borderTop: `1px solid ${panelBorder}`, paddingTop: 16 }}>
           <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, opacity: 0.5 }}>
-            {isZh ? '页面边距' : 'Page Margins'}
+            {t('epubPageMargin')}
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             {(['narrow', 'normal', 'wide'] as PageMargin[]).map(pm => {
-              const labels: Record<PageMargin, { zh: string; en: string }> = {
-                narrow: { zh: '窄', en: 'Narrow' },
-                normal: { zh: '标准', en: 'Normal' },
-                wide: { zh: '宽', en: 'Wide' },
+              const labelKeys: Record<PageMargin, string> = {
+                narrow: 'epubMarginNarrow',
+                normal: 'epubMarginNormal',
+                wide: 'epubMarginWide',
               }
               return (
                 <button key={pm} onClick={() => onPageMarginChange(pm)} style={{
@@ -134,7 +135,7 @@ export function EpubSettings({
                   border: 'none', cursor: 'pointer', fontSize: 12,
                   fontWeight: 600, transition: 'all 0.15s',
                 }}>
-                  {isZh ? labels[pm].zh : labels[pm].en}
+                  {t(labelKeys[pm] as any)}
                 </button>
               )
             })}
@@ -144,9 +145,7 @@ export function EpubSettings({
         {/* Keyboard shortcuts reference */}
         <div style={{ borderTop: `1px solid ${panelBorder}`, paddingTop: 14 }}>
           <p style={{ fontSize: 11, opacity: 0.35, lineHeight: 1.7 }}>
-            {isZh
-              ? '快捷键: 方向键/空格 翻页 | S 搜索 | N 笔记 | I 统计 | T 排版 | Esc 关闭'
-              : 'Keys: Arrows/Space nav | S search | N notes | I stats | T typography | Esc close'}
+            {t('epubShortcutsHelp')}
           </p>
         </div>
       </div>

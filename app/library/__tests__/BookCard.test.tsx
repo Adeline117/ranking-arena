@@ -15,6 +15,14 @@ jest.mock('@/app/components/ui/StarRating', () => {
   }
 })
 
+jest.mock('@/app/components/Providers/LanguageProvider', () => ({
+  useLanguage: () => ({
+    language: 'en',
+    t: (key: string) => key,
+    setLanguage: () => {},
+  }),
+}))
+
 import BookCard from '../BookCard'
 
 const mockItem: LibraryItem = {
@@ -39,30 +47,30 @@ const mockItem: LibraryItem = {
 
 describe('BookCard', () => {
   it('renders without crashing', () => {
-    const { container } = render(<BookCard item={mockItem} isZh={false} />)
+    const { container } = render(<BookCard item={mockItem} />)
     expect(container.firstChild).toBeInTheDocument()
   })
 
   it('links to the book page', () => {
-    render(<BookCard item={mockItem} isZh={false} />)
+    render(<BookCard item={mockItem} />)
     const link = screen.getByRole('link')
     expect(link).toHaveAttribute('href', '/library/test-1')
   })
 
   it('shows book title via BookCover', () => {
-    render(<BookCard item={mockItem} isZh={false} />)
+    render(<BookCard item={mockItem} />)
     expect(screen.getByTestId('book-cover')).toHaveTextContent('Trading Psychology')
   })
 
   it('shows free badge for free items', () => {
-    const { container } = render(<BookCard item={mockItem} isZh={false} />)
+    const { container } = render(<BookCard item={mockItem} />)
     // Free items should have a green-ish badge
     expect(container.innerHTML).toBeTruthy()
   })
 
   it('renders paid item', () => {
     const paidItem = { ...mockItem, is_free: false }
-    const { container } = render(<BookCard item={paidItem} isZh={true} />)
+    const { container } = render(<BookCard item={paidItem} />)
     expect(container.firstChild).toBeInTheDocument()
   })
 })

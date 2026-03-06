@@ -86,7 +86,6 @@ async function fetchRecommendedGroups(accessToken: string | null): Promise<{ gro
 
 export default function RecommendedGroups() {
   const { language, t } = useLanguage()
-  const isZh = language === 'zh'
   const auth = useUnifiedAuth()
 
   const { data, error, isLoading: loading } = useSWR(
@@ -129,8 +128,8 @@ export default function RecommendedGroups() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {groups.map(g => {
-            const displayName = isZh ? g.name : (g.name_en || g.name)
-            const desc = isZh ? g.description : (g.description_en || g.description)
+            const displayName = language === 'zh' ? g.name : (g.name_en || g.name)
+            const desc = language === 'zh' ? g.description : (g.description_en || g.description)
             return (
               <Link prefetch={false}
                 key={g.id}
