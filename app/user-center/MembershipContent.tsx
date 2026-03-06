@@ -439,7 +439,7 @@ export default function MembershipContent() {
                   borderRadius: tokens.radius.full,
                   fontSize: 10,
                   fontWeight: 700,
-                  color: '#fff',
+                  color: '#451a03',
                 }}
               >
                 {isZh ? `前${PRICING.lifetime.spots}名` : `First ${PRICING.lifetime.spots}`}

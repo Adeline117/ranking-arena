@@ -290,6 +290,7 @@ export default function GroupsFeedPage() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
 
+      <h1 className="sr-only">{t('groups')}</h1>
       <ThreeColumnLayout
         leftSidebar={
           <Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}>

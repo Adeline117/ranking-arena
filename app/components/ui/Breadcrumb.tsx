@@ -83,6 +83,10 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
                     color: 'inherit',
                     textDecoration: 'none',
                     transition: 'color 0.15s',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    minHeight: 44,
+                    padding: '8px 4px',
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = 'var(--color-brand, #8b6fa8)'

@@ -210,6 +210,7 @@ export default function ResourcesClient({
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 100px' }}>
+        <h1 className="sr-only">{isZh ? '交易知识库' : 'Trading Library'}</h1>
 
         {/* Top Leaderboards — aligned with filter tabs: Books / Papers / Whitepapers */}
         <TopLeaderboards columns={[
@@ -249,6 +250,7 @@ export default function ResourcesClient({
             type="text"
             value={searchInput}
             onChange={e => handleSearchInput(e.target.value)}
+            aria-label={isZh ? '搜索书名、作者或关键词' : 'Search by title, author, or keyword'}
             placeholder={isZh ? '搜索书名、作者或关键词...' : 'Search by title, author, or keyword...'}
             onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-accent-primary)'; e.currentTarget.style.boxShadow = `0 0 0 ${tokens.focusRing.width} ${tokens.focusRing.color}` }}
             onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border-secondary)'; e.currentTarget.style.boxShadow = 'none' }}
@@ -314,6 +316,7 @@ export default function ResourcesClient({
           })}
           <select
             value={sort}
+            aria-label={isZh ? '排序方式' : 'Sort by'}
             onChange={e => handleSortChange(e.target.value)}
             style={{
               padding: '8px 28px 8px 14px',

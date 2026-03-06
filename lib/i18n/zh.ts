@@ -175,6 +175,9 @@ const zh = {
     traderNotRegisteredDesc: '该交易员尚未认领此账号',
     unclaimedBadge: '未认领',
     claimThisProfile: '认领此主页',
+    claimYourProfile: '这是你吗？认领你的主页',
+    claimYourProfileDesc: '验证你的交易所账户，解锁主页定制、成绩徽章，并与社区分享你的交易记录。',
+    loginToClaim: '登录后认领',
     jumpToExchange: '跳转至交易所跟单',
     unlockToJumpExchange: '解锁后跳转交易所跟单',
     copyTradePro: '跟单 Pro',
@@ -3636,6 +3639,22 @@ freeFeatureRankings: '基础排行榜',
 freeFeaturePosts: '社区帖子',
 freeFeatureGroups: '公开群组',
 freeFeatureLibrary: '图书馆访问',
+
+// Feedback
+feedbackTitle: '提交反馈',
+feedbackPlaceholder: '告诉我们你的想法、报告 Bug 或提出建议...',
+feedbackSubmit: '提交',
+feedbackSubmitting: '提交中...',
+feedbackSuccess: '感谢你的反馈！',
+feedbackError: '提交失败，请重试。',
+feedbackScreenshot: '添加截图（可选）',
+
+// Data disclaimer
+dataDisclaimer: '数据仅供参考，不构成任何投资建议。',
+
+// Missing keys referenced in code
+selected: '已选择',
+next: '下一步',
 
 } as const
 
