@@ -26,15 +26,23 @@ export class BitgetFuturesConnector extends BaseExchangeConnector {
     const cycleTime = params?.period === '7d' ? 7 : params?.period === '90d' ? 90 : 30
 
     try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({
-          languageType: 0,
-          triggerUserId: traderId,
-          cycleTime,
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30_000)
+      let response: Response
+      try {
+        response = await fetch(API_URL, {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify({
+            languageType: 0,
+            triggerUserId: traderId,
+            cycleTime,
+          }),
+          signal: controller.signal,
         })
-      })
+      } finally {
+        clearTimeout(timeout)
+      }
 
       if (!response.ok) return null
       const json = await response.json()
