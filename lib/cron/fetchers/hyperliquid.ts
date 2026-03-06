@@ -126,7 +126,8 @@ async function fetchEnrichedStats(
       totalWins: wins.length,
       totalLosses: losses.length,
     }
-  } catch {
+  } catch (err) {
+    logger.warn(`[${SOURCE}] Trade stats fetch failed: ${err instanceof Error ? err.message : String(err)}`)
     return { winRate: null, tradesCount: null, avgProfit: null, avgLoss: null, totalWins: null, totalLosses: null }
   }
 }
@@ -178,7 +179,8 @@ async function fetchMaxDrawdown(
 
     const result = Math.abs(maxDrawdown) * 100
     return result > 0 && result < 200 ? result : null
-  } catch {
+  } catch (err) {
+    logger.warn(`[${SOURCE}] Drawdown calculation failed: ${err instanceof Error ? err.message : String(err)}`)
     return null
   }
 }

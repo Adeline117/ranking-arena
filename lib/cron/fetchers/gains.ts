@@ -67,8 +67,8 @@ async function fetchLeaderboardApi(): Promise<GainsLeaderboardEntry[]> {
       const data = await fetchJson<GainsLeaderboardEntry[]>(`${chain.base}/leaderboard`)
       logger.warn(`[${SOURCE}] ${chain.name} leaderboard: ${data.length}`)
       all.push(...data)
-    } catch {
-      logger.warn(`[${SOURCE}] ${chain.name} leaderboard failed`)
+    } catch (err) {
+      logger.warn(`[${SOURCE}] ${chain.name} leaderboard failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
   return all
@@ -98,8 +98,8 @@ async function fetchOpenTradesApi(): Promise<ActiveTrader[]> {
         const decimals = [18, 18, 6, 6][collateralIndex] || 6
         trader.totalCollateral += collateral / Math.pow(10, decimals)
       }
-    } catch {
-      logger.warn(`[${SOURCE}] ${chain.name} open-trades failed`)
+    } catch (err) {
+      logger.warn(`[${SOURCE}] ${chain.name} open-trades failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

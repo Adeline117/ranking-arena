@@ -61,7 +61,8 @@ async function aggregateTraders(): Promise<
         prev.count += 1
         addrMap.set(addr, prev)
       }
-    } catch {
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Swap page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
       break
     }
   }

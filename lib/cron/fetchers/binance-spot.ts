@@ -155,7 +155,8 @@ async function enrichTraderDetail(
     const followers = parseNum(d.copierCount ?? d.followerCount ?? d.currentCopyCount)
 
     return { winRate, maxDrawdown, followers: followers != null ? Math.round(followers) : null }
-  } catch {
+  } catch (err) {
+    logger.warn(`[${SOURCE}] enrichTraderDetail failed: ${err instanceof Error ? err.message : String(err)}`)
     return { winRate: null, maxDrawdown: null, followers: null }
   }
 }
@@ -214,7 +215,8 @@ async function fetchPeriod(
 
       if (allTraders.length >= TARGET) break
       await sleep(500)
-    } catch {
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
       break
     }
   }

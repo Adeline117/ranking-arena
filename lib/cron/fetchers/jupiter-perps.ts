@@ -125,7 +125,8 @@ async function fetchTraderStats(owner: string): Promise<JupiterEnrichedStats> {
       totalWins: wins.length,
       totalLosses: losses.length,
     }
-  } catch {
+  } catch (err) {
+    logger.warn(`[${SOURCE}] Trade stats fetch failed: ${err instanceof Error ? err.message : String(err)}`)
     return empty
   }
 }
