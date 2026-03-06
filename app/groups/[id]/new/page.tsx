@@ -623,6 +623,7 @@ export default function NewGroupPostPage(): React.ReactElement {
               value={title}
               onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
               maxLength={TITLE_MAX_LENGTH}
+              aria-label={t('titleLabel')}
               className="post-editor-input"
               style={{ ...inputStyle, padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, transition: 'border-color 0.2s, box-shadow 0.2s' }}
             />
@@ -723,6 +724,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                 onChange={(e) => setContent(e.target.value.slice(0, CONTENT_MAX_LENGTH))}
                 maxLength={CONTENT_MAX_LENGTH}
                 rows={12}
+                aria-label={t('contentLabel')}
                 className="post-editor-input"
                 style={{ ...inputStyle, padding: tokens.spacing[4], resize: 'vertical', lineHeight: 1.7, transition: 'border-color 0.2s, box-shadow 0.2s', minHeight: 240 }}
               />
@@ -815,6 +817,7 @@ export default function NewGroupPostPage(): React.ReactElement {
                     <input
                       type="text"
                       placeholder={`${t('pollOptionPlaceholder')} ${index + 1}`}
+                      aria-label={`${t('pollOptionPlaceholder')} ${index + 1}`}
                       value={option.text}
                       onChange={(e) => {
                         const newOptions = [...pollOptions]
