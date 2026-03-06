@@ -16,15 +16,26 @@ export interface DexTrader {
 
 // ── Subgraph endpoints ──
 
-export const UNISWAP_V3_SUBGRAPH =
-  'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3'
+// TheGraph hosted service was deprecated mid-2025.
+// These now use the decentralized network gateway (requires THEGRAPH_API_KEY).
+const THEGRAPH_API_KEY = process.env.THEGRAPH_API_KEY || ''
 
-export const PANCAKESWAP_SUBGRAPH =
-  'https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v3-bsc'
+// Subgraph IDs on TheGraph decentralized network
+const UNISWAP_V3_SUBGRAPH_ID = '5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV'
+const PANCAKESWAP_SUBGRAPH_ID = 'A1fADqYS1xgeRbGQ4hMDqbqrGacEi4WsMJvMiKvHcEq2'
+
+export const UNISWAP_V3_SUBGRAPH = THEGRAPH_API_KEY
+  ? `https://gateway-arbitrum.network.thegraph.com/api/${THEGRAPH_API_KEY}/subgraphs/id/${UNISWAP_V3_SUBGRAPH_ID}`
+  : ''
+
+export const PANCAKESWAP_SUBGRAPH = THEGRAPH_API_KEY
+  ? `https://gateway-arbitrum.network.thegraph.com/api/${THEGRAPH_API_KEY}/subgraphs/id/${PANCAKESWAP_SUBGRAPH_ID}`
+  : ''
 
 // ── GraphQL helpers ──
 
 async function querySubgraph<T>(url: string, query: string): Promise<T> {
+  if (!url) throw new Error('Subgraph URL not configured — THEGRAPH_API_KEY required')
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

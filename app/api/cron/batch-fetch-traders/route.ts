@@ -7,7 +7,10 @@
  * Query params:
  *   group=a  → binance_futures, binance_spot, bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → mexc, kucoin, okx_web3, hyperliquid, gmx, jupiter_perps, aevo (every 4h)
- *   group=c  → coinex, bitget_spot, xt (every 6h)
+ *   group=c  → coinex, bitget_spot, xt, bybit_spot, binance_web3 (every 6h)
+ *   group=d  → lbank, dydx, phemex, gains, htx_futures, weex (every 6h)
+ *   group=e  → blofin, bingx, gateio, cryptocom, bitfinex (every 8h)
+ *   group=f  → whitebit, btse, toobit (every 12h)
  * 
  * Each platform is called sequentially with a small delay to avoid rate limits.
  */
@@ -29,8 +32,10 @@ const GROUPS: Record<string, string[]> = {
   d: ['lbank', 'dydx', 'phemex', 'gains', 'htx_futures', 'weex'],
   // Group E: Lowest-priority (every 8h) — 5 platforms
   e: ['blofin', 'bingx', 'gateio', 'cryptocom', 'bitfinex'],
-  // Group F: Additional platforms (every 12h) — 5 platforms
-  f: ['whitebit', 'btse', 'toobit', 'uniswap', 'pancakeswap'],
+  // Group F: Additional platforms (every 12h) — 3 platforms
+  // uniswap/pancakeswap removed: TheGraph hosted service deprecated (requires THEGRAPH_API_KEY),
+  // and these only provide swap volume (no ROI/PnL) — zero value for copy-trading rankings
+  f: ['whitebit', 'btse', 'toobit'],
 }
 
 interface BatchResult {

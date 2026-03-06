@@ -482,10 +482,21 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  uniswap: () =>
-    verifyEndpoint(
+  uniswap: () => {
+    const apiKey = process.env.THEGRAPH_API_KEY || ''
+    if (!apiKey) {
+      return Promise.resolve({
+        platform: 'uniswap',
+        healthy: false,
+        latencyMs: 0,
+        failureReason: 'auth_required' as FailureReason,
+        details: 'THEGRAPH_API_KEY not set',
+        checkedAt: new Date().toISOString(),
+      })
+    }
+    return verifyEndpoint(
       'uniswap',
-      'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3',
+      `https://gateway-arbitrum.network.thegraph.com/api/${apiKey}/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -495,12 +506,24 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.swaps) && d.data.swaps.length > 0,
       }
-    ),
+    )
+  },
 
-  pancakeswap: () =>
-    verifyEndpoint(
+  pancakeswap: () => {
+    const apiKey = process.env.THEGRAPH_API_KEY || ''
+    if (!apiKey) {
+      return Promise.resolve({
+        platform: 'pancakeswap',
+        healthy: false,
+        latencyMs: 0,
+        failureReason: 'auth_required' as FailureReason,
+        details: 'THEGRAPH_API_KEY not set',
+        checkedAt: new Date().toISOString(),
+      })
+    }
+    return verifyEndpoint(
       'pancakeswap',
-      'https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v3-bsc',
+      `https://gateway-arbitrum.network.thegraph.com/api/${apiKey}/subgraphs/id/A1fADqYS1xgeRbGQ4hMDqbqrGacEi4WsMJvMiKvHcEq2`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -510,7 +533,8 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.swaps) && d.data.swaps.length > 0,
       }
-    ),
+    )
+  },
 
   // TheGraph-dependent platforms (require THEGRAPH_API_KEY)
   kwenta: () => {

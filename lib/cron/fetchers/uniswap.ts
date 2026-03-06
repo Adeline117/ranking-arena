@@ -26,6 +26,9 @@ interface SwapEntry {
 }
 
 async function fetchSwapsPage(first: number, skip: number): Promise<SwapEntry[]> {
+  if (!UNISWAP_V3_SUBGRAPH) {
+    throw new Error('Missing THEGRAPH_API_KEY — required for Uniswap V3 subgraph')
+  }
   const query = `{
     swaps(first: ${first}, skip: ${skip}, orderBy: amountUSD, orderDirection: desc) {
       origin
