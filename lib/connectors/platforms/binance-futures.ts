@@ -118,6 +118,47 @@ interface _BinancePerformanceDetailResponse {
   success: boolean
 }
 
+/**
+ * Response from the copy-trade lead-portfolio detail endpoint.
+ * Provides win_rate, max_drawdown, trades_count, sharpe_ratio, avg_holding_time.
+ */
+interface BinanceCopyTradeDetailResponse {
+  code?: string
+  data?: {
+    portfolioId?: string
+    roi?: number
+    pnl?: number
+    winRate?: number
+    maxDrawdown?: number
+    mdd?: number
+    tradeCount?: number
+    sharpeRatio?: number
+    avgHoldingTime?: number
+    followerCount?: number
+    currentCopyCount?: number
+    aum?: number
+    copierPnl?: number
+    leadingDays?: number
+  } | null
+  success?: boolean
+}
+
+/**
+ * Response from the copy-trade lead base info endpoint.
+ * Provides followers, copiers, and aum.
+ */
+interface BinanceCopyTradeBaseInfoResponse {
+  code?: string
+  data?: {
+    portfolioId?: string
+    nickName?: string
+    followerCount?: number
+    currentCopyCount?: number
+    aum?: number
+  } | null
+  success?: boolean
+}
+
 // ============================================
 // Binance Futures Connector
 // ============================================
@@ -274,7 +315,7 @@ export class BinanceFuturesConnector extends BaseConnector {
     traderKey: string,
     window: Window
   ): Promise<SnapshotResult | null> {
-    // Fetch performance data
+    // Fetch performance data (ROI + PnL per period)
     const _rawPerf = await this.request<BinancePerformanceResponse>(
       `${this.BASE_URL}/v1/public/future/leaderboard/getOtherPerformance`,
       {
@@ -305,7 +346,73 @@ export class BinanceFuturesConnector extends BaseConnector {
     const roi = roiEntry?.value != null ? roiEntry.value * 100 : null  // Convert to percentage
     const pnl = pnlEntry?.value ?? null
 
-    // Calculate Arena Score if we have enough data
+    // Fetch additional detail data from copy-trade APIs (best-effort)
+    let winRate: number | null = null
+    let maxDrawdown: number | null = null
+    let tradesCount: number | null = null
+    let followers: number | null = null
+    let copiers: number | null = null
+    let aum: number | null = null
+    let sharpeRatio: number | null = null
+    let avgHoldingHours: number | null = null
+
+    // Try the copy-trade detail endpoint first — it has the most fields
+    try {
+      const detailResponse = await this.request<BinanceCopyTradeDetailResponse>(
+        `https://www.binance.com/bapi/futures/v2/friendly/future/copy-trade/lead-portfolio/detail`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': 'https://www.binance.com',
+            'Referer': 'https://www.binance.com/en/copy-trading',
+          },
+          body: JSON.stringify({
+            encryptedUid: traderKey,
+            timeRange: periodType,
+          }),
+        }
+      )
+
+      if (detailResponse?.data) {
+        const d = detailResponse.data
+        winRate = d.winRate != null ? (d.winRate <= 1 ? d.winRate * 100 : d.winRate) : null
+        maxDrawdown = d.maxDrawdown != null ? Math.abs(d.maxDrawdown) : (d.mdd != null ? Math.abs(d.mdd) : null)
+        tradesCount = d.tradeCount ?? null
+        sharpeRatio = d.sharpeRatio ?? null
+        avgHoldingHours = d.avgHoldingTime ?? null
+        followers = d.followerCount ?? null
+        copiers = d.currentCopyCount ?? null
+        aum = d.aum ?? null
+      }
+    } catch {
+      // Detail endpoint failed — try the base-info endpoint as fallback for social fields
+      try {
+        const baseInfoResponse = await this.request<BinanceCopyTradeBaseInfoResponse>(
+          `https://www.binance.com/bapi/futures/v2/friendly/future/copy-trade/lead-portfolio/query-lead-base-info`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Origin': 'https://www.binance.com',
+              'Referer': 'https://www.binance.com/en/copy-trading',
+            },
+            body: JSON.stringify({ portfolioId: traderKey }),
+          }
+        )
+
+        if (baseInfoResponse?.data) {
+          const b = baseInfoResponse.data
+          followers = b.followerCount ?? null
+          copiers = b.currentCopyCount ?? null
+          aum = b.aum ?? null
+        }
+      } catch {
+        // Both endpoints failed — continue with basic ROI/PnL only
+      }
+    }
+
+    // Calculate Arena Score with all available data
     let arenaScore = null
     let returnScore = null
     let drawdownScore = null
@@ -314,7 +421,7 @@ export class BinanceFuturesConnector extends BaseConnector {
     if (roi !== null && pnl !== null) {
       const period = window === '7d' ? '7D' : window === '30d' ? '30D' : '90D'
       const scoreResult = calculateArenaScore(
-        { roi, pnl, maxDrawdown: null, winRate: null },
+        { roi, pnl, maxDrawdown: maxDrawdown ?? null, winRate: winRate ?? null },
         period
       )
       arenaScore = scoreResult.totalScore
@@ -326,19 +433,20 @@ export class BinanceFuturesConnector extends BaseConnector {
     const metrics: SnapshotMetrics = {
       roi,
       pnl,
-      win_rate: null,         // Requires additional API call
-      max_drawdown: null,     // Requires additional API call
-      sharpe_ratio: null,
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      sharpe_ratio: sharpeRatio,
       sortino_ratio: null,
-      trades_count: null,
-      followers: null,        // Available from profile
-      copiers: null,
-      aum: null,
+      trades_count: tradesCount,
+      followers,
+      copiers,
+      aum,
       platform_rank: null,
       arena_score: arenaScore,
       return_score: returnScore,
       drawdown_score: drawdownScore,
       stability_score: stabilityScore,
+      avg_holding_hours: avgHoldingHours,
     }
 
     const qualityFlags = this.buildQualityFlags(
