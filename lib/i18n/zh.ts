@@ -3536,6 +3536,8 @@ const zh = {
     bookSimilar: '相关推荐',
     bookAnonymous: '匿名用户',
     typing: '正在输入...',
+    selected: '已选',
+    next: '下一步',
 
 // Filter
 grade: '等级',
