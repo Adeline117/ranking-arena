@@ -158,7 +158,7 @@ function RankingSkeleton({ animated = true }: { animated?: boolean }) {
         padding: tokens.spacing[4],
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
       }}>
-        {['#', '交易员', 'ROI', '胜率', 'MDD', 'Score'].map((_, i) => (
+        {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonBase key={i} width="80%" height={12} animated={animated} />
         ))}
       </div>
