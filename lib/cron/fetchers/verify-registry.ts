@@ -23,6 +23,10 @@ export interface VerifyResult {
 
 type VerifyFn = () => Promise<VerifyResult>
 
+/** Loose shape for external API responses checked by validators */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ApiResponse = Record<string, any>
+
 // ── Helpers ──
 
 async function verifyEndpoint(
@@ -32,7 +36,7 @@ async function verifyEndpoint(
     method?: string
     headers?: Record<string, string>
     body?: unknown
-    validateResponse?: (data: any) => boolean
+    validateResponse?: (data: ApiResponse) => boolean
     timeoutMs?: number
   }
 ): Promise<VerifyResult> {
@@ -40,7 +44,7 @@ async function verifyEndpoint(
   const checkedAt = new Date().toISOString()
 
   try {
-    const data = await fetchJson(url, {
+    const data = await fetchJson<ApiResponse>(url, {
       method: opts?.method,
       headers: opts?.headers,
       body: opts?.body,
@@ -98,7 +102,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           dataType: 'ROI',
           favoriteOnly: false,
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.list) && d.data.list.length > 0,
       }
     ),
@@ -124,7 +128,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           favoriteOnly: false,
           hideFull: false,
         },
-        validateResponse: (d: any) => {
+        validateResponse: (d: ApiResponse) => {
           const list = d?.data?.list || d?.data?.data
           return Array.isArray(list) && list.length > 0
         },
@@ -149,7 +153,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           statisticsType: 'ROI',
           tradeType: 'PERPETUAL',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data) && d.data.length > 0,
       }
     ),
@@ -159,7 +163,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'bybit',
       'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=1&pageSize=1&dataDuration=DATA_DURATION_THIRTY_DAY&sortField=LEADER_SORT_FIELD_SORT_ROI',
       {
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.result?.leaderDetails) && d.result.leaderDetails.length > 0,
       }
     ),
@@ -169,7 +173,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'bybit_spot',
       'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=1&pageSize=1&dataDuration=DATA_DURATION_THIRTY_DAY&sortField=LEADER_SORT_FIELD_SORT_ROI',
       {
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.result?.leaderDetails) && d.result.leaderDetails.length > 0,
       }
     ),
@@ -180,7 +184,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&page=1',
       {
         headers: { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           d?.code === '0' && Array.isArray(d?.data) && d.data.length > 0,
       }
     ),
@@ -191,7 +195,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=MARGIN&page=1',
       {
         headers: { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           d?.code === '0' && Array.isArray(d?.data) && d.data.length > 0,
       }
     ),
@@ -201,7 +205,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'htx',
       'https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?pageNo=1&pageSize=1&sortField=roi&sortType=desc',
       {
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -214,7 +218,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://www.bitget.com/',
           Origin: 'https://www.bitget.com',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           d?.code === '00000' || d?.code === 0 || d?.code === '0' || !!d?.data,
       }
     ),
@@ -228,7 +232,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://www.bitget.com/',
           Origin: 'https://www.bitget.com',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           d?.code === '00000' || d?.code === 0 || d?.code === '0' || !!d?.data,
       }
     ),
@@ -238,7 +242,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'xt',
       'https://www.xt.com/fapi/user/v1/public/copy-trade/elite-leader-list-v2?size=1&days=30&sotType=1&pageNo=1',
       {
-        validateResponse: (d: any) => !!d?.result || !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.result || !!d?.data,
       }
     ),
 
@@ -251,7 +255,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://bingx.com/en/CopyTrading/leaderBoard',
           Origin: 'https://bingx.com',
         },
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -260,7 +264,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'gateio',
       'https://api.gateio.ws/api/v4/copy_trading/leader_board?sort_by=roi&period=30D&page=1&limit=1',
       {
-        validateResponse: (d: any) => Array.isArray(d) || !!d?.data,
+        validateResponse: (d: ApiResponse) => Array.isArray(d) || !!d?.data,
       }
     ),
 
@@ -273,7 +277,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://www.mexc.com/futures/copyTrade/home',
           Origin: 'https://www.mexc.com',
         },
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -286,7 +290,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://www.kucoin.com/copytrading',
           Origin: 'https://www.kucoin.com',
         },
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -295,7 +299,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'coinex',
       'https://www.coinex.com/res/copy-trading/traders?page=1&limit=1',
       {
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -308,7 +312,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://phemex.com/copy-trading',
           Origin: 'https://phemex.com',
         },
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -324,7 +328,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Origin: 'https://www.weex.com',
         },
         body: { pageNo: 1, pageSize: 1 },
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -337,7 +341,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://www.lbank.com/copy-trading',
           Origin: 'https://www.lbank.com',
         },
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -350,7 +354,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://blofin.com/en/copy-trade',
           Origin: 'https://blofin.com',
         },
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -363,7 +367,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://crypto.com/exchange/copy-trading',
           Origin: 'https://crypto.com',
         },
-        validateResponse: (d: any) => !!d?.data || !!d?.result,
+        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
       }
     ),
 
@@ -376,7 +380,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://www.toobit.com/en-US/copy-trading',
           Origin: 'https://www.toobit.com',
         },
-        validateResponse: (d: any) => !!d?.data || !!d?.result,
+        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
       }
     ),
 
@@ -385,7 +389,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'btse',
       'https://api.btse.com/spot/api/v3.2/market_summary',
       {
-        validateResponse: (d: any) => Array.isArray(d) && d.length > 0,
+        validateResponse: (d: ApiResponse) => Array.isArray(d) && d.length > 0,
       }
     ),
 
@@ -398,7 +402,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           Referer: 'https://www.pionex.com/en/copy-trade',
           Origin: 'https://www.pionex.com',
         },
-        validateResponse: (d: any) => !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.data,
       }
     ),
 
@@ -410,7 +414,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard',
       {
         timeoutMs: 15000,
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.leaderboardRows) && d.leaderboardRows.length > 0,
       }
     ),
@@ -425,7 +429,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         body: {
           query: '{ accountStats(limit: 1, orderBy: realizedPnl_DESC) { id } }',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.accountStats) && d.data.accountStats.length > 0,
       }
     ),
@@ -435,7 +439,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'dydx',
       'https://indexer.dydx.trade/v4/leaderboard/pnl?period=PERIOD_7D&limit=1',
       {
-        validateResponse: (d: any) => !!d,
+        validateResponse: (d: ApiResponse) => !!d,
       }
     ),
 
@@ -445,7 +449,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'https://backend-arbitrum.gains.trade/leaderboard',
       {
         timeoutMs: 15000,
-        validateResponse: (d: any) => Array.isArray(d) && d.length > 0,
+        validateResponse: (d: ApiResponse) => Array.isArray(d) && d.length > 0,
       }
     ),
 
@@ -454,7 +458,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'aevo',
       'https://api.aevo.xyz/leaderboard?asset=ETH&period=weekly&limit=1',
       {
-        validateResponse: (d: any) => !!d,
+        validateResponse: (d: ApiResponse) => !!d,
       }
     ),
 
@@ -463,7 +467,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'drift',
       'https://mainnet-beta.api.drift.trade/leaderboard?resolution=allTime',
       {
-        validateResponse: (d: any) => Array.isArray(d) || !!d?.data,
+        validateResponse: (d: ApiResponse) => Array.isArray(d) || !!d?.data,
       }
     ),
 
@@ -473,7 +477,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'https://perps-api.jup.ag/v1/top-traders?year=2025&week=current',
       {
         timeoutMs: 15000,
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           !!d?.topTradersByPnl || !!d?.topTradersByVolume,
       }
     ),
@@ -488,7 +492,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         body: {
           query: '{ swaps(first: 1, orderBy: amountUSD, orderDirection: desc) { origin amountUSD } }',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.swaps) && d.data.swaps.length > 0,
       }
     ),
@@ -503,7 +507,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         body: {
           query: '{ swaps(first: 1, orderBy: amountUSD, orderDirection: desc) { origin amountUSD } }',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.swaps) && d.data.swaps.length > 0,
       }
     ),
@@ -530,7 +534,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         body: {
           query: '{ accounts(first: 1, orderBy: totalVolume, orderDirection: desc) { id } }',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.accounts) && d.data.accounts.length > 0,
       }
     )
@@ -557,7 +561,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         body: {
           query: '{ accounts(first: 1) { id } }',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.accounts) && d.data.accounts.length > 0,
       }
     )
@@ -584,7 +588,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         body: {
           query: '{ accounts(first: 1) { id } }',
         },
-        validateResponse: (d: any) =>
+        validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.accounts) && d.data.accounts.length > 0,
       }
     )
