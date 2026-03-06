@@ -17,7 +17,7 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
+  fetchWithFallback,
   sleep,
   parseNum,
   normalizeWinRate,
@@ -175,7 +175,7 @@ async function fetchPeriod(
       try {
         const params = ep.params(page, periodNum)
         const url = `${BASE}${ep.path}${params ? '?' + params : ''}`
-        const data = await fetchJson<unknown>(url, { headers: HEADERS, timeoutMs: 10000 })
+        const { data } = await fetchWithFallback<unknown>(url, { headers: HEADERS, timeoutMs: 10000, platform: SOURCE })
 
         // Find trader arrays in the response
         const arrays = findTraderArrays(data)

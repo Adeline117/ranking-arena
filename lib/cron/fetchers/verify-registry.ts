@@ -15,7 +15,7 @@
  *   The actual fetchers use browser-like headers or proxy fallback.
  */
 
-import { fetchJson, type FailureReason, classifyFetchError } from './shared'
+import { fetchJson, fetchWithFallback, type FailureReason, classifyFetchError } from './shared'
 import { logger } from '@/lib/logger'
 
 // ── Types ──
@@ -73,6 +73,58 @@ async function verifyEndpoint(
     }
 
     return { platform, healthy: true, latencyMs, checkedAt }
+  } catch (err) {
+    const latencyMs = Date.now() - start
+    const failureReason = classifyFetchError(err)
+    return {
+      platform,
+      healthy: false,
+      latencyMs,
+      failureReason,
+      details: err instanceof Error ? err.message.slice(0, 300) : String(err),
+      checkedAt,
+    }
+  }
+}
+
+/** Like verifyEndpoint but uses fetchWithFallback (direct → VPS proxy) for WAF-blocked platforms */
+async function verifyEndpointWithProxy(
+  platform: string,
+  url: string,
+  opts?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: unknown
+    validateResponse?: (data: ApiResponse) => boolean
+    timeoutMs?: number
+  }
+): Promise<VerifyResult> {
+  const start = Date.now()
+  const checkedAt = new Date().toISOString()
+
+  try {
+    const { data, via } = await fetchWithFallback<ApiResponse>(url, {
+      method: opts?.method,
+      headers: opts?.headers,
+      body: opts?.body,
+      timeoutMs: opts?.timeoutMs || 10000,
+      platform,
+    })
+
+    const latencyMs = Date.now() - start
+
+    if (opts?.validateResponse && !opts.validateResponse(data)) {
+      return {
+        platform,
+        healthy: false,
+        latencyMs,
+        failureReason: 'empty_data',
+        details: `Response valid but no usable data (via ${via})`,
+        checkedAt,
+      }
+    }
+
+    return { platform, healthy: true, latencyMs, details: `via ${via}`, checkedAt }
   } catch (err) {
     const latencyMs = Date.now() - start
     const failureReason = classifyFetchError(err)
@@ -414,9 +466,9 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // Pionex behind Cloudflare challenge
+  // Pionex behind Cloudflare challenge — uses VPS proxy fallback
   pionex: () =>
-    verifyEndpoint(
+    verifyEndpointWithProxy(
       'pionex',
       'https://www.pionex.com/kol-apis/tapi/v1/kol/list?page=1&pageSize=1',
       {
@@ -428,9 +480,9 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // Crypto.com behind Cloudflare challenge
+  // Crypto.com behind Cloudflare challenge — uses VPS proxy fallback
   cryptocom: () =>
-    verifyEndpoint(
+    verifyEndpointWithProxy(
       'cryptocom',
       'https://crypto.com/fe-ex-api/copy/leader/list?sort=roi&period=30d&page=1&pageSize=1',
       {
@@ -456,10 +508,9 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // LBank: all API endpoints return HTML (CF protection or endpoint migration)
-  // Fetcher uses multi-URL fallback with 5 different paths
+  // LBank: CF-protected — uses VPS proxy fallback
   lbank: () =>
-    verifyEndpoint(
+    verifyEndpointWithProxy(
       'lbank',
       'https://www.lbank.com/api/copy-trading/trader/ranking?period=30d&page=1&size=1&sort=roi',
       {

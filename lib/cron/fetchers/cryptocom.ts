@@ -14,7 +14,7 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
+  fetchWithFallback,
   sleep,
   parseNum,
   normalizeWinRate,
@@ -140,7 +140,7 @@ async function fetchPeriod(
     for (let page = 1; page <= maxPages; page++) {
       try {
         const url = buildUrl(page, periodStr)
-        const data = await fetchJson<CryptoComResponse>(url, { headers: HEADERS, timeoutMs: 10000 })
+        const { data } = await fetchWithFallback<CryptoComResponse>(url, { headers: HEADERS, timeoutMs: 10000, platform: SOURCE })
         const list = extractList(data)
 
         if (list.length === 0) {
