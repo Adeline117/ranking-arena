@@ -14,6 +14,8 @@ import * as cache from '@/lib/cache'
 import { CacheKey, CACHE_TTL } from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
 
+const logger = createLogger('trader-data')
+
 // 支持的交易所数据源
 export const TRADER_SOURCES = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
 export const TRADER_SOURCES_WITH_WEB3 = ['binance_web3', ...TRADER_SOURCES] as const
@@ -227,7 +229,8 @@ export async function findTraderAcrossSources(
     }
 
     return data[0] as TraderSourceRecord
-  } catch (_error) {
+  } catch (error) {
+    logger.warn('findTraderAcrossSources failed', { error: error instanceof Error ? error.message : String(error) })
     return null
   }
 }
@@ -277,7 +280,8 @@ export async function findTradersAcrossSources(
     })
 
     return result
-  } catch (_error) {
+  } catch (error) {
+    logger.warn('findTradersAcrossSources failed', { error: error instanceof Error ? error.message : String(error) })
     return result
   }
 }

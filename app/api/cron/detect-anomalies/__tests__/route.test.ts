@@ -15,12 +15,9 @@ jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({ from: mockFrom })),
 }))
 
-const mockBatchDetectAnomalies = jest.fn()
-const mockSaveAnomalies = jest.fn()
-
 jest.mock('@/lib/services/anomaly-manager', () => ({
-  batchDetectAnomalies: mockBatchDetectAnomalies,
-  saveAnomalies: mockSaveAnomalies,
+  batchDetectAnomalies: jest.fn(),
+  saveAnomalies: jest.fn(),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -34,6 +31,10 @@ jest.mock('@/lib/logger', () => ({
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
+import { batchDetectAnomalies, saveAnomalies } from '@/lib/services/anomaly-manager'
+
+const mockBatchDetectAnomalies = batchDetectAnomalies as jest.MockedFunction<typeof batchDetectAnomalies>
+const mockSaveAnomalies = saveAnomalies as jest.MockedFunction<typeof saveAnomalies>
 
 // ---------------------------------------------------------------------------
 // Helpers

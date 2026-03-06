@@ -10,7 +10,8 @@
 
 export const runtime = 'edge'
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   getAuthUser,
@@ -30,6 +31,14 @@ import { getWeightedPosts } from '@/lib/data/posts-weighted'
 import { getServerCache, setServerCache, deleteServerCacheByPrefix, CacheTTL } from '@/lib/utils/server-cache'
 import { get as cacheGet, set as cacheSet } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
+
+// Zod schema for POST /api/posts
+const CreatePostSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200, 'Title must be at most 200 characters'),
+  content: z.string().min(1, 'Content is required').max(10000, 'Content must be at most 10000 characters'),
+  group_id: z.string().uuid().optional().nullable(),
+  poll_enabled: z.boolean().optional().default(false),
+})
 
 // 缓存键前缀
 const POSTS_CACHE_PREFIX = 'posts:'
@@ -250,11 +259,16 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin()
     const body = await request.json()
 
-    // 验证输入
-    const title = validateString(body.title, { required: true, minLength: 1, maxLength: 200, fieldName: 'title' })!
-    const content = validateString(body.content, { required: true, minLength: 1, maxLength: 10000, fieldName: 'content' })!
-    const group_id = validateString(body.group_id) ?? undefined
-    const poll_enabled = body.poll_enabled === true
+    // Zod 输入验证
+    const parsed = CreatePostSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+    const { title, content, poll_enabled } = parsed.data
+    const group_id = parsed.data.group_id ?? undefined
 
     // 获取用户 handle
     const userHandle = await getUserHandle(user.id, user.email)
