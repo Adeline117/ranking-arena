@@ -79,10 +79,10 @@ const ExchangeIcon = () => (
   </svg>
 )
 
-function instToEntry(inst: Institution, isZh: boolean): LeaderboardEntry {
+function instToEntry(inst: Institution, lang: 'zh' | 'en'): LeaderboardEntry {
   return {
     id: inst.id,
-    name: isZh ? (inst.name_zh || inst.name) : inst.name,
+    name: lang === 'zh' ? (inst.name_zh || inst.name) : inst.name,
     rating: inst.avg_rating,
     logoUrl: inst.logo_url,
     href: inst.website,
@@ -91,8 +91,7 @@ function instToEntry(inst: Institution, isZh: boolean): LeaderboardEntry {
 
 
 export default function InstitutionsPage() {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { language, t } = useLanguage()
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [loading, setLoading] = useState(true)
   const [category, setCategory] = useState('all')
@@ -215,7 +214,7 @@ export default function InstitutionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [category, sort, debouncedSearch, isZh])
+  }, [category, sort, debouncedSearch, language])
 
   useEffect(() => {
     fetchData()
@@ -230,21 +229,21 @@ export default function InstitutionsPage() {
           {
             title: t('top10Funds'),
             icon: <FundIcon />,
-            entries: topFunds.map(i => instToEntry(i, isZh)),
+            entries: topFunds.map(i => instToEntry(i, language)),
             loading: leaderboardLoading,
             emptyText: t('comingSoon'),
           },
           {
             title: t('top10Projects'),
             icon: <ProjectIcon />,
-            entries: topProjects.map(i => instToEntry(i, isZh)),
+            entries: topProjects.map(i => instToEntry(i, language)),
             loading: leaderboardLoading,
             emptyText: t('comingSoon'),
           },
           {
             title: t('top10Exchanges'),
             icon: <ExchangeIcon />,
-            entries: topExchanges.map(i => instToEntry(i, isZh)),
+            entries: topExchanges.map(i => instToEntry(i, language)),
             loading: leaderboardLoading,
             emptyText: t('comingSoon'),
           },
@@ -297,7 +296,7 @@ export default function InstitutionsPage() {
                   letterSpacing: '0.01em',
                 }}
               >
-                {isZh ? f.zh : f.en}
+                {f[language]}
                 {count != null && count > 0 && (
                   <span style={{
                     fontSize: tokens.typography.fontSize.xs,
@@ -328,7 +327,7 @@ export default function InstitutionsPage() {
             }}
           >
             {SORT_OPTIONS.map(opt => (
-              <option key={opt.key} value={opt.key}>{isZh ? opt.zh : opt.en}</option>
+              <option key={opt.key} value={opt.key}>{opt[language]}</option>
             ))}
           </select>
         </div>
@@ -392,7 +391,7 @@ export default function InstitutionsPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap: 20 }}>
             {institutions.map(inst => (
-              <InstitutionCard key={inst.id} institution={inst} isZh={isZh} />
+              <InstitutionCard key={inst.id} institution={inst} language={language} />
             ))}
           </div>
         )}
@@ -401,9 +400,10 @@ export default function InstitutionsPage() {
   )
 }
 
-function InstitutionCard({ institution, isZh }: { institution: Institution; isZh: boolean }) {
-  const name = isZh ? (institution.name_zh || institution.name) : institution.name
-  const desc = isZh ? (institution.description_zh || institution.description) : institution.description
+function InstitutionCard({ institution, language }: { institution: Institution; language: 'zh' | 'en' }) {
+  const { t } = useLanguage()
+  const name = language === 'zh' ? (institution.name_zh || institution.name) : institution.name
+  const desc = language === 'zh' ? (institution.description_zh || institution.description) : institution.description
 
   return (
     <a
@@ -456,7 +456,7 @@ function InstitutionCard({ institution, isZh }: { institution: Institution; isZh
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: tokens.typography.fontSize.base, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
           <div style={{ fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)', fontWeight: 500 }}>
-            {CATEGORY_FILTERS.find(f => f.key === institution.category)?.[isZh ? 'zh' : 'en'] || institution.category}
+            {CATEGORY_FILTERS.find(f => f.key === institution.category)?.[language] || institution.category}
           </div>
         </div>
       </div>
@@ -498,7 +498,7 @@ function InstitutionCard({ institution, isZh }: { institution: Institution; isZh
         />
       ) : (
         <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
-          {t('noRatingsYet')}
+          {isZh ? '暂无评分' : 'No ratings yet'}
         </span>
       )}
     </a>

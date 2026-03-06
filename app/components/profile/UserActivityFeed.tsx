@@ -18,15 +18,15 @@ interface Activity {
 }
 
 const ACTIVITY_ICONS: Record<string, string> = {
-  rate_book: '★',
-  want_read: '●',
-  reading: '●',
-  read_book: '✓',
-  review_book: '●',
-  follow_trader: '●',
-  follow_user: '●',
-  join_group: '●',
-  create_post: '●',
+  rate_book: '\u2605',
+  want_read: '\u25CF',
+  reading: '\u25CF',
+  read_book: '\u2713',
+  review_book: '\u25CF',
+  follow_trader: '\u25CF',
+  follow_user: '\u25CF',
+  join_group: '\u25CF',
+  create_post: '\u25CF',
 }
 
 function getActivityLink(activity: Activity): string {
@@ -46,7 +46,7 @@ function getActivityLink(activity: Activity): string {
   }
 }
 
-function ActivityDescription({ activity, isZh }: { activity: Activity; isZh: boolean }) {
+function ActivityDescription({ activity, t: _t }: { activity: Activity; t: (key: string) => string }) {
   const meta = activity.metadata
   const bookTitle = (meta.book_title as string) || ''
   const rating = meta.rating as number | null
@@ -61,54 +61,54 @@ function ActivityDescription({ activity, isZh }: { activity: Activity; isZh: boo
     case 'want_read':
       return (
         <span>
-          {isZh ? '标记' : 'Marked '}
+          {t('userActivityMarked')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
-            《{bookTitle}》
+            {bookTitle}
           </Link>
-          {isZh ? ' 为想读' : ' as want to read'}
+          {t('userActivityWantRead')}
         </span>
       )
     case 'reading':
       return (
         <span>
-          {isZh ? '开始阅读 ' : 'Started reading '}
+          {t('userActivityStartedReading')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
-            《{bookTitle}》
+            {bookTitle}
           </Link>
         </span>
       )
     case 'read_book':
       return (
         <span>
-          {isZh ? '读过 ' : 'Finished reading '}
+          {t('userActivityFinishedReading')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
-            《{bookTitle}》
+            {bookTitle}
           </Link>
         </span>
       )
     case 'rate_book':
       return (
         <span>
-          {isZh ? '给 ' : 'Rated '}
+          {t('userActivityRated')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
-            《{bookTitle}》
+            {bookTitle}
           </Link>
-          {isZh ? ` 评分 ${'★'.repeat(rating || 0)}` : ` ${'★'.repeat(rating || 0)}`}
+          {`${t('userActivityRatedSuffix')}${'\u2605'.repeat(rating || 0)}`}
         </span>
       )
     case 'review_book':
       return (
         <span>
-          {isZh ? '评论了 ' : 'Reviewed '}
+          {t('userActivityReviewed')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
-            《{bookTitle}》
+            {bookTitle}
           </Link>
         </span>
       )
     case 'follow_trader':
       return (
         <span>
-          {isZh ? '关注了交易员 ' : 'Followed trader '}
+          {t('userActivityFollowedTrader')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
             {traderHandle}
           </Link>
@@ -117,7 +117,7 @@ function ActivityDescription({ activity, isZh }: { activity: Activity; isZh: boo
     case 'follow_user':
       return (
         <span>
-          {isZh ? '关注了 ' : 'Followed '}
+          {t('userActivityFollowedUser')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
             @{handle}
           </Link>
@@ -126,7 +126,7 @@ function ActivityDescription({ activity, isZh }: { activity: Activity; isZh: boo
     case 'join_group':
       return (
         <span>
-          {isZh ? '加入了群组 ' : 'Joined group '}
+          {t('userActivityJoinedGroup')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
             {groupName}
           </Link>
@@ -135,9 +135,9 @@ function ActivityDescription({ activity, isZh }: { activity: Activity; isZh: boo
     case 'create_post':
       return (
         <span>
-          {isZh ? '发布了帖子 ' : 'Published post '}
+          {t('userActivityPublishedPost')}
           <Link href={link} style={{ color: tokens.colors.accent.brand, textDecoration: 'none', fontWeight: 600 }}>
-            {postTitle || (isZh ? '查看' : 'View')}
+            {postTitle || t('userActivityView')}
           </Link>
         </span>
       )
@@ -147,8 +147,7 @@ function ActivityDescription({ activity, isZh }: { activity: Activity; isZh: boo
 }
 
 export default function UserActivityFeed({ handle }: { handle: string }) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { language, t: _t } = useLanguage()
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(false)
@@ -194,7 +193,7 @@ export default function UserActivityFeed({ handle }: { handle: string }) {
     return (
       <Box bg="secondary" p={6} radius="lg" border="primary" style={{ textAlign: 'center' }}>
         <Text size="sm" color="tertiary">
-          {isZh ? '暂无动态' : 'No activities yet'}
+          {t('userActivityNoActivities')}
         </Text>
       </Box>
     )
@@ -203,7 +202,7 @@ export default function UserActivityFeed({ handle }: { handle: string }) {
   // Group activities by date
   const grouped = new Map<string, Activity[]>()
   for (const a of activities) {
-    const dateKey = new Date(a.created_at).toLocaleDateString(isZh ? 'zh-CN' : 'en-US', {
+    const dateKey = new Date(a.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -215,7 +214,7 @@ export default function UserActivityFeed({ handle }: { handle: string }) {
   return (
     <Box bg="secondary" p={4} radius="lg" border="primary">
       <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-        {isZh ? '动态' : 'Activity'}
+        {t('userActivityTitle')}
       </Text>
 
       <Box style={{ position: 'relative', paddingLeft: 24 }}>
@@ -285,12 +284,12 @@ export default function UserActivityFeed({ handle }: { handle: string }) {
                     }}
                   >
                     <span style={{ marginRight: 6 }}>
-                      {ACTIVITY_ICONS[activity.activity_type] || '●'}
+                      {ACTIVITY_ICONS[activity.activity_type] || '\u25CF'}
                     </span>
-                    <ActivityDescription activity={activity} isZh={isZh} />
+                    <ActivityDescription activity={activity} t={t} />
                   </Text>
                   <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
-                    {formatTimeAgo(activity.created_at, isZh ? 'zh' : 'en')}
+                    {formatTimeAgo(activity.created_at, language)}
                   </Text>
                 </Box>
               </Box>
@@ -314,7 +313,7 @@ export default function UserActivityFeed({ handle }: { handle: string }) {
             marginTop: tokens.spacing[3],
           }}
         >
-          {isZh ? '加载更多' : 'Load more'}
+          {t('userActivityLoadMore')}
         </button>
       )}
     </Box>

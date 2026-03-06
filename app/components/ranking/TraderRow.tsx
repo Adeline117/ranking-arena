@@ -287,7 +287,6 @@ export const TraderRow = memo(function TraderRow({
             score={trader.arena_score}
             roi={trader.roi}
             pnl={trader.pnl}
-            language={language}
             showConfidence
             trader={trader}
           />

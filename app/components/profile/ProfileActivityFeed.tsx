@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { t as tModule } from '@/lib/i18n'
 import { logger } from '@/lib/logger'
 
 type ActivityItem = {
@@ -21,24 +22,31 @@ const ICONS: Record<string, string> = {
   join_group: '●',
 }
 
-function formatRelativeTime(ts: string, isZh: boolean): string {
+function formatRelativeTime(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return t('justNow')
-  if (mins < 60) return isZh ? `${mins}分钟前` : `${mins}m ago`
+  if (mins < 1) return tModule('justNow')
+  if (mins < 60) return `${mins}${tModule('profileActivityMinutesAgo')}`
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return isZh ? `${hours}小时前` : `${hours}h ago`
+  if (hours < 24) return `${hours}${tModule('profileActivityHoursAgo')}`
   const days = Math.floor(hours / 24)
-  if (days < 30) return isZh ? `${days}天前` : `${days}d ago`
+  if (days < 30) return `${days}${tModule('profileActivityDaysAgo')}`
   const months = Math.floor(days / 30)
-  return isZh ? `${months}个月前` : `${months}mo ago`
+  return `${months}${tModule('profileActivityMonthsAgo')}`
 }
 
-function ActivityDescription({ item, isZh }: { item: ActivityItem; isZh: boolean }) {
+const BOOK_STATUS_I18N: Record<string, string> = {
+  want_to_read: 'profileActivityWantsToRead',
+  reading: 'profileActivityIsReading',
+  read: 'profileActivityFinishedReading',
+}
+
+function ActivityDescription({ item }: { item: ActivityItem }) {
+  const { t, language } = useLanguage()
   switch (item.type) {
     case 'post': {
       const group = item.data.group
-      const groupName = isZh ? (group?.name || '') : (group?.name_en || group?.name || '')
+      const groupName = language === 'zh' ? (group?.name || '') : (group?.name_en || group?.name || '')
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
           {t('publishedAPost')}{' '}
@@ -55,15 +63,10 @@ function ActivityDescription({ item, isZh }: { item: ActivityItem; isZh: boolean
     }
     case 'book_rating': {
       const book = item.data.book
-      const statusMap: Record<string, { zh: string; en: string }> = {
-        want_to_read: { zh: '想读', en: 'wants to read' },
-        reading: { zh: '在读', en: 'is reading' },
-        read: { zh: '读过', en: 'finished reading' },
-      }
-      const statusText = statusMap[item.data.status as string] || { zh: '评价了', en: 'rated' }
+      const statusKey = BOOK_STATUS_I18N[item.data.status as string] || 'profileActivityRated'
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-          {isZh ? statusText.zh : statusText.en}{' '}
+          {t(statusKey as any)}{' '}
           <Link href={`/library/${item.data.itemId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
             {book?.title || (t('aBook'))}
           </Link>
@@ -88,7 +91,7 @@ function ActivityDescription({ item, isZh }: { item: ActivityItem; isZh: boolean
     }
     case 'join_group': {
       const group = item.data.group
-      const name = isZh ? (group?.name || '') : (group?.name_en || group?.name || '')
+      const name = language === 'zh' ? (group?.name || '') : (group?.name_en || group?.name || '')
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
           {t('joinedGroup')}{' '}
@@ -104,8 +107,7 @@ function ActivityDescription({ item, isZh }: { item: ActivityItem; isZh: boolean
 }
 
 export default function ProfileActivityFeed({ handle }: { handle: string }) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -182,9 +184,9 @@ export default function ProfileActivityFeed({ handle }: { handle: string }) {
               {ICONS[item.type]}
             </Text>
             <Box style={{ flex: 1, minWidth: 0 }}>
-              <ActivityDescription item={item} isZh={isZh} />
+              <ActivityDescription item={item} />
               <Text size="xs" color="tertiary" style={{ marginTop: 3 }}>
-                {formatRelativeTime(item.timestamp, isZh)}
+                {formatRelativeTime(item.timestamp)}
               </Text>
             </Box>
           </Box>

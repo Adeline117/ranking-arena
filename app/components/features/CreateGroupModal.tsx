@@ -74,7 +74,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     if (!query.trim()) { setSearchResults([]); return }
     searchTimerRef.current = setTimeout(() => searchUsers(query), 300)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- searchUsers defined after, circular dep
 
   const searchUsers = useCallback(async (query: string) => {
     if (!query.trim() || !accessToken) return
@@ -90,7 +90,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
     } finally {
       setSearching(false)
     }
-  }, [accessToken]) // eslint-disable-line react-hooks/exhaustive-deps -- circular dep
+  }, [accessToken])
 
   const toggleMember = (user: UserResult) => {
     setSelectedMembers(prev => {

@@ -72,7 +72,7 @@ function SearchContent() {
      
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null)
-    })
+    }).catch(() => { /* Auth check non-critical on search page */ })
     setSearchHistory(getSearchHistory())
     
     // 加载热门搜索数据
@@ -241,7 +241,7 @@ function SearchContent() {
         abortControllerRef.current.abort()
       }
     }
-  }, [query, t, showToast]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [query, t, showToast])
 
   const getHref = (result: SearchResult) => {
     if (result.type === 'library') return `/library/${result.id}`
