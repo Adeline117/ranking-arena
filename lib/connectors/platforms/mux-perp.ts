@@ -12,12 +12,6 @@
  */
 
 import { BaseConnector } from '../base'
-import { warnValidate } from '../schemas'
-import {
-  MuxAccountsResponseSchema,
-  MuxAccountResponseSchema,
-  MuxPositionsResponseSchema,
-} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -84,13 +78,14 @@ export class MuxPerpConnector extends BaseConnector {
         }
       `
 
-      const response = await this.request<{
+      const _rawLb = await this.request<{
         data?: { accounts?: MuxAccount[] }
       }>(this.SUBGRAPH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables: { limit } }),
       })
+      const response =(, _rawLb, 'mux-perp/discover')
 
       const accounts = response?.data?.accounts || []
       const traders: TraderSource[] = accounts.map((item) => ({
@@ -126,13 +121,14 @@ export class MuxPerpConnector extends BaseConnector {
         }
       `
 
-      const response = await this.request<{
+      const _rawProfile = await this.request<{
         data?: { account?: MuxAccount }
       }>(this.SUBGRAPH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables: { id: traderKey.toLowerCase() } }),
       })
+      const response =(, _rawProfile, 'mux-perp/profile')
 
       const info = response?.data?.account
       if (!info) return null
@@ -209,7 +205,7 @@ export class MuxPerpConnector extends BaseConnector {
         }
       `
 
-      const [accountResponse, positionsResponse] = await Promise.all([
+      const [_rawAccount, _rawPositions] = await Promise.all([
         this.request<{ data?: { account?: MuxAccount } }>(this.SUBGRAPH_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -221,6 +217,8 @@ export class MuxPerpConnector extends BaseConnector {
           body: JSON.stringify({ query: positionsQuery, variables: { account: traderKey.toLowerCase(), windowStart: String(windowStart) } }),
         }),
       ])
+      const accountResponse =(, _rawAccount, 'mux-perp/snapshot-account')
+      const positionsResponse =(, _rawPositions, 'mux-perp/snapshot-positions')
 
       const info = accountResponse?.data?.account
       if (!info) {
