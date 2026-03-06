@@ -7,6 +7,8 @@ import { logger } from '@/lib/logger'
 import { sleep } from './shared'
 import { fetchWithProxyFallback, type EquityCurvePoint, type PositionHistoryItem, type StatsDetail } from './enrichment-types'
 import { upsertEquityCurve, upsertPositionHistory } from './enrichment-db'
+import { withRetry } from '@/lib/utils/circuit-breaker'
+import { type Result, Ok, Err } from '@/lib/types'
 
 const BINANCE_API = 'https://www.binance.com/bapi/futures/v2/friendly/future/copy-trade'
 
@@ -225,6 +227,47 @@ export async function fetchBinanceStatsDetail(
   }
 }
 
+async function enrichSingleTrader(
+  supabase: SupabaseClient,
+  traderId: string,
+  collectEquityCurve: boolean,
+  collectPositionHistory: boolean,
+): Promise<Result<string>> {
+  try {
+    if (collectEquityCurve) {
+      const curve = await withRetry(
+        () => fetchBinanceEquityCurve(traderId, 'QUARTERLY'),
+        { maxRetries: 2, initialDelay: 2000, isRetryable: (e) => {
+          const msg = e instanceof Error ? e.message : ''
+          return msg.includes('timeout') || msg.includes('429') || msg.includes('ECONNRESET')
+        }}
+      )
+      if (curve.length > 0) {
+        await upsertEquityCurve(supabase, 'binance_futures', traderId, '90D', curve)
+      }
+    }
+
+    if (collectPositionHistory) {
+      const positions = await withRetry(
+        () => fetchBinancePositionHistory(traderId),
+        { maxRetries: 2, initialDelay: 2000, isRetryable: (e) => {
+          const msg = e instanceof Error ? e.message : ''
+          return msg.includes('timeout') || msg.includes('429') || msg.includes('ECONNRESET')
+        }}
+      )
+      if (positions.length > 0) {
+        await upsertPositionHistory(supabase, 'binance_futures', traderId, positions)
+      }
+    }
+
+    return Ok(traderId)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.warn(`[binance_futures] Enrichment failed for ${traderId}: ${msg}`)
+    return Err(err instanceof Error ? err : new Error(msg))
+  }
+}
+
 export async function enrichBinanceTraders(
   supabase: SupabaseClient,
   traderIds: string[],
@@ -234,7 +277,7 @@ export async function enrichBinanceTraders(
     collectEquityCurve?: boolean
     collectPositionHistory?: boolean
   } = {}
-): Promise<{ success: number; failed: number }> {
+): Promise<{ success: number; failed: number; errors: string[] }> {
   const {
     concurrency = 3,
     delayMs = 1000,
@@ -244,39 +287,30 @@ export async function enrichBinanceTraders(
 
   let success = 0
   let failed = 0
+  const errors: string[] = []
 
   for (let i = 0; i < traderIds.length; i += concurrency) {
     const batch = traderIds.slice(i, i + concurrency)
 
-    await Promise.all(
-      batch.map(async (traderId) => {
-        try {
-          if (collectEquityCurve) {
-            const curve = await fetchBinanceEquityCurve(traderId, 'QUARTERLY')
-            if (curve.length > 0) {
-              await upsertEquityCurve(supabase, 'binance_futures', traderId, '90D', curve)
-            }
-          }
-
-          if (collectPositionHistory) {
-            const positions = await fetchBinancePositionHistory(traderId)
-            if (positions.length > 0) {
-              await upsertPositionHistory(supabase, 'binance_futures', traderId, positions)
-            }
-          }
-
-          success++
-        } catch (err) {
-          logger.warn(`[binance_futures] Enrichment failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
-          failed++
-        }
-      })
+    const results = await Promise.all(
+      batch.map((traderId) =>
+        enrichSingleTrader(supabase, traderId, collectEquityCurve, collectPositionHistory)
+      )
     )
+
+    for (const result of results) {
+      if (result.ok) {
+        success++
+      } else {
+        failed++
+        if (errors.length < 10) errors.push(result.error.message)
+      }
+    }
 
     if (i + concurrency < traderIds.length) {
       await sleep(delayMs)
     }
   }
 
-  return { success, failed }
+  return { success, failed, errors }
 }
