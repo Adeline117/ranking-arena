@@ -31,9 +31,12 @@ export const maxDuration = 300
 const logger = createLogger('compute-leaderboard')
 
 const SEASONS: Period[] = ['7D', '30D', '90D']
-/** Per-platform freshness thresholds: CEX=24h, DEX=48h */
-const DATA_FRESHNESS_HOURS_CEX = 24
-const DATA_FRESHNESS_HOURS_DEX = 48
+/** Per-platform freshness thresholds: CEX=7d, DEX=7d
+ *  Widened from 24h/48h to 168h — many fetchers are intermittently broken
+ *  (Cloudflare WAF, geo-blocking), so trader data can be days old but still valid.
+ *  Better to show slightly stale data than to drop 70% of traders. */
+const DATA_FRESHNESS_HOURS_CEX = 168
+const DATA_FRESHNESS_HOURS_DEX = 168
 
 function getFreshnessHours(source: string): number {
   const sourceType = SOURCE_TYPE_MAP[source]
@@ -415,8 +418,10 @@ async function computeSeason(
     }
   }
 
-  // Clean up stale rows not updated in this run (e.g., old checksum-case 0x duplicates)
-  const cutoff = new Date(Date.now() - 120_000).toISOString() // 2 min ago
+  // Clean up rows not updated in 14 days (truly abandoned data)
+  // Previously used 2-minute cutoff which aggressively deleted data from
+  // platforms with broken fetchers, causing 70%+ count drops.
+  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
   const { data: staleRows, error: staleErr } = await supabase
     .from('leaderboard_ranks')
     .select('id')
@@ -428,7 +433,7 @@ async function computeSeason(
     for (let i = 0; i < staleIds.length; i += 500) {
       await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
     }
-    logger.info(`${season}: cleaned ${staleIds.length} stale rows`)
+    logger.info(`${season}: cleaned ${staleIds.length} stale rows (>14d old)`)
   }
 
   logger.info(`${season}: ranked ${scored.length} traders`)
