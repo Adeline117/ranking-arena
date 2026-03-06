@@ -562,7 +562,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     }
     return verifyEndpoint(
       'uniswap',
-      `https://gateway-arbitrum.network.thegraph.com/api/${apiKey}/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV`,
+      `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -582,7 +582,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     }
     return verifyEndpoint(
       'pancakeswap',
-      `https://gateway-arbitrum.network.thegraph.com/api/${apiKey}/subgraphs/id/A1fADqYS1xgeRbGQ4hMDqbqrGacEi4WsMJvMiKvHcEq2`,
+      `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/Hv1GncLY5docZoGtXjo4kwbTvxm3MAhVZqBZE4sUT9eZ`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -602,7 +602,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     }
     return verifyEndpoint(
       'kwenta',
-      `https://gateway-arbitrum.network.thegraph.com/api/${apiKey}/subgraphs/id/5sbJJTTJQQ4kYuVYNBVw9sX8C5juRpVJNLHg7uFugw2e`,
+      `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/5sbJJTTJQQ4kYuVYNBVw9sX8C5juRpVJNLHg7uFugw2e`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -622,7 +622,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     }
     return verifyEndpoint(
       'synthetix',
-      `https://gateway-arbitrum.network.thegraph.com/api/${apiKey}/subgraphs/id/Cjhmx65d3EJPxYXcidLeBXFGiVrBfYEPaywVMPf3DP9M`,
+      `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/Cjhmx65d3EJPxYXcidLeBXFGiVrBfYEPaywVMPf3DP9M`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -642,7 +642,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     }
     return verifyEndpoint(
       'mux',
-      `https://gateway-arbitrum.network.thegraph.com/api/${apiKey}/subgraphs/id/7hUM4US9DPz6JqLD6ySqwFmLq4XiAF7cEZLmEesQnYgR`,
+      `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/7hUM4US9DPz6JqLD6ySqwFmLq4XiAF7cEZLmEesQnYgR`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
