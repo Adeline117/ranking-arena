@@ -233,60 +233,76 @@ export class BinanceFuturesConnector extends BaseConnectorLegacy implements Lega
     page: number,
     pageSize: number,
   ): Promise<BinanceLeaderboardResponse> {
-    const response = await fetch(`${this.baseUrl}/lead-portfolio/ranking`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': this.getRandomUserAgent(),
-      },
-      body: JSON.stringify({
-        pageNumber: page,
-        pageSize,
-        timeRange: period,
-        dataType: 'ROI',
-        favoriteOnly: false,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
 
-    if (!response.ok) {
-      throw new Error(
-        `Binance leaderboard API returned ${response.status}`,
-      );
+    try {
+      const response = await fetch(`${this.baseUrl}/lead-portfolio/ranking`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': this.getRandomUserAgent(),
+        },
+        body: JSON.stringify({
+          pageNumber: page,
+          pageSize,
+          timeRange: period,
+          dataType: 'ROI',
+          favoriteOnly: false,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Binance leaderboard API returned ${response.status}`,
+        );
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json();
   }
 
   private async fetchTraderDetailApi(
     encryptedUid: string,
     window: RankingWindow,
   ): Promise<BinanceTraderDetail> {
-    const response = await fetch(`${this.baseUrl}/lead-portfolio/detail`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': this.getRandomUserAgent(),
-      },
-      body: JSON.stringify({
-        encryptedUid,
-        timeRange: WINDOW_TO_PERIOD[window],
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
 
-    if (!response.ok) {
-      throw new Error(
-        `Binance trader detail API returned ${response.status}`,
-      );
+    try {
+      const response = await fetch(`${this.baseUrl}/lead-portfolio/detail`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': this.getRandomUserAgent(),
+        },
+        body: JSON.stringify({
+          encryptedUid,
+          timeRange: WINDOW_TO_PERIOD[window],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Binance trader detail API returned ${response.status}`,
+        );
+      }
+
+      const json = await response.json();
+      if (!json.success || !json.data) {
+        throw new Error(
+          `Binance trader detail API returned no data for ${encryptedUid}`,
+        );
+      }
+
+      return json.data;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const json = await response.json();
-    if (!json.success || !json.data) {
-      throw new Error(
-        `Binance trader detail API returned no data for ${encryptedUid}`,
-      );
-    }
-
-    return json.data;
   }
 
   private async fetchPerformanceCurve(
@@ -294,28 +310,35 @@ export class BinanceFuturesConnector extends BaseConnectorLegacy implements Lega
     type: 'equity_curve' | 'daily_pnl',
   ): Promise<BinancePerformanceEntry[]> {
     const dataType = type === 'equity_curve' ? 'ROI' : 'PNL';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
 
-    const response = await fetch(`${this.baseUrl}/lead-portfolio/performance`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': this.getRandomUserAgent(),
-      },
-      body: JSON.stringify({
-        encryptedUid,
-        dataType,
-        timeRange: 'QUARTERLY', // Always fetch 90d for full picture
-      }),
-    });
+    try {
+      const response = await fetch(`${this.baseUrl}/lead-portfolio/performance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': this.getRandomUserAgent(),
+        },
+        body: JSON.stringify({
+          encryptedUid,
+          dataType,
+          timeRange: 'QUARTERLY', // Always fetch 90d for full picture
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(
-        `Binance performance API returned ${response.status}`,
-      );
+      if (!response.ok) {
+        throw new Error(
+          `Binance performance API returned ${response.status}`,
+        );
+      }
+
+      const json = await response.json();
+      return json.data || [];
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const json = await response.json();
-    return json.data || [];
   }
 
   private getRandomUserAgent(): string {
