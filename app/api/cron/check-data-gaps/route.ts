@@ -122,6 +122,8 @@ export async function GET(req: NextRequest) {
     platformsWithIssues: [] as string[],
   }
 
+  const plog = await PipelineLogger.start('check-data-gaps')
+
   for (const platform of platforms) {
     try {
       // Get unique traders for this platform
@@ -303,6 +305,8 @@ export async function GET(req: NextRequest) {
   }
 
   const duration = Date.now() - startTime
+
+  await plog.success(reports.length, { summary })
 
   return NextResponse.json({
     ok: true,

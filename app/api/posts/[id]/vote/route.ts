@@ -32,11 +32,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const supabase = getSupabaseAdmin()
 
     const body = await request.json()
-    const choice = validateEnum(
-      body.choice,
-      ['bull', 'bear', 'wait'] as const,
-      { required: true, fieldName: 'choice' }
-    )!
+    const parsed = PostVoteSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
+    const { choice } = parsed.data
 
     // 执行投票操作
     const result = await togglePostVote(supabase, id, user.id, choice)
