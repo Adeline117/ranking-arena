@@ -3503,9 +3503,9 @@ const zh = {
     bookCategoryBook: '书籍',
     bookCategoryPaper: '论文',
     bookCategoryWhitepaper: '白皮书',
-    bookCategoryEvent: '事件',
-    bookCategoryResearch: '研报',
-    bookCategoryAcademic: '学术论文',
+    bookCategoryEvent: '活动',
+    bookCategoryResearch: '研究',
+    bookCategoryAcademic: '学术',
     bookCategoryFinance: '金融',
     bookCategoryRegulatory: '监管',
     bookPages: '页',
@@ -3533,7 +3533,7 @@ const zh = {
     bookReviews: '书评',
     bookWriteReview: '写长评',
     bookLoadMore: '加载更多',
-    bookSimilar: '相似推荐',
+    bookSimilar: '相关推荐',
     bookAnonymous: '匿名用户',
     typing: '正在输入...',
 
@@ -3674,6 +3674,13 @@ searchCheckTypos: '检查是否有拼写错误',
 searchTryShorterKeywords: '尝试使用更短或更通用的关键词',
 searchTryTraderHandle: '尝试使用交易员的handle或平台名称搜索',
 searchPostsSection: '动态/帖子',
+searchTabTraders: '交易员',
+searchTabLibrary: '书库',
+searchTabGroups: '小组',
+searchLibrarySection: '书库',
+searchGroupsSection: '小组',
+searchTradersSection: '交易员',
+searchGroupMembers: '成员',
 searchFailedToast: '搜索失败',
 
 // Book detail - language labels
@@ -3739,6 +3746,56 @@ userCenterWaysToEarnExp: '经验获取途径',
 userCenterPerDay: '天',
 userCenterLevelOverview: '等级一览',
 userCenterCurrent: '当前',
+
+// Duration formatting
+durationSeconds: '{n}秒',
+durationMinutes: '{n}分钟',
+durationHours: '{h}小时{m}',
+durationHoursOnly: '{h}小时',
+
+// Footer
+footerProduct: '产品',
+footerCommunity: '社区',
+footerLegal: '法律',
+footerAbout: '关于',
+footerRankings: '排行榜',
+footerMarket: '市场',
+footerLibrary: '知识库',
+footerGroups: '小组',
+footerHot: '热门',
+footerTerms: '服务条款',
+footerPrivacy: '隐私政策',
+footerDisclaimer: '风险免责声明',
+footerDmca: '版权政策',
+footerContact: '联系我们',
+footerHelp: '帮助中心',
+footerStatus: '系统状态',
+footerSlogan: '加密万物排行榜',
+footerDisclaimerText: '本站数据仅供参考，不构成任何投资建议。加密货币交易存在高风险，请谨慎决策。',
+
+// Score breakdown
+scoreNoDetails: '暂无评分详情',
+scoreBreakdownTitle: '评分构成',
+scoreProfit: '收益能力',
+scoreRisk: '风险控制',
+scoreExecution: '执行质量',
+scoreDataConfidence: '数据置信度:',
+scoreRadarProfit: '收益',
+scoreRadarRisk: '风控',
+scoreRadarExec: '执行',
+scoreRoiScore: 'ROI 分',
+scorePnlScore: 'PnL 分',
+scoreTotal: '总分',
+
+// Export ranking
+exportRanking: '导出排名',
+
+// Pro / Paywall
+proUpgradeTitle: '升级 Pro，解锁全部功能',
+proFeatureExclusive: '{feature} 为 Pro 专属功能',
+proStartingPrice: '低至 $4.99/月',
+proViewPlans: '查看方案',
+proFreeNow: '限时免费',
 
 } as const
 
