@@ -132,7 +132,7 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     traderKey: string,
     window: RankingWindow,
   ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
-    const pnlData = await this.requestWithCircuitBreaker<{ pnl: number; roi: number; nTrades: number; winRate: number | null }>(
+    const pnlData = await this.requestWithCircuitBreaker<{ pnl: number; roi: number; nTrades: number; winRate: number | null; maxDrawdownPct: number | null }>(
       () => this.fetchUserPnl(traderKey, window),
       { label: `fetchUserPnl(${traderKey}, ${window})` },
     );
@@ -141,7 +141,7 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
       roi_pct: pnlData.roi != null ? pnlData.roi * 100 : null,
       pnl_usd: pnlData.pnl ?? null,
       win_rate_pct: pnlData.winRate != null ? pnlData.winRate * 100 : null,
-      max_drawdown_pct: null, // Would require historical equity curve analysis
+      max_drawdown_pct: pnlData.maxDrawdownPct,
       trades_count: pnlData.nTrades ?? null,
       copier_count: null, // No copy trading on Hyperliquid
       sharpe_ratio: null,
@@ -281,7 +281,7 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
   private async fetchUserPnl(
     address: string,
     window: RankingWindow,
-  ): Promise<{ pnl: number; roi: number; nTrades: number; winRate: number | null }> {
+  ): Promise<{ pnl: number; roi: number; nTrades: number; winRate: number | null; maxDrawdownPct: number | null }> {
     const startTime = Date.now() - WINDOW_TO_MS[window];
 
     const response = await this.fetchWithTimeout({
@@ -291,7 +291,7 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     });
 
     if (!response.ok) {
-      return { pnl: 0, roi: 0, nTrades: 0, winRate: null };
+      return { pnl: 0, roi: 0, nTrades: 0, winRate: null, maxDrawdownPct: null };
     }
 
     const rawFills = await response.json();
@@ -301,23 +301,48 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     let wins = 0;
     let losses = 0;
 
-    for (const fill of fills) {
+    // Sort fills by time for cumulative PnL curve
+    const sortedFills = [...fills].sort((a, b) => a.time - b.time);
+
+    // Track cumulative PnL and compute MDD
+    let cumulativePnl = 0;
+    let peakPnl = 0;
+    let maxDrawdown = 0; // absolute USD drawdown
+
+    for (const fill of sortedFills) {
       const pnl = parseFloat(fill.closedPnl || '0');
       if (pnl !== 0) {
         totalPnl += pnl;
         if (pnl > 0) wins++;
         else losses++;
       }
+      cumulativePnl += pnl;
+      if (cumulativePnl > peakPnl) {
+        peakPnl = cumulativePnl;
+      }
+      const drawdown = peakPnl - cumulativePnl;
+      if (drawdown > maxDrawdown) {
+        maxDrawdown = drawdown;
+      }
     }
 
     const totalTrades = wins + losses;
     const winRate = totalTrades > 0 ? wins / totalTrades : null;
+
+    // Convert MDD to percentage relative to peak equity
+    // MDD % = (peak - trough) / peak * 100
+    // Use peak PnL as reference; if no meaningful peak, leave null
+    let maxDrawdownPct: number | null = null;
+    if (peakPnl > 0 && maxDrawdown > 0) {
+      maxDrawdownPct = (maxDrawdown / peakPnl) * 100;
+    }
 
     return {
       pnl: totalPnl,
       roi: 0, // Would need initial equity to calculate
       nTrades: fills.length,
       winRate,
+      maxDrawdownPct,
     };
   }
 
