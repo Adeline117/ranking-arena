@@ -80,10 +80,11 @@ export class BybitFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark=${traderKey}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BybitFuturesDetailResponseSchema, _rawProfile, 'bybit-futures/profile')
 
     const info = data?.result
 
@@ -118,10 +119,11 @@ export class BybitFuturesConnector extends BaseConnector {
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     const timeRange = WINDOW_MAP[window]
 
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark=${traderKey}&timeRange=${timeRange}`,
       { method: 'GET' }
     )
+    const data = warnValidate(BybitFuturesDetailResponseSchema, _rawSnap, 'bybit-futures/snapshot')
 
     const info = data?.result
 

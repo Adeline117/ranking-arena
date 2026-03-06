@@ -82,7 +82,6 @@ async function fetchMyGroups(userId: string): Promise<Group[]> {
 
 export default function MyGroups() {
   const { language, t } = useLanguage()
-  const isZh = language === 'zh'
   const { user } = useAuthSession()
 
   const { data: groups = [], isLoading, error: swrError } = useSWR(
@@ -122,7 +121,7 @@ export default function MyGroups() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {groups.map(g => {
-            const displayName = isZh ? g.name : (g.name_en || g.name)
+            const displayName = language === 'zh' ? g.name : (g.name_en || g.name)
             return (
               <Link prefetch={false}
                 key={g.id}

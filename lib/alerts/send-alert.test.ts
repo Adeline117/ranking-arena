@@ -259,19 +259,19 @@ describe('sendAlert', () => {
     // Info level
     await sendAlert({ title: 'Info', message: 'Test', level: 'info' })
     let body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body)
-    expect(body.attachments[0].color).toBe('#36a64f')
+    expect(body.attachments[0].color).toBe('#22c55e')
 
     // Warning level
     ;(global.fetch as jest.Mock).mockClear()
     await sendAlert({ title: 'Warning', message: 'Test', level: 'warning' })
     body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body)
-    expect(body.attachments[0].color).toBe('#ffcc00')
+    expect(body.attachments[0].color).toBe('#f59e0b')
 
     // Critical level
     ;(global.fetch as jest.Mock).mockClear()
     await sendAlert({ title: 'Critical', message: 'Test', level: 'critical' })
     body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body)
-    expect(body.attachments[0].color).toBe('#ff0000')
+    expect(body.attachments[0].color).toBe('#ef4444')
   })
 })
 
@@ -303,7 +303,7 @@ describe('sendScraperAlert', () => {
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
     const body = JSON.parse(fetchCall[1].body)
     expect(body.attachments[0].title).toContain('严重过期')
-    expect(body.attachments[0].color).toBe('#ff0000')
+    expect(body.attachments[0].color).toBe('#ef4444')
   })
 
   test('should send warning alert for stale platforms', async () => {
@@ -328,7 +328,7 @@ describe('sendScraperAlert', () => {
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
     const body = JSON.parse(fetchCall[1].body)
     expect(body.attachments[0].title).toContain('陈旧')
-    expect(body.attachments[0].color).toBe('#ffcc00')
+    expect(body.attachments[0].color).toBe('#f59e0b')
   })
 
   test('should include both critical and stale platforms', async () => {

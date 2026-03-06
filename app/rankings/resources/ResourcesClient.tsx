@@ -286,17 +286,17 @@ export default function ResourcesClient({
 
         {/* Category tabs + Sort — tabs aligned with Top 10 leaderboard columns */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-          {CATEGORIES.map(cat => {
-            const active = category === cat.key
-            const count = categoryCounts[cat.key]
-            const label = isZh ? cat.zh : cat.en
+          {CATEGORY_KEYS.map(catKey => {
+            const active = category === catKey
+            const count = categoryCounts[catKey]
+            const label = t(CATEGORY_I18N[catKey] as any)
             const displayLabel = count != null && count > 0
               ? `${label} (${formatCount(count)})`
               : label
             return (
               <button
-                key={cat.key}
-                onClick={() => handleCategoryChange(cat.key)}
+                key={catKey}
+                onClick={() => handleCategoryChange(catKey)}
                 style={{
                   padding: '8px 18px',
                   borderRadius: tokens.radius.full,
@@ -338,8 +338,8 @@ export default function ResourcesClient({
               transition: `border-color ${tokens.transition.fast}`,
             }}
           >
-            {SORT_OPTIONS.map(opt => (
-              <option key={opt.key} value={opt.key}>{isZh ? opt.zh : opt.en}</option>
+            {SORT_KEYS.map(sortKey => (
+              <option key={sortKey} value={sortKey}>{t(SORT_I18N[sortKey] as any)}</option>
             ))}
           </select>
         </div>
@@ -392,7 +392,7 @@ export default function ResourcesClient({
         {/* Results count */}
         {(search || category !== 'all') && (
           <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 16 }}>
-            {isZh ? `${total.toLocaleString()} 个结果` : `${total.toLocaleString()} results`}
+            {t('resourcesResultsCount').replace('{count}', total.toLocaleString())}
           </p>
         )}
 
