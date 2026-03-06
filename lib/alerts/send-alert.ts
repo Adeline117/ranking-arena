@@ -210,32 +210,83 @@ async function sendEmailAlert(toEmail: string, payload: AlertPayload) {
   }
 }
 
+async function sendTelegramAlert(botToken: string, chatId: string, payload: AlertPayload) {
+  const levelIcon = {
+    info: 'ℹ️',
+    warning: '⚠️',
+    critical: '🚨',
+  }
+
+  let text = `${levelIcon[payload.level]} *${escapeMarkdown(payload.title)}*\n\n${escapeMarkdown(payload.message)}`
+
+  if (payload.details) {
+    text += '\n\n'
+    for (const [key, value] of Object.entries(payload.details)) {
+      text += `*${escapeMarkdown(key)}:* ${escapeMarkdown(String(value))}\n`
+    }
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'MarkdownV2',
+        disable_web_page_preview: true,
+      }),
+    })
+
+    if (!response.ok) {
+      logger.error('[Alert] Telegram send failed:', response.status)
+      return false
+    }
+    return true
+  } catch (error) {
+    logger.error('[Alert] Telegram send error:', error)
+    return false
+  }
+}
+
+function escapeMarkdown(text: string): string {
+  return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&')
+}
+
 export async function sendAlert(payload: AlertPayload): Promise<{ sent: boolean; channels: string[] }> {
   const config = await getAlertConfig()
-  if (!config) {
-    return { sent: false, channels: [] }
-  }
-  
   const sentChannels: string[] = []
-  
+
+  // Telegram (env-based, always available)
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN
+  const telegramChatId = process.env.TELEGRAM_ALERT_CHAT_ID
+  if (telegramToken && telegramChatId) {
+    const success = await sendTelegramAlert(telegramToken, telegramChatId, payload)
+    if (success) sentChannels.push('telegram')
+  }
+
+  if (!config) {
+    return { sent: sentChannels.length > 0, channels: sentChannels }
+  }
+
   // Send to Slack
   if (config.slack_webhook_url?.enabled && config.slack_webhook_url?.value) {
     const success = await sendSlackAlert(config.slack_webhook_url.value, payload)
     if (success) sentChannels.push('slack')
   }
-  
+
   // Send to Feishu
   if (config.feishu_webhook_url?.enabled && config.feishu_webhook_url?.value) {
     const success = await sendFeishuAlert(config.feishu_webhook_url.value, payload)
     if (success) sentChannels.push('feishu')
   }
-  
+
   // Send email via Resend
   if (config.alert_email?.enabled && config.alert_email?.value) {
     const success = await sendEmailAlert(config.alert_email.value, payload)
     if (success) sentChannels.push('email')
   }
-  
+
   return {
     sent: sentChannels.length > 0,
     channels: sentChannels,
