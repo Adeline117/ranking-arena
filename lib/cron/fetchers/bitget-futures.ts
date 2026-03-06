@@ -1,18 +1,12 @@
 /**
  * Bitget Futures — Inline fetcher for Vercel serverless
  *
- * Bitget copy trading public API endpoints (v2/copy/mix-trader/*) have been
- * removed/return 404 as of 2025. The authenticated broker API
- * (v2/copy/mix-broker/query-traders) exists but requires BITGET_API_KEY,
- * BITGET_API_SECRET, and BITGET_API_PASSPHRASE.
- *
- * The website uses /v1/trigger/trace/public/traderViewV3 but it's behind
- * Cloudflare protection (requires browser session).
- *
  * Strategy:
- * 1. Try authenticated broker API if env vars available
- * 2. Try known public endpoints as fallback (in case they come back)
- * 3. Return graceful error if nothing works
+ * 1. Try authenticated broker API if env vars available (v2/copy/mix-broker)
+ * 2. Try V1 public endpoint (api/mix/v1/trace/traderList — still working)
+ * 3. Try V2 public endpoints as fallback
+ * 4. Try CF Worker and VPS proxy
+ * 5. Return graceful error if nothing works
  *
  * Original: scripts/import/import_bitget_futures_v2.mjs (Puppeteer-based)
  */
@@ -207,6 +201,9 @@ async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
 // ---------------------------------------------------------------------------
 
 const PUBLIC_API_URLS = [
+  // V1 public endpoint (still working as of 2026)
+  'https://api.bitget.com/api/mix/v1/trace/traderList',
+  // V2 endpoints (may return 404)
   'https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking',
   'https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list',
 ]
@@ -222,7 +219,12 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
 
     for (let page = 1; page <= maxPages; page++) {
       try {
-        const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
+        // V1 traderList uses sortRule/sortFlag params, V2 uses period
+        const isV1 = apiUrl.includes('/mix/v1/trace/')
+        const queryParams = isV1
+          ? `sortRule=roi&sortFlag=desc&pageNo=${page}&pageSize=${PAGE_SIZE}`
+          : `period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
+        const url = `${apiUrl}?${queryParams}`
         const data = await fetchJson<BitgetResponse>(url, {
           headers: {
             Referer: 'https://www.bitget.com/',

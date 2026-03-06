@@ -326,7 +326,8 @@ async function handleBybitCopyTrading(request: Request, url: URL): Promise<Respo
   };
 
   const dataDuration = periodMap[period] || period;
-  const apiUrl = `https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=${pageNo}&pageSize=${pageSize}&dataDuration=${dataDuration}&sortField=LEADER_SORT_FIELD_SORT_ROI`;
+  // api2.bybit.com bypasses Akamai WAF on www.bybit.com
+  const apiUrl = `https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list?pageNo=${pageNo}&pageSize=${pageSize}&dataDuration=${dataDuration}&sortField=LEADER_SORT_FIELD_SORT_ROI`;
 
   try {
     const response = await fetch(apiUrl, {
@@ -392,11 +393,11 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
 
   // Try multiple endpoints - Bitget frequently changes their API
   const endpoints = [
+    // V1 public endpoint (still working as of 2026)
+    `https://api.bitget.com/api/mix/v1/trace/traderList?sortRule=roi&sortFlag=desc&pageNo=${pageNo}&pageSize=${pageSize}`,
     // V2 public endpoints (may return 404)
     `https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking?period=${bitgetPeriod}&pageNo=${pageNo}&pageSize=${pageSize}`,
     `https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list?period=${bitgetPeriod}&pageNo=${pageNo}&pageSize=${pageSize}`,
-    // V1 web endpoint (CF protected)
-    `https://www.bitget.com/v1/trigger/trace/public/traderViewV3?pageNo=${pageNo}&pageSize=${pageSize}`,
   ];
 
   for (const apiUrl of endpoints) {
