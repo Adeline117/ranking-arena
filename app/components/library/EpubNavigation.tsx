@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type HighlightSortMode = 'time' | 'position'
 type HighlightFilterColor = string | 'all'
@@ -50,6 +51,7 @@ export function EpubSearchPanel({
   panelBg, panelText, panelBorder, panelSubtle, accent,
   searchQuery, onSearchQueryChange, onSearch, searching, searchResults, onJumpTo,
 }: EpubSearchPanelProps) {
+  const { t } = useLanguage()
   if (!show) return null
 
   return (
@@ -151,6 +153,7 @@ export function EpubNotesPanel({
   onJumpToHighlight, onRemoveHighlight,
   onStartEditNote, onSaveNote, onCancelEditNote, onEditNoteTextChange,
 }: EpubNotesPanelProps) {
+  const { t } = useLanguage()
   if (!show) return null
 
   return (
@@ -373,6 +376,7 @@ export function EpubStatsPanel({
   accent, progressPercent, currentPage, totalPages,
   sessionElapsedSec, totalSessionTime, sessionsCount, timeRemainingStr,
 }: EpubStatsPanelProps) {
+  const { t } = useLanguage()
   if (!show) return null
 
   const themeIsDark = panelBg.includes('secondary') // rough detection
