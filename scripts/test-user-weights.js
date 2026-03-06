@@ -6,7 +6,7 @@
 const readline = require('readline')
 
 // VPS 数据库连接命令
-const DB_COMMAND = `sshpass -p '${process.env.VPS_PASSWORD}' ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no root@45.76.152.169 "PGPASSWORD='${process.env.PGPASSWORD}' psql process.env.DATABASE_URL -c"`
+const DB_COMMAND = `sshpass -p '${process.env.VPS_PASSWORD}' ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no root@45.76.152.169 "PGPASSWORD='${process.env.PGPASSWORD}' psql '${process.env.DATABASE_URL}' -c"`
 
 async function executeSQL(sql) {
   const { exec } = require('child_process')
