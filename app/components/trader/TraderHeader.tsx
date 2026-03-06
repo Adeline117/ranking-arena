@@ -334,7 +334,7 @@ export default function TraderHeader({
      
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader header */ })
   }, [externalUserId])
 
   const sourceLabelKey = source ? SOURCE_CONFIG[source.toLowerCase()] : null

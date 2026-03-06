@@ -390,10 +390,10 @@ function ReviewForm({
   const [accessToken, setAccessToken] = useState<string | null>(null)
 
   useEffect(() => {
-     
+
     supabase.auth.getSession().then(({ data }) => {
       setAccessToken(data.session?.access_token ?? null)
-    })
+    }).catch(() => { /* Intentionally swallowed: session check non-critical for reviews */ })
   }, [])
 
   const handleSubmit = async () => {
@@ -519,14 +519,14 @@ export default function TraderReviews({ traderHandle }: TraderReviewsProps) {
 
   // Auth
   useEffect(() => {
-     
+
     supabase.auth.getSession().then(({ data }) => {
       setAccessToken(data.session?.access_token ?? null)
-    })
-     
+    }).catch(() => { /* Intentionally swallowed: session check non-critical */ })
+
     supabase.auth.getUser().then(({ data }) => {
       setCurrentUserId(data.user?.id ?? null)
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical */ })
   }, [])
 
   // Load reviews

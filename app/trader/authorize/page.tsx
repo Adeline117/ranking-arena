@@ -48,7 +48,7 @@ export default function TraderAuthorizePage() {
      
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user)
-    })
+    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader authorize page */ })
   }, [])
 
   const selectedPlatform = PLATFORMS.find((p) => p.value === platform)

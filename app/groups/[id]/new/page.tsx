@@ -222,7 +222,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         router.push(`/groups/${groupId}`)
         return
       }
-    })
+    }).catch(() => { /* Intentionally swallowed: auth/membership check handled via UI redirects */ })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, groupId, showToast, language])
 

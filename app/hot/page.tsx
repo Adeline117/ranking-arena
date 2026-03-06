@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState, useCallback, useRef, Suspense, lazy } from 'react'
-import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -12,63 +11,23 @@ import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
 const TopTraders = lazy(() => import('@/app/components/sidebar/TopTraders'))
 const WatchlistMarket = lazy(() => import('@/app/components/sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('@/app/components/sidebar/NewsFlash'))
-// MarketPanel replaced by sidebar widgets
 import Card from '@/app/components/ui/Card'
-// RankingTableCompact replaced by TopTraders sidebar widget
 import { Box, Text } from '@/app/components/base'
-import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/ui/icons'
 import { useToast } from '@/app/components/ui/Toast'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
-import { renderContentWithLinks } from '@/lib/utils/content'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-// CreatePostFAB removed per Adeline's request
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
+import type { Trader, Post, Comment } from './types'
+import { PostCard } from './components/PostCard'
+import { PostDetailModal } from './components/PostDetailModal'
+import { HotGroupsList } from './components/HotGroupsList'
 
 // Use design token for brand color
 const ARENA_PURPLE = tokens.colors.accent.brand
-
-// 本地 Trader 类型
-type Trader = {
-  id: string
-  handle: string | null
-  roi: number
-  win_rate: number
-  followers: number
-  source?: string
-}
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { logger } from '@/lib/logger'
-
-type Post = {
-  id: string
-  group: string
-  group_en?: string
-  group_id?: string
-  title: string
-  author: string
-  author_handle?: string
-  time: string
-  body: string
-  comments: number
-  likes: number
-  dislikes?: number
-  hotScore: number
-  views: number
-  created_at?: string
-  user_reaction?: 'up' | 'down' | null
-}
-
-type Comment = {
-  id: string
-  content: string
-  user_id: string
-  author_handle?: string
-  author_avatar_url?: string
-  created_at: string
-  replies?: Comment[]
-}
 
 function HotContent() {
   const { t, language } = useLanguage()
@@ -79,22 +38,18 @@ function HotContent() {
   const { accessToken, authChecked, email, userId: currentUserId } = useAuthSession()
   const loggedIn = authChecked && !!accessToken
 
-  // 翻译相关状态
+  // Translation state
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
   const [showingOriginal, setShowingOriginal] = useState(true)
   const [translating, setTranslating] = useState(false)
   const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
-  // 列表翻译状态
   const [translatedListPosts, setTranslatedListPosts] = useState<Record<string, { title?: string; body?: string }>>({})
   const [translatingList, setTranslatingList] = useState(false)
-  // 展开/收起状态
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
   const [_traders, setTraders] = useState<Trader[]>([])
   const [_loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
-
-  // Time range removed - sort by real-time hotness only
 
   // Tabbed sections state
   const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
@@ -103,18 +58,16 @@ function HotContent() {
   const [groups, setGroups] = useState<{ id: string; name: string; name_en?: string | null; member_count: number }[]>([])
   const [loadingGroups, setLoadingGroups] = useState(false)
 
-  // New content polling state
-  // newPostCount removed per Adeline's request
   const latestPostTime = useRef<string>('')
 
-  // 帖子详情弹窗状态
+  // Post detail modal state
   const [openPost, setOpenPost] = useState<Post | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
 
-  // 评论分页状态
+  // Comment pagination
   const COMMENTS_PER_PAGE = 10
   const [commentsOffset, setCommentsOffset] = useState(0)
   const [hasMoreComments, setHasMoreComments] = useState(true)
@@ -123,12 +76,11 @@ function HotContent() {
   // Suppress unused variable warning
   void currentUserId
 
-  // 加载交易员数据 - 查询 trader_snapshots 表 (90D)
+  // Load trader data
   useEffect(() => {
     const load = async () => {
       setLoadingTraders(true)
       try {
-        // 获取90天排名前10的交易员 (season_id 使用大写, ROI<10000%)
         let { data, error: supabaseError } = await supabase
           .from('trader_snapshots')
           .select('source, source_trader_id, roi, arena_score, followers, win_rate')
@@ -139,7 +91,6 @@ function HotContent() {
           .order('arena_score', { ascending: false })
           .limit(30)
 
-        // 如果没有 arena_score 数据，fallback 到 ROI 排序
         if (!data || data.length === 0) {
           const fallbackResult = await supabase
             .from('trader_snapshots')
@@ -160,7 +111,6 @@ function HotContent() {
           return
         }
 
-        // 去重并取前10
         const seen = new Set<string>()
         const uniqueData = (data || []).filter(row => {
           const key = `${row.source}:${row.source_trader_id}`
@@ -169,7 +119,6 @@ function HotContent() {
           return true
         }).slice(0, 10)
 
-        // 获取 handle 信息
         const traderKeys = uniqueData.map(t => t.source_trader_id)
         const handleMap: Record<string, string> = {}
         if (traderKeys.length > 0) {
@@ -206,7 +155,7 @@ function HotContent() {
     load()
   }, [])
 
-  // 从缓存 API 加载热榜帖子
+  // Load hot posts from cache API
   const loadPosts = useCallback(async () => {
     setLoadingPosts(true)
     try {
@@ -222,9 +171,7 @@ function HotContent() {
         const postsData: Post[] = data.map((post: Record<string, unknown>) => {
           const createdAt = new Date(post.created_at as string)
           const diffMs = Date.now() - createdAt.getTime()
-
           const timeStr = formatTimeAgo(post.created_at as string, language as 'zh' | 'en')
-
           const groupName = (post.group_name as string) || t('generalDiscussion')
           const groupNameEn = (post.group_name_en as string) || t('generalDiscussionEn')
 
@@ -256,11 +203,9 @@ function HotContent() {
           }
         })
         setPosts(postsData)
-        // Set latestPostTime from the most recent post
         if (postsData.length > 0 && postsData[0].created_at) {
           latestPostTime.current = postsData[0].created_at
         }
-        // newPostCount removed
       } else {
         setPosts([])
       }
@@ -276,12 +221,11 @@ function HotContent() {
 
   useEffect(() => {
     loadPosts()
-    // Refresh hot posts every 3 minutes
     const interval = setInterval(loadPosts, 180000)
     return () => clearInterval(interval)
   }, [loadPosts])
 
-  // Load groups when groups tab is active (merged with polling)
+  // Load groups when groups tab is active
   useEffect(() => {
     if (activeHotTab !== 'groups') return
     const loadGroups = async () => {
@@ -289,7 +233,6 @@ function HotContent() {
       try {
         const res = await fetch('/api/groups?sort_by=activity&limit=30')
         const json = await res.json()
-        // Handle both old and new API response formats
         const data = json.data?.groups || json.groups || json.data || []
         setGroups(data.map((g: Record<string, unknown>) => ({
           id: (g.id as string) || '',
@@ -307,29 +250,24 @@ function HotContent() {
     loadGroups()
   }, [activeHotTab])
 
-  // New content polling removed
-
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
     return sorted
   }, [posts])
 
-  // 热度标签: 新(刚上榜) / 热(热度攀升) / 沸(广泛讨论)
+  // Hot tags
   const getHotTag = useCallback((post: Post, _rank: number): { label: string; color: string } | null => {
     const createdAt = post.created_at ? new Date(post.created_at) : null
     const hoursAgo = createdAt ? (Date.now() - createdAt.getTime()) / 3600000 : 999
     const score = post.hotScore ?? 0
-    const comments = post.comments ?? 0
+    const commentCount = post.comments ?? 0
 
-    // 沸: 极高热度，真正的广泛讨论 (top 3 only, score>95 且 comments>=150)
-    if (score >= 95 && comments >= 150) {
+    if (score >= 95 && commentCount >= 150) {
       return { label: t('hotPageTagBoom'), color: 'var(--color-accent-error)' }
     }
-    // 热: 短时间内热度持续攀升 (score>80 且不到24小时)
     if (score >= 80 && hoursAgo < 24) {
       return { label: t('hotPageTagHot'), color: 'var(--color-chart-orange)' }
     }
-    // 新: 最近上榜的新鲜内容 (不到6小时)
     if (hoursAgo < 6) {
       return { label: t('hotPageTagNew'), color: 'var(--color-chart-blue)' }
     }
@@ -340,7 +278,7 @@ function HotContent() {
     return loggedIn ? hotPosts : hotPosts.slice(0, 10)
   }, [loggedIn, hotPosts])
 
-  // 加载评论（初始加载）
+  // Load comments (initial)
   const loadComments = useCallback(async (postId: string) => {
     try {
       setLoadingComments(true)
@@ -359,7 +297,7 @@ function HotContent() {
         setHasMoreComments(false)
       }
     } catch (err) {
-      logger.error('[HotPage] 加载评论失败:', err)
+      logger.error('[HotPage] Load comments failed:', err)
       setComments([])
       setHasMoreComments(false)
       showToast(t('loadCommentsFailed'), 'error')
@@ -368,7 +306,7 @@ function HotContent() {
     }
   }, [showToast, t])
 
-  // 加载更多评论
+  // Load more comments
   const loadMoreComments = useCallback(async () => {
     if (!openPost || loadingMoreComments || !hasMoreComments) return
 
@@ -386,13 +324,13 @@ function HotContent() {
         setHasMoreComments(false)
       }
     } catch (err) {
-      logger.error('[HotPage] 加载更多评论失败:', err)
+      logger.error('[HotPage] Load more comments failed:', err)
     } finally {
       setLoadingMoreComments(false)
     }
   }, [openPost, commentsOffset, loadingMoreComments, hasMoreComments])
 
-  // 检测文本是否是中文
+  // Detect Chinese text
   const isChineseText = useCallback((text: string) => {
     if (!text) return false
     const chineseRegex = /[\u4e00-\u9fa5]/g
@@ -401,7 +339,7 @@ function HotContent() {
     return chineseRatio > 0.1
   }, [])
 
-  // 批量翻译列表帖子（使用批量API，带缓存）- 翻译标题和正文
+  // Batch translate list posts
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
     if (translatingList) return
 
@@ -418,11 +356,9 @@ function HotContent() {
     setTranslatingList(true)
 
     try {
-      // 使用批量翻译API - 同时翻译标题和正文
       const items: Array<{ id: string; text: string; contentType: 'post_title' | 'post_content'; contentId: string }> = []
 
       needsTranslation.slice(0, 10).forEach(post => {
-        // 添加标题翻译请求
         if (post.title && !translatedListPosts[post.id]?.title) {
           items.push({
             id: `${post.id}_title`,
@@ -431,11 +367,10 @@ function HotContent() {
             contentId: post.id,
           })
         }
-        // 添加正文翻译请求
         if (post.body && !translatedListPosts[post.id]?.body) {
           items.push({
             id: `${post.id}_body`,
-            text: post.body.slice(0, 500), // 限制长度
+            text: post.body.slice(0, 500),
             contentType: 'post_content',
             contentId: post.id,
           })
@@ -472,26 +407,25 @@ function HotContent() {
           }
           return updated
         })
-
       }
     } catch {
-      // 翻译失败，静默处理
+      // Translation failed, silent
     } finally {
       setTranslatingList(false)
     }
   }, [translatingList, translatedListPosts, isChineseText])
 
-  // 当帖子加载或语言变化时翻译列表
+  // Translate list when posts load or language changes
   useEffect(() => {
     if (posts.length > 0) {
       translateListPosts(posts, language as 'zh' | 'en')
     }
   }, [posts, language, translateListPosts])
 
-  // 翻译帖子内容（带缓存）
+  // Translate post content (with cache)
   const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
     const cacheKey = `${postId}-content-${targetLang}`
-    
+
     if (translationCache[cacheKey]) {
       setTranslatedContent(translationCache[cacheKey])
       setShowingOriginal(false)
@@ -502,19 +436,19 @@ function HotContent() {
     try {
       const response = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...getCsrfHeaders()
         },
-        body: JSON.stringify({ 
-          text: content, 
+        body: JSON.stringify({
+          text: content,
           targetLang,
           contentType: 'post_content',
           contentId: postId,
         }),
       })
       const data = await response.json()
-      
+
       if (response.ok && data.success && data.data?.translatedText) {
         const translated = data.data.translatedText
         setTranslatedContent(translated)
@@ -531,10 +465,10 @@ function HotContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [translationCache, showToast])
 
-  // Track whether this modal was opened via navigation (for back button handling)
+  // Track whether this modal was opened via navigation
   const openedViaNav = useRef(false)
 
-  // 打开帖子详情
+  // Open post detail
   const handleOpenPost = useCallback((post: Post, fromUrlRestore = false) => {
     setOpenPost(post)
     setComments([])
@@ -542,7 +476,6 @@ function HotContent() {
     setShowingOriginal(true)
     loadComments(post.id)
 
-    // 更新 URL，添加 postId 参数
     if (!fromUrlRestore) {
       const params = new URLSearchParams(searchParams.toString())
       params.set('post', post.id)
@@ -550,7 +483,6 @@ function HotContent() {
       router.push(`/hot?${params.toString()}`, { scroll: false })
     }
 
-    // 自动检测并翻译
     if (post.body) {
       const isChinese = isChineseText(post.body)
       const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
@@ -561,11 +493,9 @@ function HotContent() {
     }
   }, [loadComments, language, isChineseText, translateContent, searchParams, router])
 
-  // 关闭帖子详情
+  // Close post detail
   const handleClosePost = useCallback(() => {
     setOpenPost(null)
-    // Always use replace to stay on /hot — router.back() can navigate away
-    // if user came from messages/groups/etc
     openedViaNav.current = false
     const params = new URLSearchParams(searchParams.toString())
     params.delete('post')
@@ -575,18 +505,16 @@ function HotContent() {
 
   // Post modal: URL restore, ESC key, body scroll lock, and browser back button
   useEffect(() => {
-    // Restore post detail from URL params
     const postId = searchParams.get('post')
     if (postId && posts.length > 0 && !openPost) {
       const post = posts.find(p => p.id === postId)
       if (post) {
-        handleOpenPost(post, true) // fromUrlRestore: don't push history again
+        handleOpenPost(post, true)
       }
     }
 
     if (!openPost) return
 
-    // Lock body scroll
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
@@ -613,24 +541,23 @@ function HotContent() {
     }
   }, [searchParams, posts, openPost, handleOpenPost, handleClosePost])
 
-  // 语言切换时重新翻译当前打开的帖子
+  // Re-translate when language changes
   useEffect(() => {
     if (openPost && openPost.body) {
       const isChinese = isChineseText(openPost.body)
       const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
-      
-      // 重置翻译状态
+
       setTranslatedContent(null)
       setShowingOriginal(true)
-      
+
       if (needsTranslation) {
         translateContent(openPost.id, openPost.body, language)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language]) // 只监听语言变化
+  }, [language])
 
-  // 提交评论
+  // Submit comment
   const submitComment = useCallback(async (postId: string) => {
     if (!accessToken) {
       showToast(t('pleaseLoginFirst'), 'warning')
@@ -651,7 +578,6 @@ function HotContent() {
       })
 
       if (!response.ok) {
-        // Differentiate error types
         if (response.status === 401) {
           showToast(t('sessionExpired'), 'error')
         } else if (response.status === 403) {
@@ -668,7 +594,6 @@ function HotContent() {
       const json = await response.json()
       if (json.success && json.data?.comment) {
         setNewComment('')
-        // Server ACK received - add comment to state
         setComments(prev => [...prev, json.data.comment])
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
@@ -683,14 +608,14 @@ function HotContent() {
         showToast(json.error?.message || t('postCommentFailed'), 'error')
       }
     } catch (err) {
-      logger.error('[HotPage] 提交评论失败:', err)
+      logger.error('[HotPage] Submit comment failed:', err)
       showToast(t('networkErrorRetry'), 'error')
     } finally {
       setSubmittingComment(false)
     }
   }, [accessToken, newComment, openPost?.id, showToast, t])
 
-  // 点赞/踩
+  // Toggle reaction (like/dislike)
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
     if (!accessToken) {
       showToast(t('pleaseLoginFirst'), 'warning')
@@ -732,7 +657,7 @@ function HotContent() {
         }
       }
     } catch (err) {
-      logger.error('[HotPage] 点赞失败:', err)
+      logger.error('[HotPage] Reaction failed:', err)
       showToast(t('actionFailedRetry'), 'error')
     }
   }, [accessToken, openPost?.id, showToast, t])
@@ -755,7 +680,6 @@ function HotContent() {
             </div>
           }
         >
-          {/* 中：热榜 */}
           <Box as="section" style={{ minWidth: 0 }}>
             <Card title={t('hotList')}>
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2], fontSize: '11px' }}>
@@ -822,206 +746,22 @@ function HotContent() {
                     </div>
                   ) : (
                     <Box className="stagger-fade" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], position: 'relative' }}>
-                      {/* New posts polling banner */}
                       {visibleHot.map((p, idx) => {
                         const rank = idx + 1
                         return (
-                          <Box
+                          <PostCard
                             key={p.id}
-                            className="hot-post-item"
-                            style={{
-                              cursor: 'pointer',
-                              padding: '14px 16px',
-                              borderRadius: tokens.radius.lg,
-                              background: 'var(--color-bg-secondary)',
-                              border: `1px solid var(--color-border-primary)`,
-                              boxShadow: 'none',
-                              transition: `all 0.2s cubic-bezier(0.4, 0, 0.2, 1)`,
-                            }}
-                            onClick={(e: React.MouseEvent) => {
-                              if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
-                              handleOpenPost(p)
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.boxShadow = `0 4px 16px var(--color-accent-primary-12)`
-                              e.currentTarget.style.borderColor = `${ARENA_PURPLE}40`
-                              e.currentTarget.style.transform = 'translateY(-1px)'
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.boxShadow = 'none'
-                              e.currentTarget.style.borderColor = 'var(--color-border-primary)'
-                              e.currentTarget.style.transform = 'translateY(0)'
-                            }}
-                          >
-                            {/* Top row: rank + badges + group */}
-                            <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap', alignItems: 'center' }}>
-                              <Text className="hot-post-rank" size="sm" weight="black" style={{
-                                color: rank <= 3 ? 'var(--color-accent-warning)' : 'var(--color-text-tertiary)',
-                                fontSize: rank <= 3 ? '15px' : '13px',
-                                minWidth: 28,
-                              }}>
-                                #{rank}
-                              </Text>
-                              {(() => {
-                                const tag = getHotTag(p, rank)
-                                return tag ? (
-                                  <span style={{
-                                    fontSize: 10,
-                                    fontWeight: 800,
-                                    color: tokens.colors.white,
-                                    background: tag.color,
-                                    padding: '2px 8px',
-                                    borderRadius: tokens.radius.full,
-                                    lineHeight: '16px',
-                                    letterSpacing: '0.5px',
-                                    textTransform: 'uppercase',
-                                  }}>
-                                    {tag.label}
-                                  </span>
-                                ) : null
-                              })()}
-                              {p.group_id ? (
-                                <Link
-                                  href={`/groups/${p.group_id}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{
-                                    fontSize: tokens.typography.fontSize.xs,
-                                    color: ARENA_PURPLE,
-                                    textDecoration: 'none',
-                                    padding: '2px 10px',
-                                    background: `${ARENA_PURPLE}12`,
-                                    borderRadius: tokens.radius.full,
-                                    fontWeight: 600,
-                                    transition: 'background 0.15s ease',
-                                  }}
-                                >
-                                  {localizedName(p.group, p.group_en)}
-                                </Link>
-                              ) : (
-                                <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `var(--color-text-tertiary-10)`, borderRadius: 999 }}>
-                                  {localizedName(p.group, p.group_en)}
-                                </Text>
-                              )}
-                            </Box>
-
-                            {/* Title - clickable link to post detail */}
-                            <Link
-                              href={`/post/${p.id}`}
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                handleOpenPost(p)
-                              }}
-                              style={{ textDecoration: 'none', color: 'inherit' }}
-                            >
-                            <Text className="hot-post-title" size="base" weight="bold" style={{
-                              marginBottom: tokens.spacing[1],
-                              lineHeight: 1.4,
-                              fontSize: '14px',
-                              cursor: 'pointer',
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}>
-                              {translatedListPosts[p.id]?.title || p.title}
-                              {translatedListPosts[p.id]?.title && (
-                                <span style={{
-                                  fontSize: 10, fontWeight: 500, marginLeft: 6,
-                                  padding: '1px 6px', borderRadius: tokens.radius.sm,
-                                  background: `${'var(--color-text-tertiary)'}15`,
-                                  color: 'var(--color-text-tertiary)',
-                                  verticalAlign: 'middle',
-                                }}>
-                                  {t('hotTranslatedBadge')}
-                                </span>
-                              )}
-                            </Text>
-                            </Link>
-
-                            {/* Body preview */}
-                            {(() => {
-                              const isExpanded = expandedPosts[p.id]
-                              const displayBody = translatedListPosts[p.id]?.body || p.body
-                              const isLongContent = displayBody.length > 100
-                              const contentToShow = isExpanded || !isLongContent
-                                ? displayBody
-                                : displayBody.slice(0, 100) + '...'
-                              return (
-                                <>
-                                  <Text className="hot-post-body" size="sm" color="secondary" style={{
-                                    marginBottom: tokens.spacing[1],
-                                    lineHeight: 1.5,
-                                    fontSize: '12px',
-                                    color: translatedListPosts[p.id]?.body ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)',
-                                  }}>
-                                    {renderContentWithLinks(contentToShow)}
-                                  </Text>
-                                  {isLongContent && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setExpandedPosts(prev => ({ ...prev, [p.id]: !prev[p.id] }))
-                                      }}
-                                      style={{
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: ARENA_PURPLE,
-                                        cursor: 'pointer',
-                                        fontSize: 12,
-                                        fontWeight: 600,
-                                        marginBottom: tokens.spacing[2],
-                                        padding: 0,
-                                      }}
-                                    >
-                                      {isExpanded ? t('showLess') : t('showMore')}
-                                    </button>
-                                  )}
-                                </>
-                              )
-                            })()}
-
-                            {/* Footer: author, time, stats */}
-                            <Box className="hot-post-footer" style={{
-                              display: 'flex',
-                              gap: tokens.spacing[2],
-                              fontSize: '11px',
-                              color: 'var(--color-text-tertiary)',
-                              flexWrap: 'wrap',
-                              alignItems: 'center',
-                              marginTop: tokens.spacing[1],
-                              paddingTop: tokens.spacing[1],
-                              borderTop: 'none',
-                            }}>
-                              {p.author_handle ? (
-                                <Link
-                                  href={`/u/${encodeURIComponent(p.author_handle)}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{
-                                    fontSize: tokens.typography.fontSize.xs,
-                                    color: 'var(--color-text-secondary)',
-                                    textDecoration: 'none',
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  @{p.author}
-                                </Link>
-                              ) : (
-                                <Text size="xs" color="tertiary">{p.author}</Text>
-                              )}
-                              <Text size="xs" color="tertiary">{p.time}</Text>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
-                                <CommentIcon size={12} /> {p.comments}
-                              </span>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
-                                <ThumbsUpIcon size={12} /> {p.likes}
-                              </span>
-                              <Text size="xs" color="tertiary" style={{ marginLeft: 'auto' }}>
-                                {(p.views ?? 0).toLocaleString()} {t('views')}
-                              </Text>
-                            </Box>
-                          </Box>
+                            post={p}
+                            rank={rank}
+                            hotTag={getHotTag(p, rank)}
+                            translatedTitle={translatedListPosts[p.id]?.title}
+                            translatedBody={translatedListPosts[p.id]?.body}
+                            isExpanded={!!expandedPosts[p.id]}
+                            onToggleExpand={() => setExpandedPosts(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                            onOpenPost={handleOpenPost}
+                            localizedName={localizedName}
+                            t={t}
+                          />
                         )
                       })}
 
@@ -1104,59 +844,12 @@ function HotContent() {
 
               {/* Tab Content: Hot Groups */}
               {activeHotTab === 'groups' && (
-                <>
-                  {loadingGroups ? (
-                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                      <Text color="tertiary">{t('loading')}</Text>
-                    </Box>
-                  ) : groups.length === 0 ? (
-                    <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                      <Text color="tertiary">{t('noData')}</Text>
-                    </Box>
-                  ) : (
-                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-                      {groups.map((group, idx) => (
-                        <Box
-                          key={group.id}
-                          style={{
-                            padding: '12px 16px',
-                            borderRadius: tokens.radius.lg,
-                            background: 'var(--color-bg-secondary)',
-                            border: `1px solid var(--color-border-primary)`,
-                            boxShadow: 'none',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                          }}
-                          onClick={() => router.push(`/groups/${group.id}`)}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.boxShadow = `0 4px 16px var(--color-accent-primary-12)`
-                            e.currentTarget.style.borderColor = `${ARENA_PURPLE}40`
-                            e.currentTarget.style.transform = 'translateY(-1px)'
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.boxShadow = 'none'
-                            e.currentTarget.style.borderColor = 'var(--color-border-primary)'
-                            e.currentTarget.style.transform = 'translateY(0)'
-                          }}
-                        >
-                          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                              <Text size="sm" weight="black" style={{ color: idx < 3 ? 'var(--color-accent-warning)' : 'var(--color-text-secondary)' }}>
-                                #{idx + 1}
-                              </Text>
-                              <Text size="base" weight="bold">
-                                {localizedName(group.name, group.name_en)}
-                              </Text>
-                            </Box>
-                            <Text size="xs" color="tertiary">
-                              {group.member_count.toLocaleString()} {t('membersUnit')}
-                            </Text>
-                          </Box>
-                        </Box>
-                      ))}
-                    </Box>
-                  )}
-                </>
+                <HotGroupsList
+                  groups={groups}
+                  loading={loadingGroups}
+                  localizedName={localizedName}
+                  t={t}
+                />
               )}
             </Card>
           </Box>
@@ -1164,323 +857,29 @@ function HotContent() {
         </ThreeColumnLayout>
       </Box>
 
-      {/* 帖子详情弹窗 - Portal to body to avoid stacking context issues */}
-      {openPost && createPortal(
-        <div
-          onClick={handleClosePost}
-          role="dialog"
-          aria-modal="true"
-          aria-label={openPost.title}
-          className="post-modal-overlay"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'var(--color-blur-overlay)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20,
-            zIndex: tokens.zIndex.modal,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="post-modal-content"
-            style={{
-              width: 'min(760px, 100%)',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              border: `1px solid var(--color-border-primary)`,
-              borderRadius: tokens.radius.xl,
-              background: 'var(--color-bg-secondary)',
-              padding: 16,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                onClick={handleClosePost}
-                aria-label="Close"
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--color-text-secondary)',
-                  cursor: 'pointer',
-                  fontSize: 20,
-                  width: 44,
-                  height: 44,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: tokens.radius.md,
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Group name - clickable link */}
-            {openPost.group_id ? (
-              <Link
-                href={`/groups/${openPost.group_id}`}
-                style={{
-                  fontSize: 12,
-                  color: ARENA_PURPLE,
-                  textDecoration: 'none',
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  background: `${ARENA_PURPLE}20`,
-                  borderRadius: tokens.radius.sm,
-                  display: 'inline-block',
-                }}
-              >
-                {localizedName(openPost.group, openPost.group_en)}
-              </Link>
-            ) : (
-              <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
-                {localizedName(openPost.group, openPost.group_en)}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>{openPost.title}</div>
-            </div>
-
-            {/* Author - clickable link */}
-            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {openPost.author_handle ? (
-                <Link
-                  href={`/u/${encodeURIComponent(openPost.author_handle)}`}
-                  style={{
-                    color: 'var(--color-text-secondary)',
-                    textDecoration: 'none',
-                    fontWeight: 700,
-                  }}
-                >
-                  @{openPost.author}
-                </Link>
-              ) : (
-                <span>{openPost.author}</span>
-              )}
-              <span>·</span>
-              <span>{openPost.time}</span>
-              <span>·</span>
-              <CommentIcon size={12} />
-              <span>{openPost.comments}</span>
-            </div>
-
-            <div translate="no" style={{ marginTop: 12, fontSize: 14, color: 'var(--color-text-primary)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-              {showingOriginal
-                ? renderContentWithLinks(openPost.body || '')
-                : renderContentWithLinks(translatedContent || openPost.body || '')
-              }
-            </div>
-
-            {/* 翻译/原文切换按钮 */}
-            {(translatedContent || translating) && (
-              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  onClick={() => setShowingOriginal(!showingOriginal)}
-                  disabled={translating}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    border: `1px solid var(--color-border-primary)`,
-                    borderRadius: 6,
-                    background: 'var(--color-bg-tertiary)',
-                    color: 'var(--color-text-secondary)',
-                    cursor: translating ? 'wait' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  {translating ? (
-                    <>{t('translating')}</>
-                  ) : showingOriginal ? (
-                    <>{t('viewTranslation')}</>
-                  ) : (
-                    <>{t('viewOriginal')}</>
-                  )}
-                </button>
-                {!showingOriginal && (
-                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                    {t('translatedByAI')}
-                  </span>
-                )}
-              </div>
-            )}
-
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid var(--color-border-secondary)`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              <button
-                onClick={() => toggleReaction(openPost.id, 'up')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  border: 'none',
-                  borderRadius: tokens.radius.md,
-                  background: openPost.user_reaction === 'up' ? `var(--color-accent-success-20)` : 'var(--color-bg-tertiary)',
-                  color: openPost.user_reaction === 'up' ? 'var(--color-accent-success)' : 'var(--color-text-secondary)',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                <ThumbsUpIcon size={14} /> {openPost.likes}
-              </button>
-              <button
-                onClick={() => toggleReaction(openPost.id, 'down')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  border: 'none',
-                  borderRadius: tokens.radius.md,
-                  background: openPost.user_reaction === 'down' ? `var(--color-accent-error-20)` : 'var(--color-bg-tertiary)',
-                  color: openPost.user_reaction === 'down' ? 'var(--color-accent-error)' : 'var(--color-text-secondary)',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                <ThumbsDownIcon size={14} /> {(openPost.dislikes ?? 0) > 0 ? openPost.dislikes : ''}
-              </button>
-            </div>
-
-            {/* 评论区 */}
-            <div style={{ marginTop: 16, borderTop: `1px solid var(--color-border-secondary)`, paddingTop: 16 }}>
-              <div style={{ fontWeight: 900, marginBottom: 12 }}>
-                {t('comments')} ({openPost.comments})
-              </div>
-
-              {/* 评论输入框 */}
-              <div style={{ marginBottom: 16 }}>
-                <textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder={accessToken ? t('writeComment') : t('loginToComment')}
-                  disabled={!accessToken || submittingComment}
-                  style={{
-                    width: '100%',
-                    minHeight: 80,
-                    padding: 12,
-                    borderRadius: tokens.radius.md,
-                    border: `1px solid var(--color-border-primary)`,
-                    background: 'var(--color-bg-primary)',
-                    color: 'var(--color-text-primary)',
-                    fontSize: 14,
-                    resize: 'vertical',
-                    outline: 'none',
-                  }}
-                />
-                {accessToken && (
-                  <button
-                    onClick={() => submitComment(openPost.id)}
-                    disabled={!newComment.trim() || submittingComment}
-                    style={{
-                      marginTop: 8,
-                      padding: '8px 16px',
-                      background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'var(--color-accent-primary-30)',
-                      color: tokens.colors.white,
-                      border: 'none',
-                      borderRadius: tokens.radius.md,
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    {submittingComment ? t('sending') : t('postComment')}
-                  </button>
-                )}
-              </div>
-
-              {/* 评论列表 */}
-              {loadingComments ? (
-                <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>{t('loadingComments')}</div>
-              ) : comments.length === 0 ? (
-                <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>{t('noCommentsYet')}</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {comments.filter(Boolean).map((comment) => (
-                    <div
-                      key={comment.id}
-                      style={{
-                        padding: 12,
-                        background: 'var(--color-bg-primary)',
-                        borderRadius: tokens.radius.md,
-                        border: `1px solid var(--color-border-primary)`,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        {comment.author_handle ? (
-                          <Link
-                            href={`/u/${encodeURIComponent(comment.author_handle)}`}
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              color: 'var(--color-text-secondary)',
-                              textDecoration: 'none',
-                            }}
-                          >
-                            @{comment.author_handle}
-                          </Link>
-                        ) : (
-                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-secondary)' }}>
-                            {'user'}
-                          </span>
-                        )}
-                        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                          {formatTimeAgo(comment.created_at)}
-                        </span>
-                      </div>
-                      <div translate="no" style={{ fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.6 }}>
-                        {renderContentWithLinks(comment.content || '')}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* 加载更多评论按钮 */}
-                  {hasMoreComments && (
-                    <button
-                      onClick={loadMoreComments}
-                      disabled={loadingMoreComments}
-                      style={{
-                        padding: '10px 16px',
-                        background: 'transparent',
-                        border: `1px solid var(--color-border-primary)`,
-                        borderRadius: tokens.radius.md,
-                        color: 'var(--color-text-secondary)',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        cursor: loadingMoreComments ? 'not-allowed' : 'pointer',
-                        opacity: loadingMoreComments ? 0.6 : 1,
-                        transition: 'all 0.2s ease',
-                        width: '100%',
-                        marginTop: 4,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!loadingMoreComments) {
-                          e.currentTarget.style.borderColor = 'var(--color-accent-primary)'
-                          e.currentTarget.style.color = 'var(--color-accent-primary)'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--color-border-primary)'
-                        e.currentTarget.style.color = 'var(--color-text-secondary)'
-                      }}
-                    >
-                      {loadingMoreComments ? t('loading') : t('loadMoreComments')}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>,
-        document.body
+      {/* Post detail modal */}
+      {openPost && (
+        <PostDetailModal
+          post={openPost}
+          comments={comments}
+          loadingComments={loadingComments}
+          hasMoreComments={hasMoreComments}
+          loadingMoreComments={loadingMoreComments}
+          newComment={newComment}
+          setNewComment={setNewComment}
+          submittingComment={submittingComment}
+          translatedContent={translatedContent}
+          showingOriginal={showingOriginal}
+          translating={translating}
+          accessToken={accessToken}
+          onClose={handleClosePost}
+          onSubmitComment={submitComment}
+          onToggleReaction={toggleReaction}
+          onToggleOriginal={() => setShowingOriginal(!showingOriginal)}
+          onLoadMoreComments={loadMoreComments}
+          localizedName={localizedName}
+          t={t}
+        />
       )}
       <FloatingActionButton />
     </Box>

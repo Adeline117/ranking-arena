@@ -126,11 +126,12 @@ export default function LoginPage() {
                 .then(({ data: userProfile }) => {
                   router.push(getRedirectUrl(userProfile?.handle, user.email))
                 })
+                .catch(() => { router.push(getRedirectUrl()) })
             } else {
               router.push(getRedirectUrl())
             }
-          })
-        })
+          }).catch(() => { router.push(getRedirectUrl()) })
+        }).catch(() => { router.push(getRedirectUrl()) })
       }
     })
     return () => { subscription.unsubscribe() }

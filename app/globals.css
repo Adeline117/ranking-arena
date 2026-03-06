@@ -59,6 +59,7 @@ html.theme-transition *::after {
   --color-brand-light: var(--color-accent-primary-30);
   --color-brand-accent: #c9b8db;
   --color-brand-deep: #6b4f88;
+  --color-accent-brand: #8b6fa8;
   --color-verified-onchain: #2fe57d;
   --color-verified-web3: #8B5CF6;
   
@@ -525,7 +526,7 @@ body {
 
 /* Focus styles */
 :focus-visible {
-  outline: 2px solid var(--color-accent-primary);
+  outline: 2px solid var(--color-accent-brand);
   outline-offset: 2px;
 }
 
@@ -2688,7 +2689,7 @@ td[data-numeric],
 
 /* Enhanced focus indicators for accessibility */
 *:focus-visible {
-  outline: 2px solid var(--color-accent-primary);
+  outline: 2px solid var(--color-accent-brand);
   outline-offset: 2px;
   border-radius: 2px;
 }
