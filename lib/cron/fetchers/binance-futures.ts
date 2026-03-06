@@ -40,12 +40,14 @@ const SOURCE = 'binance_futures'
 const API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
 const _PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
-const TARGET = 2000
-const PAGE_SIZE = 20
+// Binance caps at ~30 results/page regardless of pageSize.
+// With VPS proxy fallback (~2s/page), TARGET=500 keeps within Vercel 300s limit.
+const TARGET = 500
+const PAGE_SIZE = 30
 
-// Phase 2: Enrichment settings - increased coverage from 50 to 100
-const ENRICH_LIMIT = 300 // Top N traders to enrich with equity curve/position history
-const ENRICH_CONCURRENCY = 5 // Increased concurrency
+// Phase 2: Enrichment settings
+const ENRICH_LIMIT = 100
+const ENRICH_CONCURRENCY = 5
 const ENRICH_DELAY_MS = 1000
 
 // Futures API may use either number or string format - trying both
@@ -271,8 +273,9 @@ async function fetchPeriod(
   const { saved, error } = await upsertTraders(supabase, top)
 
   // Phase 2: Enrich top traders with equity curve, position history, and stats detail
-  // Extended to all periods (not just 90D)
-  if (saved > 0) {
+  // Skip enrichment when using VPS proxy — enrichment APIs also geo-blocked,
+  // each failed call wastes ~30s. Use batch-enrich cron instead.
+  if (saved > 0 && _cachedStrategy !== 'vps') {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
     logger.info(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
