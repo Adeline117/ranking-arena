@@ -45,7 +45,7 @@ function TraderAvatarImg({ avatarUrl, traderKey: _traderKey, name, size = 32 }: 
   return (
     <img
       src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
-      alt=""
+      alt={name || 'Trader avatar'}
       width={size}
       height={size}
       loading="lazy"

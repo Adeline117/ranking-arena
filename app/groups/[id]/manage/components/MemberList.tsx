@@ -213,7 +213,7 @@ export default function MemberList({
                 />
               )}
               <Box style={{ width: 40, height: 40, borderRadius: '50%', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
-                {member.avatar_url ? <Image src={member.avatar_url} alt="" fill sizes="36px" style={{ objectFit: 'cover' }} /> : <Text size="sm" color="tertiary">{(member.handle || 'U').charAt(0).toUpperCase()}</Text>}
+                {member.avatar_url ? <Image src={member.avatar_url} alt={member.handle || 'Member avatar'} fill sizes="36px" style={{ objectFit: 'cover' }} /> : <Text size="sm" color="tertiary">{(member.handle || 'U').charAt(0).toUpperCase()}</Text>}
               </Box>
               <Box style={{ flex: 1 }}>
                 <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
