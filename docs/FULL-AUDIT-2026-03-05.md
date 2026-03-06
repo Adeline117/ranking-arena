@@ -7,16 +7,16 @@
 
 | Dimension | Health | Critical Issues | Key Strength |
 |-----------|--------|----------------|--------------|
-| Architecture | STRONG | 0 | Well-modularized, modern stack (Next.js 16, React 19) |
-| Database | EXCELLENT | 0 | 275 indexes, 100 migrations, comprehensive RLS |
-| API Routes | STRONG | 0 | 289 routes, standardized error handling, rate limiting |
+| Architecture | GOOD | 1 | Well-modularized, modern stack (Next.js 16, React 19) |
+| Database | EXCELLENT | 1 | 275 indexes, 100 migrations, comprehensive RLS |
+| API Routes | GOOD | 1 | 289 routes, standardized error handling, rate limiting |
 | Exchange Connectors | GOOD | 2 | 45+ connectors, circuit breakers, proxy fallback |
 | Performance | NEEDS WORK | 3 | Good caching infra, but N+1 queries in cron jobs |
-| Security | NEEDS WORK | 3 | Strong RLS/auth, but exposed secrets & auth bypasses |
+| Security | CRITICAL | 5 | Strong RLS/auth, but open redirects & auth bypasses |
 | Silent Failures | CRITICAL | 6 | fireAndForget util exists but unused in 30+ locations |
-| Data Quality | CRITICAL | 3 | normalizeROI() dead code, Arena Score divergence |
+| Data Quality | CRITICAL | 4 | normalizeROI() dead code, Arena Score divergence |
 | Frontend/UI | STRONG | 0 | 262 components, SSR+CSR hybrid, PWA+Capacitor |
-| Infrastructure | GOOD | 0 | 27 cron jobs, tiered cache, Sentry monitoring |
+| Infrastructure | GOOD | 1 | 27 cron jobs, tiered cache, Sentry monitoring |
 
 **Overall Assessment:** Production-grade platform with strong architecture and database design. The highest-risk area is the data pipeline -- silent failures in enrichment, inconsistent ROI normalization, and divergent Arena Score implementations threaten data integrity for 32,000+ traders.
 
