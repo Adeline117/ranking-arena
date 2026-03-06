@@ -11,6 +11,12 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  DydxLeaderboardResponseSchema,
+  DydxSubaccountResponseSchema,
+  DydxHistoricalPnlResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags, TraderTimeseries,
@@ -93,7 +99,8 @@ export class DydxPerpConnector extends BaseConnector {
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     const period = WINDOW_MAP[window]
     const url = this.buildUrl('/v4/leaderboard/pnl', { period, limit: String(limit) })
-    const data = await this.request<any>(url, { method: 'GET' })
+    const _rawLb = await this.request<any>(url, { method: 'GET' })
+    const data = warnValidate(DydxLeaderboardResponseSchema, _rawLb, 'dydx-perp/leaderboard')
     const rankings = data?.pnlRanking || []
 
     const traders: TraderSource[] = (Array.isArray(rankings) ? rankings : []).map((item: Record<string, unknown>) => {
@@ -128,7 +135,8 @@ export class DydxPerpConnector extends BaseConnector {
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     // Get subaccount for equity (through proxy if configured)
     const subUrl = this.buildUrl(`/v4/addresses/${traderKey}/subaccounts/0`)
-    const subData = await this.request<any>(subUrl, { method: 'GET' })
+    const _rawSub = await this.request<any>(subUrl, { method: 'GET' })
+    const subData = warnValidate(DydxSubaccountResponseSchema, _rawSub, 'dydx-perp/subaccount')
     const equity = Number(subData?.subaccount?.equity) || 0
 
     // Get PnL from leaderboard for this address (through proxy if configured)

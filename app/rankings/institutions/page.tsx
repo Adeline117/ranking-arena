@@ -24,29 +24,34 @@ interface Institution {
 }
 
 const CATEGORY_FILTERS = [
-  { key: 'all', zh: '全部', en: 'All' },
-  { key: 'exchange', zh: '交易所', en: 'Exchanges' },
-  { key: 'cex', zh: 'CEX', en: 'CEX' },
-  { key: 'dex', zh: 'DEX', en: 'DEX' },
-  { key: 'derivatives', zh: '衍生品', en: 'Derivatives' },
-  { key: 'dex-aggregator', zh: 'DEX聚合器', en: 'DEX Aggregators' },
-  { key: 'otc', zh: 'OTC', en: 'OTC' },
-  { key: 'fund', zh: '基金', en: 'Funds' },
-  { key: 'crypto-vc', zh: '加密VC', en: 'Crypto VC' },
-  { key: 'traditional-vc', zh: '传统VC', en: 'Traditional VC' },
-  { key: 'hedge-fund', zh: '对冲基金', en: 'Hedge Funds' },
-  { key: 'family-office', zh: '家族办公室', en: 'Family Office' },
-  { key: 'trading-firm', zh: '交易公司', en: 'Trading Firms' },
-  { key: 'dao-treasury', zh: 'DAO国库', en: 'DAO Treasury' },
-  { key: 'accelerator', zh: '加速器', en: 'Accelerators' },
-  { key: 'l1', zh: 'L1', en: 'L1' },
-  { key: 'l2', zh: 'L2', en: 'L2' },
-  { key: 'project', zh: '项目方', en: 'Projects' },
-  { key: 'defi', zh: 'DeFi', en: 'DeFi', isGroup: true },
-  { key: 'infrastructure', zh: '基础设施', en: 'Infrastructure' },
-  { key: 'services', zh: '服务商', en: 'Services', isGroup: true },
-  { key: 'media', zh: '媒体', en: 'Media', isGroup: true },
-]
+  { key: 'all', labelKey: 'instCatAll' },
+  { key: 'exchange', labelKey: 'instCatExchange' },
+  { key: 'cex', labelKey: 'instCatCex' },
+  { key: 'dex', labelKey: 'instCatDex' },
+  { key: 'derivatives', labelKey: 'instCatDerivatives' },
+  { key: 'dex-aggregator', labelKey: 'instCatDexAggregator' },
+  { key: 'otc', labelKey: 'instCatOtc' },
+  { key: 'fund', labelKey: 'instCatFund' },
+  { key: 'crypto-vc', labelKey: 'instCatCryptoVc' },
+  { key: 'traditional-vc', labelKey: 'instCatTraditionalVc' },
+  { key: 'hedge-fund', labelKey: 'instCatHedgeFund' },
+  { key: 'family-office', labelKey: 'instCatFamilyOffice' },
+  { key: 'trading-firm', labelKey: 'instCatTradingFirm' },
+  { key: 'dao-treasury', labelKey: 'instCatDaoTreasury' },
+  { key: 'accelerator', labelKey: 'instCatAccelerator' },
+  { key: 'l1', labelKey: 'instCatL1' },
+  { key: 'l2', labelKey: 'instCatL2' },
+  { key: 'project', labelKey: 'instCatProject' },
+  { key: 'defi', labelKey: 'instCatDefi', isGroup: true },
+  { key: 'infrastructure', labelKey: 'instCatInfrastructure' },
+  { key: 'services', labelKey: 'instCatServices', isGroup: true },
+  { key: 'media', labelKey: 'instCatMedia', isGroup: true },
+] as const
+
+// Map from category filter key to its labelKey for reverse lookup in InstitutionCard
+const INST_CATEGORY_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  CATEGORY_FILTERS.map(f => [f.key, f.labelKey])
+)
 
 // Category groups for combined filters
 const CATEGORY_GROUPS: Record<string, string[]> = {
@@ -56,10 +61,10 @@ const CATEGORY_GROUPS: Record<string, string[]> = {
 }
 
 const SORT_OPTIONS = [
-  { key: 'rating', zh: '评分最高', en: 'Highest Rated' },
-  { key: 'newest', zh: '最新', en: 'Newest' },
-  { key: 'reviews', zh: '评价最多', en: 'Most Reviews' },
-]
+  { key: 'rating', labelKey: 'instSortRating' },
+  { key: 'newest', labelKey: 'instSortNewest' },
+  { key: 'reviews', labelKey: 'instSortReviews' },
+] as const
 
 const FundIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -214,7 +219,7 @@ export default function InstitutionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [category, sort, debouncedSearch, language]) // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  }, [category, sort, debouncedSearch, t])
 
   useEffect(() => {
     fetchData()
@@ -296,7 +301,7 @@ export default function InstitutionsPage() {
                   letterSpacing: '0.01em',
                 }}
               >
-                {f[language]}
+                {t(f.labelKey)}
                 {count != null && count > 0 && (
                   <span style={{
                     fontSize: tokens.typography.fontSize.xs,
@@ -327,7 +332,7 @@ export default function InstitutionsPage() {
             }}
           >
             {SORT_OPTIONS.map(opt => (
-              <option key={opt.key} value={opt.key}>{opt[language]}</option>
+              <option key={opt.key} value={opt.key}>{t(opt.labelKey)}</option>
             ))}
           </select>
         </div>
@@ -401,7 +406,7 @@ export default function InstitutionsPage() {
 }
 
 function InstitutionCard({ institution, language }: { institution: Institution; language: 'zh' | 'en' }) {
-  const { t: _t } = useLanguage()
+  const { t } = useLanguage()
   const name = language === 'zh' ? (institution.name_zh || institution.name) : institution.name
   const desc = language === 'zh' ? (institution.description_zh || institution.description) : institution.description
 
@@ -456,7 +461,7 @@ function InstitutionCard({ institution, language }: { institution: Institution; 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: tokens.typography.fontSize.base, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
           <div style={{ fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)', fontWeight: 500 }}>
-            {CATEGORY_FILTERS.find(f => f.key === institution.category)?.[language] || institution.category}
+            {INST_CATEGORY_LABEL_MAP[institution.category] ? t(INST_CATEGORY_LABEL_MAP[institution.category]) : institution.category}
           </div>
         </div>
       </div>
@@ -498,7 +503,7 @@ function InstitutionCard({ institution, language }: { institution: Institution; 
         />
       ) : (
         <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
-          {isZh ? '暂无评分' : 'No ratings yet'}
+          {t('instNoRatingsYet')}
         </span>
       )}
     </a>

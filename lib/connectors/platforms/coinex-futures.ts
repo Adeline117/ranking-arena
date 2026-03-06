@@ -6,6 +6,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  CoinexFuturesLeaderboardResponseSchema,
+  CoinexFuturesDetailResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -37,10 +42,11 @@ export class CoinexFuturesConnector extends BaseConnector {
     }
 
     const page = Math.floor(offset / limit) + 1
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `https://www.coinex.com/res/copy-trading/traders?page=${page}&limit=${limit}&sort_by=roi&period=${window}`,
       { method: 'GET' }
     )
+    const data = warnValidate(CoinexFuturesLeaderboardResponseSchema, _rawLb, 'coinex-futures/leaderboard')
     const list = data?.data?.items || []
 
     const traders: TraderSource[] = (Array.isArray(list) ? list : []).map((item: Record<string, unknown>) => ({
@@ -56,10 +62,11 @@ export class CoinexFuturesConnector extends BaseConnector {
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
-    const data = await this.request<any>(
+    const _rawProfile = await this.request<any>(
       `https://www.coinex.com/res/copy-trading/trader/${traderKey}/detail`,
       { method: 'GET' }
     )
+    const data = warnValidate(CoinexFuturesDetailResponseSchema, _rawProfile, 'coinex-futures/profile')
     const info = data?.data
     if (!info) return null
 
@@ -95,10 +102,11 @@ export class CoinexFuturesConnector extends BaseConnector {
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
     }
 
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `https://www.coinex.com/res/copy-trading/trader/${traderKey}/detail?period=${window}`,
       { method: 'GET' }
     )
+    const data = warnValidate(CoinexFuturesDetailResponseSchema, _rawSnap, 'coinex-futures/snapshot')
     const info = data?.data
     if (!info) return null
 
