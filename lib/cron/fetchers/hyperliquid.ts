@@ -126,7 +126,8 @@ async function fetchEnrichedStats(
       totalWins: wins.length,
       totalLosses: losses.length,
     }
-  } catch {
+  } catch (err) {
+    logger.warn(`[${SOURCE}] Error: ${err instanceof Error ? err.message : String(err)}`)
     return { winRate: null, tradesCount: null, avgProfit: null, avgLoss: null, totalWins: null, totalLosses: null }
   }
 }
