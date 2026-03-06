@@ -3539,6 +3539,52 @@ const zh = {
     selected: '已选',
     next: '下一步',
 
+    // isZh migration - common
+    activity: '动态',
+    aBook: '一本书',
+    allItemsLoaded: '已加载全部内容',
+    failedToLoadRetry: '加载失败，请重试',
+    featured: '精选推荐',
+    followedTrader: '关注了交易员',
+    inGroup: '在',
+    institutions: '机构',
+    joinedGroup: '加入了小组',
+    noInstitutionsFound: '暂无数据',
+    noItemsFound: '暂无内容',
+    noRatingsYet: '暂无评分',
+    noRecentActivity: '暂无动态',
+    noToolsFound: '暂无数据',
+    prev: '上一页',
+    publishedAPost: '发表了帖子',
+    tools: '工具',
+    tradingLibrary: '交易知识库',
+    tryDifferentCategory: '试试其他分类',
+    tryDifferentKeywords: '换个关键词试试',
+    unknownGroup: '未知小组',
+
+    // isZh migration - rankings
+    discoverRateInstitutions: '发现并评价加密行业中的顶级机构',
+    discoverRateTools: '发现并评价加密行业中的顶级工具',
+    searchByTitleAuthor: '搜索书名、作者或关键词...',
+    searchInstitutions: '搜索机构...',
+    searchTools: '搜索工具...',
+    top10Books: '热门书籍 Top 10',
+    top10Exchanges: '顶级交易所 Top 10',
+    top10Funds: '顶级基金 Top 10',
+    top10Papers: '热门论文 Top 10',
+    top10Projects: '顶级项目方 Top 10',
+    top10QuantPlatforms: '量化平台 Top 10',
+    top10Scripts: '开源脚本 Top 10',
+    top10TradingTools: '交易工具 Top 10',
+    top10Whitepapers: '热门白皮书 Top 10',
+
+    // isZh migration - epub/notes (additional keys)
+    epubEnterKeyword: '输入关键词...',
+    epubHighlightsNotes: '高亮和笔记',
+    epubNoHighlightsYet: '暂无高亮或笔记。\n选中文字即可添加。',
+    epubReadingStats: '阅读统计',
+    notesHighlights: '笔记与高亮',
+
 // Filter
 grade: '等级',
 
