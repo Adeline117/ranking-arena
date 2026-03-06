@@ -13,11 +13,9 @@
 
 </div>
 
----
-
 ## Overview
 
-Arena aggregates, normalizes, and ranks 32,000+ crypto copy-trading leaders across 39 centralized and decentralized exchanges. Every trader receives an Arena Score — a composite metric combining ROI and absolute PnL — allowing apples-to-apples comparison regardless of the originating platform. The system ingests data continuously through 44 scheduled cron jobs, enriches trader profiles with equity curves, position history, and advanced statistics, and serves the results through a Next.js 16 frontend with ISR and edge caching.
+Arena aggregates, normalizes, and ranks 32,000+ crypto copy-trading leaders across 39 centralized and decentralized exchanges. Every trader receives an Arena Score, a composite metric combining ROI and absolute PnL, allowing apples-to-apples comparison regardless of the originating platform. The system ingests data continuously through 44 scheduled cron jobs, enriches trader profiles with equity curves, position history, and advanced statistics, and serves the results through a Next.js 16 frontend with ISR and edge caching.
 
 Beyond rankings, Arena provides a 60,000+ item educational library (books, research papers, whitepapers), real-time market data via TradingView WebSocket, community features (groups, posts, comments), and a Pro membership tier.
 
@@ -27,8 +25,8 @@ Beyond rankings, Arena provides a 60,000+ item educational library (books, resea
 
 Arena Score is a two-dimension composite metric scored on a 0-100 scale:
 
-- **Return Score (60%)** — Measures ROI using a log-scaled sigmoid curve. Period-specific calibration: 7D baseline 15%, 30D baseline 30%, 90D baseline 60%. Scores are compressed so that median traders land around 25-30 points and only genuinely exceptional returns approach the ceiling.
-- **PnL Score (40%)** — Measures absolute realized profit in USD. Also log-scaled to handle the wide range from small retail accounts to whale-tier PnL. The median trader maps to roughly 13 points.
+- **Return Score (60%)**: Measures ROI using a log-scaled sigmoid curve. Period-specific calibration: 7D baseline 15%, 30D baseline 30%, 90D baseline 60%. Scores are compressed so that median traders land around 25-30 points and only genuinely exceptional returns approach the ceiling.
+- **PnL Score (40%)**: Measures absolute realized profit in USD. Also log-scaled to handle the wide range from small retail accounts to whale-tier PnL. The median trader maps to roughly 13 points.
 
 Score confidence is tracked as `full`, `partial`, or `minimal` depending on whether win rate and max drawdown data are available from the source exchange.
 
@@ -395,4 +393,4 @@ Cron schedules are defined in `vercel.json`. All 44 cron endpoints require an `A
 
 ## License
 
-All rights reserved. Copyright 2024-2026 Arena.
+All rights reserved. Copyright 2026 Arena.
