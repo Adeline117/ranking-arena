@@ -103,44 +103,35 @@ async function fetchPeriod(
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
   const allTraders = new Map<string, BybitLeaderDetail>()
 
-  // Strategy A: Try VPS Playwright scraper bulk fetch first
-  if (VPS_SCRAPER_KEY) {
-    try {
-      const scraperUrl = `${VPS_SCRAPER_URL}/bybit/leaderboard?multiPage=true&pages=${maxPages}&pageSize=${PAGE_SIZE}&duration=${duration}`
-      const res = await fetch(scraperUrl, {
-        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-        signal: AbortSignal.timeout(120_000),
-      })
-      if (res.ok) {
-        const scraperData = (await res.json()) as BybitApiResponse
-        const details = scraperData?.result?.leaderDetails || []
-        if (details.length > 0) {
-          logger.info(`[${SOURCE}] VPS scraper got ${details.length} traders`)
-          for (const item of details) {
-            const id = String(item.leaderUserId || item.leaderMark || '')
-            if (!id || allTraders.has(id)) continue
-            allTraders.set(id, item)
+  for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+    let data: BybitApiResponse | null = null
+
+    // Strategy 1: VPS Playwright scraper (bypasses Akamai WAF)
+    if (VPS_SCRAPER_KEY) {
+      try {
+        const scraperUrl = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${PAGE_SIZE}&duration=${duration}`
+        const res = await fetch(scraperUrl, {
+          headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+          signal: AbortSignal.timeout(60_000),
+        })
+        if (res.ok) {
+          const scraperData = (await res.json()) as BybitApiResponse
+          if (scraperData?.result?.leaderDetails?.length) {
+            data = scraperData
           }
         }
+      } catch (err) {
+        logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : err}`)
       }
-    } catch (err) {
-      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : err}`)
     }
-  }
 
-  // Strategy B: Fall back to page-by-page if scraper didn't get enough
-  if (allTraders.size >= PAGE_SIZE) {
-    // Skip direct API, scraper got enough data
-  } else {
-  for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
-    try {
-      const url =
-        `${API_URL}?pageNo=${pageNo}&pageSize=${PAGE_SIZE}` +
-        `&dataDuration=${duration}` +
-        `&sortField=LEADER_SORT_FIELD_SORT_ROI`
-
-      let data: BybitApiResponse
+    // Strategy 2: Direct API + proxy fallback
+    if (!data) {
       try {
+        const url =
+          `${API_URL}?pageNo=${pageNo}&pageSize=${PAGE_SIZE}` +
+          `&dataDuration=${duration}` +
+          `&sortField=LEADER_SORT_FIELD_SORT_ROI`
         data = await fetchWithProxyFallback<BybitApiResponse>(url)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -150,26 +141,23 @@ async function fetchPeriod(
           }
           break
         }
-        throw err
+        logger.warn(`[${SOURCE}] Page fetch failed: ${msg}`)
+        break
       }
-
-      const details = data?.result?.leaderDetails || []
-      if (details.length === 0) break
-
-      for (const item of details) {
-        const id = String(item.leaderUserId || item.leaderMark || '')
-        if (!id || allTraders.has(id)) continue
-        allTraders.set(id, item)
-      }
-
-      if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
-      await sleep(500)
-    } catch (err) {
-      logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
-      break
     }
+
+    const details = data?.result?.leaderDetails || []
+    if (details.length === 0) break
+
+    for (const item of details) {
+      const id = String(item.leaderUserId || item.leaderMark || '')
+      if (!id || allTraders.has(id)) continue
+      allTraders.set(id, item)
+    }
+
+    if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
+    await sleep(500)
   }
-  } // end else (scraper didn't get enough)
 
   // Map to TraderData
   const capturedAt = new Date().toISOString()
