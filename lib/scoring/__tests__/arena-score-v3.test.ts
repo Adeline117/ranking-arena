@@ -271,7 +271,8 @@ describe('calculateMultiWindowScore', () => {
       },
     })
     expect(result.total).toBe(0)
-    expect(result.completeness).toBe('insufficient')
+    // Insufficient window is skipped entirely; byWindow still records it
+    expect(result.byWindow['30D']?.completeness).toBe('insufficient')
   })
 
   test('worst completeness propagates', () => {
