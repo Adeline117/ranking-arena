@@ -17,13 +17,6 @@ const eslintConfig = defineConfig([
       // This repo contains many pragmatic uses of `any` across UI + scripts.
       "@typescript-eslint/no-explicit-any": "off",
 
-      // Allow unused vars with _ prefix (common pattern for intentionally unused params)
-      "@typescript-eslint/no-unused-vars": ["warn", {
-        "argsIgnorePattern": "^_",
-        "varsIgnorePattern": "^_",
-        "caughtErrorsIgnorePattern": "^_"
-      }],
-
       // These rules are helpful, but currently too strict for the codebase patterns.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/immutability": "off",
@@ -60,23 +53,26 @@ const eslintConfig = defineConfig([
 
       // Detect empty Promise .catch() callbacks like .catch(() => {})
       // Use fireAndForget() from lib/utils/logger instead for proper logging
-      "no-restricted-syntax": ["warn", {
-        "selector": "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[body.type='BlockStatement'][body.body.length=0]",
-        "message": "Empty .catch(() => {}) silently swallows errors. Use fireAndForget() from lib/utils/logger instead."
-      }],
+      "no-restricted-syntax": ["warn",
+        {
+          "selector": "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[body.type='BlockStatement'][body.body.length=0]",
+          "message": "Empty .catch(() => {}) silently swallows errors. Use fireAndForget() from lib/utils/logger instead."
+        },
+        {
+          "selector": "JSXAttribute[name.name='style'][value.expression.type='ObjectExpression']",
+          "message": "Avoid inline style={{}}. Use Tailwind CSS classes or design tokens from lib/design-tokens.ts instead."
+        },
+        {
+          "selector": "ConditionalExpression[test.name='isZh']",
+          "message": "Do not use isZh ? ternary for translations. Use t('key') from useLanguage() instead. See lib/i18n."
+        },
+      ],
     },
   },
   // ============================================
   // System State Management enforcement
   // See docs/system-principles.md for rationale
   // ============================================
-  {
-    files: ["app/**/*.{ts,tsx}"],
-    rules: {
-      // TODO: Re-enable after migrating all auth calls to useAuthSession()
-      "no-restricted-syntax": "off",
-    },
-  },
   // Exempt: auth hook implementation and server-side API routes (which use JWT verification)
   {
     files: ["lib/hooks/useAuthSession.ts", "app/api/**/*.ts"],
