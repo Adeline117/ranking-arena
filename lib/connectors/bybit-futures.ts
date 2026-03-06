@@ -47,7 +47,7 @@ function getRandomUserAgent(): string {
 
 // External API response type - loosely typed since Bybit internal API shapes vary
  
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type BybitApiResponse = Record<string, any>
 
 export class BybitFuturesConnector {

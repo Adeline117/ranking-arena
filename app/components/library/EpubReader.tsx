@@ -551,7 +551,7 @@ export default function EpubReader({
     if (goToHref && renditionRef.current) {
       renditionRef.current.display(goToHref)
     }
-  }, [goToHref]) // eslint-disable-line react-hooks/exhaustive-deps -- renditionRef is a stable ref
+  }, [goToHref])  
 
   // ─── Navigation ────────────────────────────────────────────────
   const goNext = useCallback(() => { renditionRef.current?.next() }, [])

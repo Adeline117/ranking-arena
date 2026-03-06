@@ -64,7 +64,7 @@ export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: 
     if (accessToken) {
       fetchMyApplications(accessToken)
     }
-  }, [accessToken]) // eslint-disable-line react-hooks/exhaustive-deps -- fetchMyApplications is defined below in closure, not a stable ref
+  }, [accessToken])  
 
   const validateField = (fieldName: string, _value: string) => {
     const newErrors = { ...fieldErrors }

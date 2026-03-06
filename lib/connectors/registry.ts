@@ -15,7 +15,7 @@ import type { PlatformConnector } from './types'
 /** Union type for both new-style and legacy connectors in the registry.
  * Uses any to support both BaseConnector and BaseConnectorLegacy subclasses
  * without requiring type assertions at every call site in job-runner.ts. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AnyConnector = any
 import { TokenBucketRateLimiter } from './rate-limiter'
 
