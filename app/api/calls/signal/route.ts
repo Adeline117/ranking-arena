@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'targetUserId required' }, { status: 400 })
     }
 
-    const { data: signal } = await supabaseAdmin
+    const { data: signal } = await getSupabaseAdmin()
       .from('call_signals')
       .select('peer_id')
       .eq('user_id', targetUserId)
