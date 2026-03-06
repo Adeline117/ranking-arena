@@ -45,7 +45,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
     navigator.serviceWorker.ready.then(async (reg) => {
       const sub = await reg.pushManager.getSubscription()
       setStatus(sub ? 'subscribed' : 'unsubscribed')
-    }).catch(() => setStatus('unsupported'))
+    }).catch(() => setStatus('unsupported')) // eslint-disable-line no-restricted-syntax -- service worker unavailable = push unsupported
   }, [])
 
   const subscribe = useCallback(async () => {

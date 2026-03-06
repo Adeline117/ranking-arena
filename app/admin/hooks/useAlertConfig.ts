@@ -82,7 +82,7 @@ export function useAlertConfig(accessToken: string | null, showToast?: ToastFn) 
     } finally {
       setSaving(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setSaving/setConfig use updater form
   }, [accessToken, showToast])
 
   return {

@@ -233,7 +233,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     if (postsHook.posts.length > 0 && !translatingPosts) {
       translatePosts(postsHook.posts, language as 'zh' | 'en')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- translatePosts excluded to avoid infinite loop; only trigger on posts/language change
   }, [postsHook.posts, language])
 
   // Related groups
@@ -343,7 +343,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     return () => {
       controller.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- supabase/postsHook/showToast/t are stable; load group data on mount or when userId changes
   }, [groupId, userId])
 
   // Fallback: Load posts when membership state changes (for non-cold-start cases)
@@ -351,7 +351,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     if (groupId && !loading && postsHook.posts.length === 0 && !postsHook.loadingMore) {
       postsHook.loadPosts(true)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- postsHook.loadPosts/posts/loadingMore excluded to avoid infinite loop; fallback trigger only
   }, [isMember, groupId, loading])
 
   // Invite auto-join
@@ -372,7 +372,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       }
     }
     handleInvite()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleJoin/showToast/t excluded; only re-run when invite params or auth state change
   }, [searchParams, userId, groupId, isMember, loading])
 
   // Join group (via API)
@@ -413,7 +413,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     } finally {
       setJoining(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; getCsrfHeaders is a pure utility
   }, [userId, group, isPro, groupId, accessToken, showToast])
 
   // Leave group (via API)
@@ -446,7 +446,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     } finally {
       setJoining(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; getCsrfHeaders is a pure utility
   }, [userId, groupId, accessToken, showToast])
 
   // Load members

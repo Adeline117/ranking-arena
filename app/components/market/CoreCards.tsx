@@ -281,7 +281,7 @@ export default function CoreCards() {
               setLosers(sorted.filter(r => r.direction === 'down').slice(-5).reverse())
               setMarketLoaded(true)
             })
-            .catch(() => { if (alive) setMarketLoaded(true) })
+            .catch(() => { if (alive) setMarketLoaded(true) }) // eslint-disable-line no-restricted-syntax -- last-resort fallback: mark loaded even if spot API also fails
         })
 
       fetch('/api/market/exchanges', { signal: controller.signal })

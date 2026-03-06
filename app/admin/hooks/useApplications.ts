@@ -130,7 +130,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     } finally {
       setActionLoading(prev => ({ ...prev, [applicationId]: false }))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setApplications/setActionLoading use updater form
   }, [accessToken, showToast])
 
   const rejectApplication = useCallback(async (applicationId: string, reason?: string) => {
@@ -163,7 +163,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     } finally {
       setActionLoading(prev => ({ ...prev, [applicationId]: false }))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setApplications/setActionLoading use updater form
   }, [accessToken, showToast])
 
   const approveEditApplication = useCallback(async (applicationId: string) => {
@@ -194,7 +194,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     } finally {
       setActionLoading(prev => ({ ...prev, [`edit_${applicationId}`]: false }))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setEditApplications/setActionLoading use updater form
   }, [accessToken, showToast])
 
   const rejectEditApplication = useCallback(async (applicationId: string, reason?: string) => {
@@ -227,7 +227,7 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     } finally {
       setActionLoading(prev => ({ ...prev, [`edit_${applicationId}`]: false }))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setEditApplications/setActionLoading use updater form
   }, [accessToken, showToast])
 
   return {
