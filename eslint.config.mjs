@@ -21,6 +21,7 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/immutability": "off",
       "react-hooks/purity": "off",
+      "react-hooks/refs": "off",
 
       // Next link rule is nice-to-have; we allow <a> in simple 404 pages.
       "@next/next/no-html-link-for-pages": "off",
