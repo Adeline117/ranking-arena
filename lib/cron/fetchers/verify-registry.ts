@@ -591,7 +591,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   },
 }
 
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 
 
 // ── Public API ──
 
