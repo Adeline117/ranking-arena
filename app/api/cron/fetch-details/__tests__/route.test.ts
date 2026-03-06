@@ -166,6 +166,7 @@ describe('GET /api/cron/fetch-details', () => {
     const origKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     // Mock getSupabaseEnv to return empty
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getSupabaseEnv } = require('@/lib/cron/utils')
     getSupabaseEnv.mockReturnValueOnce({ url: '', serviceKey: '' })
 
