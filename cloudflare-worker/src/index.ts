@@ -262,7 +262,7 @@ async function handleProxy(request: Request, _env: Env): Promise<Response> {
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (error) {
+  } catch (_error) {
     return Response.json({
       error: 'Proxy error',
       details: 'Upstream API unavailable'
@@ -300,7 +300,7 @@ async function handleBinanceCopyTrading(request: Request, url: URL): Promise<Res
     return Response.json(data, {
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (error) {
+  } catch (_error) {
     return Response.json({
       error: 'Binance API error',
       details: 'Upstream API unavailable'
@@ -363,7 +363,7 @@ async function handleBybitCopyTrading(request: Request, url: URL): Promise<Respo
     return Response.json(data, {
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (error) {
+  } catch (_error) {
     return Response.json({
       error: 'Bybit API error',
       details: 'Upstream API unavailable'
@@ -485,7 +485,7 @@ async function handleKuCoinCopyTrading(request: Request, url: URL): Promise<Resp
     return Response.json(data, {
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (error) {
+  } catch (_error) {
     return Response.json({
       error: 'KuCoin API error',
       details: 'Upstream API unavailable'
@@ -527,7 +527,7 @@ async function handleBinanceSpotCopyTrading(request: Request, url: URL): Promise
     return Response.json(data, {
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (error) {
+  } catch (_error) {
     return Response.json({
       error: 'Binance Spot API error',
       details: 'Upstream API unavailable'
@@ -567,7 +567,7 @@ async function handleDydxLeaderboard(request: Request, url: URL): Promise<Respon
       status: response.status,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (error) {
+  } catch (_error) {
     return Response.json({
       error: 'dYdX leaderboard proxy error',
       details: 'Upstream API unavailable'
@@ -604,7 +604,7 @@ async function handleDydxHistoricalPnl(request: Request, url: URL): Promise<Resp
       status: response.status,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (error) {
+  } catch (_error) {
     return Response.json({
       error: 'dYdX historical PnL proxy error',
       details: 'Upstream API unavailable'
@@ -640,7 +640,7 @@ async function handleDydxSubaccount(request: Request, url: URL): Promise<Respons
       status: response.status,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (error) {
+  } catch (_error) {
     return Response.json({
       error: 'dYdX subaccount proxy error',
       details: 'Upstream API unavailable'
@@ -719,8 +719,8 @@ async function handleBingxTraderDetail(_request: Request, url: URL): Promise<Res
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (error) {
-    return Response.json({ error: 'BingX trader detail proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+  } catch (_error) {
+    return Response.json({ error: 'BingX trader detail proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
@@ -755,8 +755,8 @@ async function handleBlofinLeaderboard(_request: Request, url: URL): Promise<Res
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (error) {
-    return Response.json({ error: 'BloFin leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+  } catch (_error) {
+    return Response.json({ error: 'BloFin leaderboard proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
@@ -782,8 +782,8 @@ async function handleBlofinTraderInfo(_request: Request, url: URL): Promise<Resp
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (error) {
-    return Response.json({ error: 'BloFin trader info proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+  } catch (_error) {
+    return Response.json({ error: 'BloFin trader info proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
@@ -816,8 +816,8 @@ async function handleGainsLeaderboardAll(_request: Request, url: URL): Promise<R
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (error) {
-    return Response.json({ error: 'Gains leaderboard proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+  } catch (_error) {
+    return Response.json({ error: 'Gains leaderboard proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
@@ -841,8 +841,8 @@ async function handleGainsOpenTrades(_request: Request, url: URL): Promise<Respo
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (error) {
-    return Response.json({ error: 'Gains open-trades proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+  } catch (_error) {
+    return Response.json({ error: 'Gains open-trades proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
@@ -869,8 +869,8 @@ async function handleGainsTraderStats(_request: Request, url: URL): Promise<Resp
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (error) {
-    return Response.json({ error: 'Gains trader stats proxy error', details: error instanceof Error ? error.message : 'Unknown' }, {
+  } catch (_error) {
+    return Response.json({ error: 'Gains trader stats proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
