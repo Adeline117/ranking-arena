@@ -22,6 +22,7 @@ import {
   isTraderClaimed,
   type VerificationMethod,
 } from '@/lib/data/trader-claims'
+import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
 
 /**
  * GET /api/traders/claim
@@ -92,6 +93,9 @@ export async function POST(request: NextRequest) {
       verification_method: verification_method as VerificationMethod,
       verification_data: body.verification_data,
     })
+
+    // 实时通知
+    notifyTraderClaim(user.email ?? null, trader_id, source)
 
     return success({
       claim,
