@@ -9,7 +9,8 @@ from decimal import Decimal
 def log(msg, **kw):
     print(msg, flush=True)
 
-DB = "postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
+import os
+DB = os.environ.get("DATABASE_URL", "")
 
 
 def print_status(conn, label=""):

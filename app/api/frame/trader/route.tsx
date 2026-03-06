@@ -12,9 +12,7 @@ import { Pool } from 'pg'
 export const dynamic = 'force-dynamic'
 
 const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres',
+  connectionString: process.env.DATABASE_URL,
   max: 3,
 })
 

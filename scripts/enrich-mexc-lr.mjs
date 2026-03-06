@@ -13,7 +13,7 @@ import pg from 'pg'
 import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = process.env.DATABASE_URL || '${process.env.DATABASE_URL}'
 const { Client } = pg
 
 const HEADERS = {

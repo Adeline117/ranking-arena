@@ -3,9 +3,8 @@
  * Enrich Bybit PNL + Equity via Puppeteer (bypasses WAF)
  * Navigates to bybit.com, then uses page.evaluate to call APIs
  */
-process.env.DATABASE_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
-process.env.SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+// Set env vars before running: DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL env var required')
 
 const { createClient } = require('@supabase/supabase-js')
 const { Pool } = require('pg')
