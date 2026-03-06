@@ -17,6 +17,7 @@ const en = {
     recommended: 'Recommended',
     bookshelf: 'Bookshelf',
     followers: 'Followers',
+    arenaFollowers: 'Arena Followers',
     bio: 'Bio',
     performance: 'Performance',
     stats: 'Stats',

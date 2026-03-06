@@ -17,6 +17,7 @@ const zh = {
     recommended: '推荐',
     bookshelf: '书架',
     followers: '粉丝',
+    arenaFollowers: 'Arena 关注',
     bio: '个人简介',
     performance: '表现',
     stats: '数据统计',
