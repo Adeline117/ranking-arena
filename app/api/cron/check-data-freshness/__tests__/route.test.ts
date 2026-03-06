@@ -171,6 +171,7 @@ describe('GET /api/cron/check-data-freshness', () => {
 
   it('returns 500 when buildFreshnessReport throws', async () => {
     // Force getSupabaseEnv to return empty to cause an error
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getSupabaseEnv } = require('@/lib/cron/utils')
     getSupabaseEnv.mockReturnValueOnce({ url: '', serviceKey: '' })
 
