@@ -11,6 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes — longest of the three
@@ -82,6 +83,13 @@ export async function GET(request: NextRequest) {
 
   const totalDuration = Date.now() - startTime
   const hasErrors = results.some(r => r.status === 'error')
+  const plog = await PipelineLogger.start('batch-5min')
+  const succeeded = results.filter(r => r.status === 'success').length
+  if (hasErrors) {
+    await plog.error(new Error(`${results.length - succeeded}/${results.length} sub-jobs failed`), { results })
+  } else {
+    await plog.success(succeeded, { results })
+  }
 
   return NextResponse.json({
     batch: 'batch-5min',

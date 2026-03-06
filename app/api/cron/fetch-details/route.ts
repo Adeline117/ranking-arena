@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAuthorized, getSupabaseEnv, createSupabaseAdmin, logCronExecution } from '@/lib/cron/utils'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { createScheduleManager } from '@/lib/services/schedule-manager'
 import { ActivityTier } from '@/lib/services/smart-scheduler'
 import {
@@ -332,6 +333,14 @@ async function processTraders(
       duration,
     },
   ])
+
+  // Pipeline logging
+  const plog = await PipelineLogger.start(`fetch-details-${tierParam || source || 'all'}`)
+  if (failed > 0 && failed > success) {
+    await plog.error(new Error(`${failed}/${traders.length} failed`), { success, failed })
+  } else {
+    await plog.success(success, { failed, total: traders.length })
+  }
 
   return NextResponse.json({
     ok: true,

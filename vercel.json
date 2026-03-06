@@ -50,11 +50,11 @@
     },
     {
       "path": "/api/cron/fetch-market-data?type=prices",
-      "schedule": "0 */1 * * *"
+      "schedule": "10 */1 * * *"
     },
     {
       "path": "/api/cron/calculate-advanced-metrics",
-      "schedule": "30 */4 * * *"
+      "schedule": "35 */4 * * *"
     },
     {
       "path": "/api/cron/aggregate-daily-snapshots",
@@ -62,11 +62,11 @@
     },
     {
       "path": "/api/cron/fetch-funding-rates",
-      "schedule": "0 */4 * * *"
+      "schedule": "40 */4 * * *"
     },
     {
       "path": "/api/cron/fetch-open-interest",
-      "schedule": "0 * * * *"
+      "schedule": "5 * * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=a",
