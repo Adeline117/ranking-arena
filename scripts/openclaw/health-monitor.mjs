@@ -126,11 +126,56 @@ async function runHealthCheck() {
     const msg = `<b>🏟 Arena Health Alert</b>\n\n${issues.join('\n')}\n\n<i>${new Date().toISOString()}</i>`
     await sendTelegram(msg)
     console.log('ALERT:', issues.join(' | '))
+
+    // 4. Trigger auto-fix if --with-auto-fix flag is set
+    if (process.argv.includes('--with-auto-fix') && pipelineHealth) {
+      await triggerAutoFix(pipelineHealth)
+    }
+
     return { status: 'alert', issues }
   }
 
   console.log(`✅ All healthy (basic: ${basicHealth?.status}, pipeline: ${pipelineHealth?.status})`)
   return { status: 'healthy' }
+}
+
+async function triggerAutoFix(pipelineHealth) {
+  const { spawn } = await import('child_process')
+  const autoFixScript = path.join(__dirname, 'auto-fix.mjs')
+  const failingJobs = (pipelineHealth.recentFailures || [])
+    .filter(f => f.job_name?.startsWith('fetch-traders-'))
+    .map(f => ({
+      platform: f.job_name.replace('fetch-traders-', ''),
+      reason: classifyErrorMsg(f.error_message),
+    }))
+  if (failingJobs.length === 0) { console.log('[auto-fix] No fetcher failures'); return }
+  const seen = new Set()
+  for (const { platform, reason } of failingJobs) {
+    if (seen.has(platform)) continue
+    seen.add(platform)
+    const lastAttempt = fixAttempts.get(platform) || 0
+    if (Date.now() - lastAttempt < AUTO_FIX_COOLDOWN_MS) { console.log('[auto-fix] Cooldown: ' + platform); continue }
+    fixAttempts.set(platform, Date.now())
+    console.log('[auto-fix] Fixing ' + platform + ' (' + reason + ')')
+    try {
+      const proc = spawn('node', [autoFixScript, platform, '--reason', reason], {
+        cwd: path.dirname(__dirname), stdio: 'inherit', timeout: 300000,
+      })
+      proc.on('close', (code) => console.log('[auto-fix] ' + platform + ' exit: ' + code))
+    } catch (err) { console.error('[auto-fix] Launch failed for ' + platform, err.message) }
+  }
+}
+
+function classifyErrorMsg(msg) {
+  if (!msg) return 'unknown'
+  const m = msg.toLowerCase()
+  if (m.includes('geo') || m.includes('451')) return 'geo_blocked'
+  if (m.includes('waf') || m.includes('cloudflare') || m.includes('access denied')) return 'waf_blocked'
+  if (m.includes('404') || m.includes('not found')) return 'endpoint_gone'
+  if (m.includes('429') || m.includes('rate limit')) return 'rate_limited'
+  if (m.includes('timeout') || m.includes('abort')) return 'timeout'
+  if (m.includes('401') || m.includes('unauthorized')) return 'auth_required'
+  return 'unknown'
 }
 
 async function runDailyReport() {
