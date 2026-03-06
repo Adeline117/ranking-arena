@@ -30,7 +30,7 @@ const API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/home-page-list'
 const DETAIL_API_URL =
   'https://www.binance.com/bapi/futures/v1/friendly/future/spot-copy-trade/common/portfolio-detail'
-const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+const _PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 500
 const PAGE_SIZE = 100
 const ENRICH_LIMIT = 300
