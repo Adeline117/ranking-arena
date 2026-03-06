@@ -86,39 +86,6 @@ interface BybitApiResponse {
 // Fetch helpers with proxy fallback
 // ---------------------------------------------------------------------------
 
-/**
- * Fetch all pages at once via VPS Playwright scraper (multi-page mode).
- * Returns all trader details in a single call.
- */
-async function fetchBybitViaScraper(
-  duration: string,
-  maxPages: number = 10,
-  pageSize: number = PAGE_SIZE
-): Promise<BybitLeaderDetail[]> {
-  if (!VPS_SCRAPER_KEY) return []
-
-  try {
-    const url = `${VPS_SCRAPER_URL}/bybit/leaderboard?multiPage=true&pages=${maxPages}&pageSize=${pageSize}&duration=${duration}`
-    const res = await fetch(url, {
-      headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-      signal: AbortSignal.timeout(120_000), // 2 min timeout for multi-page
-    })
-    if (!res.ok) {
-      logger.warn(`[bybit] VPS scraper returned ${res.status}`)
-      return []
-    }
-    const data = (await res.json()) as BybitApiResponse
-    const details = data?.result?.leaderDetails || []
-    if (details.length > 0) {
-      logger.info(`[bybit] VPS scraper got ${details.length} traders`)
-    }
-    return details
-  } catch (err) {
-    logger.warn(`[bybit] VPS scraper failed: ${err instanceof Error ? err.message : err}`)
-    return []
-  }
-}
-
 async function fetchBybitPage(
   pageNo: number,
   pageSize: number,
@@ -235,38 +202,25 @@ async function fetchPeriod(
   const allTraders = new Map<string, BybitLeaderDetail>()
   let lastError: string | undefined
 
-  // Strategy A: Try VPS scraper bulk fetch first (most efficient)
-  const scraperDetails = await fetchBybitViaScraper(duration, maxPages, PAGE_SIZE)
-  if (scraperDetails.length > 0) {
-    for (const item of scraperDetails) {
+  for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+    const data = await fetchBybitPage(pageNo, PAGE_SIZE, duration)
+
+    if (!data) {
+      lastError = 'All strategies failed (VPS scraper, direct API, CF proxy, VPS proxy)'
+      break
+    }
+
+    const details = data.result?.leaderDetails || []
+    if (details.length === 0) break
+
+    for (const item of details) {
       const id = String(item.leaderUserId || item.leaderMark || '')
       if (!id || allTraders.has(id)) continue
       allTraders.set(id, item)
     }
-  }
 
-  // Strategy B: Fall back to page-by-page if scraper didn't get enough
-  if (allTraders.size < PAGE_SIZE) {
-    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
-      const data = await fetchBybitPage(pageNo, PAGE_SIZE, duration)
-
-      if (!data) {
-        lastError = 'All strategies failed (VPS scraper, direct API, CF proxy, VPS proxy)'
-        break
-      }
-
-      const details = data.result?.leaderDetails || []
-      if (details.length === 0) break
-
-      for (const item of details) {
-        const id = String(item.leaderUserId || item.leaderMark || '')
-        if (!id || allTraders.has(id)) continue
-        allTraders.set(id, item)
-      }
-
-      if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
-      await sleep(500)
-    }
+    if (details.length < PAGE_SIZE || allTraders.size >= TARGET) break
+    await sleep(500)
   }
 
   if (allTraders.size === 0) {
