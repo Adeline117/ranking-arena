@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 // Use plain <img> for crypto icons (SVGs cause 400 on Vercel image optimizer)
 import { tokens } from '@/lib/design-tokens'
-import { uiLogger } from '@/lib/utils/logger'
 
 interface TickerCoin {
   symbol: string
@@ -27,6 +26,8 @@ function getCryptoIcon(symbol: string, fallbackImage: string): string {
 export default function PriceTicker() {
   const [coins, setCoins] = useState<TickerCoin[]>([])
   const [imgErrors, setImgErrors] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -42,8 +43,13 @@ export default function PriceTicker() {
             change24h: c.change24h as number,
             image: c.image as string,
           })))
+          setError(null)
         })
-        .catch(err => console.warn('[PriceTicker] fetch failed', err))
+        .catch((err) => {
+          if (!alive) return
+          setError(err instanceof Error ? err.message : 'Failed to load')
+        })
+        .finally(() => { if (alive) setLoading(false) })
     }
 
     load()
@@ -60,6 +66,48 @@ export default function PriceTicker() {
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
+
+  if (loading) {
+    return (
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        height: 48,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 24,
+        padding: '0 20px',
+        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        background: tokens.colors.bg.secondary,
+        overflow: 'hidden',
+      }}>
+        {[100, 90, 100, 85, 95, 100, 90, 85].map((w, i) => (
+          <div key={i} className="skeleton" style={{ width: w, height: 20, borderRadius: 4, flexShrink: 0 }} />
+        ))}
+      </div>
+    )
+  }
+
+  if (error && coins.length === 0) {
+    return (
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        height: 48,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        background: tokens.colors.bg.secondary,
+        fontSize: 12,
+        color: tokens.colors.text.tertiary,
+      }}>
+        Market data unavailable
+      </div>
+    )
+  }
 
   if (coins.length === 0) return <div style={{ height: 48 }} />
 

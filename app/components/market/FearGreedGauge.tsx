@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
-import { uiLogger } from '@/lib/utils/logger'
 
 function getColor(value: number): string {
   if (value <= 25) return '#ea3943'
@@ -19,6 +18,7 @@ export default function FearGreedGauge() {
   const isZh = language === 'zh'
   const [data, setData] = useState<FearGreedData | null>(null)
   const [animatedValue, setAnimatedValue] = useState(0)
+  const [error, setError] = useState<string | null>(null)
   const prevValueRef = useRef(0)
 
   function getLabel(value: number): string {
@@ -33,7 +33,9 @@ export default function FearGreedGauge() {
     fetch('/api/market/fear-greed')
       .then((r) => r.json())
       .then((json) => { if (json.current) setData(json.current) })
-      .catch(err => console.warn('[FearGreedGauge] fetch failed', err))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load')
+      })
   }, [])
 
   useEffect(() => {
@@ -54,20 +56,50 @@ export default function FearGreedGauge() {
     requestAnimationFrame(animate)
   }, [data?.value]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!data) {
+  const cardStyle = {
+    padding: tokens.spacing[5],
+    background: tokens.glass.bg.medium,
+    backdropFilter: tokens.glass.blur.lg,
+    borderRadius: tokens.radius.xl,
+    border: tokens.glass.border.light,
+    height: '100%',
+  }
+
+  if (!data && !error) {
     return (
-      <div style={{
-        padding: tokens.spacing[5],
-        background: tokens.glass.bg.medium,
-        backdropFilter: tokens.glass.blur.lg,
-        borderRadius: tokens.radius.xl,
-        border: tokens.glass.border.light,
-        height: '100%',
-      }}>
+      <div style={cardStyle}>
         <div className="skeleton" style={{ height: '100%', borderRadius: tokens.radius.lg }} />
       </div>
     )
   }
+
+  if (error && !data) {
+    return (
+      <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+          fontSize: tokens.typography.fontSize.base,
+          fontWeight: 700,
+          color: tokens.colors.text.primary,
+          marginBottom: tokens.spacing[2],
+          letterSpacing: '0.3px',
+        }}>
+          {t('fearGreedTitle')}
+        </div>
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.sm,
+        }}>
+          {t('sidebarLoadFailed')}
+        </div>
+      </div>
+    )
+  }
+
+  if (!data) return null
 
   const displayValue = data.value
   const color = getColor(displayValue)
@@ -113,12 +145,7 @@ export default function FearGreedGauge() {
 
   return (
     <div style={{
-      padding: tokens.spacing[5],
-      background: tokens.glass.bg.medium,
-      backdropFilter: tokens.glass.blur.lg,
-      borderRadius: tokens.radius.xl,
-      border: tokens.glass.border.light,
-      height: '100%',
+      ...cardStyle,
       display: 'flex',
       flexDirection: 'column',
       position: 'relative',
