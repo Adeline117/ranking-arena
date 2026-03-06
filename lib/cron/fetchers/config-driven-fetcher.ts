@@ -12,7 +12,7 @@ import {
   type PlatformFetcher,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
+  fetchJsonWithRetry,
   fetchWithFallback,
   sleep,
   normalizeWinRate,
@@ -95,7 +95,7 @@ async function fetchPage(
       const { data } = await fetchWithFallback(url, { ...opts, platform: config.source })
       return data
     }
-    return await fetchJson(url, opts)
+    return await fetchJsonWithRetry(url, opts)
   } catch (err) {
     logger.warn(`[${config.source}] Page ${page} failed: ${err instanceof Error ? err.message : err}`)
     return null

@@ -36,7 +36,7 @@ const FIX_TIMEOUT_MS = 5 * 60 * 1000
 
 async function sendTelegram(message) {
   if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT) {
-    console.log('[auto-fix] Telegram not configured, logging only:', message)
+    console.log('[自动修复] Telegram 未配置，仅写日志:', message)
     return
   }
   try {
@@ -50,7 +50,7 @@ async function sendTelegram(message) {
       }),
     })
   } catch (err) {
-    console.error('[auto-fix] Telegram send failed:', err.message)
+    console.error('[自动修复] Telegram 发送失败:', err.message)
   }
 }
 
@@ -113,7 +113,7 @@ function diagnosePlatform(platform, reason) {
     return {
       fetcherPath: null,
       diagnosis: `Fetcher file not found: ${fetcherPath}`,
-      fixStrategy: 'manual',
+      fix策略: 'manual',
     }
   }
 
@@ -197,8 +197,8 @@ async function runClaudeCodeFix(platform, diagnosis) {
   const prompt = buildFixPrompt(platform, diagnosis)
 
   console.log(`[auto-fix] Launching Claude Code for ${platform}...`)
-  console.log(`[auto-fix] Strategy: ${diagnosis.strategy}`)
-  console.log(`[auto-fix] Risk: ${diagnosis.risk}`)
+  console.log(`[auto-fix] 策略: ${diagnosis.strategy}`)
+  console.log(`[auto-fix] 风险: ${diagnosis.risk}`)
 
   return new Promise((resolve) => {
     const startTime = Date.now()
@@ -246,7 +246,7 @@ function buildFixPrompt(platform, diagnosis) {
   const basePrompt = `Fix the failing fetcher for platform "${platform}".
 
 Failure reason: ${diagnosis.diagnosis}
-Strategy: ${diagnosis.strategy}
+策略: ${diagnosis.strategy}
 Fetcher file: ${diagnosis.fetcherPath}
 
 RULES:
@@ -317,32 +317,32 @@ Requests are timing out. Fix by:
 
 async function fixPlatform(platform, reason) {
   console.log(`\n${'='.repeat(60)}`)
-  console.log(`[auto-fix] Platform: ${platform}`)
-  console.log(`[auto-fix] Reason: ${reason || 'unknown'}`)
+  console.log(`[auto-fix] 平台: ${platform}`)
+  console.log(`[auto-fix] 原因: ${reason || 'unknown'}`)
   console.log(`${'='.repeat(60)}`)
 
   // Step 1: Diagnose
   const diagnosis = diagnosePlatform(platform, reason)
   console.log(`[auto-fix] Diagnosis: ${diagnosis.diagnosis}`)
-  console.log(`[auto-fix] Risk: ${diagnosis.risk}`)
+  console.log(`[auto-fix] 风险: ${diagnosis.risk}`)
   console.log(`[auto-fix] Auto-fixable: ${diagnosis.autoFixable}`)
 
   if (!diagnosis.autoFixable) {
-    const msg = `<b>Auto-Fix Skipped</b>\n\n` +
-      `Platform: <code>${platform}</code>\n` +
-      `Reason: ${diagnosis.diagnosis}\n` +
-      `Risk: ${diagnosis.risk}\n\n` +
-      `<i>Requires human review — auto-fix not safe for this failure type.</i>`
+    const msg = `<b>自动修复已跳过</b>\n\n` +
+      `平台: <code>${platform}</code>\n` +
+      `原因: ${diagnosis.diagnosis}\n` +
+      `风险: ${diagnosis.risk}\n\n` +
+      `<i>需要人工审查 — 此类故障不适合自动修复。</i>`
     await sendTelegram(msg)
     return { platform, skipped: true, reason: diagnosis.diagnosis }
   }
 
   // Step 2: Notify start
   await sendTelegram(
-    `<b>Auto-Fix Started</b>\n\n` +
-    `Platform: <code>${platform}</code>\n` +
-    `Strategy: ${diagnosis.strategy}\n` +
-    `Description: ${diagnosis.diagnosis}`
+    `<b>自动修复开始</b>\n\n` +
+    `平台: <code>${platform}</code>\n` +
+    `策略: ${diagnosis.strategy}\n` +
+    `描述: ${diagnosis.diagnosis}`
   )
 
   // Step 3: Run fix
@@ -350,26 +350,26 @@ async function fixPlatform(platform, reason) {
 
   // Step 4: Report result
   if (result.dryRun) {
-    console.log(`[auto-fix] Dry run complete for ${platform}`)
+    console.log(`[自动修复] 试运行完成: ${platform}`)
     return { platform, dryRun: true, diagnosis }
   }
 
   if (result.success) {
     await sendTelegram(
-      `<b>Auto-Fix Complete</b>\n\n` +
-      `Platform: <code>${platform}</code>\n` +
-      `Duration: ${result.duration}s\n` +
-      `Strategy: ${diagnosis.strategy}\n\n` +
-      `<i>Changes committed locally. Review and push when ready.</i>`
+      `<b>自动修复完成</b>\n\n` +
+      `平台: <code>${platform}</code>\n` +
+      `耗时: ${result.duration}s\n` +
+      `策略: ${diagnosis.strategy}\n\n` +
+      `<i>已本地提交。请审核后推送。</i>`
     )
   } else {
     await sendTelegram(
-      `<b>Auto-Fix Failed</b>\n\n` +
-      `Platform: <code>${platform}</code>\n` +
-      `Duration: ${result.duration}s\n` +
-      `Exit code: ${result.exitCode}\n\n` +
+      `<b>自动修复失败</b>\n\n` +
+      `平台: <code>${platform}</code>\n` +
+      `耗时: ${result.duration}s\n` +
+      `退出码: ${result.exitCode}\n\n` +
       `<pre>${(result.error || result.output || '').slice(0, 500)}</pre>\n\n` +
-      `<i>Manual intervention required.</i>`
+      `<i>需要人工干预。</i>`
     )
   }
 
