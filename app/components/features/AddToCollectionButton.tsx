@@ -24,9 +24,8 @@ interface AddToCollectionButtonProps {
 
 export default function AddToCollectionButton({ itemType, itemId, compact }: AddToCollectionButtonProps) {
   const { accessToken } = useAuthSession()
-  const { language } = useLanguage()
+  const { t } = useLanguage()
   const { showToast } = useToast()
-  const isZh = language === 'zh'
 
   const [open, setOpen] = useState(false)
   const [collections, setCollections] = useState<Collection[]>([])
@@ -45,7 +44,7 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
 
   const loadCollections = async () => {
     if (!accessToken) {
-      showToast(isZh ? '请先登录' : 'Please login first', 'error')
+      showToast(t('collectionLoginFirst'), 'error')
       return
     }
     setOpen(true)
@@ -77,16 +76,16 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
       })
       const data = await res.json()
       if (res.ok) {
-        showToast(isZh ? '已添加到收藏夹' : 'Added to collection', 'success')
+        showToast(t('collectionAddedSuccess'), 'success')
         setOpen(false)
       } else if (res.status === 409) {
-        showToast(isZh ? '已在收藏夹中' : 'Already in collection', 'info')
+        showToast(t('collectionAlreadyIn'), 'info')
       } else {
         showToast(data.data?.error || 'Failed', 'error')
       }
     } catch (err) {
       logger.error('Failed to add to collection', err)
-      showToast(isZh ? '添加失败' : 'Failed to add', 'error')
+      showToast(t('collectionAddFailed'), 'error')
     } finally {
       setAdding(null)
     }
@@ -114,7 +113,7 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
         onMouseLeave={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary }}
       >
         <span style={{ fontSize: compact ? 14 : 16 }}>★</span>
-        {!compact && (isZh ? '收藏到...' : 'Save to...')}
+        {!compact && t('collectionSaveTo')}
       </button>
 
       {open && (
@@ -133,17 +132,17 @@ export default function AddToCollectionButton({ itemType, itemId, compact }: Add
         }}>
           <Box style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
             <Text size="sm" weight="bold">
-              {isZh ? '选择收藏夹' : 'Choose collection'}
+              {t('collectionChoose')}
             </Text>
           </Box>
 
           {loading ? (
             <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">{isZh ? '加载中...' : 'Loading...'}</Text>
+              <Text size="sm" color="tertiary">{t('collectionLoading')}</Text>
             </Box>
           ) : collections.length === 0 ? (
             <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-              <Text size="sm" color="tertiary">{isZh ? '暂无收藏夹' : 'No collections'}</Text>
+              <Text size="sm" color="tertiary">{t('collectionEmpty')}</Text>
             </Box>
           ) : (
             <Box style={{ maxHeight: 240, overflowY: 'auto' }}>
