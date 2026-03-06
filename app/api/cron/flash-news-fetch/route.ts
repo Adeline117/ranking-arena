@@ -130,10 +130,10 @@ async function handleFetch(req: NextRequest) {
       return NextResponse.json({ inserted: 0, message: 'All items already exist' })
     }
 
-    // Insert new items
+    // Upsert new items — handle race conditions where duplicate titles slip through
     const { data: inserted, error: insertError } = await supabase
       .from('flash_news')
-      .insert(newItems)
+      .upsert(newItems, { onConflict: 'title', ignoreDuplicates: true })
       .select('id')
 
     if (insertError) {

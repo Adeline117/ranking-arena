@@ -36,8 +36,9 @@ const GROUPS: Record<string, string[]> = {
   d: ['gains', 'htx_futures', 'dydx'],
   // Group E: Lower-priority (every 8h) — 3 platforms
   e: ['coinex', 'bitget_spot', 'binance_web3'],
-  // Group F: Stub/broken platforms (every 12h) — kept for periodic retry
-  f: ['mexc', 'kucoin', 'phemex', 'weex', 'blofin', 'bingx', 'gateio', 'lbank'],
+  // Group F: Lower-priority CEX (every 12h) — periodic retry
+  // Removed: phemex (copy trading shut down), weex (API dead)
+  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank'],
 }
 
 interface BatchResult {
