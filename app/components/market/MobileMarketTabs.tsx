@@ -4,24 +4,17 @@ import { useState, useRef, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-interface TabConfig {
-  key: string
-  labelZh: string
-  labelEn: string
-}
-
-const TABS: TabConfig[] = [
-  { key: 'overview', labelZh: '概览', labelEn: 'Overview' },
-  { key: 'movers', labelZh: '涨跌', labelEn: 'Movers' },
-  { key: 'sectors', labelZh: '板块', labelEn: 'Sectors' },
-  { key: 'watchlist', labelZh: '自选', labelEn: 'Watchlist' },
+const TAB_KEYS = [
+  { key: 'overview', i18nKey: 'mobileMarketOverview' as const },
+  { key: 'movers', i18nKey: 'mobileMarketMovers' as const },
+  { key: 'sectors', i18nKey: 'mobileMarketSectors' as const },
+  { key: 'watchlist', i18nKey: 'mobileMarketWatchlist' as const },
 ]
 
 export default function MobileMarketTabs({ children }: {
   children: Record<string, React.ReactNode>
 }) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const [activeTab, setActiveTab] = useState('overview')
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['overview']))
   const containerRef = useRef<HTMLDivElement>(null)
@@ -29,7 +22,7 @@ export default function MobileMarketTabs({ children }: {
   const currentXRef = useRef(0)
   const isDragging = useRef(false)
 
-  const currentIndex = TABS.findIndex(t => t.key === activeTab)
+  const currentIndex = TAB_KEYS.findIndex(tab => tab.key === activeTab)
 
   // Track mounted tabs for caching
   useEffect(() => {
@@ -58,10 +51,10 @@ export default function MobileMarketTabs({ children }: {
       const diff = startXRef.current - currentXRef.current
       const threshold = 60
 
-      if (diff > threshold && currentIndex < TABS.length - 1) {
-        setActiveTab(TABS[currentIndex + 1].key)
+      if (diff > threshold && currentIndex < TAB_KEYS.length - 1) {
+        setActiveTab(TAB_KEYS[currentIndex + 1].key)
       } else if (diff < -threshold && currentIndex > 0) {
-        setActiveTab(TABS[currentIndex - 1].key)
+        setActiveTab(TAB_KEYS[currentIndex - 1].key)
       }
     }
 
@@ -87,7 +80,7 @@ export default function MobileMarketTabs({ children }: {
         top: 48, // below SentimentBar
         zIndex: 50,
       }}>
-        {TABS.map(tab => (
+        {TAB_KEYS.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -105,14 +98,14 @@ export default function MobileMarketTabs({ children }: {
               transition: 'all 0.15s ease',
             }}
           >
-            {isZh ? tab.labelZh : tab.labelEn}
+            {t(tab.i18nKey)}
           </button>
         ))}
       </div>
 
       {/* Tab Content - cached: once mounted, keep in DOM but hide */}
       <div ref={containerRef} style={{ minHeight: '60vh', padding: '16px 0' }}>
-        {TABS.map(tab => {
+        {TAB_KEYS.map(tab => {
           if (!mountedTabs.has(tab.key)) return null
           const isActive = tab.key === activeTab
           return (
@@ -129,7 +122,7 @@ export default function MobileMarketTabs({ children }: {
                   color: tokens.colors.text.tertiary,
                   fontSize: 14,
                 }}>
-                  {isZh ? '即将推出' : 'Coming Soon'}
+                  {t('comingSoon')}
                 </div>
               )}
             </div>

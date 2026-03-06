@@ -11,8 +11,7 @@ interface BookRatingOverviewProps {
 }
 
 export default function BookRatingOverview({ average, count, distribution }: BookRatingOverviewProps) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const maxDist = Math.max(...Object.values(distribution), 1)
 
   return (
@@ -25,7 +24,7 @@ export default function BookRatingOverview({ average, count, distribution }: Boo
         </div>
         <StarRating rating={average} size={20} readonly showCount={false} />
         <div style={{ fontSize: 12, color: tokens.colors.text.tertiary, marginTop: 4 }}>
-          {count} {isZh ? '人评价' : 'ratings'}
+          {count} {t('bookRatings')}
         </div>
       </div>
 
