@@ -24,7 +24,6 @@ export interface VerifyResult {
 type VerifyFn = () => Promise<VerifyResult>
 
 /** Loose shape for external API responses checked by validators */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ApiResponse = Record<string, any>
 
 // ── Helpers ──
