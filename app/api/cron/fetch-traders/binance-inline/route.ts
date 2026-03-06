@@ -200,7 +200,8 @@ export async function POST(req: NextRequest) {
       source: SOURCE,
       source_trader_id: t.portfolioId || t.leadPortfolioId || '',
       handle: t.nickName || t.portfolioId || t.leadPortfolioId || '',
-      profile_url: t.userPhotoUrl || null,
+      avatar_url: t.userPhotoUrl || null,
+      profile_url: null,
       updated_at: new Date().toISOString(),
     }))
 

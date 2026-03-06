@@ -351,6 +351,23 @@ export async function upsertTraders(
   for (let i = 0; i < validated.length; i += BATCH) {
     const batch = validated.slice(i, i + BATCH)
 
+    // Upsert trader_sources (handle + avatar_url for leaderboard display)
+    const sources = batch.map((t) => ({
+      source: t.source,
+      source_trader_id: t.source_trader_id,
+      handle: t.handle || null,
+      avatar_url: t.avatar_url || null,
+      profile_url: t.profile_url || null,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }))
+
+    const { error: srcErr } = await supabase
+      .from('trader_sources')
+      .upsert(sources, { onConflict: 'source,source_trader_id', ignoreDuplicates: false })
+
+    if (srcErr) dataLogger.warn(`[upsert] trader_sources error: ${srcErr.message}`)
+
     // Upsert trader_profiles_v2
     const profiles = batch.map((t) => ({
       platform: t.source,

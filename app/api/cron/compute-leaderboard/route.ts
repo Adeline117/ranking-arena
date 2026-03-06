@@ -242,9 +242,9 @@ async function computeSeason(
 
   if (!uniqueTraders.length) return 0
 
-  // Batch fetch handles and avatars from trader_sources
+  // Batch fetch handles and avatars from trader_sources + trader_profiles_v2 fallback
   const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
-  
+
   // Group by source for efficient queries
   const bySource = new Map<string, string[]>()
   for (const t of uniqueTraders) {
@@ -273,6 +273,45 @@ async function computeSeason(
       }
     })
   )
+
+  // Fallback: fill missing avatars from trader_profiles_v2
+  const missingAvatarKeys = Array.from(handleMap.entries())
+    .filter(([, v]) => !v.avatar_url)
+    .map(([k]) => k)
+
+  if (missingAvatarKeys.length > 0) {
+    const missingBySource = new Map<string, string[]>()
+    for (const key of missingAvatarKeys) {
+      const [source, ...rest] = key.split(':')
+      const traderId = rest.join(':')
+      const ids = missingBySource.get(source) || []
+      ids.push(traderId)
+      missingBySource.set(source, ids)
+    }
+
+    await Promise.all(
+      Array.from(missingBySource.entries()).map(async ([source, traderIds]) => {
+        for (let i = 0; i < traderIds.length; i += 500) {
+          const chunk = traderIds.slice(i, i + 500)
+          const { data } = await supabase
+            .from('trader_profiles_v2')
+            .select('trader_key, avatar_url')
+            .eq('platform', source)
+            .in('trader_key', chunk)
+            .not('avatar_url', 'is', null)
+
+          data?.forEach((p: { trader_key: string; avatar_url: string | null }) => {
+            if (p.avatar_url) {
+              const existing = handleMap.get(`${source}:${p.trader_key}`)
+              if (existing) {
+                existing.avatar_url = p.avatar_url
+              }
+            }
+          })
+        }
+      })
+    )
+  }
 
   // Calculate arena_score and rank
   const scored = uniqueTraders.map(t => {
