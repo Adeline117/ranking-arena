@@ -85,7 +85,7 @@ function parseArgs(): WorkerConfig {
 }
 
 function printHelp(): void {
-  console.log(`
+  logger.info(`
 Ranking Arena Worker Service
 
 Usage:
@@ -117,10 +117,10 @@ ${PLATFORM_CONFIGS.map((p) => `  - ${p.id.padEnd(20)} (${p.category})`).join('\n
 // ============================================
 
 async function runWorker(config: WorkerConfig): Promise<void> {
-  console.log('╔═══════════════════════════════════════════════════════════╗')
-  console.log('║         Ranking Arena Worker Service                      ║')
-  console.log('╚═══════════════════════════════════════════════════════════╝')
-  console.log('')
+  logger.info('╔═══════════════════════════════════════════════════════════╗')
+  logger.info('║         Ranking Arena Worker Service                      ║')
+  logger.info('╚═══════════════════════════════════════════════════════════╝')
+  logger.info('')
 
   // Determine which platforms to run
   let platforms: PlatformConfig[] = []
@@ -132,7 +132,7 @@ async function runWorker(config: WorkerConfig): Promise<void> {
       if (p) {
         platforms.push(p)
       } else {
-        console.warn(`[Worker] Unknown platform: ${id}`)
+        logger.warn(`[Worker] Unknown platform: ${id}`)
       }
     }
   } else if (config.category) {
@@ -148,9 +148,9 @@ async function runWorker(config: WorkerConfig): Promise<void> {
     process.exit(1)
   }
 
-  console.log(`[Worker] Running ${platforms.length} platforms:`)
-  platforms.forEach((p) => console.log(`  - ${p.name} (${p.id})`))
-  console.log('')
+  logger.info(`[Worker] Running ${platforms.length} platforms:`)
+  platforms.forEach((p) => logger.info(`  - ${p.name} (${p.id})`))
+  logger.info('')
 
   // Initialize proxy pool
   const proxyPool = new ProxyPoolManager({
@@ -168,7 +168,7 @@ async function runWorker(config: WorkerConfig): Promise<void> {
 
   // Event listeners
   scheduler.on('job:started', ({ job }) => {
-    console.log(`[▶️] Started: ${job.platform}`)
+    logger.info(`[▶️] Started: ${job.platform}`)
   })
 
   scheduler.on('job:completed', ({ job, result }) => {
@@ -180,26 +180,26 @@ async function runWorker(config: WorkerConfig): Promise<void> {
       .map(([period, p]) => `${period}: ${p.error}`)
 
     if (errors.length > 0) {
-      console.log(`[⚠️] Completed with errors: ${job.platform} (${totalSaved} records)`)
-      errors.forEach((e) => console.log(`     └─ ${e}`))
+      logger.info(`[⚠️] Completed with errors: ${job.platform} (${totalSaved} records)`)
+      errors.forEach((e) => logger.info(`     └─ ${e}`))
     } else {
-      console.log(`[✅] Completed: ${job.platform} (${totalSaved} records, ${result.duration}ms)`)
+      logger.info(`[✅] Completed: ${job.platform} (${totalSaved} records, ${result.duration}ms)`)
     }
   })
 
   scheduler.on('job:failed', ({ job, error }) => {
-    console.log(`[❌] Failed: ${job.platform} - ${error}`)
+    logger.info(`[❌] Failed: ${job.platform} - ${error}`)
   })
 
   scheduler.on('job:retry', ({ job, attempt }) => {
-    console.log(`[🔄] Retrying: ${job.platform} (attempt ${attempt}/${job.maxRetries})`)
+    logger.info(`[🔄] Retrying: ${job.platform} (attempt ${attempt}/${job.maxRetries})`)
   })
 
   // Handle graceful shutdown
   const shutdown = async () => {
-    console.log('\n[Worker] Shutting down...')
+    logger.info('\n[Worker] Shutting down...')
     await scheduler.stop()
-    console.log('[Worker] Goodbye!')
+    logger.info('[Worker] Goodbye!')
     process.exit(0)
   }
 
@@ -219,12 +219,12 @@ async function runWorker(config: WorkerConfig): Promise<void> {
     })
   }
 
-  console.log(`[Worker] Enqueued ${platforms.length} jobs`)
-  console.log('')
+  logger.info(`[Worker] Enqueued ${platforms.length} jobs`)
+  logger.info('')
 
   if (config.daemon) {
     // Daemon mode: keep running and re-schedule
-    console.log('[Worker] Running in daemon mode. Press Ctrl+C to stop.')
+    logger.info('[Worker] Running in daemon mode. Press Ctrl+C to stop.')
     
     // Keep process alive (cron scheduling handled externally)
     await new Promise(() => {})
@@ -243,13 +243,13 @@ async function runWorker(config: WorkerConfig): Promise<void> {
 
 function printSummary(scheduler: Scheduler): void {
   const state = scheduler.getState()
-  console.log('')
-  console.log('╔═══════════════════════════════════════════════════════════╗')
-  console.log('║                     Execution Summary                      ║')
-  console.log('╠═══════════════════════════════════════════════════════════╣')
-  console.log(`║  ✅ Completed:  ${String(state.completedJobs).padStart(4)}                                    ║`)
-  console.log(`║  ❌ Failed:     ${String(state.failedJobs).padStart(4)}                                    ║`)
-  console.log('╚═══════════════════════════════════════════════════════════╝')
+  logger.info('')
+  logger.info('╔═══════════════════════════════════════════════════════════╗')
+  logger.info('║                     Execution Summary                      ║')
+  logger.info('╠═══════════════════════════════════════════════════════════╣')
+  logger.info(`║  ✅ Completed:  ${String(state.completedJobs).padStart(4)}                                    ║`)
+  logger.info(`║  ❌ Failed:     ${String(state.failedJobs).padStart(4)}                                    ║`)
+  logger.info('╚═══════════════════════════════════════════════════════════╝')
 }
 
 // ============================================

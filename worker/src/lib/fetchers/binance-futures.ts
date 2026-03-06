@@ -33,6 +33,7 @@ import {
   enhanceStatsWithDerivedMetrics,
   type EquityCurvePoint,
 } from './enrichment.js'
+import { logger } from '../../logger.js'
 
 const SOURCE = 'binance_futures'
 const API_URL =
@@ -228,7 +229,7 @@ async function fetchPeriod(
   // Extended to all periods (not just 90D)
   if (saved > 0) {
     const toEnrich = top.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
+    logger.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     let enrichedCount = 0
     for (let i = 0; i < toEnrich.length; i += ENRICH_CONCURRENCY) {
@@ -276,7 +277,7 @@ async function fetchPeriod(
               enrichedCount++
             }
           } catch (err) {
-            console.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err}`)
+            logger.warn(`[${SOURCE}] Enrichment failed for ${trader.source_trader_id}: ${err}`)
           }
         })
       )
@@ -284,7 +285,7 @@ async function fetchPeriod(
         await sleep(ENRICH_DELAY_MS)
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
+    logger.warn(`[${SOURCE}] Enrichment complete for ${period}: ${enrichedCount} stats details saved`)
   }
 
   return { total: top.length, saved, error }

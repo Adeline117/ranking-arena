@@ -132,6 +132,7 @@ import {
   type PeerArrays,
   type DataCompleteness,
 } from '../arena-score-v3'
+import { logger } from '../../logger.js'
 
 export { calcScoreV3, detectCompleteness }
 export type { ScoreV3Input, PeerArrays, DataCompleteness }
@@ -212,7 +213,7 @@ export async function upsertTraders(
       .from('trader_sources')
       .upsert(sources, { onConflict: 'source,source_trader_id' })
 
-    if (srcErr) console.warn(`[upsert] trader_sources error: ${srcErr.message}`)
+    if (srcErr) logger.warn(`[upsert] trader_sources error: ${srcErr.message}`)
 
     // Upsert trader_snapshots
     const snapshots = batch.map((t) => ({
@@ -238,7 +239,7 @@ export async function upsertTraders(
       .upsert(snapshots, { onConflict: 'source,source_trader_id,season_id' })
 
     if (snapErr) {
-      console.warn(`[upsert] trader_snapshots error: ${snapErr.message}`)
+      logger.warn(`[upsert] trader_snapshots error: ${snapErr.message}`)
       return { saved, error: snapErr.message }
     }
 

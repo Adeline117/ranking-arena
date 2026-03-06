@@ -18,6 +18,7 @@ import {
   sleep,
 } from './shared.js'
 import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, upsertStatsDetail } from './enrichment.js'
+import { logger } from '../../logger.js'
 
 const SOURCE = 'dydx'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
@@ -76,11 +77,11 @@ async function fetchLeaderboard(period: string): Promise<DydxLeaderboardEntry[]>
     const proxyUrl = `${PROXY_URL}/dydx/leaderboard?period=${dydxPeriod}&limit=${TARGET}`
     const data = await fetchJson<DydxLeaderboardResponse>(proxyUrl, { timeoutMs: 20000 })
     if (data?.leaderboard && data.leaderboard.length > 0) {
-      console.warn(`[dydx] Proxy success: ${data.leaderboard.length} entries`)
+      logger.warn(`[dydx] Proxy success: ${data.leaderboard.length} entries`)
       return data.leaderboard
     }
   } catch (err) {
-    console.warn(`[dydx] Proxy failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[dydx] Proxy failed: ${err instanceof Error ? err.message : err}`)
   }
 
   // Try direct API
@@ -88,11 +89,11 @@ async function fetchLeaderboard(period: string): Promise<DydxLeaderboardEntry[]>
     const directUrl = `${INDEXER_URL}/v4/leaderboard/pnl?period=${dydxPeriod}&limit=${TARGET}`
     const data = await fetchJson<DydxLeaderboardResponse>(directUrl, { timeoutMs: 20000 })
     if (data?.leaderboard && data.leaderboard.length > 0) {
-      console.warn(`[dydx] Direct API success: ${data.leaderboard.length} entries`)
+      logger.warn(`[dydx] Direct API success: ${data.leaderboard.length} entries`)
       return data.leaderboard
     }
   } catch (err) {
-    console.warn(`[dydx] Direct API failed: ${err instanceof Error ? err.message : err}`)
+    logger.warn(`[dydx] Direct API failed: ${err instanceof Error ? err.message : err}`)
   }
 
   return []
@@ -221,7 +222,7 @@ async function fetchPeriod(
   await enrichTraders(topTraders)
 
   // Phase 3: Save equity curves and stats_detail for ALL periods (extended from 90D only)
-  console.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
+  logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
   let curvesSaved = 0
   let statsSaved = 0
   for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
@@ -251,7 +252,7 @@ async function fetchPeriod(
     const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
     if (s) statsSaved++
   }
-  console.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
+  logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
 
   // Build TraderData
   const capturedAt = new Date().toISOString()

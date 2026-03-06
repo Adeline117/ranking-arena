@@ -37,10 +37,10 @@ async function main(): Promise<void> {
 
   const windows = targetWindow ? [targetWindow] : WINDOWS
 
-  console.log(`[discover] Starting leaderboard discovery: platform=${platform}, windows=${windows.join(',')}, limit=${limit}`)
+  logger.info(`[discover] Starting leaderboard discovery: platform=${platform}, windows=${windows.join(',')}, limit=${limit}`)
 
   for (const window of windows) {
-    console.log(`[discover] Fetching ${window} leaderboard...`)
+    logger.info(`[discover] Fetching ${window} leaderboard...`)
 
     // Fetch leaderboard entries using the appropriate connector
     const leaderboard = platform === 'bybit'
@@ -48,11 +48,11 @@ async function main(): Promise<void> {
       : await fetchLeaderboard(window, limit)
 
     if (leaderboard.length === 0) {
-      console.log(`[discover] No data for ${window}, skipping`)
+      logger.info(`[discover] No data for ${window}, skipping`)
       continue
     }
 
-    console.log(`[discover] Got ${leaderboard.length} traders for ${window}`)
+    logger.info(`[discover] Got ${leaderboard.length} traders for ${window}`)
 
     // Batch upsert profiles
     let profilesUpserted = 0
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
 
       if (!error) profilesUpserted++
     }
-    console.log(`[discover] Upserted ${profilesUpserted} profiles`)
+    logger.info(`[discover] Upserted ${profilesUpserted} profiles`)
 
     // Batch insert snapshots
     const now = new Date().toISOString()
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log(`[discover] ${window}: inserted=${snapshotsInserted}, skipped=${snapshotsSkipped}`)
+    logger.info(`[discover] ${window}: inserted=${snapshotsInserted}, skipped=${snapshotsSkipped}`)
 
     // Also update trader_sources for discovery tracking
     for (const entry of leaderboard) {
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('[discover] Done!')
+  logger.info('[discover] Done!')
 }
 
 interface LeaderboardResult {

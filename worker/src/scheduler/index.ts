@@ -104,11 +104,11 @@ export class Scheduler extends EventEmitter {
 
   async start(): Promise<void> {
     if (this.running) {
-      console.log('[Scheduler] Already running')
+      logger.info('[Scheduler] Already running')
       return
     }
 
-    console.log('[Scheduler] Starting scheduler...')
+    logger.info('[Scheduler] Starting scheduler...')
     this.running = true
     this.startedAt = new Date()
 
@@ -128,13 +128,13 @@ export class Scheduler extends EventEmitter {
     )
 
     this.emit('scheduler:started', { timestamp: this.startedAt })
-    console.log('[Scheduler] Scheduler started')
+    logger.info('[Scheduler] Scheduler started')
   }
 
   async stop(): Promise<void> {
     if (!this.running) return
 
-    console.log('[Scheduler] Stopping scheduler...')
+    logger.info('[Scheduler] Stopping scheduler...')
     this.running = false
 
     if (this.processTimer) {
@@ -155,7 +155,7 @@ export class Scheduler extends EventEmitter {
 
     await this.proxyPool.shutdown()
     this.emit('scheduler:stopped', { timestamp: new Date() })
-    console.log('[Scheduler] Scheduler stopped')
+    logger.info('[Scheduler] Scheduler stopped')
   }
 
   getState(): SchedulerState {
@@ -247,7 +247,7 @@ export class Scheduler extends EventEmitter {
     }
 
     if (toRemove.length > 0) {
-      console.log(
+      logger.info(
         `[Scheduler] Cleaned up ${toRemove.length} old ${type} jobs ` +
         `(kept ${jobMap.size}/${maxSize})`
       )
@@ -264,7 +264,7 @@ export class Scheduler extends EventEmitter {
     this.completedJobs.clear()
     this.failedJobs.clear()
 
-    console.log(
+    logger.info(
       `[Scheduler] Cleared job history: ${completedCount} completed, ${failedCount} failed`
     )
   }
@@ -287,7 +287,7 @@ export class Scheduler extends EventEmitter {
     const insertIndex = this.findInsertIndex(newJob)
     this.jobQueue.splice(insertIndex, 0, newJob)
 
-    console.log(`[Scheduler] Enqueued job ${newJob.id} for ${newJob.platform} (priority: ${newJob.priority})`)
+    logger.info(`[Scheduler] Enqueued job ${newJob.id} for ${newJob.platform} (priority: ${newJob.priority})`)
     return newJob
   }
 
@@ -349,7 +349,7 @@ export class Scheduler extends EventEmitter {
   private async processQueue(): Promise<void> {
     if (!this.running) return
     if (!this.executor) {
-      console.warn('[Scheduler] No executor set, skipping queue processing')
+      logger.warn('[Scheduler] No executor set, skipping queue processing')
       return
     }
 
@@ -383,7 +383,7 @@ export class Scheduler extends EventEmitter {
     }
 
     this.emit('job:started', { job })
-    console.log(`[Scheduler] Starting job ${job.id} for ${job.platform}`)
+    logger.info(`[Scheduler] Starting job ${job.id} for ${job.platform}`)
 
     try {
       // Execute with timeout
@@ -406,7 +406,7 @@ export class Scheduler extends EventEmitter {
       }
 
       this.emit('job:completed', { job, result })
-      console.log(
+      logger.info(
         `[Scheduler] Job ${job.id} completed in ${result.duration}ms - ` +
           `${Object.values(result.periods).reduce((a, p) => a + p.saved, 0)} records saved`
       )
@@ -445,7 +445,7 @@ export class Scheduler extends EventEmitter {
             const insertIndex = this.findInsertIndex(job)
             this.jobQueue.splice(insertIndex, 0, job)
             this.emit('job:retry', { job, attempt: job.retryCount })
-            console.log(
+            logger.info(
               `[Scheduler] Retrying job ${job.id} (attempt ${job.retryCount}/${job.maxRetries}) in ${Math.round(retryDelay)}ms`
             )
           }

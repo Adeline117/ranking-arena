@@ -55,15 +55,15 @@ export class ProxyPoolManager {
   // ============================================
 
   async initialize(): Promise<void> {
-    console.log('[ProxyPool] Initializing proxy pool...')
+    logger.info('[ProxyPool] Initializing proxy pool...')
     await this.refreshProxyList()
     await this.runHealthCheck()
     this.startHealthCheckTimer()
-    console.log(`[ProxyPool] Initialized with ${this.nodes.size} proxies`)
+    logger.info(`[ProxyPool] Initialized with ${this.nodes.size} proxies`)
   }
 
   async shutdown(): Promise<void> {
-    console.log('[ProxyPool] Shutting down...')
+    logger.info('[ProxyPool] Shutting down...')
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer)
       this.healthCheckTimer = null
@@ -136,7 +136,7 @@ export class ProxyPoolManager {
         })
       }
 
-      console.log(`[ProxyPool] Refreshed proxy list: ${this.nodes.size} nodes`)
+      logger.info(`[ProxyPool] Refreshed proxy list: ${this.nodes.size} nodes`)
     } catch (err) {
       logger.error('[ProxyPool] Failed to refresh proxy list', err instanceof Error ? err : new Error(String(err)))
     }
@@ -186,7 +186,7 @@ export class ProxyPoolManager {
   }
 
   async runHealthCheck(): Promise<void> {
-    console.log('[ProxyPool] Running health check...')
+    logger.info('[ProxyPool] Running health check...')
     const checkPromises: Promise<void>[] = []
 
     for (const node of this.nodes.values()) {
@@ -241,12 +241,12 @@ export class ProxyPoolManager {
       activeNode.status === 'down' ||
       activeNode.successRate < this.config.failoverThreshold
     ) {
-      console.log(
+      logger.info(
         `[ProxyPool] Active node ${this.activeNodeId} degraded (status: ${activeNode.status}, success rate: ${(activeNode.successRate * 100).toFixed(1)}%)`
       )
       const newNode = await this.selectBestProxy()
       if (newNode && newNode.id !== this.activeNodeId) {
-        console.log(`[ProxyPool] Failing over to ${newNode.id}`)
+        logger.info(`[ProxyPool] Failing over to ${newNode.id}`)
         await this.switchProxy(newNode.id)
       }
     }
@@ -313,7 +313,7 @@ export class ProxyPoolManager {
       })
 
       this.activeNodeId = nodeId
-      console.log(`[ProxyPool] Switched to proxy: ${nodeId}`)
+      logger.info(`[ProxyPool] Switched to proxy: ${nodeId}`)
       return true
     } catch (err) {
       logger.error(`[ProxyPool] Failed to switch to ${nodeId}`, err instanceof Error ? err : new Error(String(err)))

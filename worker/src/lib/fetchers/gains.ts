@@ -14,6 +14,7 @@ import {
   sleep,
 } from './shared.js'
 import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
+import { logger } from '../../logger.js'
 
 const SOURCE = 'gains'
 const API_BASE = 'https://backend-arbitrum.gains.trade'
@@ -204,7 +205,7 @@ async function fetchPeriod(
 
   // Save stats_detail for all periods (Phase 1: extended from 90D only)
   if (saved > 0) {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(sorted.length, 100)} traders (${period})...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(sorted.length, 100)} traders (${period})...`)
     let statsSaved = 0
     for (const t of sorted.slice(0, 100)) {
       const stats: StatsDetail = {
@@ -230,7 +231,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, t.traderId, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
   }
 
   return { total: traders.length, saved, error }

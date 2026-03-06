@@ -16,6 +16,7 @@ import {
   sleep,
 } from './shared.js'
 import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
+import { logger } from '../../logger.js'
 
 const SOURCE = 'hyperliquid'
 const STATS_API = 'https://stats-data.hyperliquid.xyz/Mainnet'
@@ -297,7 +298,7 @@ async function fetchPeriod(
   await enrichTraders(topTraders, period)
 
   // Phase 3: Save stats_detail for ALL periods (extended from 90D only)
-  console.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders (${period})...`)
+  logger.warn(`[${SOURCE}] Saving stats details for ${Math.min(topTraders.length, ENRICH_LIMIT)} traders (${period})...`)
   let statsSaved = 0
   for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
     const stats: StatsDetail = {
@@ -323,7 +324,7 @@ async function fetchPeriod(
     const { saved } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
     if (saved) statsSaved++
   }
-  console.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
+  logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details for ${period}`)
 
   const capturedAt = new Date().toISOString()
   const traders: TraderData[] = topTraders.map((t, idx) => ({

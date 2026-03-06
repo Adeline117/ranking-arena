@@ -30,6 +30,7 @@ import {
 } from './shared.js'
 import { type StatsDetail, upsertStatsDetail } from './enrichment.js'
 import { createHmac } from 'crypto'
+import { logger } from '../../logger.js'
 
 const SOURCE = 'bitget_futures'
 const TARGET = 500
@@ -179,7 +180,7 @@ async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
       })
 
       if (data.code !== '00000' && data.code !== 0 && data.code !== '0') {
-        console.warn(`[bitget-futures] Authenticated API error: ${data.code} ${data.msg}`)
+        logger.warn(`[bitget-futures] Authenticated API error: ${data.code} ${data.msg}`)
         break
       }
 
@@ -190,7 +191,7 @@ async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
       if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
       await sleep(300)
     } catch (err) {
-      console.warn(`[bitget-futures] Auth fetch error: ${err}`)
+      logger.warn(`[bitget-futures] Auth fetch error: ${err}`)
       break
     }
   }
@@ -243,7 +244,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
 
   // Strategy 2: Try Cloudflare Worker proxy if direct APIs failed
   if (allTraders.length === 0) {
-    console.log('[bitget-futures] Trying Cloudflare Worker proxy...')
+    logger.info('[bitget-futures] Trying Cloudflare Worker proxy...')
     for (let page = 1; page <= maxPages; page++) {
       try {
         const proxyUrl = `${PROXY_URL}/bitget/copy-trading?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}&type=futures`
@@ -251,7 +252,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
 
         // Check if proxy returned an error object
         if ((data as unknown as { error?: string }).error) {
-          console.log(`[bitget-futures] Proxy error: ${(data as unknown as { error: string }).error}`)
+          logger.info(`[bitget-futures] Proxy error: ${(data as unknown as { error: string }).error}`)
           break
         }
 
@@ -264,7 +265,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(300)
       } catch (err) {
-        console.log(`[bitget-futures] Proxy fetch error: ${err}`)
+        logger.info(`[bitget-futures] Proxy fetch error: ${err}`)
         break
       }
     }
@@ -322,7 +323,7 @@ async function fetchPeriod(
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
@@ -346,7 +347,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: top.length, saved, error }

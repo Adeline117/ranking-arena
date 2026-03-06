@@ -56,7 +56,7 @@ const connectors: Record<string, ConnectorInterface> = {
  */
 async function run(): Promise<void> {
   const db = getSupabase()
-  console.log(`[${WORKER_ID}] Job Runner started. Polling every ${POLL_INTERVAL_MS}ms`)
+  logger.info(`[${WORKER_ID}] Job Runner started. Polling every ${POLL_INTERVAL_MS}ms`)
 
   while (isRunning) {
     try {
@@ -69,12 +69,12 @@ async function run(): Promise<void> {
     await sleep(POLL_INTERVAL_MS)
   }
 
-  console.log(`[${WORKER_ID}] Shutting down, waiting for ${activeJobs} active jobs...`)
+  logger.info(`[${WORKER_ID}] Shutting down, waiting for ${activeJobs} active jobs...`)
   const deadline = Date.now() + GRACEFUL_SHUTDOWN_TIMEOUT
   while (activeJobs > 0 && Date.now() < deadline) {
     await sleep(1000)
   }
-  console.log(`[${WORKER_ID}] Shutdown complete.`)
+  logger.info(`[${WORKER_ID}] Shutdown complete.`)
 }
 
 /**
@@ -97,7 +97,7 @@ async function pollAndExecute(db: SupabaseClient): Promise<void> {
 
   if (!jobs || jobs.length === 0) return
 
-  console.log(`[${WORKER_ID}] Claimed ${jobs.length} job(s)`)
+  logger.info(`[${WORKER_ID}] Claimed ${jobs.length} job(s)`)
 
   // Execute jobs concurrently (but limited by BATCH_SIZE)
   await Promise.all(jobs.map((job: RefreshJobRow) => executeJob(db, job)))
@@ -109,7 +109,7 @@ async function pollAndExecute(db: SupabaseClient): Promise<void> {
 async function executeJob(db: SupabaseClient, job: RefreshJobRow): Promise<void> {
   activeJobs++
   const startTime = Date.now()
-  console.log(`[${WORKER_ID}] Executing job ${job.id}: ${job.job_type} for ${job.platform}/${job.trader_key}`)
+  logger.info(`[${WORKER_ID}] Executing job ${job.id}: ${job.job_type} for ${job.platform}/${job.trader_key}`)
 
   try {
     const connector = connectors[job.platform]
@@ -148,7 +148,7 @@ async function executeJob(db: SupabaseClient, job: RefreshJobRow): Promise<void>
       p_error: null,
     })
 
-    console.log(`[${WORKER_ID}] Job ${job.id} completed in ${duration}ms`)
+    logger.info(`[${WORKER_ID}] Job ${job.id} completed in ${duration}ms`)
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     logger.error(`[${WORKER_ID}] Job ${job.id} failed`, error instanceof Error ? error : new Error(String(error)), { jobId: job.id })
@@ -312,11 +312,11 @@ async function executeTimeseriesRefresh(
 // Graceful shutdown
 // ============================================
 process.on('SIGINT', () => {
-  console.log(`[${WORKER_ID}] Received SIGINT, shutting down...`)
+  logger.info(`[${WORKER_ID}] Received SIGINT, shutting down...`)
   isRunning = false
 })
 process.on('SIGTERM', () => {
-  console.log(`[${WORKER_ID}] Received SIGTERM, shutting down...`)
+  logger.info(`[${WORKER_ID}] Received SIGTERM, shutting down...`)
   isRunning = false
 })
 

@@ -14,6 +14,7 @@ import {
   sleep,
 } from './shared.js'
 import { type EquityCurvePoint, type StatsDetail, upsertEquityCurve, fetchOkxStatsDetail, upsertStatsDetail } from './enrichment.js'
+import { logger } from '../../logger.js'
 
 const SOURCE = 'okx_futures'
 const API_URL = 'https://www.okx.com/api/v5/copytrading/public-lead-traders'
@@ -225,7 +226,7 @@ async function fetchPeriod(
   if (saved > 0) {
     const tradersArray = Array.from(allTraders.entries())
     const toEnrich = tradersArray.slice(0, ENRICH_LIMIT)
-    console.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
+    logger.warn(`[${SOURCE}] Enriching ${toEnrich.length} traders for ${period}...`)
 
     let curvesSaved = 0
     let statsSaved = 0
@@ -272,7 +273,7 @@ async function fetchPeriod(
         if (s) statsSaved++
       }
     }
-    console.warn(`[${SOURCE}] Enrichment complete for ${period}: ${curvesSaved} curves, ${statsSaved} stats`)
+    logger.warn(`[${SOURCE}] Enrichment complete for ${period}: ${curvesSaved} curves, ${statsSaved} stats`)
   }
 
   return { total: top.length, saved, error }
