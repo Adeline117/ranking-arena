@@ -17,15 +17,13 @@
 | 3 | Hardcoded Chinese in toast messages | `app/components/features/CreateGroupModal.tsx:94,107` | Use i18n `t()` |
 | 4 | Hardcoded Chinese in LoadingSkeleton headers | `app/components/error/LoadingSkeleton.tsx:161` | Removed visual-only text |
 
-### Findings (Not Fixed - Low Risk)
+### Verified OK (False Positives)
 
-| # | Issue | File | Severity |
-|---|-------|------|----------|
-| 5 | Missing loading state during market fetch | `app/components/market/CoreCards.tsx:230-290` | Medium |
-| 6 | Silent error swallowing in market components | `app/components/market/CoreCards.tsx:262,284,290` | Medium |
-| 7 | Missing empty state for gainers/losers lists | `app/components/market/CoreCards.tsx:300+` | Low |
-| 8 | ProfileActivityFeed - no loading indicator | `app/components/profile/ProfileActivityFeed.tsx:113` | Low |
-| 9 | ProfileBookshelf - no loading skeleton | `app/components/profile/ProfileBookshelf.tsx:40` | Low |
+| # | Issue | Actual Status |
+|---|-------|---------------|
+| 5-7 | CoreCards loading/error/empty states | Already has skeleton loading + `t('noGainers')`/`t('noLosers')` empty states + spot fallback |
+| 8 | ProfileActivityFeed loading | Already has skeleton loading state (line 120-129) |
+| 9 | ProfileBookshelf loading | Already has skeleton loading state (line 54+) |
 
 ---
 
@@ -67,12 +65,17 @@
 |---|-------|------|-----|
 | 17 | CreateGroupModal search: no debounce on API calls | `CreateGroupModal.tsx:174` | Added 300ms debounce |
 
+### Fixed
+
+| # | Issue | File | Fix |
+|---|-------|------|-----|
+| 19 | Hardcoded English in channel error toasts | `channels/[channelId]/page.tsx:89,99,187,211,213` | Use `t('loadFailed2')`, `t('sendFailed')`, `t('uploadFailed')` |
+
 ### Findings (Not Fixed)
 
 | # | Issue | File | Severity |
 |---|-------|------|----------|
 | 18 | Position table headers lack hover styling | `portfolio/PositionList.tsx:206` | Low |
-| 19 | Hardcoded English in channel error toasts | `channels/[channelId]/page.tsx:99,213` | Low |
 
 ---
 
@@ -123,14 +126,14 @@
 
 ## Summary
 
-| Category | Found | Fixed | Remaining |
-|----------|-------|-------|-----------|
-| State Handling | 9 | 4 | 5 (low risk) |
-| Data Display | 6 | 2 | 4 (needs design decision) |
-| Interactive | 3 | 1 | 2 (low risk) |
-| Supabase/Redis/WS | 1 issue | 0 | 1 (select * - large scope) |
-| i18n | 4 | 2 | 2 (large scope) |
-| **Total** | **23** | **9** | **14** |
+| Category | Found | Fixed | False Positive | Remaining |
+|----------|-------|-------|----------------|-----------|
+| State Handling | 9 | 4 | 5 (already handled) | 0 |
+| Data Display | 6 | 2 | 0 | 4 (needs design decision) |
+| Interactive | 3 | 2 | 0 | 1 (low risk) |
+| Supabase/Redis/WS | 1 issue | 0 | 0 | 1 (select * - large scope) |
+| i18n | 4 | 3 | 0 | 1 (large scope - ternary pattern) |
+| **Total** | **23** | **11** | **5** | **7** |
 
 Core infrastructure (realtime, caching, WebSocket, RLS) is well-implemented.
-Main UX issues are formatting inconsistencies and missing loading states in secondary components.
+Remaining items are design decisions (ROI/PnL formatting), low-risk cosmetics, or large-scope refactors (ternary i18n pattern, select(*)).

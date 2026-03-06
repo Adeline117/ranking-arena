@@ -86,7 +86,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       })
       const data = await res.json()
       if (!res.ok) {
-        showToast(data.error || 'Failed to load', 'error')
+        showToast(data.error || t('loadFailed2'), 'error')
         router.push('/inbox')
         return
       }
@@ -96,7 +96,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       setMyRole(data.my_role)
       setHasMore(data.has_more)
     } catch {
-      showToast('Failed to load channel', 'error')
+      showToast(t('loadFailed2'), 'error')
     } finally {
       setLoading(false)
     }
@@ -184,7 +184,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         setMessages(prev => prev.map(m => m._tempId === tempId ? { ...data.message, _status: 'sent' } : m))
       } else {
         setMessages(prev => prev.map(m => m._tempId === tempId ? { ...m, _status: 'failed' } : m))
-        showToast(data.error || 'Failed to send', 'error')
+        showToast(data.error || t('sendFailed'), 'error')
       }
     } catch {
       setMessages(prev => prev.map(m => m._tempId === tempId ? { ...m, _status: 'failed' } : m))
@@ -208,9 +208,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       if (res.ok) {
         setPendingAttachment({ url: data.url, type: data.category, originalName: data.originalName, fileSize: data.fileSize })
       } else {
-        showToast(data.error || 'Upload failed', 'error')
+        showToast(data.error || t('uploadFailed'), 'error')
       }
-    } catch { showToast('Upload failed', 'error') }
+    } catch { showToast(t('uploadFailed'), 'error') }
     finally { setUploading(false) }
   }
 
