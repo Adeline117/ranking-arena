@@ -149,11 +149,12 @@ export default function ChallengeButton({
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          padding: '6px 12px',
+          padding: '8px 14px',
           borderRadius: 8,
           background: 'rgba(255,215,0,0.08)',
           border: '1px solid rgba(255,215,0,0.3)',
-          color: '#FFD700',
+          color: 'var(--color-medal-gold, #FFD700)',
+          minHeight: 44,
           fontSize: 13,
           fontWeight: 700,
           cursor: 'pointer',
@@ -203,7 +204,7 @@ export default function ChallengeButton({
             position: 'fixed',
             inset: 0,
             zIndex: 9999,
-            background: 'rgba(0,0,0,0.75)',
+            background: 'var(--color-backdrop-heavy, rgba(0,0,0,0.75))',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -213,13 +214,13 @@ export default function ChallengeButton({
         >
           <div
             style={{
-              background: '#12111A',
-              border: '1px solid rgba(139,111,168,0.3)',
+              background: 'var(--color-bg-secondary)',
+              border: '1px solid var(--glass-border-medium)',
               borderRadius: 16,
               padding: '28px 24px',
               width: '100%',
               maxWidth: 480,
-              boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+              boxShadow: '0 24px 64px var(--color-overlay-dark, rgba(0,0,0,0.6))',
               position: 'relative',
             }}
           >
@@ -235,9 +236,12 @@ export default function ChallengeButton({
                 border: 'none',
                 color: 'var(--color-text-tertiary)',
                 cursor: 'pointer',
-                padding: 4,
+                padding: 12,
                 display: 'flex',
                 alignItems: 'center',
+                minWidth: 44,
+                minHeight: 44,
+                justifyContent: 'center',
               }}
             >
               <svg
@@ -311,7 +315,7 @@ export default function ChallengeButton({
                       transform: 'translateY(-50%)',
                       width: 16,
                       height: 16,
-                      border: '2px solid rgba(139,111,168,0.3)',
+                      border: '2px solid var(--color-accent-primary-30)',
                       borderTopColor: '#8b6fa8',
                       borderRadius: '50%',
                       animation: 'spin 0.8s linear infinite',
@@ -356,7 +360,7 @@ export default function ChallengeButton({
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background =
-                        'rgba(139,111,168,0.1)'
+                        'var(--color-accent-primary-10)'
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'transparent'
@@ -438,8 +442,8 @@ export default function ChallengeButton({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '10px 14px',
-                    background: 'rgba(139,111,168,0.1)',
-                    border: '1px solid rgba(139,111,168,0.3)',
+                    background: 'var(--color-accent-primary-10)',
+                    border: '1px solid var(--color-accent-primary-30)',
                     borderRadius: 10,
                   }}
                 >
@@ -530,8 +534,8 @@ export default function ChallengeButton({
                       padding: '10px 16px',
                       borderRadius: 8,
                       background:
-                        'linear-gradient(135deg, rgba(139,111,168,0.3) 0%, rgba(99,102,241,0.3) 100%)',
-                      border: '1px solid rgba(139,111,168,0.5)',
+                        'linear-gradient(135deg, var(--color-accent-primary-30) 0%, rgba(99,102,241,0.3) 100%)',
+                      border: '1px solid var(--color-accent-primary-40)',
                       color: 'var(--color-text-primary)',
                       fontSize: 13,
                       fontWeight: 700,
