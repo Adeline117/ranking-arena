@@ -1,10 +1,25 @@
 /**
  * NetworkStatusBanner 组件测试
+ * Note: Component uses i18n, test renders with default English text
  */
 
 import React from 'react'
 import { render, screen, act } from '@testing-library/react'
 import NetworkStatusBanner from '../NetworkStatusBanner'
+
+// Mock useLanguage to return English text (default behavior)
+jest.mock('@/app/components/Providers/LanguageProvider', () => ({
+  useLanguage: () => ({
+    t: (key: string) => {
+      const translations: Record<string, string> = {
+        networkDisconnected: 'Network disconnected',
+        networkReconnected: 'Network reconnected',
+      }
+      return translations[key] || key
+    },
+    locale: 'en',
+  }),
+}))
 
 describe('NetworkStatusBanner', () => {
   let originalNavigator: boolean
@@ -31,7 +46,7 @@ describe('NetworkStatusBanner', () => {
     Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true })
     render(<NetworkStatusBanner />)
     expect(screen.getByRole('alert')).toBeInTheDocument()
-    expect(screen.getByText('网络连接已断开')).toBeInTheDocument()
+    expect(screen.getByText('Network disconnected')).toBeInTheDocument()
   })
 
   it('should show offline banner on offline event', () => {
@@ -43,7 +58,7 @@ describe('NetworkStatusBanner', () => {
     })
 
     expect(screen.getByRole('alert')).toBeInTheDocument()
-    expect(screen.getByText('网络连接已断开')).toBeInTheDocument()
+    expect(screen.getByText('Network disconnected')).toBeInTheDocument()
   })
 
   it('should show reconnected message on online event after offline', () => {
@@ -53,12 +68,12 @@ describe('NetworkStatusBanner', () => {
     act(() => {
       window.dispatchEvent(new Event('offline'))
     })
-    expect(screen.getByText('网络连接已断开')).toBeInTheDocument()
+    expect(screen.getByText('Network disconnected')).toBeInTheDocument()
 
     act(() => {
       window.dispatchEvent(new Event('online'))
     })
-    expect(screen.getByText('网络已恢复')).toBeInTheDocument()
+    expect(screen.getByText('Network reconnected')).toBeInTheDocument()
   })
 
   it('should have role="alert" and aria-live="assertive"', () => {
