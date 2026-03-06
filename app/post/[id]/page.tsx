@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -5,16 +6,25 @@ import PostDetailClient from './PostDetailClient'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  const { id } = await params
-
+const getPostMeta = cache(async (id: string) => {
   try {
     const supabase = getSupabaseAdmin()
     const { data } = await supabase
       .from('posts')
-      .select('title, content, author_handle, created_at')
+      .select('id, title, content, author_handle, created_at')
       .eq('id', id)
       .maybeSingle()
+    return data
+  } catch {
+    return null
+  }
+})
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params
+
+  try {
+    const data = await getPostMeta(id)
 
     if (!data) {
       return { title: 'Post Not Found | Arena' }
@@ -57,18 +67,9 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
     notFound()
   }
 
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle()
-
-    if (!data) {
-      notFound()
-    }
-  } catch {
+  // Reuses cached result from generateMetadata — no extra DB query
+  const data = await getPostMeta(id)
+  if (!data) {
     notFound()
   }
 
