@@ -1,0 +1,220 @@
+/**
+ * /api/bookmark-folders route tests
+ *
+ * Tests listing bookmark folders (GET) and creating folders (POST),
+ * including auth, validation, and error handling.
+ */
+
+// --- Mocks ---
+
+jest.mock('next/server', () => {
+  class MockNextResponse {
+    _body: unknown
+    status: number
+    headers: Map<string, string>
+    constructor(body?: unknown, init: { status?: number } = {}) {
+      this._body = body
+      this.status = init.status || 200
+      this.headers = new Map()
+    }
+    async json() { return this._body }
+    static json(data: unknown, init?: { status?: number }) {
+      return new MockNextResponse(data, init)
+    }
+  }
+
+  class MockNextRequest {
+    url: string
+    nextUrl: URL
+    headers: Map<string, string>
+    method: string
+    _body: unknown
+    constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
+      this.url = url
+      this.nextUrl = new URL(url)
+      this.headers = new Map(Object.entries(opts?.headers || {}))
+      this.method = opts?.method || 'GET'
+      this._body = opts?.body
+    }
+    async json() { return this._body }
+  }
+
+  return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
+})
+
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue(null),
+  RateLimitPresets: { read: {}, write: {} },
+}))
+
+const mockRequireAuth = jest.fn()
+let mockSupabaseRpcResult: { data: unknown; error: unknown } = { data: null, error: null }
+let mockSupabaseSelectResult: { data: unknown; error: unknown } = { data: [], error: null }
+let mockSupabaseInsertResult: { data: unknown; error: unknown } = { data: null, error: null }
+
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: jest.fn(() => ({
+    rpc: jest.fn().mockImplementation(() => Promise.resolve(mockSupabaseRpcResult)),
+    from: jest.fn(() => {
+      const chain: Record<string, jest.Mock> = {}
+      chain.select = jest.fn(() => chain)
+      chain.eq = jest.fn(() => chain)
+      chain.order = jest.fn(() => Promise.resolve(mockSupabaseSelectResult))
+      chain.insert = jest.fn(() => chain)
+      chain.single = jest.fn(() => Promise.resolve(mockSupabaseInsertResult))
+      return chain
+    }),
+  })),
+  requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
+  getAuthUser: jest.fn(),
+  getUserHandle: jest.fn(),
+  getUserProfile: jest.fn(),
+}))
+
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: jest.fn(() => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() })),
+  logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
+  fireAndForget: jest.fn(),
+  captureError: jest.fn(),
+  captureMessage: jest.fn(),
+}))
+
+import { NextRequest } from 'next/server'
+import { GET, POST } from '../route'
+
+describe('/api/bookmark-folders', () => {
+  const mockUser = { id: 'user-1', email: 'test@test.com' }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockRequireAuth.mockResolvedValue(mockUser)
+    mockSupabaseRpcResult = { data: null, error: null }
+    mockSupabaseSelectResult = { data: [], error: null }
+    mockSupabaseInsertResult = { data: null, error: null }
+  })
+
+  // --- GET: List Bookmark Folders ---
+
+  describe('GET /api/bookmark-folders', () => {
+    it('returns 401 when not authenticated', async () => {
+      mockRequireAuth.mockRejectedValue(
+        Object.assign(new Error('Unauthorized'), { statusCode: 401 })
+      )
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders')
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(res.status).toBeGreaterThanOrEqual(400)
+      expect(body.success).toBe(false)
+    })
+
+    it('returns empty folders list for new user', async () => {
+      mockSupabaseSelectResult = { data: [], error: null }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders')
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.success).toBe(true)
+      expect(body.data.folders).toEqual([])
+    })
+
+    it('returns user bookmark folders', async () => {
+      mockSupabaseSelectResult = {
+        data: [
+          { id: 'f1', name: 'Default', is_default: true, is_public: false },
+          { id: 'f2', name: 'Favorites', is_default: false, is_public: true },
+        ],
+        error: null,
+      }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders')
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data.folders).toHaveLength(2)
+    })
+
+    it('handles table not found gracefully', async () => {
+      mockSupabaseSelectResult = {
+        data: null,
+        error: { code: '42P01', message: 'relation does not exist' },
+      }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders')
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data.folders).toEqual([])
+    })
+  })
+
+  // --- POST: Create Bookmark Folder ---
+
+  describe('POST /api/bookmark-folders', () => {
+    it('returns 401 when not authenticated', async () => {
+      mockRequireAuth.mockRejectedValue(
+        Object.assign(new Error('Unauthorized'), { statusCode: 401 })
+      )
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: { name: 'My Folder' },
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBeGreaterThanOrEqual(400)
+      expect(body.success).toBe(false)
+    })
+
+    it('returns 400 when name is missing', async () => {
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: {},
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBeGreaterThanOrEqual(400)
+      expect(body.success).toBe(false)
+    })
+
+    it('creates folder successfully with valid name', async () => {
+      const mockFolder = { id: 'f-new', name: 'My Folder', is_default: false, is_public: false }
+      mockSupabaseInsertResult = { data: mockFolder, error: null }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: { name: 'My Folder' },
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(201)
+      expect(body.success).toBe(true)
+      expect(body.data.folder.name).toBe('My Folder')
+    })
+
+    it('handles duplicate folder name error', async () => {
+      mockSupabaseInsertResult = {
+        data: null,
+        error: { code: '23505', message: 'duplicate key value' },
+      }
+
+      const req = new NextRequest('http://localhost/api/bookmark-folders', {
+        method: 'POST',
+        body: { name: 'Existing Folder' },
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBeGreaterThanOrEqual(400)
+      expect(body.success).toBe(false)
+    })
+  })
+})
