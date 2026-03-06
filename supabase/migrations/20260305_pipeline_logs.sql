@@ -91,7 +91,7 @@ CREATE POLICY "Admins can view pipeline_logs"
     EXISTS (
       SELECT 1 FROM user_profiles
       WHERE user_profiles.id = auth.uid()
-      AND user_profiles.is_admin = true
+      AND user_profiles.role = 'admin'
     )
   );
 
