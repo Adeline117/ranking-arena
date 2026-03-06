@@ -69,6 +69,14 @@
       "schedule": "5 * * * *"
     },
     {
+      "path": "/api/cron/fetch-traders/binance_futures",
+      "schedule": "45 */3 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-traders/binance_spot",
+      "schedule": "48 */3 * * *"
+    },
+    {
       "path": "/api/cron/fetch-traders/bybit",
       "schedule": "50 */3 * * *"
     },
