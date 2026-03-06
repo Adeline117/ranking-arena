@@ -54,7 +54,7 @@ jobs:
       - name: Run tests with coverage
         run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov
       - name: Upload coverage to artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage/
@@ -89,7 +89,7 @@ jobs:
         run: |
           # Remove files with colons in names (node: externals) — invalid for artifact upload
           find .next -name '*:*' -delete 2>/dev/null || true
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: nextjs-build
           path: .next
@@ -116,7 +116,7 @@ jobs:
       - run: npm run test:e2e -- --project=chromium
         env:
           CI: true
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
