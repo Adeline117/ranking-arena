@@ -83,7 +83,7 @@ describe('Chat Settings API', () => {
 
       expect(response.status).toBe(401)
       const data = await response.json()
-      expect(data.error).toBe('未授权')
+      expect(data.error).toBe('Unauthorized')
     })
 
     it('returns 403 for non-member access', async () => {
