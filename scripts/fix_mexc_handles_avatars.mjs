@@ -23,8 +23,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 const CACHE_FILE = '/tmp/mexc_all_traders_v2.json'
 
 const supabase = createClient(
-  'https://iknktzifjdyujdccyhsv.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlrbmt0emlmamR5dWpkY2N5aHN2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjU1MTU1MywiZXhwIjoyMDgyMTI3NTUzfQ.dBTyJ6tPY-eelVj4khLq31RuUg59Opcy5B48zOLLuGE'
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 const HEX_PATTERN = /^[a-f0-9]{32}$/

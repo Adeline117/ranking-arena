@@ -17,7 +17,7 @@ import 'dotenv/config'
 import pg from 'pg'
 const { Client } = pg
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
+const DB_URL = process.env.DATABASE_URL || process.env.DATABASE_URL
 
 const DRY_RUN = process.argv.includes('--dry-run')
 const LIMIT = parseInt(process.argv.find(a => a.startsWith('--limit='))?.split('=')[1] || '100') || 100

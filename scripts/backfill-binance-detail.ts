@@ -4,7 +4,7 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 const { Client } = pg;
 
-const DB = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres';
+const DB = process.env.DATABASE_URL;
 
 async function fetchOne(id: string): Promise<{ nickname: string; avatarUrl: string | null } | null> {
   try {

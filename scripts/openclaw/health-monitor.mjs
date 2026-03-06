@@ -10,12 +10,26 @@
  *
  * Usage (OpenClaw):
  *   Configure as a skill that runs every 30 minutes
+ *
+ * Flags:
+ *   check              Health check mode (default)
+ *   daily              Daily report mode
+ *   --with-auto-fix    Trigger auto-fix for failing fetchers after alert
  */
+
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const ARENA_URL = process.env.ARENA_URL || 'https://www.arenafi.org'
 const CRON_SECRET = process.env.CRON_SECRET
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID
+
+// Auto-fix cooldown: 6 hours between fix attempts per platform
+const AUTO_FIX_COOLDOWN_MS = 6 * 60 * 60 * 1000
+const fixAttempts = new Map() // platform -> last attempt timestamp
 
 if (!CRON_SECRET) {
   console.error('CRON_SECRET is required')

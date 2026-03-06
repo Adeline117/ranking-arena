@@ -3,9 +3,9 @@
  * Enrich Bybit PNL + Equity Curves via direct API
  * Uses pg Pool (not Client) to avoid connection hanging
  */
-process.env.DATABASE_URL = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres'
-process.env.SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlrbmt0emlmamR5dWpkY2N5aHN2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjU1MTU1MywiZXhwIjoyMDgyMTI3NTUzfQ.dBTyJ6tPY-eelVj4khLq31RuUg59Opcy5B48zOLLuGE'
+process.env.DATABASE_URL = process.env.DATABASE_URL
+process.env.SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const { createClient } = require('@supabase/supabase-js')
 const { Pool } = require('pg')

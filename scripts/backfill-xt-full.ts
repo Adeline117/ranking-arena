@@ -1,7 +1,7 @@
 import pg from 'pg';
 const { Client } = pg;
 
-const DB = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres';
+const DB = process.env.DATABASE_URL;
 
 async function fetchAllXT(): Promise<Map<string, { nickName: string; avatar: string | null }>> {
   const traders = new Map<string, { nickName: string; avatar: string | null }>();

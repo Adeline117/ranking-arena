@@ -7,7 +7,7 @@ import { ProxyAgent } from 'undici'
 import * as fs from 'fs'
 import * as path from 'path'
 
-const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const PROXY = 'http://127.0.0.1:7890'
 const API_URL = 'https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/home-page/query-list'
 

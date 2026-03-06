@@ -53,7 +53,7 @@ async function main() {
   
   // Use pg directly for the OR query
   const pg = await import('pg')
-  const client = new pg.default.Client('postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres')
+  const client = new pg.default.Client(process.env.DATABASE_URL)
   await client.connect()
 
   const { rows: nullRows2 } = await client.query(

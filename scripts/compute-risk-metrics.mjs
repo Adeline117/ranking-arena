@@ -7,7 +7,7 @@
 import { execSync } from 'child_process';
 
 const PSQL = '/opt/homebrew/opt/libpq/bin/psql';
-const DB = 'postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres';
+const DB = process.env.DATABASE_URL;
 
 function sql(query) {
   return execSync(`${PSQL} "${DB}" -t -A -c "${query.replace(/"/g, '\\"')}"`, {
