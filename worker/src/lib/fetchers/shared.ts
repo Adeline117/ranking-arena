@@ -13,6 +13,7 @@ export interface TraderData {
   source: string
   source_trader_id: string
   handle: string
+  avatar_url?: string | null
   profile_url?: string | null
   season_id: string
   rank?: number | null
@@ -205,6 +206,7 @@ export async function upsertTraders(
       source: t.source,
       source_trader_id: t.source_trader_id,
       handle: t.handle,
+      avatar_url: t.avatar_url || null,
       profile_url: t.profile_url || null,
       is_active: true,
     }))

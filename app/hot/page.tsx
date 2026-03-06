@@ -50,6 +50,7 @@ function HotContent() {
   const [_loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
+  const [postsError, setPostsError] = useState(false)
 
   // Tabbed sections state
   const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
@@ -57,6 +58,7 @@ function HotContent() {
   // Groups data for the groups tab
   const [groups, setGroups] = useState<{ id: string; name: string; name_en?: string | null; member_count: number }[]>([])
   const [loadingGroups, setLoadingGroups] = useState(false)
+  const [groupsError, setGroupsError] = useState(false)
 
   const latestPostTime = useRef<string>('')
 
@@ -158,6 +160,7 @@ function HotContent() {
   // Load hot posts from cache API
   const loadPosts = useCallback(async () => {
     setLoadingPosts(true)
+    setPostsError(false)
     try {
       const headers: Record<string, string> = {}
       if (accessToken) {
@@ -212,6 +215,7 @@ function HotContent() {
     } catch (e) {
       logger.error('Failed to load posts:', e)
       setPosts([])
+      setPostsError(true)
       showToast(t('loadHotPostsFailed'), 'error')
     } finally {
       setLoadingPosts(false)
@@ -225,30 +229,34 @@ function HotContent() {
     return () => clearInterval(interval)
   }, [loadPosts])
 
+  // Load groups
+  const loadGroups = useCallback(async () => {
+    setLoadingGroups(true)
+    setGroupsError(false)
+    try {
+      const res = await fetch('/api/groups?sort_by=activity&limit=30')
+      const json = await res.json()
+      const data = json.data?.groups || json.groups || json.data || []
+      setGroups(data.map((g: Record<string, unknown>) => ({
+        id: (g.id as string) || '',
+        name: (g.name as string) || '',
+        name_en: (g.name_en as string | null) || null,
+        member_count: (g.member_count as number) || 0,
+      })))
+    } catch (error) {
+      logger.error('Groups load error:', error)
+      setGroups([])
+      setGroupsError(true)
+    } finally {
+      setLoadingGroups(false)
+    }
+  }, [])
+
   // Load groups when groups tab is active
   useEffect(() => {
     if (activeHotTab !== 'groups') return
-    const loadGroups = async () => {
-      setLoadingGroups(true)
-      try {
-        const res = await fetch('/api/groups?sort_by=activity&limit=30')
-        const json = await res.json()
-        const data = json.data?.groups || json.groups || json.data || []
-        setGroups(data.map((g: Record<string, unknown>) => ({
-          id: (g.id as string) || '',
-          name: (g.name as string) || '',
-          name_en: (g.name_en as string | null) || null,
-          member_count: (g.member_count as number) || 0,
-        })))
-      } catch (error) {
-        logger.error('Groups load error:', error)
-        setGroups([])
-      } finally {
-        setLoadingGroups(false)
-      }
-    }
     loadGroups()
-  }, [activeHotTab])
+  }, [activeHotTab, loadGroups])
 
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
@@ -735,6 +743,11 @@ function HotContent() {
                     <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
                       <Text color="tertiary">{t('loading')}</Text>
                     </Box>
+                  ) : postsError ? (
+                    <Box style={{ padding: '48px 24px', textAlign: 'center' }}>
+                      <Text color="tertiary" style={{ marginBottom: 12 }}>{t('loadFailed')}</Text>
+                      <button onClick={loadPosts} style={{ color: tokens.colors.accent.primary, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', fontSize: 14 }}>{t('retry')}</button>
+                    </Box>
                   ) : visibleHot.length === 0 ? (
                     <div className="empty-state" style={{ padding: '64px 24px' }}>
                       <div className="empty-state-icon">
@@ -847,6 +860,8 @@ function HotContent() {
                 <HotGroupsList
                   groups={groups}
                   loading={loadingGroups}
+                  error={groupsError}
+                  onRetry={loadGroups}
                   localizedName={localizedName}
                   t={t}
                 />

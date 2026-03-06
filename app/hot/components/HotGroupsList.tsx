@@ -16,17 +16,30 @@ interface HotGroup {
 interface HotGroupsListProps {
   groups: HotGroup[]
   loading: boolean
+  error?: boolean
+  onRetry?: () => void
   localizedName: (zh: string, en?: string | null) => string
   t: (key: string) => string
 }
 
-export function HotGroupsList({ groups, loading, localizedName, t }: HotGroupsListProps) {
+export function HotGroupsList({ groups, loading, error, onRetry, localizedName, t }: HotGroupsListProps) {
   const router = useRouter()
 
   if (loading) {
     return (
       <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
         <Text color="tertiary">{t('loading')}</Text>
+      </Box>
+    )
+  }
+
+  if (error) {
+    return (
+      <Box style={{ padding: '48px 24px', textAlign: 'center' }}>
+        <Text color="tertiary" style={{ marginBottom: 12 }}>{t('loadFailed')}</Text>
+        {onRetry && (
+          <button onClick={onRetry} style={{ color: tokens.colors.accent.primary, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', fontSize: 14 }}>{t('retry')}</button>
+        )}
       </Box>
     )
   }

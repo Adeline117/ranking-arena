@@ -64,6 +64,35 @@ Action:
 | Tests pass + 3+ files changed | Wait for confirmation |
 | Tests fail | Block + alert |
 
+#### Daily R2 Backup (3:00 AM)
+```
+Trigger: Daily at 03:00
+Script: cd ~/ranking-arena && npm run backup:r2
+Action: Dump 31 trader tables → gzip → upload to R2
+Full backup (weekly, Sunday): cd ~/ranking-arena && npm run backup:r2:full
+```
+
+### 4. Mac Mini Crontab
+
+Add these lines to `crontab -e`:
+
+```cron
+# Arena Health Monitor (every 30 min)
+*/30 * * * * cd ~/ranking-arena && node scripts/openclaw/health-monitor.mjs >> /tmp/arena-health.log 2>&1
+
+# Arena Daily Report (8 AM)
+0 8 * * * cd ~/ranking-arena && node scripts/openclaw/health-monitor.mjs daily >> /tmp/arena-daily.log 2>&1
+
+# Arena UX Patrol (9 AM)
+0 9 * * * cd ~/ranking-arena && node scripts/openclaw/ux-patrol.mjs >> /tmp/arena-ux.log 2>&1
+
+# Arena Daily Backup to R2 (3 AM)
+0 3 * * * cd ~/ranking-arena && npm run backup:r2 >> /tmp/arena-backup.log 2>&1
+
+# Arena Full Backup to R2 (Sunday 4 AM)
+0 4 * * 0 cd ~/ranking-arena && npm run backup:r2:full >> /tmp/arena-backup-full.log 2>&1
+```
+
 ## Scripts
 
 | Script | Purpose |
@@ -71,3 +100,5 @@ Action:
 | `health-monitor.mjs` | Health check (run every 30 min) |
 | `health-monitor.mjs daily` | Daily summary report (run at 8 AM) |
 | `ux-patrol.mjs` | UX health check — pages, APIs, data quality, SSR (daily at 9 AM) |
+| `../maintenance/backup-to-r2.mjs` | Daily trader data backup to R2 (3 AM) |
+| `../maintenance/backup-to-r2.mjs --full` | Full DB backup to R2 (Sunday 4 AM) |

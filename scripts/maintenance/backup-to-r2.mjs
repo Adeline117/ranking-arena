@@ -3,8 +3,9 @@
 /**
  * Long-term database backup to Cloudflare R2
  *
- * Dumps critical tables → gzip → upload to R2
- * Run weekly via cron or manually: node scripts/maintenance/backup-to-r2.mjs
+ * Dumps all trader data tables → gzip → upload to R2
+ * Run daily via Mac Mini cron: npm run backup:r2
+ * Run manually with full DB: npm run backup:r2:full
  *
  * Requires: DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  */
@@ -14,18 +15,45 @@ import { createReadStream, statSync, unlinkSync } from 'fs'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import 'dotenv/config'
 
-const CRITICAL_TABLES = [
+const TRADER_TABLES = [
+  // Core trader data
   'trader_equity_curve',
   'trader_snapshots',
-  'trader_sources',
-  'daily_trader_stats',
+  'trader_snapshots_v2',
+  'trader_daily_snapshots',
+  'trader_timeseries',
+  'trader_roi_history',
+  // Position data
   'trader_position_history',
+  'trader_positions_history',
+  'trader_positions_live',
+  'trader_position_summary',
+  // Asset & trading details
+  'trader_asset_breakdown',
+  'trader_frequently_traded',
+  // Identity & profile
+  'trader_sources',
+  'trader_sources_v2',
+  'traders',
+  'trader_profiles_v2',
+  'trader_stats_detail',
+  'trader_scores',
+  'trader_links',
+  'trader_portfolio',
+  // Flags & quality
+  'trader_flags',
+  'trader_anomalies',
+  'trader_seasons',
+  'trader_merges',
+  // Social
+  'trader_follows',
+  'trader_reviews',
+  'trader_authorizations',
+  'trader_alerts',
+  // Leaderboard
   'leaderboard_ranks',
   'leaderboard_snapshots',
-  'trader_snapshots_v2',
-  'trader_stats_detail',
-  'trader_asset_breakdown',
-  'trader_profiles_v2',
+  'daily_trader_stats',
 ]
 
 const DATABASE_URL = process.env.DATABASE_URL
@@ -57,18 +85,18 @@ const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
 const fullMode = process.argv.includes('--full')
 
 async function run() {
-  console.log(`[backup] Starting ${fullMode ? 'FULL' : 'critical tables'} backup — ${now.toISOString()}`)
+  console.log(`[backup] Starting ${fullMode ? 'FULL' : 'trader tables'} backup — ${now.toISOString()}`)
 
   const tableArgs = fullMode
     ? '' // dump everything
-    : CRITICAL_TABLES.map(t => `-t public.${t}`).join(' ')
+    : TRADER_TABLES.map(t => `-t public.${t}`).join(' ')
 
   const filename = `arena-backup-${dateStr}${fullMode ? '-full' : ''}.sql.gz`
   const localPath = `/tmp/${filename}`
 
   try {
     // pg_dump → gzip
-    console.log(`[backup] Dumping${fullMode ? ' full database' : ` ${CRITICAL_TABLES.length} tables`}...`)
+    console.log(`[backup] Dumping${fullMode ? ' full database' : ` ${TRADER_TABLES.length} tables`}...`)
     execSync(
       `pg_dump "${DATABASE_URL}" ${tableArgs} --no-owner --no-privileges | gzip > ${localPath}`,
       { stdio: ['pipe', 'pipe', 'pipe'], timeout: 600_000 }
@@ -90,8 +118,8 @@ async function run() {
       ContentLength: size,
       Metadata: {
         'backup-date': now.toISOString(),
-        'backup-type': fullMode ? 'full' : 'critical-tables',
-        'tables': fullMode ? 'all' : CRITICAL_TABLES.join(','),
+        'backup-type': fullMode ? 'full' : 'trader-tables',
+        'tables': fullMode ? 'all' : TRADER_TABLES.join(','),
       },
     }))
 
