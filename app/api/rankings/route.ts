@@ -25,7 +25,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { RankingWindow, TradingCategory, Platform, GranularPlatform, RankingsQuery, RankedTraderRow } from '@/lib/types/leaderboard';
 import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import { checkRateLimit, setRateLimitHeaders, getClientIp } from '@/lib/middleware/rate-limit';
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit';
 import { tieredGetOrSet } from '@/lib/cache/redis-layer';
 import logger from '@/lib/logger'
 
@@ -55,18 +55,9 @@ const ROI_ANOMALY_THRESHOLD = 5000; // 5000% = 50x — anything above is likely 
 
 export async function GET(request: NextRequest) {
   try {
-    // Rate limit check
-    const clientIp = getClientIp(request)
-    const rateLimit = checkRateLimit(`rankings:${clientIp}`, { limit: 60, windowSec: 60 })
-    if (!rateLimit.success) {
-      const res = NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again later.' },
-        { status: 429 }
-      )
-      setRateLimitHeaders(res.headers, rateLimit)
-      res.headers.set('Retry-After', String(Math.ceil((rateLimit.resetAt - Date.now()) / 1000)))
-      return res
-    }
+    // Rate limit check (Redis-backed, global across all serverless instances)
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
+    if (rateLimitResponse) return rateLimitResponse
 
     const { searchParams } = new URL(request.url);
 
@@ -119,22 +110,43 @@ export async function GET(request: NextRequest) {
     let result: unknown;
 
     if (normalizedWindow === 'composite') {
-      // Composite: fetch all three windows and merge
-      result = await tieredGetOrSet(
-        cacheKey,
-        () => getCompositeRankings({
-          category: category || undefined,
-          platform: (platform || undefined) as Platform | undefined,
-          limit,
-          offset,
-          sort_by: sortBy,
-          sort_dir: sortDir,
-          min_pnl: minPnl,
-          min_trades: minTrades,
-        }),
-        'hot',
-        ['rankings']
-      );
+      // Try precomputed composite first (written by /api/cron/precompute-composite)
+      const precomputedKey = category ? `precomputed:composite:${category}` : 'precomputed:composite:all'
+      const { data: precomputed } = await (await import('@/lib/cache/redis-layer')).tieredGet<{
+        traders: unknown[]
+        totalcount: number
+        total_count: number
+        as_of: string
+        is_stale: boolean
+        availableSources: string[]
+      }>(precomputedKey, 'hot')
+
+      if (precomputed && !platform && !minPnl && !minTrades && sortBy === 'arena_score' && sortDir === 'desc') {
+        // Serve from precomputed cache — slice for pagination
+        const traders = precomputed.traders.slice(offset, offset + limit)
+        result = {
+          ...precomputed,
+          traders,
+          window: 'COMPOSITE',
+        }
+      } else {
+        // Fall back to real-time compute for filtered/sorted queries
+        result = await tieredGetOrSet(
+          cacheKey,
+          () => getCompositeRankings({
+            category: category || undefined,
+            platform: (platform || undefined) as Platform | undefined,
+            limit,
+            offset,
+            sort_by: sortBy,
+            sort_dir: sortDir,
+            min_pnl: minPnl,
+            min_trades: minTrades,
+          }),
+          'hot',
+          ['rankings']
+        );
+      }
     } else {
       const query: RankingsQuery = {
         window: normalizedWindow,
@@ -155,13 +167,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const res = NextResponse.json(result, {
+    return NextResponse.json(result, {
       headers: {
         'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
       },
     });
-    setRateLimitHeaders(res.headers, rateLimit);
-    return res;
   } catch (error: unknown) {
     logger.error('[API /rankings] Error:', error);
     const msg = error instanceof Error ? error.message : String(error);
