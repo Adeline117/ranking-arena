@@ -114,6 +114,12 @@ export function withApiMiddleware<T>(
   return async (request: NextRequest): Promise<NextResponse> => {
     const correlationId = getOrCreateCorrelationId(request)
 
+    // Helper: attach correlation ID header to any response before returning
+    const withCid = (res: NextResponse): NextResponse => {
+      res.headers.set('X-Correlation-ID', correlationId)
+      return res
+    }
+
     return runWithCorrelationId(correlationId, async () => {
     const startTime = Date.now()
 
@@ -129,12 +135,12 @@ export function withApiMiddleware<T>(
 
         const rateLimitResponse = await checkRateLimit(request, config)
         if (rateLimitResponse) {
-          logger.warn(`Rate limit exceeded for ${name}`)
+          logger.warn(`Rate limit exceeded for ${name}`, { correlationId })
           // 添加版本头到限流响应
           if (versioning) {
             addVersionHeaders(rateLimitResponse, versionContext)
           }
-          return rateLimitResponse
+          return withCid(rateLimitResponse)
         }
       }
 
@@ -147,7 +153,7 @@ export function withApiMiddleware<T>(
           if (versioning) {
             addVersionHeaders(errorResponse, versionContext)
           }
-          return errorResponse
+          return withCid(errorResponse)
         }
       } else {
         // 即使不需要认证，也尝试获取用户信息
@@ -161,12 +167,12 @@ export function withApiMiddleware<T>(
         const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
 
         if (!validateCsrfToken(cookieToken, headerToken)) {
-          logger.warn(`CSRF validation failed for ${name}`)
+          logger.warn(`CSRF validation failed for ${name}`, { correlationId })
           const csrfErrorResponse = createErrorResponse('CSRF 验证失败', 403)
           if (versioning) {
             addVersionHeaders(csrfErrorResponse, versionContext)
           }
-          return csrfErrorResponse
+          return withCid(csrfErrorResponse)
         }
       }
 
@@ -201,7 +207,7 @@ export function withApiMiddleware<T>(
         logger.warn(`Slow API: ${name} took ${duration}ms`, { path: request.nextUrl.pathname, correlationId })
       }
 
-      return response
+      return withCid(response)
     } catch (error: unknown) {
       const statusCode = error instanceof Error && 'statusCode' in error
         ? (error as { statusCode: number }).statusCode
@@ -222,9 +228,8 @@ export function withApiMiddleware<T>(
         addVersionHeaders(errorResponse, versionContext)
       }
       errorResponse.headers.set('X-Response-Time', `${duration}ms`)
-      errorResponse.headers.set('X-Correlation-ID', correlationId)
 
-      return errorResponse
+      return withCid(errorResponse)
     }
     }) // end runWithCorrelationId
   }

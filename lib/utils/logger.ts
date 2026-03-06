@@ -4,6 +4,20 @@
  * 生产环境自动关闭 debug/log，保留 warn/error
  */
 
+// Lazy import to avoid circular dependencies — correlation module is lightweight
+let _getCorrelationId: (() => string | undefined) | null = null
+function correlationId(): string | undefined {
+  if (!_getCorrelationId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      _getCorrelationId = require('@/lib/api/correlation').getCorrelationId
+    } catch {
+      _getCorrelationId = () => undefined
+    }
+  }
+  return _getCorrelationId!()
+}
+
 // ============================================
 // 类型定义
 // ============================================
@@ -109,6 +123,12 @@ class Logger {
     const prefix = this.config.prefix || this.name
     if (prefix) {
       parts.push(`[${prefix}]`)
+    }
+
+    // Correlation ID (auto-injected from AsyncLocalStorage context)
+    const cid = correlationId()
+    if (cid) {
+      parts.push(`[cid:${cid}]`)
     }
 
     parts.push(message)
