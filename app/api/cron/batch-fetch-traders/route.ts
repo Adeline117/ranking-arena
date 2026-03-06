@@ -6,11 +6,11 @@
  *
  * Query params:
  *   group=a  → bitget_futures, okx_futures (every 3h)
- *   group=b  → mexc, kucoin, okx_web3, hyperliquid, gmx, jupiter_perps, aevo (every 4h)
- *   group=c  → coinex, bitget_spot, xt, binance_web3 (every 6h)
- *   group=d  → dydx, phemex, gains, htx_futures, weex, bitmart, kwenta, mux (every 6h)
- *   group=e  → blofin, bingx, gateio, cryptocom, bitfinex, pionex, lbank (every 8h)
- *   group=f  → whitebit, btse, toobit (every 12h)
+ *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
+ *   group=c  → okx_web3, aevo, xt (every 6h)
+ *   group=d  → gains, htx_futures, dydx (every 6h)
+ *   group=e  → coinex, bitget_spot, binance_web3 (every 8h)
+ *   group=f  → mexc, kucoin, phemex, weex, blofin, bingx, gateio, lbank (every 12h)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,19 +25,19 @@ export const maxDuration = 300
 export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
-  // Group A: High-priority CEX (every 3h) — 2 platforms
-  // binance_futures, binance_spot, bybit have dedicated crons (need full 300s for VPS proxy)
+  // Group A: High-priority CEX (every 3h) — 2 platforms, ~190s parallel
+  // binance_futures, binance_spot, bybit have dedicated crons
   a: ['bitget_futures', 'okx_futures'],
-  // Group B: Mid-priority (every 4h) — 7 platforms
-  b: ['mexc', 'kucoin', 'okx_web3', 'hyperliquid', 'gmx', 'jupiter_perps', 'aevo'],
-  // Group C: Lower-priority batch 1 (every 6h) — 4 platforms (bybit_spot has dedicated cron)
-  c: ['coinex', 'bitget_spot', 'xt', 'binance_web3'],
-  // Group D: Lower-priority batch 2 (every 6h) — 8 platforms
-  d: ['dydx', 'phemex', 'gains', 'htx_futures', 'weex', 'bitmart', 'kwenta', 'mux'],
-  // Group E: Lowest-priority (every 8h) — 7 platforms
-  e: ['blofin', 'bingx', 'gateio', 'cryptocom', 'bitfinex', 'pionex', 'lbank'],
-  // Group F: Additional platforms (every 12h) — 3 platforms
-  f: ['whitebit', 'btse', 'toobit'],
+  // Group B: DEX + slow APIs (every 4h) — 3 platforms, ~110s parallel
+  b: ['hyperliquid', 'gmx', 'jupiter_perps'],
+  // Group C: Mid-priority CEX (every 4h) — 3 platforms, ~70s parallel
+  c: ['okx_web3', 'aevo', 'xt'],
+  // Group D: Working CEX (every 6h) — 3 platforms, ~35s parallel
+  d: ['gains', 'htx_futures', 'dydx'],
+  // Group E: Lower-priority (every 8h) — 3 platforms
+  e: ['coinex', 'bitget_spot', 'binance_web3'],
+  // Group F: Stub/broken platforms (every 12h) — kept for periodic retry
+  f: ['mexc', 'kucoin', 'phemex', 'weex', 'blofin', 'bingx', 'gateio', 'lbank'],
 }
 
 interface BatchResult {
