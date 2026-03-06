@@ -20,29 +20,31 @@ interface ShareData {
   author?: string
 }
 
-function buildShareText(data: ShareData, lang: string): string {
-  const isZh = lang === 'zh'
+function buildShareText(data: ShareData, t: (key: string) => string): string {
   switch (data.type) {
     case 'trader': {
       const name = data.traderName || ''
       const period = data.period || '90D'
       const roi = data.roi != null ? data.roi.toFixed(1) : '0'
-      return isZh
-        ? `在Arena发现了一位表现优异的交易员 ${name}，${period} ROI ${roi}% ${data.url}`
-        : `Found a top trader ${name} on Arena, ${period} ROI ${roi}% ${data.url}`
+      return t('shareTraderText')
+        .replace('{name}', name)
+        .replace('{period}', period)
+        .replace('{roi}', roi)
+        .replace('{url}', data.url)
     }
     case 'post': {
       const title = data.title || ''
-      return isZh
-        ? `${title} - 来自Arena社区 ${data.url}`
-        : `${title} - from Arena Community ${data.url}`
+      return t('sharePostText')
+        .replace('{title}', title)
+        .replace('{url}', data.url)
     }
     case 'library': {
       const title = data.title || ''
       const author = data.author || ''
-      return isZh
-        ? `推荐阅读《${title}》by ${author} ${data.url}`
-        : `Recommended reading: "${title}" by ${author} ${data.url}`
+      return t('shareLibraryText')
+        .replace('{title}', title)
+        .replace('{author}', author)
+        .replace('{url}', data.url)
     }
     default:
       return data.url
@@ -68,10 +70,10 @@ interface ShareButtonProps {
 export default function ShareButton({ data, size = 'sm', variant = 'ghost', showLabel = true }: ShareButtonProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const { language, t } = useLanguage()
+  const { t } = useLanguage()
   const { showToast } = useToast()
 
-  const text = buildShareText(data, language)
+  const text = buildShareText(data, t)
 
   const handleNativeShare = useCallback(async () => {
     try {

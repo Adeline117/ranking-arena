@@ -10,20 +10,19 @@ interface SubNavProps {
   onTabChange: (tab: SubNavTab) => void
 }
 
-const TABS: { key: SubNavTab; zhLabel: string; enLabel: string; icon: string; zhSub?: string; enSub?: string }[] = [
-  { key: 'following', zhLabel: '关注', enLabel: 'Following', icon: '' },
-  { key: 'recommended', zhLabel: '热榜', enLabel: 'Hot', icon: '', zhSub: '全站热门帖子', enSub: 'Trending posts' },
-  { key: 'bookshelf', zhLabel: '书架', enLabel: 'Library', icon: '' },
+const TABS: { key: SubNavTab; labelKey: string; icon: string; subKey?: string }[] = [
+  { key: 'following', labelKey: 'subNavFollowing', icon: '' },
+  { key: 'recommended', labelKey: 'subNavHot', icon: '', subKey: 'subNavHotSub' },
+  { key: 'bookshelf', labelKey: 'subNavLibrary', icon: '' },
 ]
 
 export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
-  const { language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
   return (
     <div
       role="tablist"
-      aria-label={isZh ? '内容分类' : 'Content categories'}
+      aria-label={t('subNavContentCategories')}
       style={{
       display: 'flex',
       gap: 4,
@@ -66,8 +65,8 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
               }
             }}
           >
-            {tab.icon} {isZh ? tab.zhLabel : tab.enLabel}
-            {tab.zhSub && (
+            {tab.icon} {t(tab.labelKey)}
+            {tab.subKey && (
               <span style={{
                 display: 'block',
                 fontSize: 12,
@@ -76,7 +75,7 @@ export default function SubNav({ activeTab, onTabChange }: SubNavProps) {
                 marginTop: 1,
                 opacity: 0.8,
               }}>
-                {isZh ? tab.zhSub : tab.enSub}
+                {t(tab.subKey!)}
               </span>
             )}
           </button>

@@ -43,7 +43,6 @@ const fetcher = async (url: string) => {
 
 export default function NewsFlash() {
   const { language, t } = useLanguage()
-  const isZh = language === 'zh'
 
   const { data, error, isLoading } = useSWR(
     '/api/flash-news?limit=5&sort=published_at',
@@ -65,7 +64,7 @@ export default function NewsFlash() {
   const loading = isLoading
 
   const getTitle = (item: NewsItem) => {
-    if (isZh) return item.title_zh || item.title
+    if (language === 'zh') return item.title_zh || item.title
     return item.title_en || item.title
   }
 
@@ -77,8 +76,8 @@ export default function NewsFlash() {
     const total = cjkChars + latinChars
     if (total < 4) return null
     const cjkRatio = cjkChars / total
-    if (isZh && cjkRatio < 0.3) return 'EN'
-    if (!isZh && cjkRatio > 0.7) return '\u4E2D'
+    if (language === 'zh' && cjkRatio < 0.3) return 'EN'
+    if (language !== 'zh' && cjkRatio > 0.7) return '\u4E2D'
     return null
   }
 
@@ -117,7 +116,7 @@ export default function NewsFlash() {
                       background: impConfig.color, padding: '1px 6px',
                       borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
-                      {isZh ? impConfig.label : impConfig.label_en}
+                      {t(`newsFlash_imp_${item.importance}`)}
                     </span>
                   )}
                   {catConfig && (
@@ -126,7 +125,7 @@ export default function NewsFlash() {
                       background: `${catConfig.color}15`, padding: '1px 6px',
                       borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
-                      {isZh ? catConfig.label : catConfig.label_en}
+                      {t(`newsFlash_cat_${item.category}`)}
                     </span>
                   )}
                 </div>

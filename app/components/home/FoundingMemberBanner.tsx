@@ -10,13 +10,10 @@ import { tokens } from '@/lib/design-tokens'
  * Links to /pricing#lifetime
  */
 export default function FoundingMemberBanner() {
-  const { t, language } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
 
-  const text = t('foundingMemberBannerText') || (isZh
-    ? '创始会员 — 终身访问仅 $49.99'
-    : 'Founding Member — Lifetime access at $49.99')
-  const cta = t('foundingMemberBannerCta') || (isZh ? '立即获取' : 'Get it now')
+  const text = t('foundingMemberBannerText')
+  const cta = t('foundingMemberBannerCta')
 
   return (
     <div
@@ -43,7 +40,7 @@ export default function FoundingMemberBanner() {
         {text}
       </span>
       <span style={{ color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.xs }}>
-        {isZh ? '前 200 名专属' : '· First 200 only'}
+        {t('foundingMemberFirst200')}
       </span>
       <Link
         href="/pricing#lifetime"

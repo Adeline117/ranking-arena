@@ -59,7 +59,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
      
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
-    })
+    }).catch(() => { /* Auth check non-critical for trader feed */ })
   }, [])
 
   const sortedItems = useMemo(() => {

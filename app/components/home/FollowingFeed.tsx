@@ -22,8 +22,7 @@ function calculateFeedScore(post: PostWithUserState): number {
 
 export default function FollowingFeed() {
   const { user, loading: authLoading } = useAuthSession()
-  const { language, t } = useLanguage()
-  const isZh = language === 'zh'
+  const { t } = useLanguage()
   const [posts, setPosts] = useState<PostWithUserState[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -81,14 +80,14 @@ export default function FollowingFeed() {
       }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>--</div>
         <p style={{ fontSize: 16, marginBottom: 12 }}>
-          {isZh ? '登录后查看关注动态' : 'Login to see your following feed'}
+          {t('followingFeedLoginPrompt')}
         </p>
         <a href="/login" style={{
           display: 'inline-block', padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
-          {isZh ? '去登录' : 'Login'}
+          {t('followingFeedLoginButton')}
         </a>
       </div>
     )
@@ -134,17 +133,17 @@ export default function FollowingFeed() {
       }}>
         <Image src="/stickers/happy.webp" alt="No posts yet" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
         <p style={{ fontSize: 16, marginBottom: 8 }}>
-          {isZh ? '关注你感兴趣的交易员' : "You haven't followed anyone yet"}
+          {t('followingFeedNoFollowing')}
         </p>
         <p style={{ fontSize: 13 }}>
-          {isZh ? '去排行榜发现有趣的交易员吧' : 'Discover interesting traders on the leaderboard'}
+          {t('followingFeedDiscoverTraders')}
         </p>
         <a href="/rankings" style={{
           display: 'inline-block', marginTop: 16, padding: '8px 24px', borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
-          {isZh ? '去看排行榜' : 'View Rankings'}
+          {t('followingFeedViewRankings')}
         </a>
       </div>
     )
@@ -157,7 +156,7 @@ export default function FollowingFeed() {
         color: tokens.colors.text.secondary,
       }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>--</div>
-        <p>{isZh ? '关注的人还没有发布内容' : 'No posts from people you follow yet'}</p>
+        <p>{t('followingFeedNoPosts')}</p>
       </div>
     )
   }
