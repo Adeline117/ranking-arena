@@ -93,8 +93,8 @@ async function fetchWithProxyFallback<T>(
       }
     }
 
-    // Try VPS proxy as last resort
-    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
+    // Try VPS proxy as last resort (SG preferred for Binance, JP as fallback)
+    const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
     if (vpsUrl) {
       try {
         logger.warn(`[binance-futures] Trying VPS proxy for ${url.slice(0, 80)}...`)
