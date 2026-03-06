@@ -414,13 +414,33 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // Pionex: No public leaderboard API — stub connector only
+  // Pionex behind Cloudflare challenge
   pionex: () =>
-    skipResult('pionex', 'endpoint_gone', 'Pionex has no public leaderboard API (bot-only CopyBot platform)'),
+    verifyEndpoint(
+      'pionex',
+      'https://www.pionex.com/kol-apis/tapi/v1/kol/list?page=1&pageSize=1',
+      {
+        headers: {
+          Referer: 'https://www.pionex.com/en/copy-trade',
+          Origin: 'https://www.pionex.com',
+        },
+        validateResponse: (d: ApiResponse) => !!d?.data,
+      }
+    ),
 
-  // Crypto.com: WAF-blocked from all Vercel regions (CF challenge page)
+  // Crypto.com behind Cloudflare challenge
   cryptocom: () =>
-    skipResult('cryptocom', 'endpoint_gone', 'Crypto.com copy trading API behind Cloudflare WAF challenge — requires browser/proxy'),
+    verifyEndpoint(
+      'cryptocom',
+      'https://crypto.com/fe-ex-api/copy/leader/list?sort=roi&period=30d&page=1&pageSize=1',
+      {
+        headers: {
+          Referer: 'https://crypto.com/exchange/copy-trading',
+          Origin: 'https://crypto.com',
+        },
+        validateResponse: (d: ApiResponse) => !!d?.data || !!d?.result,
+      }
+    ),
 
   // Toobit: returns HTML instead of JSON (geo/CF block)
   toobit: () =>
@@ -436,9 +456,20 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  // LBank: No public API — all endpoints return HTML (CF protection), stub connector only
+  // LBank: all API endpoints return HTML (CF protection or endpoint migration)
+  // Fetcher uses multi-URL fallback with 5 different paths
   lbank: () =>
-    skipResult('lbank', 'endpoint_gone', 'LBank has no public copy trading API (all endpoints return HTML/CF challenge)'),
+    verifyEndpoint(
+      'lbank',
+      'https://www.lbank.com/api/copy-trading/trader/ranking?period=30d&page=1&size=1&sort=roi',
+      {
+        headers: {
+          Referer: 'https://www.lbank.com/copy-trading',
+          Origin: 'https://www.lbank.com',
+        },
+        validateResponse: (d: ApiResponse) => !!d?.data,
+      }
+    ),
 
   // =============================================
   // CEX — Discontinued
