@@ -288,8 +288,45 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
+  // VPS proxy fallback for CF-protected endpoints
   if (allTraders.size === 0) {
-    return { total: 0, saved: 0, error: 'No data from Gate.io API endpoints (likely CF-protected)' }
+    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
+    if (vpsUrl) {
+      logger.warn(`[${SOURCE}] All direct endpoints failed, trying VPS proxy...`)
+      for (const buildUrl of API_ENDPOINTS) {
+        if (allTraders.size >= TARGET) break
+        try {
+          const url = buildUrl(1, periodStr)
+          const res = await fetch(vpsUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+            },
+            body: JSON.stringify({ url, method: 'GET', headers: HEADERS }),
+          })
+          if (!res.ok) continue
+          const data = (await res.json()) as GateResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
+            if (id && id !== 'undefined' && !allTraders.has(id)) {
+              allTraders.set(id, item)
+            }
+          }
+          if (allTraders.size > 0) {
+            logger.warn(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
+            break
+          }
+        } catch (err) {
+          logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
+  }
+
+  if (allTraders.size === 0) {
+    return { total: 0, saved: 0, error: 'No data from Gate.io — all endpoints and VPS proxy failed' }
   }
 
   const traders: TraderData[] = []
@@ -309,7 +346,7 @@ async function fetchPeriod(
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const trader of top.slice(0, 50)) {
       const stats: StatsDetail = {
@@ -333,7 +370,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.source_trader_id, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: top.length, saved, error }

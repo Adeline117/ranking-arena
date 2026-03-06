@@ -275,7 +275,7 @@ async function fetchPeriod(
 
   // Save stats_detail for 90D period
   if (saved > 0 && period === '90D') {
-    console.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
+    logger.warn(`[${SOURCE}] Saving stats details for top ${Math.min(top.length, 50)} traders...`)
     let statsSaved = 0
     for (const t of top.slice(0, 50)) {
       const stats: StatsDetail = {
@@ -299,7 +299,7 @@ async function fetchPeriod(
       const { saved: s } = await upsertStatsDetail(supabase, SOURCE, t.owner, period, stats)
       if (s) statsSaved++
     }
-    console.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
+    logger.warn(`[${SOURCE}] Saved ${statsSaved} stats details`)
   }
 
   return { total: traders.length, saved, error }

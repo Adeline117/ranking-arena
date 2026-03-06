@@ -273,7 +273,7 @@ async function fetchPeriod(
   }
 
   // Phase 3: Save equity curves and stats_detail for ALL periods (extended from 90D only)
-  console.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
+  logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
   let curvesSaved = 0
   let statsSaved = 0
   for (const trader of toEnrich) {
@@ -303,7 +303,7 @@ async function fetchPeriod(
     const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
     if (s) statsSaved++
   }
-  console.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
+  logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
 
   const capturedAt = new Date().toISOString()
   const traders: TraderData[] = topTraders.map((t, idx) => ({
