@@ -78,7 +78,11 @@ describe('GET /api/feed/activities', () => {
     queryChain.order = jest.fn(() => queryChain)
     queryChain.eq = jest.fn(() => queryChain)
     queryChain.lt = jest.fn(() => queryChain)
-    queryChain.limit = jest.fn(() => Promise.resolve(queryResult))
+    // limit() returns the chain (thenable), not a raw Promise.
+    // The chain is awaited later by the route, so we make it thenable.
+    queryChain.limit = jest.fn(() => queryChain)
+    // Make the chain thenable so `await query` resolves to the result
+    queryChain.then = jest.fn((resolve: (v: unknown) => void) => resolve(queryResult)) as jest.Mock
     // Make from() always return the same chain
     mockSupabaseFrom.mockReturnValue(queryChain)
   }

@@ -5,11 +5,6 @@
  * @jest-environment node
  */
 
-// Set env before imports so module-level const CRON_SECRET captures it
-process.env.CRON_SECRET = 'test-secret'
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.test'
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key'
-
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -33,14 +28,40 @@ jest.mock('@/lib/logger', () => ({
 const mockFetch = jest.fn()
 global.fetch = mockFetch
 
-import { NextRequest } from 'next/server'
-import { GET } from '../route'
+// ---------------------------------------------------------------------------
+// We must dynamically import the route because it captures CRON_SECRET at
+// module level. Set env vars then use dynamic import.
+// ---------------------------------------------------------------------------
+
+let GET: typeof import('../route').GET
+
+async function loadRoute() {
+  // Reset module registry so the route re-reads CRON_SECRET
+  jest.resetModules()
+  // Re-apply mocks after resetModules
+  jest.mock('@supabase/supabase-js', () => ({
+    createClient: jest.fn(() => ({ from: mockFrom })),
+  }))
+  jest.mock('@/lib/logger', () => ({
+    __esModule: true,
+    default: {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    },
+  }))
+  global.fetch = mockFetch
+
+  const mod = await import('../route')
+  GET = mod.GET
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createCronRequest(secret?: string): NextRequest {
+function createCronRequest(secret?: string) {
+  const { NextRequest } = require('next/server')
   const headers = new Headers()
   if (secret) headers.set('authorization', `Bearer ${secret}`)
   return new NextRequest('http://localhost:3000/api/cron/flash-news-fetch', { headers })
@@ -53,10 +74,16 @@ function createCronRequest(secret?: string): NextRequest {
 describe('GET /api/cron/flash-news-fetch', () => {
   const CRON_SECRET = 'test-secret'
 
-  // env already set at top of file for module-level capture
+  beforeAll(async () => {
+    process.env.CRON_SECRET = CRON_SECRET
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.test'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key'
+    await loadRoute()
+  })
 
   beforeEach(() => {
     jest.clearAllMocks()
+    global.fetch = mockFetch
   })
 
   // ---- Auth ----------------------------------------------------------------
@@ -193,6 +220,7 @@ describe('GET /api/cron/flash-news-fetch', () => {
   })
 
   it('handles fetch errors from RSS feeds gracefully', async () => {
+    // All RSS feeds fail, so allItems is empty -> returns "No items fetched"
     mockFetch.mockRejectedValue(new Error('Network error'))
 
     const res = await GET(createCronRequest(CRON_SECRET))

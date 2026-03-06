@@ -80,8 +80,54 @@ export default function DataHealthPage() {
       </div>
     </div>
   )
+  const retryFetch = () => {
+    setLoading(true)
+    setError(null)
+    fetch('/api/monitoring/freshness')
+      .then(res => res.json())
+      .then((d) => {
+        const platforms: PlatformHealth[] = (d.platforms || []).map((p: Record<string, unknown>) => ({
+          source: p.source as string,
+          total: (p.total as number) || 0,
+          latest_snapshot: p.latestSnapshot as string | null,
+          oldest_snapshot: null,
+          age_hours: p.ageHours as number | null,
+          status: p.status as string || 'no_data',
+        }))
+        setData({
+          platforms,
+          total_traders: platforms.reduce((sum: number, p: PlatformHealth) => sum + p.total, 0),
+          total_platforms: platforms.filter((p: PlatformHealth) => p.total > 0).length,
+          timestamp: d.timestamp || new Date().toISOString(),
+        })
+        setLoading(false)
+      })
+      .catch(err => {
+        setError(err.message)
+        setLoading(false)
+      })
+  }
+
   if (loading) return <div style={{ padding: 40, color: 'var(--color-text-secondary)' }}>{t('loading')}</div>
-  if (error) return <div style={{ padding: 40, color: 'var(--color-accent-error)' }}>{t('error')}: {error}</div>
+  if (error) return (
+    <div style={{ padding: 40, textAlign: 'center' }}>
+      <p style={{ color: 'var(--color-accent-error)', marginBottom: 12 }}>{t('error')}: {error}</p>
+      <button
+        onClick={retryFetch}
+        style={{
+          padding: '8px 20px',
+          borderRadius: 8,
+          border: '1px solid var(--color-border-primary)',
+          background: 'var(--color-bg-tertiary)',
+          color: 'var(--color-text-secondary)',
+          cursor: 'pointer',
+          fontSize: 14,
+        }}
+      >
+        {t('retry') || 'Retry'}
+      </button>
+    </div>
+  )
   if (!data) return null
 
   return (

@@ -189,7 +189,7 @@ export default function MetricsTrends({ accessToken }: MetricsTrendsProps) {
         <TrendCard
           title="New Users"
           data={trends?.activeUsers || []}
-          color={tokens.colors.accent.info}
+          color={tokens.colors.accent.brand}
           unit=""
           latestLabel="Daily new registrations"
         />

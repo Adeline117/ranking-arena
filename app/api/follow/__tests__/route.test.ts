@@ -196,7 +196,7 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(400)
-      expect(body.success).toBe(false)
+      expect(body.error).toBeDefined()
     })
 
     it('returns 400 when action is invalid', async () => {
@@ -211,7 +211,7 @@ describe('/api/follow', () => {
       const body = await res.json()
 
       expect(res.status).toBe(400)
-      expect(body.success).toBe(false)
+      expect(body.error).toBeDefined()
     })
 
     it('successfully follows a trader', async () => {

@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { checkNFTMembership } from '@/lib/web3/nft'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -57,6 +58,8 @@ export async function GET(request: NextRequest) {
     nftChecked: 0,
     errors: [] as string[],
   }
+
+  const plog = await PipelineLogger.start('subscription-expiry')
 
   try {
     // ============================================
@@ -220,6 +223,9 @@ export async function GET(request: NextRequest) {
 
     logger.info('Subscription expiry check completed', results)
 
+    const processed = results.expiringReminders + results.downgraded + results.nftChecked
+    await plog.success(processed, results)
+
     return NextResponse.json({
       success: true,
       ...results,
@@ -227,6 +233,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     logger.error('Subscription expiry check failed', { error })
+    await plog.error(error)
     return NextResponse.json(
       { error: 'Failed to check subscription expiry' },
       { status: 500 }
