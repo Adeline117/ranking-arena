@@ -3,7 +3,8 @@
  * POST /api/posts/[id]/vote - 投票（看涨/看跌/观望）
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   requireAuth,
@@ -13,6 +14,11 @@ import {
 } from '@/lib/api'
 import { togglePostVote, getPostById } from '@/lib/data/posts'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+
+// Zod schema for POST /api/posts/[id]/vote
+const PostVoteSchema = z.object({
+  choice: z.enum(['bull', 'bear', 'wait'], { message: 'choice must be bull, bear, or wait' }),
+})
 
 type RouteContext = { params: Promise<{ id: string }> }
 

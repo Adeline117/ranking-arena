@@ -22,6 +22,7 @@ export default function MultiChainPage() {
   const [data, setData] = useState<MultiChainResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastAddress, setLastAddress] = useState<string | null>(null)
 
   const handleAnalyze = useCallback(async (address: string) => {
     setIsLoading(true)
