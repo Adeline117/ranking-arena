@@ -15,12 +15,12 @@ function isAuthorized(request: NextRequest): boolean {
   // Bearer token auth (for cron / internal calls)
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) return true
+  if (!cronSecret) return false
+  if (authHeader === `Bearer ${cronSecret}`) return true
 
-  // Admin cookie auth - check for admin email in Supabase session
-  // For simplicity, allow if CRON_SECRET matches or admin token present
+  // Admin token auth
   const adminToken = request.headers.get('x-admin-token')
-  if (cronSecret && adminToken === cronSecret) return true
+  if (adminToken === cronSecret) return true
 
   return false
 }
