@@ -106,10 +106,7 @@ export default function RankingSection({
   const [category, setCategory] = useState<CategoryType>('all')
 
   // 高级筛选状态
-  const [showAdvancedFilter, setShowAdvancedFilter] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return window.innerWidth >= 1024
-  })
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
 
