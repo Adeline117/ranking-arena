@@ -28,6 +28,8 @@ const getInterceptApiResponses = () => import('../scrapers/cloudflare-bypass').t
 const SOURCE = 'lbank'
 const TARGET = 500
 const PAGE_SIZE = 50
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
 /** LBank period mapping */
 const PERIOD_MAP: Record<string, string> = {
@@ -219,6 +221,71 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
+  // VPS proxy fallback: route requests through SG/JP VPS to bypass CF
+  if (allTraders.size === 0) {
+    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
+    if (vpsUrl) {
+      logger.warn(`[${SOURCE}] All direct endpoints failed, trying VPS proxy...`)
+      for (const buildUrl of API_ENDPOINTS) {
+        if (allTraders.size >= TARGET) break
+        try {
+          const url = buildUrl(1, periodStr)
+          const res = await fetch(vpsUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+            },
+            body: JSON.stringify({ url, method: 'GET', headers: HEADERS }),
+            signal: AbortSignal.timeout(30000),
+          })
+          if (!res.ok) continue
+          const data = (await res.json()) as LbankResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.uid || item.userId || item.traderId || item.id || item.memberId || '')
+            if (id && id !== 'undefined' && !allTraders.has(id)) {
+              allTraders.set(id, item)
+            }
+          }
+          if (allTraders.size > 0) {
+            logger.warn(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
+            break
+          }
+        } catch (err) {
+          logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
+  }
+
+  // VPS Playwright scraper fallback (browser-based bypass for CF challenge)
+  if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
+    logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
+    try {
+      const scraperUrl = `${VPS_SCRAPER_URL}/lbank/leaderboard?pageSize=${PAGE_SIZE}`
+      const res = await fetch(scraperUrl, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(120_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as LbankResponse
+        const list = extractList(data)
+        for (const item of list) {
+          const id = String(item.uid || item.userId || item.traderId || item.id || item.memberId || '')
+          if (id && id !== 'undefined' && !allTraders.has(id)) {
+            allTraders.set(id, item)
+          }
+        }
+        if (allTraders.size > 0) {
+          logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   // Stealth browser fallback when all HTTP methods fail (CF JS challenge)
   if (allTraders.size === 0) {
     logger.warn(`[${SOURCE}] All HTTP methods failed, trying stealth browser fallback...`)
@@ -248,7 +315,7 @@ async function fetchPeriod(
   }
 
   if (allTraders.size === 0) {
-    return { total: 0, saved: 0, error: 'No data from LBank API endpoints (likely CF-protected)' }
+    return { total: 0, saved: 0, error: 'No data from LBank — all endpoints, VPS proxy, and VPS scraper failed' }
   }
 
   const traders: TraderData[] = []
