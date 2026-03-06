@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { ExchangeInfo } from '@/lib/utils/coingecko'
+import { uiLogger } from '@/lib/utils/logger'
 
 function formatBTC(value: number): string {
   if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`
@@ -19,7 +20,7 @@ export default function ExchangeVolume() {
     fetch('/api/market/exchanges')
       .then((r) => r.json())
       .then((json) => { if (Array.isArray(json)) setExchanges(json) })
-      .catch(() => {})
+      .catch((err) => { uiLogger.warn('ExchangeVolume fetch failed', { error: err instanceof Error ? err.message : String(err) }) })
   }, [])
 
   if (exchanges.length === 0) return null

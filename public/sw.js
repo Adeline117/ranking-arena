@@ -164,6 +164,7 @@ self.addEventListener('fetch', (event) => {
                 });
                 await cache.put(request, responseWithTimestamp);
               }
+            // eslint-disable-next-line no-restricted-syntax -- SW cache update, failure is non-critical
             }).catch(() => {});
 
             return cachedResponse;

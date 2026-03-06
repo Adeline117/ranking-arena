@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Link from 'next/link'
+import { uiLogger } from '@/lib/utils/logger'
 
 interface CoinRow {
   symbol: string
@@ -287,7 +288,7 @@ export default function CoreCards() {
       fetch('/api/market/exchanges', { signal: controller.signal })
         .then(r => r.json())
         .then(json => { if (alive && Array.isArray(json)) setExchanges(json.slice(0, 5)) })
-        .catch(() => {})
+        .catch((err) => { uiLogger.warn('CoreCards fetch failed', { error: err instanceof Error ? err.message : String(err) }) })
     }
     fetchMarketData()
     // Refresh market data every 60 seconds

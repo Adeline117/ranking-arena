@@ -396,7 +396,7 @@ async function discoverPlatform(meta: PlatformDiscoveryMeta): Promise<SourceConf
         });
       }
     } catch (error) {
-      console.log(`  ✗ Leaderboard error: ${(error as Error).message}`);
+      console.error(`[Discovery] Leaderboard error for ${key}:`, { error: (error as Error).message });
       proofs.push({
         url: meta.leaderboard_url,
         request_path: meta.api_endpoints[0] || '',
@@ -485,8 +485,7 @@ async function runDiscovery(targetPlatform?: string): Promise<void> {
       // Rate limit between platforms
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
-      console.error(`  ✗ Error discovering ${meta.platform}:${meta.market_type}:`, error);
-      console.log('');
+      console.error(`[Discovery] Error discovering ${meta.platform}:${meta.market_type}:`, { error: (error as Error).message || String(error) });
     }
   }
 
@@ -501,6 +500,6 @@ const platformArg = process.argv.find(a => a.startsWith('--platform='));
 const targetPlatform = platformArg?.split('=')[1];
 
 runDiscovery(targetPlatform).catch(err => {
-  console.error('Discovery failed:', err);
+  console.error('[Discovery] Fatal:', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   process.exit(1);
 });

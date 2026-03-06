@@ -29,11 +29,11 @@ export function interceptUnhandledPromises() {
 
     // Report to Sentry with original error (not friendly message)
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line no-restricted-syntax -- Intentional: dynamic import, failure is non-critical
       import('@sentry/nextjs').then((Sentry) => {
         Sentry.captureException(error, {
           tags: { source: 'unhandledPromise' },
         })
+      // eslint-disable-next-line no-restricted-syntax -- Sentry dynamic import, failure is non-critical
       }).catch(() => {})
     }
 
@@ -55,7 +55,6 @@ export function interceptGlobalErrors() {
     if (event.message === 'Script error.') return
 
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line no-restricted-syntax -- Intentional: dynamic import, failure is non-critical
       import('@sentry/nextjs').then((Sentry) => {
         Sentry.captureException(error, {
           tags: { source: 'globalError' },
@@ -67,6 +66,7 @@ export function interceptGlobalErrors() {
             }
           }
         })
+      // eslint-disable-next-line no-restricted-syntax -- Sentry dynamic import, failure is non-critical
       }).catch(() => {})
     }
   })

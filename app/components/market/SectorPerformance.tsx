@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CryptoCategory } from '@/lib/utils/coingecko'
+import { uiLogger } from '@/lib/utils/logger'
 
 const SECTOR_LABELS: Record<string, string> = {
   'layer-1': 'L1',
@@ -24,7 +25,7 @@ export default function SectorPerformance() {
     fetch('/api/market/sectors')
       .then((r) => r.json())
       .then((json) => { if (Array.isArray(json)) setSectors(json.slice(0, 4)) })
-      .catch(() => {})
+      .catch((err) => { uiLogger.warn('SectorPerformance fetch failed', { error: err instanceof Error ? err.message : String(err) }) })
   }, [])
 
   if (sectors.length === 0) return null

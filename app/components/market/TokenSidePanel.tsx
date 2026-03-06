@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import { uiLogger } from '@/lib/utils/logger'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
 import type { OHLCVDataPoint } from '@/app/components/charts/TradingViewChart'
@@ -163,7 +164,7 @@ export default function TokenSidePanel({ token, onClose }: {
     fetch(`/api/market/coin/${token.id}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => d && setCoinDetail(d))
-      .catch(() => {})
+      .catch((err) => { uiLogger.warn('TokenSidePanel fetch failed', { error: err instanceof Error ? err.message : String(err) }) })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
   }, [token?.id])
 

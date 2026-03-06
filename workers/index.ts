@@ -83,7 +83,7 @@ async function main() {
         }
       }
     } catch (error) {
-      console.error(`[${WORKER_ID}] Poll error:`, error);
+      console.error(`[${WORKER_ID}] Poll error:`, { error: (error as Error).message || String(error), ts: new Date().toISOString() });
     }
 
     await sleep(POLL_INTERVAL);
@@ -150,7 +150,7 @@ async function processJob(job: RefreshJob): Promise<void> {
     await completeJob(job);
   } catch (error) {
     const errorMsg = (error as Error).message || String(error);
-    console.error(`[${WORKER_ID}] Job failed:`, errorMsg);
+    console.error(`[${WORKER_ID}] Job failed:`, { jobType: job.job_type, platform: platformKey, attempt: job.attempts, error: errorMsg });
 
     breaker.recordFailure();
     await failJob(job, errorMsg);
@@ -547,7 +547,7 @@ if (process.argv[1]?.endsWith('workers/index.ts') || process.argv[1]?.endsWith('
     seedDiscoveryJobs().then(() => process.exit(0));
   } else {
     main().catch(err => {
-      console.error('Worker fatal error:', err);
+      console.error(`[${WORKER_ID}] Fatal error:`, { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
       process.exit(1);
     });
   }

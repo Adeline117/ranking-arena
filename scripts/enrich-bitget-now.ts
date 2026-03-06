@@ -80,7 +80,7 @@ async function main() {
       enriched++
     } catch (err) {
       failed++
-      console.error(`  ❌ Error: ${err instanceof Error ? err.message : err}`)
+      console.error(`[enrich-bitget] Error enriching ${traderId}:`, err instanceof Error ? err.message : err)
     }
 
     await sleep(2000) // Rate limit
@@ -90,4 +90,4 @@ async function main() {
   console.log(`Enriched: ${enriched}, Failed: ${failed}`)
 }
 
-main().catch(console.error)
+main().catch((err) => { console.error('[enrich-bitget-now] Fatal:', err); process.exit(1) })

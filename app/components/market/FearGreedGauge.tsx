@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
+import { uiLogger } from '@/lib/utils/logger'
 
 function getColor(value: number): string {
   if (value <= 25) return '#ea3943'
@@ -32,7 +33,7 @@ export default function FearGreedGauge() {
     fetch('/api/market/fear-greed')
       .then((r) => r.json())
       .then((json) => { if (json.current) setData(json.current) })
-      .catch(() => {})
+      .catch((err) => { uiLogger.warn('FearGreedGauge fetch failed', { error: err instanceof Error ? err.message : String(err) }) })
   }, [])
 
   useEffect(() => {

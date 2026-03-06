@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { DefiOverview as DefiOverviewData } from '@/lib/utils/defillama'
+import { uiLogger } from '@/lib/utils/logger'
 
 function formatTVL(value: number): string {
   if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`
@@ -20,7 +21,7 @@ export default function DefiOverview() {
     fetch('/api/market/defi')
       .then((r) => r.json())
       .then((json) => { if (!json.error) setData(json) })
-      .catch(() => {})
+      .catch((err) => { uiLogger.warn('DefiOverview fetch failed', { error: err instanceof Error ? err.message : String(err) }) })
   }, [])
 
   if (!data) return null

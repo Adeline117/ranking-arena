@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { uiLogger } from '@/lib/utils/logger'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface CrossExchangeOpp {
@@ -78,7 +79,7 @@ export default function ArbitrageOpportunities() {
           setOpps(json.opportunities.slice(0, 4))
         }
       })
-      .catch(() => {})
+      .catch((err) => { uiLogger.warn('ArbitrageOpportunities fetch failed', { error: err instanceof Error ? err.message : String(err) }) })
       .finally(() => setLoading(false))
 
     fetchPriceComparisons()

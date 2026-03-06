@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useRealtimePrices, type PriceFlashInfo } from '@/lib/hooks/useRealtimePrices'
 import MarketTable, { Column } from './MarketTable'
+import { uiLogger } from '@/lib/utils/logger'
 import Sparkline from './Sparkline'
 
 interface SpotCoin {
@@ -105,7 +106,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
     fetch('/api/market/spot')
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setData(d) })
-      .catch(() => {})
+      .catch((err) => { uiLogger.warn('SpotMarket fetch failed', { error: err instanceof Error ? err.message : String(err) }) })
       .finally(() => setLoading(false))
   }, [])
 

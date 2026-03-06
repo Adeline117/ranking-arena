@@ -126,5 +126,6 @@ if (typeof window !== 'undefined') {
 export const onRouterTransitionStart = (...args: unknown[]) => {
   import('@sentry/nextjs').then(Sentry => {
     Sentry.captureRouterTransitionStart(...(args as Parameters<typeof Sentry.captureRouterTransitionStart>))
+  // eslint-disable-next-line no-restricted-syntax -- Sentry dynamic import, failure is non-critical
   }).catch(() => {})
 }

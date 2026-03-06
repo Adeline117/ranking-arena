@@ -24,11 +24,11 @@ export function trackInteraction(event: InteractionEvent): void {
 
   // sendBeacon doesn't send auth headers, so use fetch with keepalive
   // Auth token is read from supabase session cookie by the API
-  // eslint-disable-next-line no-restricted-syntax -- Intentional: analytics should never break the app
   fetch('/api/interactions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
     keepalive: true,
+  // eslint-disable-next-line no-restricted-syntax -- analytics fire-and-forget, failure is non-critical
   }).catch(() => {})
 }
