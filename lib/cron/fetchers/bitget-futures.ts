@@ -322,6 +322,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
                 Accept: 'application/json',
               },
             }),
+            signal: AbortSignal.timeout(15_000),
           })
           if (!res.ok) continue
           const data = (await res.json()) as BitgetResponse
