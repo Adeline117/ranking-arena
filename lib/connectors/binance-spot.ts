@@ -17,6 +17,10 @@ import type {
   SnapshotMetricsLegacy,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  BinanceSpotListResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // Binance Spot API types
@@ -70,10 +74,11 @@ export class BinanceSpotConnector extends BaseConnectorLegacy implements LegacyP
     const period = WINDOW_TO_PERIOD[window];
     const traders: TraderIdentity[] = [];
 
-    const data = await this.requestWithCircuitBreaker<BinanceSpotListResponse>(
+    const raw = await this.requestWithCircuitBreaker<BinanceSpotListResponse>(
       () => this.fetchLeaderboardPage(period, 1, 100),
       { label: `discoverLeaderboard(${window})` },
     );
+    const data = warnValidate(BinanceSpotListResponseSchema, raw, 'binance-spot/leaderboard') as unknown as BinanceSpotListResponse;
 
     if (!data.success || !data.data?.list?.length) return traders;
 
