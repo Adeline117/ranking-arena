@@ -129,7 +129,8 @@ export default function FavoritesPage() {
       
       const data = await response.json()
       if (response.ok) {
-        setFolders(prev => [...prev, data.data?.folder])
+        const newFolder = data.data?.folder
+        if (newFolder) setFolders(prev => [...prev, newFolder])
         setNewFolderName('')
         setNewFolderPublic(false)
         setShowCreateForm(false)

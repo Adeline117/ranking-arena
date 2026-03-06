@@ -293,10 +293,10 @@ export default function FollowingPage() {
     return sorted
   }, [items, sortMode, searchQuery, platformFilter])
 
-  // 汇总统计（只计算交易员）
+  // 汇总统计（基于筛选后的列表，与显示一致）
   const stats = useMemo(() => {
-    const traders = items.filter((i) => i.type === 'trader')
-    const users = items.filter((i) => i.type === 'user')
+    const traders = sortedItems.filter((i) => i.type === 'trader')
+    const users = sortedItems.filter((i) => i.type === 'user')
 
     if (traders.length === 0) {
       return {
@@ -322,7 +322,7 @@ export default function FollowingPage() {
       bestPerformer,
       worstPerformer,
     }
-  }, [items])
+  }, [sortedItems])
 
   const handleItemClick = (item: FollowItem) => {
     trackInteraction({ action: 'click', target_type: item.type, target_id: item.id })
