@@ -215,19 +215,17 @@ describe('POST /api/cron/fetch-market-data', () => {
     expect(body.results.prices).toBeDefined()
   })
 
-  it('returns 500 when an unhandled error occurs', async () => {
-    // Force an error in the supabase client creation path
-    mockFrom.mockImplementation(() => {
-      throw new Error('Fatal error')
-    })
-
-    // Mock fetch to succeed so we get past the price fetch into conditions
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ prices: [[Date.now() - 86400000, 60000], [Date.now(), 61000]] }),
+  it('returns 500 when outer try-catch catches an unhandled error', async () => {
+    // createClient is mocked, but we can make the URL constructor throw
+    // by passing an invalid URL in the request
+    const { createClient } = require('@supabase/supabase-js')
+    createClient.mockImplementationOnce(() => {
+      throw new Error('Fatal supabase init error')
     })
 
     const res = await POST(createCronRequest(CRON_SECRET, { type: 'all' }))
     expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toContain('Fatal supabase init error')
   })
 })

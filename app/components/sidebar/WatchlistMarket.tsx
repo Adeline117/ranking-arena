@@ -122,7 +122,7 @@ export default function WatchlistMarket() {
     }).filter((r): r is CoinPrice => r !== null)
   }
 
-  const { data: coins = [], isLoading: loading, error: swrError } = useSWR(
+  const { data: coins = [], isLoading: loading, error: swrError, mutate: mutateMarket } = useSWR(
     pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null,
     marketFetcher,
     {
