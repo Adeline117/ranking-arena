@@ -100,26 +100,41 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Last resort: raw SQL fallback
-    logger.warn('RPC refresh failed, trying raw SQL fallback', { error: fullError?.message })
+    // Last resort: update hot_score directly via Supabase query
+    // (replaces dangerous exec_sql RPC with safe parameterized approach)
+    logger.warn('RPC refresh failed, trying direct update fallback', { error: fullError?.message })
 
-    const { error: rawError } = await supabase.rpc('exec_sql', {
-      sql: `
-        UPDATE posts SET hot_score = (
-          (COALESCE(like_count, 0) * 3 +
-           COALESCE(comment_count, 0) * 5 +
-           COALESCE(repost_count, 0) * 2 +
-           COALESCE(view_count, 0) * 0.1)
-          / POWER(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600 + 2, 1.5)
-        ),
-        last_hot_refresh_at = now()
-        WHERE created_at > NOW() - INTERVAL '7 days'
-      `
-    })
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentPosts, error: fetchError } = await supabase
+      .from('posts')
+      .select('id, like_count, comment_count, repost_count, view_count, created_at')
+      .gte('created_at', cutoff)
 
-    if (rawError) {
-      logger.error('Failed to refresh hot scores', { error: rawError.message })
-      return NextResponse.json({ success: false, error: rawError.message }, { status: 500 })
+    if (fetchError || !recentPosts) {
+      logger.error('Failed to fetch posts for hot score fallback', { error: fetchError?.message })
+      return NextResponse.json({ success: false, error: fetchError?.message || 'No posts' }, { status: 500 })
+    }
+
+    let updateErrors = 0
+    for (const post of recentPosts) {
+      const likes = post.like_count ?? 0
+      const comments = post.comment_count ?? 0
+      const reposts = post.repost_count ?? 0
+      const views = post.view_count ?? 0
+      const ageHours = (Date.now() - new Date(post.created_at).getTime()) / 3_600_000
+      const score = (likes * 3 + comments * 5 + reposts * 2 + views * 0.1) / Math.pow(ageHours + 2, 1.5)
+
+      const { error: upErr } = await supabase
+        .from('posts')
+        .update({ hot_score: Math.round(score * 100) / 100, last_hot_refresh_at: new Date().toISOString() })
+        .eq('id', post.id)
+
+      if (upErr) updateErrors++
+    }
+
+    if (updateErrors > recentPosts.length / 2) {
+      logger.error('Too many hot score update failures', { errors: updateErrors, total: recentPosts.length })
+      return NextResponse.json({ success: false, error: `${updateErrors}/${recentPosts.length} updates failed` }, { status: 500 })
     }
 
     try {

@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { getAuthUser } from '@/lib/supabase/server'
 
 // 懒加载 Stripe 客户端
 function getStripe() {
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse
     }
 
+    // Verify authenticated user
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
     const { sessionId } = await request.json()
 
     if (!sessionId) {
@@ -87,6 +94,12 @@ export async function POST(request: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID not found in session' }, { status: 400 })
+    }
+
+    // Verify the session belongs to the authenticated user
+    if (userId !== authUser.id) {
+      logger.warn('Session user mismatch', { sessionUserId: userId, authUserId: authUser.id })
+      return NextResponse.json({ error: 'Session does not belong to current user' }, { status: 403 })
     }
 
     if (!subscriptionId) {
