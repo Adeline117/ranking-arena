@@ -150,7 +150,7 @@ function ConnectionDot({ connected }: { connected: boolean }) {
 export default function LiveTradesFeed() {
   const { language } = useLanguage()
   const isZh = language === 'zh'
-  const { trades, connected } = useMarketFeed({ maxTrades: 150 })
+  const { trades, connected, error } = useMarketFeed({ maxTrades: 150 })
   const containerRef = useRef<HTMLDivElement>(null)
   const [paused, setPaused] = useState(false)
   const [exchangeFilter, setExchangeFilter] = useState<Set<ExchangeId>>(new Set(ALL_EXCHANGES))
@@ -291,7 +291,34 @@ export default function LiveTradesFeed() {
           overflowX: 'hidden',
         }}
       >
-        {filteredTrades.length === 0 ? (
+        {error && !connected && filteredTrades.length === 0 ? (
+          <div style={{
+            padding: 40,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}>
+            <p style={{ marginBottom: 4 }}>{t('disconnected')}</p>
+            <p style={{ fontSize: tokens.typography.fontSize.xs, opacity: 0.7 }}>{t('connectionLostMessage')}</p>
+          </div>
+        ) : !connected && trades.length === 0 ? (
+          <div style={{
+            padding: 40,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+          }}>
+            <div style={{
+              width: 20, height: 20, margin: '0 auto 8px',
+              border: `2px solid ${tokens.colors.border.primary}`,
+              borderTopColor: tokens.colors.accent.primary,
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+            <p style={{ fontSize: tokens.typography.fontSize.sm }}>
+              {t('waitingForData') || '等待交易数据...'}
+            </p>
+          </div>
+        ) : filteredTrades.length === 0 ? (
           <div style={{
             padding: 40,
             textAlign: 'center',
@@ -318,7 +345,7 @@ export default function LiveTradesFeed() {
           borderRadius: 3,
           background: 'var(--color-orange-subtle)',
         }}>
-          已暂停
+          {isZh ? '已暂停' : 'Paused'}
         </div>
       )}
     </div>
