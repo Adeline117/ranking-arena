@@ -18,6 +18,12 @@ import type {
   TimeseriesPoint,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  BybitLeaderboardResponseSchema,
+  BybitTraderDetailResponseSchema,
+  BybitPerformanceResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // Bybit API types
@@ -99,10 +105,11 @@ export class BybitConnector extends BaseConnectorLegacy implements LegacyPlatfor
     const maxPages = 5;
 
     for (let page = 1; page <= maxPages; page++) {
-      const data = await this.requestWithCircuitBreaker<BybitLeaderboardResponse>(
+      const raw = await this.requestWithCircuitBreaker<BybitLeaderboardResponse>(
         () => this.fetchLeaderboardPage(period, page, pageSize),
         { label: `discoverLeaderboard(${window}, page=${page})` },
       );
+      const data = warnValidate(BybitLeaderboardResponseSchema, raw, 'bybit/leaderboard') as unknown as BybitLeaderboardResponse;
 
       if (data.retCode !== 0 || !data.result?.list?.length) break;
 
@@ -129,10 +136,11 @@ export class BybitConnector extends BaseConnectorLegacy implements LegacyPlatfor
     traderKey: string,
     window: RankingWindow,
   ): Promise<Omit<TraderSnapshotLegacy, 'id' | 'created_at'>> {
-    const detail = await this.requestWithCircuitBreaker<BybitTraderDetailResponse>(
+    const raw = await this.requestWithCircuitBreaker<BybitTraderDetailResponse>(
       () => this.fetchTraderDetailApi(traderKey, window),
       { label: `fetchTraderSnapshot(${traderKey}, ${window})` },
     );
+    const detail = warnValidate(BybitTraderDetailResponseSchema, raw, 'bybit/trader-detail') as unknown as BybitTraderDetailResponse;
 
     const d = detail.result;
     const roi = d.roi != null ? (Math.abs(d.roi) < 10 ? d.roi * 100 : d.roi) : null;
@@ -168,10 +176,11 @@ export class BybitConnector extends BaseConnectorLegacy implements LegacyPlatfor
   async fetchTraderProfile(
     traderKey: string,
   ): Promise<Omit<TraderProfileEnriched, 'last_enriched_at'>> {
-    const detail = await this.requestWithCircuitBreaker<BybitTraderDetailResponse>(
+    const rawProfile = await this.requestWithCircuitBreaker<BybitTraderDetailResponse>(
       () => this.fetchTraderDetailApi(traderKey, '90d'),
       { label: `fetchTraderProfile(${traderKey})` },
     );
+    const detail = warnValidate(BybitTraderDetailResponseSchema, rawProfile, 'bybit/trader-detail') as unknown as BybitTraderDetailResponse;
 
     const d = detail.result;
 
@@ -291,7 +300,8 @@ export class BybitConnector extends BaseConnectorLegacy implements LegacyPlatfor
       if (!response.ok) return [];
 
       const json = await response.json();
-      return json.result?.list || [];
+      const validated = warnValidate(BybitPerformanceResponseSchema, json, 'bybit/performance');
+      return validated.result?.list || [];
     } finally {
       clearTimeout(timeout);
     }

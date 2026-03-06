@@ -12,6 +12,7 @@
  * - Win rate must be derived from position history.
  */
 
+import { z } from 'zod';
 import { BaseConnectorLegacy } from './base';
 import type {
   RankingWindow,
@@ -24,6 +25,12 @@ import type {
   TimeseriesPoint,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  HyperliquidLeaderEntrySchema,
+  HyperliquidUserStateSchema,
+  HyperliquidFillSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // Hyperliquid API types
@@ -253,7 +260,8 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     }
 
     const json = await response.json();
-    return json.leaderboardRows || json || [];
+    const rows = json.leaderboardRows || json || [];
+    return warnValidate(z.array(HyperliquidLeaderEntrySchema), rows, 'hyperliquid/leaderboard') as HyperliquidLeaderEntry[];
   }
 
   private async fetchUserState(address: string): Promise<HyperliquidUserState> {
@@ -266,7 +274,8 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
       throw new Error(`Hyperliquid user state API returned ${response.status}`);
     }
 
-    return response.json();
+    const json = await response.json();
+    return warnValidate(HyperliquidUserStateSchema, json, 'hyperliquid/user-state') as HyperliquidUserState;
   }
 
   private async fetchUserPnl(
@@ -285,7 +294,8 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
       return { pnl: 0, roi: 0, nTrades: 0, winRate: null };
     }
 
-    const fills: HyperliquidFill[] = await response.json();
+    const rawFills = await response.json();
+    const fills: HyperliquidFill[] = warnValidate(z.array(HyperliquidFillSchema), rawFills, 'hyperliquid/user-fills') as HyperliquidFill[];
 
     let totalPnl = 0;
     let wins = 0;
@@ -321,7 +331,8 @@ export class HyperliquidConnector extends BaseConnectorLegacy implements LegacyP
     });
 
     if (!response.ok) return [];
-    return response.json();
+    const json = await response.json();
+    return warnValidate(z.array(HyperliquidFillSchema), json, 'hyperliquid/user-fills-timeseries') as HyperliquidFill[];
   }
 
   private truncateAddress(address: string): string {

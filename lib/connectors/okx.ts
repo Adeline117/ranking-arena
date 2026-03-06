@@ -17,6 +17,11 @@ import type {
   SnapshotMetricsLegacy,
   LegacyPlatformConnector,
 } from '@/lib/types/leaderboard';
+import {
+  OKXLeaderboardResponseSchema,
+  OKXTraderDetailResponseSchema,
+  warnValidate,
+} from './schemas';
 
 // ============================================
 // OKX API types
@@ -69,10 +74,11 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
     const period = WINDOW_TO_PERIOD[window];
     const traders: TraderIdentity[] = [];
 
-    const data = await this.requestWithCircuitBreaker<OKXLeaderboardResponse>(
+    const raw = await this.requestWithCircuitBreaker<OKXLeaderboardResponse>(
       () => this.fetchLeaderboardApi(period),
       { label: `discoverLeaderboard(${window})` },
     );
+    const data = warnValidate(OKXLeaderboardResponseSchema, raw, 'okx/leaderboard') as unknown as OKXLeaderboardResponse;
 
     if (data.code !== '0' || !data.data?.ranks?.length) return traders;
 
@@ -212,12 +218,13 @@ export class OKXConnector extends BaseConnectorLegacy implements LegacyPlatformC
         throw new Error(`OKX trader detail API returned ${response.status}`);
       }
 
-      const json: { code: string; data: OKXTraderEntry } = await response.json();
-      if (json.code !== '0' || !json.data) {
+      const json = await response.json();
+      const validated = warnValidate(OKXTraderDetailResponseSchema, json, 'okx/trader-detail');
+      if (validated.code !== '0' || !validated.data) {
         throw new Error(`OKX trader detail API returned no data for ${uniqueName}`);
       }
 
-      return json;
+      return validated as { code: string; data: OKXTraderEntry };
     } finally {
       clearTimeout(timeout);
     }
