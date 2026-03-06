@@ -5,11 +5,18 @@
  */
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { withApiMiddleware, createErrorResponse } from '@/lib/api/middleware'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
 const logger = createLogger('follow-api')
+
+// Zod schema for POST /api/follow
+const FollowActionSchema = z.object({
+  traderId: z.string().min(1, 'traderId is required'),
+  action: z.enum(['follow', 'unfollow'], { message: 'action must be follow or unfollow' }),
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -69,15 +76,14 @@ export const POST = withApiMiddleware(
     }
 
     const body = await request.json()
-    const { traderId, action } = body
-
-    if (!traderId) {
-      return createErrorResponse('Missing traderId parameter', 400)
+    const parsed = FollowActionSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
-
-    if (!action || !['follow', 'unfollow'].includes(action)) {
-      return createErrorResponse('Invalid action parameter, must be follow or unfollow', 400)
-    }
+    const { traderId, action } = parsed.data
 
     if (action === 'follow') {
       // 关注

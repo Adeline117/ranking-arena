@@ -14,6 +14,9 @@ import {
 import type { Trader } from '@/app/components/ranking/RankingTable'
 import { getTradersArenaFollowersCount } from './trader-followers'
 import { getOrSet, CACHE_TTL } from '@/lib/cache'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('trader-loader')
 
 // 内存缓存（作为二级缓存，减少网络请求）
 let traderCache: { data: Trader[]; timestamp: number; timeRange: string } | null = null
@@ -123,7 +126,8 @@ async function loadTradersFromDB(
     traders.sort((a, b) => b.roi - a.roi)
 
     return traders
-  } catch (_error) {
+  } catch (error) {
+    logger.warn('loadTradersFromDB failed', { error: error instanceof Error ? error.message : String(error) })
     return []
   }
 }
