@@ -13,6 +13,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  GmxLeaderboardResponseSchema,
+  GmxSubgraphResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags, TraderTimeseries,
@@ -43,10 +48,11 @@ export class GmxPerpConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     // Use the REST leaderboard endpoint
-    const data = await this.request<any>(
+    const _rawLb = await this.request<any>(
       `${this.getSubgraphUrl()}/leaderboard/pnl?period=${window}&limit=${limit}`,
       { method: 'GET' }
     )
+    const data = warnValidate(GmxLeaderboardResponseSchema, _rawLb, 'gmx-perp/leaderboard')
     const rankings = Array.isArray(data) ? data : (data?.accounts || [])
 
     const traders: TraderSource[] = rankings.slice(0, limit).map((item: Record<string, unknown>) => {
@@ -79,10 +85,11 @@ export class GmxPerpConnector extends BaseConnector {
   }
 
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
-    const data = await this.request<any>(
+    const _rawSnap = await this.request<any>(
       `${this.getSubgraphUrl()}/leaderboard/pnl?period=${window}&limit=1000`,
       { method: 'GET' }
     )
+    const data = warnValidate(GmxLeaderboardResponseSchema, _rawSnap, 'gmx-perp/snapshot')
     const rankings = Array.isArray(data) ? data : (data?.accounts || [])
 
     const entry = rankings.find((r: Record<string, unknown>) =>
@@ -156,7 +163,7 @@ export class GmxPerpConnector extends BaseConnector {
         }
       }`
 
-      const data = await this.request<any>(
+      const _rawSubgraph = await this.request<any>(
         'https://subgraph.satsuma-prod.com/gmx/synthetics-arbitrum-stats/api',
         {
           method: 'POST',
@@ -164,6 +171,7 @@ export class GmxPerpConnector extends BaseConnector {
           body: JSON.stringify({ query }),
         }
       )
+      const data = warnValidate(GmxSubgraphResponseSchema, _rawSubgraph, 'gmx-perp/timeseries')
       const dailyStats = data?.data?.periodAccountStats || []
 
       if (Array.isArray(dailyStats) && dailyStats.length > 0) {

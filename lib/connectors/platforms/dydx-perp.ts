@@ -142,7 +142,8 @@ export class DydxPerpConnector extends BaseConnector {
     // Get PnL from leaderboard for this address (through proxy if configured)
     const period = WINDOW_MAP[window]
     const lbUrl = this.buildUrl('/v4/leaderboard/pnl', { period, limit: '1000' })
-    const lbData = await this.request<any>(lbUrl, { method: 'GET' })
+    const _rawLb2 = await this.request<any>(lbUrl, { method: 'GET' })
+    const lbData = warnValidate(DydxLeaderboardResponseSchema, _rawLb2, 'dydx-perp/snapshot-leaderboard')
     const rankings = lbData?.pnlRanking || []
     const entry = rankings.find((r: Record<string, unknown>) => String(r.address) === traderKey)
 
@@ -181,7 +182,8 @@ export class DydxPerpConnector extends BaseConnector {
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
     const tsUrl = this.buildUrl('/v4/historical-pnl', { address: traderKey, subaccountNumber: '0', limit: '90' })
-    const data = await this.request<any>(tsUrl, { method: 'GET' })
+    const _rawTs = await this.request<any>(tsUrl, { method: 'GET' })
+    const data = warnValidate(DydxHistoricalPnlResponseSchema, _rawTs, 'dydx-perp/timeseries')
     const historicalPnl = data?.historicalPnl || []
 
     const series: TraderTimeseries[] = []

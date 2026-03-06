@@ -121,6 +121,7 @@ export function EpubSearchPanel({
 interface EpubNotesPanelProps {
   show: boolean
   onClose: () => void
+  isZh: boolean
   panelBg: string
   panelText: string
   panelBorder: string
@@ -143,7 +144,7 @@ interface EpubNotesPanelProps {
 }
 
 export function EpubNotesPanel({
-  show, onClose, _isZh,
+  show, onClose, isZh,
   panelBg, panelText, panelBorder, panelSubtle, accent,
   highlights, highlightSort, highlightFilter, filteredHighlights,
   editingNoteIdx, editNoteText,
@@ -369,7 +370,7 @@ function formatDur(seconds: number, isZh: boolean): string {
 }
 
 export function EpubStatsPanel({
-  show, onClose, _isZh,
+  show, onClose, isZh,
   panelBg, panelText, panelBorder, panelSubtle,
   accent, progressPercent, currentPage, totalPages,
   sessionElapsedSec, totalSessionTime, sessionsCount, timeRemainingStr,

@@ -11,6 +11,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  BingxFuturesLeaderboardResponseSchema,
+  BingxFuturesDetailResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -66,10 +71,11 @@ export class BingxFuturesConnector extends BaseConnector {
 
     try {
       // Try BingX copy trading API endpoint
-      const data = await this.request<{ data?: { list?: BingXLeaderboardEntry[] } }>(
+      const _rawLb = await this.request<{ data?: { list?: BingXLeaderboardEntry[] } }>(
         `https://bingx.com/api/uc/v1/public/copyTrade/traders?page=1&pageSize=${limit}&period=${period}&sortBy=roi&sortOrder=desc`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(BingxFuturesLeaderboardResponseSchema, _rawLb, 'bingx-futures/leaderboard')
 
       const list = data?.data?.list || []
       const traders: TraderSource[] = list.map((item) => ({
@@ -93,10 +99,11 @@ export class BingxFuturesConnector extends BaseConnector {
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     try {
-      const data = await this.request<{ data?: BingXLeaderboardEntry }>(
+      const _rawProfile = await this.request<{ data?: BingXLeaderboardEntry }>(
         `https://bingx.com/api/uc/v1/public/copyTrade/trader/${traderKey}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(BingxFuturesDetailResponseSchema, _rawProfile, 'bingx-futures/profile')
 
       const info = data?.data
       if (!info) return null
@@ -134,10 +141,11 @@ export class BingxFuturesConnector extends BaseConnector {
     const period = periodMap[window] || '30'
 
     try {
-      const data = await this.request<{ data?: BingXLeaderboardEntry }>(
+      const _rawSnap = await this.request<{ data?: BingXLeaderboardEntry }>(
         `https://bingx.com/api/uc/v1/public/copyTrade/trader/${traderKey}?period=${period}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(BingxFuturesDetailResponseSchema, _rawSnap, 'bingx-futures/snapshot')
 
       const info = data?.data
       if (!info) {

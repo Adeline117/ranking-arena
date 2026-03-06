@@ -92,8 +92,10 @@ async function fetchTechnicalAnalysis(
   const result = new Map<string, TechnicalAnalysis>()
 
   try {
+    // Use variable to prevent Turbopack static analysis
+    const pkg = '@mathieuc/' + 'tradingview'
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const TradingView = require('@mathieuc/tradingview')
+    const TradingView = require(pkg)
 
     for (const sym of symbols) {
       const mapping = SYMBOL_MAP[sym]
@@ -143,8 +145,10 @@ async function fetchTechnicalAnalysis(
 // ============================================
 
 function createTVClient(): TradingViewClientWrapper {
+  // Use variable to prevent Turbopack static analysis
+  const pkg = '@mathieuc/' + 'tradingview'
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const TradingView = require('@mathieuc/tradingview')
+  const TradingView = require(pkg)
 
   const wrapper: TradingViewClientWrapper = {
     prices: new Map(),

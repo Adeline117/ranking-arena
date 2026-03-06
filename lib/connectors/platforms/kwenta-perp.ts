@@ -11,6 +11,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  KwentaStatsResponseSchema,
+  KwentaPositionsResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -82,13 +87,14 @@ export class KwentaPerpConnector extends BaseConnector {
         }
       `
 
-      const response = await this.request<{
+      const _rawLb = await this.request<{
         data?: { futuresStats?: KwentaFuturesStat[] }
       }>(this.SUBGRAPH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables: { limit } }),
       })
+      const response = warnValidate(KwentaStatsResponseSchema, _rawLb, 'kwenta-perp/leaderboard')
 
       const stats = response?.data?.futuresStats || []
       const traders: TraderSource[] = stats.map((item) => ({
@@ -126,13 +132,14 @@ export class KwentaPerpConnector extends BaseConnector {
         }
       `
 
-      const response = await this.request<{
+      const _rawProfile = await this.request<{
         data?: { futuresStats?: KwentaFuturesStat[] }
       }>(this.SUBGRAPH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables: { account: traderKey.toLowerCase() } }),
       })
+      const response = warnValidate(KwentaStatsResponseSchema, _rawProfile, 'kwenta-perp/profile')
 
       const info = response?.data?.futuresStats?.[0]
       if (!info) return null
@@ -214,7 +221,7 @@ export class KwentaPerpConnector extends BaseConnector {
         }
       `
 
-      const [statsResponse, positionsResponse] = await Promise.all([
+      const [_rawStats, _rawPositions] = await Promise.all([
         this.request<{ data?: { futuresStats?: KwentaFuturesStat[] } }>(this.SUBGRAPH_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -226,6 +233,8 @@ export class KwentaPerpConnector extends BaseConnector {
           body: JSON.stringify({ query: positionsQuery, variables: { account: traderKey.toLowerCase(), windowStart: String(windowStart) } }),
         }),
       ])
+      const statsResponse = warnValidate(KwentaStatsResponseSchema, _rawStats, 'kwenta-perp/stats')
+      const positionsResponse = warnValidate(KwentaPositionsResponseSchema, _rawPositions, 'kwenta-perp/positions')
 
       const info = statsResponse?.data?.futuresStats?.[0]
       if (!info) {
