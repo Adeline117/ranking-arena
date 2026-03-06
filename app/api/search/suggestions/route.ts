@@ -173,7 +173,8 @@ export const GET = withPublic(
           query: query.slice(0, 200),
           result_count: suggestions.length,
           source: 'dropdown',
-        }),
+        })
+        .then(),
       'Record search analytics'
     )
 

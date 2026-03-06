@@ -231,7 +231,7 @@ export const GET = withPublic(
         query: query.slice(0, 200),
         result_count: result.total,
         source: 'unified',
-      }),
+      }).then(),
       'Record search analytics'
     )
 

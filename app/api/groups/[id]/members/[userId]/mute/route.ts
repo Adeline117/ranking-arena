@@ -181,7 +181,7 @@ export async function POST(
         action: 'mute',
         target_id: targetUserId,
         details: { duration, reason: reason || null }
-      }),
+      }).then(),
       'Group audit log: mute'
     )
 
@@ -247,7 +247,7 @@ export async function DELETE(
         action: 'unmute',
         target_id: targetUserId,
         details: {}
-      }),
+      }).then(),
       'Group audit log: unmute'
     )
 
