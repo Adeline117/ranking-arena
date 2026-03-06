@@ -178,57 +178,115 @@ function classifyErrorMsg(msg) {
   return 'unknown'
 }
 
+// ============================================
+// 用户活动数据
+// ============================================
+
+async function fetchActivityStats() {
+  try {
+    const res = await fetch(`${ARENA_URL}/api/analytics/activity`, {
+      headers: {
+        Authorization: `Bearer ${CRON_SECRET}`,
+        'Cache-Control': 'no-cache',
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    return json.activity || null
+  } catch (err) {
+    console.error('获取活动数据失败:', err.message)
+    return null
+  }
+}
+
+// ============================================
+// 每日报告
+// ============================================
+
 async function runDailyReport() {
   let pipelineHealth
+  let activity
 
   try {
-    pipelineHealth = await checkPipelineHealth()
+    ;[pipelineHealth, activity] = await Promise.all([
+      checkPipelineHealth(),
+      fetchActivityStats(),
+    ])
   } catch (err) {
-    await sendTelegram(`<b>🏟 Arena Daily Report</b>\n\n❌ Failed to fetch pipeline data: ${err.message}`)
+    await sendTelegram(`<b>📊 Arena 每日报告</b>\n\n获取数据失败: ${err.message}`)
     return
   }
 
   const { summary, stats } = pipelineHealth
+  const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' })
 
-  // Calculate totals from stats
   const totalRuns = stats?.reduce((s, j) => s + (j.total_runs || 0), 0) || 0
   const totalSuccess = stats?.reduce((s, j) => s + (j.success_count || 0), 0) || 0
   const totalErrors = stats?.reduce((s, j) => s + (j.error_count || 0), 0) || 0
-  const totalRecords = stats?.reduce((s, j) => s + (j.total_records_processed || 0), 0) || 0
 
   const overallSuccessRate = totalRuns > 0 ? ((totalSuccess / totalRuns) * 100).toFixed(1) : 'N/A'
 
-  // Find worst performing jobs
   const worstJobs = (stats || [])
     .filter(j => j.success_rate < 100)
     .sort((a, b) => (a.success_rate || 0) - (b.success_rate || 0))
-    .slice(0, 5)
+    .slice(0, 3)
 
-  let report = `<b>🏟 Arena Daily Report</b>\n`
-  report += `<i>${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</i>\n\n`
-
-  // Overall status
   const statusEmoji = summary?.failedJobs === 0 ? '🟢' : summary?.failedJobs < 3 ? '🟡' : '🔴'
-  report += `<b>Status:</b> ${statusEmoji} ${pipelineHealth.status}\n`
-  report += `<b>Success Rate (7d):</b> ${overallSuccessRate}%\n`
-  report += `<b>Total Runs (7d):</b> ${totalRuns}\n`
-  report += `<b>Records Processed:</b> ${totalRecords.toLocaleString()}\n`
-  report += `<b>Errors:</b> ${totalErrors}\n`
-  report += `<b>Jobs:</b> ${summary?.healthyJobs || 0} healthy / ${summary?.totalJobs || 0} total\n`
+
+  let report = `📊<b>【日报】${today}</b>\n\n`
+
+  // 🔧 系统状态
+  report += `🔧 <b>系统状态</b>\n`
+  report += `- Pipeline：${statusEmoji} ${summary?.healthyJobs || 0}/${summary?.totalJobs || 0} 正常`
+  if (summary?.failedJobs > 0) {
+    report += `，${summary.failedJobs} 异常`
+  }
+  report += `\n`
+  report += `- 成功率 (7天)：${overallSuccessRate}%\n`
+  report += `- 错误数：${totalErrors}\n`
 
   if (worstJobs.length > 0) {
-    report += `\n<b>Lowest Success Rates:</b>\n`
-    for (const j of worstJobs) {
-      report += `  ${j.success_rate}% - ${j.job_name}\n`
-    }
+    report += `- 错误 Top ${worstJobs.length}：${worstJobs.map(j => `${j.job_name}(${j.success_rate}%)`).join('、')}\n`
   }
 
   if (summary?.staleJobs > 0 || summary?.stuckJobs > 0) {
-    report += `\n⚠️ ${summary.staleJobs} stale, ${summary.stuckJobs} stuck jobs`
+    report += `- ⚠️ ${summary.staleJobs} 过期, ${summary.stuckJobs} 卡住\n`
+  }
+
+  // 📈 流量与用户
+  report += `\n📈 <b>流量与用户</b>\n`
+  if (activity) {
+    report += `- 今日新注册：${activity.signups}\n`
+    report += `- 总注册用户：${activity.total_users}\n`
+    report += `- 今日活跃用户：${activity.active_users}\n`
+  } else {
+    report += `- <i>活动数据获取失败</i>\n`
+  }
+
+  // 💬 社区活动
+  report += `\n💬 <b>社区活动</b>\n`
+  if (activity) {
+    report += `- 新建小组：${activity.new_groups} 个\n`
+    report += `- 新发帖子：${activity.new_posts} 条\n`
+    report += `- 新评论：${activity.new_comments} 条\n`
+    report += `- 新关注（用户间）：${activity.new_follows}\n`
+  } else {
+    report += `- <i>社区数据获取失败</i>\n`
+  }
+
+  // 👤 交易员认领
+  report += `\n👤 <b>交易员认领</b>\n`
+  if (activity) {
+    report += `- 今日新认领：${activity.new_claims} 个\n`
+    report += `- 总已认领：${activity.total_verified} 个\n`
+    report += `- 待审核认领：${activity.pending_claims} 个\n`
+  } else {
+    report += `- <i>认领数据获取失败</i>\n`
   }
 
   await sendTelegram(report)
-  console.log('Daily report sent')
+  console.log('每日报告已发送')
 }
 
 // Main

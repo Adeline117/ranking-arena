@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { notifyNewGroup } from '@/lib/notifications/activity-alerts'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -163,6 +164,9 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         role: 'owner',
       })
+
+      // 实时通知
+      notifyNewGroup(user.email ?? null, name.trim())
     }
 
     return NextResponse.json({
