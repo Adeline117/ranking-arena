@@ -12,6 +12,20 @@
 import { BaseExchangeConnector, TraderData, ListParams } from './base-connector-enrichment'
 import { dataLogger } from '../utils/logger'
 
+interface BingXSpotTraderItem {
+  trader?: { nickName?: string; traderName?: string; uid?: string | number }
+  rankStat?: {
+    winRate?: string; winRate90d?: string
+    maxDrawdown?: string; maxDrawdown90d?: string
+    totalTransactions?: string; totalOrders?: string
+    chart?: BingXChartPoint[]
+  }
+}
+
+interface BingXChartPoint {
+  cumulativePnlRate?: string | number
+}
+
 const API_URL = 'https://api-app.qq-os.com/api/copy-trade-facade/v2/spot/trader/search'
 
 export class BingXSpotConnector extends BaseExchangeConnector {
@@ -64,7 +78,7 @@ export class BingXSpotConnector extends BaseExchangeConnector {
       const json = await response.json()
       const items = json.data?.result || []
 
-      return items.map((item: any) => {
+      return items.map((item: BingXSpotTraderItem) => {
         const traderInfo = item.trader || {}
         const rankStat = item.rankStat || {}
         
@@ -102,9 +116,9 @@ export class BingXSpotConnector extends BaseExchangeConnector {
   /**
    * Calculate max drawdown from equity curve
    */
-  private calcMddFromChart(chart: any[]): number | null {
+  private calcMddFromChart(chart: BingXChartPoint[]): number | null {
     if (!chart || chart.length < 2) return null
-    const equities = chart.map((p: any) => 1 + parseFloat(p.cumulativePnlRate || 0))
+    const equities = chart.map((p) => 1 + parseFloat(String(p.cumulativePnlRate || 0)))
     let peak = equities[0]
     let maxDD = 0
 

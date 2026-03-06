@@ -64,6 +64,41 @@ const SYMBOL_MAP: Record<string, { tv: string; display: string }> = {
 }
 
 // ============================================
+// Minimal type stubs for @mathieuc/tradingview (no published types)
+// ============================================
+
+interface TVChartPeriod {
+  close: number
+  open: number
+  volume?: number
+  max?: number
+  high?: number
+  min?: number
+  low?: number
+}
+
+interface TVChart {
+  setMarket(symbol: string, opts: { timeframe: string; range: number }): void
+  onError(cb: (...args: unknown[]) => void): void
+  onUpdate(cb: () => void): void
+  delete(): void
+  periods?: TVChartPeriod[]
+}
+
+interface TVClient {
+  onConnected(cb: () => void): void
+  onDisconnected(cb: () => void): void
+  onError(cb: (...args: unknown[]) => void): void
+  end(): void
+  Session: { Chart: new () => TVChart }
+}
+
+interface TVModule {
+  Client: new () => TVClient
+  getTA(symbol: string): Promise<Record<string, { All?: number; MA?: number; Other?: number }> | null>
+}
+
+// ============================================
 // Singleton state
 // ============================================
 
@@ -74,10 +109,10 @@ interface TradingViewClientWrapper {
   prices: Map<string, RealtimePrice>
   ta: Map<string, TechnicalAnalysis>
   lastTaFetch: number
-   
-  client: any
-   
-  charts: Map<string, any>
+
+  client: TVClient | null
+
+  charts: Map<string, TVChart>
   connected: boolean
   destroy: () => void
 }
@@ -95,7 +130,7 @@ async function fetchTechnicalAnalysis(
     // Use variable to prevent Turbopack static analysis
     const pkg = '@mathieuc/' + 'tradingview'
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const TradingView = require(pkg)
+    const TradingView = require(pkg) as TVModule
 
     for (const sym of symbols) {
       const mapping = SYMBOL_MAP[sym]
