@@ -3,51 +3,27 @@
  * 测试统一 Telegram 告警系统
  */
 
-import { sendAlert, sendScraperAlert } from './send-alert'
-
-// Mock fetch
-global.fetch = jest.fn()
-
-// Mock logger
-jest.mock('@/lib/logger', () => ({
-  logger: {
-    warn: jest.fn(),
-    info: jest.fn(),
-    error: jest.fn(),
-  },
+// Mock the telegram module BEFORE imports
+jest.mock('@/lib/notifications/telegram', () => ({
+  sendTelegramAlert: jest.fn().mockResolvedValue(true),
 }))
 
-const originalEnv = process.env
+jest.mock('@/lib/logger', () => ({
+  logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn() },
+}))
+
+import { sendAlert, sendScraperAlert } from './send-alert'
+import { sendTelegramAlert } from '@/lib/notifications/telegram'
+
+const mockSendTelegram = sendTelegramAlert as jest.MockedFunction<typeof sendTelegramAlert>
 
 beforeEach(() => {
   jest.clearAllMocks()
-  process.env = {
-    ...originalEnv,
-    TELEGRAM_BOT_TOKEN: 'test-token',
-    TELEGRAM_ALERT_CHAT_ID: 'test-chat-id',
-  }
-  ;(global.fetch as jest.Mock).mockResolvedValue({ ok: true })
-})
-
-afterAll(() => {
-  process.env = originalEnv
+  mockSendTelegram.mockResolvedValue(true)
 })
 
 describe('sendAlert', () => {
-  test('should return not sent when Telegram env missing', async () => {
-    delete process.env.TELEGRAM_BOT_TOKEN
-
-    const result = await sendAlert({
-      title: 'Test Alert',
-      message: 'Test message',
-      level: 'info',
-    })
-
-    expect(result.sent).toBe(false)
-    expect(result.channels).toEqual([])
-  })
-
-  test('should send via Telegram when configured', async () => {
+  test('should call sendTelegramAlert with correct params', async () => {
     const result = await sendAlert({
       title: 'Test Alert',
       message: 'Test message',
@@ -56,21 +32,22 @@ describe('sendAlert', () => {
 
     expect(result.sent).toBe(true)
     expect(result.channels).toContain('telegram')
-    expect(global.fetch).toHaveBeenCalledWith(
-      'https://api.telegram.org/bottest-token/sendMessage',
+    expect(mockSendTelegram).toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        level: 'warning',
+        source: '系统告警',
+        title: 'Test Alert',
+        message: 'Test message',
       })
     )
   })
 
-  test('should handle fetch errors gracefully', async () => {
-    ;(global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'))
+  test('should return not sent when Telegram fails', async () => {
+    mockSendTelegram.mockResolvedValue(false)
 
     const result = await sendAlert({
-      title: 'Test Alert',
-      message: 'Test message',
+      title: 'Fail Alert',
+      message: 'msg',
       level: 'info',
     })
 
@@ -78,44 +55,16 @@ describe('sendAlert', () => {
     expect(result.channels).toEqual([])
   })
 
-  test('should handle non-ok response', async () => {
-    ;(global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500 })
-
-    const result = await sendAlert({
-      title: 'Test Alert',
-      message: 'Test message',
-      level: 'info',
-    })
-
-    expect(result.sent).toBe(false)
-    expect(result.channels).toEqual([])
-  })
-
-  test('should include details in Telegram payload', async () => {
+  test('should pass details as string values', async () => {
     await sendAlert({
-      title: 'Test Alert',
-      message: 'Test message',
-      level: 'warning',
-      details: {
-        'Platform': 'binance',
-        'Error Code': 'TIMEOUT',
-      },
+      title: 'Details Alert',
+      message: 'msg',
+      level: 'critical',
+      details: { count: 42, name: 'test' },
     })
 
-    const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
-    const body = JSON.parse(fetchCall[1].body)
-    expect(body.text).toContain('Platform')
-    expect(body.text).toContain('binance')
-    expect(body.text).toContain('TIMEOUT')
-    expect(body.parse_mode).toBe('HTML')
-  })
-
-  test('should send correct chat_id', async () => {
-    await sendAlert({ title: 'Test', message: 'msg', level: 'critical' })
-
-    const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
-    const body = JSON.parse(fetchCall[1].body)
-    expect(body.chat_id).toBe('test-chat-id')
+    const call = mockSendTelegram.mock.calls[0][0]
+    expect(call.details).toEqual({ count: '42', name: 'test' })
   })
 })
 
@@ -123,19 +72,20 @@ describe('sendScraperAlert', () => {
   test('should not send when no platforms have issues', async () => {
     const result = await sendScraperAlert([], [], {})
     expect(result.sent).toBe(false)
+    expect(mockSendTelegram).not.toHaveBeenCalled()
   })
 
   test('should send critical alert for critical platforms', async () => {
-    await sendScraperAlert(
+    const result = await sendScraperAlert(
       ['binance'],
       [],
       { binance: 'Binance' }
     )
 
-    const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
-    const body = JSON.parse(fetchCall[1].body)
-    expect(body.text).toContain('严重过期')
-    expect(body.text).toContain('Binance')
+    expect(result.sent).toBe(true)
+    const call = mockSendTelegram.mock.calls[0][0]
+    expect(call.title).toContain('严重过期')
+    expect(call.message).toContain('Binance')
   })
 
   test('should send warning alert for stale platforms', async () => {
@@ -145,10 +95,9 @@ describe('sendScraperAlert', () => {
       { bybit: 'Bybit' }
     )
 
-    const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
-    const body = JSON.parse(fetchCall[1].body)
-    expect(body.text).toContain('陈旧')
-    expect(body.text).toContain('Bybit')
+    const call = mockSendTelegram.mock.calls[0][0]
+    expect(call.title).toContain('陈旧')
+    expect(call.message).toContain('Bybit')
   })
 
   test('should include both critical and stale platforms', async () => {
@@ -158,10 +107,9 @@ describe('sendScraperAlert', () => {
       { binance: 'Binance', bybit: 'Bybit', bitget: 'Bitget' }
     )
 
-    const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
-    const body = JSON.parse(fetchCall[1].body)
-    expect(body.text).toContain('Binance')
-    expect(body.text).toContain('Bybit')
-    expect(body.text).toContain('Bitget')
+    const call = mockSendTelegram.mock.calls[0][0]
+    expect(call.message).toContain('Binance')
+    expect(call.message).toContain('Bybit')
+    expect(call.message).toContain('Bitget')
   })
 })
