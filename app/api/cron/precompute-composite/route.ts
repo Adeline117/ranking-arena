@@ -3,7 +3,7 @@
  * Schedule: Every 2 hours (see vercel.json cron config)
  *
  * Composite = weighted average of 7D/30D/90D arena_score:
- *   7D×0.20 + 30D×0.45 + 90D×0.35
+ *   7D*0.20 + 30D*0.45 + 90D*0.35
  *
  * Result stored in Redis with 3h TTL so /api/rankings?window=composite
  * can serve from cache in ~5ms instead of ~500ms real-time compute.

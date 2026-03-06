@@ -64,8 +64,8 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
   }
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
+    <div style={styles.overlay} onClick={onClose} role="presentation">
+      <div style={styles.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Connect Exchange">
         <div style={styles.header}>
           <h3 style={styles.title}>Connect Exchange</h3>
           <button style={styles.closeBtn} onClick={onClose} aria-label="Close">

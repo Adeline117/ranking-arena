@@ -350,6 +350,7 @@ export default function CopyTradeConfig({ traderId, traderName, onClose }: CopyT
             onChange={e => setPairInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addPair(pairInput)}
             placeholder={t('copyTrade_pairInputPlaceholder')}
+            aria-label={t('copyTrade_pairInputPlaceholder')}
             style={{
               flex: 1, padding: '6px 10px', borderRadius: tokens.radius.sm, fontSize: 14,
               border: `1px solid ${c.border.primary}`,
@@ -501,6 +502,7 @@ function NumberField({
           }}
           min={min}
           max={max}
+          aria-label={label}
           style={{
             flex: 1, padding: '6px 10px', borderRadius: tokens.radius.sm, fontSize: 14,
             border: `1px solid ${c.border.primary}`,

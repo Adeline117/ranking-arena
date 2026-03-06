@@ -14,6 +14,7 @@ export function TrophyIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -36,6 +37,7 @@ export function SearchIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -53,6 +55,7 @@ export function ChartIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -75,6 +78,7 @@ export function UserIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -92,6 +96,7 @@ export function LikeIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -114,6 +119,7 @@ export function ThumbsUpIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -136,6 +142,7 @@ export function ThumbsDownIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -158,6 +165,7 @@ export function CommentIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -180,6 +188,7 @@ export function DashboardIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -199,6 +208,7 @@ export function NotificationIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -221,6 +231,7 @@ export function BadgeIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -238,6 +249,7 @@ export function ArrowRightIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -254,6 +266,7 @@ export function ArrowLeftIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -270,6 +283,7 @@ export function CloseIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -286,6 +300,7 @@ export function ChevronDownIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -302,6 +317,7 @@ export function PlusIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -318,6 +334,7 @@ export function SettingsIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -365,6 +382,7 @@ export function SunIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -387,6 +405,7 @@ export function MoonIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
@@ -409,6 +428,7 @@ export function MessageIcon({ size = 16, style, ...props }: IconProps) {
       height={size}
       viewBox="0 0 16 16"
       fill="none"
+      aria-hidden="true"
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
       {...props}
     >
