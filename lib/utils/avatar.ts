@@ -258,12 +258,11 @@ function isLikelyImageUrl(url: string): boolean {
 export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string | null {
   if (!avatarUrl || avatarUrl.trim() === '') return null
 
-  // 过滤掉明显无效的URL
+  // 过滤掉明显无效的URL（但保留交易所默认头像如 default-avatar.png）
   if (
     avatarUrl.includes('t.co') ||
     avatarUrl.includes('/banner/') ||
-    avatarUrl.includes('placeholder') ||
-    avatarUrl.includes('default')
+    avatarUrl.includes('placeholder')
   ) {
     return null
   }
