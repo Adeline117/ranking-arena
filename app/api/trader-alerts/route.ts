@@ -3,7 +3,8 @@
  * Pro 会员功能：管理关注交易员的变动提醒配置
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   getSupabaseAdmin,
   requireAuth,

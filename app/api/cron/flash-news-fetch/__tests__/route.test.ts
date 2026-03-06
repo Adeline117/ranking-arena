@@ -5,6 +5,11 @@
  * @jest-environment node
  */
 
+// Set env before imports so module-level const CRON_SECRET captures it
+process.env.CRON_SECRET = 'test-secret'
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.test'
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key'
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -48,11 +53,7 @@ function createCronRequest(secret?: string): NextRequest {
 describe('GET /api/cron/flash-news-fetch', () => {
   const CRON_SECRET = 'test-secret'
 
-  beforeAll(() => {
-    process.env.CRON_SECRET = CRON_SECRET
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://supabase.test'
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key'
-  })
+  // env already set at top of file for module-level capture
 
   beforeEach(() => {
     jest.clearAllMocks()

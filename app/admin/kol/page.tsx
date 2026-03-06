@@ -39,19 +39,25 @@ export default function AdminKolPage() {
   const [applications, setApplications] = useState<KolApplication[]>([])
   const [filter, setFilter] = useState('pending')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [reviewing, setReviewing] = useState<Record<string, boolean>>({})
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({})
 
   const fetchApplications = useCallback(async () => {
     if (!accessToken) return
     setLoading(true)
+    setLoadError(false)
     try {
       const res = await fetch(`/api/admin/kol/review?status=${filter}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch')
       setApplications(data.data || [])
     } catch {
       logger.error('Failed to fetch applications')
+      setLoadError(true)
+      setApplications([])
     } finally {
       setLoading(false)
     }

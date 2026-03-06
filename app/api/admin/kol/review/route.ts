@@ -26,7 +26,8 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({ data })
-  } catch (_err) {
+  } catch (err) {
+    logger.error('GET /api/admin/kol/review failed', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -82,7 +83,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true })
-  } catch (_err) {
+  } catch (err) {
+    logger.error('POST /api/admin/kol/review failed', { error: err instanceof Error ? err.message : String(err) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
