@@ -58,13 +58,13 @@ export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: 
   const [isPremiumOnly, setIsPremiumOnly] = useState(false)
 
   // Existing applications
-  const [existingApplications, setExistingApplications] = useState<any[]>([]) // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [existingApplications, setExistingApplications] = useState<{ id: string; name: string; status: string; created_at: string }[]>([])
 
   useEffect(() => {
     if (accessToken) {
       fetchMyApplications(accessToken)
     }
-  }, [accessToken]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accessToken]) // eslint-disable-line react-hooks/exhaustive-deps -- fetchMyApplications is defined below in closure, not a stable ref
 
   const validateField = (fieldName: string, _value: string) => {
     const newErrors = { ...fieldErrors }
