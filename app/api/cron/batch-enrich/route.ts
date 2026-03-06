@@ -67,9 +67,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid period, must be 7D, 30D, or 90D' }, { status: 400 })
   }
 
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
   // Determine which platforms to enrich based on period and all flag
   let platforms: string[]

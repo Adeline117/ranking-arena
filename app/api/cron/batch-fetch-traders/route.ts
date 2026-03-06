@@ -8,15 +8,9 @@
  *   group=a  → binance_futures, binance_spot, bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → mexc, kucoin, okx_web3, hyperliquid, gmx, jupiter_perps, aevo (every 4h)
  *   group=c  → coinex, bitget_spot, xt, bybit_spot, binance_web3 (every 6h)
-<<<<<<< HEAD
- *   group=d  → lbank, dydx, phemex, gains, htx_futures, weex (every 6h)
- *   group=e  → blofin, bingx, gateio, cryptocom, bitfinex (every 8h)
- *   group=f  → whitebit, btse, toobit (every 12h)
-=======
  *   group=d  → dydx, phemex, gains, htx_futures, weex, bitmart, kwenta, mux (every 6h)
- *   group=e  → blofin, bingx, gateio (every 8h)
- *   group=f  → whitebit, btse, toobit, uniswap, pancakeswap, cryptocom, bitfinex (every 12h)
->>>>>>> e2f5436f (fix(data): config fixes for data coverage gaps)
+ *   group=e  → blofin, bingx, gateio, cryptocom, bitfinex (every 8h)
+ *   group=f  → whitebit, btse, toobit, uniswap, pancakeswap (every 12h)
  * 
  * Each platform is called sequentially with a small delay to avoid rate limits.
  */
@@ -26,6 +20,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
+export const preferredRegion = 'hnd1' // Tokyo — avoids Binance/OKX/Bybit geo-blocking
 
 const GROUPS: Record<string, string[]> = {
   // Group A: High-priority CEX (every 3h) — 5 platforms
@@ -62,9 +57,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: `Unknown group: ${group}`, available: Object.keys(GROUPS) }, { status: 400 })
   }
 
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  // Use production URL to avoid Vercel deployment protection on preview URLs
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
   const results: BatchResult[] = []
   const overallStart = Date.now()
