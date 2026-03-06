@@ -145,10 +145,9 @@ async function fetchTechnicalAnalysis(
 // ============================================
 
 function createTVClient(): TradingViewClientWrapper {
-  // Use variable to prevent Turbopack static analysis
-  const pkg = '@mathieuc/' + 'tradingview'
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const TradingView = require(pkg)
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+  let TradingView: any
+  try { TradingView = require('@mathieuc/' + 'tradingview') } catch { /* optional dep */ }
 
   const wrapper: TradingViewClientWrapper = {
     prices: new Map(),

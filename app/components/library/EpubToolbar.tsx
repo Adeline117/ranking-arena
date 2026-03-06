@@ -1,6 +1,8 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { t as moduleT } from '@/lib/i18n'
 
 interface EpubToolbarProps {
   ready: boolean
@@ -8,13 +10,25 @@ interface EpubToolbarProps {
   currentPage: number
   totalPages: number
   sessionElapsedSec: number
-  isZh: boolean
   showAudioReader: boolean
   themeIsDark: boolean
   panelBorder: string
   accent: string
   timeRemainingStr: string
   onToggleAudio: () => void
+}
+
+function formatDur(seconds: number): string {
+  const sec = moduleT('durationSec')
+  const min = moduleT('durationMin')
+  const hour = moduleT('durationHour')
+  const minSuffix = moduleT('durationMinSuffix')
+  if (seconds < 60) return `${seconds}${sec}`
+  const m = Math.floor(seconds / 60)
+  if (m < 60) return `${m}${min}`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return `${h}${hour}${rm > 0 ? ` ${rm}${minSuffix}` : ''}`
 }
 
 /** Bottom progress bar with session timer and audio toggle */
@@ -24,7 +38,6 @@ export function EpubToolbar({
   currentPage,
   totalPages,
   sessionElapsedSec,
-  isZh,
   showAudioReader,
   themeIsDark,
   panelBorder,
@@ -32,17 +45,10 @@ export function EpubToolbar({
   timeRemainingStr,
   onToggleAudio,
 }: EpubToolbarProps) {
+  const { t } = useLanguage()
   if (!ready) return null
 
   const elapsed = sessionElapsedSec
-  const formatDur = (seconds: number) => {
-    if (seconds < 60) return isZh ? `${seconds}秒` : `${seconds}s`
-    const m = Math.floor(seconds / 60)
-    if (m < 60) return isZh ? `${m}分钟` : `${m}min`
-    const h = Math.floor(m / 60)
-    const rm = m % 60
-    return isZh ? `${h}小时${rm > 0 ? rm + '分钟' : ''}` : `${h}h ${rm > 0 ? rm + 'm' : ''}`
-  }
 
   return (
     <div style={{
@@ -57,7 +63,7 @@ export function EpubToolbar({
     }}>
       <span>{progressPercent}% -- {currentPage}/{totalPages}</span>
       <span>
-        {isZh ? '本次阅读 ' : 'Session: '}{formatDur(elapsed)}
+        {t('epubSessionLabel')}{formatDur(elapsed)}
       </span>
       <span>
         {isZh ? '预计剩余 ' : 'Remaining: '}{timeRemainingStr}

@@ -11,6 +11,8 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import { LbankFuturesLeaderboardResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile,
@@ -54,10 +56,11 @@ export class LbankFuturesConnector extends BaseConnector {
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     try {
       // Attempt internal API (likely won't work without Puppeteer)
-      const data = await this.request<{ data?: { list?: LBankLeaderboardEntry[] } }>(
+      const _rawLb = await this.request<{ data?: { list?: LBankLeaderboardEntry[] } }>(
         `https://www.lbank.com/api/copy-trading/leaders?limit=${limit}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(LbankFuturesLeaderboardResponseSchema, _rawLb, 'lbank-futures/leaderboard')
 
       const list = data?.data?.list || []
       const traders: TraderSource[] = list.map((item) => ({

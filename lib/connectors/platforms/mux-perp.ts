@@ -12,6 +12,12 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  MuxAccountsResponseSchema,
+  MuxAccountResponseSchema,
+  MuxPositionsResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,

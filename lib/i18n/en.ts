@@ -4196,6 +4196,31 @@ instSortReviews: 'Most Reviews',
 // Institutions page - no ratings
 instNoRatingsYet: 'No ratings yet',
 
+// Library i18n migration - remaining isZh patterns
+audioReaderTitle: 'Audio Reader',
+epubSessionLabel: 'Session: ',
+epubRemainingLabel: 'Remaining: ',
+epubAudioModeLabel: 'Audio',
+epubHighlightsCountSuffix: '',
+epubNoHighlightsMessage: 'No highlights yet.\nSelect text to add.',
+readerShortcutsHint: 'Keys: Arrows/Space flip, B bookmark, F fullscreen',
+bookSubcatHack: 'Hack',
+bookSubcatRegulation: 'Regulation',
+bookSubcatQuote: 'Quote',
+bookSubcatMilestone: 'Milestone',
+bookCardFree: 'Free',
+bookCardPro: 'Pro',
+bookMonthsAgoShort: '{n}mo ago',
+bookReviewWriteReview: 'Write Review',
+bookReviewLoadMore: 'Load more',
+bookReviewAnonymous: 'Anonymous',
+
+// ProfileBookshelf
+bookshelfSectionTitle: 'Bookshelf',
+bookshelfBooksCount: 'books',
+bookshelfNoBooks: 'No books yet',
+bookshelfViewAllLink: 'View all',
+
 } as const
 
 export default en
