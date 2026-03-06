@@ -8,7 +8,6 @@
  */
 
 import { KwentaPerpConnector } from '../kwenta-perp'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally

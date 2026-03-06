@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -173,6 +174,8 @@ export async function POST(request: NextRequest) {
   let inserted = 0
   let errors = 0
 
+  const plog = await PipelineLogger.start('fetch-open-interest')
+
   try {
 
     for (const exchange of EXCHANGES) {
@@ -220,6 +223,8 @@ export async function POST(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
+    await plog.success(inserted, { fetched, errors })
+
     return NextResponse.json({
       success: true,
       fetched,
@@ -230,6 +235,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     logger.apiError('/api/cron/fetch-open-interest', error, {})
+    await plog.error(error)
     return NextResponse.json(
       {
         error: 'Internal server error',

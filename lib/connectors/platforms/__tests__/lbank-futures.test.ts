@@ -8,7 +8,6 @@
  */
 
 import { LbankFuturesConnector } from '../lbank-futures'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally

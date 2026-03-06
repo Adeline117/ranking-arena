@@ -105,7 +105,7 @@ export default function SentimentBar() {
           liquidation24h: overview.liquidation24h ?? null,
           ethGasGwei: overview.ethGasGwei ?? null,
         })
-      } catch { /* ignore */ }
+      } catch { /* Non-critical UI widget; stale data is acceptable, next interval will retry */ }
     }
     fetchData()
     const interval = setInterval(fetchData, 60000)

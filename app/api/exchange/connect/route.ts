@@ -10,8 +10,6 @@ import {
   requireAuth,
   success,
   handleError,
-  validateString,
-  validateEnum,
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'

@@ -8,7 +8,6 @@
  */
 
 import { MuxPerpConnector } from '../mux-perp'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally

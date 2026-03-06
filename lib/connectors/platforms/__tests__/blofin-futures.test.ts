@@ -6,7 +6,6 @@
  */
 
 import { BlofinFuturesConnector } from '../blofin-futures'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally

@@ -103,7 +103,7 @@ function handleSSE(request: NextRequest, origin: string | null): Response {
             const data = `data: ${JSON.stringify(snapshot)}\n\n`
             controller.enqueue(encoder.encode(data))
           })
-          .catch(() => { // eslint-disable-line no-restricted-syntax -- SSE stream: skip failed ticks, next interval will retry
+          .catch(() => {
             // Silently skip failed updates to keep stream alive
           })
       }, 3000)

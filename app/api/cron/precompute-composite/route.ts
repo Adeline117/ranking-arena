@@ -15,6 +15,7 @@ import { tieredSet } from '@/lib/cache/redis-layer'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { GranularPlatform } from '@/lib/types/leaderboard'
 import { createLogger } from '@/lib/utils/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
 
   const startTime = Date.now()
   const supabase = getSupabaseAdmin()
+  const plog = await PipelineLogger.start('precompute-composite')
 
   try {
     // Fetch all three windows in parallel (top 2000 per window)
@@ -226,6 +228,8 @@ export async function GET(request: NextRequest) {
     const elapsed = Date.now() - startTime
     logger.info(`Composite precomputed: ${entries.length} total, ${traders.length} cached, ${elapsed}ms`)
 
+    await plog.success(traders.length, { total_entries: entries.length })
+
     return NextResponse.json({
       ok: true,
       elapsed_ms: elapsed,
@@ -235,6 +239,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     logger.error('Precompute composite failed:', error)
+    await plog.error(error)
     return NextResponse.json(
       { error: 'Precompute failed', detail: String(error) },
       { status: 500 }

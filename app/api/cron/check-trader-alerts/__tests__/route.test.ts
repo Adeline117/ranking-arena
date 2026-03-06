@@ -24,6 +24,16 @@ jest.mock('@/lib/logger', () => ({
   },
 }))
 
+jest.mock('@/lib/services/pipeline-logger', () => ({
+  PipelineLogger: {
+    start: jest.fn().mockResolvedValue({
+      success: jest.fn().mockResolvedValue(undefined),
+      error: jest.fn().mockResolvedValue(undefined),
+      timeout: jest.fn().mockResolvedValue(undefined),
+    }),
+  },
+}))
+
 import { POST, GET } from '../route'
 
 // ---------------------------------------------------------------------------

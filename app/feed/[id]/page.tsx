@@ -39,7 +39,8 @@ const fetchActivity = cache(async function fetchActivity(id: string): Promise<Tr
 
     if (error || !data) return null
     return data as TraderActivity
-  } catch {
+  } catch (error) {
+    console.warn('[feed/id] fetchActivity failed:', error instanceof Error ? error.message : String(error))
     return null
   }
 })

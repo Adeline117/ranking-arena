@@ -29,6 +29,17 @@ jest.mock('@/lib/utils/logger', () => ({
   }),
 }))
 
+jest.mock('@/lib/services/pipeline-logger', () => ({
+  PipelineLogger: {
+    start: jest.fn().mockResolvedValue({
+      id: 1,
+      success: jest.fn().mockResolvedValue(undefined),
+      error: jest.fn().mockResolvedValue(undefined),
+      timeout: jest.fn().mockResolvedValue(undefined),
+    }),
+  },
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 

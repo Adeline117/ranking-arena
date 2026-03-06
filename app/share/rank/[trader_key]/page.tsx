@@ -100,7 +100,8 @@ async function fetchShareData(
       maxDrawdown: lr?.max_drawdown ?? null,
       window: seasonId,
     }
-  } catch {
+  } catch (error) {
+    console.warn('[share/rank] fetchTraderRank failed:', error instanceof Error ? error.message : String(error))
     return null
   }
 }

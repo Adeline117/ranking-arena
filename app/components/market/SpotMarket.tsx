@@ -128,7 +128,7 @@ export default function SpotMarket({ onTokenClick }: { onTokenClick?: (token: Sp
     try {
       const saved = localStorage.getItem('market_favorites')
       if (saved) setFavorites(new Set(JSON.parse(saved)))
-    } catch { /* ignore */ }
+    } catch { /* localStorage may be unavailable (SSR/private browsing) or data corrupted */ }
   }, [])
 
   const toggleFav = (id: string) => {

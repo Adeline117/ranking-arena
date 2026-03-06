@@ -60,7 +60,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Increment view count atomically (fire-and-forget)
-    // eslint-disable-next-line no-restricted-syntax -- non-critical analytics, fallback to manual increment
     Promise.resolve(supabase.rpc('increment_view_count', { item_id: id })).catch(() => {
       // Fallback to non-atomic if RPC doesn't exist
       supabase

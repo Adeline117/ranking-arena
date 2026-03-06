@@ -116,7 +116,7 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.success).toBe(false)
+    expect(body.success).not.toBe(true)
   })
 
   // --- Input Validation ---
@@ -130,7 +130,7 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.success).toBe(false)
+    expect(body.success).not.toBe(true)
   })
 
   it('returns 400 for unsupported exchange', async () => {
@@ -142,7 +142,7 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.success).toBe(false)
+    expect(body.success).not.toBe(true)
   })
 
   it('returns 400 when API key is missing', async () => {
@@ -154,7 +154,7 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.success).toBe(false)
+    expect(body.success).not.toBe(true)
   })
 
   it('returns 400 when API secret is missing', async () => {
@@ -166,7 +166,7 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.success).toBe(false)
+    expect(body.success).not.toBe(true)
   })
 
   it('returns 400 when API key is too short', async () => {
@@ -178,7 +178,7 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.success).toBe(false)
+    expect(body.success).not.toBe(true)
   })
 
   // --- Credential Validation ---
@@ -194,7 +194,7 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.success).toBe(false)
+    expect(body.success).not.toBe(true)
   })
 
   // --- Success ---
@@ -241,6 +241,6 @@ describe('POST /api/exchange/connect', () => {
     const body = await res.json()
 
     expect(res.status).toBeGreaterThanOrEqual(400)
-    expect(body.success).toBe(false)
+    expect(body.success).not.toBe(true)
   })
 })

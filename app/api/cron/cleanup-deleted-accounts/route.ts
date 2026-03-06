@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAuthorized } from '@/lib/cron/utils'
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -19,6 +20,8 @@ export async function GET(request: NextRequest) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const plog = await PipelineLogger.start('cleanup-deleted-accounts')
 
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -84,6 +87,8 @@ export async function GET(request: NextRequest) {
     }
 
 
+    await plog.success(deleted, { total: expiredAccounts.length, errors: errors.length })
+
     return NextResponse.json({
       message: `Cleanup complete`,
       total: expiredAccounts.length,
@@ -92,6 +97,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     logger.error('[cleanup-deleted-accounts] Error:', error)
+    await plog.error(error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

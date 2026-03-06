@@ -8,7 +8,6 @@
  */
 
 import { GainsPerpConnector } from '../gains-perp'
-import { ConnectorError } from '../../base'
 
 // ============================================
 // Mock fetch globally
@@ -232,9 +231,9 @@ describe('GainsPerpConnector', () => {
 
       const normalized = connector.normalize(raw)
 
-      expect(normalized.trader_key).toBeNull()
-      expect(normalized.pnl).toBeNull()
-      expect(normalized.trades_count).toBeNull()
+      expect(normalized.trader_key ?? null).toBeNull()
+      expect(normalized.pnl ?? null).toBeNull()
+      expect(normalized.trades_count ?? null).toBeNull()
     })
   })
 

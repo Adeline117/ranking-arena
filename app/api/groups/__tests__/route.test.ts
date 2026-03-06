@@ -91,7 +91,7 @@ describe('GET /api/groups', () => {
         pagination: { limit: 10, offset: 0, total: 2, has_more: false },
       },
     }
-    mockGetOrSetWithLock.mockImplementation(async (_key: string, fn: () => Promise<unknown>) => {
+    mockGetOrSetWithLock.mockImplementation(async (_key: string, _fn: () => Promise<unknown>) => {
       // Execute the function to test its logic
       return mockResult
     })
@@ -106,7 +106,7 @@ describe('GET /api/groups', () => {
   })
 
   it('respects limit parameter capped at 50', async () => {
-    mockGetOrSetWithLock.mockImplementation(async (_key: string, fn: () => Promise<unknown>) => {
+    mockGetOrSetWithLock.mockImplementation(async (_key: string, _fn: () => Promise<unknown>) => {
       return {
         success: true,
         data: { groups: [], pagination: { limit: 50, offset: 0, total: 0, has_more: false } },

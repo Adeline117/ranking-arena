@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -105,6 +106,7 @@ export async function GET() {
  */
 export async function POST(req: Request) {
   const startTime = Date.now()
+  const plog = await PipelineLogger.start('check-trader-alerts')
 
   try {
     // 验证授权
@@ -410,6 +412,8 @@ export async function POST(req: Request) {
 
     const duration = Date.now() - startTime
 
+    await plog.success(alertsSent, { alertsChecked: alerts.length, tradersChecked: traderIds.length })
+
     return NextResponse.json({
       ok: true,
       message: 'Trader alerts check completed',
@@ -422,6 +426,7 @@ export async function POST(req: Request) {
     })
   } catch (error: unknown) {
     logger.error('[TraderAlerts Cron] 执行Failed:', error)
+    await plog.error(error)
     return NextResponse.json(
       {
         ok: false,
