@@ -58,6 +58,7 @@ function HotContent() {
   // Groups data for the groups tab
   const [groups, setGroups] = useState<{ id: string; name: string; name_en?: string | null; member_count: number }[]>([])
   const [loadingGroups, setLoadingGroups] = useState(false)
+  const [groupsError, setGroupsError] = useState(false)
 
   const latestPostTime = useRef<string>('')
 
@@ -228,28 +229,32 @@ function HotContent() {
     return () => clearInterval(interval)
   }, [loadPosts])
 
+  // Load groups
+  const loadGroups = useCallback(async () => {
+    setLoadingGroups(true)
+    setGroupsError(false)
+    try {
+      const res = await fetch('/api/groups?sort_by=activity&limit=30')
+      const json = await res.json()
+      const data = json.data?.groups || json.groups || json.data || []
+      setGroups(data.map((g: Record<string, unknown>) => ({
+        id: (g.id as string) || '',
+        name: (g.name as string) || '',
+        name_en: (g.name_en as string | null) || null,
+        member_count: (g.member_count as number) || 0,
+      })))
+    } catch (error) {
+      logger.error('Groups load error:', error)
+      setGroups([])
+      setGroupsError(true)
+    } finally {
+      setLoadingGroups(false)
+    }
+  }, [])
+
   // Load groups when groups tab is active
   useEffect(() => {
     if (activeHotTab !== 'groups') return
-    const loadGroups = async () => {
-      setLoadingGroups(true)
-      try {
-        const res = await fetch('/api/groups?sort_by=activity&limit=30')
-        const json = await res.json()
-        const data = json.data?.groups || json.groups || json.data || []
-        setGroups(data.map((g: Record<string, unknown>) => ({
-          id: (g.id as string) || '',
-          name: (g.name as string) || '',
-          name_en: (g.name_en as string | null) || null,
-          member_count: (g.member_count as number) || 0,
-        })))
-      } catch (error) {
-        logger.error('Groups load error:', error)
-        setGroups([])
-      } finally {
-        setLoadingGroups(false)
-      }
-    }
     loadGroups()
   }, [activeHotTab])
 
@@ -855,6 +860,8 @@ function HotContent() {
                 <HotGroupsList
                   groups={groups}
                   loading={loadingGroups}
+                  error={groupsError}
+                  onRetry={loadGroups}
                   localizedName={localizedName}
                   t={t}
                 />

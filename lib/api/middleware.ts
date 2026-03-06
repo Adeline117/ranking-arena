@@ -9,13 +9,14 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets, type RateLimitConfig } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
-import { 
-  parseApiVersion, 
-  addVersionHeaders, 
+import {
+  parseApiVersion,
+  addVersionHeaders,
   addDeprecationHeaders,
   type VersionContext,
   type ApiVersion,
 } from './versioning'
+import { getOrCreateCorrelationId, runWithCorrelationId } from './correlation'
 
 const logger = createLogger('api-middleware')
 
@@ -111,11 +112,14 @@ export function withApiMiddleware<T>(
   } = options
 
   return async (request: NextRequest): Promise<NextResponse> => {
+    const correlationId = getOrCreateCorrelationId(request)
+
+    return runWithCorrelationId(correlationId, async () => {
     const startTime = Date.now()
-    
+
     // 解析 API 版本
     const versionContext = parseApiVersion(request)
-    
+
     try {
       // 1. 限流检查
       if (rateLimit !== false) {
@@ -189,11 +193,12 @@ export function withApiMiddleware<T>(
       // 8. 添加响应时间头 & 慢查询日志
       const duration = Date.now() - startTime
       response.headers.set('X-Response-Time', `${duration}ms`)
+      response.headers.set('X-Correlation-ID', correlationId)
 
       if (duration >= 3000) {
-        logger.error(`CRITICAL SLOW API: ${name} took ${duration}ms`, { path: request.nextUrl.pathname })
+        logger.error(`CRITICAL SLOW API: ${name} took ${duration}ms`, { path: request.nextUrl.pathname, correlationId })
       } else if (duration >= 1000) {
-        logger.warn(`Slow API: ${name} took ${duration}ms`, { path: request.nextUrl.pathname })
+        logger.warn(`Slow API: ${name} took ${duration}ms`, { path: request.nextUrl.pathname, correlationId })
       }
 
       return response
@@ -205,9 +210,9 @@ export function withApiMiddleware<T>(
       const duration = Date.now() - startTime
 
       if (statusCode >= 500) {
-        logger.error(`${name} error: ${internalMessage}`, { error: String(error), duration })
+        logger.error(`${name} error: ${internalMessage}`, { error: String(error), duration, correlationId })
       } else {
-        logger.warn(`${name} client error: ${internalMessage}`, { duration })
+        logger.warn(`${name} client error: ${internalMessage}`, { duration, correlationId })
       }
 
       // Don't expose internal error details to clients for 5xx errors
@@ -217,9 +222,11 @@ export function withApiMiddleware<T>(
         addVersionHeaders(errorResponse, versionContext)
       }
       errorResponse.headers.set('X-Response-Time', `${duration}ms`)
-      
+      errorResponse.headers.set('X-Correlation-ID', correlationId)
+
       return errorResponse
     }
+    }) // end runWithCorrelationId
   }
 }
 
