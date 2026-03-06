@@ -1,13 +1,11 @@
 /**
  * Bybit Spot Copy Trading — Inline fetcher for Vercel serverless
- * API: https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list
+ * API: https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list
  *
  * Same beehive API as Bybit futures, labelled as bybit_spot.
  * metricValues: [ROI, Drawdown, followerProfit, WinRate, PLRatio, SharpeRatio]
  *
- * [WARN] WAF-BLOCKED from US residential IPs (Akamai "Access Denied").
- * Verified correct endpoint from scripts/import/import_bybit_spot.mjs.
- * Should work from Vercel Japan/Singapore datacenters.
+ * Uses api2.bybit.com to bypass Akamai WAF on www.bybit.com.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -26,8 +24,9 @@ import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
 
 const SOURCE = 'bybit_spot'
+// api2.bybit.com bypasses Akamai WAF that blocks www.bybit.com/x-api
 const API_URL =
-  'https://www.bybit.com/x-api/fapi/beehive/public/v1/common/dynamic-leader-list'
+  'https://api2.bybit.com/fapi/beehive/public/v1/common/dynamic-leader-list'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const TARGET = 500
 const PAGE_SIZE = 50
