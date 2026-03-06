@@ -15,6 +15,7 @@ import { isAuthorized, getSupabaseEnv } from '@/lib/cron/utils'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
     auth: { persistSession: false },
   })
 
+  const plog = await PipelineLogger.start('check-enrichment-freshness')
   const now = Date.now()
   const results: EnrichmentStatus[] = []
   // Expanded platforms to monitor - cover all major platforms
@@ -211,6 +213,15 @@ export async function GET(req: Request) {
     await captureMessage(
       '[EnrichmentFreshness] All enrichment tables are empty - enrichment may not be running',
       'warning',
+      { summary }
+    )
+  }
+
+  if (summary.critical === 0 && summary.stale < 5) {
+    await plog.success(summary.fresh, { summary })
+  } else {
+    await plog.error(
+      new Error(`${summary.critical} critical, ${summary.stale} stale enrichment items`),
       { summary }
     )
   }

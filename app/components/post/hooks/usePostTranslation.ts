@@ -109,7 +109,7 @@ export function usePostTranslation({
     } finally {
       setTranslating(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded to avoid re-creating callback on language change; error messages read at call time
   }, [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken])
 
   const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {

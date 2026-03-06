@@ -142,7 +142,7 @@ export function usePostActions({
       if (prevPost) { setPosts(prev => prev.map(p => p.id === postId ? { ...p, like_count: prevPost.like_count, dislike_count: prevPost.dislike_count, user_reaction: prevPost.user_reaction } : p)); if (prevOpenPost) setOpenPost(prevOpenPost) }
       logger.error('[PostFeed] toggleReaction error:', err); showToast(t('networkError'), 'error')
     } finally { lockRef.current.delete(key) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t/setPosts/setOpenPost are stable refs; only re-create when auth or active post changes
   }, [accessToken, openPost?.id, showToast])
 
   // Built-in poll voting
@@ -164,7 +164,7 @@ export function usePostActions({
       } else { showToast(json.error || json.message || t('voteFailed'), 'error') }
     } catch (err) { logger.error('[PostFeed] toggleVote error:', err); showToast(t('networkError'), 'error') }
     finally { lockRef.current.delete(key) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t/setPosts/setOpenPost are stable refs; only re-create when auth or active post changes
   }, [accessToken, openPost?.id, showToast])
 
   // Custom poll
@@ -196,7 +196,7 @@ export function usePostActions({
       } else { showToast(data.error || t('voteFailed'), 'error') }
     } catch (err) { logger.error('[PostFeed] custom poll vote failed:', err); showToast(t('voteFailed'), 'error') }
     finally { setVotingCustomPoll(false) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t/showToast/setters are stable refs; only re-create when auth or selected options change
   }, [accessToken, selectedPollOptions])
 
   // Bookmark
@@ -216,7 +216,7 @@ export function usePostActions({
   const openBookmarkFolderModal = useCallback((postId: string) => {
     if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }
     setBookmarkingPostId(postId); setShowBookmarkModal(true)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [accessToken, showToast])
 
   const handleBookmarkToFolder = useCallback(async (folderId: string) => {
@@ -229,7 +229,7 @@ export function usePostActions({
       else { showToast(result.error || t('operationFailed'), 'error') }
     } catch { showToast(t('networkError'), 'error') }
     finally { setBookmarkLoading(prev => ({ ...prev, [bookmarkingPostId]: false })); setShowBookmarkModal(false); setBookmarkingPostId(null) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [accessToken, bookmarkingPostId, showToast])
 
   // Repost
@@ -245,7 +245,7 @@ export function usePostActions({
       else { showToast(result.error || t('repostFailed'), 'error') }
     } catch (err) { logger.error('[PostFeed] repost failed:', err); showToast(t('networkError'), 'error') }
     finally { setRepostLoading(prev => ({ ...prev, [postId]: false })) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [accessToken, posts, openPost, currentUserId, showToast])
 
   // Load user bookmarks
@@ -277,7 +277,7 @@ export function usePostActions({
       } else { showToast(data.error || t('editFailed'), 'error') }
     } catch (err) { logger.error('[PostFeed] edit failed:', err); showToast(t('editFailed'), 'error') }
     finally { setSavingEdit(false) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs t, setPosts, setOpenPost excluded to avoid re-creating callback
   }, [editingPost, accessToken, editTitle, editContent, openPost?.id, showToast])
 
   // Delete

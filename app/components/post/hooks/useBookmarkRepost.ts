@@ -70,7 +70,7 @@ export function useBookmarkRepost({
     }
     setBookmarkingPostId(postId)
     setShowBookmarkModal(true)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded to avoid re-creating callback on language change; translations read at call time
   }, [accessToken, showToast])
 
   const handleBookmarkToFolder = useCallback(async (folderId: string) => {
@@ -102,7 +102,7 @@ export function useBookmarkRepost({
       setShowBookmarkModal(false)
       setBookmarkingPostId(null)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded to avoid re-creating callback on language change; translations read at call time
   }, [accessToken, bookmarkingPostId, showToast])
 
   const handleRepost = useCallback(async (postId: string, comment?: string) => {
@@ -140,7 +140,7 @@ export function useBookmarkRepost({
     } finally {
       setRepostLoading(prev => ({ ...prev, [postId]: false }))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t/getPosts/getOpenPost are excluded; stable refs or read at call time
   }, [accessToken, currentUserId, showToast])
 
   // Batch load bookmark status for a list of post IDs

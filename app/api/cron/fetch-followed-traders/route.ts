@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { runTraderAlertDetection } from '@/lib/services/trader-alerts'
 import logger from '@/lib/logger'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -52,6 +53,7 @@ function getSupabaseAdmin() {
  */
 export async function GET(req: Request) {
   const startTime = Date.now()
+  const plog = await PipelineLogger.start('fetch-followed-traders')
 
   try {
     // 验证授权
@@ -117,6 +119,7 @@ export async function GET(req: Request) {
 
     const duration = Date.now() - startTime
 
+    await plog.success(totalCount, { bySource: results, alertDetection: alertResult })
     return NextResponse.json({
       ok: true,
       message: 'Followed traders check completed',
@@ -127,6 +130,7 @@ export async function GET(req: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error: unknown) {
+    await plog.error(error instanceof Error ? error : new Error(String(error)))
     logger.error('[FollowedTraders Cron] 执行Failed:', error)
     return NextResponse.json(
       {

@@ -249,7 +249,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     else setShowingOriginal(true)
     if (needsContentTranslation) translateContent(post.id, post.content!, language)
     if (!hasTranslatedTitle && needsTitleTranslation) translateListPosts([post], language as 'zh' | 'en')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/setters/showingOriginal excluded; only re-create when translation dependencies change
   }, [loadComments, language, isChineseText, translateContent, translatedListPosts, translateListPosts])
 
   if (loading) return <div className="stagger-children" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}><PostSkeleton /><PostSkeleton /><PostSkeleton /></div>
