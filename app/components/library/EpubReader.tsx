@@ -816,7 +816,6 @@ export default function EpubReader({
       <EpubSearchPanel
         show={showSearch}
         onClose={() => setShowSearch(false)}
-        isZh={isZh}
         panelBg={panelBg}
         panelText={panelText}
         panelBorder={panelBorder}

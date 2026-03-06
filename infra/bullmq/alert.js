@@ -3,7 +3,7 @@ const https = require('https');
 const { execSync } = require('child_process');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID || '5646617467';
+const CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID || '5646617467';
 
 // Dedup: don't send same alert within 30 min
 const alertHistory = new Map();

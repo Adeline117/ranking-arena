@@ -1105,6 +1105,7 @@ export default function ReadPage() {
           fontFamily={fontFamily}
           lineHeight={lineHeight}
           contentMode={contentMode}
+          isZh={isZh}
           onThemeChange={setTheme}
           onFontSizeChange={setFontSize}
           onFontFamilyChange={setFontFamily}

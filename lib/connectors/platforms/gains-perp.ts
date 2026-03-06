@@ -11,6 +11,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  GainsOpenTradesResponseSchema,
+  GainsTradeHistoryResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -68,10 +73,11 @@ export class GainsPerpConnector extends BaseConnector {
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     try {
       // Get open trades to discover active traders
-      const data = await this.request<GainsTrade[]>(
+      const _rawTrades = await this.request<GainsTrade[]>(
         `${this.API_BASE}/open-trades`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(GainsOpenTradesResponseSchema, _rawTrades, 'gains-perp/leaderboard')
 
       // Extract unique trader addresses
       const traderSet = new Set<string>()
@@ -135,16 +141,18 @@ export class GainsPerpConnector extends BaseConnector {
   async fetchTraderSnapshot(traderKey: string, window: Window): Promise<SnapshotResult | null> {
     try {
       // Get trader's open positions
-      const openTrades = await this.request<GainsTrade[]>(
+      const _rawOpenTrades = await this.request<GainsTrade[]>(
         `${this.API_BASE}/open-trades/${traderKey}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const openTrades = warnValidate(GainsOpenTradesResponseSchema, _rawOpenTrades, 'gains-perp/open-trades')
 
       // Get trading history
-      const history = await this.request<GainsTradeHistory[]>(
+      const _rawHistory = await this.request<GainsTradeHistory[]>(
         `${this.API_BASE}/personal-trading-history-table/${traderKey}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const history = warnValidate(GainsTradeHistoryResponseSchema, _rawHistory, 'gains-perp/history')
 
       // Calculate stats from history within the window
       let totalPnl = 0

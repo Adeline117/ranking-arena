@@ -11,6 +11,11 @@
  */
 
 import { BaseConnector } from '../base'
+import { warnValidate } from '../schemas'
+import {
+  BlofinFuturesLeaderboardResponseSchema,
+  BlofinFuturesDetailResponseSchema,
+} from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
@@ -59,10 +64,11 @@ export class BlofinFuturesConnector extends BaseConnector {
 
     try {
       // Attempt BloFin API endpoint
-      const data = await this.request<{ data?: { list?: BloFinTraderEntry[] } }>(
+      const _rawLb = await this.request<{ data?: { list?: BloFinTraderEntry[] } }>(
         `https://openapi.blofin.com/api/v1/copytrading/public/leaderboard?period=${period}&limit=${limit}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(BlofinFuturesLeaderboardResponseSchema, _rawLb, 'blofin-futures/leaderboard')
 
       const list = data?.data?.list || []
       const traders: TraderSource[] = list.map((item) => ({
@@ -85,10 +91,11 @@ export class BlofinFuturesConnector extends BaseConnector {
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     try {
-      const data = await this.request<{ data?: BloFinTraderEntry }>(
+      const _rawProfile = await this.request<{ data?: BloFinTraderEntry }>(
         `https://openapi.blofin.com/api/v1/copytrading/public/trader/${traderKey}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(BlofinFuturesDetailResponseSchema, _rawProfile, 'blofin-futures/profile')
 
       const info = data?.data
       const profile: TraderProfile = {
@@ -124,10 +131,11 @@ export class BlofinFuturesConnector extends BaseConnector {
     const period = periodMap[window] || '30'
 
     try {
-      const data = await this.request<{ data?: BloFinTraderEntry }>(
+      const _rawSnap = await this.request<{ data?: BloFinTraderEntry }>(
         `https://openapi.blofin.com/api/v1/copytrading/public/trader/${traderKey}?period=${period}`,
         { method: 'GET', headers: this.getHeaders() }
       )
+      const data = warnValidate(BlofinFuturesDetailResponseSchema, _rawSnap, 'blofin-futures/snapshot')
 
       const info = data?.data
       if (!info) {

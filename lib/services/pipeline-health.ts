@@ -85,7 +85,7 @@ async function sendPipelineAlert(
 
   // Try Telegram alert
   const telegramToken = process.env.TELEGRAM_BOT_TOKEN
-  const telegramChatId = process.env.TELEGRAM_CHAT_ID
+  const telegramChatId = process.env.TELEGRAM_ALERT_CHAT_ID
   if (telegramToken && telegramChatId) {
     try {
       await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
