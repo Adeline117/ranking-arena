@@ -51,12 +51,12 @@ export default function Footer() {
     <footer
       className="hide-mobile-nav"
       style={{
-        marginTop: 64,
+        marginTop: tokens.spacing[8],
         borderTop: `1px solid var(--color-border-primary)`,
         maxWidth: 1200,
         marginLeft: 'auto',
         marginRight: 'auto',
-        padding: '40px 16px 32px',
+        padding: `${tokens.spacing[10]} ${tokens.spacing[4]} ${tokens.spacing[8]}`,
       }}
     >
       {/* Column grid */}
@@ -64,9 +64,9 @@ export default function Footer() {
         className="footer-columns"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-          gap: 32,
-          marginBottom: 32,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+          gap: tokens.spacing[6],
+          marginBottom: tokens.spacing[6],
         }}
       >
         {columns.map((col) => (

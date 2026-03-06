@@ -25,15 +25,15 @@ export default function FoundingMemberBanner() {
         padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
         marginBottom: tokens.spacing[3],
         borderRadius: tokens.radius.lg,
-        background: 'color-mix(in srgb, #f59e0b 8%, var(--color-bg-secondary, transparent))',
-        border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)',
+        background: 'var(--color-founding-accent-muted)',
+        border: '1px solid var(--color-founding-accent-border)',
         fontSize: tokens.typography.fontSize.sm,
         lineHeight: 1.4,
         flexWrap: 'wrap',
       }}
     >
       {/* Star icon instead of emoji */}
-      <span style={{ color: '#f59e0b', fontWeight: 900, fontSize: 14, letterSpacing: 0.5 }}>
+      <span style={{ color: 'var(--color-founding-accent)', fontWeight: 900, fontSize: 14, letterSpacing: 0.5 }}>
         ★
       </span>
       <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>
@@ -47,7 +47,7 @@ export default function FoundingMemberBanner() {
         style={{
           padding: `2px ${tokens.spacing[3]}`,
           borderRadius: tokens.radius.md,
-          background: '#f59e0b',
+          background: 'var(--color-founding-accent)',
           color: '#fff',
           textDecoration: 'none',
           fontSize: tokens.typography.fontSize.xs,

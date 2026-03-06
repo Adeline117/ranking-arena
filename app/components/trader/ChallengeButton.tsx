@@ -151,9 +151,9 @@ export default function ChallengeButton({
           gap: 6,
           padding: '8px 14px',
           borderRadius: 8,
-          background: 'rgba(255,215,0,0.08)',
-          border: '1px solid rgba(255,215,0,0.3)',
-          color: 'var(--color-medal-gold, #FFD700)',
+          background: 'color-mix(in srgb, var(--color-medal-gold) 8%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--color-medal-gold) 30%, transparent)',
+          color: 'var(--color-medal-gold)',
           minHeight: 44,
           fontSize: 13,
           fontWeight: 700,
@@ -163,12 +163,12 @@ export default function ChallengeButton({
           whiteSpace: 'nowrap',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(255,215,0,0.15)'
-          e.currentTarget.style.borderColor = 'rgba(255,215,0,0.6)'
+          e.currentTarget.style.background = 'color-mix(in srgb, var(--color-medal-gold) 15%, transparent)'
+          e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-medal-gold) 60%, transparent)'
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255,215,0,0.08)'
-          e.currentTarget.style.borderColor = 'rgba(255,215,0,0.3)'
+          e.currentTarget.style.background = 'color-mix(in srgb, var(--color-medal-gold) 8%, transparent)'
+          e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-medal-gold) 30%, transparent)'
         }}
       >
         {/* Crossed swords icon */}
@@ -203,13 +203,14 @@ export default function ChallengeButton({
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 9999,
+            zIndex: 400,
             background: 'var(--color-backdrop-heavy, rgba(0,0,0,0.75))',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
             backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
           }}
         >
           <div
