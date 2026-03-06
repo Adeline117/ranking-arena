@@ -31,9 +31,10 @@
 - [x] TraderAvatar Image 400 errors (added `unoptimized` prop)
 
 ## In Progress
-- [ ] HTX Futures enrichment improvements
 - [ ] VPS cron deployment optimization
-- [ ] Data freshness monitoring
+- [ ] Vercel cron scheduling review
+- [ ] N+1 query audit for ranking pages
+- [ ] Orphaned trader_sources cleanup
 
 ## Platform Coverage Status
 
@@ -49,7 +50,7 @@
 | MEXC | ✅ | ✅ | - |
 | KuCoin | ✅ | ✅ | - |
 | Gate.io | ✅ | ✅ | - |
-| HTX Futures | ✅ | 🔄 | - |
+| HTX Futures | ✅ | ✅ | - |
 | CoinEx | ✅ | ✅ | - |
 | Hyperliquid | ✅ | ✅ | - |
 
@@ -62,6 +63,10 @@ Legend: ✅ Complete | 🔄 In Progress | ❌ Blocked | - Not Needed
 - Migrations: 98 files
 
 ## Session Handoff Notes
-<!-- Add notes for next session here -->
-- Last updated: 2024-03-05
-- Current focus: Data pipeline stability
+- Last updated: 2026-03-06
+- HTX enrichment completed (equity curve + stats detail + batch-enrich integration)
+- PipelineLogger integrated into 6 core cron jobs
+- Dependencies health API + E2E tests added
+- Perf audit (N+1 queries) in progress
+- Remaining P1: VPS cron optimization, Vercel cron scheduling
+- Remaining P2: orphaned trader_sources cleanup, search ranking, leaderboard filters
