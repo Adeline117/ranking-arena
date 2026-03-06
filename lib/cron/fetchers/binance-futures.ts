@@ -75,11 +75,19 @@ async function fetchWithProxyFallback<T>(
     if (PROXY_URL) {
       try {
         const proxyTarget = `${PROXY_URL}/binance/copy-trading`
-        return await fetchJson<T>(proxyTarget, {
+        const cfResult = await fetchJson<T>(proxyTarget, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: opts.body,
         })
+        // CF proxy may return 200 with geo-block message in body — detect and skip
+        const cfAny = cfResult as Record<string, unknown>
+        const cfMsg = String(cfAny?.msg || cfAny?.message || '')
+        if (cfMsg.includes('restricted location') || cfMsg.includes('unavailable')) {
+          logger.warn(`[binance-futures] CF proxy returned geo-block: ${cfMsg.slice(0, 120)}`)
+        } else {
+          return cfResult
+        }
       } catch (cfErr) {
         logger.warn(`[binance-futures] CF proxy failed: ${cfErr instanceof Error ? cfErr.message : String(cfErr)}`)
       }
