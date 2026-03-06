@@ -23,7 +23,7 @@ type ShelfBook = {
 
 export default function BookshelfTab() {
   const { language, t } = useLanguage()
-  const { showToast } = useToast()
+  useToast()
   const isZh = language === 'zh'
 
   const [books, setBooks] = useState<ShelfBook[]>([])

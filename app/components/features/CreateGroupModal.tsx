@@ -90,7 +90,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
     } finally {
       setSearching(false)
     }
-  }, [accessToken])
+  }, [accessToken]) // eslint-disable-line react-hooks/exhaustive-deps -- circular dep
 
   const toggleMember = (user: UserResult) => {
     setSelectedMembers(prev => {

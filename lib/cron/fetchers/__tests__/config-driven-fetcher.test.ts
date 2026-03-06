@@ -2,7 +2,7 @@
  * Config-Driven Fetcher Tests
  *
  * Tests the createConfigDrivenFetcher factory:
- *   - Returns a valid PlatformFetcher function
+ *   - Returns a valid function
  *   - Period mapping (maps Arena periods to exchange-specific values)
  *   - Pagination handling (page_number, offset, none)
  *   - Field mapping / extraction
@@ -12,7 +12,6 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createConfigDrivenFetcher, type ExchangeConfig } from '../config-driven-fetcher'
-import type { PlatformFetcher, FetchResult } from '../shared'
 
 // ============================================
 // Mocks
@@ -133,13 +132,13 @@ describe('createConfigDrivenFetcher', () => {
     jest.clearAllMocks()
   })
 
-  test('returns a function (PlatformFetcher)', () => {
+  test('returns a function ()', () => {
     const config = createTestConfig()
     const fetcher = createConfigDrivenFetcher(config)
     expect(typeof fetcher).toBe('function')
   })
 
-  test('returned function accepts (supabase, periods) and returns FetchResult', async () => {
+  test('returned function accepts (supabase, periods) and returns', async () => {
     const config = createTestConfig()
     const fetcher = createConfigDrivenFetcher(config)
     const supabase = createMockSupabase()
