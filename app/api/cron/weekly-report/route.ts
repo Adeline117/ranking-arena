@@ -1,7 +1,6 @@
 /**
- * Weekly Pipeline Report Cron
- * Runs every Monday at 08:00 UTC — sends summary of pipeline health,
- * error counts, and new trader counts via configured alert channels.
+ * 每周 Pipeline 报告
+ * 每周一 08:00 UTC 运行 — 发送 pipeline 健康、错误统计、新增交易员摘要。
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -22,7 +21,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin()
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-    // 1. Pipeline job stats (last 7 days)
+    // 1. Pipeline 任务统计 (最近 7 天)
     const jobStats = await PipelineLogger.getJobStats()
     const totalRuns = jobStats.reduce((sum, j) => sum + j.total_runs, 0)
     const totalErrors = jobStats.reduce((sum, j) => sum + j.error_count, 0)
@@ -30,28 +29,27 @@ export async function GET(request: NextRequest) {
       ? jobStats.reduce((sum, j) => sum + j.success_rate, 0) / jobStats.length
       : 0
 
-    // Top 5 failing jobs
     const topFailing = jobStats
       .filter(j => j.error_count > 0)
       .sort((a, b) => b.error_count - a.error_count)
       .slice(0, 5)
 
-    // 2. New traders this week
+    // 2. 本周新增交易员
     const { count: newTraders } = await supabase
       .from('trader_sources')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', weekAgo)
 
-    // 3. Total traders
+    // 3. 交易员总数
     const { count: totalTraders } = await supabase
       .from('trader_sources')
       .select('id', { count: 'exact', head: true })
 
-    // 4. Recent failures
+    // 4. 最近失败
     const recentFailures = await PipelineLogger.getRecentFailures(10)
     const uniqueFailedJobs = new Set(recentFailures.map(f => f.job_name))
 
-    // 5. Data freshness — sources with stale data
+    // 5. 数据新鲜度 — 过期数据源
     const { data: staleSources } = await supabase
       .from('trader_sources')
       .select('source')
@@ -66,55 +64,55 @@ export async function GET(request: NextRequest) {
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
 
-    // 6. User growth
+    // 6. 用户增长
     const { count: newUsers } = await supabase
       .from('user_profiles')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', weekAgo)
 
-    // Build report
+    // 构建报告
     const failingJobLines = topFailing.length > 0
-      ? topFailing.map(j => `  • ${j.job_name}: ${j.error_count} errors (${(j.success_rate * 100).toFixed(0)}% success)`).join('\n')
-      : '  None'
+      ? topFailing.map(j => `  - ${j.job_name}: ${j.error_count} 错误 (成功率 ${(j.success_rate * 100).toFixed(0)}%)`).join('\n')
+      : '  无'
 
     const staleLines = staleExchanges.length > 0
-      ? staleExchanges.map(([src, cnt]) => `  • ${src}: ${cnt} stale traders`).join('\n')
-      : '  All fresh'
+      ? staleExchanges.map(([src, cnt]) => `  - ${src}: ${cnt} 个过期交易员`).join('\n')
+      : '  全部正常'
 
     const message = [
-      `Pipeline runs: ${totalRuns} | Errors: ${totalErrors} | Avg success: ${(avgSuccessRate * 100).toFixed(1)}%`,
+      `Pipeline 运行: ${totalRuns} | 错误: ${totalErrors} | 平均成功率: ${(avgSuccessRate * 100).toFixed(1)}%`,
       '',
-      `Traders: ${(totalTraders ?? 0).toLocaleString()} total | +${newTraders ?? 0} new this week`,
-      `Users: +${newUsers ?? 0} new this week`,
+      `交易员: ${(totalTraders ?? 0).toLocaleString()} 总计 | 本周 +${newTraders ?? 0}`,
+      `用户: 本周 +${newUsers ?? 0}`,
       '',
-      `Top failing jobs:`,
+      `高频错误任务:`,
       failingJobLines,
       '',
-      `Stale exchanges:`,
+      `过期交易所:`,
       staleLines,
       '',
-      `Unique failed jobs (recent): ${uniqueFailedJobs.size}`,
+      `最近失败任务数: ${uniqueFailedJobs.size}`,
     ].join('\n')
 
     const level = avgSuccessRate < 0.8 ? 'warning' : 'info'
 
     await sendAlert({
-      title: `📊 Arena Weekly Report — ${new Date().toISOString().split('T')[0]}`,
+      title: `Arena 每周报告 — ${new Date().toISOString().split('T')[0]}`,
       message,
       level,
       details: {
-        'Total Runs': totalRuns,
-        'Error Count': totalErrors,
-        'Success Rate': `${(avgSuccessRate * 100).toFixed(1)}%`,
-        'New Traders': newTraders ?? 0,
-        'New Users': newUsers ?? 0,
+        '总运行数': totalRuns,
+        '错误数': totalErrors,
+        '成功率': `${(avgSuccessRate * 100).toFixed(1)}%`,
+        '新增交易员': newTraders ?? 0,
+        '新增用户': newUsers ?? 0,
       },
     })
 
-    logger.info('[Weekly Report] Sent successfully')
+    logger.info('[每周报告] 已发送')
     return NextResponse.json({ ok: true, totalRuns, totalErrors, avgSuccessRate, newTraders, newUsers })
   } catch (err) {
-    logger.error('[Weekly Report] Error:', err)
+    logger.error('[每周报告] 错误:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
