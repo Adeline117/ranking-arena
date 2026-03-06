@@ -109,7 +109,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         action: 'ban',
         target_id: targetUserId,
         details: { reason }
-      }),
+      }).then(),
       'Group audit log: ban'
     )
 
@@ -167,7 +167,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         action: 'unban',
         target_id: targetUserId,
         details: {}
-      }),
+      }).then(),
       'Group audit log: unban'
     )
 

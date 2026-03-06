@@ -113,7 +113,7 @@ export async function POST(
         action: 'delete_post',
         target_id: postId,
         details: { reason: null }
-      }),
+      }).then(),
       'Group audit log: delete_post'
     )
 

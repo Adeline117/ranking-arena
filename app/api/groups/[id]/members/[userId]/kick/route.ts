@@ -129,7 +129,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         action: 'kick',
         target_id: targetUserId,
         details: { reason: null }
-      }),
+      }).then(),
       'Group audit log: kick'
     )
 
