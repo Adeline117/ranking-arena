@@ -32,6 +32,7 @@ import { fetchBitfinex } from './bitfinex'
 import { fetchWhitebit } from './whitebit'
 import { fetchBtse } from './btse'
 import { fetchToobit } from './toobit'
+import { fetchPionex } from './pionex'
 
 // DEX - On-chain / Subgraph
 import { fetchHyperliquid } from './hyperliquid'
@@ -71,6 +72,7 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   whitebit: fetchWhitebit,
   btse: fetchBtse,
   toobit: fetchToobit,
+  pionex: fetchPionex,
 
   // DEX
   hyperliquid: fetchHyperliquid,
