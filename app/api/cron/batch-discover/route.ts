@@ -38,9 +38,13 @@ export async function GET(request: NextRequest) {
   for (const endpoint of ENDPOINTS) {
     const start = Date.now()
     try {
+      const headers: Record<string, string> = { 'Authorization': `Bearer ${cronSecret}` }
+      if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+        headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+      }
       const res = await fetch(`${baseUrl}${endpoint}`, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${cronSecret}` },
+        headers,
       })
       results.push({
         name: endpoint,

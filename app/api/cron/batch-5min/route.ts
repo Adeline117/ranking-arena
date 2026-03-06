@@ -31,7 +31,11 @@ async function callInternal(baseUrl: string, path: string, method: 'GET' | 'POST
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${process.env.CRON_SECRET}`,
     }
-    
+    // Bypass Vercel Deployment Protection for internal cron calls
+    if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+      headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+    }
+
     const opts: RequestInit = { method, headers }
     if (body) {
       headers['Content-Type'] = 'application/json'
