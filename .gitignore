@@ -123,3 +123,4 @@ financial_publications_summary.md
 !.claude/commands/
 !.claude/agents/
 !.claude/settings.json
+.backup-*
