@@ -21,12 +21,11 @@ function getSupabaseEnv() {
 }
 
 function isAuthorized(req: Request) {
-  const secret = process.env.ADMIN_SECRET || process.env.CRON_SECRET || ''
+  const secret = process.env.ADMIN_SECRET || process.env.CRON_SECRET
   if (!secret) return false
 
-  // 支持多种认证方式
   const authHeader = req.headers.get('authorization')
-  const adminSecret = req.headers.get('x-admin-secret') || ''
+  const adminSecret = req.headers.get('x-admin-secret')
 
   return authHeader === `Bearer ${secret}` || adminSecret === secret
 }
