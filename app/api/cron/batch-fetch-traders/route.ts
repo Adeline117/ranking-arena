@@ -57,9 +57,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: `Unknown group: ${group}`, available: Object.keys(GROUPS) }, { status: 400 })
   }
 
-  // Use production URL to avoid Vercel deployment protection on preview URLs
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+  // IMPORTANT: Use VERCEL_URL (direct Vercel domain) instead of NEXT_PUBLIC_APP_URL (Cloudflare domain)
+  // Cloudflare has a ~120s proxy timeout that kills long-running fetch requests.
+  // VERCEL_URL bypasses Cloudflare, allowing the full 300s Vercel function timeout.
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000')
 
   const results: BatchResult[] = []
   const overallStart = Date.now()
