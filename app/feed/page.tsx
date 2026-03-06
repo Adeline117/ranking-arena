@@ -13,7 +13,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 60 // ISR: 1 minute
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org'
 

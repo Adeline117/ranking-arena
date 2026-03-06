@@ -297,6 +297,7 @@ async function getTraderArenaFollowersCountBatch(
       .from('trader_follows')
       .select('trader_id')
       .in('trader_id', traderIds)
+      .limit(10000)
 
     if (error || !data) return result
 
@@ -491,13 +492,14 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
         .order('captured_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
-      // 历史快照（用于计算 profitableWeeksPct）
+      // 历史快照（用于计算 profitableWeeksPct，限制最近 200 条）
       supabase
         .from('trader_snapshots')
         .select('roi, captured_at')
         .eq('source', source.source)
         .eq('source_trader_id', source.source_trader_id)
-        .order('captured_at', { ascending: true }),
+        .order('captured_at', { ascending: false })
+        .limit(200),
       // 频繁交易资产
       (async () => {
         const { data: latestCapturedAt } = await supabase
@@ -549,8 +551,8 @@ export async function getTraderStats(handle: string): Promise<TraderStats> {
       return { additionalStats: {} }
     }
 
-    // 计算 activeSince
-    const earliestSnapshot = snapshots[0]
+    // 计算 activeSince（snapshots 按 captured_at DESC 排序，最早的在末尾）
+    const earliestSnapshot = snapshots[snapshots.length - 1]
     const activeSinceDate = new Date(earliestSnapshot.captured_at)
     const activeSince = `${activeSinceDate.getMonth() + 1}/${activeSinceDate.getDate()}/${activeSinceDate.getFullYear().toString().slice(-2)}`
 
