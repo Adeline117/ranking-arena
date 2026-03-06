@@ -20,16 +20,14 @@ export default function FoundingMemberBanner() {
       style={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-        marginBottom: tokens.spacing[3],
-        borderRadius: tokens.radius.lg,
+        gap: 6,
+        padding: `4px ${tokens.spacing[3]}`,
+        borderRadius: tokens.radius.md,
         background: 'var(--color-founding-accent-muted)',
         border: '1px solid var(--color-founding-accent-border)',
-        fontSize: tokens.typography.fontSize.sm,
+        fontSize: tokens.typography.fontSize.xs,
         lineHeight: 1.4,
-        flexWrap: 'wrap',
+        flexShrink: 0,
       }}
     >
       {/* Star icon instead of emoji */}

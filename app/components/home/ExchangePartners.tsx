@@ -121,11 +121,15 @@ export default function ExchangePartners() {
             whiteSpace: 'nowrap',
             flexShrink: 0,
             textDecoration: 'none',
+            padding: '4px 10px',
+            borderRadius: 8,
+            transition: 'all 0.2s ease',
           }
           return source ? (
             <Link
               key={`${ex.key}-${i}`}
               href={`/rankings/${source}`}
+              className="exchange-item"
               style={sharedStyle}
             >
               {content}
@@ -133,6 +137,7 @@ export default function ExchangePartners() {
           ) : (
             <span
               key={`${ex.key}-${i}`}
+              className="exchange-item"
               style={sharedStyle}
             >
               {content}
@@ -148,6 +153,10 @@ export default function ExchangePartners() {
         }
         @media (prefers-reduced-motion: reduce) {
           * { animation-duration: 0s !important; }
+        }
+        .exchange-item:hover {
+          background: var(--color-bg-hover) !important;
+          color: var(--color-text-primary) !important;
         }
       `}</style>
     </div>

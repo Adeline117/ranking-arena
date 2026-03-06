@@ -9,7 +9,6 @@ import { useToast } from '../ui/Toast'
 import { RankingTable, type Trader } from '../ranking/RankingTable'
 
 import TimeRangeSelector from './TimeRangeSelector'
-import FoundingMemberBanner from './FoundingMemberBanner'
 import type { TimeRange } from './hooks/useTraderData'
 import { CategoryType, filterByCategory } from '../ranking/CategoryRankingTabs'
 import { useSubscription } from './hooks/useSubscription'
@@ -107,7 +106,10 @@ export default function RankingSection({
   const [category, setCategory] = useState<CategoryType>('all')
 
   // 高级筛选状态
-  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth >= 1024
+  })
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
 
@@ -578,8 +580,25 @@ export default function RankingSection({
           />
         </Box>
 
-        {/* 右侧: 操作按钮 */}
+        {/* 右侧: Pro 标签 + 操作按钮 */}
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexShrink: 0 }}>
+          {BETA_PRO_FEATURES_FREE && (
+            <Box style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 10px',
+              borderRadius: tokens.radius.md,
+              background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
+              fontSize: 11,
+              color: 'var(--color-text-tertiary)',
+              whiteSpace: 'nowrap',
+            }}>
+              <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)' }}>Pro</span>
+              <span>{language === 'zh' ? '限时免费' : 'Free beta'}</span>
+            </Box>
+          )}
           {/* Copy Filter Link Button */}
           {!loading && (
             <button
@@ -643,27 +662,6 @@ export default function RankingSection({
           {/* DataFreshnessIndicator removed from toolbar — bottom timestamp is less intrusive */}
         </Box>
       </Box>
-
-      {/* Founding member banner + Pro notice — below time range selector */}
-      <FoundingMemberBanner />
-      {BETA_PRO_FEATURES_FREE && (
-        <Box style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 6,
-          padding: '6px 12px',
-          marginBottom: tokens.spacing[2],
-          borderRadius: tokens.radius.md,
-          background: 'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 10%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 25%, transparent)',
-          fontSize: tokens.typography.fontSize.xs,
-          color: 'var(--color-text-secondary)',
-        }}>
-          <span style={{ fontWeight: 700, color: 'var(--color-pro-gradient-start, #a78bfa)', fontSize: 11 }}>Pro</span>
-          <span>{language === 'zh' ? '全部功能开放中 · 限时免费体验' : 'All Pro features unlocked · Free during open beta'}</span>
-        </Box>
-      )}
 
       {/* 高级筛选面板 */}
       {showAdvancedFilter && (
@@ -759,47 +757,40 @@ export default function RankingSection({
         onSearchChange={handleSearchChange}
       />
 
-      {/* Free user limit prompt - glassmorphism overlay */}
+      {/* Free user limit — inline CTA card (not overlay) */}
       {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
         <Box
           style={{
-            marginTop: -40,
-            position: 'relative',
-            zIndex: 10,
-            paddingTop: 40,
-            background: 'linear-gradient(180deg, transparent 0%, var(--color-bg-secondary) 40%)',
-            borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
-            textAlign: 'center',
-            paddingBottom: tokens.spacing[6],
+            marginTop: tokens.spacing[4],
+            padding: `${tokens.spacing[5]} ${tokens.spacing[6]}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[5],
+            background: 'linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-pro-glow, rgba(167,139,250,0.08)) 100%)',
+            borderRadius: tokens.radius.xl,
+            border: '1px solid var(--color-pro-gradient-start, #a78bfa)',
           }}
         >
-          <Box style={{
-            padding: `${tokens.spacing[5]} ${tokens.spacing[5]}`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: tokens.spacing[3],
-            background: 'linear-gradient(180deg, var(--color-bg-secondary) 0%, var(--color-pro-glow) 100%)',
-            borderRadius: tokens.radius.lg,
-            border: '1px solid var(--color-pro-gradient-start)',
-            margin: `0 ${tokens.spacing[4]}`,
-          }}>
-            <svg width={24} height={24} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start)">
-              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-            </svg>
-            <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)' }}>
-              {t('upgradeProViewAll').replace('{count}', '15,000+')}
+          <svg width={32} height={32} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start, #a78bfa)" style={{ flexShrink: 0 }}>
+            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+          </svg>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)', marginBottom: 4 }}>
+              {t('upgradeProViewAll').replace('{count}', '32,000+')}
             </Text>
-            <Text size="sm" style={{ color: 'var(--color-text-tertiary)' }}>
-              {t('currentlyShowingTop').replace('{count}', String(FREE_LEADERBOARD_LIMIT))}
+            <Text size="sm" style={{ color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
+              {language === 'zh'
+                ? `当前显示 Top ${FREE_LEADERBOARD_LIMIT} · 升级解锁全部交易员、高级筛选、CSV 导出`
+                : `Showing Top ${FREE_LEADERBOARD_LIMIT} · Unlock all traders, advanced filters & CSV export`}
             </Text>
-            <button
-              className="pro-feature-teaser-cta"
-              onClick={() => router.push('/pricing')}
-            >
-              {t('upgradeProFull')}
-            </button>
           </Box>
+          <button
+            className="pro-feature-teaser-cta"
+            onClick={() => router.push('/pricing')}
+            style={{ flexShrink: 0 }}
+          >
+            {t('upgradeProFull')}
+          </button>
         </Box>
       )}
 

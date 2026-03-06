@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
@@ -14,9 +14,13 @@ interface TraderTabsProps {
   onProRequired?: () => void
 }
 
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+
 export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired: _onProRequired }: TraderTabsProps) {
   const { t } = useLanguage()
+  const containerRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 })
 
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'overview', label: t('overview') },
@@ -24,8 +28,31 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
     { key: 'portfolio', label: t('portfolio') },
   ]
 
+  const updateIndicator = useCallback(() => {
+    const el = tabRefs.current.get(activeTab)
+    const container = containerRef.current
+    if (!el || !container) return
+    const containerRect = container.getBoundingClientRect()
+    const tabRect = el.getBoundingClientRect()
+    setIndicator({
+      left: tabRect.left - containerRect.left + container.scrollLeft,
+      width: tabRect.width,
+    })
+  }, [activeTab])
+
+  useIsomorphicLayoutEffect(() => {
+    updateIndicator()
+  }, [updateIndicator])
+
+  // Update on resize
+  useEffect(() => {
+    window.addEventListener('resize', updateIndicator)
+    return () => window.removeEventListener('resize', updateIndicator)
+  }, [updateIndicator])
+
   return (
     <Box
+      ref={containerRef}
       className="profile-tabs"
       role="tablist"
       aria-label={t('traderProfileTabs')}
@@ -42,6 +69,21 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
         borderBottom: `1px solid ${tokens.colors.border.primary}40`,
       }}
     >
+      {/* Sliding indicator */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: indicator.left,
+          width: indicator.width,
+          height: 2,
+          background: `linear-gradient(90deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
+          borderRadius: 1,
+          transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          zIndex: 1,
+        }}
+      />
+
       {tabs.map((tab) => {
         const isProTab = tab.key === 'stats' || tab.key === 'portfolio'
         const showProBadge = !isPro && isProTab
@@ -125,4 +167,3 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
     </Box>
   )
 }
-

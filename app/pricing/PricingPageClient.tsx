@@ -356,6 +356,99 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             </Link>
           </div>
         </div>
+        {/* Feature Comparison Table */}
+        <div style={{ maxWidth: 720, margin: `${tokens.spacing[10]} auto 0`, textAlign: 'left' }}>
+          <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: tokens.spacing[6], textAlign: 'center' }}>
+            {locale === 'zh' ? '功能对比' : 'Feature Comparison'}
+          </h2>
+          <div style={{
+            borderRadius: tokens.radius.lg,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            overflow: 'hidden',
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 80px 80px',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+              background: tokens.colors.bg.tertiary,
+              fontWeight: 700,
+              fontSize: 13,
+              color: tokens.colors.text.secondary,
+            }}>
+              <span>{locale === 'zh' ? '功能' : 'Feature'}</span>
+              <span style={{ textAlign: 'center' }}>Free</span>
+              <span style={{ textAlign: 'center', color: tokens.colors.accent.brand }}>Pro</span>
+            </div>
+            {/* Rows */}
+            {[
+              { feature: locale === 'zh' ? '交易员排行榜' : 'Trader Rankings', free: 'Top 100', pro: true },
+              { feature: locale === 'zh' ? '高级筛选' : 'Advanced Filters', free: false, pro: true },
+              { feature: locale === 'zh' ? 'Arena Score 详情' : 'Score Breakdown', free: false, pro: true },
+              { feature: locale === 'zh' ? '交易员对比' : 'Trader Comparison', free: false, pro: true },
+              { feature: locale === 'zh' ? '分类排行' : 'Category Rankings', free: false, pro: true },
+              { feature: locale === 'zh' ? 'CSV 导出' : 'CSV Export', free: false, pro: true },
+              { feature: locale === 'zh' ? '交易提醒' : 'Trader Alerts', free: false, pro: true },
+              { feature: locale === 'zh' ? '社区帖子' : 'Community Posts', free: true, pro: true },
+              { feature: locale === 'zh' ? '资源库' : 'Library Access', free: true, pro: true },
+              { feature: locale === 'zh' ? '公共群组' : 'Public Groups', free: true, pro: true },
+            ].map((row, i) => (
+              <div key={i} style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 80px 80px',
+                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+                borderTop: `1px solid ${tokens.colors.border.primary}`,
+                fontSize: 14,
+                color: tokens.colors.text.primary,
+              }}>
+                <span>{row.feature}</span>
+                <span style={{ textAlign: 'center', color: row.free === false ? tokens.colors.text.tertiary : tokens.colors.text.primary }}>
+                  {row.free === true ? <CheckIcon size={16} color={tokens.colors.accent.success} /> : row.free === false ? '—' : <span style={{ fontSize: 12 }}>{row.free}</span>}
+                </span>
+                <span style={{ textAlign: 'center' }}>
+                  {row.pro === true ? <CheckIcon size={16} color={tokens.colors.accent.brand} /> : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* FAQ Section */}
+        <div style={{ maxWidth: 720, margin: `${tokens.spacing[10]} auto`, textAlign: 'left' }}>
+          <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: tokens.spacing[6], textAlign: 'center' }}>
+            FAQ
+          </h2>
+          {[
+            {
+              q: locale === 'zh' ? '可以随时取消吗？' : 'Can I cancel anytime?',
+              a: locale === 'zh' ? '当然！月付用户可以随时取消，当期剩余时间仍然有效。' : 'Yes! Monthly subscribers can cancel anytime. You keep access until the end of your billing period.',
+            },
+            {
+              q: locale === 'zh' ? '年付如何退款？' : 'What about refunds for yearly plans?',
+              a: locale === 'zh' ? '年付用户在首7天内可以全额退款。' : 'Yearly subscribers can get a full refund within the first 7 days.',
+            },
+            {
+              q: locale === 'zh' ? '终身会员是什么意思？' : 'What does Lifetime mean?',
+              a: locale === 'zh' ? '一次付款，永久享有所有 Pro 功能。即使未来涨价或增加新功能，都自动包含。' : 'Pay once, access all Pro features forever. Includes all future features and price increases.',
+            },
+          ].map((faq, i) => (
+            <details key={i} style={{
+              marginBottom: tokens.spacing[3],
+              padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              cursor: 'pointer',
+            }}>
+              <summary style={{ fontWeight: 600, fontSize: 15, color: tokens.colors.text.primary, listStyle: 'none' }}>
+                {faq.q}
+              </summary>
+              <p style={{ marginTop: tokens.spacing[3], fontSize: 14, color: tokens.colors.text.secondary, lineHeight: 1.6 }}>
+                {faq.a}
+              </p>
+            </details>
+          ))}
+        </div>
       </div>
       <MobileBottomNav />
     </div>
