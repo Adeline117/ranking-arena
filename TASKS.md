@@ -19,46 +19,32 @@ _No critical issues currently_
 
 ## 🟠 P1 - High Priority
 
-### Data Pipeline
-- [x] Complete HTX Futures enrichment coverage
-- [x] Monitor data freshness across all platforms
-- [x] Verify backfill scripts cover all edge cases
-
 ### Infrastructure
-- [ ] Optimize VPS cron deployment scripts
-- [x] Review Vercel cron job scheduling conflicts (well-distributed, no critical conflicts)
+- [ ] Run pipeline_logs migration on Supabase production
+- [ ] Set up Telegram bot + chat ID for alerts
+- [ ] Configure OpenClaw skills on Mac Mini
 
 ---
 
 ## 🟡 P2 - Should Do Soon
 
-### Performance
-- [ ] Audit N+1 queries in ranking pages (in progress - perf review)
-- [ ] Add missing database indexes for slow queries
-- [ ] Review React component re-renders
-
-### Data Quality
-- [x] Add data validation for incoming trader snapshots (Zod schema in shared.ts)
-- [x] Implement anomaly detection for ROI/PnL spikes (detect-anomalies cron)
-- [ ] Clean up orphaned trader_sources entries
-
 ### Features
 - [ ] Improve search ranking algorithm
 - [ ] Add more filter options to leaderboard
+
+### UI/UX
+- [ ] Loading skeleton improvements
+- [ ] Mobile pull-to-refresh consistency
+
+### Developer Experience
+- [ ] Add API documentation (OpenAPI spec)
 
 ---
 
 ## 🟢 P3 - Nice to Have
 
-### Developer Experience
-- [x] Add more E2E tests for critical flows (smoke.spec.ts + visual-regression.spec.ts)
-- [ ] Improve error messages in API responses
-- [ ] Add API documentation (OpenAPI spec)
-
-### UI/UX
-- [ ] Loading skeleton improvements
-- [ ] Mobile pull-to-refresh consistency
 - [ ] Dark mode refinements
+- [ ] Sentry error convergence (weekly auto-fix from Sentry API)
 
 ---
 
@@ -76,18 +62,27 @@ _No critical issues currently_
 ## Completed This Sprint
 _Move items here when done, then archive weekly_
 
+- [x] PipelineLogger integrated into 13 cron jobs (was 2)
+- [x] Dependencies health API (`/api/health/dependencies`)
+- [x] E2E smoke test + visual regression test
+- [x] HTX Futures added to batch-enrich MEDIUM_PRIORITY
+- [x] Vercel cron schedule staggered (4 jobs moved off minute :00)
+- [x] Monthly dependency update script
+- [x] API response snapshot script
+- [x] CLAUDE.md product priority section
+- [x] N+1 query audit (no issues — already batched/parallelized)
+- [x] Database index audit (36+ indexes, comprehensive)
 - [x] Proxy fallback for Binance geo-blocking
 - [x] 7 missing platforms to batch groups
 - [x] OKX Futures MDD enrichment 100%
 - [x] Cleanup unused code
-- [x] HTX Futures enrichment (equity curve + stats detail + batch-enrich)
-- [x] Data freshness monitoring (cron + admin dashboards + alerts)
-- [x] PipelineLogger integrated into 6 core cron jobs
-- [x] Dependencies health API (/api/health/dependencies)
-- [x] E2E smoke test + visual regression test
-- [x] Data validation (Zod schema for trader snapshots)
-- [x] Anomaly detection cron job
-- [x] Product priority section in CLAUDE.md
+- [x] Data validation (Zod schema for trader snapshots — already existed)
+- [x] Anomaly detection cron job (already existed)
+- [x] Data freshness monitoring (already existed)
+- [x] VPS cron optimization (OpenClaw scripts already exist)
+- [x] Orphaned trader_sources cleanup script (already existed)
+- [x] SEO + OG for trader pages (already fully implemented)
+- [x] First-screen load optimization (ISR + two-phase rendering already done)
 
 ---
 
