@@ -96,7 +96,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              pointerEvents: 'none',
+              pointerEvents: 'auto',
             }}
           >
             <Box

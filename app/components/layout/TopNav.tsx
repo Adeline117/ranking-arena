@@ -409,7 +409,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
               tabIndex={0}
               style={{
                 width: '100%',
-                height: 40,
+                height: 44,
                 borderRadius: tokens.radius.full,
                 border: tokens.glass.border.light,
                 background: tokens.glass.bg.light,
