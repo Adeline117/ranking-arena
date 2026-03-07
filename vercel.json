@@ -5,10 +5,6 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/flash-news-fetch",
-      "schedule": "*/30 * * * *"
-    },
-    {
       "path": "/api/cron/compute-leaderboard",
       "schedule": "0 * * * *"
     },
@@ -304,24 +300,6 @@
         {
           "key": "Cache-Control",
           "value": "s-maxage=300, stale-while-revalidate=900"
-        }
-      ]
-    },
-    {
-      "source": "/api/library",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=600, stale-while-revalidate=1800"
-        }
-      ]
-    },
-    {
-      "source": "/api/library/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=600, stale-while-revalidate=1800"
         }
       ]
     },

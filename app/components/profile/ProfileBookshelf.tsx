@@ -121,7 +121,7 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
       {/* Book grid */}
       <Box style={{ display: 'grid', gridTemplateColumns: expanded ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(3, 1fr)', gap: tokens.spacing[3] }}>
         {displayItems.map(book => (
-          <Link key={book.id} href={`/library/${book.id}`} style={{ textDecoration: 'none' }}>
+          <Link key={book.id} href="#" style={{ textDecoration: 'none' }}>
             <Box style={{
               display: 'flex', flexDirection: 'column', gap: tokens.spacing[1],
               transition: 'transform 0.15s',
