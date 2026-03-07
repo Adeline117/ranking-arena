@@ -103,6 +103,11 @@ export async function GET(request: Request) {
 
     if (error) {
       logger.error('[cron/discover] Job insert error:', error.message);
+      await plog.error(new Error(`Job insert failed: ${error.message}`), { blocked: Array.from(blockedPlatforms) })
+      return NextResponse.json({
+        error: `Failed to create discovery jobs: ${error.message}`,
+        blocked: Array.from(blockedPlatforms),
+      }, { status: 500 });
     }
 
     // Also release any stale locks

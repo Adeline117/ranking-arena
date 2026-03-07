@@ -1511,7 +1511,8 @@ export async function enrichBinanceTraders(
           }
 
           success++
-        } catch {
+        } catch (err) {
+          console.error(`[enrichBinance] Failed for ${traderId}:`, err instanceof Error ? err.message : String(err))
           failed++
         }
       })
@@ -1549,7 +1550,8 @@ export async function enrichBybitTraders(
             await upsertEquityCurve(supabase, 'bybit', traderId, '90D', curve)
           }
           success++
-        } catch {
+        } catch (err) {
+          console.error(`[enrichBybit] Failed for ${traderId}:`, err instanceof Error ? err.message : String(err))
           failed++
         }
       })

@@ -266,10 +266,12 @@ async function handleProxy(request: Request, _env: Env): Promise<Response> {
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] Upstream error:', msg);
     return Response.json({
       error: 'Proxy error',
-      details: 'Upstream API unavailable'
+      details: msg.slice(0, 200)
     }, { status: 500 });
   }
 }
@@ -304,10 +306,12 @@ async function handleBinanceCopyTrading(request: Request, url: URL): Promise<Res
     return Response.json(data, {
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({
       error: 'Binance API error',
-      details: 'Upstream API unavailable'
+      details: msg.slice(0, 200)
     }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -354,7 +358,7 @@ async function handleBybitCopyTrading(request: Request, url: URL): Promise<Respo
       if (text.includes('Access Denied') || text.includes('<!DOCTYPE') || text.includes('<html')) {
         return Response.json({
           error: 'Bybit API error',
-          details: 'Upstream API unavailable',
+          details: msg.slice(0, 200),
           status: response.status,
         }, {
           status: 502,
@@ -368,10 +372,12 @@ async function handleBybitCopyTrading(request: Request, url: URL): Promise<Respo
     return Response.json(data, {
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({
       error: 'Bybit API error',
-      details: 'Upstream API unavailable'
+      details: msg.slice(0, 200)
     }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -442,8 +448,8 @@ async function handleBitgetCopyTrading(request: Request, url: URL): Promise<Resp
       return Response.json(data, {
         headers: { 'Access-Control-Allow-Origin': corsOrigin() },
       });
-    } catch (_err) {
-      // Try next endpoint
+    } catch (err) {
+      console.error(`[proxy] OKX endpoint failed:`, err instanceof Error ? err.message : String(err));
       continue;
     }
   }
@@ -488,10 +494,12 @@ async function handleKuCoinCopyTrading(request: Request, url: URL): Promise<Resp
     return Response.json(data, {
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({
       error: 'KuCoin API error',
-      details: 'Upstream API unavailable'
+      details: msg.slice(0, 200)
     }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -530,10 +538,12 @@ async function handleBinanceSpotCopyTrading(request: Request, url: URL): Promise
     return Response.json(data, {
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({
       error: 'Binance Spot API error',
-      details: 'Upstream API unavailable'
+      details: msg.slice(0, 200)
     }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -570,10 +580,12 @@ async function handleDydxLeaderboard(request: Request, url: URL): Promise<Respon
       status: response.status,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({
       error: 'dYdX leaderboard proxy error',
-      details: 'Upstream API unavailable'
+      details: msg.slice(0, 200)
     }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -607,10 +619,12 @@ async function handleDydxHistoricalPnl(request: Request, url: URL): Promise<Resp
       status: response.status,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({
       error: 'dYdX historical PnL proxy error',
-      details: 'Upstream API unavailable'
+      details: msg.slice(0, 200)
     }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -643,10 +657,12 @@ async function handleDydxSubaccount(request: Request, url: URL): Promise<Respons
       status: response.status,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({
       error: 'dYdX subaccount proxy error',
-      details: 'Upstream API unavailable'
+      details: msg.slice(0, 200)
     }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -722,7 +738,9 @@ async function handleBingxTraderDetail(_request: Request, url: URL): Promise<Res
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({ error: 'BingX trader detail proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -758,7 +776,9 @@ async function handleBlofinLeaderboard(_request: Request, url: URL): Promise<Res
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({ error: 'BloFin leaderboard proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -785,7 +805,9 @@ async function handleBlofinTraderInfo(_request: Request, url: URL): Promise<Resp
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({ error: 'BloFin trader info proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -819,7 +841,9 @@ async function handleGainsLeaderboardAll(_request: Request, url: URL): Promise<R
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({ error: 'Gains leaderboard proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -844,7 +868,9 @@ async function handleGainsOpenTrades(_request: Request, url: URL): Promise<Respo
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({ error: 'Gains open-trades proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
@@ -872,7 +898,9 @@ async function handleGainsTraderStats(_request: Request, url: URL): Promise<Resp
         'Access-Control-Allow-Origin': corsOrigin(),
       },
     });
-  } catch (_error) {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[proxy] error:', msg);
     return Response.json({ error: 'Gains trader stats proxy error', details: 'Upstream API unavailable' }, {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
