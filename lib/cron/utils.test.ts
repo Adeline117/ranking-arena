@@ -172,7 +172,7 @@ describe('isAuthorized', () => {
     expect(isAuthorized(req)).toBe(false)
   })
 
-  test('should allow access in development without secret', () => {
+  test('should deny access in development without secret (security fix)', () => {
     delete process.env.CRON_SECRET
     process.env.NODE_ENV = 'development'
 
@@ -182,7 +182,8 @@ describe('isAuthorized', () => {
       },
     } as unknown as Request
 
-    expect(isAuthorized(req)).toBe(true)
+    // No longer allows bypass in dev - CRON_SECRET is always required
+    expect(isAuthorized(req)).toBe(false)
   })
 
   test('should not allow access in production without secret', () => {

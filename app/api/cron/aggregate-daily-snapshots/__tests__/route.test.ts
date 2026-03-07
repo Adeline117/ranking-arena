@@ -38,7 +38,8 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
 }))
 
 import { NextRequest } from 'next/server'
-import { POST } from '../route'
+import { GET } from '../route'
+const POST = GET // Route was changed from POST to GET
 
 // ---------------------------------------------------------------------------
 // Helpers
