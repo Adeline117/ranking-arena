@@ -157,7 +157,8 @@ export default function ProfileBookshelf({ handle, expanded }: { handle: string;
                   position: 'absolute', top: 6, right: 6,
                   padding: '2px 8px', borderRadius: tokens.radius.full,
                   background: `${STATUS_COLORS[book.status]}CC`,
-                  backdropFilter: 'blur(4px)',
+                  backdropFilter: tokens.glass.blur.xs,
+                  WebkitBackdropFilter: tokens.glass.blur.xs,
                   boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                 }}>
                   <Text style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-on-accent)', letterSpacing: '0.02em' }}>

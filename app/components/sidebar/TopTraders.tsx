@@ -210,8 +210,8 @@ export default function TopTraders() {
                   {roiStr && (
                     <div
                       style={{
-                        fontSize: 12,
-                        fontWeight: 600,
+                        fontSize: tokens.typography.fontSize.xs,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                         color: trader.roi! >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                         lineHeight: tokens.typography.lineHeight.tight,
                       }}

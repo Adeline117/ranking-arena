@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react'
+import { tokens } from '@/lib/design-tokens'
 
 interface PKPageClientProps {
   handleA: string
@@ -95,7 +96,7 @@ export default function PKPageClient({
           fontSize: 14,
           fontWeight: 600,
           cursor: 'pointer',
-          transition: 'all 0.2s ease',
+          transition: `all ${tokens.transition.base}`,
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = 'var(--glass-bg-medium)'
@@ -135,7 +136,7 @@ export default function PKPageClient({
           fontWeight: 600,
           cursor: downloading ? 'not-allowed' : 'pointer',
           opacity: downloading ? 0.6 : 1,
-          transition: 'all 0.2s ease',
+          transition: `all ${tokens.transition.base}`,
         }}
         onMouseEnter={(e) => {
           if (!downloading) {
@@ -179,7 +180,7 @@ export default function PKPageClient({
           fontSize: 14,
           fontWeight: 600,
           cursor: 'pointer',
-          transition: 'all 0.2s ease',
+          transition: `all ${tokens.transition.base}`,
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = 'var(--glass-bg-medium)'

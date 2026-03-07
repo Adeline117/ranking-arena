@@ -244,7 +244,7 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
               color: tokens.colors.accent.primary,
               fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
             }}
             onClick={() => {
               showToast(t('onChainCopyTradingComingSoon') || 'Coming soon!', 'info')

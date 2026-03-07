@@ -327,7 +327,7 @@ export default function OverviewPerformanceCard({
                       fontSize: 13,
                       fontWeight: period === p ? 600 : 400,
                       cursor: isDisabled ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.2s ease',
+                      transition: `all ${tokens.transition.base}`,
                       fontFamily: tokens.typography.fontFamily.sans.join(', '),
                       boxShadow: period === p ? '0 2px 8px var(--color-overlay-subtle)' : 'none',
                       opacity: isDisabled ? 0.5 : 1,
@@ -347,7 +347,7 @@ export default function OverviewPerformanceCard({
           style={{
             opacity: isAnimating ? 0.3 : 1,
             transform: isAnimating ? 'scale(0.98)' : 'scale(1)',
-            transition: 'all 0.2s ease',
+            transition: `all ${tokens.transition.base}`,
           }}
         >
           {/* ROI & PnL - 主指标区 Hero Metrics */}

@@ -73,8 +73,8 @@ export default function GuestSignupPrompt() {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-backdrop)',
-        backdropFilter: 'blur(4px)',
-        WebkitBackdropFilter: 'blur(4px)',
+        backdropFilter: tokens.glass.blur.xs,
+        WebkitBackdropFilter: tokens.glass.blur.xs,
         animation: 'modalFadeIn 0.3s ease',
       }}
       onClick={handleDismiss}

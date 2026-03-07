@@ -217,7 +217,7 @@ function TraderOverviewTab({
               <Box style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
                 background: 'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 60%, var(--color-lock-bg) 100%)',
-                backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
+                backdropFilter: tokens.glass.blur.xs, WebkitBackdropFilter: tokens.glass.blur.xs,
                 borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
               }}>

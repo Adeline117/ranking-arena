@@ -65,7 +65,7 @@ export default function ConversationHeader({
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           background: tokens.colors.bg.secondary,
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
-          backdropFilter: 'blur(12px)', boxShadow: tokens.shadow.xs,
+          backdropFilter: tokens.glass.blur.lg, WebkitBackdropFilter: tokens.glass.blur.lg, boxShadow: tokens.shadow.xs,
         }}
       >
         {/* Back button */}

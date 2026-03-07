@@ -131,7 +131,7 @@ export function ImageUploader({
               justifyContent: 'center',
               cursor: uploading ? 'not-allowed' : 'pointer',
               opacity: uploading ? 0.5 : 1,
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             {uploading ? (

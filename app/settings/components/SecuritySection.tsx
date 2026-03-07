@@ -129,7 +129,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               color: props.passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
               fontSize: tokens.typography.fontSize.sm,
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             {t('useCurrentPassword')}
@@ -145,7 +145,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               color: props.passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
               fontSize: tokens.typography.fontSize.sm,
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             {t('useEmailReset')}

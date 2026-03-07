@@ -26,7 +26,8 @@ export default function PortfolioProLock({ onUnlock }: PortfolioProLockProps) {
       <Box
         style={{
           background: `linear-gradient(135deg, ${tokens.colors.bg.primary}F0, ${tokens.colors.bg.secondary}E8)`,
-          backdropFilter: 'blur(4px)',
+          backdropFilter: tokens.glass.blur.xs,
+          WebkitBackdropFilter: tokens.glass.blur.xs,
           borderRadius: tokens.radius.xl,
           padding: tokens.spacing[6],
           border: `1px solid ${tokens.colors.accent.primary}40`,

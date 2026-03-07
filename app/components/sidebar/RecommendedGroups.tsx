@@ -125,7 +125,7 @@ export default function RecommendedGroups() {
           </button>
         </div>
       ) : groups.length === 0 ? (
-        <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+        <div style={{ padding: `${tokens.spacing[6]} ${tokens.spacing[3]}`, textAlign: 'center' }}>
           <Image src="/stickers/confused.webp" alt="No groups found" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
           <p style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
             {t('sidebarNoGroups')}

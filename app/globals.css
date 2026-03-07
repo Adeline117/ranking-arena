@@ -2751,11 +2751,16 @@ td[data-numeric],
   }
 }
 
-/* Enhanced focus indicators for accessibility */
+/* Enhanced focus indicators for accessibility — !important overrides inline outline:none */
 *:focus-visible {
-  outline: 2px solid var(--color-accent-brand);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-accent-brand) !important;
+  outline-offset: 2px !important;
   border-radius: 2px;
+}
+
+/* Suppress outline only for mouse/touch users */
+*:focus:not(:focus-visible) {
+  outline: none !important;
 }
 
 /* Rankings page right sidebar layout */

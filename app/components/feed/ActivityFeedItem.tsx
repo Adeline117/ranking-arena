@@ -90,7 +90,7 @@ export default function ActivityFeedItem({ activity, showShareHint = true }: Act
         padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
         background: hovered ? `${color}08` : 'transparent',
         borderLeft: `3px solid ${hovered ? color : 'transparent'}`,
-        transition: 'all 0.2s ease',
+        transition: `all ${tokens.transition.base}`,
         cursor: 'default',
       }}
     >

@@ -102,7 +102,8 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
             <Box
               style={{
                 background: `linear-gradient(135deg, ${tokens.colors.bg.primary}F0, ${tokens.colors.bg.secondary}E8)`,
-                backdropFilter: 'blur(4px)',
+                backdropFilter: tokens.glass.blur.xs,
+                WebkitBackdropFilter: tokens.glass.blur.xs,
                 borderRadius: tokens.radius.xl,
                 padding: tokens.spacing[6],
                 border: `1px solid ${tokens.colors.accent.primary}40`,
@@ -384,7 +385,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                       color: tokens.colors.text.primary,
                       fontSize: tokens.typography.fontSize.sm,
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
+                      transition: `all ${tokens.transition.base}`,
                       fontFamily: tokens.typography.fontFamily.sans.join(', '),
                     }}
                   >
@@ -414,7 +415,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                           fontSize: tokens.typography.fontSize.sm,
                           fontWeight: tokens.typography.fontWeight.medium,
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease',
+                          transition: `all ${tokens.transition.base}`,
                           fontFamily: tokens.typography.fontFamily.sans.join(', '),
                           width: '100%',
                           textAlign: 'center',
@@ -517,7 +518,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                           fontSize: tokens.typography.fontSize.sm,
                           fontWeight: tokens.typography.fontWeight.medium,
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease',
+                          transition: `all ${tokens.transition.base}`,
                           fontFamily: tokens.typography.fontFamily.sans.join(', '),
                           width: '100%',
                           textAlign: 'center',
@@ -595,7 +596,7 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  transition: 'all 0.2s ease',
+                  transition: `all ${tokens.transition.base}`,
                 }}
               >
                 ×

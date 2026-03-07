@@ -91,7 +91,7 @@ export function ImageUploader({
                     : ('1px solid ' + tokens.colors.border.primary),
                 cursor: 'grab',
                 opacity: draggedImageIndex === index ? 0.7 : 1,
-                transition: 'all 0.2s ease',
+                transition: `all ${tokens.transition.base}`,
               }}
             >
               <img
@@ -191,7 +191,7 @@ export function ImageUploader({
               justifyContent: 'center',
               cursor: uploading ? 'not-allowed' : 'pointer',
               opacity: uploading ? 0.5 : 1,
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             {uploading ? (
@@ -346,7 +346,7 @@ export function VideoUploader({
               justifyContent: 'center',
               cursor: videoUploading ? 'not-allowed' : 'pointer',
               opacity: videoUploading ? 0.5 : 1,
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             {videoUploading ? (

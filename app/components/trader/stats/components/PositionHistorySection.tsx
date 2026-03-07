@@ -88,7 +88,7 @@ export function PositionHistorySection({ positionHistory, t }: PositionHistorySe
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.medium,
             cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            transition: `all ${tokens.transition.base}`,
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
             textAlign: 'center',
           }}

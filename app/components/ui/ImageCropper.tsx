@@ -141,7 +141,8 @@ export function ImageCropper({
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-backdrop-heavy)',
-        backdropFilter: 'blur(4px)',
+        backdropFilter: tokens.glass.blur.xs,
+        WebkitBackdropFilter: tokens.glass.blur.xs,
       }}
     >
       <Box

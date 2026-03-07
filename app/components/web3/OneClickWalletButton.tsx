@@ -234,7 +234,7 @@ function OneClickWalletButtonInner({
       fontWeight: 700,
       borderRadius: sizeConfig.borderRadius,
       cursor: isDisabled ? 'not-allowed' : 'pointer',
-      transition: 'all 0.2s ease',
+      transition: `all ${tokens.transition.base}`,
       border: 'none',
       ...style,
     }
@@ -326,7 +326,7 @@ function OneClickWalletButtonInner({
               border: '1px solid var(--color-accent-primary-30)',
               color: tokens.colors.accent.brandLight,
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             <SwitchIcon size={sizeConfig.iconSize} />

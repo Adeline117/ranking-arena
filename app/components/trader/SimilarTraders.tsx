@@ -129,8 +129,8 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
       className="similar-traders glass-card"
       style={{
         background: `linear-gradient(165deg, ${tokens.colors.bg.secondary}F0 0%, ${tokens.colors.bg.primary}E8 100%)`,
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
+        backdropFilter: tokens.glass.blur.lg,
+        WebkitBackdropFilter: tokens.glass.blur.lg,
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}60`,
         padding: tokens.spacing[5],

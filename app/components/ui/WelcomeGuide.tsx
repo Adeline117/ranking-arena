@@ -97,7 +97,8 @@ export function WelcomeGuide(): ReactElement | null {
           position: 'absolute',
           inset: 0,
           background: 'var(--color-backdrop)',
-          backdropFilter: 'blur(4px)',
+          backdropFilter: tokens.glass.blur.xs,
+          WebkitBackdropFilter: tokens.glass.blur.xs,
         }}
       />
 
@@ -134,7 +135,7 @@ export function WelcomeGuide(): ReactElement | null {
                 background: index === currentStep
                   ? tokens.colors.accent.brand
                   : tokens.colors.bg.tertiary,
-                transition: 'all 0.2s ease',
+                transition: `all ${tokens.transition.base}`,
               }}
             />
           ))}

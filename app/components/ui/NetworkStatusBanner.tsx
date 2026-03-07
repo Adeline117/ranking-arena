@@ -51,7 +51,7 @@ export default function NetworkStatusBanner() {
           ? tokens.colors.accent.error
           : tokens.colors.accent.success,
         color: tokens.colors.white,
-        transition: 'all 0.3s ease',
+        transition: `all ${tokens.transition.slow}`,
       }}
     >
       {isOffline ? (

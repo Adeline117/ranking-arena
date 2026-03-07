@@ -31,7 +31,7 @@ export function PollEditor({
           borderRadius: tokens.radius.md,
           border: ('1px solid ' + pollEnabled ? tokens.colors.accent.brand : tokens.colors.border.primary),
           background: pollEnabled ? 'var(--color-accent-primary-10)' : tokens.colors.bg.secondary,
-          transition: 'all 0.2s ease',
+          transition: `all ${tokens.transition.base}`,
         }}
       >
         <Box

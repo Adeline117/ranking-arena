@@ -138,7 +138,7 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
           display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
           padding: pad, fontSize, borderRadius: tokens.radius.lg,
           background: bg, border, color: tokens.colors.text.tertiary,
-          cursor: 'pointer', transition: 'all 0.2s ease',
+          cursor: 'pointer', transition: `all ${tokens.transition.base}`,
           whiteSpace: 'nowrap',
         }}
         onMouseEnter={e => {

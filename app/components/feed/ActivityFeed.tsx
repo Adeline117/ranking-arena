@@ -318,7 +318,7 @@ export default function ActivityFeed({
                 fontWeight: tokens.typography.fontWeight.medium,
                 cursor: loading ? 'not-allowed' : 'pointer',
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
-                transition: 'all 0.2s ease',
+                transition: `all ${tokens.transition.base}`,
               }}
             >
               {loading ? 'Loading...' : 'Load More'}

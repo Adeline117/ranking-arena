@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import type { Exchange } from '@/lib/exchange'
@@ -122,8 +123,8 @@ export default function ExchangePartners() {
             flexShrink: 0,
             textDecoration: 'none',
             padding: '4px 10px',
-            borderRadius: 8,
-            transition: 'all 0.2s ease',
+            borderRadius: tokens.radius.md,
+            transition: `all ${tokens.transition.base}`,
           }
           return source ? (
             <Link

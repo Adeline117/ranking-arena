@@ -754,7 +754,7 @@ function RelatedGroupsSidebar({ groups, loading, language }: {
                 border: '1px solid transparent',
                 textDecoration: 'none',
                 color: tokens.colors.text.primary,
-                transition: 'all 0.2s ease',
+                transition: `all ${tokens.transition.base}`,
               }}
               className="hover-slide-right"
             >

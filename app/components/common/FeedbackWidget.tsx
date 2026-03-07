@@ -74,7 +74,7 @@ export default function FeedbackWidget() {
           placeItems: 'center',
           cursor: 'pointer',
           zIndex: 9998,
-          transition: 'all 0.2s ease',
+          transition: `all ${tokens.transition.base}`,
           color: 'var(--color-text-tertiary)',
         }}
       >

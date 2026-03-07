@@ -180,7 +180,8 @@ function BookshelfTab() {
                     borderRadius: tokens.radius.sm,
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
-                    backdropFilter: 'blur(4px)',
+                    backdropFilter: tokens.glass.blur.xs,
+                    WebkitBackdropFilter: tokens.glass.blur.xs,
                   }}>
                     {book.category === 'book' ? (language === 'zh' ? '书籍' : 'Book') :
                      book.category === 'paper' ? (language === 'zh' ? '论文' : 'Paper') :

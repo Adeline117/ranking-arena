@@ -26,7 +26,8 @@ const styles = {
     zIndex: tokens.zIndex.toast,
     padding: '16px',
     background: tokens.glass.bg.heavy,
-    backdropFilter: 'blur(10px)',
+    backdropFilter: tokens.glass.blur.lg,
+    WebkitBackdropFilter: tokens.glass.blur.lg,
   },
   container: {
     maxWidth: '1200px',
@@ -66,7 +67,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: 700,
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: `all ${tokens.transition.base}`,
     border: 'none',
   },
   primaryButton: {

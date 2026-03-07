@@ -140,7 +140,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                   fontSize: tokens.typography.fontSize.xs,
                   fontWeight: sortType === type ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
+                  transition: `all ${tokens.transition.base}`,
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
                   textTransform: 'capitalize',
                 }}
@@ -403,7 +403,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       background: `${tokens.colors.accent.primary}08`,
                       borderRadius: tokens.radius.md,
                       textDecoration: 'none',
-                      transition: 'all 0.2s ease',
+                      transition: `all ${tokens.transition.base}`,
                     }}
                   >
                     <Text size="xs" weight="medium" style={{ color: tokens.colors.accent.primary }}>
