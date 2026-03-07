@@ -65,14 +65,28 @@ Branch: `feature/desoc-platform`, 23 files, +1310 lines
 - i18n: paid groups, referral, share rank card, embed widget keys
 - 42 new i18n keys in both en + zh
 
+## Recently Completed (2026-03-08) — DeSoc Enhancement
+- EAS: attestation mint API now calls `publishAttestation` server-side (uses existing lib/web3/eas.ts)
+- EAS: MintArenaScore simplified — no wallet needed, server attester key signs
+- EAS: removed duplicate lib/eas/ dir, unified on lib/web3/eas.ts + lib/web3/contracts.ts
+- i18n: Language type expanded to en/zh/ja/ko with lazy-loading framework
+- i18n: LanguageProvider generalized for all 4 languages
+- i18n: LanguageToggle upgraded from binary button to 4-language dropdown
+- i18n: Locale type in date.ts/validation.ts updated for ja/ko fallback
+- i18n: ja.ts + ko.ts placeholders created (full translations pending)
+- feature/desoc-platform merged into main
+- Fixed: DirectoryPage, SnapshotViewerClient hardcoded 'zh'|'en' types
+
 ## In Progress
-_(DeSoc migration pending production deploy)_
+- Production migration: `20260308100000_desoc_foundation.sql` (apply via Supabase Dashboard)
+- Full Japanese/Korean translations (4200+ keys each)
 
 ## Key Metrics
 - Total Traders: 32,000+
 - Exchanges Supported: 28+ (added Perpetual Protocol)
 - Cron Jobs: 27 active (45+ with PipelineLogger)
-- Tests: 136 suites, 2243 tests, ALL GREEN
+- Tests: 139 suites, 2271 tests, ALL GREEN
+- Languages: 4 (en, zh, ja, ko)
 - Lighthouse: Performance 58, Accessibility 97, Best Practices 96, SEO 100
 - Quality: 75 -> ~95 across 10 dimensions (2026-03-06)
 
