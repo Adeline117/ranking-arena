@@ -7,3 +7,4 @@
 export { WalletAddress } from './WalletAddress'
 export { NFTBadge } from './NFTBadge'
 export { ChainIndicator } from './ChainIndicator'
+export { OnChainCopyTrading } from './OnChainCopyTrading'

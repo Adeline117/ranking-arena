@@ -213,7 +213,22 @@ export const PostCard = memo(function PostCard({
         </span>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-
+          {post.group_name && post.group_id && (
+            <Link
+              href={`/groups/${post.group_id}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: ARENA_PURPLE,
+                textDecoration: 'none',
+                padding: `2px 8px`,
+                background: `${ARENA_PURPLE}20`,
+                borderRadius: tokens.radius.sm,
+              }}
+            >
+              {post.group_name}
+            </Link>
+          )}
           <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
             {formatTimeAgo(post.created_at, language)}
           </span>

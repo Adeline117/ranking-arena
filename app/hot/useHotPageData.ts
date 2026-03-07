@@ -33,6 +33,13 @@ export function useHotPageData() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
 
+  // Tabbed sections state
+  const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
+
+  // Groups data for the groups tab
+  const [groups, setGroups] = useState<{ id: string; name: string; name_en?: string | null; member_count: number }[]>([])
+  const [loadingGroups, setLoadingGroups] = useState(false)
+
   const latestPostTime = useRef<string>('')
 
   // Post detail modal state
@@ -147,6 +154,8 @@ export function useHotPageData() {
           const createdAt = new Date(post.created_at as string)
           const diffMs = Date.now() - createdAt.getTime()
           const timeStr = formatTimeAgo(post.created_at as string, language as 'zh' | 'en')
+          const groupName = (post.group_name as string) || t('generalDiscussion')
+          const groupNameEn = (post.group_name_en as string) || t('generalDiscussionEn')
 
           const hotScore = (post.hot_score as number) || (() => {
             const hours = diffMs / 3600000
@@ -158,6 +167,9 @@ export function useHotPageData() {
 
           return {
             id: post.id as string,
+            group: groupName,
+            group_en: groupNameEn,
+            group_id: (post.group_id as string) || undefined,
             title: (post.title as string) || t('noTitle'),
             author: (post.author_handle as string) || 'user',
             author_handle: post.author_handle as string,
@@ -194,6 +206,31 @@ export function useHotPageData() {
     const interval = setInterval(loadPosts, 180000)
     return () => clearInterval(interval)
   }, [loadPosts])
+
+  // Load groups when groups tab is active
+  useEffect(() => {
+    if (activeHotTab !== 'groups') return
+    const loadGroups = async () => {
+      setLoadingGroups(true)
+      try {
+        const res = await fetch('/api/groups?sort_by=activity&limit=30')
+        const json = await res.json()
+        const data = json.data?.groups || json.groups || json.data || []
+        setGroups(data.map((g: Record<string, unknown>) => ({
+          id: (g.id as string) || '',
+          name: (g.name as string) || '',
+          name_en: (g.name_en as string | null) || null,
+          member_count: (g.member_count as number) || 0,
+        })))
+      } catch (error) {
+        logger.error('Groups load error:', error)
+        setGroups([])
+      } finally {
+        setLoadingGroups(false)
+      }
+    }
+    loadGroups()
+  }, [activeHotTab])
 
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
@@ -627,6 +664,14 @@ export function useHotPageData() {
     translatedListPosts,
     getHotTag,
     handleOpenPost,
+
+    // Tabs
+    activeHotTab,
+    setActiveHotTab,
+
+    // Groups
+    groups,
+    loadingGroups,
 
     // Post detail modal
     openPost,

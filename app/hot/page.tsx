@@ -25,6 +25,7 @@ import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import type { Trader, Post, Comment } from './types'
 import { PostCard } from './components/PostCard'
 import { PostDetailModal } from './components/PostDetailModal'
+import { HotGroupsList } from './components/HotGroupsList'
 
 // Use design token for brand color
 const _ARENA_PURPLE = tokens.colors.accent.brand
@@ -51,6 +52,14 @@ function HotContent() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(true)
   const [postsError, setPostsError] = useState(false)
+
+  // Tabbed sections state
+  const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
+
+  // Groups data for the groups tab
+  const [groups, setGroups] = useState<{ id: string; name: string; name_en?: string | null; member_count: number }[]>([])
+  const [loadingGroups, setLoadingGroups] = useState(false)
+  const [groupsError, setGroupsError] = useState(false)
 
   const latestPostTime = useRef<string>('')
 
@@ -167,6 +176,8 @@ function HotContent() {
           const createdAt = new Date(post.created_at as string)
           const diffMs = Date.now() - createdAt.getTime()
           const timeStr = formatTimeAgo(post.created_at as string, language as 'zh' | 'en')
+          const groupName = (post.group_name as string) || t('generalDiscussion')
+          const groupNameEn = (post.group_name_en as string) || t('generalDiscussionEn')
 
           const hotScore = (post.hot_score as number) || (() => {
             const hours = diffMs / 3600000
@@ -178,6 +189,9 @@ function HotContent() {
 
           return {
             id: post.id as string,
+            group: groupName,
+            group_en: groupNameEn,
+            group_id: (post.group_id as string) || undefined,
             title: (post.title as string) || t('noTitle'),
             author: (post.author_handle as string) || 'user',
             author_handle: post.author_handle as string,
@@ -215,6 +229,35 @@ function HotContent() {
     const interval = setInterval(loadPosts, 180000)
     return () => clearInterval(interval)
   }, [loadPosts])
+
+  // Load groups
+  const loadGroups = useCallback(async () => {
+    setLoadingGroups(true)
+    setGroupsError(false)
+    try {
+      const res = await fetch('/api/groups?sort_by=activity&limit=30')
+      const json = await res.json()
+      const data = json.data?.groups || json.groups || json.data || []
+      setGroups(data.map((g: Record<string, unknown>) => ({
+        id: (g.id as string) || '',
+        name: (g.name as string) || '',
+        name_en: (g.name_en as string | null) || null,
+        member_count: (g.member_count as number) || 0,
+      })))
+    } catch (error) {
+      logger.error('Groups load error:', error)
+      setGroups([])
+      setGroupsError(true)
+    } finally {
+      setLoadingGroups(false)
+    }
+  }, [])
+
+  // Load groups when groups tab is active
+  useEffect(() => {
+    if (activeHotTab !== 'groups') return
+    loadGroups()
+  }, [activeHotTab, loadGroups])
 
   const hotPosts = useMemo(() => {
     const sorted = [...posts].sort((a, b) => (b.hotScore ?? 0) - (a.hotScore ?? 0))
@@ -653,8 +696,50 @@ function HotContent() {
                 {loggedIn ? t('loggedInShowAllHot') : t('notLoggedInShowLimitedHot')}
               </Text>
 
-              {/* Hot Posts */}
-              {(
+              {/* Tabbed Sections */}
+              <Box style={{ display: 'flex', gap: '8px', marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
+                {([
+                  { value: 'posts' as const, label: t('hotPosts') },
+                  { value: 'groups' as const, label: t('hotGroups') },
+                ]).map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setActiveHotTab(tab.value)}
+                    style={{
+                      padding: '5px 12px',
+                      minHeight: 32,
+                      borderRadius: tokens.radius.lg,
+                      border: activeHotTab === tab.value ? 'none' : tokens.glass.border.light,
+                      background: activeHotTab === tab.value ? tokens.gradient.primary : tokens.glass.bg.light,
+                      backdropFilter: tokens.glass.blur.sm,
+                      WebkitBackdropFilter: tokens.glass.blur.sm,
+                      color: activeHotTab === tab.value ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
+                      fontWeight: activeHotTab === tab.value ? 900 : 600,
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      transition: tokens.transition.all,
+                      boxShadow: activeHotTab === tab.value ? `0 4px 12px var(--color-accent-primary-40)` : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeHotTab !== tab.value) {
+                        e.currentTarget.style.background = tokens.glass.bg.medium
+                        e.currentTarget.style.color = 'var(--color-text-primary)'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeHotTab !== tab.value) {
+                        e.currentTarget.style.background = tokens.glass.bg.light
+                        e.currentTarget.style.color = 'var(--color-text-secondary)'
+                      }
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </Box>
+
+              {/* Tab Content: Hot Posts */}
+              {activeHotTab === 'posts' && (
                 <>
                   {loadingPosts ? (
                     <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
@@ -717,6 +802,7 @@ function HotContent() {
                                   <Text size="sm" weight="black" style={{ color: 'var(--color-text-secondary)' }}>
                                     #{rank}
                                   </Text>
+                                  <Text size="xs" color="secondary">{localizedName(p.group, p.group_en)}</Text>
                                   <Text size="xs" color="tertiary">{(p.views ?? 0).toLocaleString()} {t('views')}</Text>
                                 </Box>
                                 <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
@@ -771,6 +857,17 @@ function HotContent() {
                 </>
               )}
 
+              {/* Tab Content: Hot Groups */}
+              {activeHotTab === 'groups' && (
+                <HotGroupsList
+                  groups={groups}
+                  loading={loadingGroups}
+                  error={groupsError}
+                  onRetry={loadGroups}
+                  localizedName={localizedName}
+                  t={t}
+                />
+              )}
             </Card>
           </Box>
 

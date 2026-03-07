@@ -237,6 +237,17 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         </div>
 
         {/* Group link */}
+        {post.group_id ? (
+          <Link
+            href={`/groups/${post.group_id}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontSize: 12, color: ARENA_PURPLE, textDecoration: 'none' }}
+          >
+            {post.group_name || t('generalDiscussion')}
+          </Link>
+        ) : (
+          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{t('generalDiscussion')}</div>
+        )}
 
         {/* Title */}
         <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25, marginTop: 8 }}>

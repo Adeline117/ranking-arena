@@ -17,11 +17,14 @@ export default function Footer() {
       title: t('footerProduct'),
       links: [
         { href: '/rankings', label: t('footerRankings') },
+        { href: '/market', label: t('footerMarket') },
+        { href: '/library', label: t('footerLibrary') },
       ],
     },
     {
       title: t('footerCommunity'),
       links: [
+        { href: '/groups', label: t('footerGroups') },
         { href: '/hot', label: t('footerHot') },
       ],
     },

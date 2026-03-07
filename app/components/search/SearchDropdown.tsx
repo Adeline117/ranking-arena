@@ -75,6 +75,7 @@ interface HotPost {
 const CATEGORY_CONFIG = {
   traders: { icon: 'T', labelZh: '交易员', labelEn: 'Traders', color: 'var(--color-verified-web3)' },
   posts: { icon: 'P', labelZh: '帖子', labelEn: 'Posts', color: 'var(--color-score-profitability)' },
+  library: { icon: 'L', labelZh: '资料库', labelEn: 'Library', color: 'var(--color-score-great)' },
   users: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: 'var(--color-score-average)' },
 } as const
 
@@ -82,7 +83,7 @@ type CategoryKey = keyof typeof CATEGORY_CONFIG
 
 /**
  * Search dropdown
- * - Unified search: traders, posts, users
+ * - Unified search: traders, posts, library, users
  * - Grouped by category
  * - Keyboard navigation (arrow keys, Enter, Escape)
  * - Search history
@@ -109,6 +110,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     ? [
         ...searchData.results.traders,
         ...searchData.results.posts,
+        ...searchData.results.library,
         ...searchData.results.users,
       ]
     : [], [searchData])
@@ -376,7 +378,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   // Calculate offset per category for keyboard highlight
   const getCategoryOffset = (category: CategoryKey): number => {
     if (!searchData) return 0
-    const order: CategoryKey[] = ['traders', 'posts', 'users']
+    const order: CategoryKey[] = ['traders', 'posts', 'library', 'users']
     let offset = 0
     for (const key of order) {
       if (key === category) break
@@ -537,6 +539,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
             <>
               {renderCategoryResults('traders', searchData.results.traders)}
               {renderCategoryResults('posts', searchData.results.posts)}
+              {renderCategoryResults('library', searchData.results.library)}
               {renderCategoryResults('users', searchData.results.users)}
               <Link href={`/search?q=${encodeURIComponent(query)}`} style={{ textDecoration: 'none' }} onClick={handleResultClick}>
                 <Box

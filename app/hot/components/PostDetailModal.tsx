@@ -93,6 +93,29 @@ export function PostDetailModal({
           </button>
         </div>
 
+        {/* Group name */}
+        {post.group_id ? (
+          <Link
+            href={`/groups/${post.group_id}`}
+            style={{
+              fontSize: 12,
+              color: ARENA_PURPLE,
+              textDecoration: 'none',
+              fontWeight: 600,
+              padding: '2px 8px',
+              background: `${ARENA_PURPLE}20`,
+              borderRadius: tokens.radius.sm,
+              display: 'inline-block',
+            }}
+          >
+            {localizedName(post.group, post.group_en)}
+          </Link>
+        ) : (
+          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>
+            {localizedName(post.group, post.group_en)}
+          </div>
+        )}
+
         {/* Title */}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
           <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>{post.title}</div>

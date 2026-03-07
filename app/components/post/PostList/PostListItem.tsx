@@ -97,7 +97,25 @@ export const PostListItem = memo(function PostListItem({
     >
       {/* Header: Group + Author */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0 }}>
-
+        {p.group_id ? (
+          <Link
+            href={`/groups/${p.group_id}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              fontSize: 12,
+              color: ARENA_PURPLE,
+              textDecoration: 'none',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flexShrink: 1,
+              minWidth: 0,
+            }}
+          >
+            {language === 'zh' ? (p.group_name || t('group')) : (p.group_name_en || p.group_name || t('group'))}
+          </Link>
+        ) : null}
         <AvatarLink handle={p.author_handle} avatarUrl={p.author_avatar_url} isPro={p.author_is_pro} showProBadge={p.author_show_pro_badge} />
       </div>
 

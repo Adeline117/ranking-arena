@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test'
  * A) Comment persistence: server ACK, cross-entry consistency
  * B) Auth boundaries: write ops blocked, token errors categorized
  * C) Routing/navigation: URL-driven modals, escape/close/back
- * D) Click targets: author links, no event swallowing
+ * D) Click targets: author/group links, no event swallowing
  */
 
 // ============================================================
@@ -262,6 +262,23 @@ test.describe('B) Auth Boundaries', () => {
     expect(criticalErrors).toHaveLength(0)
   })
 
+  test('no "unauthorized" console errors on groups page for unauthenticated user', async ({ page }) => {
+    const criticalErrors: string[] = []
+    page.on('console', msg => {
+      if (msg.type() === 'error') {
+        const text = msg.text()
+        if (text.includes('未授权') || text.includes('unauthorized') || text.includes('Unauthorized')) {
+          criticalErrors.push(text)
+        }
+      }
+    })
+
+    await page.goto('/groups')
+    await page.waitForLoadState('domcontentloaded')
+    await page.waitForTimeout(3000)
+
+    expect(criticalErrors).toHaveLength(0)
+  })
 
   test('messages API returns 401 for unauthenticated POST', async ({ page }) => {
     // Directly test the API endpoint
@@ -504,6 +521,21 @@ test.describe('D) Click Targets - Author and Group Links', () => {
     expect(page.url()).not.toContain('post=')
   })
 
+  test('group link in post list navigates to /groups/{id}', async ({ page }) => {
+    const groupLink = page.locator('.hot-post-item a[href^="/groups/"]').first()
+    if (!(await groupLink.isVisible())) {
+      test.skip()
+      return
+    }
+
+    const href = await groupLink.getAttribute('href')
+    expect(href).toMatch(/^\/groups\/[^/]+$/)
+
+    await groupLink.click()
+    await page.waitForTimeout(500)
+
+    expect(page.url()).toContain('/groups/')
+  })
 
   test('clicking author link does NOT trigger outer card click', async ({ page }) => {
     const authorLink = page.locator('.hot-post-item a[href^="/u/"]').first()
@@ -520,6 +552,19 @@ test.describe('D) Click Targets - Author and Group Links', () => {
     await expect(modal).not.toBeVisible()
   })
 
+  test('clicking group link does NOT trigger outer card click', async ({ page }) => {
+    const groupLink = page.locator('.hot-post-item a[href^="/groups/"]').first()
+    if (!(await groupLink.isVisible())) {
+      test.skip()
+      return
+    }
+
+    await groupLink.click()
+    await page.waitForTimeout(500)
+
+    const modal = page.locator('[role="dialog"]')
+    await expect(modal).not.toBeVisible()
+  })
 
   test('author link inside modal points to user profile', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
@@ -538,6 +583,22 @@ test.describe('D) Click Targets - Author and Group Links', () => {
     }
   })
 
+  test('group link inside modal points to group page', async ({ page }) => {
+    const firstPost = page.locator('.hot-post-item').first()
+    if (!(await firstPost.isVisible({ timeout: 10_000 }).catch(() => false))) {
+      test.skip()
+      return
+    }
+
+    await firstPost.click()
+    await page.waitForTimeout(500)
+
+    const modalGroupLink = page.locator('[role="dialog"] a[href^="/groups/"]').first()
+    if (await modalGroupLink.isVisible()) {
+      const href = await modalGroupLink.getAttribute('href')
+      expect(href).toMatch(/^\/groups\/[^/]+$/)
+    }
+  })
 
   test('comment author links point to user profiles', async ({ page }) => {
     const firstPost = page.locator('.hot-post-item').first()
@@ -564,7 +625,45 @@ test.describe('D) Click Targets - Author and Group Links', () => {
 // E) CROSS-ENTRY CONSISTENCY
 // ============================================================
 test.describe('E) Cross-Entry Consistency', () => {
+  test('groups page loads without auth errors', async ({ page }) => {
+    const errors: string[] = []
+    page.on('console', msg => {
+      if (msg.type() === 'error') errors.push(msg.text())
+    })
 
+    await page.goto('/groups')
+    await page.waitForLoadState('domcontentloaded')
+    await page.waitForTimeout(2000)
+
+    const authErrors = errors.filter(e =>
+      e.includes('未授权') ||
+      e.includes('unauthorized') ||
+      e.includes('Cannot read properties of null')
+    )
+    expect(authErrors).toHaveLength(0)
+  })
+
+  test('hot page and groups page both accessible in same session', async ({ page }) => {
+    // Visit hot page
+    await page.goto('/hot')
+    await page.waitForLoadState('domcontentloaded')
+    expect(page.url()).toContain('/hot')
+
+    // Visit groups page
+    await page.goto('/groups')
+    await page.waitForLoadState('domcontentloaded')
+    expect(page.url()).toContain('/groups')
+
+    // Go back to hot page
+    await page.goto('/hot')
+    await page.waitForLoadState('domcontentloaded')
+    expect(page.url()).toContain('/hot')
+
+    // Both should work without errors
+    const _posts = page.locator('.hot-post-item')
+    // At least the page structure should be intact
+    await page.waitForTimeout(1000)
+  })
 
   test('navigation between pages does not leak modal state', async ({ page }) => {
     await page.goto('/hot')
@@ -581,7 +680,11 @@ test.describe('E) Cross-Entry Consistency', () => {
     await page.waitForTimeout(300)
     expect(page.url()).toContain('post=')
 
-    // Modal should not be visible
+    // Navigate to groups
+    await page.goto('/groups')
+    await page.waitForLoadState('domcontentloaded')
+
+    // Modal should not be visible on groups page
     const modal = page.locator('[role="dialog"]')
     await expect(modal).not.toBeVisible()
 

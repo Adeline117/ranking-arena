@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import NotificationsList from './NotificationsList'
+import ConversationsList from './ConversationsList'
 
 export default function InboxPanel(): React.ReactElement | null {
   const panelOpen = useInboxStore((s) => s.panelOpen)
@@ -96,8 +97,11 @@ export default function InboxPanel(): React.ReactElement | null {
         </button>
       </div>
 
-      {/* Notifications */}
+      {/* Notifications section */}
       <NotificationsList />
+
+      {/* Conversations section */}
+      <ConversationsList />
 
       {/* Inline animation style */}
       <style jsx global>{`
