@@ -22,7 +22,7 @@ _No critical issues currently_
 ### Infrastructure
 - [x] Run pipeline_logs migration on Supabase production (verified present)
 - [x] Set up Telegram bot + chat ID for alerts (bot @Adeline07bot, chat 5646617467, token in Vercel env)
-- [ ] Configure OpenClaw skills on Mac Mini
+- [x] Configure OpenClaw skills on Mac Mini (crontab + dotenv + Telegram alerts verified)
 
 ---
 
@@ -48,7 +48,7 @@ _No critical issues currently_
 ## 🟢 P3 - Nice to Have
 
 - [x] Dark mode refinements (design tokens + var(--color-on-accent) across 15+ components)
-- [ ] Sentry error convergence (weekly auto-fix from Sentry API)
+- [x] Sentry error convergence (weekly report + stale auto-resolve, Friday 10 AM cron)
 
 ---
 

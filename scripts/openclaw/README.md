@@ -91,6 +91,9 @@ Add these lines to `crontab -e`:
 
 # Arena Full Backup to R2 (Sunday 4 AM)
 0 4 * * 0 cd ~/ranking-arena && npm run backup:r2:full >> /tmp/arena-backup-full.log 2>&1
+
+# Sentry Error Convergence (Friday 10 AM)
+0 10 * * 5 cd ~/ranking-arena && node scripts/openclaw/sentry-convergence.mjs --resolve-stale >> /tmp/arena-sentry.log 2>&1
 ```
 
 ## Scripts
@@ -102,3 +105,4 @@ Add these lines to `crontab -e`:
 | `ux-patrol.mjs` | UX health check — pages, APIs, data quality, SSR (daily at 9 AM) |
 | `../maintenance/backup-to-r2.mjs` | Daily trader data backup to R2 (3 AM) |
 | `../maintenance/backup-to-r2.mjs --full` | Full DB backup to R2 (Sunday 4 AM) |
+| `sentry-convergence.mjs` | Weekly Sentry error report + stale issue cleanup (Friday 10 AM) |
