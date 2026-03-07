@@ -75,7 +75,6 @@ export const ALL_SOURCES: TraderSource[] = [
   'coinex',
   'okx_futures',
   'kucoin',
-  'bitmart',
   'phemex',
   'htx_futures',
   'weex',
@@ -89,10 +88,9 @@ export const ALL_SOURCES: TraderSource[] = [
   'bitget_spot',
   'bybit_spot',
   'okx_spot',
-  // CEX web3 / wallets
+  // CEX web3
   'binance_web3',
   'okx_web3',
-  'okx_wallet',
   // DEX / on-chain perpetuals
   'gmx',
   'dydx',
@@ -100,12 +98,6 @@ export const ALL_SOURCES: TraderSource[] = [
   'gains',
   'jupiter_perps',
   'aevo',
-  // Dune on-chain data
-  'dune_gmx',
-  'dune_hyperliquid',
-  'dune_uniswap',
-  'dune_defi',
-  'web3_bot',
 ]
 
 // ---------------------------------------------------------------------------

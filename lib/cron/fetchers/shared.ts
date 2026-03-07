@@ -617,7 +617,8 @@ export function normalizeWinRate(wr: number | null): number | null {
 /**
  * Normalize ROI to percentage form (50 = 50%).
  * Platforms that return decimal ROI (0.5 = 50%) are listed in DECIMAL_ROI_PLATFORMS.
- * Heuristic: |value| < 10 → likely decimal → multiply by 100.
+ * Heuristic: |value| <= 1 → likely decimal (covers -100% to +100%) → multiply by 100.
+ * Values with |value| > 1 are assumed already in percentage form.
  */
 const DECIMAL_ROI_PLATFORMS = new Set([
   'hyperliquid', 'dydx', 'drift', 'gmx', 'gains', 'vertex',
@@ -629,7 +630,9 @@ const DECIMAL_ROI_PLATFORMS = new Set([
 export function normalizeROI(rawRoi: number | null, platform?: string): number | null {
   if (rawRoi == null) return null
   if (platform && DECIMAL_ROI_PLATFORMS.has(platform)) {
-    return Math.abs(rawRoi) < 10 ? rawRoi * 100 : rawRoi
+    // |value| <= 1 means decimal form (e.g., 0.03 = 3%), convert to percentage
+    // |value| > 1 means already percentage form (e.g., 300 = 300%)
+    return Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi
   }
   return rawRoi
 }

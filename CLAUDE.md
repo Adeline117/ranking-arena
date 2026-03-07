@@ -104,9 +104,13 @@ Each connector implements:
 
 ## Arena Score Formula
 ```
-Arena Score = (ROI_percentile * 0.6) + (PnL_percentile * 0.4)
+ReturnScore = 60 * tanh(coeff * ROI)^exponent   (0-60 points)
+PnlScore    = 40 * tanh(coeff * ln(1 + PnL/base)) (0-40 points)
+Arena Score = (ReturnScore + PnlScore) * confidenceMultiplier * trustWeight
 ```
-Higher score = better risk-adjusted performance.
+- Coefficients vary by period (7D/30D/90D), see `lib/utils/arena-score.ts`
+- Overall composite: 90D × 0.70 + 30D × 0.25 + 7D × 0.05
+- Higher score = better risk-adjusted performance
 
 ## Product Priority (Bug Triage & Feature Priority)
 **Core Path** (highest priority — fix/ship first):
