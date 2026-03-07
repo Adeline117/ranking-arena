@@ -54,8 +54,9 @@ _(Nothing currently — only multi-language expansion remains in backlog)_
 - ESLint: no-console error, no-empty error, no-explicit-any warn
 - VPS scraper v9 running with all exchange endpoints (bybit, mexc, coinex, kucoin, bingx, lbank, gateio)
 - Lighthouse: Perf 58 (4.4s redirect = Cloudflare proxy latency from local), A11y 97, BP 96, SEO 100
-- Remaining: Bitget API keys (user needs to provide)
-- Blocked: Bitget spot enrichment needs BITGET_API_KEY/SECRET/PASSPHRASE env vars
+- Bitget Futures: ✅ working via VPS Playwright scraper (100 traders/period, verified 2026-03-07)
+- Bitget Spot: ❌ no public leaderboard API exists; all endpoints return 404; needs broker API keys
+- VPS scraper updated: type=spot routing added, pageSize=100 for fewer browser sessions
 - Performance 58 note: 4.4s "redirect" is Cloudflare proxy overhead from local machine, not app issue
 
 ## Archive
