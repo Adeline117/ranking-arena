@@ -48,6 +48,8 @@ import fetchPerpetualProtocol from './perpetual'
 import { fetchKwenta } from './kwenta'
 import { fetchSynthetix } from './synthetix'
 import { fetchMux } from './mux'
+import { fetchBitmart } from './bitmart'
+import { fetchWeb3Bot } from './web3-bot'
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -93,6 +95,8 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   kwenta: fetchKwenta,
   synthetix: fetchSynthetix,
   mux: fetchMux,
+  bitmart: fetchBitmart,
+  web3_bot: fetchWeb3Bot,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {

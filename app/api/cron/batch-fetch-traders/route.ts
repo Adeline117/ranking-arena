@@ -40,9 +40,9 @@ const GROUPS: Record<string, string[]> = {
   // Group E: Lower-priority (every 8h) — 6 platforms (added DEX subgraph fetchers)
   e: ['coinex', 'bitget_spot', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
   // Group F: Lower-priority CEX (every 12h) — periodic retry
-  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank', 'weex'],
+  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank', 'weex', 'bitmart'],
   // Group G: DEX Subgraph (every 12h) — The Graph queries
-  g: ['uniswap', 'pancakeswap'],
+  g: ['uniswap', 'pancakeswap', 'web3_bot'],
 }
 
 interface BatchResult {
