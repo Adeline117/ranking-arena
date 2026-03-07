@@ -29,7 +29,7 @@ export async function POST(
     // Verify group exists
     const { data: group, error: groupErr } = await supabase
       .from('groups')
-      .select('id, created_by, is_premium_only')
+      .select('id, created_by, is_premium_only, min_arena_score, is_verified_only')
       .eq('id', groupId)
       .maybeSingle()
 
@@ -38,6 +38,30 @@ export async function POST(
     }
 
     if (action === 'join') {
+      // Check score gate and verified-only restrictions
+      if (group.min_arena_score > 0 || group.is_verified_only) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('reputation_score, is_verified_trader')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        if (group.is_verified_only && !profile?.is_verified_trader) {
+          return NextResponse.json({
+            error: 'This group is restricted to verified traders only',
+            code: 'VERIFIED_ONLY',
+          }, { status: 403 })
+        }
+
+        if (group.min_arena_score > 0 && (profile?.reputation_score ?? 0) < group.min_arena_score) {
+          return NextResponse.json({
+            error: `This group requires Arena Score of ${group.min_arena_score}+`,
+            code: 'SCORE_TOO_LOW',
+            required_score: group.min_arena_score,
+          }, { status: 403 })
+        }
+      }
+
       // Check if already a member
       const { data: existing } = await supabase
         .from('group_members')
