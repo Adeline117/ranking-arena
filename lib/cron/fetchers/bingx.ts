@@ -80,14 +80,19 @@ interface BingxTrader {
   roiRate?: string | number
   returnRate?: string | number
   pnlRatio?: string | number
+  cumulativePnlRate7Days?: string | number  // multi-rank ROI field
   pnl?: string | number
   totalPnl?: string | number
+  totalEarnings?: string | number  // multi-rank PnL field
+  followerEarning?: string | number
   profit?: string | number
   winRate?: string | number
   maxDrawdown?: string | number
   followerNum?: number
   followers?: number
   followerCount?: number
+  rank?: number
+  riskLevel?: string | number
   traderInfoVo?: BingxTrader
 }
 
@@ -106,11 +111,11 @@ function parseTrader(item: BingxTrader, period: string, rank: number): TraderDat
   const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
   if (!id || id === 'undefined') return null
 
-  let roi = parseNum(item.roi ?? item.roiRate ?? item.returnRate ?? item.pnlRatio)
+  let roi = parseNum(item.roi ?? item.roiRate ?? item.returnRate ?? item.pnlRatio ?? item.cumulativePnlRate7Days)
   if (roi === null) return null
   roi = normalizeROI(roi, SOURCE) ?? roi
 
-  const pnl = parseNum(item.pnl ?? item.totalPnl ?? item.profit)
+  const pnl = parseNum(item.pnl ?? item.totalPnl ?? item.totalEarnings ?? item.profit)
 
   let winRate = parseNum(item.winRate)
   if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
@@ -289,6 +294,35 @@ async function fetchPeriod(
         }
       } catch (err) {
         logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+  }
+
+  // VPS Playwright scraper fallback (browser-based interception on VPS)
+  if (allTraders.size === 0) {
+    const vpsScraperUrl = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+    const vpsScraperKey = process.env.VPS_PROXY_KEY || ''
+    if (vpsScraperKey) {
+      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
+      try {
+        const scraperUrl = `${vpsScraperUrl}/bingx/leaderboard?timeType=${periodType}&pageSize=${PAGE_SIZE}`
+        const res = await fetch(scraperUrl, {
+          headers: { 'X-Proxy-Key': vpsScraperKey },
+          signal: AbortSignal.timeout(90_000),
+        })
+        if (res.ok) {
+          const data = (await res.json()) as BingxResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
+            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+          }
+          if (allTraders.size > 0) {
+            logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
+          }
+        }
+      } catch (err) {
+        logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }
