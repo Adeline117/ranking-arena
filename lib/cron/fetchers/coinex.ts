@@ -50,15 +50,18 @@ interface CoinexTrader {
   nick_name?: string
   nickName?: string
   nickname?: string
+  account_name?: string
   name?: string
   avatar?: string
   avatar_url?: string
   roi?: number | string
   roi_rate?: number | string
   return_rate?: number | string
+  profit_rate?: number | string
   pnl?: number | string
   profit?: number | string
   total_pnl?: number | string
+  total_profit?: number | string
   win_rate?: number | string
   winRate?: number | string
   max_drawdown?: number | string
@@ -67,6 +70,8 @@ interface CoinexTrader {
   follower_count?: number | string
   followerCount?: number | string
   copier_num?: number | string
+  cur_follower_num?: number | string
+  status?: string
 }
 
 interface CoinexApiResponse {
@@ -95,15 +100,15 @@ function parseTrader(item: CoinexTrader, period: string): TraderData | null {
   const id = String(item.trader_id || item.traderId || item.uid || item.id || '')
   if (!id) return null
 
-  const nickname = item.nick_name || item.nickName || item.nickname || item.name || ''
+  const nickname = item.nick_name || item.nickName || item.nickname || item.account_name || item.name || ''
   if (!nickname) return null
 
-  let roi = parseNum(item.roi ?? item.roi_rate ?? item.return_rate)
+  let roi = parseNum(item.roi ?? item.roi_rate ?? item.return_rate ?? item.profit_rate)
   if (roi === null || roi === 0) return null
   // CoinEx may use decimal or percentage — normalize
   roi = normalizeROI(roi, SOURCE) ?? roi
 
-  const pnl = parseNum(item.pnl ?? item.profit ?? item.total_pnl)
+  const pnl = parseNum(item.pnl ?? item.profit ?? item.total_pnl ?? item.total_profit)
 
   let winRate = parseNum(item.win_rate ?? item.winRate)
   if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
@@ -115,7 +120,7 @@ function parseTrader(item: CoinexTrader, period: string): TraderData | null {
     if (maxDrawdown > 0 && maxDrawdown <= 1) maxDrawdown *= 100
   }
 
-  const followers = parseNum(item.follower_count ?? item.followerCount ?? item.copier_num)
+  const followers = parseNum(item.follower_count ?? item.followerCount ?? item.copier_num ?? item.cur_follower_num)
 
   return {
     source: SOURCE,
@@ -144,9 +149,13 @@ function parseTrader(item: CoinexTrader, period: string): TraderData | null {
  *    Response: { data: { items: [...] } }
  */
 const PERIOD_MAP: Record<string, string> = { '7D': '7d', '30D': '30d', '90D': '90d' }
+const TIME_RANGE_MAP: Record<string, string> = { '7D': 'DAY7', '30D': 'DAY30', '90D': 'DAY90' }
 
 const API_ENDPOINTS = [
-  // Primary — legacy connector (copy-trade/rank)
+  // Primary — public/traders endpoint (confirmed working 2026-03-06 via VPS browser debug)
+  (page: number, period: string) =>
+    `https://www.coinex.com/res/copy-trading/public/traders?data_type=profit_rate&time_range=${TIME_RANGE_MAP[period] || 'DAY30'}&hide_full=0&page=${page}&limit=${PAGE_SIZE}`,
+  // Fallback — legacy connector (copy-trade/rank)
   (page: number, period: string) =>
     `https://www.coinex.com/res/copy-trade/rank?period=${PERIOD_MAP[period] || '30d'}&page=${page}&limit=${PAGE_SIZE}&sort=roi`,
   // Fallback — platform connector (copy-trading/traders)
