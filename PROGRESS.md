@@ -30,13 +30,14 @@
 - DB migrations: get_latest_timestamps_by_source RPC + composite index applied to production
 
 ## In Progress
-- `: any` annotation cleanup (agent running)
+_(Nothing currently — only multi-language expansion remains in backlog)_
 
 ## Key Metrics
 - Total Traders: 32,000+
 - Exchanges Supported: 28+ (added Perpetual Protocol)
 - Cron Jobs: 27 active (45+ with PipelineLogger)
-- Tests: 135 suites, 2232 tests, ALL GREEN
+- Tests: 136 suites, 2243 tests, ALL GREEN
+- Lighthouse: Performance 58, Accessibility 97, Best Practices 96, SEO 100
 - Quality: 75 -> ~95 across 10 dimensions (2026-03-06)
 
 ## Platform Coverage
@@ -52,8 +53,10 @@
 - DEGRADATION.md documents all service failure strategies
 - ESLint: no-console error, no-empty error, no-explicit-any warn
 - VPS scraper v9 running with all exchange endpoints (bybit, mexc, coinex, kucoin, bingx, lbank, gateio)
-- Remaining: Bitget API keys (user needs to provide), more connector tests, Lighthouse audit
+- Lighthouse: Perf 58 (4.4s redirect = Cloudflare proxy latency from local), A11y 97, BP 96, SEO 100
+- Remaining: Bitget API keys (user needs to provide)
 - Blocked: Bitget spot enrichment needs BITGET_API_KEY/SECRET/PASSPHRASE env vars
+- Performance 58 note: 4.4s "redirect" is Cloudflare proxy overhead from local machine, not app issue
 
 ## Archive
 See `docs/PROGRESS-ARCHIVE.md` for completed items prior to current sprint.
