@@ -221,8 +221,9 @@ function SortHeader({
 }) {
   const active = currentKey === sortKey
   return (
-    <div
+    <button
       onClick={() => onSort(sortKey)}
+      aria-label={`Sort by ${label}`}
       style={{
         textAlign: align,
         cursor: 'pointer',
@@ -232,11 +233,15 @@ function SortHeader({
         justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
         color: active ? tokens.colors.accent.brand : tokens.colors.text.secondary,
         transition: 'color 0.15s',
+        background: 'none',
+        border: 'none',
+        padding: 0,
+        font: 'inherit',
       }}
     >
       {label}
       <SortArrow active={active} dir={currentDir} />
-    </div>
+    </button>
   )
 }
 
@@ -352,7 +357,7 @@ export default function ExchangeRankingClient({
             cursor: 'pointer',
           }}
         >
-          表格
+          {zh ? '表格' : 'Table'}
         </button>
         <button
           onClick={() => setViewMode('card')}
@@ -367,7 +372,7 @@ export default function ExchangeRankingClient({
             cursor: 'pointer',
           }}
         >
-          卡片
+          {zh ? '卡片' : 'Cards'}
         </button>
       </div>
 
@@ -500,7 +505,7 @@ export default function ExchangeRankingClient({
               opacity: page <= 1 ? 0.5 : 1,
             }}
           >
-            ← 上一页
+            {zh ? '← 上一页' : '← Prev'}
           </button>
           <span style={{ fontSize: 13, color: tokens.colors.text.secondary }}>
             {page} / {totalPages}
@@ -520,7 +525,7 @@ export default function ExchangeRankingClient({
               opacity: page >= totalPages ? 0.5 : 1,
             }}
           >
-            下一页 →
+            {zh ? '下一页 →' : 'Next →'}
           </button>
         </div>
       )}

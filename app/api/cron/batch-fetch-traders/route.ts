@@ -113,7 +113,9 @@ export async function GET(request: NextRequest) {
         await recordFetchResult(supabase, platform, {
           success: false, durationMs: Date.now() - start, recordCount: 0, error: errMsg,
         })
-      } catch { /* ignore metric recording failures */ }
+      } catch (metricErr) {
+        logger.warn(`[batch-fetch-traders-${group}] Failed to record metric for ${platform}`, { error: metricErr instanceof Error ? metricErr.message : String(metricErr) })
+      }
 
       return { platform, status: 'error', durationMs: Date.now() - start, error: errMsg }
     }
