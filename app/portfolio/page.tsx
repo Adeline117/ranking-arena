@@ -8,6 +8,7 @@ import MobileBottomNav from '@/app/components/layout/MobileBottomNav'
 import PortfolioOverview from '@/app/components/portfolio/PortfolioOverview'
 import PositionList from '@/app/components/portfolio/PositionList'
 import AddExchangeModal from '@/app/components/portfolio/AddExchangeModal'
+import PortfolioAnalytics from '@/app/components/portfolio/PortfolioAnalytics'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -216,6 +217,14 @@ export default function PortfolioPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Analytics Dashboard */}
+          {!loading && positions.length > 0 && (
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>{t('portfolioAnalytics') || 'Analytics'}</h2>
+              <PortfolioAnalytics positions={positions} snapshots={snapshots} />
             </div>
           )}
 
