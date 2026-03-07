@@ -89,9 +89,11 @@ export async function GET(request: NextRequest) {
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${period}`, { period, enrichAll, platforms })
 
-  for (const [index, platform] of platforms.entries()) {
+  // Run enrichments in parallel batches of 3 (was sequential with 2s delay = 28s+ idle)
+  const BATCH_CONCURRENCY = 3
+  const enrichPlatform = async (platform: string): Promise<BatchResult> => {
     const config = PLATFORM_CONFIGS[platform]
-    if (!config) continue
+    if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
 
     const limit = period === '90D' ? config.limit90 : period === '30D' ? config.limit30 : config.limit7
     const start = Date.now()
@@ -100,39 +102,35 @@ export async function GET(request: NextRequest) {
       const headers: Record<string, string> = {
         Authorization: `Bearer ${cronSecret}`,
       }
-      // Bypass Vercel Deployment Protection for internal cron calls
       if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
         headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
       }
 
       const res = await fetch(
         `${baseUrl}/api/cron/enrich?platform=${platform}&period=${period}&limit=${limit}`,
-        {
-          method: 'GET',
-          headers,
-        }
+        { method: 'GET', headers }
       )
-      results.push({
-        platform,
-        period,
+      return {
+        platform, period,
         status: res.ok ? 'success' : 'error',
         durationMs: Date.now() - start,
         error: res.ok ? undefined : `HTTP ${res.status}`,
-      })
+      }
     } catch (err) {
-      results.push({
-        platform,
-        period,
+      return {
+        platform, period,
         status: 'error',
         durationMs: Date.now() - start,
         error: err instanceof Error ? err.message : String(err),
-      })
+      }
     }
+  }
 
-    // Delay between enrichments (skip after the last platform)
-    if (index < platforms.length - 1) {
-      await new Promise((r) => setTimeout(r, 2000))
-    }
+  // Process in batches of BATCH_CONCURRENCY
+  for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
+    const batch = platforms.slice(i, i + BATCH_CONCURRENCY)
+    const batchResults = await Promise.all(batch.map(enrichPlatform))
+    results.push(...batchResults)
   }
 
   const succeeded = results.filter(r => r.status === 'success').length

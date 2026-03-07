@@ -172,19 +172,24 @@ export async function getTraderArenaFollowersCountBatch(
   if (traderIds.length === 0) return result
 
   try {
-    const { data, error } = await client
-      .from('trader_follows')
-      .select('trader_id')
-      .in('trader_id', traderIds)
+    // Query count per trader_id instead of fetching all individual follow rows.
+    // For popular traders with 100+ followers, this reduces payload from KBs to bytes.
+    const counts = await Promise.all(
+      traderIds.map(async (id) => {
+        const { count, error } = await client
+          .from('trader_follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('trader_id', id)
+        if (error || count == null) return { id, count: 0 }
+        return { id, count }
+      })
+    )
 
-    if (error || !data) return result
+    for (const { id, count } of counts) {
+      if (count > 0) result.set(id, count)
+    }
 
-    const counts = new Map<string, number>()
-    data.forEach((row: { trader_id: string }) => {
-      counts.set(row.trader_id, (counts.get(row.trader_id) || 0) + 1)
-    })
-
-    return counts
+    return result
   } catch (error) {
     logger.warn('getTraderArenaFollowersCountBatch failed', { error: error instanceof Error ? error.message : String(error) })
     return result
