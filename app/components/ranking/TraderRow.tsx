@@ -147,6 +147,15 @@ export const TraderRow = memo(function TraderRow({
   // Rank class for CSS art direction (top 3 heroes)
   const rankClass = rank <= 3 ? ` rank-${rank}` : ''
 
+  // Top 3 inline styles (critical — CSS is async-loaded)
+  const heroStyle = rank === 1
+    ? { background: 'linear-gradient(135deg, rgba(255,215,0,0.13) 0%, rgba(255,215,0,0.04) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 var(--color-rank-gold), 0 2px 20px rgba(255,215,0,0.08)', borderRadius: 10, margin: '3px 4px' }
+    : rank === 2
+    ? { background: 'linear-gradient(135deg, rgba(192,192,192,0.10) 0%, rgba(192,192,192,0.03) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 var(--color-rank-silver), 0 2px 16px rgba(192,192,192,0.06)', borderRadius: 10, margin: '3px 4px' }
+    : rank === 3
+    ? { background: 'linear-gradient(135deg, rgba(205,127,50,0.10) 0%, rgba(205,127,50,0.03) 40%, transparent 80%)', boxShadow: 'inset 3px 0 0 var(--color-rank-bronze), 0 2px 16px rgba(205,127,50,0.06)', borderRadius: 10, margin: '3px 4px' }
+    : undefined
+
   // Swipe state (mobile only)
   const swipeRef = useRef<{ startX: number; startY: number; swiping: boolean }>({ startX: 0, startY: 0, swiping: false })
   const contentRef = useRef<HTMLDivElement>(null)
@@ -217,7 +226,7 @@ export const TraderRow = memo(function TraderRow({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="swipe-row-actions">
+      <div className="swipe-row-actions" style={{ display: 'none' }}>
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); closeSwipe(); handleCompareToggle(e) }}
           style={{ background: tokens.colors.accent.primary }}
@@ -252,9 +261,11 @@ export const TraderRow = memo(function TraderRow({
           alignItems: 'center',
           gap: tokens.spacing[3],
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          borderBottom: rank <= 3 ? undefined : '1px solid var(--glass-border-light)',
           cursor: 'pointer',
           position: 'relative',
           minHeight: rank <= 3 ? 64 : 54,
+          ...heroStyle,
         }}
       >
         {/* Compare checkbox — hidden, use toolbar compare instead */}
