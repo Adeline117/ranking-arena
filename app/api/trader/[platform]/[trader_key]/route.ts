@@ -76,7 +76,7 @@ export async function GET(
     // 1. Profile
     supabase
       .from('trader_profiles_v2')
-      .select('*')
+      .select('id, platform, trader_key, display_name, avatar_url, bio, tags, follower_count, copier_count, aum, updated_at, last_enriched_at, created_at')
       .eq('platform', platform)
       .eq('trader_key', trader_key)
       .maybeSingle(),

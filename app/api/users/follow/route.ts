@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     // 检查 A 是否关注 B
     const { data: followData, error: followError } = await supabase
       .from('user_follows')
-      .select('*')
+      .select('id')
       .eq('follower_id', followerId)
       .eq('following_id', followingId)
       .maybeSingle()
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     // 检查是否互相关注
     const { data: reverseData } = await supabase
       .from('user_follows')
-      .select('*')
+      .select('id')
       .eq('follower_id', followingId)
       .eq('following_id', followerId)
       .maybeSingle()
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       // 检查是否互相关注
       const { data: reverseData } = await supabase
         .from('user_follows')
-        .select('*')
+        .select('id')
         .eq('follower_id', followingId)
         .eq('following_id', followerId)
         .maybeSingle()
