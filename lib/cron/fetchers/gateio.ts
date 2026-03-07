@@ -270,7 +270,7 @@ async function fetchPeriod(
 
         let newCount = 0
         for (const item of list) {
-          const id = String(item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
+          const id = String(item.leader_id || item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
           if (id && id !== 'undefined' && !allTraders.has(id)) {
             allTraders.set(id, item)
             newCount++
@@ -316,7 +316,7 @@ async function fetchPeriod(
           const data = (await res.json()) as GateResponse
           const list = extractList(data)
           for (const item of list) {
-            const id = String(item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
+            const id = String(item.leader_id || item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
             if (id && id !== 'undefined' && !allTraders.has(id)) {
               allTraders.set(id, item)
             }
