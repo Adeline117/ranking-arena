@@ -114,7 +114,7 @@ CREATE POLICY "Service role can manage verified traders"
 -- ============================================
 ALTER TABLE trader_sources
   ADD COLUMN IF NOT EXISTS is_bot BOOLEAN DEFAULT FALSE,
-  ADD COLUMN IF NOT EXISTS bot_category TEXT CHECK (bot_category IN ('tg_bot', 'ai_agent', 'vault', 'strategy', NULL));
+  ADD COLUMN IF NOT EXISTS bot_category TEXT CHECK (bot_category IS NULL OR bot_category IN ('tg_bot', 'ai_agent', 'vault', 'strategy'));
 
 CREATE INDEX IF NOT EXISTS idx_trader_sources_is_bot ON trader_sources(is_bot) WHERE is_bot = TRUE;
 
@@ -147,12 +147,31 @@ ALTER TABLE posts
 CREATE INDEX IF NOT EXISTS idx_posts_author_score ON posts(author_arena_score DESC) WHERE author_arena_score > 0;
 
 -- ============================================
--- 7. Attestation metadata update
+-- 7. Attestation metadata (create table if not exists)
 -- ============================================
-ALTER TABLE trader_attestations
-  ADD COLUMN IF NOT EXISTS chain_id INTEGER DEFAULT 8453,
-  ADD COLUMN IF NOT EXISTS score_period TEXT DEFAULT 'overall',
-  ADD COLUMN IF NOT EXISTS minted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+CREATE TABLE IF NOT EXISTS trader_attestations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  trader_id TEXT NOT NULL,
+  source TEXT NOT NULL,
+  arena_score NUMERIC,
+  tx_hash TEXT,
+  chain_id INTEGER DEFAULT 8453,
+  score_period TEXT DEFAULT 'overall',
+  minted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(trader_id, source, score_period)
+);
+
+ALTER TABLE trader_attestations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view attestations"
+  ON trader_attestations FOR SELECT
+  USING (true);
+
+CREATE POLICY "Service role can manage attestations"
+  ON trader_attestations FOR ALL
+  USING (true)
+  WITH CHECK (true);
 
 -- ============================================
 -- 8. User exchange connections (for claim verification)
