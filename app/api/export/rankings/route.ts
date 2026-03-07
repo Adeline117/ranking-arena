@@ -20,6 +20,13 @@ function escapeCsv(v: unknown): string {
 }
 
 export async function GET(request: Request) {
+  // Require authentication to prevent data scraping
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const url = new URL(request.url)
     const format = url.searchParams.get('format') || 'csv'

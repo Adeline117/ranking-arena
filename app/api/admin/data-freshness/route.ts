@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const validSecret =
     process.env.ADMIN_SECRET || process.env.CRON_SECRET
 
-  if (validSecret && token !== validSecret) {
+  if (!validSecret || token !== validSecret) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

@@ -83,15 +83,10 @@ function getSupabaseClient() {
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV === 'development'
+  if (!secret) return false
 
   const authHeader = req.headers.get('authorization')
-  if (authHeader === `Bearer ${secret}`) return true
-
-  const url = new URL(req.url)
-  if (url.searchParams.get('secret') === secret) return true
-
-  return false
+  return authHeader === `Bearer ${secret}`
 }
 
 export async function GET(req: NextRequest) {

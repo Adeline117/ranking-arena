@@ -332,10 +332,11 @@ async function processTraders(
 
   // Log execution
   const adminSupabase = createSupabaseAdmin()
+  const isSuccess = failed === 0 || success > failed
   await logCronExecution(adminSupabase, 'fetch-details', [
     {
       name: 'fetch_details_inline',
-      success: true,
+      success: isSuccess,
       output: `Processed ${traders.length} traders: ${success} success, ${failed} failed`,
       duration,
     },
@@ -350,7 +351,7 @@ async function processTraders(
   }
 
   return NextResponse.json({
-    ok: true,
+    ok: isSuccess,
     ran_at: new Date().toISOString(),
     summary: {
       total: traders.length,

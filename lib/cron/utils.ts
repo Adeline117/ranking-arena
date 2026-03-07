@@ -201,11 +201,6 @@ export function isAuthorized(req: Request): boolean {
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  // 开发环境允许无密钥访问
-  if (!cronSecret && process.env.NODE_ENV === 'development') {
-    return true
-  }
-
   if (!cronSecret) {
     cronLogger.error('CRON_SECRET 环境变量未设置')
     return false

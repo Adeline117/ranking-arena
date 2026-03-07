@@ -73,8 +73,9 @@ export async function loadAllTraders(
     traderCache = { data: traders, timestamp: Date.now(), timeRange }
 
     return traders
-  } catch (_error) {
+  } catch (redisError) {
     // Redis 失败时，直接从数据库加载
+    logger.warn('Redis cache failed, falling back to DB', { error: redisError instanceof Error ? redisError.message : String(redisError) })
     return await loadTradersFromDB(supabase, timeRange)
   }
 }
@@ -127,7 +128,7 @@ async function loadTradersFromDB(
 
     return traders
   } catch (error) {
-    logger.warn('loadTradersFromDB failed', { error: error instanceof Error ? error.message : String(error) })
-    return []
+    logger.error('loadTradersFromDB failed', { error: error instanceof Error ? error.message : String(error) })
+    throw error // Propagate to caller so UI can show error state
   }
 }

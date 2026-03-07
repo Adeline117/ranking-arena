@@ -1,11 +1,11 @@
 /**
- * POST /api/cron/aggregate-daily-snapshots
+ * GET /api/cron/aggregate-daily-snapshots
  *
  * Aggregates end-of-day trader snapshots into daily records for historical analysis.
  *
  * V2: Batch queries instead of N+1 (was 3 queries per trader → now 3 total queries).
  *
- * Schedule: Daily at 00:05 UTC
+ * Schedule: Daily at 00:05 UTC (Vercel cron sends GET)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,7 +18,7 @@ export const maxDuration = 300
 
 const UPSERT_BATCH = 500
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
