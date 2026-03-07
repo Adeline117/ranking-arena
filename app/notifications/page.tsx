@@ -12,6 +12,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 
 // ============================================
 // 类型
@@ -233,6 +234,7 @@ export default function NotificationsPage() {
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
+      <PullToRefreshWrapper onRefresh={loadNotifications}>
       <Box style={{ maxWidth: 700, margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`, paddingBottom: 80 }}>
         {/* 标题行 */}
         <Box style={{
@@ -439,6 +441,7 @@ export default function NotificationsPage() {
         .notif-filters::-webkit-scrollbar { display: none; }
       `}</style>
       <MobileBottomNav />
+    </PullToRefreshWrapper>
     </Box>
   )
 }

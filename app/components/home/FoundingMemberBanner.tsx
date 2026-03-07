@@ -46,7 +46,7 @@ export default function FoundingMemberBanner() {
           padding: `2px ${tokens.spacing[3]}`,
           borderRadius: tokens.radius.md,
           background: 'var(--color-founding-accent)',
-          color: '#fff',
+          color: 'var(--color-on-accent, #fff)',
           textDecoration: 'none',
           fontSize: tokens.typography.fontSize.xs,
           fontWeight: 700,

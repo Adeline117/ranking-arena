@@ -13,6 +13,7 @@ import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
@@ -394,6 +395,7 @@ export default function FollowingPage() {
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
       <TopNav email={email} />
+      <PullToRefreshWrapper onRefresh={async () => { await fetchFollowing(0, false) }}>
       <Box className="has-mobile-nav" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
         <Breadcrumb items={[{ label: t('myFollowing') }]} />
         {/* 页面标题 */}
@@ -768,6 +770,7 @@ export default function FollowingPage() {
           </>
         )}
       </Box>
+      </PullToRefreshWrapper>
     </Box>
   )
 }

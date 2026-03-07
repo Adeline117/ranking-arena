@@ -88,7 +88,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 fontWeight: 600,
                 fontSize: 14,
                 background: billing === b ? tokens.colors.accent.brand : 'transparent',
-                color: billing === b ? '#fff' : tokens.colors.text.secondary,
+                color: billing === b ? 'var(--color-on-accent, #fff)' : tokens.colors.text.secondary,
                 transition: 'all 0.2s',
               }}
             >
@@ -179,7 +179,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               left: '50%',
               transform: 'translateX(-50%)',
               background: tokens.colors.accent.brand,
-              color: '#fff',
+              color: 'var(--color-on-accent, #fff)',
               padding: '5px 18px',
               borderRadius: tokens.radius.full,
               fontSize: 11,
@@ -220,7 +220,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 borderRadius: tokens.radius.md,
                 background: tokens.colors.accent.brand,
                 textAlign: 'center',
-                color: '#fff',
+                color: 'var(--color-on-accent, #fff)',
                 textDecoration: 'none',
                 fontWeight: 700,
                 fontSize: 15,
@@ -256,8 +256,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           <div style={{
             padding: tokens.spacing[8],
             borderRadius: tokens.radius.lg,
-            border: '2px solid #f59e0b',
-            background: 'color-mix(in srgb, #f59e0b 6%, var(--color-bg-secondary))',
+            border: '2px solid var(--color-founding-accent)',
+            background: 'color-mix(in srgb, var(--color-founding-accent) 6%, var(--color-bg-secondary))',
             position: 'relative',
             textAlign: 'left',
           }}>
@@ -267,8 +267,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               top: -13,
               left: '50%',
               transform: 'translateX(-50%)',
-              background: '#f59e0b',
-              color: '#fff',
+              background: 'var(--color-founding-accent)',
+              color: 'var(--color-on-accent, #fff)',
               padding: '5px 18px',
               borderRadius: tokens.radius.full,
               fontSize: 11,
@@ -282,7 +282,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 24 }}>
               <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6, color: '#f59e0b' }}>
+                <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6, color: 'var(--color-founding-accent)' }}>
                   {locale === 'zh' ? '终身会员' : 'Lifetime Pro'}
                 </h3>
                 <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: 0, lineHeight: 1.6 }}>
@@ -292,7 +292,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 </p>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <p style={{ fontSize: 44, fontWeight: 800, marginBottom: 0, letterSpacing: '-0.02em', color: '#f59e0b', lineHeight: 1.1 }}>
+                <p style={{ fontSize: 44, fontWeight: 800, marginBottom: 0, letterSpacing: '-0.02em', color: 'var(--color-founding-accent)', lineHeight: 1.1 }}>
                   ${PRICING.lifetime.price}
                 </p>
                 <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginTop: 2 }}>
@@ -310,7 +310,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               return (
                 <div style={{ marginTop: tokens.spacing[6] }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#f59e0b' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-founding-accent)' }}>
                       {taken} / {TOTAL_SPOTS} spots taken
                     </span>
                     <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
@@ -320,14 +320,14 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                   <div style={{
                     height: 6,
                     borderRadius: 999,
-                    background: 'color-mix(in srgb, #f59e0b 18%, var(--color-bg-primary))',
+                    background: 'color-mix(in srgb, var(--color-founding-accent) 18%, var(--color-bg-primary))',
                     overflow: 'hidden',
                   }}>
                     <div style={{
                       height: '100%',
                       width: `${pct}%`,
                       borderRadius: 999,
-                      background: 'linear-gradient(90deg, #f59e0b, #fbbf24)',
+                      background: 'linear-gradient(90deg, var(--color-founding-accent), #fbbf24)',
                       transition: 'width 0.6s ease',
                     }} />
                   </div>
@@ -341,15 +341,15 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 display: 'block',
                 padding: '14px 0',
                 borderRadius: tokens.radius.md,
-                background: '#f59e0b',
+                background: 'var(--color-founding-accent)',
                 textAlign: 'center',
-                color: '#fff',
+                color: 'var(--color-on-accent, #fff)',
                 textDecoration: 'none',
                 fontWeight: 700,
                 fontSize: 15,
                 marginTop: tokens.spacing[6],
                 transition: 'all 0.2s',
-                boxShadow: '0 4px 14px rgba(245, 158, 11, 0.3)',
+                boxShadow: '0 4px 14px var(--color-founding-accent-shadow)',
               }}
             >
               {locale === 'zh' ? '立即成为创始会员' : 'Get Founding Member Access'}
