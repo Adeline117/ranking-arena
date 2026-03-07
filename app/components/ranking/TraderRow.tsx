@@ -144,17 +144,8 @@ export const TraderRow = memo(function TraderRow({
     }
   }
 
-  // Top 3 background gradients
-  const top3Bg = rank === 1
-    ? 'linear-gradient(90deg, var(--color-gold-bg) 0%, transparent 100%)'
-    : rank === 2
-    ? 'linear-gradient(90deg, var(--color-silver-bg) 0%, transparent 100%)'
-    : rank === 3
-    ? 'linear-gradient(90deg, var(--color-bronze-bg) 0%, transparent 100%)'
-    : undefined
-
-  // Zebra stripe
-  const zebraBg = rank > 3 && rank % 2 === 0 ? 'var(--overlay-hover)' : undefined
+  // Rank class for CSS art direction (top 3 heroes)
+  const rankClass = rank <= 3 ? ` rank-${rank}` : ''
 
   // Swipe state (mobile only)
   const swipeRef = useRef<{ startX: number; startY: number; swiping: boolean }>({ startX: 0, startY: 0, swiping: false })
@@ -255,17 +246,15 @@ export const TraderRow = memo(function TraderRow({
       onMouseEnter={handleMouseEnter}
     >
       <Box
-        className="ranking-row ranking-table-grid ranking-table-grid-custom touch-target"
+        className={`ranking-row ranking-table-grid ranking-table-grid-custom touch-target${rankClass}`}
         style={{
           display: 'grid',
           alignItems: 'center',
-          gap: tokens.spacing[2],
+          gap: tokens.spacing[3],
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-          borderBottom: `1px solid var(--glass-border-light)`,
           cursor: 'pointer',
           position: 'relative',
-          minHeight: 56,
-          background: top3Bg || zebraBg || 'transparent',
+          minHeight: rank <= 3 ? 64 : 54,
         }}
       >
         {/* Compare checkbox — hidden, use toolbar compare instead */}
@@ -312,11 +301,11 @@ export const TraderRow = memo(function TraderRow({
             displayName={displayName}
             avatarUrl={trader.avatar_url}
             rank={rank}
-            size={36}
+            size={rank <= 3 ? 42 : 36}
           />
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
             <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '14px' }}>
+              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: rank <= 3 ? '15px' : '14px', letterSpacing: rank <= 3 ? '-0.01em' : undefined }}>
                 <HighlightedName text={displayName} query={searchQuery} />
               </Text>
               {isAddress && <CopyButton text={traderHandle} />}

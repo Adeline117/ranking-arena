@@ -406,25 +406,25 @@ export function ArenaScoreCircle({
       {/* Circular badge */}
       <div
         style={{
-          width: 44,
-          height: 44,
+          width: 38,
+          height: 38,
           borderRadius: '50%',
-          border: `3px solid ${ringColor}`,
-          background: `color-mix(in srgb, ${ringColor} 12%, transparent)`,
+          border: `2.5px solid ${ringColor}`,
+          background: `color-mix(in srgb, ${ringColor} 10%, transparent)`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
-          transition: 'box-shadow 0.15s ease, transform 0.15s ease',
+          transition: 'box-shadow 0.2s ease, transform 0.2s ease',
           boxShadow: show
             ? `0 0 0 2px color-mix(in srgb, ${ringColor} 25%, transparent), 0 4px 14px color-mix(in srgb, ${ringColor} 20%, transparent)`
-            : `0 0 8px color-mix(in srgb, ${ringColor} 15%, transparent)`,
-          transform: show ? 'scale(1.06)' : 'scale(1)',
+            : `0 0 6px color-mix(in srgb, ${ringColor} 12%, transparent)`,
+          transform: show ? 'scale(1.08)' : 'scale(1)',
         }}
       >
         {showConfidence && trader && <ScoreConfidenceIndicator trader={trader} />}
         <span style={{
-          fontSize: 15,
+          fontSize: 13,
           fontWeight: 900,
           lineHeight: 1,
           color: ringColor,
