@@ -34,13 +34,13 @@ const GROUPS: Record<string, string[]> = {
   // Group C: Mid-priority CEX (every 4h) — 3 platforms, ~70s parallel
   // okx_spot removed: OKX only supports instType=SWAP, no spot copy trading leaderboard
   c: ['okx_web3', 'aevo', 'xt'],
-  // Group D: Working CEX+DEX (every 6h) — 3 platforms, ~35s parallel
+  // Group D: Working CEX+DEX (every 6h) — 4 platforms
   // perpetual_protocol removed: Studio subgraph returns 404 (dead)
-  d: ['gains', 'htx_futures', 'dydx'],
+  d: ['gains', 'htx_futures', 'dydx', 'phemex'],
   // Group E: Lower-priority (every 8h) — 6 platforms (added DEX subgraph fetchers)
   e: ['coinex', 'bitget_spot', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
   // Group F: Lower-priority CEX (every 12h) — periodic retry
-  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank'],
+  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank', 'weex'],
   // Group G: DEX Subgraph (every 12h) — The Graph queries
   g: ['uniswap', 'pancakeswap'],
 }
