@@ -255,6 +255,37 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
     }
   }
 
+  // Strategy 2: Direct trace API call (may be blocked by CF WAF, but worth trying)
+  if (allTraders.length === 0) {
+    const sortType = SORT_TYPE_MAP[period] ?? 2
+    for (let page = 1; page <= Math.min(maxPages, 3); page++) {
+      try {
+        const data = await fetchJson<BitgetResponse & { data?: { rows?: BitgetTrader[]; nextFlag?: boolean } }>(TRACE_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': RANDOM_UAS[Math.floor(Math.random() * RANDOM_UAS.length)],
+            'Referer': 'https://www.bitget.com/copy-trading',
+            'Origin': 'https://www.bitget.com',
+          },
+          body: { pageNo: page, pageSize: PAGE_SIZE, sortField: 'ROI', sortType, rule: 2 },
+        })
+        if (data.code !== '0' && data.code !== 0 && data.code !== '00000') break
+        const list = data.data?.rows || data.data?.traderList || data.data?.list || []
+        if (list.length === 0) break
+        allTraders.push(...list)
+        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        await sleep(500)
+      } catch (err) {
+        logger.warn(`[${SOURCE}] Trace API direct call failed: ${err instanceof Error ? err.message : String(err)}`)
+        break
+      }
+    }
+    if (allTraders.length > 0) {
+      logger.info(`[${SOURCE}] Trace API direct call got ${allTraders.length} traders`)
+    }
+  }
+
   // Strategy 3: Legacy website API (fallback)
   if (allTraders.length === 0) {
     const sortType = SORT_TYPE_MAP[period] ?? 2
