@@ -69,13 +69,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .order('captured_at', { ascending: false })
       .limit(10),
 
-    // 3. Timeseries
+    // 3. Timeseries (cap at 500 rows to prevent unbounded fetches)
     supabase
       .from('trader_timeseries')
       .select('*')
       .eq('platform', platform)
       .eq('market_type', market_type)
-      .eq('trader_key', trader_key),
+      .eq('trader_key', trader_key)
+      .order('timestamp', { ascending: false })
+      .limit(500),
 
     // 4. Refresh status
     supabase
@@ -97,7 +99,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Fallback: check trader_sources
     const { data: sourceData } = await supabase
       .from('trader_sources')
-      .select('*')
+      .select('source_trader_id, handle, display_name, profile_url, updated_at')
       .eq('source', platform)
       .eq('market_type', market_type)
       .eq('source_trader_id', trader_key)

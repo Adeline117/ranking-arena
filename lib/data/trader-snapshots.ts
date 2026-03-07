@@ -92,13 +92,23 @@ export async function getAllLatestTimestamps(
   supabase: SupabaseClient,
   seasonId: string | null = null
 ): Promise<Record<TraderSource, string | null>> {
-  const results = await Promise.all(ALL_SOURCES.map(s => getLatestTimestamp(supabase, s, seasonId)))
-  
+  // Single query with DISTINCT ON replaces 35+ parallel queries (one per source)
+  const sid = seasonId || '90D'
+  const { data } = await supabase
+    .rpc('get_latest_timestamps_by_source', { p_season_id: sid })
+
   const timestamps: Record<TraderSource, string | null> = {} as Record<TraderSource, string | null>
-  ALL_SOURCES.forEach((source, index) => {
-    timestamps[source] = results[index]
-  })
-  
+  // Initialize all sources as null
+  ALL_SOURCES.forEach(source => { timestamps[source] = null })
+  // Fill in from query results
+  if (data) {
+    for (const row of data as { source: string; captured_at: string }[]) {
+      if (row.source in timestamps) {
+        timestamps[row.source as TraderSource] = row.captured_at
+      }
+    }
+  }
+
   return timestamps
 }
 

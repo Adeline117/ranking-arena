@@ -99,39 +99,24 @@ export async function getTraderPerformance(
           return { roi_90d: 0 }
         }
 
-        const [snapshot90d, snapshot7d, snapshot30d] = await Promise.all([
-          supabase
-            .from('trader_snapshots')
-            .select('roi, pnl, win_rate, max_drawdown')
-            .eq('source', source.source)
-            .eq('source_trader_id', source.source_trader_id)
-            .eq('season_id', '90D')
-            .order('captured_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('trader_snapshots')
-            .select('roi, pnl, win_rate, max_drawdown')
-            .eq('source', source.source)
-            .eq('source_trader_id', source.source_trader_id)
-            .eq('season_id', '7D')
-            .order('captured_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('trader_snapshots')
-            .select('roi, pnl, win_rate, max_drawdown')
-            .eq('source', source.source)
-            .eq('source_trader_id', source.source_trader_id)
-            .eq('season_id', '30D')
-            .order('captured_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        ])
+        // Single query for all 3 periods instead of 3 parallel queries
+        const { data: allSnapshots } = await supabase
+          .from('trader_snapshots')
+          .select('season_id, roi, pnl, win_rate, max_drawdown')
+          .eq('source', source.source)
+          .eq('source_trader_id', source.source_trader_id)
+          .in('season_id', ['7D', '30D', '90D'])
+          .order('captured_at', { ascending: false })
+          .limit(9) // 3 per season max
 
-        const data90d = snapshot90d.data
-        const data7d = snapshot7d.data
-        const data30d = snapshot30d.data
+        // Pick latest per season_id
+        const bySeason = new Map<string, (typeof allSnapshots extends (infer T)[] | null ? T : never)>()
+        for (const s of allSnapshots || []) {
+          if (!bySeason.has(s.season_id)) bySeason.set(s.season_id, s)
+        }
+        const data90d = bySeason.get('90D') || null
+        const data7d = bySeason.get('7D') || null
+        const data30d = bySeason.get('30D') || null
 
         return {
           roi_90d: data90d?.roi ?? 0,
