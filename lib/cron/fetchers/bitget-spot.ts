@@ -36,6 +36,24 @@ const PERIOD_MAP: Record<string, string> = {
   '90D': 'NINETY_DAYS',
 }
 
+/** Bitget website API sortType values (for POST /v1/copy/spot/trader/list) */
+const SORT_TYPE_MAP: Record<string, number> = {
+  '7D': 1,
+  '30D': 2,
+  '90D': 0,
+}
+
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+
+// Website internal API — the WORKING endpoint (POST with JSON body)
+// Same as the legacy connector (lib/connectors/bitget-spot.ts)
+const WEBSITE_API_URL = 'https://www.bitget.com/v1/copy/spot/trader/list'
+
+const RANDOM_UAS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+]
+
 // ---------------------------------------------------------------------------
 // Authentication
 // ---------------------------------------------------------------------------
@@ -197,18 +215,57 @@ async function fetchWithAuth(period: string): Promise<BitgetSpotTrader[]> {
 
 async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
   const allTraders: BitgetSpotTrader[] = []
-  const periodParam = PERIOD_MAP[period] || period
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
+  const sortType = SORT_TYPE_MAP[period] ?? 2
 
-  // V1 decommissioned, V2 public return 404. Kept as fallback.
-  const urls = [
+  // Strategy 1: Website internal API (POST) — the working approach from connectors
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const data = await fetchJson<BitgetResponse>(WEBSITE_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': RANDOM_UAS[Math.floor(Math.random() * RANDOM_UAS.length)],
+        },
+        body: {
+          pageNo: page,
+          pageSize: PAGE_SIZE,
+          sortField: 'ROI',
+          sortType,
+        },
+      })
+
+      if (data.code !== '0' && data.code !== 0 && data.code !== '00000') {
+        logger.warn(`[${SOURCE}] Website API error: ${data.code} ${data.msg}`)
+        break
+      }
+
+      const list = data.data?.list || data.data?.traderList || []
+      if (list.length === 0) break
+
+      allTraders.push(...list)
+      if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+      await sleep(500 + Math.random() * 500)
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Website API failed: ${err instanceof Error ? err.message : String(err)}`)
+      break
+    }
+  }
+
+  if (allTraders.length > 0) {
+    logger.info(`[${SOURCE}] Website API got ${allTraders.length} traders`)
+    return allTraders
+  }
+
+  // Strategy 2: V2 REST API fallback (currently 404, may come back)
+  const periodParam = PERIOD_MAP[period] || period
+  const v2Urls = [
     'https://api.bitget.com/api/v2/copy/spot-trader/trader-profit-ranking',
     'https://api.bitget.com/api/v2/copy/spot-trader/query-trader-list',
   ]
 
-  for (const apiUrl of urls) {
+  for (const apiUrl of v2Urls) {
     if (allTraders.length > 0) break
-
     for (let page = 1; page <= maxPages; page++) {
       try {
         const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
@@ -219,18 +276,93 @@ async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
             Accept: 'application/json',
           },
         })
-
         if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
-
         const list = data.data?.traderList || data.data?.list || []
         if (list.length === 0) break
-
         allTraders.push(...list)
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(300)
       } catch (err) {
-        logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+        logger.warn(`[${SOURCE}] V2 API failed: ${err instanceof Error ? err.message : String(err)}`)
         break
+      }
+    }
+  }
+
+  // Strategy 3: CF Worker proxy with website POST endpoint
+  if (allTraders.length === 0) {
+    logger.warn(`[${SOURCE}] Direct APIs failed, trying CF Worker proxy...`)
+    try {
+      const proxyUrl = `${PROXY_URL}/proxy?url=${encodeURIComponent(WEBSITE_API_URL)}`
+      for (let page = 1; page <= maxPages; page++) {
+        const data = await fetchJson<BitgetResponse>(proxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': RANDOM_UAS[Math.floor(Math.random() * RANDOM_UAS.length)],
+          },
+          body: {
+            pageNo: page,
+            pageSize: PAGE_SIZE,
+            sortField: 'ROI',
+            sortType,
+          },
+        })
+        if (data.code !== '0' && data.code !== 0 && data.code !== '00000') break
+        const list = data.data?.list || data.data?.traderList || []
+        if (list.length === 0) break
+        allTraders.push(...list)
+        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        await sleep(500)
+      }
+      if (allTraders.length > 0) {
+        logger.info(`[${SOURCE}] CF proxy got ${allTraders.length} traders`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] CF proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // Strategy 4: VPS generic proxy with website API
+  if (allTraders.length === 0) {
+    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
+    if (vpsUrl) {
+      logger.warn(`[${SOURCE}] Trying VPS proxy with website API...`)
+      try {
+        const res = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+          },
+          body: JSON.stringify({
+            url: WEBSITE_API_URL,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': RANDOM_UAS[0],
+            },
+            body: JSON.stringify({
+              pageNo: 1,
+              pageSize: PAGE_SIZE,
+              sortField: 'ROI',
+              sortType,
+            }),
+          }),
+          signal: AbortSignal.timeout(15_000),
+        })
+        if (res.ok) {
+          const data = (await res.json()) as BitgetResponse
+          if (data.code === '0' || data.code === 0 || data.code === '00000') {
+            const list = data.data?.list || data.data?.traderList || []
+            allTraders.push(...list)
+            if (allTraders.length > 0) {
+              logger.info(`[${SOURCE}] VPS proxy got ${allTraders.length} traders`)
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }
