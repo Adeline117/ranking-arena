@@ -324,8 +324,11 @@ async function processTraders(
           .in('source_trader_id', ids)
       )
     )
-  } catch {
-    // Column may not exist yet, ignore
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes('details_fetched_at') && !msg.includes('column')) {
+      logger.warn('Unexpected error updating details_fetched_at', { error: msg })
+    }
   }
 
   const duration = Date.now() - startTime

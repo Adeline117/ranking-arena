@@ -384,6 +384,7 @@ async function computeSeason(
   })
 
   // Upsert into leaderboard_ranks in batches
+  let upsertErrors = 0
   const batchUpsertSize = 500
   for (let i = 0; i < scored.length; i += batchUpsertSize) {
     const batch = scored.slice(i, i + batchUpsertSize).map((t, idx) => ({
@@ -418,6 +419,7 @@ async function computeSeason(
 
     if (error) {
       logger.error(`Upsert error for ${season} batch ${i}:`, error)
+      upsertErrors += batch.length
     }
   }
 
@@ -439,6 +441,7 @@ async function computeSeason(
     logger.info(`${season}: cleaned ${staleIds.length} stale rows (>14d old)`)
   }
 
-  logger.info(`${season}: ranked ${scored.length} traders`)
-  return scored.length
+  const actualUpserted = scored.length - upsertErrors
+  logger.info(`${season}: ranked ${scored.length} traders (${upsertErrors} upsert errors)`)
+  return actualUpserted
 }
