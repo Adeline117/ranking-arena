@@ -308,9 +308,16 @@
   top: 0;
   right: 0;
   bottom: 0;
-  display: flex;
+  display: none;
   align-items: stretch;
   z-index: 1;
+}
+
+/* Only show swipe actions on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .swipe-row-actions {
+    display: flex;
+  }
 }
 
 .swipe-row-actions button {
