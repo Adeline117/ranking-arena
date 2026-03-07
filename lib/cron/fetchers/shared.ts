@@ -396,6 +396,28 @@ export async function upsertTraders(
 
     if (profileErr) dataLogger.warn(`[upsert] trader_profiles_v2 error: ${profileErr.message}`)
 
+    // Upsert trader_snapshots (v1) — the primary table read by frontend/leaderboard
+    const snapshotsV1 = batch.map((t) => ({
+      source: t.source,
+      source_trader_id: t.source_trader_id,
+      season_id: t.season_id,
+      rank: t.rank ?? null,
+      roi: t.roi ?? null,
+      pnl: t.pnl ?? null,
+      followers: t.followers ?? null,
+      win_rate: t.win_rate ?? null,
+      max_drawdown: t.max_drawdown ?? null,
+      trades_count: t.trades_count ?? null,
+      arena_score: t.arena_score ?? null,
+      captured_at: t.captured_at || new Date().toISOString(),
+    }))
+
+    const { error: v1Err } = await supabase
+      .from('trader_snapshots')
+      .upsert(snapshotsV1, { onConflict: 'source,source_trader_id,season_id', ignoreDuplicates: false })
+
+    if (v1Err) dataLogger.warn(`[upsert] trader_snapshots (v1) error: ${v1Err.message}`)
+
     // Upsert trader_snapshots_v2
     const snapshots = batch.map((t) => ({
       platform: t.source,
