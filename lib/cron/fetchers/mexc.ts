@@ -160,22 +160,21 @@ async function fetchPeriod(
     for (let page = 1; page <= maxPages; page++) {
       try {
         const url = 'https://www.mexc.com/api/platform/copy-trade/rank/list'
-        const resp = await fetch(url, {
+        const { data } = await fetchWithFallback<MexcApiResponse>(url, {
           method: 'POST',
           headers: {
             ...HEADERS,
             'Content-Type': 'application/json',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
           },
-          body: JSON.stringify({
+          body: {
             pageNum: page,
             pageSize: PAGE_SIZE,
             periodType,
             sortField: 'ROI',
-          }),
+          },
+          platform: SOURCE,
         })
-        if (!resp.ok) throw new Error(`MEXC legacy API returned ${resp.status}`)
-        const data: MexcApiResponse = await resp.json()
         const list = extractList(data)
         if (list.length === 0) break
 

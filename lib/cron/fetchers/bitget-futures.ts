@@ -36,11 +36,18 @@ const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-pro
 const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
 const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
-/** Bitget API period values */
+/** Bitget API period values (for REST API v2) */
 const PERIOD_MAP: Record<string, string> = {
   '7D': 'SEVEN_DAYS',
   '30D': 'THIRTY_DAYS',
   '90D': 'NINETY_DAYS',
+}
+
+/** Bitget website API sortType values (for POST /v1/copy/mix/trader/list) */
+const SORT_TYPE_MAP: Record<string, number> = {
+  '7D': 1,
+  '30D': 2,
+  '90D': 0,
 }
 
 // ---------------------------------------------------------------------------
@@ -200,26 +207,73 @@ async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Public fallback endpoints (may return 404 but kept for future recovery)
+// Public endpoints
 // ---------------------------------------------------------------------------
 
-// V1 decommissioned (30032), V2 public endpoints return 404
-// Only the authenticated broker API works: /api/v2/copy/mix-broker/query-traders
-// These are kept as fallback in case Bitget restores them
+// Website internal API — the WORKING endpoint (POST with JSON body)
+// Same as the legacy connector (lib/connectors/bitget-futures.ts)
+const WEBSITE_API_URL = 'https://www.bitget.com/v1/copy/mix/trader/list'
+
+// V2 REST API endpoints — currently return 404, kept as fallback
 const PUBLIC_API_URLS = [
   'https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking',
   'https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list',
 ]
 
+const RANDOM_UAS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+]
+
 async function fetchPublic(period: string): Promise<BitgetTrader[]> {
   const allTraders: BitgetTrader[] = []
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
-  const periodParam = PERIOD_MAP[period] || period
+  const sortType = SORT_TYPE_MAP[period] ?? 2
 
-  // Strategy 1: Try direct public API endpoints
+  // Strategy 1: Website internal API (POST) — the working approach from connectors
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const data = await fetchJson<BitgetResponse>(WEBSITE_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': RANDOM_UAS[Math.floor(Math.random() * RANDOM_UAS.length)],
+        },
+        body: {
+          pageNo: page,
+          pageSize: PAGE_SIZE,
+          sortField: 'ROI',
+          sortType,
+          rule: 2,
+        },
+      })
+
+      if (data.code !== '0' && data.code !== 0 && data.code !== '00000') {
+        logger.warn(`[${SOURCE}] Website API error: ${data.code} ${data.msg}`)
+        break
+      }
+
+      const list = data.data?.list || data.data?.traderList || []
+      if (list.length === 0) break
+
+      allTraders.push(...list)
+      if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+      await sleep(500 + Math.random() * 500)
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Website API failed: ${err instanceof Error ? err.message : String(err)}`)
+      break
+    }
+  }
+
+  if (allTraders.length > 0) {
+    logger.info(`[${SOURCE}] Website API got ${allTraders.length} traders`)
+    return allTraders
+  }
+
+  // Strategy 2: V2 REST API fallback (currently 404, may come back)
+  const periodParam = PERIOD_MAP[period] || period
   for (const apiUrl of PUBLIC_API_URLS) {
     if (allTraders.length > 0) break
-
     for (let page = 1; page <= maxPages; page++) {
       try {
         const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
@@ -230,54 +284,58 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
             Accept: 'application/json',
           },
         })
-
         if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
-
         const list = data.data?.traderList || data.data?.list || []
         if (list.length === 0) break
-
         allTraders.push(...list)
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(300)
       } catch (err) {
-        logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+        logger.warn(`[${SOURCE}] V2 API failed: ${err instanceof Error ? err.message : String(err)}`)
         break
       }
     }
   }
 
-  // Strategy 2: Try Cloudflare Worker proxy if direct APIs failed
+  // Strategy 3: CF Worker proxy with website POST endpoint
   if (allTraders.length === 0) {
-    for (let page = 1; page <= maxPages; page++) {
-      try {
-        const proxyUrl = `${PROXY_URL}/bitget/copy-trading?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}&type=futures`
-        const data = await fetchJson<BitgetResponse>(proxyUrl)
-
-        // Check if proxy returned an error object
-        if ((data as unknown as { error?: string }).error) {
-          logger.warn(`[bitget-futures] Proxy error: ${(data as unknown as { error: string }).error}`)
-          break
-        }
-
-        if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
-
-        const list = data.data?.traderList || data.data?.list || []
+    logger.warn(`[${SOURCE}] Direct APIs failed, trying CF Worker proxy...`)
+    try {
+      const proxyUrl = `${PROXY_URL}/proxy?url=${encodeURIComponent(WEBSITE_API_URL)}`
+      for (let page = 1; page <= maxPages; page++) {
+        const data = await fetchJson<BitgetResponse>(proxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': RANDOM_UAS[Math.floor(Math.random() * RANDOM_UAS.length)],
+          },
+          body: {
+            pageNo: page,
+            pageSize: PAGE_SIZE,
+            sortField: 'ROI',
+            sortType,
+            rule: 2,
+          },
+        })
+        if (data.code !== '0' && data.code !== 0 && data.code !== '00000') break
+        const list = data.data?.list || data.data?.traderList || []
         if (list.length === 0) break
-
         allTraders.push(...list)
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
-        await sleep(300)
-      } catch (err) {
-        logger.warn(`[bitget-futures] Proxy fetch error: ${err instanceof Error ? err.message : String(err)}`)
-        break
+        await sleep(500)
       }
+      if (allTraders.length > 0) {
+        logger.info(`[${SOURCE}] CF proxy got ${allTraders.length} traders`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] CF proxy failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
-  // Strategy 3: VPS Playwright scraper (browser-based bypass)
+  // Strategy 4: VPS Playwright scraper (browser-based bypass)
   if (allTraders.length === 0 && VPS_SCRAPER_KEY) {
     try {
-      logger.warn('[bitget-futures] Trying VPS Playwright scraper...')
+      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
       const url = `${VPS_SCRAPER_URL}/bitget/leaderboard`
       const res = await fetch(url, {
         headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
@@ -289,52 +347,56 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
           const list = data.data?.traderList || data.data?.list || []
           if (list.length > 0) {
             allTraders.push(...list)
-            logger.info(`[bitget-futures] VPS scraper got ${allTraders.length} traders`)
+            logger.info(`[${SOURCE}] VPS scraper got ${allTraders.length} traders`)
           }
         }
       }
     } catch (err) {
-      logger.warn(`[bitget-futures] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
-  // Strategy 4: VPS generic proxy fallback for geo/WAF blocks
+  // Strategy 5: VPS generic proxy with website API
   if (allTraders.length === 0) {
     const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
     if (vpsUrl) {
-      logger.warn('[bitget-futures] All direct/CF endpoints failed, trying VPS proxy...')
-      for (const apiUrl of PUBLIC_API_URLS) {
-        if (allTraders.length > 0) break
-        try {
-          const url = `${apiUrl}?period=${periodParam}&pageNo=1&pageSize=${PAGE_SIZE}`
-          const res = await fetch(vpsUrl, {
+      logger.warn(`[${SOURCE}] Trying VPS proxy with website API...`)
+      try {
+        const res = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+          },
+          body: JSON.stringify({
+            url: WEBSITE_API_URL,
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+              'User-Agent': RANDOM_UAS[0],
             },
             body: JSON.stringify({
-              url,
-              method: 'GET',
-              headers: {
-                Referer: 'https://www.bitget.com/',
-                Origin: 'https://www.bitget.com',
-                Accept: 'application/json',
-              },
+              pageNo: 1,
+              pageSize: PAGE_SIZE,
+              sortField: 'ROI',
+              sortType,
+              rule: 2,
             }),
-            signal: AbortSignal.timeout(15_000),
-          })
-          if (!res.ok) continue
+          }),
+          signal: AbortSignal.timeout(15_000),
+        })
+        if (res.ok) {
           const data = (await res.json()) as BitgetResponse
-          if (data.code !== '00000' && data.code !== 0 && data.code !== '0') continue
-          const list = data.data?.traderList || data.data?.list || []
-          allTraders.push(...list)
-          if (allTraders.length > 0) {
-            logger.warn(`[bitget-futures] VPS proxy got ${allTraders.length} traders`)
+          if (data.code === '0' || data.code === 0 || data.code === '00000') {
+            const list = data.data?.list || data.data?.traderList || []
+            allTraders.push(...list)
+            if (allTraders.length > 0) {
+              logger.info(`[${SOURCE}] VPS proxy got ${allTraders.length} traders`)
+            }
           }
-        } catch (err) {
-          logger.warn(`[bitget-futures] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
         }
+      } catch (err) {
+        logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }
