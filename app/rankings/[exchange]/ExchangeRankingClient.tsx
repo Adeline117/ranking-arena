@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { formatROI } from '@/app/components/ranking/utils'
 import { Sparkline } from '@/app/components/ui/Sparkline'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { useRealtimeRankings } from '@/lib/hooks/useRealtimeRankings'
 
 interface TraderData {
   trader_key: string
@@ -239,7 +240,8 @@ function SortHeader({
 }
 
 export default function ExchangeRankingClient({
-  traders,
+  traders: initialTraders,
+  exchange,
 }: {
   traders: TraderData[]
   exchange?: string
@@ -249,6 +251,26 @@ export default function ExchangeRankingClient({
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const PAGE_SIZE = 50
   const [page, setPage] = useState(1)
+
+  // Live-updating traders state (starts from server props, updates via Realtime)
+  const [traders, setTraders] = useState(initialTraders)
+  useEffect(() => { setTraders(initialTraders) }, [initialTraders])
+
+  const handleRealtimeUpdate = useCallback((updates: Array<{ source_trader_id: string; roi: number; pnl: number; win_rate: number | null; max_drawdown: number | null; arena_score: number | null }>) => {
+    setTraders(prev => {
+      const updateMap = new Map(updates.map(u => [u.source_trader_id, u]))
+      let changed = false
+      const next = prev.map(t => {
+        const u = updateMap.get(t.trader_key)
+        if (!u) return t
+        changed = true
+        return { ...t, roi: u.roi, pnl: u.pnl, win_rate: u.win_rate, max_drawdown: u.max_drawdown, arena_score: u.arena_score }
+      })
+      return changed ? next : prev
+    })
+  }, [])
+
+  useRealtimeRankings({ source: exchange, onUpdate: handleRealtimeUpdate })
 
   // Pre-compute rank map to avoid O(n*m) indexOf in render loop
   const rankMap = useMemo(() => {
