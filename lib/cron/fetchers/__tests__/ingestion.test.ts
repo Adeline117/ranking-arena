@@ -277,7 +277,7 @@ describe('normalizeROI', () => {
     const decimalPlatforms = ['hyperliquid', 'dydx', 'drift', 'gmx', 'gains', 'vertex', 'jupiter-perps', 'aevo']
     for (const platform of decimalPlatforms) {
       expect(normalizeROI(0.5, platform)).toBe(50) // 0.5 -> 50%
-      expect(normalizeROI(1.5, platform)).toBe(150) // 1.5 -> 150%
+      expect(normalizeROI(1.5, platform)).toBe(1.5) // |1.5| > 1, already percentage
       expect(normalizeROI(-0.3, platform)).toBe(-30) // -0.3 -> -30%
     }
   })
@@ -296,19 +296,21 @@ describe('normalizeROI', () => {
     expect(normalizeROI(null, 'hyperliquid')).toBeNull()
   })
 
-  test('safety check: large decimal platform values (>10) treated as already percentage', () => {
-    // If value is already > 10 on a decimal platform, don't multiply
-    expect(normalizeROI(50, 'hyperliquid')).toBe(50) // abs(50) >= 10
+  test('safety check: large decimal platform values (>1) treated as already percentage', () => {
+    // If value is already > 1 on a decimal platform, don't multiply
+    expect(normalizeROI(50, 'hyperliquid')).toBe(50)
     expect(normalizeROI(150, 'gmx')).toBe(150)
+    expect(normalizeROI(9.99, 'hyperliquid')).toBe(9.99)
   })
 
-  test('boundary: value of exactly 10 on decimal platform is not multiplied', () => {
-    // abs(10) >= 10, so treated as already percentage
-    expect(normalizeROI(10, 'hyperliquid')).toBe(10)
+  test('boundary: value of exactly 1 on decimal platform is multiplied', () => {
+    // abs(1) <= 1, so treated as decimal → multiply by 100
+    expect(normalizeROI(1, 'hyperliquid')).toBe(100)
   })
 
-  test('boundary: value of 9.99 on decimal platform IS multiplied', () => {
-    expect(normalizeROI(9.99, 'hyperliquid')).toBe(999)
+  test('boundary: value of 1.01 on decimal platform is NOT multiplied', () => {
+    // abs(1.01) > 1, already percentage
+    expect(normalizeROI(1.01, 'hyperliquid')).toBe(1.01)
   })
 
   test('zero ROI returns 0 for any platform', () => {
