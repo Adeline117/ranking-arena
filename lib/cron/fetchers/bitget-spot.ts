@@ -222,11 +222,16 @@ async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
   const sortType = SORT_TYPE_MAP[period] ?? 2
 
   // Strategy 0: VPS Playwright scraper (bypasses Cloudflare WAF)
+  // NOTE: Bitget spot copy trading has no public leaderboard API as of 2026-03.
+  // The scraper's type=spot param is routed but the underlying API (v1/trace/spot/public/traderList)
+  // returns 404. Kept here so it auto-recovers if Bitget re-enables the endpoint.
+  const VPS_PAGE_SIZE = 100
+  const VPS_MAX_PAGES = 3
   if (VPS_SCRAPER_KEY) {
     try {
       logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
-      for (let page = 1; page <= maxPages; page++) {
-        const url = `${VPS_SCRAPER_URL}/bitget/leaderboard?pageNo=${page}&pageSize=${PAGE_SIZE}&period=${PERIOD_MAP[period] || period}&type=spot`
+      for (let page = 1; page <= VPS_MAX_PAGES; page++) {
+        const url = `${VPS_SCRAPER_URL}/bitget/leaderboard?pageNo=${page}&pageSize=${VPS_PAGE_SIZE}&period=${PERIOD_MAP[period] || period}&type=spot`
         const res = await fetch(url, {
           headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
           signal: AbortSignal.timeout(90_000),
@@ -237,7 +242,7 @@ async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
         const list = data.data?.traderList || data.data?.list || []
         if (list.length === 0) break
         allTraders.push(...list)
-        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        if (list.length < VPS_PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(1000)
       }
       if (allTraders.length > 0) {

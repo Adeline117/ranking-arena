@@ -228,12 +228,14 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
   const periodParam = PERIOD_MAP[period] || period
 
   // Strategy 1: VPS Playwright scraper (browser bypasses Cloudflare challenge)
-  // The trace API (v1/trigger/trace/public/traderList) is behind CF WAF — only works from browser context
+  // Each page = 1 browser session (~60s), so use large pageSize to minimize sessions
+  const VPS_PAGE_SIZE = 100
+  const VPS_MAX_PAGES = 3 // 300 traders max, ~3 browser sessions ≈ 3min
   if (VPS_SCRAPER_KEY) {
     try {
       logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
-      for (let page = 1; page <= maxPages; page++) {
-        const url = `${VPS_SCRAPER_URL}/bitget/leaderboard?pageNo=${page}&pageSize=${PAGE_SIZE}&period=${periodParam}`
+      for (let page = 1; page <= VPS_MAX_PAGES; page++) {
+        const url = `${VPS_SCRAPER_URL}/bitget/leaderboard?pageNo=${page}&pageSize=${VPS_PAGE_SIZE}&period=${periodParam}`
         const res = await fetch(url, {
           headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
           signal: AbortSignal.timeout(90_000),
@@ -244,7 +246,7 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
         const list = data.data?.traderList || data.data?.list || []
         if (list.length === 0) break
         allTraders.push(...list)
-        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        if (list.length < VPS_PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(1000)
       }
       if (allTraders.length > 0) {
