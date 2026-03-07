@@ -142,6 +142,25 @@ export const TraderCard = memo(function TraderCard({
                   {sourceInfo.type}
                 </Text>
               </Box>
+              {/* Bot Badge */}
+              {(trader.source === 'web3_bot' || trader.trader_type === 'bot') && (
+                <span style={{
+                  padding: '1px 5px',
+                  borderRadius: tokens.radius.md,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: '#a78bfa',
+                  background: 'rgba(167, 139, 250, 0.12)',
+                  border: '1px solid rgba(167, 139, 250, 0.25)',
+                  lineHeight: 1.4,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 2,
+                }}>
+                  <span style={{ fontSize: 9 }}>{'⚡'}</span>
+                  Bot
+                </span>
+              )}
               {trader.also_on && trader.also_on.length > 0 && (
                 <Text size="xs" style={{ fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY }}>
                   +{trader.also_on.length}

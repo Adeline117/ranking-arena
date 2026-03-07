@@ -145,8 +145,14 @@ function TraderCardItem({ trader, rank }: { trader: TraderData; rank: number }) 
             <div style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {name}
             </div>
-            <div style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+            <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, display: 'flex', alignItems: 'center', gap: 4 }}>
               {EXCHANGE_NAMES[trader.platform] || trader.platform}
+              {trader.platform === 'web3_bot' && (
+                <span style={{
+                  padding: '0px 4px', borderRadius: 4, fontSize: 9, fontWeight: 600,
+                  color: '#a78bfa', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)',
+                }}>Bot</span>
+              )}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
