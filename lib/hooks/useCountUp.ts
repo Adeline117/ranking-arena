@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react'
  * Duration: 500ms, easeOut timing.
  */
 export function useCountUp(target: number, duration = 500): number {
-  const [value, setValue] = useState(0)
+  const [value, setValue] = useState(duration === 0 ? target : 0)
   const prevTarget = useRef<number | null>(null)
   const rafId = useRef<number>(0)
 
@@ -15,6 +15,12 @@ export function useCountUp(target: number, duration = 500): number {
     // Skip if target hasn't changed
     if (prevTarget.current === target) return
     prevTarget.current = target
+
+    // No animation — set value immediately (used for non-hero rows)
+    if (duration === 0) {
+      setValue(target)
+      return
+    }
 
     const start = performance.now()
     const from = 0

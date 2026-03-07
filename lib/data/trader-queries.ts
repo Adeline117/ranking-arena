@@ -160,143 +160,140 @@ export async function getTraderPerformance(
 }
 
 /**
- * 获取交易员统计数据
+ * 获取交易员统计数据 (cached)
  */
 export async function getTraderStats(handle: string): Promise<TraderStats> {
-  try {
-    const source = await findTraderAcrossSources(handle)
+  const cacheKey = CacheKey.traders.detail(handle) + ':stats'
 
-    if (!source) {
-      return { additionalStats: {} }
-    }
+  return cache.getOrSet(
+    cacheKey,
+    async () => {
+      try {
+        const source = await findTraderAcrossSources(handle)
 
-    const [latestSnapshotResult, historySnapshotsResult, frequentlyTradedResult, monthlyResult, yearlyResult] = await Promise.all([
-      supabase
-        .from('trader_snapshots')
-        .select('roi, captured_at, pnl, win_rate, max_drawdown, trades_count, holding_days')
-        .eq('source', source.source)
-        .eq('source_trader_id', source.source_trader_id)
-        .order('captured_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('trader_snapshots')
-        .select('roi, captured_at')
-        .eq('source', source.source)
-        .eq('source_trader_id', source.source_trader_id)
-        .order('captured_at', { ascending: false })
-        .limit(200),
-      (async () => {
-        const { data: latestCapturedAt } = await supabase
-          .from('trader_snapshots')
-          .select('captured_at')
-          .eq('source', source.source)
-          .eq('source_trader_id', source.source_trader_id)
-          .order('captured_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        if (!source) {
+          return { additionalStats: {} }
+        }
 
-        if (!latestCapturedAt) return { data: null }
+        // Phase 1: Get latest snapshot + history in parallel
+        const [latestSnapshotResult, historySnapshotsResult, monthlyResult, yearlyResult] = await Promise.all([
+          supabase
+            .from('trader_snapshots')
+            .select('roi, captured_at, pnl, win_rate, max_drawdown, trades_count, holding_days')
+            .eq('source', source.source)
+            .eq('source_trader_id', source.source_trader_id)
+            .order('captured_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('trader_snapshots')
+            .select('roi, captured_at')
+            .eq('source', source.source)
+            .eq('source_trader_id', source.source_trader_id)
+            .order('captured_at', { ascending: false })
+            .limit(200),
+          supabase
+            .from('trader_monthly_performance')
+            .select('year, month, roi')
+            .eq('source', source.source)
+            .eq('source_trader_id', source.source_trader_id)
+            .order('year', { ascending: false })
+            .order('month', { ascending: false })
+            .limit(12),
+          supabase
+            .from('trader_yearly_performance')
+            .select('year, roi')
+            .eq('source', source.source)
+            .eq('source_trader_id', source.source_trader_id)
+            .order('year', { ascending: false })
+            .limit(5),
+        ])
 
-        return supabase
-          .from('trader_frequently_traded')
-          .select('symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct')
-          .eq('source', source.source)
-          .eq('source_trader_id', source.source_trader_id)
-          .eq('captured_at', latestCapturedAt.captured_at)
-          .order('weight_pct', { ascending: false })
-          .limit(10)
-      })(),
-      supabase
-        .from('trader_monthly_performance')
-        .select('year, month, roi')
-        .eq('source', source.source)
-        .eq('source_trader_id', source.source_trader_id)
-        .order('year', { ascending: false })
-        .order('month', { ascending: false })
-        .limit(12),
-      supabase
-        .from('trader_yearly_performance')
-        .select('year, roi')
-        .eq('source', source.source)
-        .eq('source_trader_id', source.source_trader_id)
-        .order('year', { ascending: false })
-        .limit(5),
-    ])
+        const latestSnapshot = latestSnapshotResult.data
+        const snapshots = historySnapshotsResult.data || []
+        const monthlyData = monthlyResult.data || []
+        const yearlyData = yearlyResult.data || []
 
-    const latestSnapshot = latestSnapshotResult.data
-    const snapshots = historySnapshotsResult.data || []
-    const frequentlyTradedData = frequentlyTradedResult.data || []
-    const monthlyData = monthlyResult.data || []
-    const yearlyData = yearlyResult.data || []
+        if (snapshots.length === 0) {
+          return { additionalStats: {} }
+        }
 
-    if (snapshots.length === 0) {
-      return { additionalStats: {} }
-    }
+        // Phase 2: Use captured_at from latestSnapshot (eliminates redundant sub-query)
+        let frequentlyTradedData: Array<{
+          symbol: string; weight_pct: number | null; trade_count: number | null
+          avg_profit: number | null; avg_loss: number | null; profitable_pct: number | null
+        }> = []
+        if (latestSnapshot?.captured_at) {
+          const { data } = await supabase
+            .from('trader_frequently_traded')
+            .select('symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct')
+            .eq('source', source.source)
+            .eq('source_trader_id', source.source_trader_id)
+            .eq('captured_at', latestSnapshot.captured_at)
+            .order('weight_pct', { ascending: false })
+            .limit(10)
+          frequentlyTradedData = data || []
+        }
 
-    const earliestSnapshot = snapshots[snapshots.length - 1]
-    const activeSinceDate = new Date(earliestSnapshot.captured_at)
-    const activeSince = `${activeSinceDate.getMonth() + 1}/${activeSinceDate.getDate()}/${activeSinceDate.getFullYear().toString().slice(-2)}`
+        const earliestSnapshot = snapshots[snapshots.length - 1]
+        const activeSinceDate = new Date(earliestSnapshot.captured_at)
+        const activeSince = `${activeSinceDate.getMonth() + 1}/${activeSinceDate.getDate()}/${activeSinceDate.getFullYear().toString().slice(-2)}`
 
-    let profitableWeeksPct: number | undefined = undefined
-    if (snapshots.length > 1) {
-      const profitableWeeks = snapshots.filter(s => (s.roi || 0) > 0).length
-      profitableWeeksPct = (profitableWeeks / snapshots.length) * 100
-    }
+        let profitableWeeksPct: number | undefined = undefined
+        if (snapshots.length > 1) {
+          const profitableWeeks = snapshots.filter(s => (s.roi || 0) > 0).length
+          profitableWeeksPct = (profitableWeeks / snapshots.length) * 100
+        }
 
-    const frequentlyTraded = frequentlyTradedData.map((item: {
-      symbol: string
-      weight_pct: number | null
-      trade_count: number | null
-      avg_profit: number | null
-      avg_loss: number | null
-      profitable_pct: number | null
-    }) => ({
-      symbol: item.symbol,
-      weightPct: item.weight_pct ?? 0,
-      count: item.trade_count ?? 0,
-      avgProfit: item.avg_profit ?? 0,
-      avgLoss: item.avg_loss ?? 0,
-      profitablePct: item.profitable_pct ?? 0,
-    }))
+        const frequentlyTraded = frequentlyTradedData.map(item => ({
+          symbol: item.symbol,
+          weightPct: item.weight_pct ?? 0,
+          count: item.trade_count ?? 0,
+          avgProfit: item.avg_profit ?? 0,
+          avgLoss: item.avg_loss ?? 0,
+          profitablePct: item.profitable_pct ?? 0,
+        }))
 
-    const monthlyPerformance = monthlyData.map((item: { year: number; month: number; roi: number | null }) => ({
-      month: `${item.year}-${String(item.month).padStart(2, '0')}`,
-      value: item.roi ?? 0,
-    }))
+        const monthlyPerformance = monthlyData.map((item: { year: number; month: number; roi: number | null }) => ({
+          month: `${item.year}-${String(item.month).padStart(2, '0')}`,
+          value: item.roi ?? 0,
+        }))
 
-    const yearlyPerformance = yearlyData.map((item: { year: number; roi: number | null }) => ({
-      year: item.year,
-      value: item.roi ?? 0,
-    }))
+        const yearlyPerformance = yearlyData.map((item: { year: number; roi: number | null }) => ({
+          year: item.year,
+          value: item.roi ?? 0,
+        }))
 
-    return {
-      expectedDividends: undefined,
-      trading: latestSnapshot ? {
-        totalTrades12M: latestSnapshot.trades_count ?? 0,
-        avgProfit: 0,
-        avgLoss: 0,
-        profitableTradesPct: latestSnapshot.win_rate ?? 0,
-      } : undefined,
-      frequentlyTraded: frequentlyTraded.length > 0 ? frequentlyTraded : undefined,
-      additionalStats: {
-        tradesPerWeek: undefined,
-        avgHoldingTime: latestSnapshot?.holding_days ? `${latestSnapshot.holding_days}天` : undefined,
-        activeSince,
-        profitableWeeksPct,
-        riskScore: undefined,
-        volume90d: undefined,
-        maxDrawdown: latestSnapshot?.max_drawdown ?? undefined,
-        sharpeRatio: undefined,
-      },
-      monthlyPerformance: monthlyPerformance.length > 0 ? monthlyPerformance : undefined,
-      yearlyPerformance: yearlyPerformance.length > 0 ? yearlyPerformance : undefined,
-    }
-  } catch (error) {
-    const logger = createLogger('trader-data')
-    logger.error('Error in getTraderStats', { error, handle })
-    return { additionalStats: {} }
-  }
+        return {
+          expectedDividends: undefined,
+          trading: latestSnapshot ? {
+            totalTrades12M: latestSnapshot.trades_count ?? 0,
+            avgProfit: 0,
+            avgLoss: 0,
+            profitableTradesPct: latestSnapshot.win_rate ?? 0,
+          } : undefined,
+          frequentlyTraded: frequentlyTraded.length > 0 ? frequentlyTraded : undefined,
+          additionalStats: {
+            tradesPerWeek: undefined,
+            avgHoldingTime: latestSnapshot?.holding_days ? `${latestSnapshot.holding_days}天` : undefined,
+            activeSince,
+            profitableWeeksPct,
+            riskScore: undefined,
+            volume90d: undefined,
+            maxDrawdown: latestSnapshot?.max_drawdown ?? undefined,
+            sharpeRatio: undefined,
+          },
+          monthlyPerformance: monthlyPerformance.length > 0 ? monthlyPerformance : undefined,
+          yearlyPerformance: yearlyPerformance.length > 0 ? yearlyPerformance : undefined,
+        }
+      } catch (error) {
+        const logger = createLogger('trader-data')
+        logger.error('Error in getTraderStats', { error, handle })
+        return { additionalStats: {} }
+      }
+    },
+    { ttl: CACHE_TTL.TRADER_PERFORMANCE }
+  )
 }
 
 /**

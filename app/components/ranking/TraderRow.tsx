@@ -67,9 +67,10 @@ function NaIndicator({ source, metricType }: { source?: string; metricType: 'win
   )
 }
 
-// Animated ROI value with count-up effect
-function AnimatedROI({ roi, roiColor }: { roi: number; roiColor: string }) {
-  const animatedValue = useCountUp(roi, 500)
+// ROI display — animated count-up only for top 3 hero rows to avoid 100x concurrent rAF loops
+function AnimatedROI({ roi, roiColor, animate }: { roi: number; roiColor: string; animate?: boolean }) {
+  const animatedValue = useCountUp(animate ? roi : roi, animate ? 500 : 0)
+  const displayValue = animate ? animatedValue : roi
   return (
     <Text
       size="md"
@@ -78,7 +79,7 @@ function AnimatedROI({ roi, roiColor }: { roi: number; roiColor: string }) {
       style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}
       title={`${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
     >
-      {formatROI(animatedValue)}
+      {formatROI(displayValue)}
     </Text>
   )
 }
@@ -391,7 +392,7 @@ export const TraderRow = memo(function TraderRow({
           const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
           return (
             <Box className="roi-cell" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-              <AnimatedROI roi={roi} roiColor={roiColor} />
+              <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
             </Box>
           )
         })()}
