@@ -29,6 +29,8 @@ import { captureException } from '@/lib/utils/logger'
 const SOURCE = 'coinex'
 const TARGET = 500
 const PAGE_SIZE = 50
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
 const HEADERS: Record<string, string> = {
   Referer: 'https://www.coinex.com/en/copy-trading/futures',
@@ -192,8 +194,33 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
+  // VPS Playwright scraper fallback (browser-based bypass for CF challenge)
+  if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying VPS Playwright scraper...`)
+    try {
+      const scraperUrl = `${VPS_SCRAPER_URL}/coinex/leaderboard?period=${PERIOD_MAP[period] || '30d'}&pageSize=${PAGE_SIZE}`
+      const res = await fetch(scraperUrl, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(120_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as CoinexApiResponse
+        const list = extractList(data)
+        for (const item of list) {
+          const id = String(item.trader_id || item.traderId || item.uid || item.id || '')
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
+        }
+        if (allTraders.size > 0) {
+          logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   if (allTraders.size === 0) {
-    return { total: 0, saved: 0, error: lastError || 'No data from CoinEx API (DOM-only platform)' }
+    return { total: 0, saved: 0, error: lastError || 'No data from CoinEx — all endpoints and VPS scraper failed' }
   }
 
   const traders: TraderData[] = []

@@ -28,6 +28,8 @@ import { captureException } from '@/lib/utils/logger'
 const SOURCE = 'mexc'
 const TARGET = 500
 const PAGE_SIZE = 50
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
 const HEADERS: Record<string, string> = {
   Referer: 'https://www.mexc.com/futures/copyTrade/home',
@@ -222,8 +224,33 @@ async function fetchPeriod(
     await tryFuturesApi()
   }
 
+  // VPS Playwright scraper fallback (browser-based bypass for Akamai WAF)
+  if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying VPS Playwright scraper...`)
+    try {
+      const scraperUrl = `${VPS_SCRAPER_URL}/mexc/leaderboard?periodType=${periodType}&pageSize=${PAGE_SIZE}`
+      const res = await fetch(scraperUrl, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(120_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as MexcApiResponse
+        const list = extractList(data)
+        for (const item of list) {
+          const id = String(item.traderId || item.uid || item.id || item.userId || '')
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
+        }
+        if (allTraders.size > 0) {
+          logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   if (allTraders.size === 0) {
-    return { total: 0, saved: 0, error: lastError || 'No data from MEXC API (may be Akamai-blocked)' }
+    return { total: 0, saved: 0, error: lastError || 'No data from MEXC — all endpoints and VPS scraper failed' }
   }
 
   const traders: TraderData[] = []
