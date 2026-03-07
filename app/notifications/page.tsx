@@ -440,8 +440,8 @@ export default function NotificationsPage() {
       <style>{`
         .notif-filters::-webkit-scrollbar { display: none; }
       `}</style>
+      </PullToRefreshWrapper>
       <MobileBottomNav />
-    </PullToRefreshWrapper>
     </Box>
   )
 }
