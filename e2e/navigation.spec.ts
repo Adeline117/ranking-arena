@@ -27,12 +27,6 @@ test.describe('Desktop Navigation', () => {
   })
 
   test('navigate to Groups page', async ({ page }) => {
-    const groupsLink = page.locator('a[href="/groups"]').first()
-    if (await groupsLink.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await groupsLink.click()
-      await page.waitForLoadState('domcontentloaded')
-      await expect(page).toHaveURL(/\/groups/)
-    }
   })
 
   test('navigate to Hot page', async ({ page }) => {
@@ -64,7 +58,6 @@ test.describe('Desktop Navigation', () => {
 
   test('logo or home link navigates back to homepage', async ({ page }) => {
     // Navigate away first
-    await page.goto('/groups')
     await page.waitForLoadState('domcontentloaded')
 
     const homeLink = page.locator('a[href="/"]').first()

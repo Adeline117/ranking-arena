@@ -84,15 +84,6 @@ export default function PostDetailView({
 }: PostDetailViewProps) {
   return (
     <PostModal onClose={onClose}>
-      {openPost.group_name && (
-        openPost.group_id ? (
-          <Link href={`/groups/${openPost.group_id}`} style={{ fontSize: 12, color: ARENA_PURPLE, textDecoration: 'none', fontWeight: 600, padding: '2px 8px', background: `${ARENA_PURPLE}20`, borderRadius: tokens.radius.sm, display: 'inline-block' }}>
-            {language === 'zh' ? openPost.group_name : (openPost.group_name_en || openPost.group_name)}
-          </Link>
-        ) : (
-          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{language === 'zh' ? openPost.group_name : (openPost.group_name_en || openPost.group_name)}</div>
-        )
-      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
         <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25, color: !showingOriginal && translatedListPosts[openPost.id]?.title ? tokens.colors.accent.translated : tokens.colors.text.primary }}>

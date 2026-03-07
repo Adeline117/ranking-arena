@@ -10,7 +10,7 @@ export default memo(function ScrollToTop() {
   const pathname = usePathname()
 
   // Pages where FAB is shown — keep scroll-to-top from overlapping
-  const fabPages = ['/', '/groups']
+  const fabPages = ['/']
   const hasFab = fabPages.some(p => pathname === p || pathname.startsWith('/groups/'))
 
   useEffect(() => {

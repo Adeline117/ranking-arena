@@ -40,7 +40,7 @@ function getActivityLink(activity: Activity): string {
     case 'post':
       return `/post/${activity.target_id}`
     case 'group':
-      return `/groups/${activity.target_id}`
+      return '#'
     default:
       return '#'
   }
