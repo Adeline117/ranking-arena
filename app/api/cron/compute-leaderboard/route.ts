@@ -28,6 +28,28 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
+// DEX sources where 0x addresses may be bots
+const DEX_SOURCES = new Set(['hyperliquid', 'gmx', 'dydx', 'vertex', 'drift', 'aevo', 'gains', 'kwenta'])
+
+// Heuristic bot detection for DEX traders
+// High trade counts on DEX with 0x addresses are likely automated
+function detectTraderType(
+  source: string,
+  sourceId: string,
+  tradesCount: number | null,
+  existingType: string | null,
+): 'human' | 'bot' | null {
+  // Explicit type always wins
+  if (existingType === 'human' || existingType === 'bot') return existingType
+  // web3_bot source is always bot
+  if (source === 'web3_bot') return 'bot'
+  // DEX 0x address with very high trade count → likely bot
+  if (DEX_SOURCES.has(source) && sourceId.startsWith('0x') && tradesCount != null && tradesCount > 500) {
+    return 'bot'
+  }
+  return null
+}
+
 const logger = createLogger('compute-leaderboard')
 
 const SEASONS: Period[] = ['7D', '30D', '90D']
@@ -371,7 +393,7 @@ async function computeSeason(
       avg_holding_hours: t.avg_holding_hours,
       style_confidence: t.style_confidence,
       sharpe_ratio: t.sharpe_ratio,
-      trader_type: (t.trader_type || (t.source === 'web3_bot' ? 'bot' : null)) as 'human' | 'bot' | null,
+      trader_type: detectTraderType(t.source, t.source_trader_id, t.trades_count, t.trader_type),
     }
   })
 
