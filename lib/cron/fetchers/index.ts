@@ -50,6 +50,8 @@ import { fetchSynthetix } from './synthetix'
 import { fetchMux } from './mux'
 import { fetchBitmart } from './bitmart'
 import { fetchWeb3Bot } from './web3-bot'
+import { fetchDrift } from './drift'
+import { fetchBitunix } from './bitunix'
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -97,6 +99,8 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   mux: fetchMux,
   bitmart: fetchBitmart,
   web3_bot: fetchWeb3Bot,
+  drift: fetchDrift,
+  bitunix: fetchBitunix,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {

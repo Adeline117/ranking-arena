@@ -136,9 +136,8 @@ async function fetchBybitPage(
   // If we already know all strategies fail, don't waste time
   if (_bybitStrategy === 'none') return null
 
-  // If we know only scraper works and we're past page 1, return null
-  // (scraper is too slow for multi-page — 73s per page)
-  if (_bybitStrategy === 'scraper' && pageNo > 1) return null
+  // Scraper is slow (~73s/page) but reliable. Allow multi-page if batch cache missed.
+  // Batch prefetch handles bulk data in ~55s, so multi-page scraper is rare fallback.
 
   // Strategy 0: Check batch cache (prefetched all periods in single browser session)
   if (pageNo === 1 && _batchCache.has(duration)) {
@@ -149,8 +148,8 @@ async function fetchBybitPage(
     return cached
   }
 
-  // Strategy 1: VPS Playwright scraper (only page 1, only if batch cache missed)
-  if (VPS_SCRAPER_KEY && pageNo <= 1 && _batchCache.size === 0) {
+  // Strategy 1: VPS Playwright scraper (all pages, batch cache takes priority for page 1)
+  if (VPS_SCRAPER_KEY && _batchCache.size === 0) {
     try {
       const url = `${VPS_SCRAPER_URL}/bybit/leaderboard?pageNo=${pageNo}&pageSize=${pageSize}&duration=${duration}`
       const res = await fetch(url, {

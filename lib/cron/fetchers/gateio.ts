@@ -167,11 +167,14 @@ function parseTrader(item: GateTrader, period: string, rank: number): TraderData
   const id = String(item.leader_id || item.user_id || item.uid || item.trader_id || item.id || item.userId || '')
   if (!id || id === 'undefined') return null
 
-  // profit_rate from gate.com API is decimal (e.g. 9.5402 = 954.02%)
-  let roi = parseNum(item.roi ?? item.profit_rate ?? item.pnl_ratio ?? item.returnRate)
+  // profit_rate from gate.com API is a ratio (e.g. 9.5402 = 954.02%)
+  // pl_ratio is also a ratio field
+  let roi = parseNum(item.roi ?? item.profit_rate ?? item.pnl_ratio ?? item.pl_ratio ?? item.returnRate)
   if (roi === null) return null
-  // Normalize ROI (Gate.io returns ratio: 1.0 = 100%)
-  roi = normalizeROI(roi, SOURCE) ?? roi
+  // Gate.io returns ROI as ratio: 1.0 = 100%, 9.54 = 954%
+  // normalizeROI only converts |<=1| range, but Gate.io ratios can be >1
+  // Always multiply by 100 for Gate.io to convert ratio → percentage
+  roi = roi * 100
 
   const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl ?? item.follow_profit)
 
@@ -366,12 +369,18 @@ async function fetchPeriod(
   const traders: TraderData[] = []
   let rank = 0
 
+  let skippedNull = 0
   for (const [, item] of Array.from(allTraders)) {
     rank++
     const trader = parseTrader(item, period, rank)
-    if (trader && trader.roi !== null && trader.roi !== 0) {
+    if (trader && trader.roi !== null) {
       traders.push(trader)
+    } else {
+      skippedNull++
     }
+  }
+  if (skippedNull > 0) {
+    logger.warn(`[${SOURCE}] Skipped ${skippedNull}/${allTraders.size} traders (null ROI)`)
   }
 
   traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))

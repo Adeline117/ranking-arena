@@ -54,6 +54,10 @@ export type TraderSource =
   | 'jupiter_perps'
   | 'aevo'
   | 'perpetual_protocol'
+  // Solana DEX
+  | 'drift'
+  // New CEX
+  | 'bitunix'
   // Dune on-chain data
   | 'dune_gmx'
   | 'dune_hyperliquid'
@@ -99,6 +103,9 @@ export const ALL_SOURCES: TraderSource[] = [
   'gains',
   'jupiter_perps',
   'aevo',
+  'drift',
+  // New CEX
+  'bitunix',
   // Web3 bots
   'web3_bot',
 ]
@@ -202,7 +209,7 @@ export interface ExchangeConfig {
 export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   // CEX futures
   binance_futures: { name: 'Binance', sourceType: 'futures', reliability: 88, trustWeight: 1.0, roiType: 'mixed' },
-  bybit: { name: 'Bybit', sourceType: 'futures', reliability: 45, trustWeight: 0.85, roiType: 'mixed' },
+  bybit: { name: 'Bybit', sourceType: 'futures', reliability: 85, trustWeight: 0.85, roiType: 'mixed' },
   bitget_futures: { name: 'Bitget', sourceType: 'futures', reliability: 68, trustWeight: 0.85, roiType: 'mixed' },
   okx_futures: { name: 'OKX', sourceType: 'futures', reliability: 95, trustWeight: 1.0, roiType: 'mixed' },
   mexc: { name: 'MEXC', sourceType: 'futures', reliability: 75, trustWeight: 0.80, roiType: 'mixed' },
@@ -231,7 +238,8 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   gmx: { name: 'GMX', sourceType: 'web3', reliability: 95, trustWeight: 1.0, roiType: 'realized' },
   dydx: { name: 'dYdX', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'realized' },
   hyperliquid: { name: 'Hyperliquid', sourceType: 'web3', reliability: 95, trustWeight: 1.0, roiType: 'mixed' },
-  // kwenta, mux, vertex, drift, synthetix: removed — no accessible public leaderboard APIs
+  drift: { name: 'Drift', sourceType: 'web3', reliability: 80, trustWeight: 0.90, roiType: 'mixed' },
+  // kwenta, mux, vertex, synthetix: removed — no accessible public leaderboard APIs
   gains: { name: 'Gains Network', sourceType: 'web3', reliability: 95, trustWeight: 0.95, roiType: 'realized' },
   jupiter_perps: { name: 'Jupiter Perps', sourceType: 'web3', reliability: 85, trustWeight: 0.95, roiType: 'mixed' },
   aevo: { name: 'Aevo', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'mixed' },
@@ -241,6 +249,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   dune_hyperliquid: { name: 'Hyperliquid (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'mixed' },
   dune_uniswap: { name: 'Uniswap (Dune)', sourceType: 'spot', reliability: 85, trustWeight: 0.85, roiType: 'realized' },
   dune_defi: { name: 'DeFi (Dune)', sourceType: 'web3', reliability: 80, trustWeight: 0.80, roiType: 'mixed' },
+  bitunix: { name: 'Bitunix', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
 }
 
