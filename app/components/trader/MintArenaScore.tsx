@@ -34,7 +34,8 @@ export default function MintArenaScore({ traderHandle, arenaScore, isVerified }:
         .then(res => res.json())
         .then(data => {
           if (data.attestation) setAttestation(data.attestation)
-        })
+        }),
+      'MintArenaScore:checkAttestation'
     )
   }, [traderHandle])
 
