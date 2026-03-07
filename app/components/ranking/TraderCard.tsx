@@ -46,7 +46,7 @@ export const TraderCard = memo(function TraderCard({
   const isSelected = useComparisonStore(s => s.isSelected(trader.id))
   const addTrader = useComparisonStore(s => s.addTrader)
   const removeTrader = useComparisonStore(s => s.removeTrader)
-  const canAddMore = useComparisonStore(s => s.canAddMore)
+  const canAddMore = useComparisonStore(s => s.selectedTraders.length < 5)
 
   const handleCompareToggle = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -103,7 +103,7 @@ export const TraderCard = memo(function TraderCard({
           <input
             type="checkbox"
             checked={isSelected}
-            disabled={!isSelected && !canAddMore()}
+            disabled={!isSelected && !canAddMore}
             readOnly
             aria-label="Select trader for comparison"
             style={{ cursor: 'pointer', width: 16, height: 16, accentColor: tokens.colors.accent.primary }}

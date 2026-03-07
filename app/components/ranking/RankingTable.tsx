@@ -29,7 +29,6 @@ import { classifyStyle, type TradingStyle } from '@/lib/utils/trading-style'
 // Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
 // This deferred load saves ~5KB from the render-blocking CSS path
 import { useRankingTableStyles } from './useRankingTableStyles'
-import { useVirtualizer } from '@tanstack/react-virtual'
 import { RankingFilters } from './RankingFilters'
 
 // Column customization types
@@ -327,17 +326,8 @@ function RankingTableInner(props: {
   const endIndex = startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
 
-  // Virtual scrolling disabled — 100 items/page renders fine without it
-  const useVirtual = false
+  // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
-  const tableVirtualizer = useVirtualizer({ // eslint-disable-line react-hooks/incompatible-library -- by design
-    count: 0,
-    getScrollElement: () => tableScrollRef.current,
-    estimateSize: () => 56,
-    overscan: 5,
-  })
-
-  // Reset virtualizer scroll position on page/sort/filter changes
   const resetKey = useMemo(() => `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}`, [currentPage, sortColumn, sortDir, debouncedSearch, styleFilter])
   useEffect(() => {
     if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
@@ -611,10 +601,8 @@ function RankingTableInner(props: {
       ) : (
         <>
           <Box
-            ref={useVirtual ? tableScrollRef : undefined}
             style={{
               display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', contain: 'layout style paint',
-              ...(useVirtual ? { maxHeight: '80vh', overflowY: 'auto' } : {}),
             }}
           >
             {isSortPending && (
@@ -634,47 +622,17 @@ function RankingTableInner(props: {
                 }} />
               </Box>
             )}
-            {useVirtual ? (
-              <div style={{ height: tableVirtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
-                {tableVirtualizer.getVirtualItems().map(virtualRow => {
-                  const trader = paginatedTraders[virtualRow.index]
-                  const rank = startIndex + virtualRow.index + 1
-                  return (
-                    <div
-                      key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + virtualRow.index}`}
-                      data-index={virtualRow.index}
-                      ref={tableVirtualizer.measureElement}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
-                    >
-                      <TraderRow
-                        trader={trader} rank={rank} source={source} language={language}
-                        searchQuery={debouncedSearch}
-                        getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
-                        isExpanded={expandedRowId === trader.id}
-                        onToggleExpand={handleToggleExpand} />
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              paginatedTraders.map((trader, idx) => {
-                const rank = startIndex + idx + 1
-                return (
-                  <TraderRow key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
-                    trader={trader} rank={rank} source={source} language={language}
-                    searchQuery={debouncedSearch}
-                    getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
-                    isExpanded={expandedRowId === trader.id}
-                    onToggleExpand={handleToggleExpand} />
-                )
-              })
-            )}
+            {paginatedTraders.map((trader, idx) => {
+              const rank = startIndex + idx + 1
+              return (
+                <TraderRow key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
+                  trader={trader} rank={rank} source={source} language={language}
+                  searchQuery={debouncedSearch}
+                  getMedalGlowClass={getMedalGlowClass} parseSourceInfo={parseSourceInfoWithT} getPnLTooltipFn={getPnLTooltip}
+                  isExpanded={expandedRowId === trader.id}
+                  onToggleExpand={handleToggleExpand} />
+              )
+            })}
           </Box>
           {/* Registration CTA after first page for non-logged-in users */}
           {!props.loggedIn && currentPage === 1 && sortedTraders.length > itemsPerPage && (
