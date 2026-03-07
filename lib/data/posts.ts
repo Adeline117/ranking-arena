@@ -369,6 +369,13 @@ export async function createPost(
   userHandle: string,
   input: CreatePostInput
 ): Promise<Post> {
+  // Fetch author's reputation data for weighted feed
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('reputation_score, is_verified_trader')
+    .eq('id', userId)
+    .maybeSingle()
+
   const { data, error } = await supabase
     .from('posts')
     .insert({
@@ -378,6 +385,8 @@ export async function createPost(
       author_handle: userHandle,
       group_id: input.group_id || null,
       poll_enabled: input.poll_enabled || false,
+      author_arena_score: profile?.reputation_score ?? 0,
+      author_is_verified: profile?.is_verified_trader ?? false,
     })
     .select()
     .single()
