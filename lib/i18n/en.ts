@@ -4241,6 +4241,48 @@ bookshelfBooksCount: 'books',
 bookshelfNoBooks: 'No books yet',
 bookshelfViewAllLink: 'View all',
 
+// DeSoc - Bot/Human labels
+botLabel: 'Bot',
+humanLabel: 'Human',
+allTraderTypes: 'All',
+traderTypeFilter: 'Trader Type',
+isBot: 'Bot',
+isHuman: 'Trader',
+
+// DeSoc - Verified badge
+verifiedBadge: 'Verified',
+verifiedTraderProfile: 'Verified Trader',
+verifiedTooltip: 'This trader has verified ownership of their profile',
+
+// DeSoc - Reputation
+reputationScore: 'Reputation',
+reputationWeightedFeed: 'Reputation-weighted feed',
+minScoreRequired: 'Minimum Arena Score: {score}',
+groupScoreGate: 'This group requires Arena Score of {score}+ to join',
+verifiedOnlyGroup: 'Verified traders only',
+
+// DeSoc - Attestation
+mintArenaScore: 'Mint Arena Score',
+mintArenaScoreDesc: 'Create an on-chain attestation of your Arena Score on Base',
+mintSuccess: 'Arena Score minted on-chain!',
+mintFailed: 'Minting failed',
+viewOnChain: 'View on chain',
+attestationExists: 'On-chain attestation exists',
+
+// DeSoc - Referral
+copyTradeCta: 'Copy Trade',
+copyTradeOnExchange: 'Copy on {exchange}',
+
+// DeSoc - Paid groups
+paidGroup: 'Paid Group',
+groupPrice: 'Price: {price}/month',
+joinPaidGroup: 'Join ({price}/mo)',
+
+// DeSoc - Growth
+shareRankCard: 'Share Rank Card',
+weeklyTop10: 'Weekly Top 10',
+embedWidget: 'Embed Widget',
+
 } as const
 
 export default en

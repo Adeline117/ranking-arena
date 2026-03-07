@@ -4248,6 +4248,48 @@ bookshelfBooksCount: '本',
 bookshelfNoBooks: '还没有添加书籍',
 bookshelfViewAllLink: '查看全部',
 
+// DeSoc - Bot/Human labels
+botLabel: '机器人',
+humanLabel: '真人',
+allTraderTypes: '全部',
+traderTypeFilter: '交易员类型',
+isBot: '机器人',
+isHuman: '交易员',
+
+// DeSoc - Verified badge
+verifiedBadge: '已认证',
+verifiedTraderProfile: '已认证交易员',
+verifiedTooltip: '该交易员已验证其主页所有权',
+
+// DeSoc - Reputation
+reputationScore: '声誉分',
+reputationWeightedFeed: '声誉加权动态',
+minScoreRequired: '最低 Arena Score：{score}',
+groupScoreGate: '该群组要求 Arena Score 达到 {score} 以上',
+verifiedOnlyGroup: '仅限认证交易员',
+
+// DeSoc - Attestation
+mintArenaScore: '铸造 Arena Score',
+mintArenaScoreDesc: '在 Base 链上创建你的 Arena Score 链上凭证',
+mintSuccess: 'Arena Score 已上链！',
+mintFailed: '铸造失败',
+viewOnChain: '链上查看',
+attestationExists: '链上凭证已存在',
+
+// DeSoc - Referral
+copyTradeCta: '跟单',
+copyTradeOnExchange: '在 {exchange} 跟单',
+
+// DeSoc - Paid groups
+paidGroup: '付费群组',
+groupPrice: '价格：{price}/月',
+joinPaidGroup: '加入（{price}/月）',
+
+// DeSoc - Growth
+shareRankCard: '分享排名卡片',
+weeklyTop10: '每周 Top 10',
+embedWidget: '嵌入组件',
+
 } as const
 
 export default zh
