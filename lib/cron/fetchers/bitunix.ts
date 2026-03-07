@@ -175,8 +175,8 @@ async function fetchPeriod(
         }
       }
       if (allTraders.size > 0) break
-    } catch {
-      // Continue to next endpoint
+    } catch (err) {
+      logger.warn(`[${SOURCE}] API endpoint failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -214,8 +214,8 @@ async function fetchPeriod(
             }
           }
           if (allTraders.size > 0) break
-        } catch {
-          // Continue
+        } catch (err) {
+          logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
     }
