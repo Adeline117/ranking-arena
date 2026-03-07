@@ -187,8 +187,9 @@ async function computeSeason(
         const rows: TraderRow[] = []
         let page = 0
         const pageSize = 1000
+        const maxPages = 10 // Safety cap: max 10K rows per source to prevent runaway queries
 
-        while (true) {
+        while (page < maxPages) {
           const { data, error } = await supabase
             .from('trader_snapshots')
             .select('source, source_trader_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, captured_at, full_confidence_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, sharpe_ratio')
@@ -202,6 +203,9 @@ async function computeSeason(
           rows.push(...(data as TraderRow[]))
           if (data.length < pageSize) break
           page++
+        }
+        if (page >= maxPages) {
+          logger.warn(`${source}/${season}: hit ${maxPages}-page cap (${rows.length} rows), some data may be truncated`)
         }
         return rows
       })

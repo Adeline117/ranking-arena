@@ -64,20 +64,22 @@ export async function GET(req: Request) {
     const supabase = getSupabaseAdmin()
 
     // 获取有用户关注的交易员列表（去重）
-    const { data: followedTraders, error: fetchError } = await supabase
+    // Safety cap: limit to 10000 rows to prevent unbounded queries
+    const { data: finalFollowedTraders, error: finalFetchError } = await supabase
       .from('trader_follows')
       .select('trader_id, source')
       .order('created_at', { ascending: false })
+      .limit(10000)
 
-    if (fetchError) {
-      logger.error('[FollowedTraders Cron] 获取关注列表Failed:', fetchError)
+    if (finalFetchError) {
+      logger.error('[FollowedTraders Cron] 获取关注列表Failed:', finalFetchError)
       return NextResponse.json(
-        { ok: false, error: fetchError.message },
+        { ok: false, error: finalFetchError.message },
         { status: 500 }
       )
     }
 
-    if (!followedTraders || followedTraders.length === 0) {
+    if (!finalFollowedTraders || finalFollowedTraders.length === 0) {
       return NextResponse.json({
         ok: true,
         message: 'No followed traders to update',
@@ -87,7 +89,7 @@ export async function GET(req: Request) {
 
     // 按交易所分组
     const tradersBySource = new Map<string, Set<string>>()
-    for (const follow of followedTraders) {
+    for (const follow of finalFollowedTraders) {
       const source = follow.source || 'binance_futures'
       if (!tradersBySource.has(source)) {
         tradersBySource.set(source, new Set())
