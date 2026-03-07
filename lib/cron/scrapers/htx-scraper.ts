@@ -58,7 +58,9 @@ export async function scrapeHtxLeaderboard(
           const body = await response.json()
           responses.push({ url, body })
           logger.info(`[htx-scraper] Intercepted: ${url}`)
-        } catch {}
+        } catch (_err) {
+          /* non-JSON response, skip */
+        }
       }
     })
     

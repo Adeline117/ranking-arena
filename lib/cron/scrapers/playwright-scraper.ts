@@ -175,7 +175,7 @@ export async function interceptApiResponses(
       try {
         const body = await response.json()
         responses.push({ url, body })
-      } catch {
+      } catch (jsonErr) {
         // Not JSON or failed to parse
       }
     }

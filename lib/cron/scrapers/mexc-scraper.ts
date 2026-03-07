@@ -63,7 +63,7 @@ export async function scrapeMexcLeaderboard(
           const body = await response.json()
           responses.push({ url, body })
           logger.info(`[mexc-scraper] Intercepted: ${url}`)
-        } catch {}
+        } catch (_err) {}
       }
     })
     
@@ -85,7 +85,7 @@ export async function scrapeMexcLeaderboard(
       const periodText = periodButtons[periodType as keyof typeof periodButtons] || '30天'
       await page.click(`text=${periodText}`, { timeout: 3000 })
       await page.waitForTimeout(2000)
-    } catch {
+    } catch (selectorErr) {
       // Period selector not found or different layout
     }
     
@@ -155,7 +155,9 @@ export async function scrapeMexcBatch(
           try {
             const body = await response.json()
             responses.push({ url, body })
-          } catch {}
+          } catch (_err) {
+            // Not JSON or failed to parse
+          }
         }
       })
       

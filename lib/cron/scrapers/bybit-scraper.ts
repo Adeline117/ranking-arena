@@ -76,7 +76,7 @@ export async function scrapeBybitLeaderboard(
     try {
       await page.click('text=30D', { timeout: 3000 })
       await page.waitForTimeout(2000)
-    } catch {
+    } catch (_err) {
       // Period selector not found, page might have already loaded with default
     }
     
@@ -136,7 +136,9 @@ export async function scrapeBybitBatch(
               responses.push({ url, body })
               logger.info(`[bybit-scraper] Intercepted API for ${period}: ${body?.result?.leaderDetails?.length || 0} traders`)
             }
-          } catch {}
+          } catch (_err) {
+            // Selector not found, continue
+          }
         }
       }
       
@@ -164,11 +166,14 @@ export async function scrapeBybitBatch(
             await page.click(selector, { timeout: 2000 })
             await page.waitForTimeout(3000)
             if (responses.length > 0) break
-          } catch {
+          } catch (clickErr) {
+            // Selector not found, try next
             continue
           }
         }
-      } catch {}
+      } catch (_err) {
+        // Period selector not available
+      }
       
       // Remove handler to avoid duplicates
       page.off('response', responseHandler)
