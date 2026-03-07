@@ -20,7 +20,6 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 function isAuthorized(request: Request): boolean {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret && process.env.NODE_ENV === 'development') return true
   if (!cronSecret) return false
   return authHeader === `Bearer ${cronSecret}`
 }
@@ -384,8 +383,26 @@ export async function GET(request: Request) {
   const mode = url.searchParams.get('mode') || 'auto' // 'bulk', 'individual', 'auto'
   const plog = await PipelineLogger.start(`backfill-avatars-${platform || 'unknown'}`)
 
+  // Support comma-separated platforms for consolidated cron jobs
+  if (platform && platform.includes(',')) {
+    const platforms = platform.split(',').map(p => p.trim()).filter(Boolean)
+    const results: AvatarResult[] = []
+    const perPlatformLimit = Math.floor(limit / platforms.length) || 50
+    for (const p of platforms) {
+      const subUrl = new URL(request.url)
+      subUrl.searchParams.set('platform', p)
+      subUrl.searchParams.set('limit', String(perPlatformLimit))
+      const subReq = new Request(subUrl.toString(), { headers: request.headers })
+      const subRes = await GET(subReq)
+      const subData = await subRes.json() as AvatarResult
+      results.push(subData)
+    }
+    await plog.success(results.reduce((s, r) => s + r.updated, 0))
+    return NextResponse.json({ platforms: results })
+  }
+
   if (!platform) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: 'platform parameter required',
       available: Object.keys(INDIVIDUAL_FETCHERS),
     }, { status: 400 })

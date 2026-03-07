@@ -34,16 +34,26 @@ export async function getTradersArenaFollowersCount(
   traderIds.forEach(id => resultMap.set(id, 0))
 
   try {
-    // Single query: fetch follow rows for these traders, then count in JS
-    const { data } = await supabase
-      .from('trader_follows')
-      .select('trader_id')
-      .in('trader_id', traderIds)
-      .limit(10000)
+    // Use RPC for GROUP BY count (returns 1 row per trader instead of 1 row per follow)
+    const { data, error } = await supabase
+      .rpc('count_trader_followers', { trader_ids: traderIds })
 
-    if (data) {
-      for (const row of data) {
-        resultMap.set(row.trader_id, (resultMap.get(row.trader_id) || 0) + 1)
+    if (!error && data) {
+      for (const row of data as { trader_id: string; cnt: number }[]) {
+        resultMap.set(row.trader_id, row.cnt)
+      }
+    } else {
+      // Fallback: fetch individual rows and count in JS
+      const { data: fallbackData } = await supabase
+        .from('trader_follows')
+        .select('trader_id')
+        .in('trader_id', traderIds)
+        .limit(10000)
+
+      if (fallbackData) {
+        for (const row of fallbackData) {
+          resultMap.set(row.trader_id, (resultMap.get(row.trader_id) || 0) + 1)
+        }
       }
     }
   } catch {

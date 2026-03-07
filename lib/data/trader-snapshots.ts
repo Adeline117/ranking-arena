@@ -133,28 +133,45 @@ export async function getAllLatestSnapshots(
 export async function getAllTraderHandles(
   supabase: SupabaseClient
 ): Promise<Record<TraderSource, Map<string, TraderHandle>>> {
-  // 预加载所有 handles
-  const { data } = await supabase
-    .from('trader_sources')
-    .select('source, source_trader_id, handle, profile_url')
-    .in('source', ALL_SOURCES)
-    .limit(1500)
-
   const result: Record<TraderSource, Map<string, TraderHandle>> = {} as Record<TraderSource, Map<string, TraderHandle>>
   ALL_SOURCES.forEach(source => {
     result[source] = new Map()
   })
 
-  data?.forEach((item: { source: string; source_trader_id: string; handle: string | null; profile_url: string | null }) => {
-    const source = item.source as TraderSource
-    if (result[source]) {
-      result[source].set(item.source_trader_id, {
-        source_trader_id: item.source_trader_id,
-        handle: item.handle,
-        profile_url: item.profile_url,
-      })
+  // Paginate to fetch ALL handles (1000 per page to stay within PostgREST limits)
+  const PAGE_SIZE = 1000
+  let offset = 0
+  let hasMore = true
+
+  while (hasMore) {
+    const { data } = await supabase
+      .from('trader_sources')
+      .select('source, source_trader_id, handle, profile_url')
+      .in('source', ALL_SOURCES)
+      .range(offset, offset + PAGE_SIZE - 1)
+
+    if (!data || data.length === 0) {
+      hasMore = false
+      break
     }
-  })
+
+    for (const item of data as { source: string; source_trader_id: string; handle: string | null; profile_url: string | null }[]) {
+      const source = item.source as TraderSource
+      if (result[source]) {
+        result[source].set(item.source_trader_id, {
+          source_trader_id: item.source_trader_id,
+          handle: item.handle,
+          profile_url: item.profile_url,
+        })
+      }
+    }
+
+    if (data.length < PAGE_SIZE) {
+      hasMore = false
+    } else {
+      offset += PAGE_SIZE
+    }
+  }
 
   return result
 }

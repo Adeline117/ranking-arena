@@ -1,7 +1,7 @@
 {
   "buildCommand": "next build",
   "regions": [
-    "sfo1"
+    "hnd1"
   ],
   "crons": [
     {
@@ -34,11 +34,11 @@
     },
     {
       "path": "/api/cron/batch-discover",
-      "schedule": "56 */4 * * *"
+      "schedule": "56 */6 * * *"
     },
     {
       "path": "/api/scrape/proxy?period=all",
-      "schedule": "0 2,6,10,14,18,22 * * *"
+      "schedule": "0 6,18 * * *"
     },
     {
       "path": "/api/cron/subscription-expiry",
@@ -62,7 +62,7 @@
     },
     {
       "path": "/api/cron/fetch-open-interest",
-      "schedule": "5 * * * *"
+      "schedule": "5 */2 * * *"
     },
     {
       "path": "/api/cron/fetch-traders/binance_futures",
@@ -157,72 +157,12 @@
       "schedule": "0 */2 * * *"
     },
     {
-      "path": "/api/cron/check-enrichment-freshness",
-      "schedule": "15 */6 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=binance_futures&limit=200",
+      "path": "/api/cron/backfill-avatars?platform=binance_futures,bybit,bitget_futures,okx_futures,mexc,kucoin,htx_futures,bingx&limit=400",
       "schedule": "30 2 * * *"
     },
     {
-      "path": "/api/cron/backfill-avatars?platform=bybit&limit=200",
-      "schedule": "30 3 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=bitget_futures&limit=200",
-      "schedule": "30 4 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=okx_futures&limit=200",
-      "schedule": "30 5 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=mexc&limit=200",
-      "schedule": "30 6 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=kucoin&limit=200",
-      "schedule": "30 7 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=htx_futures&limit=200",
+      "path": "/api/cron/backfill-avatars?platform=coinex,lbank,binance_spot,bitget_spot,weex,phemex,blofin,xt&limit=400",
       "schedule": "30 8 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=bingx&limit=200",
-      "schedule": "30 9 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=coinex&limit=200",
-      "schedule": "30 10 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=lbank&limit=200",
-      "schedule": "30 11 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=binance_spot&limit=200",
-      "schedule": "30 12 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=bitget_spot&limit=200",
-      "schedule": "30 13 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=weex&limit=200",
-      "schedule": "30 14 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=phemex&limit=200",
-      "schedule": "30 15 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=blofin&limit=200",
-      "schedule": "30 16 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=xt&limit=200",
-      "schedule": "30 17 * * *"
     }
   ],
   "headers": [
