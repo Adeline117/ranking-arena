@@ -60,7 +60,7 @@ export interface UnregisteredTraderData {
 }
 
 type TraderTabKey = 'overview' | 'stats' | 'portfolio'
-type TraderPageData = any
+type TraderPageData = import('@/app/u/[handle]/components/types').TraderPageData
 
 interface TraderProfileClientProps {
   data: UnregisteredTraderData
