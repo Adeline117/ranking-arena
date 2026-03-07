@@ -82,7 +82,6 @@ export default function DesktopSidebar() {
   const navItems = [
     { href: '/', labelKey: 'home' as const, icon: HomeIcon },
     { href: '/rankings', labelKey: 'rankings' as const, icon: TrophyIcon },
-    { href: '/groups', labelKey: 'groups' as const, icon: GroupIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me' as const, icon: UserIcon },
   ]
 

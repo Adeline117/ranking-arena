@@ -83,28 +83,7 @@ export function PostCard({
             {hotTag.label}
           </span>
         )}
-        {p.group_id ? (
-          <Link
-            href={`/groups/${p.group_id}`}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              fontSize: tokens.typography.fontSize.xs,
-              color: ARENA_PURPLE,
-              textDecoration: 'none',
-              padding: '2px 10px',
-              background: `${ARENA_PURPLE}12`,
-              borderRadius: tokens.radius.full,
-              fontWeight: 600,
-              transition: 'background 0.15s ease',
-            }}
-          >
-            {localizedName(p.group, p.group_en)}
-          </Link>
-        ) : (
-          <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `var(--color-text-tertiary-10)`, borderRadius: 999 }}>
-            {localizedName(p.group, p.group_en)}
-          </Text>
-        )}
+
       </Box>
 
       {/* Title */}

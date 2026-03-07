@@ -24,7 +24,6 @@ export default function Footer() {
     {
       title: t('footerCommunity'),
       links: [
-        { href: '/groups', label: t('footerGroups') },
         { href: '/hot', label: t('footerHot') },
       ],
     },

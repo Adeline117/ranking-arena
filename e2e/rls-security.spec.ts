@@ -51,11 +51,6 @@ test.describe('RLS Security - Post Deletion', () => {
 })
 
 test.describe('RLS Security - Pro Features', () => {
-  test('unauthenticated user cannot access pro groups API', async ({ request }) => {
-    const response = await request.get('/api/pro/official-groups')
-
-    expect(response.ok()).toBeFalsy()
-  })
 
   test('pro page blocks unauthenticated user', async ({ page }) => {
     const response = await page.goto('/pro/official-groups')
