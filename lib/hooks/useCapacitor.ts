@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { PushNotificationsPlugin } from '@capacitor/push-notifications/dist/esm/definitions'
 
 // ============================================
 // Platform Detection
@@ -559,6 +560,112 @@ export function useCapacitorBiometric() {
     setCredentials,
     getCredentials,
     deleteCredentials,
+  }
+}
+
+// ============================================
+// Push Notifications
+// ============================================
+
+export interface PushNotificationToken {
+  value: string
+}
+
+export interface PushNotificationData {
+  id?: string
+  title?: string
+  body?: string
+  data?: Record<string, unknown>
+}
+
+export function useCapacitorPushNotifications(options?: {
+  onRegistration?: (token: PushNotificationToken) => void
+  onRegistrationError?: (error: string) => void
+  onNotificationReceived?: (notification: PushNotificationData) => void
+  onNotificationActionPerformed?: (notification: PushNotificationData, actionId: string) => void
+}) {
+  const [token, setToken] = useState<string | null>(null)
+  const [permissionGranted, setPermissionGranted] = useState(false)
+
+  const register = useCallback(async (): Promise<boolean> => {
+    if (!isNativeApp()) return false
+
+    try {
+      const mod = await import('@capacitor/push-notifications')
+      const PN = mod.PushNotifications as PushNotificationsPlugin
+      const permResult = await PN.requestPermissions()
+      if (permResult.receive !== 'granted') {
+        setPermissionGranted(false)
+        return false
+      }
+      setPermissionGranted(true)
+      await PN.register()
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isNativeApp()) return
+
+    const listeners: Array<{ remove: () => void }> = []
+
+    async function init() {
+      try {
+        const mod = await import('@capacitor/push-notifications')
+        const PN = mod.PushNotifications as PushNotificationsPlugin
+
+        const regListener = await PN.addListener('registration', (tok) => {
+          setToken(tok.value)
+          options?.onRegistration?.(tok)
+        })
+        listeners.push(regListener)
+
+        const errListener = await PN.addListener('registrationError', (err) => {
+          options?.onRegistrationError?.(err.error)
+        })
+        listeners.push(errListener)
+
+        const recvListener = await PN.addListener('pushNotificationReceived', (notification) => {
+          options?.onNotificationReceived?.({
+            id: notification.id,
+            title: notification.title,
+            body: notification.body,
+            data: notification.data,
+          })
+        })
+        listeners.push(recvListener)
+
+        const actionListener = await PN.addListener('pushNotificationActionPerformed', (action) => {
+          options?.onNotificationActionPerformed?.(
+            {
+              id: action.notification.id,
+              title: action.notification.title,
+              body: action.notification.body,
+              data: action.notification.data,
+            },
+            action.actionId,
+          )
+        })
+        listeners.push(actionListener)
+      } catch {
+        // Plugin not available
+      }
+    }
+
+    init()
+
+    return () => {
+      for (const l of listeners) l.remove()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options?.onRegistration, options?.onRegistrationError, options?.onNotificationReceived, options?.onNotificationActionPerformed])
+
+  return {
+    token,
+    permissionGranted,
+    register,
   }
 }
 

@@ -3,23 +3,25 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- All P0-P3 tasks complete. Only backlog items remain.
+- All P0-P3 tasks complete. Backlog 5/6 done (only multi-language remains).
 
 ## Recently Completed (2026-03-06)
+- Backlog: WebSocket real-time rankings (useRealtimeRankings hook + ExchangeRankingClient live merge)
+- Backlog: Perpetual Protocol v2 DEX connector (The Graph subgraph, added to batch group D)
+- Backlog: Portfolio analytics dashboard (stats cards, L/S distribution, by-exchange breakdown, equity curve)
+- Backlog: Trader following notifications (rank change alerts in trader-alerts.ts, ±10/30 rank thresholds)
+- Backlog: Capacitor mobile improvements (push notifications, network status, app badge hooks)
 - P3 UX: swipe-to-reveal trader actions, scroll-snap image gallery, comment thread lines, group avatar stack
 - Dark mode: design tokens across 15+ components (sidebar, PK, portfolio, user-center, SSR ranking)
-- Pull-to-refresh on /hot, /notifications, /following
-- Telegram bot configured + verified (alerts flowing)
-- OpenClaw Mac Mini: crontab set up with 6 scheduled jobs (health monitor, daily report, UX patrol, R2 backup, full backup, Sentry convergence)
-- Sentry error convergence: weekly auto-report + stale issue cleanup
+- OpenClaw: Sentry convergence, dotenv loading, crontab with 6 scheduled jobs
 - Zero TypeScript errors across entire codebase
 
 ## In Progress
-_(Nothing currently — only backlog items remain)_
+_(Nothing currently — only multi-language expansion remains in backlog)_
 
 ## Key Metrics
 - Total Traders: 32,000+
-- Exchanges Supported: 27+
+- Exchanges Supported: 28+ (added Perpetual Protocol)
 - Cron Jobs: 27 active (45+ with PipelineLogger)
 - Tests: 128 suites, 2066 tests, ALL GREEN
 - Quality: 75 -> ~95 across 10 dimensions (2026-03-06)
