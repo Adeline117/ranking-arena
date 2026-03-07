@@ -21,7 +21,7 @@ _No critical issues currently_
 
 ### Infrastructure
 - [x] Run pipeline_logs migration on Supabase production (verified present)
-- [ ] Set up Telegram bot + chat ID for alerts
+- [x] Set up Telegram bot + chat ID for alerts (bot @Adeline07bot, chat 5646617467, token in Vercel env)
 - [ ] Configure OpenClaw skills on Mac Mini
 
 ---
@@ -34,20 +34,20 @@ _No critical issues currently_
 
 ### UI/UX
 - [x] Loading skeleton improvements (already comprehensive — 30+ page skeletons, shimmer animation, DataStateWrapper)
-- [ ] Mobile pull-to-refresh consistency
+- [x] Mobile pull-to-refresh consistency (added to /hot, /notifications, /following)
 
 ### Observability
 - [x] Correlation ID system (AsyncLocalStorage + middleware + auto-inject into logs)
 - [x] Structured JSON logging in production (for Vercel Logs / log aggregation)
 
 ### Developer Experience
-- [ ] Add API documentation (OpenAPI spec) — 295 routes, consider auto-generation
+- [x] Add API documentation (OpenAPI spec) — already exists at public/openapi.json
 
 ---
 
 ## 🟢 P3 - Nice to Have
 
-- [ ] Dark mode refinements
+- [x] Dark mode refinements (design tokens + var(--color-on-accent) across 15+ components)
 - [ ] Sentry error convergence (weekly auto-fix from Sentry API)
 
 ---
@@ -100,6 +100,12 @@ _Move items here when done, then archive weekly_
 - [x] Logger auto-injects correlation ID into every log line
 - [x] Loading skeletons verified comprehensive (30+ page skeletons)
 - [x] pipeline_logs migration verified in Supabase production
+- [x] Telegram bot configured (@Adeline07bot, chat 5646617467)
+- [x] Pull-to-refresh on /hot, /notifications, /following
+- [x] Dark mode: design tokens across sidebar, PK, portfolio, user-center, SSR ranking
+- [x] P3 UX: swipe-to-reveal actions, scroll-snap gallery, comment thread lines, avatar stack
+- [x] OpenAPI spec verified (public/openapi.json)
+- [x] Zero TypeScript errors (all pre-existing errors fixed)
 
 ---
 
