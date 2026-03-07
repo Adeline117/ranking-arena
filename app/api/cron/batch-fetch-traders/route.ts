@@ -10,7 +10,7 @@
  *   group=c  → okx_web3, okx_spot, aevo, xt (every 4h)
  *   group=d  → gains, htx_futures, dydx (every 6h)
  *   group=e  → coinex, bitget_spot, binance_web3 (every 8h)
- *   group=f  → mexc, kucoin, phemex, weex, blofin, bingx, gateio, lbank (every 12h)
+ *   group=f  → mexc, kucoin, blofin, bingx, gateio, lbank (every 12h)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -37,7 +37,7 @@ const GROUPS: Record<string, string[]> = {
   // Group E: Lower-priority (every 8h) — 3 platforms
   e: ['coinex', 'bitget_spot', 'binance_web3'],
   // Group F: Lower-priority CEX (every 12h) — periodic retry
-  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank', 'phemex', 'weex'],
+  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank'],
 }
 
 interface BatchResult {
