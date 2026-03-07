@@ -4,6 +4,7 @@
  */
 
 import Link from 'next/link'
+import { tokens } from '@/lib/design-tokens'
 import type { PKTraderData, MetricRow, OverallResult } from './pk-types'
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
@@ -11,15 +12,16 @@ import type { PKTraderData, MetricRow, OverallResult } from './pk-types'
 export const COLOR = {
   bg: 'var(--color-bg-primary)',
   card: 'var(--color-bg-secondary)',
-  border: 'rgba(139,111,168,0.2)',
+  border: 'var(--color-border-primary)',
   text: 'var(--color-text-primary)',
   sub: 'var(--color-text-tertiary)',
-  brand: '#8b6fa8',
-  gold: '#FFD700',
+  brand: 'var(--color-brand)',
+  gold: 'var(--color-accent-warning, #FFD700)',
   success: 'var(--color-accent-success)',
   error: 'var(--color-accent-error)',
-  winnerGold: '#FFD700',
+  winnerGold: 'var(--color-accent-warning, #FFD700)',
   loser: 'var(--color-text-tertiary)',
+  sideB: 'var(--color-accent-primary)',
 }
 
 // ─── Avatar ─────────────────────────────────────────────────────────────────
@@ -32,7 +34,7 @@ interface AvatarInitialProps {
 
 export function AvatarInitial({
   name,
-  gradient = 'linear-gradient(135deg, #8b6fa8 0%, #6366f1 100%)',
+  gradient = 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-accent-primary) 100%)',
   size = 64,
 }: AvatarInitialProps) {
   return (
@@ -46,10 +48,10 @@ export function AvatarInitial({
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: size * 0.42,
-        fontWeight: 900,
-        color: '#fff',
+        fontWeight: tokens.typography.fontWeight.black,
+        color: 'var(--color-on-accent, #fff)',
         flexShrink: 0,
-        boxShadow: '0 0 20px rgba(139,111,168,0.3)',
+        boxShadow: tokens.shadow.glow,
       }}
     >
       {name.charAt(0).toUpperCase()}
@@ -69,17 +71,17 @@ interface FighterCardProps {
 export function FighterCard({ data, displayName, handle, side }: FighterCardProps) {
   const isA = side === 'a'
   const gradient = isA
-    ? 'linear-gradient(135deg, rgba(139,111,168,0.1) 0%, rgba(139,111,168,0.04) 100%)'
-    : 'linear-gradient(225deg, rgba(99,102,241,0.1) 0%, rgba(99,102,241,0.04) 100%)'
+    ? 'linear-gradient(135deg, color-mix(in srgb, var(--color-brand) 10%, transparent) 0%, color-mix(in srgb, var(--color-brand) 4%, transparent) 100%)'
+    : 'linear-gradient(225deg, color-mix(in srgb, var(--color-accent-primary) 10%, transparent) 0%, color-mix(in srgb, var(--color-accent-primary) 4%, transparent) 100%)'
   const borderColor = isA
-    ? 'rgba(139,111,168,0.3)'
-    : 'rgba(99,102,241,0.3)'
-  const borderRadius = isA ? '16px 0 0 16px' : '0 16px 16px 0'
+    ? 'color-mix(in srgb, var(--color-brand) 30%, transparent)'
+    : 'color-mix(in srgb, var(--color-accent-primary) 30%, transparent)'
+  const borderRadius = isA ? `${tokens.radius.xl} 0 0 ${tokens.radius.xl}` : `0 ${tokens.radius.xl} ${tokens.radius.xl} 0`
   const avatarGradient = isA
-    ? 'linear-gradient(135deg, #8b6fa8 0%, #6366f1 100%)'
-    : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
-  const rankColor = isA ? COLOR.gold : '#818cf8'
-  const linkColor = isA ? COLOR.brand : '#818cf8'
+    ? 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-accent-primary) 100%)'
+    : 'linear-gradient(135deg, var(--color-accent-primary) 0%, var(--color-pro-gradient-start, #8b5cf6) 100%)'
+  const rankColor = isA ? COLOR.gold : COLOR.sideB
+  const linkColor = isA ? COLOR.brand : COLOR.sideB
 
   return (
     <div
@@ -104,8 +106,8 @@ export function FighterCard({ data, displayName, handle, side }: FighterCardProp
           />
           <div
             style={{
-              fontSize: 20,
-              fontWeight: 800,
+              fontSize: tokens.typography.fontSize.xl,
+              fontWeight: tokens.typography.fontWeight.extrabold,
               color: COLOR.text,
               textAlign: 'center',
             }}
@@ -117,9 +119,9 @@ export function FighterCard({ data, displayName, handle, side }: FighterCardProp
           {data.rank != null && (
             <div
               style={{
-                fontSize: 12,
+                fontSize: tokens.typography.fontSize.xs,
                 color: rankColor,
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
               }}
             >
               #{data.rank} Ranked
@@ -128,7 +130,7 @@ export function FighterCard({ data, displayName, handle, side }: FighterCardProp
           <Link
             href={`/trader/${encodeURIComponent(handle)}`}
             style={{
-              fontSize: 12,
+              fontSize: tokens.typography.fontSize.xs,
               color: linkColor,
               textDecoration: 'none',
               marginTop: 4,
@@ -138,7 +140,7 @@ export function FighterCard({ data, displayName, handle, side }: FighterCardProp
           </Link>
         </>
       ) : (
-        <div style={{ color: COLOR.sub, fontSize: 14 }}>
+        <div style={{ color: COLOR.sub, fontSize: tokens.typography.fontSize.base }}>
           Trader not found
         </div>
       )}
@@ -156,19 +158,19 @@ export function VSDivider() {
         flexDirection: 'column',
         alignItems: 'center',
         padding: '28px 24px',
-        background: 'rgba(255,215,0,0.04)',
-        borderTop: '1px solid rgba(255,215,0,0.15)',
-        borderBottom: '1px solid rgba(255,215,0,0.15)',
+        background: 'color-mix(in srgb, var(--color-accent-warning, #FFD700) 4%, transparent)',
+        borderTop: '1px solid color-mix(in srgb, var(--color-accent-warning, #FFD700) 15%, transparent)',
+        borderBottom: '1px solid color-mix(in srgb, var(--color-accent-warning, #FFD700) 15%, transparent)',
       }}
     >
       <div
         style={{
           fontSize: 56,
-          fontWeight: 900,
+          fontWeight: tokens.typography.fontWeight.black,
           color: COLOR.gold,
           letterSpacing: -3,
           lineHeight: 1,
-          textShadow: '0 0 30px rgba(255,215,0,0.5)',
+          textShadow: tokens.shadow.glowWarning,
         }}
       >
         VS
@@ -191,7 +193,7 @@ export function MetricsTable({ metrics, nameA, nameB }: MetricsTableProps) {
       style={{
         background: COLOR.card,
         border: `1px solid ${COLOR.border}`,
-        borderRadius: 16,
+        borderRadius: tokens.radius.xl,
         overflow: 'hidden',
         marginBottom: 32,
       }}
@@ -208,8 +210,8 @@ export function MetricsTable({ metrics, nameA, nameB }: MetricsTableProps) {
       >
         <div
           style={{
-            fontSize: 11,
-            fontWeight: 700,
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: tokens.typography.fontWeight.bold,
             color: COLOR.brand,
             letterSpacing: 2,
             textTransform: 'uppercase',
@@ -220,8 +222,8 @@ export function MetricsTable({ metrics, nameA, nameB }: MetricsTableProps) {
         </div>
         <div
           style={{
-            fontSize: 11,
-            fontWeight: 700,
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: tokens.typography.fontWeight.bold,
             color: COLOR.sub,
             letterSpacing: 2,
             textTransform: 'uppercase',
@@ -232,9 +234,9 @@ export function MetricsTable({ metrics, nameA, nameB }: MetricsTableProps) {
         </div>
         <div
           style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: '#818cf8',
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: tokens.typography.fontWeight.bold,
+            color: COLOR.sideB,
             letterSpacing: 2,
             textTransform: 'uppercase',
             textAlign: 'center',
@@ -277,9 +279,9 @@ function MetricRowItem({ metric: m, isLast }: MetricRowItemProps) {
           ? '1px solid var(--glass-border-light)'
           : 'none',
         background: aWins
-          ? 'rgba(255,215,0,0.025)'
+          ? 'color-mix(in srgb, var(--color-accent-warning, #FFD700) 2.5%, transparent)'
           : bWins
-          ? 'rgba(99,102,241,0.025)'
+          ? 'color-mix(in srgb, var(--color-accent-primary) 2.5%, transparent)'
           : 'transparent',
         alignItems: 'center',
       }}
@@ -301,14 +303,14 @@ function MetricRowItem({ metric: m, isLast }: MetricRowItemProps) {
               borderRadius: '50%',
               background: COLOR.gold,
               flexShrink: 0,
-              boxShadow: '0 0 6px rgba(255,215,0,0.8)',
+              boxShadow: tokens.shadow.glowWarning,
             }}
           />
         )}
         <span
           style={{
-            fontSize: 20,
-            fontWeight: 800,
+            fontSize: tokens.typography.fontSize.xl,
+            fontWeight: tokens.typography.fontWeight.extrabold,
             color: aWins
               ? COLOR.winnerGold
               : bWins
@@ -325,11 +327,11 @@ function MetricRowItem({ metric: m, isLast }: MetricRowItemProps) {
           <div
             style={{
               padding: '2px 7px',
-              borderRadius: 20,
-              background: 'rgba(255,215,0,0.15)',
-              border: '1px solid rgba(255,215,0,0.4)',
+              borderRadius: tokens.radius.full,
+              background: 'color-mix(in srgb, var(--color-accent-warning, #FFD700) 15%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--color-accent-warning, #FFD700) 40%, transparent)',
               fontSize: 10,
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
               color: COLOR.gold,
               letterSpacing: 1,
             }}
@@ -343,8 +345,8 @@ function MetricRowItem({ metric: m, isLast }: MetricRowItemProps) {
       <div
         style={{
           textAlign: 'center',
-          fontSize: 11,
-          fontWeight: 700,
+          fontSize: tokens.typography.fontSize.xs,
+          fontWeight: tokens.typography.fontWeight.bold,
           color: COLOR.sub,
           textTransform: 'uppercase',
           letterSpacing: 1,
@@ -369,18 +371,18 @@ function MetricRowItem({ metric: m, isLast }: MetricRowItemProps) {
               width: 6,
               height: 6,
               borderRadius: '50%',
-              background: '#818cf8',
+              background: COLOR.sideB,
               flexShrink: 0,
-              boxShadow: '0 0 6px rgba(129,140,248,0.8)',
+              boxShadow: tokens.shadow.glow,
             }}
           />
         )}
         <span
           style={{
-            fontSize: 20,
-            fontWeight: 800,
+            fontSize: tokens.typography.fontSize.xl,
+            fontWeight: tokens.typography.fontWeight.extrabold,
             color: bWins
-              ? '#818cf8'
+              ? COLOR.sideB
               : aWins
               ? COLOR.loser
               : COLOR.text,
@@ -395,12 +397,12 @@ function MetricRowItem({ metric: m, isLast }: MetricRowItemProps) {
           <div
             style={{
               padding: '2px 7px',
-              borderRadius: 20,
-              background: 'rgba(129,140,248,0.15)',
-              border: '1px solid rgba(129,140,248,0.4)',
+              borderRadius: tokens.radius.full,
+              background: 'color-mix(in srgb, var(--color-accent-primary) 15%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--color-accent-primary) 40%, transparent)',
               fontSize: 10,
-              fontWeight: 700,
-              color: '#818cf8',
+              fontWeight: tokens.typography.fontWeight.bold,
+              color: COLOR.sideB,
               letterSpacing: 1,
             }}
           >
@@ -431,22 +433,22 @@ export function WinnerBanner({ overall, nameA, nameB }: WinnerBannerProps) {
         marginBottom: 32,
         background:
           overall.winner === nameA
-            ? 'linear-gradient(135deg, rgba(255,215,0,0.08) 0%, rgba(255,215,0,0.03) 100%)'
+            ? 'linear-gradient(135deg, color-mix(in srgb, var(--color-accent-warning, #FFD700) 8%, transparent) 0%, color-mix(in srgb, var(--color-accent-warning, #FFD700) 3%, transparent) 100%)'
             : overall.winner === nameB
-            ? 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.03) 100%)'
+            ? 'linear-gradient(135deg, color-mix(in srgb, var(--color-accent-primary) 8%, transparent) 0%, color-mix(in srgb, var(--color-accent-primary) 3%, transparent) 100%)'
             : 'var(--glass-bg-light)',
         border:
           overall.winner === nameA
-            ? '1px solid rgba(255,215,0,0.3)'
+            ? '1px solid color-mix(in srgb, var(--color-accent-warning, #FFD700) 30%, transparent)'
             : overall.winner === nameB
-            ? '1px solid rgba(99,102,241,0.3)'
+            ? '1px solid color-mix(in srgb, var(--color-accent-primary) 30%, transparent)'
             : '1px solid var(--glass-border-light)',
-        borderRadius: 16,
+        borderRadius: tokens.radius.xl,
       }}
     >
       <div
         style={{
-          fontSize: 12,
+          fontSize: tokens.typography.fontSize.xs,
           letterSpacing: 4,
           color: COLOR.sub,
           textTransform: 'uppercase',
@@ -459,13 +461,13 @@ export function WinnerBanner({ overall, nameA, nameB }: WinnerBannerProps) {
       </div>
       <div
         style={{
-          fontSize: 32,
-          fontWeight: 900,
+          fontSize: tokens.typography.fontSize['3xl'],
+          fontWeight: tokens.typography.fontWeight.black,
           color:
             overall.winner === nameA
               ? COLOR.gold
               : overall.winner === nameB
-              ? '#818cf8'
+              ? COLOR.sideB
               : COLOR.sub,
           letterSpacing: -1,
         }}
@@ -478,7 +480,7 @@ export function WinnerBanner({ overall, nameA, nameB }: WinnerBannerProps) {
         <div
           style={{
             marginTop: 8,
-            fontSize: 14,
+            fontSize: tokens.typography.fontSize.base,
             color: COLOR.sub,
           }}
         >

@@ -54,7 +54,7 @@ function HotTag({ score }: { score: number }) {
       border: `1px solid ${c.border}`,
       padding: '1px 6px',
       borderRadius: tokens.radius.full,
-      lineHeight: 1.6,
+      lineHeight: tokens.typography.lineHeight.normal,
       letterSpacing: '0.01em',
       flexShrink: 0,
     }}>
@@ -185,12 +185,12 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           fontSize: tokens.typography.fontSize.sm,
           color: 'var(--color-text-tertiary)',
           textAlign: 'center',
-          padding: '16px 0',
+          padding: `${tokens.spacing[4]} 0`,
         }}>
           <div>{t('loadFailed')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: '1px solid var(--glass-border-light)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: 12, cursor: 'pointer' }}
+            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: '1px solid var(--glass-border-light)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
@@ -200,7 +200,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           fontSize: tokens.typography.fontSize.sm,
           color: 'var(--color-text-tertiary)',
           textAlign: 'center',
-          padding: '16px 0',
+          padding: `${tokens.spacing[4]} 0`,
         }}>
           {t('sidebarNoDiscussions')}
         </p>
@@ -246,7 +246,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                     fontSize: tokens.typography.fontSize.sm,
                     fontWeight: tokens.typography.fontWeight.semibold,
                     color: post.translated ? 'var(--color-translated)' : 'var(--color-text-primary)',
-                    lineHeight: 1.4,
+                    lineHeight: tokens.typography.lineHeight.snug,
                     flex: 1,
                     minWidth: 0,
                     display: '-webkit-box',
@@ -258,14 +258,14 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                   </span>
                   {post.translated && (
                     <span style={{
-                      fontSize: 10,
-                      fontWeight: 600,
+                      fontSize: tokens.typography.fontSize.xs,
+                      fontWeight: tokens.typography.fontWeight.semibold,
                       color: 'var(--color-translated)',
                       background: 'var(--color-translated-08)',
                       border: '1px solid var(--color-translated-20)',
                       padding: '1px 5px',
                       borderRadius: tokens.radius.full,
-                      lineHeight: 1.6,
+                      lineHeight: tokens.typography.lineHeight.normal,
                       flexShrink: 0,
                     }}>译</span>
                   )}
@@ -278,7 +278,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                     fontSize: tokens.typography.fontSize.xs,
                     color: post.translated ? 'var(--color-translated)' : 'var(--color-text-secondary)',
                     opacity: post.translated ? 0.8 : 1,
-                    lineHeight: 1.5,
+                    lineHeight: tokens.typography.lineHeight.snug,
                     margin: 0,
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
@@ -313,7 +313,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                       width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
                       background: 'var(--glass-bg-medium)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 10, fontWeight: 600, color: 'var(--color-text-secondary)',
+                      fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.semibold, color: 'var(--color-text-secondary)',
                     }}>
                       {(post.author_handle[0] || '?').toUpperCase()}
                     </div>

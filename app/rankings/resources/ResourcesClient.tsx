@@ -304,7 +304,7 @@ export default function ResourcesClient({
                   letterSpacing: active ? '0.01em' : undefined,
                   border: active ? '1px solid transparent' : '1px solid var(--color-border-secondary)',
                   background: active ? tokens.gradient.purpleGold : 'var(--color-bg-secondary)',
-                  color: active ? '#fff' : 'var(--color-text-secondary)',
+                  color: active ? 'var(--color-on-accent, #fff)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',
                   boxShadow: active ? '0 2px 8px rgba(139, 92, 246, 0.3)' : 'none',
                   transition: `all ${tokens.transition.base}`,

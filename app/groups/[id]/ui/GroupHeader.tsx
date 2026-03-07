@@ -29,6 +29,7 @@ interface GroupHeaderProps {
   onLeave: () => void
   onShowGroupInfo: () => void
   onShowMembers: () => void
+  memberPreviews?: Array<{ avatar_url?: string | null; handle?: string | null }>
 }
 
 export default function GroupHeader({
@@ -43,6 +44,7 @@ export default function GroupHeader({
   onLeave,
   onShowGroupInfo,
   onShowMembers,
+  memberPreviews = [],
 }: GroupHeaderProps) {
   return (
     <Box
@@ -148,12 +150,53 @@ export default function GroupHeader({
                 {group.member_count !== null && group.member_count !== undefined && (
                   <span
                     className="member-badge"
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     onClick={onShowMembers}
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-                    </svg>
+                    {memberPreviews.length > 0 ? (
+                      <span style={{ display: 'inline-flex', marginRight: -2 }}>
+                        {memberPreviews.slice(0, 4).map((m, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: '50%',
+                              border: `2px solid ${tokens.colors.bg.secondary}`,
+                              marginLeft: i === 0 ? 0 : -8,
+                              overflow: 'hidden',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: tokens.colors.bg.tertiary,
+                              fontSize: 9,
+                              fontWeight: 700,
+                              color: tokens.colors.text.tertiary,
+                              zIndex: 4 - i,
+                              position: 'relative',
+                            }}
+                          >
+                            {m.avatar_url ? (
+                              <img
+                                src={m.avatar_url}
+                                alt=""
+                                width={20}
+                                height={20}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                loading="lazy"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                              />
+                            ) : (
+                              (m.handle?.[0] || '?').toUpperCase()
+                            )}
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                      </svg>
+                    )}
                     {group.member_count} {language === 'zh' ? '成员' : 'members'}
                   </span>
                 )}

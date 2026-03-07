@@ -109,6 +109,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
 
+  // Member preview (avatar stack)
+  const [memberPreviews, setMemberPreviews] = useState<Array<{ avatar_url?: string | null; handle?: string | null }>>([])
+
   // Modals
   const [showGroupInfo, setShowGroupInfo] = useState(false)
   const [showMembersList, setShowMembersList] = useState(false)
@@ -311,6 +314,20 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         }
 
         setGroup(groupData ? { ...groupData, owner_handle: ownerHandle } as Group : null)
+
+        // Fetch member avatar previews (5 most recent)
+        const { data: previewData } = await supabase
+          .from('group_members')
+          .select('user_profiles(handle, avatar_url)')
+          .eq('group_id', groupId)
+          .order('joined_at', { ascending: false })
+          .limit(5)
+        if (previewData) {
+          setMemberPreviews(previewData.map(m => {
+            const p = Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles
+            return { avatar_url: (p as { avatar_url?: string | null } | null)?.avatar_url, handle: (p as { handle?: string | null } | null)?.handle }
+          }).filter(m => m.avatar_url || m.handle))
+        }
 
         let _membershipConfirmed = false
         if (userId) {
@@ -563,6 +580,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             onLeave={handleLeave}
             onShowGroupInfo={() => setShowGroupInfo(true)}
             onShowMembers={() => { setShowMembersList(true); loadMembers() }}
+            memberPreviews={memberPreviews}
           />
 
           <SectionErrorBoundary fallbackMessage={t('postsSectionFailed')}>

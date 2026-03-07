@@ -174,47 +174,62 @@ export const PostListItem = memo(function PostListItem({
         </div>
       )}
 
-      {/* Image preview - max 4 images */}
+      {/* Image preview — single image as card, multiple as scroll-snap gallery */}
       {p.images && p.images.length > 0 && (
-        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {p.images.slice(0, 4).map((imgUrl, idx) => (
-            <div
-              key={idx}
-              style={{
-                width: p.images!.length === 1 ? 200 : 80,
-                height: p.images!.length === 1 ? 150 : 80,
-                borderRadius: tokens.radius.md,
-                overflow: 'hidden',
-                position: 'relative',
-                background: tokens.colors.bg.tertiary,
-                flexShrink: 0,
-              }}
-            >
+        p.images.length === 1 ? (
+          <div style={{ marginTop: 10 }}>
+            <div style={{
+              width: 200, height: 150,
+              borderRadius: tokens.radius.md,
+              overflow: 'hidden',
+              background: tokens.colors.bg.tertiary,
+            }}>
               <img
-                src={imgUrl}
-                alt={`Image ${idx + 1}`}
+                src={p.images[0]}
+                alt="Image 1"
                 loading="lazy"
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
-              {idx === 3 && p.images!.length > 4 && (
-                <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: 'var(--color-overlay-dark)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: tokens.colors.white,
-                  fontSize: 14,
-                  fontWeight: 700,
-                }}>
-                  +{p.images!.length - 4}
-                </div>
-              )}
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div
+            className="scroll-snap-x fade-edges"
+            style={{
+              marginTop: 10,
+              display: 'flex',
+              gap: 8,
+              overflowX: 'auto',
+              scrollSnapType: 'x mandatory',
+              WebkitOverflowScrolling: 'touch',
+              paddingBottom: 4,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {p.images.map((imgUrl, idx) => (
+              <div
+                key={idx}
+                style={{
+                  width: 120, height: 90,
+                  borderRadius: tokens.radius.md,
+                  overflow: 'hidden',
+                  background: tokens.colors.bg.tertiary,
+                  flexShrink: 0,
+                  scrollSnapAlign: 'start',
+                }}
+              >
+                <img
+                  src={imgUrl}
+                  alt={`Image ${idx + 1}`}
+                  loading="lazy"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              </div>
+            ))}
+          </div>
+        )
       )}
 
       {/* Original post quote (for reposts) */}

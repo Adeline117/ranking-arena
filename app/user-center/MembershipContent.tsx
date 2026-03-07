@@ -462,7 +462,7 @@ export default function MembershipContent() {
                   borderRadius: tokens.radius.full,
                   fontSize: 10,
                   fontWeight: 700,
-                  color: '#fff',
+                  color: 'var(--color-on-accent, #fff)',
                 }}
               >
                 {t('membershipLifetimeSpots').replace('{spots}', String(PRICING.lifetime.spots))}

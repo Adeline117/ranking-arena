@@ -115,11 +115,11 @@ export default function RecommendedGroups() {
           ))}
         </div>
       ) : error ? (
-        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
           <div>{t('sidebarLoadFailedShort')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
@@ -127,7 +127,7 @@ export default function RecommendedGroups() {
       ) : groups.length === 0 ? (
         <div style={{ padding: '24px 12px', textAlign: 'center' }}>
           <Image src="/stickers/confused.webp" alt="No groups found" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
-          <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
+          <p style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
             {t('sidebarNoGroups')}
           </p>
         </div>

@@ -158,17 +158,17 @@ export default function WatchlistMarket() {
           ))}
         </div>
       ) : swrError ? (
-        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
           <div>{t('sidebarLoadFailedShort')}</div>
           <button
             onClick={() => mutateMarket()}
-            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
         </div>
       ) : coins.length === 0 ? (
-        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
           {t('noData')}
         </div>
       ) : (
@@ -187,16 +187,16 @@ export default function WatchlistMarket() {
                 onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.semibold, color: tokens.colors.text.primary }}>
                   <CryptoIcon symbol={coin.symbol} size={18} />
                   {coin.symbol}
                 </span>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: tokens.colors.text.primary }}>
+                  <div style={{ fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.medium, color: tokens.colors.text.primary }}>
                     ${coin.price.toLocaleString(undefined, { maximumFractionDigits: coin.price < 1 ? 4 : 2 })}
                   </div>
                   <div style={{
-                    fontSize: 11, fontWeight: 600,
+                    fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.semibold,
                     color: coin.change24h >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                   }}>
                     {coin.change24h >= 0 ? '+' : ''}{coin.change24h.toFixed(2)}%
@@ -215,7 +215,7 @@ export default function WatchlistMarket() {
               border: `1px dashed ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.md,
               color: tokens.colors.text.secondary,
-              fontSize: 12, fontWeight: 500,
+              fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.medium,
               cursor: 'pointer',
               transition: `all ${tokens.transition.fast}`,
             }}
@@ -249,7 +249,7 @@ export default function WatchlistMarket() {
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.primary,
                   color: tokens.colors.text.primary,
-                  fontSize: 12,
+                  fontSize: tokens.typography.fontSize.xs,
                   outline: 'none',
                   boxSizing: 'border-box',
                 }}
@@ -267,7 +267,7 @@ export default function WatchlistMarket() {
                         border: selected ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                         background: selected ? tokens.colors.accent.brand : 'transparent',
                         color: selected ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
-                        fontSize: 11, fontWeight: 500,
+                        fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.medium,
                         cursor: 'pointer',
                         transition: `all ${tokens.transition.fast}`,
                       }}
