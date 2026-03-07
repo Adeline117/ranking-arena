@@ -137,7 +137,7 @@ export async function scrapeBybitBatch(
               logger.info(`[bybit-scraper] Intercepted API for ${period}: ${body?.result?.leaderDetails?.length || 0} traders`)
             }
           } catch (_err) {
-            // Selector not found, continue
+            /* non-JSON response, skip */
           }
         }
       }
@@ -172,7 +172,7 @@ export async function scrapeBybitBatch(
           }
         }
       } catch (_err) {
-        // Period selector not available
+        /* period selector not available */
       }
       
       // Remove handler to avoid duplicates
