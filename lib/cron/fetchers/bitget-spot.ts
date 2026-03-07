@@ -44,6 +44,9 @@ const SORT_TYPE_MAP: Record<string, number> = {
 }
 
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+// VPS Playwright scraper for WAF-protected exchanges
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
 // Website internal API — the WORKING endpoint (POST with JSON body)
 // Same as the legacy connector (lib/connectors/bitget-spot.ts)
@@ -217,6 +220,34 @@ async function fetchPublic(period: string): Promise<BitgetSpotTrader[]> {
   const allTraders: BitgetSpotTrader[] = []
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
   const sortType = SORT_TYPE_MAP[period] ?? 2
+
+  // Strategy 0: VPS Playwright scraper (bypasses Cloudflare WAF)
+  if (VPS_SCRAPER_KEY) {
+    try {
+      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
+      for (let page = 1; page <= maxPages; page++) {
+        const url = `${VPS_SCRAPER_URL}/bitget/leaderboard?pageNo=${page}&pageSize=${PAGE_SIZE}&period=${PERIOD_MAP[period] || period}&type=spot`
+        const res = await fetch(url, {
+          headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+          signal: AbortSignal.timeout(90_000),
+        })
+        if (!res.ok) break
+        const data = (await res.json()) as BitgetResponse
+        if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
+        const list = data.data?.traderList || data.data?.list || []
+        if (list.length === 0) break
+        allTraders.push(...list)
+        if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
+        await sleep(1000)
+      }
+      if (allTraders.length > 0) {
+        logger.info(`[${SOURCE}] VPS scraper got ${allTraders.length} traders`)
+        return allTraders
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
 
   // Strategy 1: Website internal API (POST) — the working approach from connectors
   for (let page = 1; page <= maxPages; page++) {
