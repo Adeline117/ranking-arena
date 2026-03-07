@@ -3,12 +3,19 @@
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## Current Sprint Focus
-- Data pipeline stability and coverage
-- Geo-blocking proxy solutions
-- Platform enrichment completion
+- All P0-P3 tasks complete. Only backlog items remain.
+
+## Recently Completed (2026-03-06)
+- P3 UX: swipe-to-reveal trader actions, scroll-snap image gallery, comment thread lines, group avatar stack
+- Dark mode: design tokens across 15+ components (sidebar, PK, portfolio, user-center, SSR ranking)
+- Pull-to-refresh on /hot, /notifications, /following
+- Telegram bot configured + verified (alerts flowing)
+- OpenClaw Mac Mini: crontab set up with 6 scheduled jobs (health monitor, daily report, UX patrol, R2 backup, full backup, Sentry convergence)
+- Sentry error convergence: weekly auto-report + stale issue cleanup
+- Zero TypeScript errors across entire codebase
 
 ## In Progress
-_(Nothing currently)_
+_(Nothing currently — only backlog items remain)_
 
 ## Key Metrics
 - Total Traders: 32,000+
