@@ -246,8 +246,9 @@ describe('Fetcher Function Signatures', () => {
     expect(fetcher).toBeDefined()
     expect(typeof fetcher).toBe('function')
 
-    // Function should accept 2 parameters
-    expect(fetcher.length).toBe(2)
+    // Function should accept at least 1 parameter (supabase); 2nd (periods) may have default
+    expect(fetcher.length).toBeGreaterThanOrEqual(1)
+    expect(fetcher.length).toBeLessThanOrEqual(2)
   })
 })
 

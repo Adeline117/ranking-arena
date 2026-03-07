@@ -83,43 +83,37 @@ describe('GET /api/cron/batch-enrich', () => {
 
   // ---- Successful execution ------------------------------------------------
 
-  it('enriches high-priority platforms for 7D period', async () => {
+  it('enriches high + medium priority platforms for 7D period', async () => {
     mockFetch.mockResolvedValue({ ok: true })
 
-    const promise = GET(createCronRequest(CRON_SECRET, { period: '7D' }))
-    await jest.advanceTimersByTimeAsync(60000)
-    const res = await promise
+    const res = await GET(createCronRequest(CRON_SECRET, { period: '7D' }))
     const body = await res.json()
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
     expect(body.period).toBe('7D')
-    // 7D only enriches high-priority (6 platforms)
-    expect(body.platforms).toBe(6)
-    expect(body.succeeded).toBe(6)
+    // 7D enriches high + medium priority (6 + 8 = 14 platforms)
+    expect(body.platforms).toBe(14)
+    expect(body.succeeded).toBe(14)
   })
 
   it('enriches high + medium priority for 90D period', async () => {
     mockFetch.mockResolvedValue({ ok: true })
 
-    const promise = GET(createCronRequest(CRON_SECRET, { period: '90D' }))
-    await jest.advanceTimersByTimeAsync(120000)
-    const res = await promise
+    const res = await GET(createCronRequest(CRON_SECRET, { period: '90D' }))
     const body = await res.json()
 
     expect(body.period).toBe('90D')
-    expect(body.platforms).toBe(12) // 6 high + 6 medium
+    expect(body.platforms).toBe(14) // 6 high + 8 medium
   })
 
   it('enriches all platforms when all=true', async () => {
     mockFetch.mockResolvedValue({ ok: true })
 
-    const promise = GET(createCronRequest(CRON_SECRET, { period: '7D', all: 'true' }))
-    await jest.advanceTimersByTimeAsync(120000)
-    const res = await promise
+    const res = await GET(createCronRequest(CRON_SECRET, { period: '7D', all: 'true' }))
     const body = await res.json()
 
-    expect(body.platforms).toBe(16) // 6 + 6 + 4
+    expect(body.platforms).toBe(19) // 6 + 8 + 5
   })
 
   // ---- Error handling ------------------------------------------------------
@@ -127,21 +121,17 @@ describe('GET /api/cron/batch-enrich', () => {
   it('reports failures when enrichment API returns errors', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 500 })
 
-    const promise = GET(createCronRequest(CRON_SECRET, { period: '7D' }))
-    await jest.advanceTimersByTimeAsync(60000)
-    const res = await promise
+    const res = await GET(createCronRequest(CRON_SECRET, { period: '7D' }))
     const body = await res.json()
 
     expect(body.ok).toBe(false)
-    expect(body.failed).toBe(6)
+    expect(body.failed).toBe(14)
   })
 
   it('handles network errors gracefully', async () => {
     mockFetch.mockRejectedValue(new Error('Connection refused'))
 
-    const promise = GET(createCronRequest(CRON_SECRET, { period: '7D' }))
-    await jest.advanceTimersByTimeAsync(60000)
-    const res = await promise
+    const res = await GET(createCronRequest(CRON_SECRET, { period: '7D' }))
     const body = await res.json()
 
     expect(body.ok).toBe(false)

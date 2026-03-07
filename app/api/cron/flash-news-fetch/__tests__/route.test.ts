@@ -132,7 +132,7 @@ describe('GET /api/cron/flash-news-fetch', () => {
           select: jest.fn().mockReturnValue({
             gte: jest.fn().mockResolvedValue({ data: [], error: null }),
           }),
-          insert: jest.fn().mockReturnValue({
+          upsert: jest.fn().mockReturnValue({
             select: jest.fn().mockResolvedValue({
               data: [{ id: '1' }],
               error: null,

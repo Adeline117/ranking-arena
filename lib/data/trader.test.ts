@@ -57,6 +57,7 @@ import {
   findTradersAcrossSources,
   getTraderByHandle,
   getTraderStats,
+  clearSourceCache,
 } from './trader'
 import { supabase } from '@/lib/supabase/client'
 
@@ -81,6 +82,7 @@ describe('Trader Constants', () => {
 describe('findTraderAcrossSources', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    clearSourceCache()
     // Reset mock chain
     ;(mockSupabase.from as jest.Mock).mockReturnThis()
     ;(mockSupabase.select as jest.Mock).mockReturnThis()
