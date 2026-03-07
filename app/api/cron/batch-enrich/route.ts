@@ -97,11 +97,19 @@ export async function GET(request: NextRequest) {
     const start = Date.now()
 
     try {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${cronSecret}`,
+      }
+      // Bypass Vercel Deployment Protection for internal cron calls
+      if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+        headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+      }
+
       const res = await fetch(
         `${baseUrl}/api/cron/enrich?platform=${platform}&period=${period}&limit=${limit}`,
         {
           method: 'GET',
-          headers: { Authorization: `Bearer ${cronSecret}` },
+          headers,
         }
       )
       results.push({
