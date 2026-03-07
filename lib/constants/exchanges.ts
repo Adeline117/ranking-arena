@@ -190,6 +190,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'jupiter_perps',
   'binance_web3',
   'drift',
+  'bitunix',
 ]
 
 // ---------------------------------------------------------------------------
