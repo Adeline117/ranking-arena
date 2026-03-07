@@ -122,7 +122,7 @@ function TraderContent({ handle, serverData }: { handle: string; serverData: Tra
     fetcher,
     {
       revalidateOnFocus: false,
-      refreshInterval: 60_000,
+      refreshInterval: 300_000, // 5min — data only updates every few hours
       dedupingInterval: 5000,
       errorRetryCount: 2,
       fallbackData: serverData ?? undefined,

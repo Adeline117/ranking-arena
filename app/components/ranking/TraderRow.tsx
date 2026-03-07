@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useRef, useState } from 'react'
+import React, { memo, useCallback, useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { mutate } from 'swr'
 import { fetcher } from '@/lib/hooks/useSWR'
@@ -117,18 +117,26 @@ export const TraderRow = memo(function TraderRow({
   const isAddress = traderHandle.startsWith('0x') && traderHandle.length > 20
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
-  // Compare checkbox state
+  // Compare checkbox state — use boolean selector to avoid new function references
   const isSelected = useComparisonStore(s => s.isSelected(trader.id))
   const addTrader = useComparisonStore(s => s.addTrader)
   const removeTrader = useComparisonStore(s => s.removeTrader)
-  const canAddMore = useComparisonStore(s => s.canAddMore)
+  const canAddMore = useComparisonStore(s => s.selectedTraders.length < 5)
 
-  // Prefetch trader detail on hover (warm SWR cache)
+  // Prefetch trader detail on hover with 150ms debounce to prevent
+  // firing 20-50 requests during rapid scroll over rows
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+  useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
   const handleMouseEnter = useCallback(() => {
-    const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
-    // Prefetch into SWR cache without blocking — only if not already cached
-    mutate(detailUrl, fetcher(detailUrl), { revalidate: false })
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => {
+      const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
+      mutate(detailUrl, fetcher(detailUrl), { revalidate: false })
+    }, 150)
   }, [traderHandle])
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+  }, [])
 
   const handleCompareToggle = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -254,6 +262,7 @@ export const TraderRow = memo(function TraderRow({
       aria-label={`#${rank} ${displayName}, ROI ${(trader.roi || 0) >= 0 ? '+' : ''}${(trader.roi || 0).toFixed(2)}%`}
       tabIndex={0}
       onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <Box
         className={`ranking-row ranking-table-grid ranking-table-grid-custom touch-target${rankClass}`}
@@ -280,7 +289,7 @@ export const TraderRow = memo(function TraderRow({
           <input
             type="checkbox"
             checked={isSelected}
-            disabled={!isSelected && !canAddMore()}
+            disabled={!isSelected && !canAddMore}
             readOnly
             aria-label="Select trader for comparison"
             style={{
