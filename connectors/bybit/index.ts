@@ -212,6 +212,10 @@ const FIELD_MAP: Record<string, string> = {
 interface BybitListResponse {
   result: {
     leaderList: BybitLeaderItem[];
+    list?: BybitLeaderItem[];
+  };
+  data?: {
+    list?: BybitLeaderItem[];
   };
 }
 
@@ -220,6 +224,7 @@ interface BybitLeaderItem {
   leaderId: string;
   nickName: string;
   avatar: string;
+  avatarUrl?: string;
   roi: number;
   pnl: number;
   winRate: number;
