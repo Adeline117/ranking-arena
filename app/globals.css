@@ -542,10 +542,10 @@ body {
   color: var(--color-text-primary);
 }
 
-/* Focus styles */
+/* Focus styles — !important ensures inline styles don't override focus ring */
 :focus-visible {
-  outline: 2px solid var(--color-accent-brand);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-accent-brand) !important;
+  outline-offset: 2px !important;
 }
 
 /* Unified link transition and hover */

@@ -14,9 +14,24 @@ import {
   type TraderSourceRecord,
 } from './trader-types'
 
+// Request-scoped cache for findTraderAcrossSources to eliminate N+1 lookups.
+// On a trader detail page, 8+ functions call findTraderAcrossSources(handle) independently.
+// This Map caches results so only the first call hits the DB; subsequent calls return instantly.
+// The cache lives for the lifetime of the serverless function invocation (~seconds), so no TTL needed.
+const sourceCache = new Map<string, Promise<TraderSourceRecord | null>>()
+
+/**
+ * Clear the request-scoped source cache.
+ * Call this at the start of a new request if reusing the module across requests.
+ */
+export function clearSourceCache() {
+  sourceCache.clear()
+}
+
 /**
  * 统一的交易员数据源查找函数
  * 使用单次查询替代循环遍历所有数据源
+ * Results are cached per handle within the same request to avoid N+1 queries.
  */
 export async function findTraderAcrossSources(
   handle: string,
@@ -26,6 +41,23 @@ export async function findTraderAcrossSources(
   } = {}
 ): Promise<TraderSourceRecord | null> {
   const { includeWeb3 = true, client = supabase } = options
+
+  // Check request-scoped cache first (eliminates N+1 on trader detail pages)
+  const cacheKey = `${handle}:${includeWeb3}`
+  const cached = sourceCache.get(cacheKey)
+  if (cached) return cached
+
+  // Store the promise itself (not the result) to deduplicate concurrent calls
+  const promise = findTraderAcrossSourcesInner(handle, includeWeb3, client)
+  sourceCache.set(cacheKey, promise)
+  return promise
+}
+
+async function findTraderAcrossSourcesInner(
+  handle: string,
+  includeWeb3: boolean,
+  client: SupabaseClient
+): Promise<TraderSourceRecord | null> {
   const decodedHandle = decodeURIComponent(handle)
   const sources = includeWeb3 ? TRADER_SOURCES_WITH_WEB3 : TRADER_SOURCES
 

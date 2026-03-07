@@ -67,12 +67,11 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
           background: currentPage === 1 ? 'transparent' : `${tokens.colors.accent.primary}10`,
           border: `1px solid ${currentPage === 1 ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
           borderRadius: tokens.radius.md,
-          color: currentPage === 1 ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
+          color: currentPage === 1 ? tokens.colors.text.disabled : tokens.colors.accent.primary,
           cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
           fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.semibold,
           transition: `all ${tokens.transition.fast}`,
-          opacity: currentPage === 1 ? 0.4 : 1,
         }}
       >
         {t('prevPage')}
@@ -129,12 +128,11 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
           background: currentPage === totalPages ? 'transparent' : `${tokens.colors.accent.primary}10`,
           border: `1px solid ${currentPage === totalPages ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
           borderRadius: tokens.radius.md,
-          color: currentPage === totalPages ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
+          color: currentPage === totalPages ? tokens.colors.text.disabled : tokens.colors.accent.primary,
           cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
           fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.semibold,
           transition: `all ${tokens.transition.fast}`,
-          opacity: currentPage === totalPages ? 0.4 : 1,
         }}
       >
         {t('nextPage')}
