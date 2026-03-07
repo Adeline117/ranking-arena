@@ -13,6 +13,12 @@
  * Daily: openclaw cron add --name "UX Patrol" --schedule "0 9 * * *" --command "node scripts/openclaw/ux-patrol.mjs"
  */
 
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { config as dotenvConfig } from 'dotenv'
+const __uxdir = path.dirname(fileURLToPath(import.meta.url))
+dotenvConfig({ path: path.resolve(__uxdir, '../../.env') })
+
 const ARENA_URL = process.env.ARENA_URL || 'https://www.arenafi.org'
 const TIMEOUT = 15000
 

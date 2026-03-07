@@ -19,6 +19,10 @@
 import { execSync, spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
+import { config as dotenvConfig } from 'dotenv'
+const __fixdir = path.dirname(fileURLToPath(import.meta.url))
+dotenvConfig({ path: path.resolve(__fixdir, '../../.env') })
 
 const ARENA_DIR = process.env.ARENA_DIR || process.cwd()
 const API_URL = process.env.ARENA_API_URL || 'https://www.arenafi.org'

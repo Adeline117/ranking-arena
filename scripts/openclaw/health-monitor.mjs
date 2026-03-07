@@ -19,8 +19,10 @@
 
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { config as dotenvConfig } from 'dotenv'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
 
 const ARENA_URL = process.env.ARENA_URL || 'https://www.arenafi.org'
 const CRON_SECRET = process.env.CRON_SECRET
