@@ -63,7 +63,9 @@ export async function scrapeMexcLeaderboard(
           const body = await response.json()
           responses.push({ url, body })
           logger.info(`[mexc-scraper] Intercepted: ${url}`)
-        } catch (_err) {}
+        } catch (_err) {
+          // Non-JSON response
+        }
       }
     })
     
@@ -156,7 +158,7 @@ export async function scrapeMexcBatch(
             const body = await response.json()
             responses.push({ url, body })
           } catch (_err) {
-            // Not JSON or failed to parse
+            /* non-JSON response, skip */
           }
         }
       })
