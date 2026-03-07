@@ -571,6 +571,21 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
+  perpetual_protocol: () =>
+    verifyEndpoint(
+      'perpetual_protocol',
+      'https://api.studio.thegraph.com/query/58978/perpetual-v2-optimism/version/latest',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          query: '{ traderDayDatas(first: 1, orderBy: tradingVolume, orderDirection: desc) { trader { id } } }',
+        },
+        validateResponse: (d: ApiResponse) =>
+          Array.isArray(d?.data?.traderDayDatas) && d.data.traderDayDatas.length > 0,
+      }
+    ),
+
   // Jupiter Perps: now requires marketMint parameter
   jupiter_perps: () =>
     verifyEndpoint(
