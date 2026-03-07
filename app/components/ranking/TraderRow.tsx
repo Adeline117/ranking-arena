@@ -75,7 +75,7 @@ function AnimatedROI({ roi, roiColor }: { roi: number; roiColor: string }) {
       size="md"
       weight="black"
       className="roi-value"
-      style={{ color: roiColor, lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}
+      style={{ color: roiColor, lineHeight: 1.2, fontSize: '14px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}
       title={`${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
     >
       {formatROI(animatedValue)}
@@ -144,14 +144,23 @@ export const TraderRow = memo(function TraderRow({
     }
   }
 
-  // Top 3 background gradients
+  // Top 3 background gradients (stronger opacity for visual hierarchy)
   const top3Bg = rank === 1
-    ? 'linear-gradient(90deg, var(--color-gold-bg) 0%, transparent 100%)'
+    ? 'linear-gradient(90deg, rgba(255, 215, 0, 0.14) 0%, transparent 70%)'
     : rank === 2
-    ? 'linear-gradient(90deg, var(--color-silver-bg) 0%, transparent 100%)'
+    ? 'linear-gradient(90deg, rgba(192, 192, 192, 0.12) 0%, transparent 70%)'
     : rank === 3
-    ? 'linear-gradient(90deg, var(--color-bronze-bg) 0%, transparent 100%)'
+    ? 'linear-gradient(90deg, rgba(205, 127, 50, 0.12) 0%, transparent 70%)'
     : undefined
+
+  // Top 3 left accent border
+  const top3Border = rank === 1
+    ? '3px solid var(--color-rank-gold)'
+    : rank === 2
+    ? '3px solid var(--color-rank-silver)'
+    : rank === 3
+    ? '3px solid var(--color-rank-bronze)'
+    : '3px solid transparent'
 
   // Zebra stripe
   const zebraBg = rank > 3 && rank % 2 === 0 ? 'var(--overlay-hover)' : undefined
@@ -259,12 +268,13 @@ export const TraderRow = memo(function TraderRow({
         style={{
           display: 'grid',
           alignItems: 'center',
-          gap: tokens.spacing[2],
+          gap: tokens.spacing[3],
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-          borderBottom: `1px solid var(--glass-border-light)`,
+          borderBottom: `1px solid color-mix(in srgb, var(--glass-border-light) 60%, transparent)`,
+          borderLeft: top3Border,
           cursor: 'pointer',
           position: 'relative',
-          minHeight: 56,
+          minHeight: rank <= 3 ? 64 : 56,
           background: top3Bg || zebraBg || 'transparent',
         }}
       >
