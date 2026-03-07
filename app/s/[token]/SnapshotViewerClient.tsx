@@ -143,12 +143,12 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
   }
 
   const getTimeRangeLabel = (range: string) => {
-    const labels: Record<string, { zh: string; en: string }> = {
-      '7D': { zh: '7天', en: '7 Days' },
-      '30D': { zh: '30天', en: '30 Days' },
-      '90D': { zh: '90天', en: '90 Days' },
+    const labels: Record<string, Record<string, string>> = {
+      '7D': { zh: '7天', en: '7 Days', ja: '7日間', ko: '7일' },
+      '30D': { zh: '30天', en: '30 Days', ja: '30日間', ko: '30일' },
+      '90D': { zh: '90天', en: '90 Days', ja: '90日間', ko: '90일' },
     }
-    return labels[range]?.[language] || range
+    return labels[range]?.[language] || labels[range]?.en || range
   }
 
   // Expired state

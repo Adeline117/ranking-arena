@@ -1,4 +1,4 @@
-export type Locale = 'zh' | 'en'
+export type Locale = 'en' | 'zh' | 'ja' | 'ko'
 
 const translations = {
   zh: {
@@ -22,16 +22,18 @@ const translations = {
 }
 
 export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'): string {
+  // ja/ko fall back to en for date formatting
+  const effectiveLocale = (locale === 'ja' || locale === 'ko') ? 'en' : locale
   // 处理无效输入
   if (!dateString) {
-    return locale === 'zh' ? '未知时间' : 'unknown'
+    return effectiveLocale === 'zh' ? '未知时间' : 'unknown'
   }
   
   const date = typeof dateString === 'string' ? new Date(dateString) : dateString
   
   // 检查日期是否有效
   if (isNaN(date.getTime())) {
-    return locale === 'zh' ? '未知时间' : 'unknown'
+    return effectiveLocale === 'zh' ? '未知时间' : 'unknown'
   }
   
   const now = new Date()
@@ -45,7 +47,7 @@ export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'):
   const diffMonths = Math.floor(diffDays / 30)
   const diffYears = Math.floor(diffDays / 365)
   
-  const t = translations[locale]
+  const t = translations[effectiveLocale]
   
   if (diffMinutes < 1) return t.justNow
   if (diffMinutes < 60) return t.minutesAgo(diffMinutes)
@@ -62,7 +64,8 @@ export function formatDate(
   locale: Locale = 'zh'
 ): string {
   const date = typeof dateString === 'string' ? new Date(dateString) : dateString
-  const localeString = locale === 'zh' ? 'zh-CN' : 'en-US'
+  const localeMap: Record<Locale, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }
+  const localeString = localeMap[locale] || 'en-US'
   
   switch (format) {
     case 'short':
