@@ -1,5 +1,5 @@
 export interface SearchResult {
-  type: 'library' | 'group' | 'post' | 'trader'
+  type: 'group' | 'post' | 'trader'
   id: string
   title: string
   subtitle?: string
@@ -33,8 +33,7 @@ export function clearSearchHistory() {
 }
 
 export function getHref(result: SearchResult): string {
-  if (result.type === 'library') return `/library/${result.id}`
-  if (result.type === 'group') return `/groups/${result.id}`
+  if (result.type === 'group') return '#'
   if (result.type === 'post') return `/post/${result.id}`
   if (result.type === 'trader') return `/trader/${encodeURIComponent(result.id)}`
   return '#'

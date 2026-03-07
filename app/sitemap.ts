@@ -73,34 +73,6 @@ async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string
 }
 
 /**
- * 获取所有书库条目
- */
-async function getAllLibraryItems(): Promise<Array<{ id: string; updated_at: string }>> {
-  try {
-    const supabase = getSupabaseAdmin()
-
-    const { data, error } = await supabase
-      .from('library_items')
-      .select('id, created_at')
-      .order('download_count', { ascending: false })
-      .limit(2000)
-
-    if (error) {
-      dataLogger.error('sitemap library items error:', error)
-      return []
-    }
-
-    return (data || []).map(item => ({
-      id: item.id,
-      updated_at: item.created_at,
-    }))
-  } catch (error) {
-    dataLogger.error('sitemap getAllLibraryItems error:', error)
-    return []
-  }
-}
-
-/**
  * 获取用户主页
  */
 async function getUserProfiles(): Promise<Array<{ handle: string; updated_at: string }>> {
@@ -192,21 +164,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     },
     {
-      url: `${BASE_URL}/rankings/institutions`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.7,
-    },
-    {
       url: `${BASE_URL}/rankings/tools`,
       lastModified: now,
       changeFrequency: "daily",
-      priority: 0.7,
-    },
-    {
-      url: `${BASE_URL}/rankings/resources`,
-      lastModified: now,
-      changeFrequency: "weekly",
       priority: 0.7,
     },
     {
@@ -226,24 +186,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.6,
-    },
-    {
-      url: `${BASE_URL}/library`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.8,
-    },
-    {
-      url: `${BASE_URL}/flash-news`,
-      lastModified: now,
-      changeFrequency: "hourly",
-      priority: 0.7,
-    },
-    {
-      url: `${BASE_URL}/market`,
-      lastModified: now,
-      changeFrequency: "hourly",
-      priority: 0.8,
     },
     {
       url: `${BASE_URL}/help`,
@@ -284,11 +226,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]
   
   // 并行获取动态数据
-  const [traders, posts, groups, libraryItems, userProfiles] = await Promise.all([
+  const [traders, posts, groups, userProfiles] = await Promise.all([
     getAllTraders(),
     getPopularPosts(),
     getAllGroups(),
-    getAllLibraryItems(),
     getUserProfiles(),
   ])
   
@@ -316,14 +257,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }))
   
-  // 书库页面
-  const libraryPages: MetadataRoute.Sitemap = libraryItems.map(item => ({
-    url: `${BASE_URL}/library/${item.id}`,
-    lastModified: item.updated_at,
-    changeFrequency: "monthly" as const,
-    priority: 0.5,
-  }))
-
   // 用户主页
   const userPages: MetadataRoute.Sitemap = userProfiles.map(user => ({
     url: `${BASE_URL}/u/${encodeURIComponent(user.handle)}`,
@@ -338,7 +271,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...traderPages,         // ~44,962 — SEO 核心资产
     ...postPages,
     ...groupPages,
-    ...libraryPages,
     ...userPages,
   ]
 }

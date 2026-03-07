@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 
 export interface UnifiedSearchResult {
   id: string
-  type: 'trader' | 'post' | 'library' | 'user' | 'group'
+  type: 'trader' | 'post' | 'user' | 'group'
   title: string
   subtitle?: string
   href: string
@@ -25,7 +25,6 @@ export interface UnifiedSearchResponse {
   results: {
     traders: UnifiedSearchResult[]
     posts: UnifiedSearchResult[]
-    library: UnifiedSearchResult[]
     users: UnifiedSearchResult[]
     groups: UnifiedSearchResult[]
   }
@@ -44,7 +43,7 @@ export const GET = withPublic(
     if (!query || query.length < 1) {
       return success({
         query: '',
-        results: { traders: [], posts: [], library: [], users: [], groups: [] },
+        results: { traders: [], posts: [], users: [], groups: [] },
         total: 0,
       } satisfies UnifiedSearchResponse)
     }
@@ -68,7 +67,7 @@ export const GET = withPublic(
     if (!sanitizedQuery) {
       return success({
         query,
-        results: { traders: [], posts: [], library: [], users: [], groups: [] },
+        results: { traders: [], posts: [], users: [], groups: [] },
         total: 0,
       } satisfies UnifiedSearchResponse)
     }
@@ -88,7 +87,7 @@ export const GET = withPublic(
     // Fetch more traders to allow relevance ranking, then trim to limit
     const traderFetchLimit = Math.max(limitPerCategory * 4, 20)
 
-    const [tradersData, postsData, libraryData, usersData, groupsData] = await Promise.all([
+    const [tradersData, postsData, usersData, groupsData] = await Promise.all([
       safeQuery(supabase
         .from('trader_sources')
         .select('source_trader_id, handle, source')
@@ -102,14 +101,6 @@ export const GET = withPublic(
         .select('id, title, author_handle, created_at, view_count')
         .or(`title.ilike.%${sanitizedQuery}%`)
         .order('view_count', { ascending: false, nullsFirst: false })
-        .limit(limitPerCategory)),
-
-      safeQuery(supabase
-        .from('library_items')
-        .select('id, title, author, slug, category')
-        .or(
-          `title.ilike.%${sanitizedQuery}%,author.ilike.%${sanitizedQuery}%`
-        )
         .limit(limitPerCategory)),
 
       safeQuery(supabase
@@ -144,7 +135,6 @@ export const GET = withPublic(
      
     interface TraderSourceRow { source_trader_id: string; handle: string | null; source: string }
     interface PostRow { id: string; title: string | null; author_handle: string | null; created_at: string; view_count: number | null }
-    interface LibraryRow { id: string; title: string; author: string | null; slug: string | null; category: string | null }
     interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
     interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
 
@@ -228,17 +218,6 @@ export const GET = withPublic(
     }))
 
      
-    const library: UnifiedSearchResult[] = (libraryData as LibraryRow[]).map(
-      (l) => ({
-        id: l.id,
-        type: 'library' as const,
-        title: l.title,
-        subtitle: l.author || l.category || undefined,
-        href: `/library/${l.slug || l.id}`,
-      })
-    )
-
-     
     const users: UnifiedSearchResult[] = (usersData as UserRow[]).map((u) => ({
       id: u.id,
       type: 'user' as const,
@@ -259,8 +238,8 @@ export const GET = withPublic(
 
     const result: UnifiedSearchResponse = {
       query,
-      results: { traders, posts, library, users, groups },
-      total: traders.length + posts.length + library.length + users.length + groups.length,
+      results: { traders, posts, users, groups },
+      total: traders.length + posts.length + users.length + groups.length,
     }
 
     // 缓存 5 分钟（pg_trgm索引加速后可以更长TTL）

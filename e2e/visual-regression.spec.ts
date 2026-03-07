@@ -13,9 +13,7 @@ const CORE_PAGES = [
   { name: 'rankings', path: '/' }, // rankings is homepage
   { name: 'search', path: '/search' },
   { name: 'login', path: '/login' },
-  { name: 'market', path: '/market' },
   { name: 'groups', path: '/groups' },
-  { name: 'library', path: '/library' },
   { name: 'pricing', path: '/pricing' },
 ]
 

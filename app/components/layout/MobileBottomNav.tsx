@@ -71,13 +71,6 @@ function FireIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
-function MarketIcon({ active }: IconProps): React.ReactElement {
-  return (
-    <NavIcon active={active}>
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </NavIcon>
-  )
-}
 
 interface NotificationBadgeProps {
   count: number
@@ -226,7 +219,6 @@ export default function MobileBottomNav(): React.ReactElement {
     { href: '/', labelKey: 'home', Icon: HomeIcon },
     { href: '/hot', labelKey: 'hot', Icon: FireIcon },
     { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
-    { href: '/market', labelKey: 'market', Icon: MarketIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
   ], [userHandle])
 
