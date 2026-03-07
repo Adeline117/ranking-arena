@@ -33,16 +33,19 @@ const PLATFORM_CONFIGS: Record<string, { limit90: number; limit30: number; limit
   gains: { limit90: 60, limit30: 50, limit7: 30 },
   jupiter_perps: { limit90: 60, limit30: 50, limit7: 30 },
   aevo: { limit90: 60, limit30: 50, limit7: 30 },
+  kwenta: { limit90: 60, limit30: 50, limit7: 30 },
+  synthetix: { limit90: 60, limit30: 50, limit7: 30 },
+  mux: { limit90: 40, limit30: 30, limit7: 20 },
 }
 
 // High priority platforms (always enriched)
 const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'hyperliquid', 'gmx']
 
 // Medium priority (enriched with all=true or period=90D)
-const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'bitget_spot', 'mexc', 'htx_futures', 'dydx']
+const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'bitget_spot', 'mexc', 'htx_futures', 'dydx', 'gains', 'aevo']
 
 // Lower priority (enriched only with all=true)
-const LOWER_PRIORITY = ['kucoin', 'gains', 'jupiter_perps', 'aevo']
+const LOWER_PRIORITY = ['kucoin', 'jupiter_perps', 'kwenta', 'synthetix', 'mux']
 
 interface BatchResult {
   platform: string
@@ -79,8 +82,8 @@ export async function GET(request: NextRequest) {
   } else if (period === '90D') {
     platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY]
   } else {
-    // For 7D and 30D, only high priority platforms
-    platforms = HIGH_PRIORITY
+    // For 7D and 30D, include both HIGH and MEDIUM priority
+    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY]
   }
 
   const results: BatchResult[] = []

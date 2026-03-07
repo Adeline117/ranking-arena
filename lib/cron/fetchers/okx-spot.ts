@@ -173,34 +173,47 @@ async function fetchPeriod(
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
   const allTraders = new Map<string, OkxRank>()
-  let totalPages = 1
 
-  for (let page = 1; page <= Math.min(totalPages, MAX_PAGES); page++) {
-    try {
-      const url = `${API_URL}?instType=SPOT&page=${page}`
-      const data = await fetchWithProxyFallback<OkxApiResponse>(url, {
-        headers: { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
-      })
+  // Try SPOT first, fall back to MARGIN if no data (OKX may not support instType=SPOT)
+  const instTypes = ['SPOT', 'MARGIN']
 
-      if (data.code !== '0' || !data.data?.length) break
+  for (const instType of instTypes) {
+    let totalPages = 1
+    allTraders.clear()
 
-      const item = data.data[0]
-      totalPages = parseInt(item.totalPage || '1') || totalPages
-      const ranks = item.ranks || []
-      if (ranks.length === 0) break
+    for (let page = 1; page <= Math.min(totalPages, MAX_PAGES); page++) {
+      try {
+        const url = `${API_URL}?instType=${instType}&page=${page}`
+        const data = await fetchWithProxyFallback<OkxApiResponse>(url, {
+          headers: { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9' },
+        })
 
-      for (const t of ranks) {
-        const id = t.uniqueCode
-        if (!id || allTraders.has(id)) continue
-        allTraders.set(id, t)
+        if (data.code !== '0' || !data.data?.length) break
+
+        const item = data.data[0]
+        totalPages = parseInt(item.totalPage || '1') || totalPages
+        const ranks = item.ranks || []
+        if (ranks.length === 0) break
+
+        for (const t of ranks) {
+          const id = t.uniqueCode
+          if (!id || allTraders.has(id)) continue
+          allTraders.set(id, t)
+        }
+
+        if (allTraders.size >= TARGET) break
+        await sleep(500)
+      } catch (err) {
+        logger.warn(`[${SOURCE}] Page fetch failed (instType=${instType}): ${err instanceof Error ? err.message : String(err)}`)
+        break
       }
+    }
 
-      if (allTraders.size >= TARGET) break
-      await sleep(500)
-    } catch (err) {
-      logger.warn(`[${SOURCE}] Page fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+    if (allTraders.size > 0) {
+      logger.info(`[${SOURCE}] Got ${allTraders.size} traders via instType=${instType}`)
       break
     }
+    logger.warn(`[${SOURCE}] instType=${instType} returned 0 traders, trying next...`)
   }
 
   const capturedAt = new Date().toISOString()

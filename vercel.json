@@ -105,6 +105,10 @@
       "schedule": "45 */12 * * *"
     },
     {
+      "path": "/api/cron/batch-fetch-traders?group=g",
+      "schedule": "55 */12 * * *"
+    },
+    {
       "path": "/api/cron/batch-enrich",
       "schedule": "10 */4 * * *"
     },

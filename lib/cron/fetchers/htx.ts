@@ -9,7 +9,7 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchWithVpsFallback,
+  fetchJson,
   sleep,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
@@ -80,7 +80,8 @@ async function fetchPeriod(
   for (let page = 1; page <= maxPages; page++) {
     try {
       const url = `${API_URL}?rankType=1&pageNo=${page}&pageSize=${PAGE_SIZE}`
-      const data = await fetchWithVpsFallback<{ code: number; data?: { itemList?: HtxTrader[] } }>(url)
+      // HTX API is not geo-blocked — use direct fetch (no VPS proxy needed)
+      const data = await fetchJson<{ code: number; data?: { itemList?: HtxTrader[] } }>(url, { timeoutMs: 15000 })
 
       if (data.code !== 200 || !data.data?.itemList) break
       const list = data.data.itemList

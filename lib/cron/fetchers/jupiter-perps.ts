@@ -144,40 +144,100 @@ function getCurrentYear(): number {
   return new Date().getFullYear()
 }
 
+// ── Week calculation helpers ──
+
+/** Get ISO week number for a date */
+function getWeekNumber(d: Date): number {
+  const target = new Date(d.valueOf())
+  const dayNr = (d.getDay() + 6) % 7
+  target.setDate(target.getDate() - dayNr + 3)
+  const firstThursday = target.valueOf()
+  target.setMonth(0, 1)
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay() + 7) % 7))
+  }
+  return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000)
+}
+
+/** Get week ranges to query for a given period */
+function getWeekRanges(period: string): Array<{ year: number; week: number | 'current' }> {
+  const now = new Date()
+  const currentWeek = getWeekNumber(now)
+  const currentYear = now.getFullYear()
+
+  if (period === '7D') {
+    // Current week only
+    return [{ year: currentYear, week: 'current' }]
+  }
+
+  // For 30D/90D, query multiple weeks and aggregate
+  const weeksNeeded = period === '30D' ? 4 : 13
+  const ranges: Array<{ year: number; week: number | 'current' }> = []
+  ranges.push({ year: currentYear, week: 'current' })
+
+  for (let i = 1; i < weeksNeeded; i++) {
+    let w = currentWeek - i
+    let y = currentYear
+    if (w <= 0) {
+      y -= 1
+      w += 52
+    }
+    ranges.push({ year: y, week: w })
+  }
+  return ranges
+}
+
 // ── Fetch traders for a market ──
 
 async function fetchMarketTraders(
-  market: keyof typeof MARKET_MINTS
+  market: keyof typeof MARKET_MINTS,
+  period: string
 ): Promise<JupiterTraderEntry[]> {
   const mint = MARKET_MINTS[market]
-  const year = getCurrentYear()
+  const weekRanges = getWeekRanges(period)
+  const traders = new Map<string, JupiterTraderEntry>()
 
-  try {
-    const url = `${API_BASE}?marketMint=${mint}&year=${year}&week=current`
-    const data = await fetchJson<JupiterTopTradersResponse>(url, {
-      timeoutMs: 15000,
-    })
+  for (const { year, week } of weekRanges) {
+    try {
+      const url = `${API_BASE}?marketMint=${mint}&year=${year}&week=${week}`
+      const data = await fetchJson<JupiterTopTradersResponse>(url, {
+        timeoutMs: 15000,
+      })
 
-    // Merge and dedupe traders from both lists
-    const traders = new Map<string, JupiterTraderEntry>()
+      for (const t of data.topTradersByPnl || []) {
+        const existing = traders.get(t.owner)
+        if (existing) {
+          // Aggregate PnL and volume across weeks
+          existing.totalPnlUsd = String(
+            parseFloat(existing.totalPnlUsd) + parseFloat(t.totalPnlUsd)
+          )
+          existing.totalVolumeUsd = String(
+            parseFloat(existing.totalVolumeUsd) + parseFloat(t.totalVolumeUsd)
+          )
+        } else {
+          traders.set(t.owner, { ...t })
+        }
+      }
 
-    for (const t of data.topTradersByPnl || []) {
-      if (!traders.has(t.owner)) {
-        traders.set(t.owner, t)
+      for (const t of data.topTradersByVolume || []) {
+        const existing = traders.get(t.owner)
+        if (existing) {
+          // Already aggregated from PnL list, skip volume-only duplicates
+        } else {
+          traders.set(t.owner, { ...t })
+        }
+      }
+    } catch (err) {
+      // Non-current weeks may 404 — that's OK, just skip
+      if (week !== 'current') {
+        logger.warn(`[JupiterPerps] Week ${year}-W${week} for ${market}: ${err instanceof Error ? err.message : 'failed'}`)
+      } else {
+        logger.warn(`[JupiterPerps] Failed to fetch ${market}: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
-
-    for (const t of data.topTradersByVolume || []) {
-      if (!traders.has(t.owner)) {
-        traders.set(t.owner, t)
-      }
-    }
-
-    return Array.from(traders.values())
-  } catch (err) {
-    logger.warn(`[JupiterPerps] Failed to fetch ${market}: ${err instanceof Error ? err.message : String(err)}`)
-    return []
   }
+
+  return Array.from(traders.values())
 }
 
 // ── Per-period fetch ──
@@ -186,11 +246,11 @@ async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  // Fetch all markets in parallel
+  // Fetch all markets in parallel (pass period for multi-week aggregation)
   const [solTraders, ethTraders, btcTraders] = await Promise.all([
-    fetchMarketTraders('SOL'),
-    fetchMarketTraders('ETH'),
-    fetchMarketTraders('BTC'),
+    fetchMarketTraders('SOL', period),
+    fetchMarketTraders('ETH', period),
+    fetchMarketTraders('BTC', period),
   ])
 
   // Merge all traders, aggregating PnL and volume
