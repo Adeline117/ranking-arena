@@ -1,6 +1,6 @@
 /**
  * Cron: batch-fetch-traders route tests
- * Tests auth, successful batch dispatch, partial failures, and error handling.
+ * Tests auth, group validation, and platform dispatching.
  *
  * @jest-environment node
  */
@@ -21,9 +21,41 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
   },
 }))
 
-// Mock global fetch for internal API calls
-const mockFetch = jest.fn()
-global.fetch = mockFetch
+const mockFetcher = jest.fn()
+jest.mock('@/lib/cron/fetchers', () => ({
+  getInlineFetcher: jest.fn(() => mockFetcher),
+}))
+
+jest.mock('@/lib/cron/utils', () => ({
+  createSupabaseAdmin: jest.fn(() => ({})),
+}))
+
+jest.mock('@/lib/utils/pipeline-monitor', () => ({
+  recordFetchResult: jest.fn(),
+}))
+
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: () => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  }),
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+}))
+
+jest.mock('@/lib/logger', () => {
+  const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
+  return {
+    __esModule: true,
+    default: mockLogger,
+    logger: mockLogger,
+    logError: jest.fn(),
+    logWarn: jest.fn(),
+    logInfo: jest.fn(),
+    logDebug: jest.fn(),
+  }
+})
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
@@ -48,16 +80,16 @@ describe('GET /api/cron/batch-fetch-traders', () => {
 
   beforeAll(() => {
     process.env.CRON_SECRET = CRON_SECRET
-    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000'
   })
 
   beforeEach(() => {
     jest.clearAllMocks()
-    jest.useFakeTimers({ advanceTimers: true })
-  })
-
-  afterEach(() => {
-    jest.useRealTimers()
+    // Default: fetcher returns success with no errors
+    mockFetcher.mockResolvedValue({
+      source: 'test',
+      periods: { '7D': { saved: 10 }, '30D': { saved: 10 }, '90D': { saved: 10 } },
+      duration: 100,
+    })
   })
 
   // ---- Auth ----------------------------------------------------------------
@@ -84,60 +116,59 @@ describe('GET /api/cron/batch-fetch-traders', () => {
   // ---- Successful execution ------------------------------------------------
 
   it('dispatches all platforms in group and returns stats', async () => {
-    mockFetch.mockResolvedValue({ ok: true, text: () => Promise.resolve('') })
-
-    const promise = GET(createCronRequest(CRON_SECRET, 'a'))
-    // Advance past delays between platforms
-    await jest.advanceTimersByTimeAsync(30000)
-    const res = await promise
+    const res = await GET(createCronRequest(CRON_SECRET, 'a'))
     const body = await res.json()
 
     expect(res.status).toBe(200)
     expect(body.group).toBe('a')
-    expect(body.platforms).toBe(5) // Group a has 5 platforms
-    expect(body.succeeded).toBe(5)
+    expect(body.platforms).toBe(2) // Group a: bitget_futures, okx_futures
+    expect(body.succeeded).toBe(2)
     expect(body.failed).toBe(0)
     expect(body.ok).toBe(true)
-    expect(mockFetch).toHaveBeenCalledTimes(5)
+    expect(mockFetcher).toHaveBeenCalledTimes(2)
   })
 
   // ---- Partial failure -----------------------------------------------------
 
   it('reports partial failures when some platforms fail', async () => {
     let callCount = 0
-    mockFetch.mockImplementation(() => {
+    mockFetcher.mockImplementation(() => {
       callCount++
-      if (callCount === 2) {
-        return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('Internal error') })
+      if (callCount === 1) {
+        return Promise.resolve({
+          source: 'test',
+          periods: { '7D': { saved: 0, error: 'API error' } },
+          duration: 100,
+        })
       }
-      return Promise.resolve({ ok: true, text: () => Promise.resolve('') })
+      return Promise.resolve({
+        source: 'test',
+        periods: { '7D': { saved: 10 }, '30D': { saved: 10 }, '90D': { saved: 10 } },
+        duration: 100,
+      })
     })
 
-    const promise = GET(createCronRequest(CRON_SECRET, 'a'))
-    await jest.advanceTimersByTimeAsync(30000)
-    const res = await promise
+    const res = await GET(createCronRequest(CRON_SECRET, 'a'))
     const body = await res.json()
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(false)
-    expect(body.succeeded).toBe(4)
+    expect(body.succeeded).toBe(1)
     expect(body.failed).toBe(1)
     expect(body.results.find((r: { status: string }) => r.status === 'error')).toBeDefined()
   })
 
-  // ---- Network error -------------------------------------------------------
+  // ---- Fetcher error -------------------------------------------------------
 
-  it('handles fetch errors gracefully', async () => {
-    mockFetch.mockRejectedValue(new Error('Network error'))
+  it('handles fetcher errors gracefully', async () => {
+    mockFetcher.mockRejectedValue(new Error('Network error'))
 
-    const promise = GET(createCronRequest(CRON_SECRET, 'a'))
-    await jest.advanceTimersByTimeAsync(30000)
-    const res = await promise
+    const res = await GET(createCronRequest(CRON_SECRET, 'a'))
     const body = await res.json()
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(false)
-    expect(body.failed).toBe(5)
+    expect(body.failed).toBe(2)
     expect(body.results.every((r: { error?: string }) => r.error?.includes('Network error'))).toBe(true)
   })
 })

@@ -31,6 +31,7 @@ export {
   findTraderAcrossSources,
   findTradersAcrossSources,
   getTraderArenaFollowersCountBatch,
+  clearSourceCache,
 } from './trader-utils'
 
 // Re-export query functions
