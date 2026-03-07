@@ -142,6 +142,9 @@ interface RankingFiltersProps {
   styleFilter: TradingStyle | 'all'
   onStyleFilterChange: (style: TradingStyle | 'all') => void
   hasStyleData: boolean
+  // Trader type filter (human/bot/all)
+  traderTypeFilter?: 'all' | 'human' | 'bot'
+  onTraderTypeFilterChange?: (type: 'all' | 'human' | 'bot') => void
   // Export
   traders: ExportRankingButtonProps['traders']
   source?: string
@@ -157,6 +160,7 @@ export function RankingFilters({
   onFilterToggle, hasActiveFilters,
   visibleColumns, showColumnSettings, onShowColumnSettings, onToggleColumn, onResetColumns,
   styleFilter, onStyleFilterChange, hasStyleData,
+  traderTypeFilter = 'all', onTraderTypeFilterChange,
   traders, source, timeRange,
 }: RankingFiltersProps) {
   const { t, language } = useLanguage()
@@ -314,6 +318,43 @@ export function RankingFilters({
           )}
         </Box>
       </Box>
+
+      {/* Trader type filter row (human/bot/all) */}
+      {onTraderTypeFilterChange && (
+        <Box style={{
+          display: 'flex', alignItems: 'center', gap: tokens.spacing[1],
+          padding: `${tokens.spacing[1]} ${tokens.spacing[4]}`,
+          borderBottom: '1px solid var(--glass-border-light)',
+          flexWrap: 'wrap', background: tokens.glass.bg.light, minHeight: 32,
+        }}>
+          <Text size="xs" weight="bold" color="tertiary" style={{ flexShrink: 0 }}>
+            {t('traderTypeFilter')}:
+          </Text>
+          {([
+            { value: 'all' as const, label: t('allTraderTypes') },
+            { value: 'human' as const, label: t('isHuman') },
+            { value: 'bot' as const, label: t('isBot') },
+          ]).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => onTraderTypeFilterChange(opt.value)}
+              style={{
+                padding: '2px 10px', borderRadius: tokens.radius.lg,
+                border: traderTypeFilter === opt.value
+                  ? `1px solid ${tokens.colors.accent.primary}80`
+                  : `1px solid ${tokens.colors.border.primary}`,
+                background: traderTypeFilter === opt.value ? `${tokens.colors.accent.primary}20` : 'transparent',
+                color: traderTypeFilter === opt.value ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                fontSize: 12, fontWeight: traderTypeFilter === opt.value ? 700 : 500,
+                cursor: 'pointer', transition: `all ${tokens.transition.fast}`,
+              }}
+            >
+              {opt.value === 'bot' && <span style={{ marginRight: 3 }}>{'⚡'}</span>}
+              {opt.label}
+            </button>
+          ))}
+        </Box>
+      )}
 
       {/* Inline style filter row */}
       {hasStyleData && (

@@ -108,6 +108,12 @@ export interface Trader {
   avg_holding_hours?: number | null
   sharpe_ratio?: number | null
   trader_type?: 'human' | 'bot' | null
+  /** Whether this trader is a bot */
+  is_bot?: boolean
+  /** Bot category */
+  bot_category?: string | null
+  /** Whether this trader is verified (claimed profile) */
+  is_verified?: boolean
 }
 
 // Debounce hook

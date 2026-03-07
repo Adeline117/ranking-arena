@@ -347,8 +347,29 @@ export const TraderRow = memo(function TraderRow({
                   {sourceInfo.type}
                 </Text>
               </Box>
+              {/* Verified Badge */}
+              {trader.is_verified && (
+                <span
+                  title={i18nT('verifiedTooltip')}
+                  style={{
+                    padding: '1px 6px',
+                    borderRadius: tokens.radius.md,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#22d3ee',
+                    background: 'rgba(34, 211, 238, 0.12)',
+                    border: '1px solid rgba(34, 211, 238, 0.25)',
+                    lineHeight: 1.4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}>
+                  <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
+                  {i18nT('verifiedBadge')}
+                </span>
+              )}
               {/* Bot Badge */}
-              {(trader.source === 'web3_bot' || trader.trader_type === 'bot') && (
+              {(trader.is_bot || trader.trader_type === 'bot') && (
                 <span style={{
                   padding: '1px 6px',
                   borderRadius: tokens.radius.md,
@@ -363,7 +384,7 @@ export const TraderRow = memo(function TraderRow({
                   gap: 3,
                 }}>
                   <span style={{ fontSize: 10 }}>{'⚡'}</span>
-                  Bot
+                  {i18nT('botLabel')}
                 </span>
               )}
               {/* Trading Style Chip */}
