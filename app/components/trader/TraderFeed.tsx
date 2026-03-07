@@ -32,7 +32,7 @@ function getFeedItemHref(item: TraderFeedItem): string {
   const postId = item.type === 'repost' && item.original_post_id
     ? item.original_post_id
     : item.id
-  return item.groupId ? `/groups/${item.groupId}` : `/posts/${postId}`
+  return `/posts/${postId}`
 }
 
 function formatRelativeTime(dateString: string, language: string, t: (key: string) => string): string {
@@ -387,29 +387,6 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                   >
                     {cleanContent(item.content)}
                   </Text>
-                )}
-                
-                {/* Group Link */}
-                {item.groupId && item.groupName && (
-                  <Link
-                    href={`/groups/${item.groupId}`}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      marginTop: tokens.spacing[3],
-                      padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                      background: `${tokens.colors.accent.primary}08`,
-                      borderRadius: tokens.radius.md,
-                      textDecoration: 'none',
-                      transition: `all ${tokens.transition.base}`,
-                    }}
-                  >
-                    <Text size="xs" weight="medium" style={{ color: tokens.colors.accent.primary }}>
-                      {item.groupName}
-                    </Text>
-                  </Link>
                 )}
               </Box>
             </Link>

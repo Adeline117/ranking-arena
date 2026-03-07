@@ -163,8 +163,8 @@ export default function SearchResults({
     const categoryOrder: Array<UnifiedSearchResult['type']> = [
       'trader',
       'post',
-      'library',
       'user',
+      'group',
     ]
     let globalIndex = 0
 

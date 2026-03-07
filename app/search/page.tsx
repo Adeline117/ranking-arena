@@ -13,7 +13,7 @@ import { logger } from '@/lib/logger'
 import type { UnifiedSearchResponse } from '@/app/api/search/route'
 
 interface SearchResult {
-  type: 'library' | 'group' | 'post' | 'trader'
+  type: 'group' | 'post' | 'trader'
   id: string
   title: string
   subtitle?: string
@@ -59,11 +59,9 @@ function SearchContent() {
   const [trendingSearches, setTrendingSearches] = useState<string[]>(['BTC', 'ETH', 'Binance', 'Bitget', 'SOL'])
   const { showToast } = useToast()
 
-  const [libraryResults, setLibraryResults] = useState<SearchResult[]>([])
   const [groupResults, setGroupResults] = useState<SearchResult[]>([])
   const [postResults, setPostResults] = useState<SearchResult[]>([])
   const [traderResults, setTraderResults] = useState<SearchResult[]>([])
-  const [libTotal, setLibTotal] = useState(0)
   const [groupTotal, setGroupTotal] = useState(0)
   const [postTotal, setPostTotal] = useState(0)
   const [traderTotal, setTraderTotal] = useState(0)
@@ -105,7 +103,7 @@ function SearchContent() {
   // Save successful searches to history
   useEffect(() => {
     if (query.trim() && !loading && !searchError) {
-      const total = libraryResults.length + groupResults.length + postResults.length + traderResults.length
+      const total = groupResults.length + postResults.length + traderResults.length
       if (total > 0) {
         saveSearchHistory(query.trim())
         setSearchHistory(getSearchHistory())
@@ -142,7 +140,6 @@ function SearchContent() {
 
   useEffect(() => {
     if (!query.trim()) {
-      setLibraryResults([])
       setGroupResults([])
       setPostResults([])
       setTraderResults([])
@@ -174,16 +171,6 @@ function SearchContent() {
           const json = await apiRes.json()
           const data: UnifiedSearchResponse = json.data || json
 
-          // Library
-          setLibTotal(data.results.library.length)
-          setLibraryResults(data.results.library.map(item => ({
-            type: 'library' as const,
-            id: item.id,
-            title: item.title,
-            subtitle: item.subtitle || undefined,
-            meta: item.meta?.category as string || undefined,
-          })))
-
           // Posts
           setPostTotal(data.results.posts.length)
           setPostResults(data.results.posts.map(p => ({
@@ -213,11 +200,9 @@ function SearchContent() {
             meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
           })))
         } else {
-          setLibraryResults([])
           setPostResults([])
           setTraderResults([])
           setGroupResults([])
-          setLibTotal(0)
           setPostTotal(0)
           setTraderTotal(0)
           setGroupTotal(0)
@@ -244,14 +229,13 @@ function SearchContent() {
   }, [query, t, showToast])
 
   const getHref = (result: SearchResult) => {
-    if (result.type === 'library') return `/library/${result.id}`
     if (result.type === 'group') return `/groups/${result.id}`
     if (result.type === 'post') return `/post/${result.id}`
     if (result.type === 'trader') return `/trader/${encodeURIComponent(result.id)}`
     return '#'
   }
 
-  const totalResults = libraryResults.length + groupResults.length + postResults.length + traderResults.length
+  const totalResults = groupResults.length + postResults.length + traderResults.length
 
   const renderSection = (
     title: string,
@@ -390,10 +374,9 @@ function SearchContent() {
             display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap',
           }}>
             {[
-              { key: 'all', label: t('searchTabAll'), count: libTotal + groupTotal + postTotal + traderTotal },
+              { key: 'all', label: t('searchTabAll'), count: groupTotal + postTotal + traderTotal },
               { key: 'traders', label: t('traders'), count: traderTotal },
               { key: 'posts', label: t('searchTabPosts'), count: postTotal },
-              { key: 'library', label: t('library'), count: libTotal },
               { key: 'groups', label: t('groups'), count: groupTotal },
             ].filter(tab => tab.key === 'all' || tab.count > 0).map(tab => (
               <Link
@@ -610,11 +593,6 @@ function SearchContent() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))',
             gap: 16, marginTop: 16,
           }}>
-            {(activeTab === 'all' || activeTab === 'library') && renderSection(
-              t('library'),
-              libraryResults, libTotal, 'library',
-              'L', tokens.colors.accent.brand, tokens.colors.accent.brandMuted || 'var(--color-accent-primary-15)',
-            )}
             {(activeTab === 'all' || activeTab === 'groups') && renderSection(
               t('groups'),
               groupResults, groupTotal, 'groups',

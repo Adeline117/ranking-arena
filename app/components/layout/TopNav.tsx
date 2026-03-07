@@ -15,7 +15,6 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { SearchIcon, UserIcon, NotificationIcon } from '../ui/icons'
 import { Box } from '../base'
 import { useInboxStore } from '@/lib/stores/inboxStore'
-import { usePostStore } from '@/lib/stores/postStore'
 
 // Lazy load non-critical components
 const MobileSearchOverlay = dynamic(() => import('../search/MobileSearchOverlay'), { ssr: false })
@@ -366,8 +365,6 @@ export default function TopNav({ email = null }: { email?: string | null }) {
           <Box as="nav" aria-label={t('mainNavigation')} className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
             {[
               { href: '/rankings', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
-              { href: '/groups', labelKey: 'groups' as const, tooltip: language === 'zh' ? '加入讨论小组' : 'Join discussion groups' },
-              { href: '/market', labelKey: 'market' as const, tooltip: language === 'zh' ? '市场数据总览' : 'Market overview' },
               { href: '/hot', labelKey: 'hot' as const, tooltip: language === 'zh' ? '全站热门帖子' : 'Trending posts' },
             ].map((item) => {
               const label = t(item.labelKey)
@@ -379,12 +376,7 @@ export default function TopNav({ email = null }: { email?: string | null }) {
                   className={`top-nav-link${isActive ? ' top-nav-link-active' : ''}`}
                   aria-current={isActive ? 'page' : undefined}
                   title={item.tooltip}
-                  onClick={() => {
-                    // Trigger feed refresh when clicking groups link while already on groups page
-                    if (item.href === '/groups' && isActive) {
-                      usePostStore.getState().triggerFeedRefresh()
-                    }
-                  }}
+                  onClick={() => {}}
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
