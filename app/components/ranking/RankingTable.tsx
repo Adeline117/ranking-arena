@@ -107,6 +107,7 @@ export interface Trader {
   score_completeness?: 'full' | 'partial' | 'minimal' | null
   avg_holding_hours?: number | null
   sharpe_ratio?: number | null
+  trader_type?: 'human' | 'bot' | null
 }
 
 // Debounce hook
