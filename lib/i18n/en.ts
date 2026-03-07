@@ -4268,6 +4268,7 @@ mintSuccess: 'Arena Score minted on-chain!',
 mintFailed: 'Minting failed',
 viewOnChain: 'View on chain',
 attestationExists: 'On-chain attestation exists',
+attestationPending: 'Attestation pending',
 
 // DeSoc - Referral
 copyTradeCta: 'Copy Trade',
