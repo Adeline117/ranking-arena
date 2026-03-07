@@ -9,6 +9,9 @@ export type Trader = {
 
 export type Post = {
   id: string
+  group: string
+  group_en?: string
+  group_id?: string
   title: string
   author: string
   author_handle?: string

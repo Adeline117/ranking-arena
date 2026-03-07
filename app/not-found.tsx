@@ -389,6 +389,7 @@ export default function NotFoundPage() {
             flexWrap: 'wrap',
           }}>
             {[
+              { href: '/groups', label: t('notFoundBrowseGroups'), icon: '◈' },
               { href: '/search', label: t('search'), icon: '⌕' },
               { href: '/login', label: t('login'), icon: '→' },
             ].map((item) => (

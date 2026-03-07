@@ -225,6 +225,7 @@ export default function MobileBottomNav(): React.ReactElement {
   const navItems: NavItem[] = useMemo(() => [
     { href: '/', labelKey: 'home', Icon: HomeIcon },
     { href: '/hot', labelKey: 'hot', Icon: FireIcon },
+    { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
     { href: '/market', labelKey: 'market', Icon: MarketIcon },
     { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon },
   ], [userHandle])

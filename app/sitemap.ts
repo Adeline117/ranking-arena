@@ -130,6 +130,33 @@ async function getUserProfiles(): Promise<Array<{ handle: string; updated_at: st
   }
 }
 
+/**
+ * 获取所有小组
+ */
+async function getAllGroups(): Promise<Array<{ id: string; updated_at: string }>> {
+  try {
+    const supabase = getSupabaseAdmin()
+    
+    const { data, error } = await supabase
+      .from('groups')
+      .select('id, created_at')
+      .order('member_count', { ascending: false })
+      .limit(500)
+    
+    if (error) {
+      dataLogger.error('sitemap 获取小组失败:', error)
+      return []
+    }
+    
+    return (data || []).map(g => ({
+      id: g.id,
+      updated_at: g.created_at,
+    }))
+  } catch (error) {
+    dataLogger.error('sitemap getAllGroups error:', error)
+    return []
+  }
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Skip DB queries during build — sitemap regenerates via ISR
@@ -150,6 +177,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "hourly",
       priority: 0.9,
+    },
+    {
+      url: `${BASE_URL}/groups`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.8,
     },
     // /rankings redirects to /, excluded from sitemap
     {
@@ -251,10 +284,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]
   
   // 并行获取动态数据
-  const [traders, posts, libraryItems, userProfiles] = await Promise.all([
+  const [traders, posts, groups, libraryItems, userProfiles] = await Promise.all([
     getAllTraders(),
     getPopularPosts(),
-        getAllLibraryItems(),
+    getAllGroups(),
+    getAllLibraryItems(),
     getUserProfiles(),
   ])
   
@@ -272,6 +306,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: post.updated_at,
     changeFrequency: "weekly" as const,
     priority: 0.6,
+  }))
+  
+  // 小组页面
+  const groupPages: MetadataRoute.Sitemap = groups.map(group => ({
+    url: `${BASE_URL}/groups/${group.id}`,
+    lastModified: group.updated_at,
+    changeFrequency: "daily" as const,
+    priority: 0.7,
   }))
   
   // 书库页面
@@ -295,6 +337,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...staticPages,
     ...traderPages,         // ~44,962 — SEO 核心资产
     ...postPages,
+    ...groupPages,
     ...libraryPages,
     ...userPages,
   ]

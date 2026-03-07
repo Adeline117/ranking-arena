@@ -1,4 +1,5 @@
 import Stripe from 'stripe'
+import { leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, logger } from './shared'
 
 export async function handleChargeRefunded(charge: Stripe.Charge) {
@@ -50,6 +51,12 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', profile.id)
+
+      try {
+        await leaveProOfficialGroup(profile.id)
+      } catch (leaveError) {
+        logger.error('Error leaving Pro group after refund', { error: leaveError })
+      }
 
       logger.info(`User ${profile.id} downgraded to free after full refund`)
     }

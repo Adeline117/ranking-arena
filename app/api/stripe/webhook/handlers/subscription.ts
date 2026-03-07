@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
+import { leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
 
 export async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
@@ -57,6 +58,15 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
 
   if (profileError) {
     logger.error('Failed to downgrade user tier to free', { userId: profile.id, error: profileError.message })
+  }
+
+  try {
+    const leftGroup = await leaveProOfficialGroup(profile.id)
+    if (leftGroup) {
+      logger.info(`User ${profile.id} left Pro official group`)
+    }
+  } catch (leaveError) {
+    logger.error('Error leaving Pro official group', { error: leaveError })
   }
 
   logger.info(`Subscription canceled for user ${profile.id}`)

@@ -251,7 +251,7 @@ function RankingTableInner(props: {
 
   const desktopGridTemplate = React.useMemo(() => {
     let template = '40px minmax(140px, 1.5fr)'
-    if (visibleColumns.includes('score')) template += ' 56px'
+    if (visibleColumns.includes('score')) template += ' 68px'
     if (visibleColumns.includes('roi')) template += ' 96px'
     if (visibleColumns.includes('pnl')) template += ' 80px'
     if (visibleColumns.includes('winrate')) template += ' 64px'
@@ -368,10 +368,9 @@ function RankingTableInner(props: {
           grid-template-columns: ${desktopGridTemplate} !important;
         }
         ${!visibleColumns.includes('score') ? '.ranking-table-grid-custom .col-score { display: none !important; }' : ''}
-        ${!visibleColumns.includes('roi') ? '.ranking-table-grid-custom .roi-cell { display: none !important; }' : ''}
-        ${!visibleColumns.includes('pnl') ? '.ranking-table-grid-custom .col-pnl { display: none !important; }' : ''}
         ${!visibleColumns.includes('winrate') ? '.ranking-table-grid-custom .col-winrate { display: none !important; }' : ''}
         ${!visibleColumns.includes('mdd') ? '.ranking-table-grid-custom .col-mdd { display: none !important; }' : ''}
+        ${!visibleColumns.includes('roi') ? '.ranking-table-grid-custom .roi-cell { display: none !important; }' : ''}
         ${!visibleColumns.includes('sortino') ? '.ranking-table-grid-custom .col-sortino { display: none !important; }' : ''}
         ${!visibleColumns.includes('alpha') ? '.ranking-table-grid-custom .col-alpha { display: none !important; }' : ''}
         ${!visibleColumns.includes('style') ? '.ranking-table-grid-custom .col-style { display: none !important; }' : ''}
@@ -465,9 +464,6 @@ function RankingTableInner(props: {
         </Box>
         <Box className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('roi')} title={t('roiTooltip').replace('{range}', timeRange)} aria-sort={sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('roi')} <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
-        </Box>
-        <Box className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('pnl')} aria-sort={sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
-          PnL <SortIndicator active={sortColumn === 'pnl'} dir={sortDir} />
         </Box>
         <Box className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`} as="button" onClick={() => handleSort('winrate')} title={t('winRateTooltip')} aria-sort={sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} data-sortable>
           {t('winRateShort')} <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />

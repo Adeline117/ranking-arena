@@ -23,6 +23,7 @@ export default function robots(): MetadataRoute.Robots {
           "/portfolio",
           "/notifications",
           "/membership",
+          "/channels",
           "/user-center",
           "/exchange",
           "/auth",

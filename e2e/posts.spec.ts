@@ -227,6 +227,33 @@ test.describe('热榜帖子导航与关闭', () => {
     expect(page.url()).toContain('/u/')
   })
 
+  test('帖子弹窗内小组名称可点击跳转', async ({ page }) => {
+    const postItem = page.locator('.hot-post-item').first()
+    if (!(await postItem.isVisible({ timeout: 10_000 }).catch(() => false))) {
+      test.skip()
+      return
+    }
+
+    await postItem.click()
+    await page.waitForTimeout(500)
+
+    const modal = page.locator('[role="dialog"]')
+    await expect(modal).toBeVisible()
+
+    const groupLink = modal.locator('a[href^="/groups/"]').first()
+    if (!(await groupLink.isVisible({ timeout: 3000 }).catch(() => false))) {
+      test.skip()
+      return
+    }
+
+    const href = await groupLink.getAttribute('href')
+    expect(href).toContain('/groups/')
+
+    await groupLink.click()
+    await page.waitForTimeout(1000)
+
+    expect(page.url()).toContain('/groups/')
+  })
 
   test('帖子列表中作者和小组链接不会被卡片点击吞掉', async ({ page }) => {
     const authorLink = page.locator('.hot-post-item a[href^="/u/"]').first()

@@ -32,7 +32,7 @@ function getFeedItemHref(item: TraderFeedItem): string {
   const postId = item.type === 'repost' && item.original_post_id
     ? item.original_post_id
     : item.id
-  return `/posts/`
+  return item.groupId ? `/groups/${item.groupId}` : `/posts/${postId}`
 }
 
 function formatRelativeTime(dateString: string, language: string, t: (key: string) => string): string {

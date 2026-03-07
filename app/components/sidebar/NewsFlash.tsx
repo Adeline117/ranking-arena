@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import useSWR from 'swr'
 import { tokens, newsCategories, newsImportance } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -160,6 +161,16 @@ export default function NewsFlash() {
           })
         )}
       </div>
+      <Link prefetch={false}
+        href="/flash-news"
+        style={{
+          display: 'block', textAlign: 'center', marginTop: tokens.spacing[2],
+          fontSize: tokens.typography.fontSize.xs, color: tokens.colors.accent.primary, textDecoration: 'none',
+          padding: `${tokens.spacing[1]} 0`,
+        }}
+      >
+        {t('viewAll')}
+      </Link>
     </SidebarCard>
   )
 }

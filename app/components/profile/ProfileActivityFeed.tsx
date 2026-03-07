@@ -38,7 +38,7 @@ function ActivityDescription({ item }: { item: ActivityItem }) {
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
           {t('publishedAPost')}{' '}
-          <Link href={`/posts/${item.data.postId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
+          <Link href={`/groups/${item.data.postId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
             {item.data.title || (t('untitled'))}
           </Link>
           {groupName && (
@@ -55,7 +55,7 @@ function ActivityDescription({ item }: { item: ActivityItem }) {
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
           {t(statusKey)}{' '}
-          <Link href="#" style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
+          <Link href={`/library/${item.data.itemId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
             {book?.title || (t('aBook'))}
           </Link>
           {item.data.rating && (
@@ -83,9 +83,9 @@ function ActivityDescription({ item }: { item: ActivityItem }) {
       return (
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
           {t('joinedGroup')}{' '}
-          <span style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>
+          <Link href={`/groups/${item.data.groupId}`} style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}>
             {name || (t('unknownGroup'))}
-          </span>
+          </Link>
         </Text>
       )
     }
