@@ -498,9 +498,18 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   // CEX — Discontinued
   // =============================================
 
-  // Weex copy trading API discontinued (all endpoints return 404/521)
+  // Weex — try direct, may need VPS proxy
   weex: () =>
-    skipResult('weex', 'endpoint_gone', 'Weex copy trading API discontinued (404/521)'),
+    verifyEndpointWithProxy(
+      'weex',
+      'https://www.weex.com/api/v1/copy-trade/public/trader/rank?page=1&size=1&sort=roi',
+      {
+        headers: {
+          Referer: 'https://www.weex.com/copy-trade',
+          Origin: 'https://www.weex.com',
+        },
+      },
+    ),
 
   // =============================================
   // DEX — Working
