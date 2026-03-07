@@ -8,6 +8,7 @@ import { formatROI } from '@/app/components/ranking/utils'
 import { Sparkline } from '@/app/components/ui/Sparkline'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useRealtimeRankings } from '@/lib/hooks/useRealtimeRankings'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface TraderData {
   trader_key: string
@@ -246,6 +247,8 @@ export default function ExchangeRankingClient({
   traders: TraderData[]
   exchange?: string
 }) {
+  const { language } = useLanguage()
+  const zh = language === 'zh'
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sortKey, setSortKey] = useState<SortKey>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -323,10 +326,10 @@ export default function ExchangeRankingClient({
           </svg>
         </div>
         <div style={{ fontSize: tokens.typography.fontSize.base, fontWeight: 600, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[2] }}>
-          暂无排行数据
+          {zh ? '暂无排行数据' : 'No ranking data'}
         </div>
         <div style={{ fontSize: tokens.typography.fontSize.sm }}>
-          该平台的排行数据正在收集中，请稍后再来查看
+          {zh ? '该平台的排行数据正在收集中，请稍后再来查看' : 'Ranking data is being collected. Please check back later.'}
         </div>
       </div>
     )

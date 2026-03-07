@@ -358,7 +358,7 @@ async function handleBybitCopyTrading(request: Request, url: URL): Promise<Respo
       if (text.includes('Access Denied') || text.includes('<!DOCTYPE') || text.includes('<html')) {
         return Response.json({
           error: 'Bybit API error',
-          details: msg.slice(0, 200),
+          details: text.slice(0, 200),
           status: response.status,
         }, {
           status: 502,
