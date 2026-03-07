@@ -99,7 +99,7 @@ async function fetchPeriod(
     const addr = entry.authority
     traders.push({
       source: SOURCE,
-      source_trader_id: addr.toLowerCase(),
+      source_trader_id: addr, // Solana addresses are case-sensitive (base58)
       handle: `${addr.slice(0, 4)}...${addr.slice(-4)}`,
       profile_url: `https://app.drift.trade/overview?userAccount=${addr}`,
       season_id: period,
