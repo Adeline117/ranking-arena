@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
-import { Language, getLanguage, setLanguage as setLang, translations, loadZhTranslations } from '@/lib/i18n'
+import { Language, getLanguage, setLanguage as setLang, translations, loadTranslations } from '@/lib/i18n'
 
 // Translation function type - accepts any string but returns the key if not found
 export type TranslationFunction = (key: string) => string
@@ -15,25 +15,22 @@ type LanguageContextType = {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Default to 'en' (sync-loaded). zh loads on-demand.
-  // Use 'en' for SSR to match the sync-loaded translations and avoid hydration mismatch.
   const [language, setLanguageState] = useState<Language>('en')
   const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
     setIsMounted(true)
     const savedLanguage = getLanguage()
-    
-    // Load Chinese translations on-demand if needed
-    if (savedLanguage === 'zh') {
-      loadZhTranslations().then(() => setLanguageState('zh'))
+
+    if (savedLanguage !== 'en') {
+      loadTranslations(savedLanguage).then(() => setLanguageState(savedLanguage))
     } else {
       setLanguageState(savedLanguage)
     }
 
     const handleLanguageChange = (e: CustomEvent<Language>) => {
-      if (e.detail === 'zh') {
-        loadZhTranslations().then(() => setLanguageState(e.detail))
+      if (e.detail !== 'en') {
+        loadTranslations(e.detail).then(() => setLanguageState(e.detail))
       } else {
         setLanguageState(e.detail)
       }
@@ -45,8 +42,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLanguage = useCallback((lang: Language) => {
     setLang(lang)
-    if (lang === 'zh') {
-      loadZhTranslations().then(() => setLanguageState(lang))
+    if (lang !== 'en') {
+      loadTranslations(lang).then(() => setLanguageState(lang))
     } else {
       setLanguageState(lang)
     }

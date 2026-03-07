@@ -664,7 +664,7 @@ const DirectoryCard = memo(function DirectoryCard({
   item, language, categoryLabelMap, pricingLabelKeys, noRatingsKey, accentVar, accentMutedVar,
 }: {
   item: DirectoryItem
-  language: 'zh' | 'en'
+  language: string
   categoryLabelMap: Record<string, string>
   pricingLabelKeys?: Record<string, string>
   noRatingsKey?: string

@@ -3,10 +3,11 @@
 /**
  * Mint Arena Score Button
  * Allows verified traders to create an on-chain attestation of their Arena Score.
- * The actual minting happens client-side; this component handles the UI flow.
+ * Uses EAS (Ethereum Attestation Service) on Base chain via Privy wallet.
  */
 
 import { useState, useEffect } from 'react'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { Button } from '../base'
 import { useToast } from '../ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -14,21 +15,24 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { fireAndForget } from '@/lib/utils/logger'
+import { ARENA_SCORE_SCHEMA_UID } from '@/lib/eas/config'
 
 interface MintArenaScoreProps {
   traderHandle: string
   arenaScore: number | null
   isVerified: boolean
+  traderSource?: string
 }
 
-export default function MintArenaScore({ traderHandle, arenaScore, isVerified }: MintArenaScoreProps) {
+export default function MintArenaScore({ traderHandle, arenaScore, isVerified, traderSource }: MintArenaScoreProps) {
   const { t } = useLanguage()
   const { showToast } = useToast()
+  const { authenticated, login } = usePrivy()
+  const { wallets } = useWallets()
   const [loading, setLoading] = useState(false)
   const [attestation, setAttestation] = useState<{ attestation_uid: string; tx_hash: string } | null>(null)
 
   useEffect(() => {
-    // Check if attestation exists
     fireAndForget(
       fetch(`/api/attestation/mint?handle=${encodeURIComponent(traderHandle)}`)
         .then(res => res.json())
@@ -72,16 +76,71 @@ export default function MintArenaScore({ traderHandle, arenaScore, isVerified }:
   const handleMint = async () => {
     setLoading(true)
     try {
-      // In a full implementation, this would call ethers/viem to mint an EAS attestation
-      // For now, we create a placeholder that can be replaced with actual on-chain minting
+      // Step 1: Check auth
+      if (!authenticated) {
+        login()
+        setLoading(false)
+        return
+      }
+
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLoginFirst'), 'warning')
         return
       }
 
-      // TODO: Replace with actual EAS minting via wallet
-      // For now, record intent
+      // Step 2: Get wallet
+      const wallet = wallets[0]
+      if (!wallet) {
+        showToast(t('connectWalletFirst'), 'warning')
+        return
+      }
+
+      // Step 3: Check if EAS schema is configured
+      if (!ARENA_SCORE_SCHEMA_UID) {
+        // Fallback: record intent without on-chain minting
+        const response = await fetch('/api/attestation/mint', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({
+            attestation_uid: `pending_${wallet.address}_${Date.now()}`,
+            tx_hash: 'pending',
+            arena_score: arenaScore,
+            chain_id: 8453,
+            score_period: 'overall',
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || t('mintFailed'))
+        }
+
+        const result = await response.json()
+        setAttestation(result.attestation)
+        showToast(t('mintSuccess'), 'success')
+        return
+      }
+
+      // Step 4: Switch to Base chain if needed
+      await wallet.switchChain(8453)
+      const provider = await wallet.getEthereumProvider()
+
+      // Step 5: Mint on-chain via EAS
+      const { mintArenaScoreAttestation } = await import('@/lib/eas/mint')
+      const mintResult = await mintArenaScoreAttestation({
+        walletProvider: provider,
+        traderAddress: wallet.address,
+        arenaScore,
+        source: traderSource || 'unknown',
+        period: 'overall',
+      })
+
+      // Step 6: Record in our database
       const response = await fetch('/api/attestation/mint', {
         method: 'POST',
         headers: {
@@ -90,8 +149,8 @@ export default function MintArenaScore({ traderHandle, arenaScore, isVerified }:
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
-          attestation_uid: `pending_${Date.now()}`,
-          tx_hash: `pending_${Date.now()}`,
+          attestation_uid: mintResult.attestationUid,
+          tx_hash: mintResult.txHash,
           arena_score: arenaScore,
           chain_id: 8453,
           score_period: 'overall',
@@ -103,8 +162,8 @@ export default function MintArenaScore({ traderHandle, arenaScore, isVerified }:
         throw new Error(data.error || t('mintFailed'))
       }
 
-      const result = await response.json()
-      setAttestation(result.attestation)
+      const apiResult = await response.json()
+      setAttestation(apiResult.attestation)
       showToast(t('mintSuccess'), 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : t('mintFailed'), 'error')

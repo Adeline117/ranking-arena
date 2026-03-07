@@ -10,6 +10,10 @@ export const HANDLE_REGEX = /^[a-zA-Z0-9_\u4e00-\u9fa5]+$/
 
 const VALID_RESULT: ValidationResult = { valid: true, message: '' }
 
+function msg(locale: Locale) {
+  return (locale === 'ja' || locale === 'ko') ? messages.en : messages[locale as 'zh' | 'en']
+}
+
 const messages = {
   zh: {
     invalidEmail: '请输入有效的邮箱地址',
@@ -46,7 +50,7 @@ function invalid(message: string): ValidationResult {
  */
 export function validateEmail(email: string, locale: Locale = 'zh'): ValidationResult {
   if (!email) return VALID_RESULT
-  if (!EMAIL_REGEX.test(email)) return invalid(messages[locale].invalidEmail)
+  if (!EMAIL_REGEX.test(email)) return invalid(msg(locale).invalidEmail)
   return VALID_RESULT
 }
 
@@ -56,7 +60,7 @@ export function validateEmail(email: string, locale: Locale = 'zh'): ValidationR
  */
 export function validatePassword(password: string, minLength = 6, locale: Locale = 'zh'): ValidationResult {
   if (!password) return VALID_RESULT
-  if (password.length < minLength) return invalid(messages[locale].passwordTooShort(minLength))
+  if (password.length < minLength) return invalid(msg(locale).passwordTooShort(minLength))
   return VALID_RESULT
 }
 
@@ -66,7 +70,7 @@ export function validatePassword(password: string, minLength = 6, locale: Locale
  */
 export function validatePasswordMatch(password: string, confirmPassword: string, locale: Locale = 'zh'): ValidationResult {
   if (!confirmPassword) return VALID_RESULT
-  if (password !== confirmPassword) return invalid(messages[locale].passwordMismatch)
+  if (password !== confirmPassword) return invalid(msg(locale).passwordMismatch)
   return VALID_RESULT
 }
 
@@ -76,9 +80,9 @@ export function validatePasswordMatch(password: string, confirmPassword: string,
  */
 export function validateHandle(handle: string, minLength = 1, locale: Locale = 'zh'): ValidationResult {
   if (!handle) return VALID_RESULT
-  if (handle.length < minLength) return invalid(messages[locale].handleTooShort(minLength))
-  if (handle.length > 30) return invalid(messages[locale].handleTooLong(30))
-  if (!HANDLE_REGEX.test(handle)) return invalid(messages[locale].handleInvalidChars)
+  if (handle.length < minLength) return invalid(msg(locale).handleTooShort(minLength))
+  if (handle.length > 30) return invalid(msg(locale).handleTooLong(30))
+  if (!HANDLE_REGEX.test(handle)) return invalid(msg(locale).handleInvalidChars)
   return VALID_RESULT
 }
 
@@ -116,7 +120,7 @@ export function validateUrl(url: string, locale: Locale = 'zh'): ValidationResul
     new URL(url)
     return VALID_RESULT
   } catch {
-    return invalid(messages[locale].invalidUrl)
+    return invalid(msg(locale).invalidUrl)
   }
 }
 
@@ -124,7 +128,7 @@ export function validateUrl(url: string, locale: Locale = 'zh'): ValidationResul
  * 验证必填字段
  */
 export function validateRequired(value: string, fieldName: string, locale: Locale = 'zh'): ValidationResult {
-  if (!value || !value.trim()) return invalid(messages[locale].required(fieldName))
+  if (!value || !value.trim()) return invalid(msg(locale).required(fieldName))
   return VALID_RESULT
 }
 
@@ -138,8 +142,8 @@ export function validateLength(
   locale: Locale = 'zh'
 ): ValidationResult {
   if (!value) return VALID_RESULT
-  if (options.min && value.length < options.min) return invalid(messages[locale].tooShort(fieldName, options.min))
-  if (options.max && value.length > options.max) return invalid(messages[locale].tooLong(fieldName, options.max))
+  if (options.min && value.length < options.min) return invalid(msg(locale).tooShort(fieldName, options.min))
+  if (options.max && value.length > options.max) return invalid(msg(locale).tooLong(fieldName, options.max))
   return VALID_RESULT
 }
 
