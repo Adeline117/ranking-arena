@@ -51,17 +51,17 @@
   animation: rowFadeIn 0.3s ease-out both;
 }
 
-/* Staggered delay for first 20 rows */
-.ranking-row-link:nth-child(1) { animation-delay: 0ms; }
-.ranking-row-link:nth-child(2) { animation-delay: 15ms; }
-.ranking-row-link:nth-child(3) { animation-delay: 30ms; }
-.ranking-row-link:nth-child(4) { animation-delay: 45ms; }
-.ranking-row-link:nth-child(5) { animation-delay: 60ms; }
-.ranking-row-link:nth-child(6) { animation-delay: 75ms; }
-.ranking-row-link:nth-child(7) { animation-delay: 90ms; }
-.ranking-row-link:nth-child(8) { animation-delay: 105ms; }
-.ranking-row-link:nth-child(9) { animation-delay: 120ms; }
-.ranking-row-link:nth-child(10) { animation-delay: 135ms; }
+/* Staggered delay for first 10 rows — target swipe-row-wrapper (direct children of flex container) */
+.swipe-row-wrapper:nth-child(1) .ranking-row-link { animation-delay: 0ms; }
+.swipe-row-wrapper:nth-child(2) .ranking-row-link { animation-delay: 15ms; }
+.swipe-row-wrapper:nth-child(3) .ranking-row-link { animation-delay: 30ms; }
+.swipe-row-wrapper:nth-child(4) .ranking-row-link { animation-delay: 45ms; }
+.swipe-row-wrapper:nth-child(5) .ranking-row-link { animation-delay: 60ms; }
+.swipe-row-wrapper:nth-child(6) .ranking-row-link { animation-delay: 75ms; }
+.swipe-row-wrapper:nth-child(7) .ranking-row-link { animation-delay: 90ms; }
+.swipe-row-wrapper:nth-child(8) .ranking-row-link { animation-delay: 105ms; }
+.swipe-row-wrapper:nth-child(9) .ranking-row-link { animation-delay: 120ms; }
+.swipe-row-wrapper:nth-child(10) .ranking-row-link { animation-delay: 135ms; }
 
 /* Sort header flash feedback */
 .sort-header.just-sorted {
@@ -97,13 +97,13 @@
   transform: translateY(-1px);
 }
 
-/* Top 3 rows get subtle depth treatment */
-.ranking-row:nth-child(-n+3) {
+/* Top 3 rows get subtle depth treatment — target via swipe-row-wrapper nth-child */
+.swipe-row-wrapper:nth-child(-n+3) .ranking-row {
   background: var(--glass-bg-light);
   box-shadow: var(--shadow-border-glow), var(--shadow-inset-subtle);
 }
 
-.ranking-row:nth-child(-n+3):hover {
+.swipe-row-wrapper:nth-child(-n+3) .ranking-row:hover {
   background: var(--glass-bg-medium) !important;
   box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
 }
@@ -333,7 +333,6 @@
   z-index: 2;
   background: var(--color-bg-primary, #0f0f13);
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform;
 }
 
 @media (hover: none) and (pointer: coarse) {
