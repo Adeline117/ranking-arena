@@ -45,22 +45,29 @@ const HEADERS: Record<string, string> = {
   'Accept-Language': 'en-US,en;q=0.9',
 }
 
-/** Multiple API endpoint patterns to try */
+/** LBank internal API (discovered 2026-03-06 via VPS browser debug)
+ * Base: https://uuapi.rerrkvifj.com/futures-follow-center/trader/stat/v1/
+ * sortField values: omProfitRate (ROI), omProfit (PnL), smFollowerIncome (follower income)
+ */
+const LBANK_API_BASE = 'https://uuapi.rerrkvifj.com/futures-follow-center/trader/stat/v1'
+
 const API_ENDPOINTS = [
-  // Common internal API patterns for LBank
-  (page: number, period: string) =>
-    `https://www.lbank.com/api/copy-trading/trader/ranking?period=${period}&page=${page}&size=${PAGE_SIZE}&sort=roi`,
-  (page: number, period: string) =>
-    `https://www.lbank.com/api/v1/copy/trader/list?period=${period}&pageNo=${page}&pageSize=${PAGE_SIZE}&sortBy=roi`,
-  (page: number, period: string) =>
-    `https://www.lbank.com/api/copy_trading/leaders?period=${period}&page=${page}&limit=${PAGE_SIZE}`,
+  // Primary — getAll with ROI sort (paginated, confirmed working)
   (page: number, _period: string) =>
-    `https://www.lbank.com/api/v2/copy/trader/ranking?page=${page}&size=${PAGE_SIZE}`,
+    `${LBANK_API_BASE}/getAll?size=${PAGE_SIZE}&current=${page}&topFlag=1&sortField=omProfitRate&sortDirection=1`,
+  // Fallback — getAll with PnL sort
   (page: number, _period: string) =>
-    `https://www.lbank.com/en-US/api/copy-trading/list?page=${page}&limit=${PAGE_SIZE}&sort=roi`,
+    `${LBANK_API_BASE}/getAll?size=${PAGE_SIZE}&current=${page}&topFlag=1&sortField=omProfit&sortDirection=1`,
+]
+
+const EXTRA_ENDPOINTS = [
+  `${LBANK_API_BASE}/queryBestTrader`,
+  `${LBANK_API_BASE}/queryAddTrader`,
+  `${LBANK_API_BASE}/getRecomm`,
 ]
 
 interface LbankTrader {
+  uuid?: string
   uid?: string
   userId?: string
   traderId?: string
@@ -72,24 +79,36 @@ interface LbankTrader {
   userName?: string
   avatar?: string
   headUrl?: string
+  headPhoto?: string
   avatarUrl?: string
   photo?: string
   roi?: string | number
+  roi7d?: string | number
+  roi30d?: string | number
   returnRate?: string | number
   profitRate?: string | number
+  omProfitRate?: string | number
   yield?: string | number
   pnl?: string | number
   profit?: string | number
   totalProfit?: string | number
   totalPnl?: string | number
+  followerIncome?: string | number
+  followerProfit7d?: string | number
+  followerProfit30d?: string | number
   winRate?: string | number
   winRatio?: string | number
+  swinRate?: string | number
+  winRate30d?: string | number
   maxDrawdown?: string | number
   mdd?: string | number
+  drawDown?: string | number
   followerCount?: number | string
   followers?: number | string
   copyCount?: number | string
   followNum?: number | string
+  followerCountNow?: number | string
+  maxFollowerCount?: number | string
 }
 
 interface LbankResponse {
@@ -97,36 +116,52 @@ interface LbankResponse {
   data?: {
     list?: LbankTrader[]
     traders?: LbankTrader[]
+    records?: LbankTrader[]
+    traderInfoResps?: LbankTrader[]
     total?: number
+    current?: number
+    pages?: number
+    size?: number
   } | LbankTrader[]
   result?: {
     list?: LbankTrader[]
   }
   rows?: LbankTrader[]
   msg?: string
+  message?: string
 }
 
 function parseTrader(item: LbankTrader, period: string, rank: number): TraderData | null {
-  const id = String(item.uid || item.userId || item.traderId || item.id || item.memberId || '')
+  const id = String(item.uuid || item.uid || item.userId || item.traderId || item.id || item.memberId || '')
   if (!id || id === 'undefined') return null
 
-  let roi = parseNum(item.roi ?? item.returnRate ?? item.profitRate ?? item.yield)
+  // LBank uses period-specific ROI fields: roi7d, roi30d
+  let roi = parseNum(
+    (period === '7D' ? item.roi7d : null)
+    ?? (period === '30D' ? item.roi30d : null)
+    ?? item.roi ?? item.omProfitRate ?? item.returnRate ?? item.profitRate ?? item.roi30d ?? item.roi7d ?? item.yield
+  )
   if (roi === null) return null
   if (Math.abs(roi) > 0 && Math.abs(roi) < 1) roi *= 100
 
-  const pnl = parseNum(item.pnl ?? item.profit ?? item.totalProfit ?? item.totalPnl)
+  const pnl = parseNum(item.pnl ?? item.profit ?? item.followerIncome ?? item.totalProfit ?? item.totalPnl)
 
-  let winRate = parseNum(item.winRate ?? item.winRatio)
+  let winRate = parseNum(item.swinRate ?? item.winRate30d ?? item.winRate ?? item.winRatio)
   if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
   winRate = normalizeWinRate(winRate)
 
-  let maxDrawdown = parseNum(item.maxDrawdown ?? item.mdd)
+  let maxDrawdown = parseNum(item.drawDown ?? item.maxDrawdown ?? item.mdd)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) {
     maxDrawdown *= 100
   }
 
-  const followers = parseNum(item.followerCount ?? item.followers ?? item.copyCount ?? item.followNum)
+  const followers = parseNum(item.followerCountNow ?? item.followerCount ?? item.followers ?? item.copyCount ?? item.followNum)
   const handle = item.nickname || item.nickName || item.name || item.userName || `Trader_${id.slice(0, 8)}`
+
+  let avatarUrl = item.avatar || item.headUrl || item.avatarUrl || null
+  if (!avatarUrl && item.headPhoto) {
+    avatarUrl = item.headPhoto.startsWith('http') ? item.headPhoto : `https://file.lbank.zone${item.headPhoto}`
+  }
 
   return {
     source: SOURCE,
@@ -142,7 +177,7 @@ function parseTrader(item: LbankTrader, period: string, rank: number): TraderDat
     followers: followers ? Math.round(followers) : null,
     arena_score: calculateArenaScore(roi, pnl, maxDrawdown, winRate, period),
     captured_at: new Date().toISOString(),
-      avatar_url: item.avatar || item.headUrl || item.avatarUrl || null,
+    avatar_url: avatarUrl,
   }
 }
 
@@ -155,7 +190,9 @@ function extractList(data: LbankResponse): LbankTrader[] {
 
   // Nested data
   if (data.data && typeof data.data === 'object') {
-    const d = data.data as { list?: LbankTrader[]; traders?: LbankTrader[] }
+    const d = data.data as { records?: LbankTrader[]; traderInfoResps?: LbankTrader[]; list?: LbankTrader[]; traders?: LbankTrader[] }
+    if (d.records && Array.isArray(d.records)) return d.records
+    if (d.traderInfoResps && Array.isArray(d.traderInfoResps)) return d.traderInfoResps
     if (d.list && Array.isArray(d.list)) return d.list
     if (d.traders && Array.isArray(d.traders)) return d.traders
   }
@@ -175,6 +212,11 @@ async function fetchPeriod(
 ): Promise<{ total: number; saved: number; error?: string }> {
   const periodStr = PERIOD_MAP[period] || '30d'
   const allTraders = new Map<string, LbankTrader>()
+
+  const addTrader = (item: LbankTrader) => {
+    const id = String(item.uuid || item.uid || item.userId || item.traderId || item.id || item.memberId || '')
+    if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+  }
 
   for (const buildUrl of API_ENDPOINTS) {
     if (allTraders.size >= TARGET) break
@@ -196,11 +238,9 @@ async function fetchPeriod(
 
         let newCount = 0
         for (const item of list) {
-          const id = String(item.uid || item.userId || item.traderId || item.id || item.memberId || '')
-          if (id && id !== 'undefined' && !allTraders.has(id)) {
-            allTraders.set(id, item)
-            newCount++
-          }
+          const sizeBefore = allTraders.size
+          addTrader(item)
+          if (allTraders.size > sizeBefore) newCount++
         }
 
         if (newCount === 0) {
@@ -221,40 +261,38 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
-  // VPS proxy fallback: route requests through SG/JP VPS to bypass CF
+  // Try extra non-paginated endpoints for more traders
+  if (allTraders.size < TARGET) {
+    for (const url of EXTRA_ENDPOINTS) {
+      try {
+        const { data } = await fetchWithFallback<LbankResponse>(url, { headers: HEADERS, timeoutMs: 10000, platform: SOURCE })
+        const list = extractList(data)
+        for (const item of list) addTrader(item)
+      } catch { /* ignore extra endpoint failures */ }
+    }
+  }
+
+  // VPS proxy fallback
   if (allTraders.size === 0) {
     const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
     if (vpsUrl) {
       logger.warn(`[${SOURCE}] All direct endpoints failed, trying VPS proxy...`)
-      for (const buildUrl of API_ENDPOINTS) {
-        if (allTraders.size >= TARGET) break
-        try {
-          const url = buildUrl(1, periodStr)
-          const res = await fetch(vpsUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
-            },
-            body: JSON.stringify({ url, method: 'GET', headers: HEADERS }),
-            signal: AbortSignal.timeout(30000),
-          })
-          if (!res.ok) continue
+      try {
+        const url = `${LBANK_API_BASE}/getAll?size=${PAGE_SIZE}&current=1&topFlag=1&sortField=omProfitRate&sortDirection=1`
+        const res = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Proxy-Key': process.env.VPS_PROXY_KEY || '' },
+          body: JSON.stringify({ url, method: 'GET', headers: HEADERS }),
+          signal: AbortSignal.timeout(30000),
+        })
+        if (res.ok) {
           const data = (await res.json()) as LbankResponse
           const list = extractList(data)
-          for (const item of list) {
-            const id = String(item.uid || item.userId || item.traderId || item.id || item.memberId || '')
-            if (id && id !== 'undefined' && !allTraders.has(id)) {
-              allTraders.set(id, item)
-            }
-          }
-          if (allTraders.size > 0) {
-            logger.warn(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
-            break
-          }
-        } catch (err) {
-          logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+          for (const item of list) addTrader(item)
+          if (allTraders.size > 0) logger.warn(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
         }
+      } catch (err) {
+        logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }
@@ -271,15 +309,8 @@ async function fetchPeriod(
       if (res.ok) {
         const data = (await res.json()) as LbankResponse
         const list = extractList(data)
-        for (const item of list) {
-          const id = String(item.uid || item.userId || item.traderId || item.id || item.memberId || '')
-          if (id && id !== 'undefined' && !allTraders.has(id)) {
-            allTraders.set(id, item)
-          }
-        }
-        if (allTraders.size > 0) {
-          logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
-        }
+        for (const item of list) addTrader(item)
+        if (allTraders.size > 0) logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
       }
     } catch (err) {
       logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -300,10 +331,7 @@ async function fetchPeriod(
         try {
           const data = JSON.parse(resp.body) as LbankResponse
           const list = extractList(data)
-          for (const item of list) {
-            const id = String(item.uid || item.userId || item.traderId || item.id || item.memberId || '')
-            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
-          }
+          for (const item of list) addTrader(item)
         } catch { /* skip unparseable */ }
       }
       if (allTraders.size > 0) {

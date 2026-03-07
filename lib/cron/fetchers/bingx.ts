@@ -48,7 +48,10 @@ const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-pro
 
 /** Working API endpoints — api-app.qq-os.com is BingX's real internal API domain */
 const API_ENDPOINTS = [
-  // Primary: Real internal API (used by CF Worker, confirmed working)
+  // Primary: multi-rank endpoint (confirmed working 2026-03-06 from VPS browser debug)
+  (_page: number, _periodType: number) =>
+    `https://api-app.qq-os.com/api/copy-trade-facade/v1/rank/multi-rank?pageSize=${PAGE_SIZE}`,
+  // Secondary: v2 leaderboard/rank (paginated)
   (page: number, periodType: number) =>
     `https://api-app.qq-os.com/api/copy-trade-facade/v2/leaderboard/rank?pageIndex=${page}&pageSize=${PAGE_SIZE}&timeType=${periodType}`,
   // Fallback: BingX domain copy trading endpoints
@@ -62,6 +65,8 @@ interface BingxTrader {
   uniqueId?: string
   uid?: string
   traderId?: string
+  trader?: string  // multi-rank endpoint uses "trader" as ID
+  apiIdentity?: string
   id?: string
   traderName?: string
   nickname?: string
@@ -83,6 +88,7 @@ interface BingxTrader {
   followerNum?: number
   followers?: number
   followerCount?: number
+  traderInfoVo?: BingxTrader
 }
 
 interface BingxResponse {
@@ -97,7 +103,7 @@ interface BingxResponse {
 }
 
 function parseTrader(item: BingxTrader, period: string, rank: number): TraderData | null {
-  const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+  const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
   if (!id || id === 'undefined') return null
 
   let roi = parseNum(item.roi ?? item.roiRate ?? item.returnRate ?? item.pnlRatio)
@@ -140,7 +146,24 @@ function extractList(data: BingxResponse): BingxTrader[] {
   if (!data) return []
   if (Array.isArray(data.data)) return data.data
   if (data.data && typeof data.data === 'object') {
-    const d = data.data as { list?: BingxTrader[]; rows?: BingxTrader[]; records?: BingxTrader[] }
+    const d = data.data as {
+      list?: BingxTrader[]
+      rows?: BingxTrader[]
+      records?: BingxTrader[]
+      global?: { result?: Array<{ traderInfoVo?: BingxTrader } & BingxTrader> }
+      local?: { result?: Array<{ traderInfoVo?: BingxTrader } & BingxTrader> }
+    }
+    // Handle multi-rank nested structure
+    if (d.global?.result?.length) {
+      return d.global.result.map(item =>
+        item.traderInfoVo ? { ...item, ...item.traderInfoVo } : item
+      )
+    }
+    if (d.local?.result?.length) {
+      return d.local.result.map(item =>
+        item.traderInfoVo ? { ...item, ...item.traderInfoVo } : item
+      )
+    }
     return d.list || d.rows || d.records || []
   }
   return []
@@ -174,7 +197,7 @@ async function fetchPeriod(
 
         let newCount = 0
         for (const item of list) {
-          const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+          const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
           if (id && id !== 'undefined' && !allTraders.has(id)) {
             allTraders.set(id, item)
             newCount++
@@ -220,7 +243,7 @@ async function fetchPeriod(
         if (list.length === 0) break
 
         for (const item of list) {
-          const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+          const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
           if (id && id !== 'undefined' && !allTraders.has(id)) {
             allTraders.set(id, item)
           }
@@ -257,7 +280,7 @@ async function fetchPeriod(
           const data = (await res.json()) as BingxResponse
           const list = extractList(data)
           for (const item of list) {
-            const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+            const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
             if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
           }
           if (allTraders.size > 0) {
@@ -285,7 +308,7 @@ async function fetchPeriod(
           const data = JSON.parse(resp.body) as BingxResponse
           const list = extractList(data)
           for (const item of list) {
-            const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+            const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
             if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
           }
         } catch { /* skip unparseable */ }

@@ -45,6 +45,7 @@ interface MexcTrader {
   uid?: string | number
   id?: string | number
   userId?: string | number
+  order?: number
   nickName?: string
   nickname?: string
   name?: string
@@ -65,6 +66,8 @@ interface MexcTrader {
   followerCount?: number | string
   copierCount?: number | string
   followers?: number | string
+  followersLimit?: number | string
+  minCopyAmount?: number | string
 }
 
 interface MexcApiResponse {
@@ -73,6 +76,7 @@ interface MexcApiResponse {
   data?: {
     resultList?: MexcTrader[]  // legacy endpoint: { code: 0, data: { resultList: [...] } }
     list?: MexcTrader[]        // futures endpoint: { data: { list: [...] } }
+    comprehensives?: MexcTrader[]  // copyFutures/api/v1/traders/top endpoint
     items?: MexcTrader[]
     traders?: MexcTrader[]
     rows?: MexcTrader[]
@@ -87,7 +91,7 @@ interface MexcApiResponse {
 function extractList(data: MexcApiResponse): MexcTrader[] {
   if (!data?.data) return []
   if (Array.isArray(data.data)) return data.data
-  return data.data.resultList || data.data.list || data.data.items || data.data.traders || data.data.rows || []
+  return data.data.resultList || data.data.list || data.data.comprehensives || data.data.items || data.data.traders || data.data.rows || []
 }
 
 function parseTrader(item: MexcTrader, period: string): TraderData | null {
@@ -95,7 +99,7 @@ function parseTrader(item: MexcTrader, period: string): TraderData | null {
   if (!id) return null
 
   const nickname = item.nickName || item.nickname || item.name || item.displayName || item.traderName
-  if (!nickname || nickname.includes('*****') || nickname.startsWith('Trader_') || nickname.startsWith('Mexctrader-')) {
+  if (!nickname || nickname.includes('*****')) {
     return null
   }
 
@@ -155,6 +159,44 @@ async function fetchPeriod(
   const allTraders = new Map<string, MexcTrader>()
   let lastError = ''
   const periodType = PERIOD_TYPE[period] ?? 3
+
+  // Strategy 0: GET from copyFutures/api/v1/traders/top (discovered 2026-03-06, simple GET, no auth)
+  const tryCopyFuturesApi = async () => {
+    try {
+      const url = `https://www.mexc.com/api/platform/futures/copyFutures/api/v1/traders/top?limit=${TARGET}`
+      const { data } = await fetchWithFallback<MexcApiResponse>(url, {
+        headers: { ...HEADERS, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36' },
+        platform: SOURCE,
+      })
+      const list = extractList(data)
+      for (const item of list) {
+        const id = String(item.traderId || item.uid || item.id || item.userId || '')
+        if (id && !allTraders.has(id)) allTraders.set(id, item)
+      }
+      if (allTraders.size > 0) logger.info(`[${SOURCE}] copyFutures/traders/top got ${allTraders.size} traders`)
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+    }
+  }
+
+  // Strategy 0b: GET from copyFutures/ai/recommend/traders
+  const tryRecommendApi = async () => {
+    try {
+      const url = `https://www.mexc.com/api/platform/futures/copyFutures/api/v1/ai/recommend/traders?limit=${Math.min(TARGET, 100)}`
+      const { data } = await fetchWithFallback<MexcApiResponse>(url, {
+        headers: { ...HEADERS, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36' },
+        platform: SOURCE,
+      })
+      const list = extractList(data)
+      for (const item of list) {
+        const id = String(item.traderId || item.uid || item.id || item.userId || '')
+        if (id && !allTraders.has(id)) allTraders.set(id, item)
+      }
+      if (allTraders.size > 0) logger.info(`[${SOURCE}] ai/recommend/traders got ${allTraders.size} traders`)
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+    }
+  }
 
   // Strategy 1: POST to legacy copy-trade rank/list endpoint
   const tryLegacyApi = async () => {
@@ -219,10 +261,10 @@ async function fetchPeriod(
   }
 
   // Try each strategy in order; stop at first success
-  await tryLegacyApi()
-  if (allTraders.size === 0) {
-    await tryFuturesApi()
-  }
+  await tryCopyFuturesApi()
+  if (allTraders.size === 0) await tryRecommendApi()
+  if (allTraders.size === 0) await tryLegacyApi()
+  if (allTraders.size === 0) await tryFuturesApi()
 
   // VPS Playwright scraper fallback (browser-based bypass for Akamai WAF)
   if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
