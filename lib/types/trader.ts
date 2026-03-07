@@ -82,6 +82,9 @@ export interface TraderSourceRecord {
 // 交易员基本信息
 // ============================================
 
+/** Bot category */
+export type BotCategory = 'tg_bot' | 'ai_agent' | 'vault' | 'strategy'
+
 /** 交易员基本资料 */
 export interface TraderProfile {
   handle: string
@@ -98,6 +101,10 @@ export interface TraderProfile {
   tradingStyle?: TradingStyle
   /** 验证状态 */
   isVerified?: boolean
+  /** Whether this is a bot/AI agent */
+  is_bot?: boolean
+  /** Bot category (only if is_bot) */
+  bot_category?: BotCategory | null
 }
 
 // ============================================
@@ -284,6 +291,12 @@ export interface Trader {
   return_score?: number
   drawdown_score?: number
   stability_score?: number
+  /** Whether this trader is a bot */
+  is_bot?: boolean
+  /** Bot category */
+  bot_category?: BotCategory | null
+  /** Whether this trader is verified (claimed profile) */
+  is_verified?: boolean
 }
 
 /** 排行榜交易员数据（严格版本，所有字段必需） */
@@ -333,6 +346,12 @@ export interface RankedTrader {
   is_suspicious?: boolean
   /** 可疑原因 */
   suspicion_reasons?: string[]
+  /** Whether this trader is a bot */
+  is_bot?: boolean
+  /** Bot category */
+  bot_category?: BotCategory | null
+  /** Whether this trader is verified (claimed profile) */
+  is_verified?: boolean
 }
 
 /** 排行榜查询参数 */
