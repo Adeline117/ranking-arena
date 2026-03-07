@@ -373,22 +373,15 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   blofin: () =>
     skipResult('blofin', 'auth_required', 'openapi.blofin.com requires authentication (401)'),
 
-  // Drift leaderboard API requires DRIFT_API_KEY
-  drift: () => {
-    if (!process.env.DRIFT_API_KEY) {
-      return skipResult('drift', 'auth_required', 'DRIFT_API_KEY not set')
-    }
-    return verifyEndpoint(
+  // Drift public Data API (no auth required)
+  drift: () =>
+    verifyEndpoint(
       'drift',
-      'https://mainnet-beta.api.drift.trade/leaderboard?resolution=allTime',
+      'https://data.api.drift.trade/stats/leaderboard?limit=1&sort=pnl',
       {
-        headers: {
-          Authorization: `Bearer ${process.env.DRIFT_API_KEY}`,
-        },
-        validateResponse: (d: ApiResponse) => Array.isArray(d) || !!d?.data,
+        validateResponse: (d: ApiResponse) => !!d?.success && !!d?.data?.leaderboard,
       }
-    )
-  },
+    ),
 
   // =============================================
   // CEX — Cloudflare WAF / endpoint changes
