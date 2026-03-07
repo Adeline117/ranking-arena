@@ -132,11 +132,11 @@ export default function UpgradeSection({
               top: -8,
               right: 12,
               padding: '2px 8px',
-              background: '#f59e0b',
+              background: 'var(--color-founding-accent, #f59e0b)',
               borderRadius: tokens.radius.full,
               fontSize: 10,
               fontWeight: 700,
-              color: '#fff',
+              color: 'var(--color-on-accent, #fff)',
             }}
           >
             {t('membershipLifetimeSpots').replace('{spots}', String(PRICING.lifetime.spots))}
@@ -144,11 +144,11 @@ export default function UpgradeSection({
 
           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box>
-              <Text size="sm" weight="bold" style={{ color: '#f59e0b' }}>{t('membershipFoundingLifetime')}</Text>
+              <Text size="sm" weight="bold" style={{ color: 'var(--color-founding-accent, #f59e0b)' }}>{t('membershipFoundingLifetime')}</Text>
               <Text size="xs" color="tertiary">{t('membershipOneTimeForever')}</Text>
             </Box>
             <Box style={{ textAlign: 'right' }}>
-              <Text size="xl" weight="black" style={{ color: '#f59e0b' }}>
+              <Text size="xl" weight="black" style={{ color: 'var(--color-founding-accent, #f59e0b)' }}>
                 ${PRICING.lifetime.price}
               </Text>
               <Text size="xs" color="tertiary">{t('membershipOneTime')}</Text>

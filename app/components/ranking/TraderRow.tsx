@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from 'react'
+import React, { memo, useCallback, useRef, useState } from 'react'
 import Link from 'next/link'
 import { mutate } from 'swr'
 import { fetcher } from '@/lib/hooks/useSWR'
@@ -25,6 +25,10 @@ import { getScoreColor } from '@/lib/utils/score-colors'
 import { CopyButton } from './HeroSection'
 import { useComparisonStore } from '@/lib/stores'
 import { classifyStyle, getStyleInfo, type TradingStyle } from '@/lib/utils/trading-style'
+import { t as i18nTFn } from '@/lib/i18n'
+
+const SWIPE_THRESHOLD = 50
+const ACTION_WIDTH = 140
 
 const ScoreBreakdownLazy = dynamic(
   () => import('./ScoreBreakdown'),
@@ -152,8 +156,96 @@ export const TraderRow = memo(function TraderRow({
   // Zebra stripe
   const zebraBg = rank > 3 && rank % 2 === 0 ? 'var(--overlay-hover)' : undefined
 
+  // Swipe state (mobile only)
+  const swipeRef = useRef<{ startX: number; startY: number; swiping: boolean }>({ startX: 0, startY: 0, swiping: false })
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [swipeOpen, setSwipeOpen] = useState(false)
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    swipeRef.current = { startX: touch.clientX, startY: touch.clientY, swiping: false }
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    const dx = touch.clientX - swipeRef.current.startX
+    const dy = touch.clientY - swipeRef.current.startY
+    if (!swipeRef.current.swiping && Math.abs(dy) > Math.abs(dx)) return
+    if (Math.abs(dx) > 10) swipeRef.current.swiping = true
+    if (!swipeRef.current.swiping) return
+    e.preventDefault()
+    const el = contentRef.current
+    if (!el) return
+    const offset = swipeOpen ? -ACTION_WIDTH + dx : dx
+    const clamped = Math.max(-ACTION_WIDTH, Math.min(0, offset))
+    el.style.transform = `translateX(${clamped}px)`
+    el.style.transition = 'none'
+  }, [swipeOpen])
+
+  const handleTouchEnd = useCallback(() => {
+    if (!swipeRef.current.swiping) return
+    const el = contentRef.current
+    if (!el) return
+    el.style.transition = ''
+    const matrix = getComputedStyle(el).transform
+    const tx = matrix !== 'none' ? parseFloat(matrix.split(',')[4]) : 0
+    if (tx < -SWIPE_THRESHOLD) {
+      el.style.transform = `translateX(-${ACTION_WIDTH}px)`
+      setSwipeOpen(true)
+    } else {
+      el.style.transform = 'translateX(0)'
+      setSwipeOpen(false)
+    }
+  }, [])
+
+  const closeSwipe = useCallback(() => {
+    const el = contentRef.current
+    if (el) {
+      el.style.transition = ''
+      el.style.transform = 'translateX(0)'
+    }
+    setSwipeOpen(false)
+  }, [])
+
+  const handleShare = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    closeSwipe()
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      void navigator.share({ title: displayName, url: `${window.location.origin}${href}` })
+    } else if (typeof navigator !== 'undefined') {
+      void navigator.clipboard.writeText(`${window.location.origin}${href}`)
+    }
+  }, [displayName, href, closeSwipe])
+
   return (
     <>
+    <div
+      className="swipe-row-wrapper"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div className="swipe-row-actions">
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); closeSwipe(); handleCompareToggle(e) }}
+          style={{ background: tokens.colors.accent.primary }}
+          title={i18nTFn('compare')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+          <span>{i18nTFn('compare')}</span>
+        </button>
+        <button
+          onClick={handleShare}
+          style={{ background: tokens.colors.accent.brand }}
+          title={i18nTFn('share')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          <span>{i18nTFn('share')}</span>
+        </button>
+      </div>
+
+      <div ref={contentRef} className="swipe-row-content">
     <Link
       href={href}
       className="ranking-row-link"
@@ -384,6 +476,8 @@ export const TraderRow = memo(function TraderRow({
         arena_score={trader.arena_score}
       />
     )}
+      </div>{/* end swipe-row-content */}
+    </div>{/* end swipe-row-wrapper */}
     </>
   )
 }, (prev, next) => areTraderPropsEqual(prev, next) && prev.source === next.source && prev.isExpanded === next.isExpanded)

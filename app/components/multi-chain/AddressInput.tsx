@@ -65,7 +65,7 @@ export default function AddressInput({ onSubmit, isLoading }: AddressInputProps)
             background: 'var(--color-accent-primary)',
             border: 'none',
             borderRadius: tokens.radius.lg,
-            color: '#fff',
+            color: 'var(--color-on-accent, #fff)',
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: 600,
             cursor: isLoading ? 'wait' : 'pointer',

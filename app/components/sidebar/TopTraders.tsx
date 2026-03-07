@@ -104,17 +104,17 @@ export default function TopTraders() {
           ))}
         </div>
       ) : error ? (
-        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
           <div>{t('sidebarLoadFailed')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
         </div>
       ) : traders.length === 0 ? (
-        <div style={{ padding: '12px 0', textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: 13 }}>
+        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
           {t('noData')}
         </div>
       ) : (
@@ -151,8 +151,8 @@ export default function TopTraders() {
                 {/* Rank */}
                 <span
                   style={{
-                    fontSize: 13,
-                    fontWeight: 800,
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: tokens.typography.fontWeight.extrabold,
                     minWidth: 16,
                     textAlign: 'right',
                     color: idx < 3 ? RANK_COLORS[idx] : tokens.colors.text.tertiary,
@@ -169,13 +169,13 @@ export default function TopTraders() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
-                      fontSize: 12,
-                      fontWeight: 600,
+                      fontSize: tokens.typography.fontSize.xs,
+                      fontWeight: tokens.typography.fontWeight.semibold,
                       color: tokens.colors.text.primary,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      lineHeight: 1.3,
+                      lineHeight: tokens.typography.lineHeight.tight,
                     }}
                   >
                     {displayName}
@@ -188,19 +188,19 @@ export default function TopTraders() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
                       <span style={{
                         fontSize: 9,
-                        fontWeight: 700,
+                        fontWeight: tokens.typography.fontWeight.bold,
                         color: 'var(--color-text-tertiary)',
                         letterSpacing: '0.04em',
                         textTransform: 'uppercase',
-                        lineHeight: 1.3,
+                        lineHeight: tokens.typography.lineHeight.tight,
                       }}>
                         Score
                       </span>
                       <span style={{
-                        fontSize: 12,
-                        fontWeight: 700,
+                        fontSize: tokens.typography.fontSize.xs,
+                        fontWeight: tokens.typography.fontWeight.bold,
                         color: getScoreColor(trader.arena_score!),
-                        lineHeight: 1.3,
+                        lineHeight: tokens.typography.lineHeight.tight,
                         ...(trader.arena_score >= 90 ? { textShadow: '0 0 8px var(--color-accent-primary-60)' } : {}),
                       }}>
                         {trader.arena_score.toFixed(0)}
@@ -213,7 +213,7 @@ export default function TopTraders() {
                         fontSize: 12,
                         fontWeight: 600,
                         color: trader.roi! >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                        lineHeight: 1.3,
+                        lineHeight: tokens.typography.lineHeight.tight,
                       }}
                     >
                       {roiStr}

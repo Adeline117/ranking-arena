@@ -106,7 +106,7 @@ export default function MyGroups() {
   return (
     <SidebarCard title={t('sidebarMyGroups')}>
       {!user ? (
-        <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
+        <p style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, textAlign: 'center', padding: `${tokens.spacing[2]} 0` }}>
           {t('sidebarLoginToView')}
         </p>
       ) : loading ? (
@@ -114,17 +114,17 @@ export default function MyGroups() {
           {[1, 2].map(i => <div key={i} className="skeleton" style={{ height: 40, borderRadius: tokens.radius.md }} />)}
         </div>
       ) : swrError ? (
-        <div style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
+        <div style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, textAlign: 'center', padding: `${tokens.spacing[2]} 0` }}>
           <div>{t('loadFailed')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
         </div>
       ) : groups.length === 0 ? (
-        <p style={{ fontSize: 12, color: tokens.colors.text.secondary, textAlign: 'center', padding: '8px 0' }}>
+        <p style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, textAlign: 'center', padding: `${tokens.spacing[2]} 0` }}>
           {t('sidebarNoGroupsJoined')}
         </p>
       ) : (

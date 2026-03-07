@@ -89,17 +89,17 @@ export default function NewsFlash() {
             <div key={i} className="skeleton" style={{ height: 52, marginBottom: 4, borderRadius: tokens.radius.md }} />
           ))
         ) : error ? (
-          <div style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
+          <div style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary, textAlign: 'center', padding: `${tokens.spacing[3]} 0` }}>
             <div>{t('sidebarLoadFailed')}</div>
             <button
               onClick={() => mutate()}
-              style={{ marginTop: 6, padding: '4px 12px', borderRadius: 6, border: '1px solid var(--glass-border-light)', background: 'transparent', color: tokens.colors.text.secondary, fontSize: 12, cursor: 'pointer' }}
+              style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: '1px solid var(--glass-border-light)', background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
             >
               {t('retry') || 'Retry'}
             </button>
           </div>
         ) : news.length === 0 ? (
-          <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '12px 0' }}>
+          <p style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary, textAlign: 'center', padding: `${tokens.spacing[3]} 0` }}>
             {t('sidebarNoNews')}
           </p>
         ) : (
@@ -118,7 +118,7 @@ export default function NewsFlash() {
                 <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                   {impConfig && (
                     <span style={{
-                      fontSize: 12, fontWeight: 700, color: tokens.colors.white,
+                      fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.white,
                       background: impConfig.color, padding: '1px 6px',
                       borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
@@ -127,7 +127,7 @@ export default function NewsFlash() {
                   )}
                   {catConfig && (
                     <span style={{
-                      fontSize: 12, fontWeight: 600, color: catConfig.color,
+                      fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.semibold, color: catConfig.color,
                       background: `${catConfig.color}15`, padding: '1px 6px',
                       borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
@@ -135,16 +135,16 @@ export default function NewsFlash() {
                     </span>
                   )}
                 </div>
-                <p style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.4, marginBottom: 4, userSelect: 'text' }}>
+                <p style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.primary, lineHeight: tokens.typography.lineHeight.snug, marginBottom: 4, userSelect: 'text' }}>
                   {getTitle(item)}
                   {(() => {
                     const badge = getLangBadge(item)
                     if (!badge) return null
                     return (
                       <span style={{
-                        fontSize: 9, fontWeight: 700, color: tokens.colors.text.tertiary,
+                        fontSize: 9, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.text.tertiary,
                         background: 'var(--glass-bg-medium)', padding: '1px 4px',
-                        borderRadius: 3, marginLeft: 4, verticalAlign: 'middle',
+                        borderRadius: tokens.radius.sm, marginLeft: 4, verticalAlign: 'middle',
                         lineHeight: '14px', display: 'inline-block',
                       }}>
                         {badge}
@@ -152,7 +152,7 @@ export default function NewsFlash() {
                     )
                   })()}
                 </p>
-                <div style={{ display: 'flex', gap: 8, fontSize: 11, color: tokens.colors.text.secondary }}>
+                <div style={{ display: 'flex', gap: 8, fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary }}>
                   <span>{item.source}</span>
                   <span>{formatTimeAgo(item.published_at, language)}</span>
                 </div>
@@ -165,7 +165,7 @@ export default function NewsFlash() {
         href="/flash-news"
         style={{
           display: 'block', textAlign: 'center', marginTop: tokens.spacing[2],
-          fontSize: 12, color: tokens.colors.accent.primary, textDecoration: 'none',
+          fontSize: tokens.typography.fontSize.xs, color: tokens.colors.accent.primary, textDecoration: 'none',
           padding: `${tokens.spacing[1]} 0`,
         }}
       >

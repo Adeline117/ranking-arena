@@ -128,8 +128,8 @@ export default function PKPageClient({
           gap: 8,
           padding: '10px 20px',
           borderRadius: 10,
-          background: 'rgba(139,111,168,0.12)',
-          border: '1px solid rgba(139,111,168,0.35)',
+          background: 'var(--color-brand-muted)',
+          border: '1px solid color-mix(in srgb, var(--color-brand) 35%, transparent)',
           color: 'var(--color-text-secondary)',
           fontSize: 14,
           fontWeight: 600,
@@ -139,11 +139,11 @@ export default function PKPageClient({
         }}
         onMouseEnter={(e) => {
           if (!downloading) {
-            e.currentTarget.style.background = 'rgba(139,111,168,0.22)'
+            e.currentTarget.style.background = 'color-mix(in srgb, var(--color-brand) 22%, transparent)'
           }
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(139,111,168,0.12)'
+          e.currentTarget.style.background = 'var(--color-brand-muted)'
         }}
       >
         {/* Download icon */}
