@@ -54,12 +54,12 @@ _No critical issues currently_
 
 ## ⚪ Backlog
 
-- [ ] Add WebSocket real-time updates for rankings
+- [x] Add WebSocket real-time updates for rankings (useRealtimeRankings hook + ExchangeRankingClient integration)
 - [ ] Multi-language support expansion (beyond zh/en)
-- [ ] Mobile app improvements (Capacitor)
-- [ ] Add more DEX platforms (Perpetual Protocol, etc.)
-- [ ] User portfolio analytics dashboard
-- [ ] Social features: trader following notifications
+- [x] Mobile app improvements (Capacitor push notifications, network status, app badge hooks)
+- [x] Add more DEX platforms (Perpetual Protocol v2 on Optimism via The Graph)
+- [x] User portfolio analytics dashboard (stats cards, L/S distribution, equity curve)
+- [x] Social features: trader following notifications (rank change alerts in trader-alerts.ts)
 
 ---
 
