@@ -16,13 +16,13 @@ import type {
 } from '../base/types';
 
 const API_BASE = 'https://api2.bybit.com';
-const LIST_URL = `${API_BASE}/fapi/beehive/public/v2/common/leader/list`;
-const PROFILE_URL = `${API_BASE}/fapi/beehive/public/v1/common/leader/detail`;
+const LIST_URL = `${API_BASE}/fapi/beehive/public/v1/common/dynamic-leader-list`;
+const PROFILE_URL = `${API_BASE}/fapi/beehive/public/v1/common/leader-details`;
 
 const WINDOW_MAP: Record<Window, string> = {
-  '7d': '7',
-  '30d': '30',
-  '90d': '90',
+  '7d': 'WEEKLY',
+  '30d': 'MONTHLY',
+  '90d': 'QUARTERLY',
 };
 
 export class BybitConnector extends BaseConnector {
@@ -37,40 +37,41 @@ export class BybitConnector extends BaseConnector {
       const pageSize = 20;
       const pages = Math.ceil(limit / pageSize);
 
-      for (let page = 0; page < pages && entries.length < limit; page++) {
-        const params = new URLSearchParams({
-          pageNo: String(page),
-          pageSize: String(pageSize),
+      for (let page = 1; page <= pages && entries.length < limit; page++) {
+        const body = {
+          pageNo: page,
+          pageSize: pageSize,
+          timeRange: WINDOW_MAP[window],
+          dataType: 'ROI',
           sortField: 'ROI',
           sortType: 'DESC',
-          periodType: WINDOW_MAP[window],
-        });
+        };
 
-        const response = await this.fetchJSON<BybitListResponse>(
-          `${LIST_URL}?${params.toString()}`,
+        const response = await this.postJSON<BybitListResponse>(
+          LIST_URL,
+          body,
           {
-            headers: {
-              'Referer': 'https://www.bybit.com/copyTrading/traderRanking',
-              'Origin': 'https://www.bybit.com',
-            },
+            'Referer': 'https://www.bybit.com/copyTrade/tradeCenter/leaderBoard',
+            'Origin': 'https://www.bybit.com',
           }
         );
 
-        if (!response?.result?.leaderList) break;
+        const list = response?.result?.list || response?.data?.list || [];
+        if (list.length === 0) break;
 
-        for (const item of response.result.leaderList) {
+        for (const item of list) {
           entries.push({
             trader_key: item.leaderMark || item.leaderId,
             display_name: item.nickName || null,
-            avatar_url: item.avatar || null,
-            profile_url: `https://www.bybit.com/copyTrading/trade-center/detail?leaderMark=${item.leaderMark}`,
+            avatar_url: item.avatar || item.avatarUrl || null,
+            profile_url: `https://www.bybit.com/copyTrade/tradeCenter/leaderBoard/detail?leaderMark=${item.leaderMark || item.leaderId}`,
             rank: entries.length + 1,
             metrics: this.normalize(item as unknown as Record<string, unknown>, FIELD_MAP),
             raw: item as unknown as Record<string, unknown>,
           });
         }
 
-        if (response.result.leaderList.length < pageSize) break;
+        if (list.length < pageSize) break;
         await this.sleep(this.getRandomDelay(2000, 4000));
       }
 
@@ -87,31 +88,31 @@ export class BybitConnector extends BaseConnector {
   async fetchTraderProfile(trader_key: string): Promise<ConnectorResult<CanonicalProfile>> {
     try {
       const params = new URLSearchParams({ leaderMark: trader_key });
-      const response = await this.fetchJSON<{ result: Record<string, unknown> }>(
+      const response = await this.fetchJSON<{ result: Record<string, unknown>; data: Record<string, unknown> }>(
         `${PROFILE_URL}?${params.toString()}`,
         {
           headers: {
-            'Referer': `https://www.bybit.com/copyTrading/trade-center/detail?leaderMark=${trader_key}`,
+            'Referer': `https://www.bybit.com/copyTrade/tradeCenter/leaderBoard/detail?leaderMark=${trader_key}`,
             'Origin': 'https://www.bybit.com',
           },
         }
       );
 
-      if (!response?.result) return this.failure('Profile not found');
+      const d = response?.result || response?.data;
+      if (!d) return this.failure('Profile not found');
 
-      const d = response.result;
       return this.success<CanonicalProfile>({
         platform: 'bybit',
         market_type: 'futures',
         trader_key,
         display_name: (d.nickName as string) || null,
-        avatar_url: (d.avatar as string) || null,
+        avatar_url: (d.avatar as string) || (d.avatarUrl as string) || null,
         bio: (d.introduction as string) || null,
         tags: [],
-        profile_url: `https://www.bybit.com/copyTrading/trade-center/detail?leaderMark=${trader_key}`,
-        followers: this.parseNumber(d.followerNum) as number | null,
-        copiers: this.parseNumber(d.copierNum) as number | null,
-        aum: this.parseNumber(d.aum) as number | null,
+        profile_url: `https://www.bybit.com/copyTrade/tradeCenter/leaderBoard/detail?leaderMark=${trader_key}`,
+        followers: this.parseNumber(d.followerCount || d.followerNum) as number | null,
+        copiers: this.parseNumber(d.copierNum || d.currentFollowerCount) as number | null,
+        aum: this.parseNumber(d.totalAssets || d.aum) as number | null,
         provenance: this.buildProvenance(PROFILE_URL),
       });
     } catch (error) {
@@ -121,21 +122,24 @@ export class BybitConnector extends BaseConnector {
 
   async fetchTraderSnapshot(trader_key: string, window: Window): Promise<ConnectorResult<CanonicalSnapshot>> {
     try {
-      const params = new URLSearchParams({
-        leaderMark: trader_key,
-        periodType: WINDOW_MAP[window],
-      });
-      const url = `${API_BASE}/fapi/beehive/public/v1/common/leader/performance?${params.toString()}`;
-      const response = await this.fetchJSON<{ result: Record<string, unknown> }>(url, {
-        headers: {
-          'Referer': `https://www.bybit.com/copyTrading/trade-center/detail?leaderMark=${trader_key}`,
+      const url = `${API_BASE}/fapi/beehive/public/v1/common/leader-performance`;
+      const body = {
+        leaderId: trader_key,
+        timeRange: WINDOW_MAP[window],
+      };
+      const response = await this.postJSON<{ result: Record<string, unknown>; data: Record<string, unknown> }>(
+        url,
+        body,
+        {
+          'Referer': `https://www.bybit.com/copyTrade/tradeCenter/leaderBoard/detail?leaderMark=${trader_key}`,
           'Origin': 'https://www.bybit.com',
-        },
-      });
+        }
+      );
 
-      if (!response?.result) return this.failure('Snapshot not found');
+      const data = response?.result || response?.data;
+      if (!data) return this.failure('Snapshot not found');
 
-      const metrics = this.normalize(response.result, FIELD_MAP);
+      const metrics = this.normalize(data, FIELD_MAP);
       return this.success<CanonicalSnapshot>({
         platform: 'bybit',
         market_type: 'futures',
