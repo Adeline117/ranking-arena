@@ -16,14 +16,27 @@
 - OpenClaw: Sentry convergence, dotenv loading, crontab with 6 scheduled jobs
 - Zero TypeScript errors across entire codebase
 
+## Recently Completed (2026-03-07)
+- Performance: N+1 query elimination (35→1 getAllLatestTimestamps, 3→1 getTraderPerformance)
+- Performance: batch-enrich parallelized (sequential 2s delay → concurrent batches of 3)
+- Performance: fetch-details UPDATE batched by source (200→~5 queries)
+- Performance: follower count queries grouped, timeseries capped at 500
+- Performance: composite index on (source, season_id, captured_at DESC)
+- Performance: select('*') → explicit columns in core API routes
+- Performance: animation limited to top 3, hover prefetch debounced, SWR 60s→300s
+- Performance: dead code removed (trader-fetch.ts 564 lines, unused virtualizer -12KB)
+- Frontend: WCAG contrast fix, LCP avatar preload, Zustand selector optimization
+- Tests: 5 test suites fixed to match refactored code (135/135 suites, 2232/2232 tests GREEN)
+- DB migrations: get_latest_timestamps_by_source RPC + composite index applied to production
+
 ## In Progress
-_(Nothing currently — only multi-language expansion remains in backlog)_
+- `: any` annotation cleanup (agent running)
 
 ## Key Metrics
 - Total Traders: 32,000+
 - Exchanges Supported: 28+ (added Perpetual Protocol)
 - Cron Jobs: 27 active (45+ with PipelineLogger)
-- Tests: 128 suites, 2066 tests, ALL GREEN
+- Tests: 135 suites, 2232 tests, ALL GREEN
 - Quality: 75 -> ~95 across 10 dimensions (2026-03-06)
 
 ## Platform Coverage
@@ -34,11 +47,13 @@ _(Nothing currently — only multi-language expansion remains in backlog)_
 | Bybit, OKX, Bitget, MEXC, KuCoin, Gate.io, HTX, CoinEx, Hyperliquid | All done | All done | - |
 
 ## Session Handoff Notes
-- Last updated: 2026-03-06
-- Zero console.log, zero empty catches, zero `as any` in production
+- Last updated: 2026-03-07
+- Zero console.log, zero empty catches in production
 - DEGRADATION.md documents all service failure strategies
 - ESLint: no-console error, no-empty error, no-explicit-any warn
-- Remaining: more connector tests, fix `: any` annotations, Lighthouse audit
+- VPS scraper v9 running with all exchange endpoints (bybit, mexc, coinex, kucoin, bingx, lbank, gateio)
+- Remaining: Bitget API keys (user needs to provide), more connector tests, Lighthouse audit
+- Blocked: Bitget spot enrichment needs BITGET_API_KEY/SECRET/PASSPHRASE env vars
 
 ## Archive
 See `docs/PROGRESS-ARCHIVE.md` for completed items prior to current sprint.
