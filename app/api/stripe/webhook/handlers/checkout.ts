@@ -1,6 +1,5 @@
 import Stripe from 'stripe'
 import { stripe } from '@/lib/stripe'
-import { joinProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
 import { updateUserSubscription } from './subscription'
 import { mintNFTForUser } from './nft'
@@ -51,16 +50,8 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
     await updateUserSubscription(userId, subscription, plan || 'monthly')
 
-    try {
-      const joinResult = await joinProOfficialGroup(userId)
-      if (joinResult.success) {
-        logger.info(`User ${userId} joined Pro official group`, { groupId: joinResult.groupId })
-      } else {
-        logger.warn(`Failed to join Pro official group`, { message: joinResult.message })
-      }
-    } catch (joinError) {
-      logger.error('Error joining Pro official group', { error: joinError })
-    }
+    // Pro official group removed in audit cleanup
+    logger.info(`User ${userId} subscription activated`)
 
     await mintNFTForUser(userId, plan || 'monthly')
 
