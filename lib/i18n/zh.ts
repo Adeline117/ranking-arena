@@ -4275,6 +4275,7 @@ mintSuccess: 'Arena Score 已上链！',
 mintFailed: '铸造失败',
 viewOnChain: '链上查看',
 attestationExists: '链上凭证已存在',
+attestationPending: '凭证待确认',
 
 // DeSoc - Referral
 copyTradeCta: '跟单',
