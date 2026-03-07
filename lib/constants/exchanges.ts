@@ -53,6 +53,7 @@ export type TraderSource =
   | 'gains'
   | 'jupiter_perps'
   | 'aevo'
+  | 'perpetual_protocol'
   // Dune on-chain data
   | 'dune_gmx'
   | 'dune_hyperliquid'
@@ -239,6 +240,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   gains: { name: 'Gains Network', sourceType: 'web3', reliability: 95, trustWeight: 0.95, roiType: 'realized' },
   jupiter_perps: { name: 'Jupiter Perps', sourceType: 'web3', reliability: 85, trustWeight: 0.95, roiType: 'mixed' },
   aevo: { name: 'Aevo', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'mixed' },
+  perpetual_protocol: { name: 'Perpetual Protocol', sourceType: 'web3', reliability: 85, trustWeight: 0.90, roiType: 'mixed' },
   // Dune on-chain data
   dune_gmx: { name: 'GMX (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'realized' },
   dune_hyperliquid: { name: 'Hyperliquid (Dune)', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'mixed' },
