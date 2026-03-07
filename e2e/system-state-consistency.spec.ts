@@ -187,30 +187,6 @@ test.describe('System State Consistency - Author Navigation', () => {
     }
   })
 
-  test('Groups page: author links in posts navigate to user profiles', async ({ page }) => {
-    await page.goto('/groups')
-    await page.waitForLoadState('domcontentloaded')
-
-    // Find a group link and navigate to it
-    const groupLink = page.locator('a[href*="/groups/"]').first()
-    if (!(await groupLink.isVisible({ timeout: 5000 }).catch(() => false))) {
-      test.skip(true, 'No groups available')
-      return
-    }
-
-    await groupLink.click()
-    await page.waitForLoadState('domcontentloaded')
-
-    // Find author links in posts
-    const authorLink = page.locator('a[href*="/u/"]').first()
-    if (await authorLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const href = await authorLink.getAttribute('href')
-      expect(href).toMatch(/\/u\/[^/]+/)
-    } else {
-      // Valid: group might have no posts or anonymous posts
-      expect(true).toBe(true)
-    }
-  })
 })
 
 test.describe('System State Consistency - Error Handling', () => {

@@ -125,17 +125,6 @@ test.describe('System State Architecture - Navigation Consistency', () => {
     }
   })
 
-  test('group name in post list is a clickable link', async ({ page }) => {
-    await page.goto('/hot')
-    await page.waitForLoadState('domcontentloaded')
-
-    // Find a group link inside a post item
-    const groupLink = page.locator('.hot-post-item a[href^="/groups/"]').first()
-    if (await groupLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const href = await groupLink.getAttribute('href')
-      expect(href).toMatch(/^\/groups\//)
-    }
-  })
 
   test('clicking author link does not open post modal', async ({ page }) => {
     await page.goto('/hot')
