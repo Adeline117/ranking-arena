@@ -13,6 +13,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { fireAndForget } from '@/lib/utils/logger'
 
 interface MintArenaScoreProps {
   traderHandle: string
@@ -28,12 +29,13 @@ export default function MintArenaScore({ traderHandle, arenaScore, isVerified }:
 
   useEffect(() => {
     // Check if attestation exists
-    fetch(`/api/attestation/mint?handle=${encodeURIComponent(traderHandle)}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.attestation) setAttestation(data.attestation)
-      })
-      .catch(() => {})
+    fireAndForget(
+      fetch(`/api/attestation/mint?handle=${encodeURIComponent(traderHandle)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.attestation) setAttestation(data.attestation)
+        })
+    )
   }, [traderHandle])
 
   if (!isVerified || arenaScore == null) return null
