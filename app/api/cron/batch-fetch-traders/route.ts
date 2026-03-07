@@ -7,8 +7,8 @@
  * Query params:
  *   group=a  → bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
- *   group=c  → okx_web3, okx_spot, aevo, xt (every 4h)
- *   group=d  → gains, htx_futures, dydx, perpetual_protocol (every 6h)
+ *   group=c  → okx_web3, aevo, xt (every 4h)
+ *   group=d  → gains, htx_futures, dydx (every 6h)
  *   group=e  → coinex, bitget_spot, binance_web3, kwenta, synthetix, mux (every 8h)
  *   group=f  → mexc, kucoin, blofin, bingx, gateio, lbank (every 12h)
  *   group=g  → uniswap, pancakeswap (every 12h)
@@ -31,10 +31,12 @@ const GROUPS: Record<string, string[]> = {
   a: ['bitget_futures', 'okx_futures'],
   // Group B: DEX + slow APIs (every 4h) — 3 platforms, ~110s parallel
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
-  // Group C: Mid-priority CEX (every 4h) — 4 platforms, ~70s parallel
-  c: ['okx_web3', 'okx_spot', 'aevo', 'xt'],
-  // Group D: Working CEX (every 6h) — 3 platforms, ~35s parallel
-  d: ['gains', 'htx_futures', 'dydx', 'perpetual_protocol'],
+  // Group C: Mid-priority CEX (every 4h) — 3 platforms, ~70s parallel
+  // okx_spot removed: OKX only supports instType=SWAP, no spot copy trading leaderboard
+  c: ['okx_web3', 'aevo', 'xt'],
+  // Group D: Working CEX+DEX (every 6h) — 3 platforms, ~35s parallel
+  // perpetual_protocol removed: Studio subgraph returns 404 (dead)
+  d: ['gains', 'htx_futures', 'dydx'],
   // Group E: Lower-priority (every 8h) — 6 platforms (added DEX subgraph fetchers)
   e: ['coinex', 'bitget_spot', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
   // Group F: Lower-priority CEX (every 12h) — periodic retry
