@@ -245,16 +245,11 @@ function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) {
     logger.error('[enrich] CRON_SECRET not configured')
-    return process.env.NODE_ENV === 'development' // Only allow in dev mode
+    return false
   }
 
   const authHeader = req.headers.get('authorization')
-  if (authHeader === `Bearer ${secret}`) return true
-
-  const url = new URL(req.url)
-  if (url.searchParams.get('secret') === secret) return true
-
-  return false
+  return authHeader === `Bearer ${secret}`
 }
 
 export async function GET(req: Request) {

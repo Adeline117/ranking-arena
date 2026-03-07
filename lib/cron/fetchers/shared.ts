@@ -6,6 +6,12 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { dataLogger } from '@/lib/utils/logger'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+
+/** Resolve market_type from SOURCE_TYPE_MAP for trader_profiles_v2 */
+function getMarketType(source: string): string {
+  return SOURCE_TYPE_MAP[source] || 'futures'
+}
 
 // ============================================
 // Failure Classification
@@ -371,7 +377,7 @@ export async function upsertTraders(
     // Upsert trader_profiles_v2
     const profiles = batch.map((t) => ({
       platform: t.source,
-      market_type: 'futures',
+      market_type: getMarketType(t.source),
       trader_key: t.source_trader_id,
       display_name: t.handle || null,
       avatar_url: t.avatar_url || null,

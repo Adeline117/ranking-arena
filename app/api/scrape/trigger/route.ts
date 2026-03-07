@@ -207,11 +207,10 @@ export async function GET(request: Request) {
   // Security: Verify CRON_SECRET
   const authHeader = request.headers.get('authorization')
   const { searchParams } = new URL(request.url)
-  const secretParam = searchParams.get('secret')
   if (!CRON_SECRET) {
     return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
   }
-  if (authHeader !== `Bearer ${CRON_SECRET}` && secretParam !== CRON_SECRET) {
+  if (authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
