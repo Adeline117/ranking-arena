@@ -176,11 +176,11 @@ export default function TraderProfileView({
 interface TraderOverviewTabProps {
   handle: string
   email: string | null
-  traderProfile: any
-  traderPerformance: any
-  traderEquityCurve: any
-  traderFeed: any[]
-  traderSimilar: any[]
+  traderProfile: TraderPageData['profile']
+  traderPerformance: TraderPageData['performance']
+  traderEquityCurve: TraderPageData['equityCurve']
+  traderFeed: NonNullable<TraderPageData['feed']>
+  traderSimilar: NonNullable<TraderPageData['similarTraders']>
   serverProfile: ServerProfile | null
   t: (key: string) => string
 }

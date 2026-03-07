@@ -159,7 +159,7 @@ export async function PATCH(
     }
 
     // Build update object
-    const updateData: Record<string, any> = {}
+    const updateData: Record<string, string | boolean> = {}
 
     if (update.status) {
       updateData.status = update.status

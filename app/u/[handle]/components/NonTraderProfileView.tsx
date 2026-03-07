@@ -11,7 +11,7 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/Dynamic'
 
-import type { ServerProfile, ProfileTabKey } from './types'
+import type { ServerProfile, ProfileTabKey, TraderPageData } from './types'
 import { userProfileStyles } from './profileStyles'
 import UserProfileHeader from './UserProfileHeader'
 import UserProfileTabs from './UserProfileTabs'
@@ -45,7 +45,7 @@ interface NonTraderProfileViewProps {
   onTabChange: (tab: ProfileTabKey) => void
   followersCount: number
   onFollowersCountChange: (delta: number) => void
-  traderData: Record<string, any> | null | undefined
+  traderData: TraderPageData | null | undefined
 }
 
 export default function NonTraderProfileView({

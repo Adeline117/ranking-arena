@@ -19,7 +19,7 @@ interface ManipulationAlert {
   alert_type: string
   severity: 'low' | 'medium' | 'high' | 'critical'
   traders: string[]
-  evidence: Record<string, any>
+  evidence: Record<string, unknown>
   auto_action?: 'flag' | 'suspend' | 'ban' | 'none'
 }
 
