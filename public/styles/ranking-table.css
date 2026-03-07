@@ -7,21 +7,25 @@
    ============================================================ */
 
 /* === Medal Glow Animations === */
+/* Use filter: drop-shadow instead of box-shadow for GPU-composited animation */
 @keyframes medalGlowGold {
-  0%, 100% { box-shadow: 0 0 8px var(--color-gold-glow), 0 0 18px var(--color-gold-glow); }
-  50% { box-shadow: 0 0 14px var(--color-gold-glow), 0 0 30px var(--color-gold-glow); }
+  0%, 100% { filter: drop-shadow(0 0 6px var(--color-gold-glow)); }
+  50% { filter: drop-shadow(0 0 14px var(--color-gold-glow)); }
 }
 
 @keyframes medalGlowSilver {
-  0%, 100% { box-shadow: 0 0 6px var(--color-silver-glow), 0 0 14px var(--color-silver-glow); }
-  50% { box-shadow: 0 0 10px var(--color-silver-glow), 0 0 24px var(--color-silver-glow); }
+  0%, 100% { filter: drop-shadow(0 0 5px var(--color-silver-glow)); }
+  50% { filter: drop-shadow(0 0 12px var(--color-silver-glow)); }
 }
 
 @keyframes medalGlowBronze {
-  0%, 100% { box-shadow: 0 0 6px var(--color-bronze-glow), 0 0 14px var(--color-bronze-glow); }
-  50% { box-shadow: 0 0 10px var(--color-bronze-glow), 0 0 24px var(--color-bronze-glow); }
+  0%, 100% { filter: drop-shadow(0 0 5px var(--color-bronze-glow)); }
+  50% { filter: drop-shadow(0 0 12px var(--color-bronze-glow)); }
 }
 
+.medal-glow-gold,
+.medal-glow-silver,
+.medal-glow-bronze { will-change: filter; }
 .medal-glow-gold { animation: medalGlowGold 2.5s ease-in-out infinite; }
 .medal-glow-silver { animation: medalGlowSilver 2.5s ease-in-out infinite; }
 .medal-glow-bronze { animation: medalGlowBronze 2.5s ease-in-out infinite; }
