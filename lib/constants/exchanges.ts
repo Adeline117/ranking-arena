@@ -83,6 +83,7 @@ export const ALL_SOURCES: TraderSource[] = [
   'xt',
   'lbank',
   'blofin',
+  'bitmart',
   // CEX spot
   'binance_spot',
   'bitget_spot',
@@ -98,6 +99,8 @@ export const ALL_SOURCES: TraderSource[] = [
   'gains',
   'jupiter_perps',
   'aevo',
+  // Web3 bots
+  'web3_bot',
 ]
 
 // ---------------------------------------------------------------------------
