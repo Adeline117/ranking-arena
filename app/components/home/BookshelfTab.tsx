@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import StarRating from '@/app/components/ui/StarRating'
-import BookCover from '@/app/library/BookCover'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import { useToast } from '@/app/components/ui/Toast'
@@ -160,7 +159,7 @@ export default function BookshelfTab() {
         </div>
       ) : books.length === 0 ? (
         /* Empty state - attractive library entrance */
-        <Link href="/rankings/resources" style={{ textDecoration: 'none', display: 'block' }}>
+        <Link href="/rankings" style={{ textDecoration: 'none', display: 'block' }}>
           <div style={{
             padding: '40px 24px',
             borderRadius: tokens.radius.xl,
@@ -212,7 +211,7 @@ export default function BookshelfTab() {
           {books.map(book => (
             <Link
               key={book.id}
-              href={`/library/${book.id}`}
+              href="#"
               style={{
                 textDecoration: 'none',
                 transition: `transform ${tokens.transition.base}`,
@@ -224,13 +223,13 @@ export default function BookshelfTab() {
                 aspectRatio: '2/3', position: 'relative', borderRadius: tokens.radius.lg,
                 overflow: 'hidden', boxShadow: tokens.shadow.md, marginBottom: 8,
               }}>
-                <BookCover
-                  title={book.title}
-                  author={book.author}
-                  category={book.category}
-                  coverUrl={book.cover_url}
-                  fontSize="sm"
-                />
+                {book.cover_url ? (
+                  <img src={book.cover_url} alt={book.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', background: tokens.gradient.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8 }}>
+                    <span style={{ color: '#fff', fontSize: 11, fontWeight: 600, textAlign: 'center', lineHeight: 1.3 }}>{book.title}</span>
+                  </div>
+                )}
               </div>
 
               {/* Status badge */}
@@ -265,7 +264,7 @@ export default function BookshelfTab() {
           ))}
 
           {/* Browse more link */}
-          <Link href="/rankings/resources" style={{
+          <Link href="/rankings" style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             aspectRatio: '2/3', borderRadius: tokens.radius.lg,
             border: `2px dashed ${tokens.colors.border.primary}`,

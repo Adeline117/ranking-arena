@@ -107,7 +107,7 @@ test.describe('Complete User Journey', () => {
   })
 
   test('No white screens on page navigation', async ({ page }) => {
-    const pages = ['/', '/hot', '/rankings/all', '/library']
+    const pages = ['/', '/hot', '/rankings/all']
 
     for (const path of pages) {
       await page.goto(path)
