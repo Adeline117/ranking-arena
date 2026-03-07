@@ -46,6 +46,10 @@ const HEADERS: Record<string, string> = {
 }
 
 const PERIOD_RANGE: Record<string, string> = { '7D': '1', '30D': '2', '90D': '3' }
+/** Period values for the public/leaderboard endpoint (days) */
+const PERIOD_DAYS: Record<string, string> = { '7D': '7', '30D': '30', '90D': '90' }
+
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 
 /* ---------- response shapes ---------- */
 
@@ -137,50 +141,64 @@ function parseTrader(item: BlofinTrader, period: string): TraderData | null {
 
 /* ---------- fetching ---------- */
 
-// BloFin API endpoint candidates
-const API_ENDPOINTS = [
-  // Confirmed endpoint (exists but returns 401 without auth — may work with proper headers from Vercel)
-  (page: number, range: string) =>
-    `https://openapi.blofin.com/api/v1/copytrading/current-traders?pageNo=${page}&pageSize=${PAGE_SIZE}&range=${range}`,
-  // Website API (behind Cloudflare)
-  (page: number, range: string) =>
-    `https://www.blofin.com/api/v1/copytrading/current-traders?pageNo=${page}&pageSize=${PAGE_SIZE}&range=${range}`,
-  // Alternative API paths
-  (page: number, range: string) =>
-    `https://openapi.blofin.com/api/v1/copytrading/traders?pageNo=${page}&pageSize=${PAGE_SIZE}&range=${range}`,
-  (page: number, range: string) =>
-    `https://openapi.blofin.com/api/v1/copytrading/ranking?pageNo=${page}&pageSize=${PAGE_SIZE}&range=${range}`,
-  // Without range param
-  (page: number, _range: string) =>
-    `https://openapi.blofin.com/api/v1/copytrading/current-traders?pageNo=${page}&pageSize=${PAGE_SIZE}`,
-]
-
 async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  const range = PERIOD_RANGE[period] || '2'
+  const periodDays = PERIOD_DAYS[period] || '30'
   const allTraders = new Map<string, BlofinTrader>()
   let lastError = ''
 
-  for (const makeUrl of API_ENDPOINTS) {
-    if (allTraders.size >= TARGET) break
+  // Strategy 1: CF Worker proxy — routes through Cloudflare network to bypass blocks
+  // The CF Worker has a dedicated /blofin/leaderboard endpoint that proxies to openapi.blofin.com
+  try {
+    const limit = Math.min(TARGET, 500) // BloFin may cap at 100-500
+    const proxyUrl = `${PROXY_URL}/blofin/leaderboard?period=${periodDays}&limit=${limit}`
+    const data = await fetchJson<BlofinApiResponse>(proxyUrl, {
+      headers: HEADERS,
+      timeoutMs: 20_000,
+    })
 
-    const maxPages = Math.ceil(TARGET / PAGE_SIZE)
-    for (let page = 1; page <= maxPages; page++) {
+    // Check for proxy error
+    if ((data as unknown as { error?: string }).error) {
+      lastError = `CF proxy error: ${(data as unknown as { error: string }).error}`
+    } else if (data?.code === '401' || data?.code === 401) {
+      lastError = 'BloFin API requires authentication (401) via CF proxy'
+    } else {
+      const list = extractList(data)
+      for (const item of list) {
+        const id = String(item.uniqueName || item.traderId || item.uid || item.id || '')
+        if (id && !allTraders.has(id)) {
+          allTraders.set(id, item)
+        }
+      }
+      if (allTraders.size > 0) {
+        logger.info(`[${SOURCE}] CF Worker proxy got ${allTraders.size} traders`)
+      }
+    }
+  } catch (err) {
+    lastError = err instanceof Error ? err.message : String(err)
+    logger.warn(`[${SOURCE}] CF Worker proxy failed: ${lastError}`)
+  }
+
+  // Strategy 2: Direct openapi.blofin.com — the correct public endpoint
+  if (allTraders.size === 0) {
+    const directEndpoints = [
+      `https://openapi.blofin.com/api/v1/copytrading/public/leaderboard?period=${periodDays}&limit=${TARGET}`,
+      `https://openapi.blofin.com/api/v1/copytrading/public/leaderboard?period=${periodDays}&limit=100`,
+    ]
+
+    for (const url of directEndpoints) {
+      if (allTraders.size > 0) break
       try {
-        const url = makeUrl(page, range)
         const data = await fetchJson<BlofinApiResponse>(url, { headers: HEADERS })
 
-        // Skip 401 Unauthorized responses
         if (data?.code === '401' || data?.code === 401) {
           lastError = 'BloFin API requires authentication (401)'
           break
         }
 
         const list = extractList(data)
-        if (list.length === 0) break
-
         for (const item of list) {
           const id = String(item.uniqueName || item.traderId || item.uid || item.id || '')
           if (id && !allTraders.has(id)) {
@@ -188,20 +206,56 @@ async function fetchPeriod(
           }
         }
 
-        if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
-        await sleep(500)
+        if (allTraders.size > 0) {
+          logger.info(`[${SOURCE}] Direct API got ${allTraders.size} traders`)
+        }
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
-        break
+        logger.warn(`[${SOURCE}] Direct API failed: ${lastError}`)
       }
     }
-
-    if (allTraders.size > 0) break
   }
 
-  // Stealth browser fallback when HTTP fetch fails
+  // Strategy 3: VPS proxy fallback for geo/WAF blocks
   if (allTraders.size === 0) {
-    logger.warn(`[${SOURCE}] HTTP fetch failed, trying stealth browser fallback...`)
+    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
+    if (vpsUrl) {
+      logger.warn(`[${SOURCE}] Trying VPS proxy...`)
+      try {
+        const targetUrl = `https://openapi.blofin.com/api/v1/copytrading/public/leaderboard?period=${periodDays}&limit=${TARGET}`
+        const res = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+          },
+          body: JSON.stringify({
+            url: targetUrl,
+            method: 'GET',
+            headers: HEADERS,
+          }),
+          signal: AbortSignal.timeout(15_000),
+        })
+        if (res.ok) {
+          const data = (await res.json()) as BlofinApiResponse
+          const list = extractList(data)
+          for (const item of list) {
+            const id = String(item.uniqueName || item.traderId || item.uid || item.id || '')
+            if (id && !allTraders.has(id)) allTraders.set(id, item)
+          }
+          if (allTraders.size > 0) {
+            logger.info(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
+          }
+        }
+      } catch (err) {
+        logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+  }
+
+  // Strategy 4: Stealth browser fallback when all HTTP methods fail
+  if (allTraders.size === 0) {
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying stealth browser fallback...`)
     try {
       const interceptApiResponses = await getInterceptApiResponses()
       const { responses } = await interceptApiResponses(

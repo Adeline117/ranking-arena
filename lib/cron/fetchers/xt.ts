@@ -17,7 +17,7 @@ import {
   type TraderData,
   calculateArenaScore,
   upsertTraders,
-  fetchJson,
+  fetchWithFallback,
   sleep,
   parseNum,
   normalizeWinRate,
@@ -128,7 +128,7 @@ async function fetchEliteV2(
     while (pageNo <= 50 && emptyStreak < 2) {
       try {
         const url = `https://www.xt.com/fapi/user/v1/public/copy-trade/elite-leader-list-v2?size=${PAGE_SIZE}&days=${days}&sotType=${sortType}&pageNo=${pageNo}`
-        const data = await fetchJson<XtResponse>(url, { headers: HEADERS })
+        const { data } = await fetchWithFallback<XtResponse>(url, { headers: HEADERS, platform: SOURCE })
 
         if (!data || data.returnCode !== 0) break
 
@@ -190,7 +190,7 @@ async function fetchFallbackEndpoints(allTraders: Map<string, XtTrader>): Promis
     for (let pageNo = 1; pageNo <= 100; pageNo++) {
       try {
         const url = `${baseUrl}?pageNo=${pageNo}&pageSize=${PAGE_SIZE}`
-        const data = await fetchJson<XtResponse>(url, { headers: HEADERS })
+        const { data } = await fetchWithFallback<XtResponse>(url, { headers: HEADERS, platform: SOURCE })
 
         if (!data || data.returnCode !== 0) break
 

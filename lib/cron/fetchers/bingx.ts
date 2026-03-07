@@ -37,23 +37,25 @@ const PERIOD_MAP: Record<string, number> = {
 }
 
 const HEADERS: Record<string, string> = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   Referer: 'https://bingx.com/en/CopyTrading/leaderBoard',
   Origin: 'https://bingx.com',
-  Accept: 'application/json',
+  Accept: 'application/json, text/plain, */*',
   'Accept-Language': 'en-US,en;q=0.9',
 }
 
-/** Multiple API endpoints to try */
+const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+
+/** Working API endpoints — api-app.qq-os.com is BingX's real internal API domain */
 const API_ENDPOINTS = [
-  // Internal web API patterns discovered from BingX website
+  // Primary: Real internal API (used by CF Worker, confirmed working)
+  (page: number, periodType: number) =>
+    `https://api-app.qq-os.com/api/copy-trade-facade/v2/leaderboard/rank?pageIndex=${page}&pageSize=${PAGE_SIZE}&timeType=${periodType}`,
+  // Fallback: BingX domain copy trading endpoints
+  (page: number, periodType: number) =>
+    `https://bingx.com/api/copytrading/v1/leaderboard?pageIndex=${page}&pageSize=${PAGE_SIZE}&timeType=${periodType}`,
   (page: number, periodType: number) =>
     `https://bingx.com/api/strategy/api/v1/copy/trader/topRanking?type=${periodType}&pageIndex=${page}&pageSize=${PAGE_SIZE}`,
-  (page: number, periodType: number) =>
-    `https://bingx.com/api/copy-trade/v2/trader/ranking?periodType=${periodType}&page=${page}&size=${PAGE_SIZE}`,
-  (page: number, _periodType: number) =>
-    `https://bingx.com/api/strategy/api/v1/copy/trader/list?pageIndex=${page}&pageSize=${PAGE_SIZE}&sortBy=roi`,
-  (page: number, periodType: number) =>
-    `https://bingx.com/api/copy/v1/public/leaderboard?type=${periodType}&page=${page}&limit=${PAGE_SIZE}`,
 ]
 
 interface BingxTrader {
@@ -198,24 +200,60 @@ async function fetchPeriod(
     if (allTraders.size > 0) break
   }
 
-  // VPS proxy fallback when HTTP fetch fails
+  // CF Worker proxy fallback — routes through Cloudflare to bypass CF challenge
+  if (allTraders.size === 0) {
+    logger.warn(`[${SOURCE}] Direct APIs failed, trying CF Worker proxy...`)
+    try {
+      // Use the dedicated /bingx/leaderboard shortcut in the CF Worker
+      const maxPagesProxy = Math.ceil(TARGET / PAGE_SIZE)
+      for (let page = 1; page <= maxPagesProxy; page++) {
+        const proxyUrl = `${PROXY_URL}/bingx/leaderboard?pageIndex=${page}&pageSize=${PAGE_SIZE}&timeType=${periodType}`
+        const data = await fetchJson<BingxResponse>(proxyUrl, { timeoutMs: 15_000 })
+
+        // Check for proxy error
+        if ((data as unknown as { error?: string }).error) {
+          logger.warn(`[${SOURCE}] CF proxy error: ${(data as unknown as { error: string }).error}`)
+          break
+        }
+
+        const list = extractList(data)
+        if (list.length === 0) break
+
+        for (const item of list) {
+          const id = String(item.uniqueId || item.uid || item.traderId || item.id || '')
+          if (id && id !== 'undefined' && !allTraders.has(id)) {
+            allTraders.set(id, item)
+          }
+        }
+
+        if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
+        await sleep(300)
+      }
+      if (allTraders.size > 0) {
+        logger.info(`[${SOURCE}] CF Worker proxy got ${allTraders.size} traders`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] CF Worker proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // VPS proxy fallback when CF Worker also fails
   if (allTraders.size === 0) {
     const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
     if (vpsUrl) {
-      logger.warn(`[${SOURCE}] HTTP fetch failed, trying VPS proxy...`)
-      for (const buildUrl of API_ENDPOINTS) {
-        if (allTraders.size >= TARGET) break
-        try {
-          const url = buildUrl(1, periodType)
-          const res = await fetch(vpsUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
-            },
-            body: JSON.stringify({ url, method: 'GET', headers: HEADERS }),
-          })
-          if (!res.ok) continue
+      logger.warn(`[${SOURCE}] Trying VPS proxy...`)
+      const realApiUrl = `https://api-app.qq-os.com/api/copy-trade-facade/v2/leaderboard/rank?pageIndex=1&pageSize=${PAGE_SIZE}&timeType=${periodType}`
+      try {
+        const res = await fetch(vpsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+          },
+          body: JSON.stringify({ url: realApiUrl, method: 'GET', headers: HEADERS }),
+          signal: AbortSignal.timeout(15_000),
+        })
+        if (res.ok) {
           const data = (await res.json()) as BingxResponse
           const list = extractList(data)
           for (const item of list) {
@@ -223,12 +261,11 @@ async function fetchPeriod(
             if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
           }
           if (allTraders.size > 0) {
-            logger.warn(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
-            break
+            logger.info(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
           }
-        } catch (err) {
-          logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
         }
+      } catch (err) {
+        logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }
