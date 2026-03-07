@@ -30,6 +30,8 @@ import { captureException } from '@/lib/utils/logger'
 const SOURCE = 'kucoin'
 const TARGET = 500
 const PAGE_SIZE = 20
+const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
 
 const HEADERS: Record<string, string> = {
   Referer: 'https://www.kucoin.com/copytrading',
@@ -195,8 +197,33 @@ async function fetchPeriod(
     if (allTraders.size > 0) break // found data from this endpoint
   }
 
+  // VPS Playwright scraper fallback (browser-based bypass for CF challenge)
+  if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
+    logger.warn(`[${SOURCE}] All HTTP methods failed, trying VPS Playwright scraper...`)
+    try {
+      const scraperUrl = `${VPS_SCRAPER_URL}/kucoin/leaderboard?period=${PERIOD_DAYS[period] || '30'}&pageSize=${PAGE_SIZE}`
+      const res = await fetch(scraperUrl, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(120_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as KucoinApiResponse
+        const items = data?.data?.items || data?.data?.list || []
+        for (const item of items) {
+          const id = String(item.leadConfigId || item.leaderId || item.uid || '')
+          if (id && !allTraders.has(id)) allTraders.set(id, item)
+        }
+        if (allTraders.size > 0) {
+          logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   if (allTraders.size === 0) {
-    return { total: 0, saved: 0, error: lastError || 'No data from KuCoin API (endpoint not found)' }
+    return { total: 0, saved: 0, error: lastError || 'No data from KuCoin — all endpoints and VPS scraper failed' }
   }
 
   const traders: TraderData[] = []
