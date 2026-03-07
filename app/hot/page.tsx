@@ -21,6 +21,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import type { Trader, Post, Comment } from './types'
 import { PostCard } from './components/PostCard'
 import { PostDetailModal } from './components/PostDetailModal'
@@ -674,6 +675,7 @@ function HotContent() {
     <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
       <TopNav email={email} />
 
+      <PullToRefreshWrapper onRefresh={loadPosts}>
       <Box as="main" py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
         <ThreeColumnLayout
           leftSidebar={<Suspense fallback={<div className="skeleton" style={{ height: 300, borderRadius: tokens.radius.lg }} />}><TopTraders /></Suspense>}
@@ -897,6 +899,7 @@ function HotContent() {
         />
       )}
       <FloatingActionButton />
+    </PullToRefreshWrapper>
     </Box>
   )
 }
