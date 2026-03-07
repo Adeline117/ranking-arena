@@ -189,6 +189,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'dydx',
   'jupiter_perps',
   'binance_web3',
+  'drift',
 ]
 
 // ---------------------------------------------------------------------------
