@@ -222,7 +222,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
   // Note: unique constraint on (source, source_trader_id, season_id) guarantees no duplicates
   let dbQuery = supabase
     .from('trader_snapshots')
-    .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence', { count: 'estimated' })
+    .select('id, source, source_trader_id, season_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, trader_type', { count: 'estimated' })
     .eq('season_id', seasonId)
     .not('arena_score', 'is', null)
     .lte('roi', ROI_ANOMALY_THRESHOLD)
@@ -365,6 +365,8 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, cursor?: string
       trading_style: row.trading_style || null,
       avg_holding_hours: row.avg_holding_hours != null ? parseFloat(row.avg_holding_hours) : null,
       style_confidence: row.style_confidence != null ? parseFloat(row.style_confidence) : null,
+      is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+      trader_type: row.trader_type || (row.source === 'web3_bot' ? 'bot' : null),
     };
   });
 
@@ -409,7 +411,7 @@ async function getCompositeRankings(params: {
   const fetchWindow = async (seasonId: string) => {
     let q = supabase
       .from('trader_snapshots')
-      .select('source, source_trader_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence')
+      .select('source, source_trader_id, captured_at, arena_score, arena_score_v3, roi, pnl, max_drawdown, win_rate, trades_count, followers, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, trader_type')
       .eq('season_id', seasonId)
       .not('arena_score', 'is', null)
       .lte('roi', ROI_ANOMALY_THRESHOLD)
@@ -569,6 +571,8 @@ async function getCompositeRankings(params: {
       trading_style: row.trading_style || null,
       avg_holding_hours: row.avg_holding_hours != null ? parseFloat(row.avg_holding_hours as string) : null,
       style_confidence: row.style_confidence != null ? parseFloat(row.style_confidence as string) : null,
+      is_bot: entry.source === 'web3_bot' || row.trader_type === 'bot',
+      trader_type: row.trader_type || (entry.source === 'web3_bot' ? 'bot' : null),
     };
   });
 
