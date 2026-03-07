@@ -29,8 +29,44 @@
 - Tests: 5 test suites fixed to match refactored code (135/135 suites, 2232/2232 tests GREEN)
 - DB migrations: get_latest_timestamps_by_source RPC + composite index applied to production
 
+## Recently Completed (2026-03-08) — DeSoc Platform
+Branch: `feature/desoc-platform`, 23 files, +1310 lines
+
+### P0: Trader Claim System
+- DB migration: `trader_claims`, `verified_traders`, `user_exchange_connections` tables
+- API: `/api/traders/claim` (GET/POST), `/api/traders/claim/review` (POST admin)
+- API: `/api/traders/verified` (GET/PUT)
+- API: `/api/exchange/verify-ownership` (POST)
+- Frontend: `ClaimTraderButton`, `VerifiedBadge` components
+- Tests: 24 new tests for claims, attestation, score gating
+
+### P0: Bot + Human Unified Ranking
+- DB: `is_bot`, `bot_category` columns on `trader_sources`
+- Types: `is_bot`, `bot_category`, `is_verified` on `Trader`, `RankedTrader`
+- UI: Bot badge + Verified badge in `TraderRow`
+- Filter: Human/Bot/All filter in `RankingFilters`
+- Leaderboard: `trader_type` field in `compute-leaderboard`
+
+### P1: Reputation-Driven Social
+- DB: `reputation_score`, `is_verified_trader` on `user_profiles`
+- DB: `author_arena_score`, `author_is_verified` on `posts`
+- DB: `min_arena_score`, `is_verified_only` on `groups`
+- Group join API: score gate + verified-only check
+- Post creation: auto-injects author arena score
+
+### P2: On-Chain Attestation
+- DB: `chain_id`, `score_period`, `minted_by` on `trader_attestations`
+- API: `/api/attestation/mint` (GET/POST)
+- Frontend: `MintArenaScore` component (EAS Base chain)
+- i18n: mint/attestation keys in en + zh
+
+### P3: Growth & Monetization
+- `CopyTradeLink` component with referral URLs for 8 exchanges
+- i18n: paid groups, referral, share rank card, embed widget keys
+- 42 new i18n keys in both en + zh
+
 ## In Progress
-_(Nothing currently — only multi-language expansion remains in backlog)_
+_(DeSoc migration pending production deploy)_
 
 ## Key Metrics
 - Total Traders: 32,000+
