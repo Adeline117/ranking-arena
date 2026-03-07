@@ -298,31 +298,43 @@ async function fetchPeriod(
     }
   }
 
-  // VPS Playwright scraper fallback (browser-based interception on VPS)
+  // VPS Playwright scraper fallback with pagination (browser-based interception on VPS)
   if (allTraders.size === 0) {
     const vpsScraperUrl = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
     const vpsScraperKey = process.env.VPS_PROXY_KEY || ''
     if (vpsScraperKey) {
-      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
-      try {
-        const scraperUrl = `${vpsScraperUrl}/bingx/leaderboard?timeType=${periodType}&pageSize=${PAGE_SIZE}`
-        const res = await fetch(scraperUrl, {
-          headers: { 'X-Proxy-Key': vpsScraperKey },
-          signal: AbortSignal.timeout(90_000),
-        })
-        if (res.ok) {
+      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper with pagination...`)
+      const scraperMaxPages = 5 // 5 pages × 50 = 250 traders target
+      for (let page = 1; page <= scraperMaxPages; page++) {
+        try {
+          const scraperUrl = `${vpsScraperUrl}/bingx/leaderboard?timeType=${periodType}&pageSize=${PAGE_SIZE}&pageIndex=${page}`
+          const res = await fetch(scraperUrl, {
+            headers: { 'X-Proxy-Key': vpsScraperKey },
+            signal: AbortSignal.timeout(90_000),
+          })
+          if (!res.ok) break
           const data = (await res.json()) as BingxResponse
           const list = extractList(data)
+          if (list.length === 0) break
+
+          let newCount = 0
           for (const item of list) {
             const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
-            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+            if (id && id !== 'undefined' && !allTraders.has(id)) {
+              allTraders.set(id, item)
+              newCount++
+            }
           }
-          if (allTraders.size > 0) {
-            logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders`)
-          }
+          if (newCount === 0) break
+          if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
+          await sleep(2000) // Slower pace for scraper
+        } catch (err) {
+          logger.warn(`[${SOURCE}] VPS scraper page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+          break
         }
-      } catch (err) {
-        logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+      if (allTraders.size > 0) {
+        logger.warn(`[${SOURCE}] VPS scraper got ${allTraders.size} traders across pages`)
       }
     }
   }

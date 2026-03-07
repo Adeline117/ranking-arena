@@ -159,7 +159,68 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Step 4: Batch upsert
+    // Step 4: Compute Sharpe ratio from recent daily snapshots
+    // For each trader, get last 30 daily_return_pct values and compute annualized Sharpe
+    const tradersForSharpe = records.filter(r => r.daily_return_pct != null)
+    if (tradersForSharpe.length > 0) {
+      // Fetch recent daily returns (last 90 days) for these traders
+      const { data: recentDaily } = await supabase
+        .from('trader_daily_snapshots')
+        .select('platform, trader_key, daily_return_pct')
+        .in('platform', platforms)
+        .gte('date', new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().split('T')[0])
+        .order('date', { ascending: true })
+        .limit(100000)
+
+      if (recentDaily && recentDaily.length > 0) {
+        // Group daily returns by trader
+        const returnsByTrader = new Map<string, number[]>()
+        for (const row of recentDaily) {
+          if (row.daily_return_pct == null) continue
+          const key = `${row.platform}:${row.trader_key}`
+          if (!returnsByTrader.has(key)) returnsByTrader.set(key, [])
+          returnsByTrader.get(key)!.push(parseFloat(String(row.daily_return_pct)))
+        }
+
+        // Compute Sharpe and batch update trader_snapshots
+        const sharpeUpdates: Array<{ source: string; source_trader_id: string; sharpe_ratio: number }> = []
+        for (const [key, returns] of returnsByTrader) {
+          if (returns.length < 7) continue
+          const mean = returns.reduce((s, r) => s + r, 0) / returns.length
+          const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length
+          const stdDev = Math.sqrt(variance)
+          if (stdDev === 0) continue
+          const sharpe = (mean / stdDev) * Math.sqrt(365)
+          if (sharpe < -10 || sharpe > 10) continue
+          const [platform, trader_key] = key.split(':')
+          sharpeUpdates.push({
+            source: platform,
+            source_trader_id: trader_key,
+            sharpe_ratio: Math.round(sharpe * 100) / 100,
+          })
+        }
+
+        // Batch update sharpe_ratio in trader_snapshots
+        if (sharpeUpdates.length > 0) {
+          let sharpeUpdated = 0
+          for (let i = 0; i < sharpeUpdates.length; i += 100) {
+            const batch = sharpeUpdates.slice(i, i + 100)
+            for (const upd of batch) {
+              const { error: shErr } = await supabase
+                .from('trader_snapshots')
+                .update({ sharpe_ratio: upd.sharpe_ratio })
+                .eq('source', upd.source)
+                .eq('source_trader_id', upd.source_trader_id)
+                .is('sharpe_ratio', null)
+              if (!shErr) sharpeUpdated++
+            }
+          }
+          logger.info(`[aggregate] Computed Sharpe ratio for ${sharpeUpdated}/${sharpeUpdates.length} traders`)
+        }
+      }
+    }
+
+    // Step 5: Batch upsert daily snapshots
     let inserted = 0
     let errors = 0
 

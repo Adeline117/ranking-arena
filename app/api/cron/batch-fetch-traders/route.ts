@@ -10,8 +10,8 @@
  *   group=c  → okx_web3, aevo, xt (every 4h)
  *   group=d  → gains, htx_futures, dydx (every 6h)
  *   group=e  → coinex, bitget_spot, binance_web3, kwenta, synthetix, mux (every 8h)
- *   group=f  → mexc, kucoin, blofin, bingx, gateio, lbank (every 12h)
- *   group=g  → uniswap, pancakeswap (every 12h)
+ *   group=f  → mexc, kucoin, blofin, bingx, gateio, lbank, weex, bitmart, bitunix (every 12h)
+ *   group=g  → uniswap, pancakeswap, web3_bot, drift (every 12h)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -40,9 +40,9 @@ const GROUPS: Record<string, string[]> = {
   // Group E: Lower-priority (every 8h) — 6 platforms (added DEX subgraph fetchers)
   e: ['coinex', 'bitget_spot', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
   // Group F: Lower-priority CEX (every 12h) — periodic retry
-  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank', 'weex', 'bitmart'],
-  // Group G: DEX Subgraph (every 12h) — The Graph queries
-  g: ['uniswap', 'pancakeswap', 'web3_bot'],
+  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank', 'weex', 'bitmart', 'bitunix'],
+  // Group G: DEX Subgraph + Solana (every 12h) — The Graph queries + Drift
+  g: ['uniswap', 'pancakeswap', 'web3_bot', 'drift'],
 }
 
 interface BatchResult {
