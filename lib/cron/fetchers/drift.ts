@@ -94,13 +94,35 @@ async function fetchLeaderboardData(
   const resolution = RESOLUTION_MAP[period] || 'allTime'
   const headers = getApiHeaders()
 
-  // Check if API key is available
+  // Attempt 0: VPS Playwright scraper (works without API key)
+  const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
+  const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || ''
+  if (VPS_SCRAPER_KEY) {
+    try {
+      const res = await fetch(`${VPS_SCRAPER_URL}/drift/leaderboard?resolution=${resolution}&limit=${TARGET}`, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(120_000),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as DriftLeaderboardResponse
+        const entries = data?.data || data?.leaderboard || data?.result || data?.users || []
+        if (entries.length > 0) {
+          logger.info(`[Drift] VPS scraper returned ${entries.length} entries`)
+          return { entries }
+        }
+      }
+    } catch (err) {
+      logger.warn(`[Drift] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // Check if API key is available for direct API calls
   if (!process.env.DRIFT_API_KEY) {
     return {
       entries: [],
       error:
         'Drift API requires authentication. Set DRIFT_API_KEY environment variable. ' +
-        'Contact Drift team or check docs at drift.trade/developers for API access.',
+        'VPS scraper also returned no data.',
     }
   }
 

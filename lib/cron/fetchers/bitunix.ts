@@ -221,23 +221,15 @@ async function fetchPeriod(
     }
   }
 
-  // Strategy 3: VPS Playwright scraper (browser-based)
+  // Strategy 3: VPS Playwright scraper (dedicated endpoint)
   if (allTraders.size === 0 && VPS_SCRAPER_KEY) {
     logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
+    const periodMap: Record<string, string> = { '7d': 'SEVEN_DAYS', '30d': 'THIRTY_DAY', '90d': 'NINETY_DAY' }
+    const scraperPeriod = periodMap[periodStr] || 'THIRTY_DAY'
     try {
-      const scraperUrl = `${VPS_SCRAPER_URL}/scrape`
-      const res = await fetch(scraperUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Proxy-Key': VPS_SCRAPER_KEY,
-        },
-        body: JSON.stringify({
-          url: `https://www.bitunix.com/copy-trading/square?period=${periodStr}`,
-          exchange: 'bitunix',
-          type: 'futures',
-        }),
-        signal: AbortSignal.timeout(90_000),
+      const res = await fetch(`${VPS_SCRAPER_URL}/bitunix/leaderboard?period=${scraperPeriod}&pageSize=50`, {
+        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+        signal: AbortSignal.timeout(120_000),
       })
       if (res.ok) {
         const data = (await res.json()) as BitunixResponse
@@ -261,8 +253,8 @@ async function fetchPeriod(
     return {
       total: 0,
       saved: 0,
-      error: 'No data from Bitunix — API blocked (403) and VPS scraper not configured for bitunix. ' +
-        'Add bitunix scraper handler on VPS to enable.',
+      error: 'No data from Bitunix — API blocked by WAF (403) and VPS scraper cannot bypass anti-bot. ' +
+        'Bitunix has aggressive headless browser detection.',
     }
   }
 
