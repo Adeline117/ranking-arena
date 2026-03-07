@@ -46,7 +46,10 @@ const ALLOWED_HOSTS = [
   'www.coinex.com',
   'api.coinex.com',
   'www.htx.com',
+  'api.htx.com',
+  'contract.htx.com',
   'api.huobi.pro',
+  'api.hbdm.com',
   'api.gmx.io',
   'api.dydx.exchange',
   'api.hyperliquid.xyz',
@@ -141,6 +144,16 @@ const worker = {
       return handleBinanceSpotCopyTrading(request, url);
     }
 
+    // 快捷端点: /mexc/copy-trading
+    if (url.pathname === '/mexc/copy-trading') {
+      return handleMexcCopyTrading(request, url);
+    }
+
+    // 快捷端点: /htx/copy-trading
+    if (url.pathname === '/htx/copy-trading') {
+      return handleHtxCopyTrading(request, url);
+    }
+
     // Shortcut: /bingx/leaderboard
     if (url.pathname === '/bingx/leaderboard') {
       return handleBingxLeaderboard(request, url);
@@ -197,6 +210,7 @@ const worker = {
         '/health', '/proxy',
         '/binance/copy-trading', '/binance/spot-copy-trading',
         '/bybit/copy-trading', '/bitget/copy-trading', '/kucoin/copy-trading',
+        '/mexc/copy-trading', '/htx/copy-trading',
         '/dydx/leaderboard', '/dydx/historical-pnl', '/dydx/subaccount',
         '/blofin/leaderboard', '/blofin/trader-info',
         '/gains/leaderboard-all', '/gains/open-trades', '/gains/trader-stats',
@@ -668,6 +682,144 @@ async function handleDydxSubaccount(request: Request, url: URL): Promise<Respons
       headers: { 'Access-Control-Allow-Origin': corsOrigin() },
     });
   }
+}
+
+// ============================================
+// MEXC Proxy Endpoint
+// ============================================
+
+async function handleMexcCopyTrading(request: Request, url: URL): Promise<Response> {
+  const page = parseInt(url.searchParams.get('page') || '1');
+  const pageSize = parseInt(url.searchParams.get('pageSize') || '20');
+  const period = url.searchParams.get('period') || '30D';
+
+  // MEXC copy trading endpoints to try (need to discover current working endpoint)
+  const endpoints = [
+    // Try futures subdomain first
+    `https://futures.mexc.com/api/v1/private/copytrading/trader/list?page=${page}&pageSize=${pageSize}&period=${period}`,
+    // Try contract subdomain
+    `https://contract.mexc.com/api/v1/private/copytrading/trader/list?page=${page}&pageSize=${pageSize}&period=${period}`,
+    // Try main domain
+    `https://www.mexc.com/api/platform/copy-trade/trader/list?page=${page}&pageSize=${pageSize}&period=${period}`,
+    // Try different path
+    `https://www.mexc.com/api/v1/copy-trade/public/traders?page=${page}&pageSize=${pageSize}&period=${period}`,
+  ];
+
+  for (const apiUrl of endpoints) {
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.mexc.com/copy-trading',
+          'Origin': 'https://www.mexc.com',
+        },
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      
+      // Skip if we get HTML (404 or error page)
+      if (!contentType.includes('application/json') && !contentType.includes('text/plain')) {
+        continue;
+      }
+
+      const data = await response.json();
+      
+      // Check for valid response
+      if (response.status === 200 || data.code === 0 || data.success) {
+        return Response.json(data, {
+          headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+        });
+      }
+      
+      // If we get a proper error response, try next endpoint
+      continue;
+    } catch (err) {
+      console.error(`[proxy] MEXC endpoint failed:`, err instanceof Error ? err.message : String(err));
+      continue;
+    }
+  }
+
+  // All endpoints failed
+  return Response.json({
+    error: 'MEXC API error',
+    details: 'All API endpoints returned 404 or invalid responses. Endpoint may have changed.',
+    note: 'Please verify current MEXC copy trading API by inspecting Network requests on https://www.mexc.com/copy-trading',
+  }, {
+    status: 502,
+    headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+  });
+}
+
+// ============================================
+// HTX (Huobi) Proxy Endpoint
+// ============================================
+
+async function handleHtxCopyTrading(request: Request, url: URL): Promise<Response> {
+  const page = parseInt(url.searchParams.get('page') || '1');
+  const pageSize = parseInt(url.searchParams.get('pageSize') || '20');
+  const period = url.searchParams.get('period') || '30D';
+
+  // HTX (formerly Huobi) copy trading endpoints to try
+  const endpoints = [
+    // Current HTX brand
+    `https://www.htx.com/v1/copy-trading/public/trader/list?page=${page}&pageSize=${pageSize}&period=${period}`,
+    `https://www.htx.com/api/v1/copy-trading/public/traders?page=${page}&pageSize=${pageSize}&period=${period}`,
+    // Legacy Huobi endpoints (may still work)
+    `https://api.huobi.pro/linear-swap-api/v1/copy-trading/traders?page=${page}&pageSize=${pageSize}`,
+    `https://api.hbdm.com/linear-swap-api/v1/copy-trading/traders?page=${page}&pageSize=${pageSize}`,
+    // Try contract subdomain
+    `https://contract.htx.com/api/v1/copy-trading/public/traders?page=${page}&pageSize=${pageSize}`,
+  ];
+
+  for (const apiUrl of endpoints) {
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.htx.com/',
+          'Origin': 'https://www.htx.com',
+        },
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      
+      // Skip if we get HTML (404 or error page)
+      if (!contentType.includes('application/json') && !contentType.includes('text/plain')) {
+        continue;
+      }
+
+      const data = await response.json();
+      
+      // Check for valid response (HTX usually returns status field)
+      if (response.status === 200 || data.status === 'ok' || data.code === 200 || data.success) {
+        return Response.json(data, {
+          headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+        });
+      }
+      
+      // If we get a proper error response, try next endpoint
+      continue;
+    } catch (err) {
+      console.error(`[proxy] HTX endpoint failed:`, err instanceof Error ? err.message : String(err));
+      continue;
+    }
+  }
+
+  // All endpoints failed
+  return Response.json({
+    error: 'HTX API error',
+    details: 'All API endpoints returned 404 or invalid responses. HTX may have deprecated copy trading API.',
+    note: 'Please verify if HTX still offers copy trading and inspect Network requests on https://www.htx.com/copy-trading',
+  }, {
+    status: 502,
+    headers: { 'Access-Control-Allow-Origin': corsOrigin() },
+  });
 }
 
 // ============================================
