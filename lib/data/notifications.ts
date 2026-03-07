@@ -181,7 +181,7 @@ export async function createNotification(
   supabase: SupabaseClient,
   notification: {
     user_id: string
-    type: 'follow' | 'like' | 'comment' | 'system' | 'mention' | 'copy_trade' | 'message' | 'trader_alert'
+    type: NotificationType
     title: string
     message: string
     link?: string

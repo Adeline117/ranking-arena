@@ -20,6 +20,7 @@ export interface TraderAlertThresholds {
   roi7dChange: number   // 7D ROI 变化阈值（绝对值百分比），默认 20
   roi30dChange: number  // 30D ROI 变化阈值（绝对值百分比），默认 50
   scoreChange: number   // Arena Score 变化阈值（绝对值分数），默认 15
+  rankChange: number    // 排名变化阈值（位数），默认 10
 }
 
 export interface SnapshotComparison {
@@ -30,10 +31,12 @@ export interface SnapshotComparison {
   currentRoi7d: number | null
   currentRoi30d: number | null
   currentArenaScore: number | null
+  currentRank: number | null
   // 上一次值
   prevRoi7d: number | null
   prevRoi30d: number | null
   prevArenaScore: number | null
+  prevRank: number | null
 }
 
 export interface DetectedAlert {
@@ -41,7 +44,7 @@ export interface DetectedAlert {
   traderId: string
   traderHandle: string
   source: string
-  alertType: 'roi_7d_change' | 'roi_30d_change' | 'score_change'
+  alertType: 'roi_7d_change' | 'roi_30d_change' | 'score_change' | 'rank_change'
   oldValue: number
   newValue: number
   changeAmount: number
@@ -52,6 +55,7 @@ export const DEFAULT_ALERT_THRESHOLDS: TraderAlertThresholds = {
   roi7dChange: 20,
   roi30dChange: 50,
   scoreChange: 15,
+  rankChange: 10,
 }
 
 // ============================================
@@ -77,6 +81,10 @@ function getSeverity(
       if (absChange >= 25) return 'critical'
       if (absChange >= 15) return 'warning'
       return 'info'
+    case 'rank_change':
+      if (absChange >= 30) return 'critical'
+      if (absChange >= 10) return 'warning'
+      return 'info'
     default:
       return 'info'
   }
@@ -94,6 +102,7 @@ function formatAlertTitle(
     roi_7d_change: { zh: '7日 ROI 异动', en: '7D ROI Alert' },
     roi_30d_change: { zh: '30日 ROI 异动', en: '30D ROI Alert' },
     score_change: { zh: 'Arena Score 异动', en: 'Arena Score Alert' },
+    rank_change: { zh: '排名变动', en: 'Rank Change Alert' },
   }
   return titles[alertType]?.[language] || titles[alertType]?.zh || '异动提醒'
 }
@@ -118,6 +127,10 @@ function formatAlertMessage(
         return `${handle} 30D ROI changed from ${oldStr} to ${newStr}`
       case 'score_change':
         return `${handle} Arena Score changed from ${oldStr} to ${newStr}`
+      case 'rank_change': {
+        const dir = alert.changeAmount < 0 ? 'up' : 'down'
+        return `${handle} rank moved ${dir} from #${Math.round(alert.oldValue)} to #${Math.round(alert.newValue)}`
+      }
     }
   }
 
@@ -128,6 +141,10 @@ function formatAlertMessage(
       return `你关注的 ${handle} 30日 ROI 从 ${oldStr} 变为 ${newStr}`
     case 'score_change':
       return `你关注的 ${handle} Arena Score 从 ${oldStr} 变为 ${newStr}`
+    case 'rank_change': {
+      const dir = alert.changeAmount < 0 ? '上升' : '下降'
+      return `你关注的 ${handle} 排名${dir}，从 #${Math.round(alert.oldValue)} 变为 #${Math.round(alert.newValue)}`
+    }
   }
 }
 
@@ -186,6 +203,29 @@ export function detectAlerts(
           newValue: comparison.currentRoi30d,
           changeAmount: change,
           severity: getSeverity('roi_30d_change', change),
+        })
+      }
+    }
+  }
+
+  // 排名变动检测
+  if (
+    comparison.currentRank !== null &&
+    comparison.prevRank !== null
+  ) {
+    const change = comparison.currentRank - comparison.prevRank // positive = dropped, negative = improved
+    if (Math.abs(change) >= thresholds.rankChange) {
+      for (const userId of userIds) {
+        alerts.push({
+          userId,
+          traderId: comparison.sourceTraderid,
+          traderHandle: comparison.handle,
+          source: comparison.source,
+          alertType: 'rank_change',
+          oldValue: comparison.prevRank,
+          newValue: comparison.currentRank,
+          changeAmount: change,
+          severity: getSeverity('rank_change', change),
         })
       }
     }
@@ -362,7 +402,7 @@ export async function runTraderAlertDetection(
 
   const { data: snapshots, error: snapshotError } = await supabase
     .from('trader_snapshots')
-    .select('source_trader_id, source, roi, roi_7d, roi_30d, arena_score, captured_at')
+    .select('source_trader_id, source, roi, roi_7d, roi_30d, arena_score, rank, captured_at')
     .in('source_trader_id', traderIds)
     .gte('captured_at', twoWeeksAgo.toISOString())
     .order('captured_at', { ascending: false })
@@ -394,6 +434,7 @@ export async function runTraderAlertDetection(
     roi_7d: number | null
     roi_30d: number | null
     arena_score: number | null
+    rank: number | null
     captured_at: string
   }
 
@@ -428,9 +469,11 @@ export async function runTraderAlertDetection(
       currentRoi7d: latest.roi_7d,
       currentRoi30d: latest.roi_30d,
       currentArenaScore: latest.arena_score,
+      currentRank: latest.rank,
       prevRoi7d: previous.roi_7d,
       prevRoi30d: previous.roi_30d,
       prevArenaScore: previous.arena_score,
+      prevRank: previous.rank,
     }
 
     const userIds = traderFollowersMap.get(traderId) || []
