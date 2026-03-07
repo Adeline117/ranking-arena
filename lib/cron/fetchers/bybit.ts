@@ -90,7 +90,10 @@ interface BybitApiResponse {
 const _batchCache = new Map<string, BybitApiResponse>()
 
 async function prefetchBatch(periods: string[]): Promise<void> {
-  if (!VPS_SCRAPER_KEY) return
+  if (!VPS_SCRAPER_KEY) {
+    logger.error(`[bybit] VPS_SCRAPER_KEY not set — Bybit requires VPS Playwright scraper (api2.bybit.com returns 403)`)
+    return
+  }
   const durations = periods.map(p => PERIOD_MAP[p] || PERIOD_MAP['30D'])
   try {
     const url = `${VPS_SCRAPER_URL}/bybit/leaderboard-batch?pageSize=${PAGE_SIZE}&durations=${durations.join(',')}`
@@ -106,9 +109,11 @@ async function prefetchBatch(periods: string[]): Promise<void> {
         }
       }
       logger.info(`[bybit] Batch prefetch: ${_batchCache.size}/${durations.length} periods cached`)
+    } else {
+      logger.error(`[bybit] VPS scraper returned HTTP ${res.status} — scraper may be down. SSH to VPS and run: pm2 restart arena-scraper`)
     }
   } catch (err) {
-    logger.warn(`[bybit] Batch prefetch failed: ${err instanceof Error ? err.message : err}`)
+    logger.error(`[bybit] VPS scraper unreachable (${VPS_SCRAPER_URL}): ${err instanceof Error ? err.message : err} — check PM2 process on SG VPS`)
   }
 }
 

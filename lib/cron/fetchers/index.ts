@@ -45,6 +45,9 @@ import { fetchDydx } from './dydx'
 import { fetchUniswap } from './uniswap'
 import { fetchPancakeSwap } from './pancakeswap'
 import fetchPerpetualProtocol from './perpetual'
+import { fetchKwenta } from './kwenta'
+import { fetchSynthetix } from './synthetix'
+import { fetchMux } from './mux'
 
 export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   // CEX Futures
@@ -87,6 +90,9 @@ export const INLINE_FETCHERS: Record<string, PlatformFetcher> = {
   uniswap: fetchUniswap,
   pancakeswap: fetchPancakeSwap,
   perpetual_protocol: fetchPerpetualProtocol,
+  kwenta: fetchKwenta,
+  synthetix: fetchSynthetix,
+  mux: fetchMux,
 }
 
 export function getInlineFetcher(platform: string): PlatformFetcher | undefined {
