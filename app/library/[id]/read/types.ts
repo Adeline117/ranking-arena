@@ -5,7 +5,7 @@ export type PDFDocumentProxy = {
   numPages: number
   getPage(n: number): Promise<PDFPageProxy>
   getDestination(dest: string): Promise<any[] | null>
-  getPageIndex(ref: any): Promise<number>
+  getPageIndex(ref: unknown): Promise<number>
   destroy(): void
 }
 export type PDFPageProxy = {

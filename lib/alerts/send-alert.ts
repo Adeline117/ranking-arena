@@ -11,7 +11,7 @@ interface AlertPayload {
   title: string
   message: string
   level: 'info' | 'warning' | 'critical'
-  details?: Record<string, any>
+  details?: Record<string, unknown>
 }
 
 // ============================================

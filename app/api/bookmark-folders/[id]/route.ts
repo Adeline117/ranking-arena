@@ -198,7 +198,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json()
-    const updateData: Record<string, any> = {}
+    const updateData: Record<string, string | boolean | null> = {}
 
     // 验证并添加更新字段
     const name = validateString(body.name, { minLength: 1, maxLength: 50 })
