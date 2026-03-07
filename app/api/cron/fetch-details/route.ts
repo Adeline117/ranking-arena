@@ -306,17 +306,24 @@ async function processTraders(
     }
   }
 
-  // Update details_fetched_at for successfully processed traders
-  // (best effort - column may not exist)
+  // Batch update details_fetched_at grouped by source (1 query per source instead of N per trader)
   try {
     const now = new Date().toISOString()
+    const bySource = new Map<string, string[]>()
     for (const trader of traders) {
-      await supabase
-        .from('traders')
-        .update({ details_fetched_at: now } as Record<string, unknown>)
-        .eq('source', trader.source)
-        .eq('source_trader_id', trader.source_trader_id)
+      const ids = bySource.get(trader.source) || []
+      ids.push(trader.source_trader_id)
+      bySource.set(trader.source, ids)
     }
+    await Promise.all(
+      Array.from(bySource.entries()).map(([source, ids]) =>
+        supabase
+          .from('traders')
+          .update({ details_fetched_at: now } as Record<string, unknown>)
+          .eq('source', source)
+          .in('source_trader_id', ids)
+      )
+    )
   } catch {
     // Column may not exist yet, ignore
   }

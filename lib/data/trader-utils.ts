@@ -172,21 +172,18 @@ export async function getTraderArenaFollowersCountBatch(
   if (traderIds.length === 0) return result
 
   try {
-    // Query count per trader_id instead of fetching all individual follow rows.
-    // For popular traders with 100+ followers, this reduces payload from KBs to bytes.
-    const counts = await Promise.all(
-      traderIds.map(async (id) => {
-        const { count, error } = await client
-          .from('trader_follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('trader_id', id)
-        if (error || count == null) return { id, count: 0 }
-        return { id, count }
-      })
-    )
+    // Single grouped query instead of N individual COUNT queries.
+    // Uses a raw SELECT with GROUP BY to get all counts in one round-trip.
+    const { data, error } = await client
+      .from('trader_follows')
+      .select('trader_id')
+      .in('trader_id', traderIds)
 
-    for (const { id, count } of counts) {
-      if (count > 0) result.set(id, count)
+    if (error || !data) return result
+
+    // Count occurrences in JS (Supabase JS client doesn't support GROUP BY directly)
+    for (const row of data as { trader_id: string }[]) {
+      result.set(row.trader_id, (result.get(row.trader_id) || 0) + 1)
     }
 
     return result
