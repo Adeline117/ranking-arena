@@ -203,6 +203,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
             trading_style: t.trading_style ?? null,
             avg_holding_hours: t.avg_holding_hours ?? null,
             style_confidence: t.style_confidence ?? null,
+            is_bot: t.is_bot ?? false,
+            trader_type: t.trader_type ?? null,
           }))
         }
         const cached: CachedData = {
