@@ -210,15 +210,12 @@ async function fetchWithAuth(period: string): Promise<BitgetTrader[]> {
 // Public endpoints
 // ---------------------------------------------------------------------------
 
-// Website internal API — the WORKING endpoint (POST with JSON body)
-// Same as the legacy connector (lib/connectors/bitget-futures.ts)
-const WEBSITE_API_URL = 'https://www.bitget.com/v1/copy/mix/trader/list'
+// Working endpoint: POST /v1/trigger/trace/public/traderList (discovered 2026-03-06)
+// Returns: { code: "00000", data: { rows: [...], nextFlag: true } }
+const TRACE_API_URL = 'https://www.bitget.com/v1/trigger/trace/public/traderList'
 
-// V2 REST API endpoints — currently return 404, kept as fallback
-const PUBLIC_API_URLS = [
-  'https://api.bitget.com/api/v2/copy/mix-trader/trader-profit-ranking',
-  'https://api.bitget.com/api/v2/copy/mix-trader/query-trader-list',
-]
+// Legacy endpoint (no longer works — kept as fallback)
+const WEBSITE_API_URL = 'https://www.bitget.com/v1/copy/mix/trader/list'
 
 const RANDOM_UAS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
@@ -228,94 +225,48 @@ const RANDOM_UAS = [
 async function fetchPublic(period: string): Promise<BitgetTrader[]> {
   const allTraders: BitgetTrader[] = []
   const maxPages = Math.ceil(TARGET / PAGE_SIZE)
-  const sortType = SORT_TYPE_MAP[period] ?? 2
-
-  // Strategy 1: Website internal API (POST) — the working approach from connectors
-  for (let page = 1; page <= maxPages; page++) {
-    try {
-      const data = await fetchJson<BitgetResponse>(WEBSITE_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': RANDOM_UAS[Math.floor(Math.random() * RANDOM_UAS.length)],
-        },
-        body: {
-          pageNo: page,
-          pageSize: PAGE_SIZE,
-          sortField: 'ROI',
-          sortType,
-          rule: 2,
-        },
-      })
-
-      if (data.code !== '0' && data.code !== 0 && data.code !== '00000') {
-        logger.warn(`[${SOURCE}] Website API error: ${data.code} ${data.msg}`)
-        break
-      }
-
-      const list = data.data?.list || data.data?.traderList || []
-      if (list.length === 0) break
-
-      allTraders.push(...list)
-      if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
-      await sleep(500 + Math.random() * 500)
-    } catch (err) {
-      logger.warn(`[${SOURCE}] Website API failed: ${err instanceof Error ? err.message : String(err)}`)
-      break
-    }
-  }
-
-  if (allTraders.length > 0) {
-    logger.info(`[${SOURCE}] Website API got ${allTraders.length} traders`)
-    return allTraders
-  }
-
-  // Strategy 2: V2 REST API fallback (currently 404, may come back)
   const periodParam = PERIOD_MAP[period] || period
-  for (const apiUrl of PUBLIC_API_URLS) {
-    if (allTraders.length > 0) break
-    for (let page = 1; page <= maxPages; page++) {
-      try {
-        const url = `${apiUrl}?period=${periodParam}&pageNo=${page}&pageSize=${PAGE_SIZE}`
-        const data = await fetchJson<BitgetResponse>(url, {
-          headers: {
-            Referer: 'https://www.bitget.com/',
-            Origin: 'https://www.bitget.com',
-            Accept: 'application/json',
-          },
+
+  // Strategy 1: VPS Playwright scraper (browser bypasses Cloudflare challenge)
+  // The trace API (v1/trigger/trace/public/traderList) is behind CF WAF — only works from browser context
+  if (VPS_SCRAPER_KEY) {
+    try {
+      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
+      for (let page = 1; page <= maxPages; page++) {
+        const url = `${VPS_SCRAPER_URL}/bitget/leaderboard?pageNo=${page}&pageSize=${PAGE_SIZE}&period=${periodParam}`
+        const res = await fetch(url, {
+          headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
+          signal: AbortSignal.timeout(90_000),
         })
+        if (!res.ok) break
+        const data = (await res.json()) as BitgetResponse
         if (data.code !== '00000' && data.code !== 0 && data.code !== '0') break
         const list = data.data?.traderList || data.data?.list || []
         if (list.length === 0) break
         allTraders.push(...list)
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
-        await sleep(300)
-      } catch (err) {
-        logger.warn(`[${SOURCE}] V2 API failed: ${err instanceof Error ? err.message : String(err)}`)
-        break
+        await sleep(1000)
       }
+      if (allTraders.length > 0) {
+        logger.info(`[${SOURCE}] VPS scraper got ${allTraders.length} traders`)
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
-  // Strategy 3: CF Worker proxy with website POST endpoint
+  // Strategy 3: Legacy website API (fallback)
   if (allTraders.length === 0) {
-    logger.warn(`[${SOURCE}] Direct APIs failed, trying CF Worker proxy...`)
-    try {
-      const proxyUrl = `${PROXY_URL}/proxy?url=${encodeURIComponent(WEBSITE_API_URL)}`
-      for (let page = 1; page <= maxPages; page++) {
-        const data = await fetchJson<BitgetResponse>(proxyUrl, {
+    const sortType = SORT_TYPE_MAP[period] ?? 2
+    for (let page = 1; page <= Math.min(maxPages, 3); page++) {
+      try {
+        const data = await fetchJson<BitgetResponse>(WEBSITE_API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': RANDOM_UAS[Math.floor(Math.random() * RANDOM_UAS.length)],
           },
-          body: {
-            pageNo: page,
-            pageSize: PAGE_SIZE,
-            sortField: 'ROI',
-            sortType,
-            rule: 2,
-          },
+          body: { pageNo: page, pageSize: PAGE_SIZE, sortField: 'ROI', sortType, rule: 2 },
         })
         if (data.code !== '0' && data.code !== 0 && data.code !== '00000') break
         const list = data.data?.list || data.data?.traderList || []
@@ -323,80 +274,9 @@ async function fetchPublic(period: string): Promise<BitgetTrader[]> {
         allTraders.push(...list)
         if (list.length < PAGE_SIZE || allTraders.length >= TARGET) break
         await sleep(500)
-      }
-      if (allTraders.length > 0) {
-        logger.info(`[${SOURCE}] CF proxy got ${allTraders.length} traders`)
-      }
-    } catch (err) {
-      logger.warn(`[${SOURCE}] CF proxy failed: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
-  // Strategy 4: VPS Playwright scraper (browser-based bypass)
-  if (allTraders.length === 0 && VPS_SCRAPER_KEY) {
-    try {
-      logger.warn(`[${SOURCE}] Trying VPS Playwright scraper...`)
-      const url = `${VPS_SCRAPER_URL}/bitget/leaderboard`
-      const res = await fetch(url, {
-        headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-        signal: AbortSignal.timeout(60_000),
-      })
-      if (res.ok) {
-        const data = (await res.json()) as BitgetResponse
-        if (data.code === '00000' || data.code === 0 || data.code === '0') {
-          const list = data.data?.traderList || data.data?.list || []
-          if (list.length > 0) {
-            allTraders.push(...list)
-            logger.info(`[${SOURCE}] VPS scraper got ${allTraders.length} traders`)
-          }
-        }
-      }
-    } catch (err) {
-      logger.warn(`[${SOURCE}] VPS scraper failed: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
-  // Strategy 5: VPS generic proxy with website API
-  if (allTraders.length === 0) {
-    const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
-    if (vpsUrl) {
-      logger.warn(`[${SOURCE}] Trying VPS proxy with website API...`)
-      try {
-        const res = await fetch(vpsUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
-          },
-          body: JSON.stringify({
-            url: WEBSITE_API_URL,
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': RANDOM_UAS[0],
-            },
-            body: JSON.stringify({
-              pageNo: 1,
-              pageSize: PAGE_SIZE,
-              sortField: 'ROI',
-              sortType,
-              rule: 2,
-            }),
-          }),
-          signal: AbortSignal.timeout(15_000),
-        })
-        if (res.ok) {
-          const data = (await res.json()) as BitgetResponse
-          if (data.code === '0' || data.code === 0 || data.code === '00000') {
-            const list = data.data?.list || data.data?.traderList || []
-            allTraders.push(...list)
-            if (allTraders.length > 0) {
-              logger.info(`[${SOURCE}] VPS proxy got ${allTraders.length} traders`)
-            }
-          }
-        }
       } catch (err) {
-        logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+        logger.warn(`[${SOURCE}] Legacy API failed: ${err instanceof Error ? err.message : String(err)}`)
+        break
       }
     }
   }
