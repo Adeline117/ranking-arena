@@ -592,7 +592,7 @@ export default function ReadPage() {
         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         pointerEvents: showToolbar ? 'auto' : 'none',
       }}>
-        <div style={{ padding: '2px 16px', background: theme === 'dark' ? 'var(--color-blur-overlay)' : 'var(--color-backdrop-heavy)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+        <div style={{ padding: '2px 16px', background: theme === 'dark' ? 'var(--color-blur-overlay)' : 'var(--color-backdrop-heavy)', backdropFilter: tokens.glass.blur.sm, WebkitBackdropFilter: tokens.glass.blur.sm }}>
           <Breadcrumb items={[
             { label: t('readerLibrary'), href: '/library' },
             { label: book.title, href: `/library/${id}` },
@@ -623,7 +623,7 @@ export default function ReadPage() {
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '10px 12px', paddingTop: 'max(10px, env(safe-area-inset-top))',
           background: theme === 'dark' ? 'var(--color-backdrop-heavy)' : 'var(--color-backdrop-heavy)',
-          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+          backdropFilter: tokens.glass.blur.lg, WebkitBackdropFilter: tokens.glass.blur.lg,
         }}>
           <ToolbarBtn onClick={() => router.push(`/library/${id}`)} title={t('readerBack')}><IconBack /></ToolbarBtn>
 
@@ -664,7 +664,7 @@ export default function ReadPage() {
         <div style={{
           padding: '10px 16px', paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
           background: theme === 'dark' ? 'var(--color-backdrop-heavy)' : 'var(--color-backdrop-heavy)',
-          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+          backdropFilter: tokens.glass.blur.lg, WebkitBackdropFilter: tokens.glass.blur.lg,
           display: 'flex', flexDirection: 'column', gap: 8,
         }}>
           <div onClick={handleProgressClick} style={{ height: 6, borderRadius: 3, cursor: 'pointer', position: 'relative', background: 'var(--glass-bg-medium)' }}>

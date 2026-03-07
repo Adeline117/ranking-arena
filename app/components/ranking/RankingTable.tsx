@@ -422,7 +422,7 @@ function RankingTableInner(props: {
       {/* Table Header (only in table view) - sticky */}
       {viewMode === 'table' && (
       <Box className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
-        style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'var(--color-bg-secondary)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 0, zIndex: 20, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', transform: 'translateZ(0)' }}>
+        style={{ display: 'grid', gap: tokens.spacing[2], padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid var(--glass-border-light)`, background: onCategoryChange ? 'var(--color-bg-secondary)' : tokens.glass.bg.light, borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`, position: 'sticky', top: 0, zIndex: 20, backdropFilter: tokens.glass.blur.lg, WebkitBackdropFilter: tokens.glass.blur.lg, transform: 'translateZ(0)' }}>
         <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('rank')}</Text>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap', fontSize: tokens.typography.fontSize.xs }}>{t('trader')}</Text>
@@ -622,7 +622,8 @@ function RankingTableInner(props: {
                 position: 'absolute', inset: 0, zIndex: 10,
                 background: 'var(--color-bg-overlay, var(--color-overlay-light))',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                backdropFilter: 'blur(1px)',
+                backdropFilter: tokens.glass.blur.xs,
+                WebkitBackdropFilter: tokens.glass.blur.xs,
                 borderRadius: tokens.radius.md,
                 pointerEvents: 'none',
               }}>

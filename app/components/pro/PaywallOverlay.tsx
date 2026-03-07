@@ -113,7 +113,8 @@ export default function PaywallOverlay({ feature, compact = false, style }: Payw
         padding: '48px 24px',
         textAlign: 'center',
         background: 'linear-gradient(180deg, transparent 0%, var(--color-bg-primary) 20%)',
-        backdropFilter: 'blur(4px)',
+        backdropFilter: tokens.glass.blur.xs,
+        WebkitBackdropFilter: tokens.glass.blur.xs,
         borderRadius: tokens.radius.lg,
         ...style,
       }}

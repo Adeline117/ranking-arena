@@ -482,7 +482,7 @@ function LevelTab({ info, dailyEarned }: { info: LevelInfo & { currentExp: numbe
                   border: isCurrent
                     ? `1.5px solid ${lvl.colorHex}`
                     : `1px solid ${tokens.colors.border.primary}`,
-                  transition: 'all 0.2s ease',
+                  transition: `all ${tokens.transition.base}`,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], minWidth: 0 }}>

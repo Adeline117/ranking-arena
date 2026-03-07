@@ -540,7 +540,8 @@ function SaveFilterModal({
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-backdrop, var(--color-overlay-dark))',
-        backdropFilter: 'blur(4px)',
+        backdropFilter: tokens.glass.blur.xs,
+        WebkitBackdropFilter: tokens.glass.blur.xs,
         zIndex: 1000,
       }}
       onClick={onCancel}

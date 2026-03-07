@@ -806,7 +806,7 @@ export default function EditPostPage() {
                         : ('1px solid ' + tokens.colors.border.primary),
                     cursor: 'grab',
                     opacity: draggedImageIndex === index ? 0.7 : 1,
-                    transition: 'all 0.2s ease',
+                    transition: `all ${tokens.transition.base}`,
                   }}
                 >
                   <Image

@@ -56,7 +56,7 @@ export function EpubToolbar({
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '6px 16px',
       background: themeIsDark ? 'var(--color-blur-overlay)' : 'var(--glass-bg-heavy)',
-      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      backdropFilter: tokens.glass.blur.sm, WebkitBackdropFilter: tokens.glass.blur.sm,
       borderTop: `1px solid ${panelBorder}`,
       fontSize: 11, color: themeIsDark ? 'var(--glass-border-heavy)' : 'var(--color-backdrop-light)',
       zIndex: 50,

@@ -230,7 +230,7 @@ export default function SectorTreemap({ onSectorClick }: { onSectorClick?: (cate
                 cursor: 'pointer',
                 background: timeframe === tf.key ? tokens.colors.accent.primary : 'transparent',
                 color: timeframe === tf.key ? '#FFFFFF' : tokens.colors.text.tertiary,
-                transition: 'all 0.2s ease',
+                transition: `all ${tokens.transition.base}`,
               }}
             >
               {tf.label}

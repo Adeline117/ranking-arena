@@ -402,7 +402,7 @@ export default function DirectoryPage({ config }: { config: DirectoryPageConfig 
           .directory-filter-chip.active {
             font-weight: 700; border-color: transparent;
             background: ${config.header.gradient || tokens.gradient.purpleGold};
-            color: ${config.header.gradient ? '#fff' : 'var(--color-on-accent)'};
+            color: var(--color-on-accent, #fff);
             box-shadow: ${tokens.shadow.md};
           }
           .directory-search-input {

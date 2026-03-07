@@ -379,7 +379,7 @@ export default function BookDetailClient({
                       background: tokens.gradient.primary, color: 'var(--foreground)',
                       textDecoration: 'none',
                       display: 'inline-flex', alignItems: 'center', gap: 10,
-                      transition: 'all 0.2s ease',
+                      transition: `all ${tokens.transition.base}`,
                       boxShadow: '0 4px 16px var(--color-accent-primary-30, rgba(99,102,241,0.3))',
                     }}
                   >
@@ -454,7 +454,7 @@ export default function BookDetailClient({
                     background: 'transparent', color: tokens.colors.text.primary,
                     textDecoration: 'none',
                     display: 'inline-flex', alignItems: 'center', gap: 8,
-                    transition: 'all 0.2s ease',
+                    transition: `all ${tokens.transition.base}`,
                   }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -514,7 +514,7 @@ export default function BookDetailClient({
                 marginTop: 16, padding: '16px 20px', borderRadius: tokens.radius.lg,
                 background: showRatingPrompt ? 'var(--color-accent-brand-08, rgba(139,111,168,0.08))' : tokens.colors.bg.secondary,
                 border: showRatingPrompt ? `2px solid ${tokens.colors.accent.brand}` : `1px solid ${tokens.colors.border.primary}`,
-                transition: 'all 0.3s ease',
+                transition: `all ${tokens.transition.slow}`,
               }}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: tokens.colors.text.primary, marginBottom: 10 }}>
                   {userRating ? t('bookYourRating') : t('bookRateThis')}

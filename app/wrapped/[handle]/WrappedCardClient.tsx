@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { tokens } from '@/lib/design-tokens'
 import type { WrappedTraderData } from './page'
 
 // Brand colors (must stay in sync with /api/og/rank/route.tsx)
@@ -419,7 +420,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
               fontSize: 15,
               fontWeight: 700,
               textDecoration: 'none',
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
               cursor: 'pointer',
             }}
           >
@@ -443,7 +444,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
               fontSize: 15,
               fontWeight: 700,
               cursor: downloading ? 'wait' : 'pointer',
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
               opacity: downloading ? 0.7 : 1,
             }}
           >

@@ -335,7 +335,7 @@ export function PostDetailModal({
                     fontWeight: 600,
                     cursor: loadingMoreComments ? 'not-allowed' : 'pointer',
                     opacity: loadingMoreComments ? 0.6 : 1,
-                    transition: 'all 0.2s ease',
+                    transition: `all ${tokens.transition.base}`,
                     width: '100%',
                     marginTop: 4,
                   }}

@@ -53,7 +53,7 @@ export function ReactButton({
         gap: 4,
         padding: '6px 8px',
         borderRadius: tokens.radius.sm,
-        transition: 'all 0.2s ease',
+        transition: `all ${tokens.transition.base}`,
         transform: isPressed ? 'scale(0.9)' : 'scale(1)',
         fontWeight: active ? 900 : 400,
         boxShadow: active ? '0 0 0 1px var(--color-accent-primary-20)' : 'none',

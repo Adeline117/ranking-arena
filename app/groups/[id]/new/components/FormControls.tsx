@@ -53,7 +53,7 @@ export function ToggleSwitch({ enabled, onToggle, label, description }: ToggleSw
         border: `1px solid ${enabled ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
         background: enabled ? 'var(--color-accent-primary-10)' : tokens.colors.bg.secondary,
         cursor: 'pointer',
-        transition: 'all 0.2s ease',
+        transition: `all ${tokens.transition.base}`,
       }}
       onClick={onToggle}
     >

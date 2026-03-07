@@ -240,7 +240,7 @@ export default function GroupHeader({
                 gap: 4,
                 padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                 borderRadius: tokens.radius.md,
-                transition: 'all 0.2s ease',
+                transition: `all ${tokens.transition.base}`,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = tokens.colors.text.primary

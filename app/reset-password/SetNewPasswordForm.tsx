@@ -92,7 +92,7 @@ export function SetNewPasswordForm({
                     height: 4,
                     borderRadius: 2,
                     background: level <= passwordStrength.level ? passwordStrength.color : 'var(--glass-border-light)',
-                    transition: 'all 0.3s ease',
+                    transition: `all ${tokens.transition.slow}`,
                   }}
                 />
               ))}

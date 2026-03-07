@@ -79,7 +79,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           background: 'var(--color-red-bg-light)',
           border: '1px solid var(--color-red-border)',
           cursor: isPending ? 'wait' : 'pointer',
-          transition: 'all 0.2s ease',
+          transition: `all ${tokens.transition.base}`,
         }}
         title={t('switchToBase') || 'Switch to Base'}
       >
@@ -118,7 +118,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           background: chainStyle.bg,
           border: `1px solid ${chainStyle.color}30`,
           cursor: 'pointer',
-          transition: 'all 0.2s ease',
+          transition: `all ${tokens.transition.base}`,
         }}
       >
         {/* Status dot */}

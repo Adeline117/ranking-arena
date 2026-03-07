@@ -93,7 +93,7 @@ export function BreakdownSection({
                 width: `${(item.weightPct / totalPct) * 100}%`,
                 background: getColorForIndex(idx),
                 minWidth: 4,
-                transition: 'all 0.3s ease',
+                transition: `all ${tokens.transition.slow}`,
                 opacity: hoveredIndex === null || hoveredIndex === idx ? 1 : 0.4,
                 transform: hoveredIndex === idx ? 'scaleY(1.15)' : 'scaleY(1)',
               }}
@@ -121,7 +121,7 @@ export function BreakdownSection({
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.lg,
               background: hoveredIndex === idx ? `${getColorForIndex(idx)}15` : 'transparent',
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
               cursor: 'default',
             }}
             onMouseEnter={() => setHoveredIndex(idx)}
@@ -192,7 +192,7 @@ function PeriodSelector({
             fontSize: tokens.typography.fontSize.xs,
             fontWeight: value === p ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
             cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            transition: `all ${tokens.transition.base}`,
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
           }}
         >

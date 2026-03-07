@@ -196,7 +196,7 @@ export default function BookshelfTab() {
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               padding: '12px 32px', borderRadius: tokens.radius.lg,
-              background: 'var(--glass-bg-heavy)', backdropFilter: 'blur(8px)',
+              background: 'var(--glass-bg-heavy)', backdropFilter: tokens.glass.blur.sm, WebkitBackdropFilter: tokens.glass.blur.sm,
               fontWeight: 700, fontSize: 15, letterSpacing: '0.3px',
             }}>
               {t('bookshelfBrowseNow')}

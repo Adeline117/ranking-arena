@@ -463,7 +463,7 @@ export default function LoginPage() {
             width: '100%', padding: '14px 16px', borderRadius: tokens.radius.lg,
             border: '1px solid var(--color-accent-primary-30)', background: 'transparent',
             color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: 14, cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            transition: `all ${tokens.transition.base}`,
           }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent-primary-60)'; e.currentTarget.style.color = 'var(--color-brand-accent)' }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent-primary-30)'; e.currentTarget.style.color = 'var(--color-text-tertiary)' }}

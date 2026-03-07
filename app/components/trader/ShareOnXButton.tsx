@@ -115,7 +115,7 @@ export default function ShareOnXButton({
         fontSize: tokens.typography.fontSize.sm,
         fontWeight: tokens.typography.fontWeight.bold,
         cursor: 'pointer',
-        transition: 'all 0.2s ease',
+        transition: `all ${tokens.transition.base}`,
         whiteSpace: 'nowrap' as const,
         lineHeight: 1,
       }}

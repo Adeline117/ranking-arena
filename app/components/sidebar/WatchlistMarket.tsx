@@ -210,7 +210,7 @@ export default function WatchlistMarket() {
           <button
             onClick={() => setShowPicker(!showPicker)}
             style={{
-              width: '100%', marginTop: 8, padding: '8px 0',
+              width: '100%', marginTop: 8, padding: `${tokens.spacing[2]} 0`,
               background: 'transparent',
               border: `1px dashed ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.md,

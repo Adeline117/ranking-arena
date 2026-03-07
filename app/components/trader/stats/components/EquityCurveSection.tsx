@@ -273,7 +273,7 @@ function PeriodSelector({
             fontSize: 13,
             fontWeight: value === p ? 600 : 400,
             cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            transition: `all ${tokens.transition.base}`,
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
             boxShadow: value === p ? '0 2px 8px var(--color-overlay-subtle)' : 'none',
           }}

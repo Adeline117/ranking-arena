@@ -140,7 +140,7 @@ export function VideoUploader({
               justifyContent: 'center',
               cursor: videoUploading ? 'not-allowed' : 'pointer',
               opacity: videoUploading ? 0.5 : 1,
-              transition: 'all 0.2s ease',
+              transition: `all ${tokens.transition.base}`,
             }}
           >
             {videoUploading ? (

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 const SUPPORTED_EXCHANGES = [
   'binance',
@@ -160,7 +161,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     maxWidth: '440px',
     backgroundColor: 'var(--color-bg-secondary)',
-    borderRadius: '16px',
+    borderRadius: tokens.radius.xl,
     border: '1px solid var(--color-border-primary)',
     overflow: 'hidden',
   },
@@ -208,40 +209,40 @@ const styles: Record<string, React.CSSProperties> = {
   },
   input: {
     padding: '10px 12px',
-    borderRadius: '8px',
+    borderRadius: tokens.radius.md,
     border: '1px solid var(--color-border-primary)',
     backgroundColor: 'var(--color-bg-tertiary)',
     color: 'var(--color-text-primary)',
-    fontSize: '14px',
+    fontSize: tokens.typography.fontSize.base,
     outline: 'none',
   },
   select: {
     padding: '10px 12px',
-    borderRadius: '8px',
+    borderRadius: tokens.radius.md,
     border: '1px solid var(--color-border-primary)',
     backgroundColor: 'var(--color-bg-tertiary)',
     color: 'var(--color-text-primary)',
-    fontSize: '14px',
+    fontSize: tokens.typography.fontSize.base,
     outline: 'none',
   },
   error: {
     margin: 0,
-    fontSize: '13px',
+    fontSize: tokens.typography.fontSize.sm,
     color: 'var(--color-error)',
   },
   hint: {
-    fontSize: '12px',
+    fontSize: tokens.typography.fontSize.xs,
     color: 'var(--color-text-tertiary)',
     lineHeight: 1.5,
   },
   submitBtn: {
-    padding: '12px',
-    borderRadius: '10px',
+    padding: tokens.spacing[3],
+    borderRadius: tokens.radius.lg,
     border: 'none',
     backgroundColor: 'var(--color-brand)',
     color: 'var(--color-on-accent, #fff)',
-    fontSize: '14px',
-    fontWeight: 600,
+    fontSize: tokens.typography.fontSize.base,
+    fontWeight: tokens.typography.fontWeight.semibold,
     cursor: 'pointer',
   },
 }

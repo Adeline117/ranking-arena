@@ -64,8 +64,8 @@ export default function TimeRangeSelector({
       className="time-range-selector"
       style={{
         display: 'inline-flex',
-        gap: 2,
-        padding: 3,
+        gap: tokens.spacing[0],
+        padding: tokens.spacing[1],
         background: tokens.colors.bg.secondary,
         borderRadius: tokens.radius.lg,
         border: `1px solid ${tokens.colors.border.primary}`,
@@ -116,7 +116,7 @@ export default function TimeRangeSelector({
                 : tokens.typography.fontWeight.medium,
               cursor: disabled ? 'not-allowed' : 'pointer',
               opacity: disabled ? 0.5 : 1,
-              transition: `color 0.2s ease, font-weight 0.2s ease`,
+              transition: `color ${tokens.duration.normal} ease, font-weight ${tokens.duration.normal} ease`,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
               lineHeight: 1.2,
               position: 'relative',

@@ -82,8 +82,8 @@ const BookCard = memo(function BookCard({ item, priority = false }: BookCardProp
           fontWeight: 700,
           padding: '2px 8px',
           borderRadius: tokens.radius.full,
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          backdropFilter: tokens.glass.blur.sm,
+          WebkitBackdropFilter: tokens.glass.blur.sm,
           ...(item.is_free
             ? { background: 'var(--color-accent-success)', color: 'var(--foreground)' }
             : { background: 'var(--color-accent-primary)', color: 'var(--foreground)' }),

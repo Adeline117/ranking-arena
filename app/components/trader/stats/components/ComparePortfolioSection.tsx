@@ -371,7 +371,7 @@ function PeriodSelector({
             fontSize: tokens.typography.fontSize.xs,
             fontWeight: value === p ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
             cursor: 'pointer',
-            transition: 'all 0.2s ease',
+            transition: `all ${tokens.transition.base}`,
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
           }}
         >

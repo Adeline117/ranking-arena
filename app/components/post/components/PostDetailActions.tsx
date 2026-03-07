@@ -113,7 +113,7 @@ export function PostDetailActions({
             padding: '6px 8px',
             fontSize: 12,
             borderRadius: tokens.radius.sm,
-            transition: 'all 0.2s ease',
+            transition: `all ${tokens.transition.base}`,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'var(--overlay-hover)'

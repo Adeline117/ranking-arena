@@ -11,6 +11,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { tokens } from '@/lib/design-tokens'
 
 interface TraderSearchResult {
   id: string
@@ -159,7 +160,7 @@ export default function ChallengeButton({
           fontWeight: 700,
           cursor: 'pointer',
           letterSpacing: 0.5,
-          transition: 'all 0.2s ease',
+          transition: `all ${tokens.transition.base}`,
           whiteSpace: 'nowrap',
         }}
         onMouseEnter={(e) => {
@@ -209,16 +210,16 @@ export default function ChallengeButton({
             alignItems: 'center',
             justifyContent: 'center',
             padding: 20,
-            backdropFilter: 'blur(4px)',
-            WebkitBackdropFilter: 'blur(4px)',
+            backdropFilter: tokens.glass.blur.xs,
+            WebkitBackdropFilter: tokens.glass.blur.xs,
           }}
         >
           <div
             style={{
               background: 'var(--color-bg-secondary)',
               border: '1px solid var(--glass-border-medium)',
-              borderRadius: 16,
-              padding: '28px 24px',
+              borderRadius: tokens.radius.xl,
+              padding: `${tokens.spacing[8]} ${tokens.spacing[6]}`,
               width: '100%',
               maxWidth: 480,
               boxShadow: '0 24px 64px var(--color-overlay-dark, rgba(0,0,0,0.6))',
