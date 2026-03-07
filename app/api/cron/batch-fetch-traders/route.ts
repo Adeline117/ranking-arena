@@ -37,8 +37,7 @@ const GROUPS: Record<string, string[]> = {
   // Group E: Lower-priority (every 8h) — 3 platforms
   e: ['coinex', 'bitget_spot', 'binance_web3'],
   // Group F: Lower-priority CEX (every 12h) — periodic retry
-  // Removed: phemex (copy trading shut down), weex (API dead)
-  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank'],
+  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank', 'phemex', 'weex'],
 }
 
 interface BatchResult {
