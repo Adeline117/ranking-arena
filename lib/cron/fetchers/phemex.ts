@@ -258,7 +258,7 @@ async function fetchPeriod(
       const scraperUrl = `${VPS_SCRAPER_URL}/phemex/leaderboard?pageSize=${PAGE_SIZE}&days=${days}`
       const res = await fetch(scraperUrl, {
         headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(45_000),
       })
       if (res.ok) {
         const data = (await res.json()) as PhemexResponse

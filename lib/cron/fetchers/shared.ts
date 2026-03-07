@@ -505,6 +505,12 @@ export async function fetchJson<T = unknown>(
       throw new Error(detail)
     }
 
+    // Detect HTML responses masquerading as 200 (CF challenge pages)
+    const contentType = res.headers.get('content-type') || ''
+    if (contentType.includes('text/html')) {
+      throw new Error(`HTTP ${res.status} from ${url} (response is HTML, likely WAF/CF block)`)
+    }
+
     return (await res.json()) as T
   } finally {
     clearTimeout(timeout)

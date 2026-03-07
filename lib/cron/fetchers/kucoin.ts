@@ -204,7 +204,7 @@ async function fetchPeriod(
       const scraperUrl = `${VPS_SCRAPER_URL}/kucoin/leaderboard?period=${PERIOD_DAYS[period] || '30'}&pageSize=${PAGE_SIZE}`
       const res = await fetch(scraperUrl, {
         headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(45_000),
       })
       if (res.ok) {
         const data = (await res.json()) as KucoinApiResponse
