@@ -171,4 +171,57 @@ async function scrapeBingx({ timeType = 2, pageSize = 50 } = {}) {
   })
 }
 
-module.exports = { scrapeMexc, scrapeCoinex, scrapeKucoin, scrapeLbank, scrapeBingx }
+// ─── Bitunix ────────────────────────────────────────────────────────
+// Browse bitunix.com copy trading and intercept API responses
+async function scrapeBitunix({ periodType = 2, pageSize = 50 } = {}) {
+  return withBrowser(async (browser) => {
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+    })
+    const page = await context.newPage()
+    const captured = []
+
+    // Intercept API responses for trader/leaderboard data
+    page.on('response', async (response) => {
+      const url = response.url()
+      if (url.includes('copy') && (url.includes('trader') || url.includes('rank') || url.includes('leader'))) {
+        try {
+          const data = await response.json()
+          captured.push(data)
+        } catch (_err) { /* response not JSON */ }
+      }
+    })
+
+    // Also try direct API fetch from the page context (bypasses CF)
+    await page.goto('https://www.bitunix.com/copy-trading', { waitUntil: 'networkidle', timeout: 30000 })
+    await page.waitForTimeout(3000)
+
+    // Scroll to trigger lazy-loaded content
+    await page.evaluate(() => window.scrollBy(0, 500))
+    await page.waitForTimeout(3000)
+
+    // If no intercepted data, try fetching API directly from page context
+    if (captured.length === 0) {
+      try {
+        const apiData = await page.evaluate(async (params) => {
+          const urls = [
+            `/api/v1/copy-trade/traders?page=1&pageSize=${params.pageSize}&sortType=${params.periodType}`,
+            `/fapi/v1/copy-trade/rank?page=1&pageSize=${params.pageSize}&periodType=${params.periodType}`,
+          ]
+          for (const url of urls) {
+            try {
+              const res = await fetch(url)
+              if (res.ok) return await res.json()
+            } catch (_e) { /* try next */ }
+          }
+          return null
+        }, { pageSize, periodType })
+        if (apiData) captured.push(apiData)
+      } catch (_err) { /* page.evaluate failed */ }
+    }
+
+    return captured.length > 0 ? captured[0] : { error: 'No API response captured' }
+  })
+}
+
+module.exports = { scrapeMexc, scrapeCoinex, scrapeKucoin, scrapeLbank, scrapeBingx, scrapeBitunix }
