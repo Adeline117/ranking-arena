@@ -93,16 +93,8 @@
       "schedule": "55 */6 * * *"
     },
     {
-      "path": "/api/cron/batch-enrich",
+      "path": "/api/cron/batch-enrich?period=all",
       "schedule": "10 */4 * * *"
-    },
-    {
-      "path": "/api/cron/batch-enrich?period=30D",
-      "schedule": "20 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-enrich?period=7D",
-      "schedule": "30 */6 * * *"
     },
     {
       "path": "/api/cron/batch-enrich?all=true",
