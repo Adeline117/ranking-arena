@@ -66,7 +66,7 @@ export class GateioConnector extends BaseConnector {
       entries.sort((a, b) => ((b.metrics.roi_pct ?? -Infinity) - (a.metrics.roi_pct ?? -Infinity)));
 
       return this.success(entries.slice(0, limit), {
-        source_url: url,
+        source_url: apiUrl,
         platform_sorting: 'roi_desc',
         platform_window: window,
       });
