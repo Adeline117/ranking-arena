@@ -22,6 +22,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  getWinRateFormat,
 } from './shared'
 import { fetchBybitEquityCurve, fetchBybitStatsDetail, upsertEquityCurve, upsertStatsDetail, enhanceStatsWithDerivedMetrics, type EquityCurvePoint } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -288,7 +289,7 @@ async function fetchPeriod(
 
     const maxDrawdown = parsePercent(mv[1])
     const pnl = parseNum(mv[2])
-    const winRate = normalizeWinRate(parsePercent(mv[3]))
+    const winRate = normalizeWinRate(parsePercent(mv[3]), getWinRateFormat(SOURCE))
     // mv[4] = PLRatio (盈亏比)
     const sharpeRatio = parsePercent(mv[5]) // Phase 1: 提取 Sharpe Ratio
 

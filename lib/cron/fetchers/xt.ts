@@ -21,6 +21,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  getWinRateFormat,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -85,7 +86,7 @@ function parseTrader(item: XtTrader, period: string, rank: number): TraderData |
   const pnl = parseNum(item.income)
 
   let winRate = parseNum(item.winRate)
-  winRate = normalizeWinRate(winRate)
+  winRate = normalizeWinRate(winRate, getWinRateFormat(SOURCE))
 
   let maxDrawdown = parseNum(item.maxRetraction)
   if (maxDrawdown !== null) {

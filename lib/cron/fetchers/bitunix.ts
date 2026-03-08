@@ -17,6 +17,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  getWinRateFormat,
 } from './shared'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
@@ -66,10 +67,8 @@ function parseTrader(item: BitunixTrader, period: string, rank: number): TraderD
 
   const pnl = parseNum(item.pl)
 
-  // winRate and mdd come as ratios (0-1), convert to percentage
   let winRate = parseNum(item.winRate)
-  if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
-  winRate = normalizeWinRate(winRate)
+  winRate = normalizeWinRate(winRate, getWinRateFormat(SOURCE))
 
   let maxDrawdown = parseNum(item.mdd)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) {

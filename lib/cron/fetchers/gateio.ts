@@ -20,6 +20,7 @@ import {
   parseNum,
   normalizeWinRate,
   normalizeROI,
+  getWinRateFormat,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -172,15 +173,13 @@ function parseTrader(item: GateTrader, period: string, rank: number): TraderData
   let roi = parseNum(item.roi ?? item.profit_rate ?? item.pnl_ratio ?? item.pl_ratio ?? item.returnRate)
   if (roi === null) return null
   // Gate.io returns ROI as ratio: 1.0 = 100%, 9.54 = 954%
-  // normalizeROI only converts |<=1| range, but Gate.io ratios can be >1
-  // Always multiply by 100 for Gate.io to convert ratio → percentage
+  // Convert ratio → percentage inline (could also use normalizeROI(roi, 'decimal'))
   roi = roi * 100
 
   const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl ?? item.follow_profit)
 
   let winRate = parseNum(item.win_rate ?? item.winRate)
-  if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
-  winRate = normalizeWinRate(winRate)
+  winRate = normalizeWinRate(winRate, getWinRateFormat(SOURCE))
 
   let maxDrawdown = parseNum(item.max_drawdown ?? item.maxDrawdown)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) {

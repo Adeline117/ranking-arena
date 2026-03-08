@@ -22,6 +22,7 @@ import {
   parseNum,
   normalizeWinRate,
   normalizeROI,
+  getWinRateFormat,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { createHmac } from 'crypto'
@@ -125,7 +126,7 @@ function parseTrader(item: BitgetTrader, period: string, rank: number): TraderDa
   const pnl = parseNum(item.totalProfit ?? item.profit)
 
   let winRate = parseNum(item.winRate)
-  winRate = normalizeWinRate(winRate)
+  winRate = normalizeWinRate(winRate, getWinRateFormat(SOURCE))
 
   let maxDrawdown = parseNum(item.maxDrawdown ?? item.mdd)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) {

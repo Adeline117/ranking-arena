@@ -33,6 +33,7 @@ import {
   parseNum,
   normalizeWinRate,
   normalizeROI,
+  getWinRateFormat,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -193,7 +194,7 @@ async function fetchPeriod(
 
     const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl)
     const wrRaw = parseNum(item.winRate ?? item.win_rate ?? item.successRate)
-    const winRate = normalizeWinRate(wrRaw)
+    const winRate = normalizeWinRate(wrRaw, getWinRateFormat(SOURCE))
     const mddRaw = parseNum(item.mdd ?? item.maxDrawdown ?? item.max_drawdown)
     const maxDrawdown = mddRaw != null ? Math.abs(mddRaw) : null
 

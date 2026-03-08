@@ -20,6 +20,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  getWinRateFormat,
 } from './shared'
 import {
   fetchBinanceEquityCurve,
@@ -253,7 +254,7 @@ async function fetchPeriod(
     const roi = roiRaw * 100
     const pnl = parseNum(t.pnl)
     const wrRaw = parseNum(t.winRate)
-    const winRate = normalizeWinRate(wrRaw != null ? (wrRaw <= 1 ? wrRaw * 100 : wrRaw) : null)
+    const winRate = normalizeWinRate(wrRaw, getWinRateFormat(SOURCE))
     const mddRaw = parseNum(t.maxDrawdown ?? t.mdd)
     const maxDrawdown = mddRaw != null ? Math.abs(mddRaw) : null
 

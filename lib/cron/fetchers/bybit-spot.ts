@@ -18,6 +18,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  getWinRateFormat,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -207,7 +208,7 @@ async function fetchPeriod(
 
     const maxDrawdown = parsePercent(mv[1])
     const pnl = parseNum(mv[2])
-    const winRate = normalizeWinRate(parsePercent(mv[3]))
+    const winRate = normalizeWinRate(parsePercent(mv[3]), getWinRateFormat(SOURCE))
     const followers = parseInt(String(item.currentFollowerCount || '0'), 10) || null
 
     traders.push({

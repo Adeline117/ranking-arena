@@ -19,6 +19,7 @@ import {
   parseNum,
   normalizeWinRate,
   normalizeROI,
+  getWinRateFormat,
 } from './shared'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
@@ -94,7 +95,7 @@ function parseTrader(item: ToobitTrader, period: string, rank: number): TraderDa
   roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.pnl ?? item.profit)
-  const winRate = normalizeWinRate(parseNum(item.winRate ?? item.win_rate))
+  const winRate = normalizeWinRate(parseNum(item.winRate ?? item.win_rate), getWinRateFormat(SOURCE))
   let maxDrawdown = parseNum(item.maxDrawdown ?? item.max_drawdown)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) maxDrawdown *= 100
 
