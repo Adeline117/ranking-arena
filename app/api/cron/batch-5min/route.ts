@@ -37,17 +37,29 @@ export async function GET(request: NextRequest) {
   }
 
   const startTime = Date.now()
+  const plog = await PipelineLogger.start('batch-5min')
 
   // Run all sub-jobs in parallel — they are independent, no HTTP needed
-  const results: InlineJobResult[] = await Promise.all([
-    runWorkerInline(),
-    refreshHotScoresInline(),
-    syncTradersInline(),
-  ])
+  // Wrap with 250s timeout to ensure plog gets closed within 300s maxDuration
+  let results: InlineJobResult[]
+  try {
+    results = await Promise.race([
+      Promise.all([
+        runWorkerInline(),
+        refreshHotScoresInline(),
+        syncTradersInline(),
+      ]),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('batch-5min timed out after 250s')), 250_000)
+      ),
+    ])
+  } catch (err) {
+    await plog.error(err instanceof Error ? err : new Error(String(err)))
+    return NextResponse.json({ batch: 'batch-5min', status: 'error', error: String(err) }, { status: 500 })
+  }
 
   const totalDuration = Date.now() - startTime
   const hasErrors = results.some(r => r.status === 'error')
-  const plog = await PipelineLogger.start('batch-5min')
   const succeeded = results.filter(r => r.status === 'success').length
   if (hasErrors) {
     await plog.error(new Error(`${results.length - succeeded}/${results.length} sub-jobs failed`), { results })

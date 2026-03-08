@@ -113,6 +113,7 @@ async function handleFetch(req: NextRequest) {
       .flatMap(r => r.value)
 
     if (allItems.length === 0) {
+      await plog.success(0, { message: 'No items fetched' })
       return NextResponse.json({ inserted: 0, message: 'No items fetched' })
     }
 
@@ -127,6 +128,7 @@ async function handleFetch(req: NextRequest) {
     const newItems = allItems.filter(item => !existingTitles.has(item.title.toLowerCase().trim()))
 
     if (newItems.length === 0) {
+      await plog.success(0, { message: 'All items already exist' })
       return NextResponse.json({ inserted: 0, message: 'All items already exist' })
     }
 
