@@ -10,7 +10,8 @@
  *   group=c  → okx_web3, aevo, xt (every 4h)
  *   group=d  → gains, htx_futures, dydx, phemex, bybit_spot (every 6h)
  *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 6h)
- *   group=f  → mexc, bingx, gateio, weex, bitmart (every 6h)
+ *   group=f  → mexc, bingx (every 6h) — slow platforms, parallel ~200s
+ *   group=h  → gateio, weex, bitmart (every 6h) — fast platforms, parallel ~25s
  *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap, paradex (every 6h)
  *
  * Dead/blocked platforms removed:
@@ -43,9 +44,11 @@ const GROUPS: Record<string, string[]> = {
   d: ['gains', 'htx_futures', 'dydx', 'phemex', 'bybit_spot'],
   // Group E: Lower-priority DEX (every 6h) — 5 platforms (was 8h)
   e: ['coinex', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
-  // Group F: Mid-tier CEX (every 6h) — 5 platforms (was 12h)
-  f: ['mexc', 'bingx', 'gateio', 'weex', 'bitmart'],
-  // Group G: New CEX + DEX (every 6h) — 5 platforms (was 12h)
+  // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
+  f: ['mexc', 'bingx'],
+  // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
+  h: ['gateio', 'weex', 'bitmart'],
+  // Group G: New CEX + DEX (every 6h) — 6 platforms
   g: ['drift', 'bitunix', 'web3_bot', 'uniswap', 'pancakeswap', 'paradex'],
 }
 
