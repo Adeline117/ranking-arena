@@ -59,6 +59,26 @@ interface HerokuClcResponse {
   pagination: { total: number; totalPages: number; page: number; perPage: number }
 }
 
+// ── Copin API types ──
+
+interface CopinDydxTrader {
+  account: string
+  ranking: number
+  totalPnl: number
+  totalVolume: number
+  totalTrade: number
+  totalWin: number
+  totalLose: number
+}
+
+interface CopinDydxResponse {
+  data: CopinDydxTrader[]
+  meta: { total: number; totalPages: number; limit: number; offset: number }
+}
+
+// Copin API period mapping
+const COPIN_PERIOD: Record<string, string> = { '7D': 'WEEK', '30D': 'MONTH', '90D': 'MONTH' }
+
 interface DydxHistoricalPnl {
   equity: string
   totalPnl: string
@@ -109,6 +129,60 @@ async function fetchLeaderboardFromHeroku(): Promise<HerokuClcEntry[]> {
   }
 
   return allTraders
+}
+
+/**
+ * Strategy 2: Copin API fallback for dYdX leaderboard data.
+ * Free, no API key needed. ~1000 traders available.
+ */
+async function fetchViaCopinApi(period: string): Promise<TraderData[]> {
+  const statisticType = COPIN_PERIOD[period] || 'WEEK'
+  const now = new Date()
+  const queryDate = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+
+  const traders: TraderData[] = []
+  const capturedAt = new Date().toISOString()
+  const pageSize = 100
+  const maxPages = Math.ceil(TARGET / pageSize)
+
+  for (let page = 0; page < maxPages; page++) {
+    const url = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=${pageSize}&offset=${page * pageSize}&sort_by=ranking&sort_type=asc`
+
+    const data = await fetchJson<CopinDydxResponse>(url, { timeoutMs: 15000 })
+    if (!data?.data?.length) break
+
+    for (const t of data.data) {
+      if (!t.account) continue
+
+      // Compute ROI from PnL / estimated capital (volume / avg leverage ~10x)
+      const estimatedCapital = t.totalVolume > 0 ? t.totalVolume / 10 : 0
+      const roi = estimatedCapital > 100 ? (t.totalPnl / estimatedCapital) * 100 : 0
+      if (roi === 0 && t.totalPnl === 0) continue
+
+      const winRate = t.totalTrade > 0 ? (t.totalWin / t.totalTrade) * 100 : null
+      const addr = t.account
+
+      traders.push({
+        source: SOURCE,
+        source_trader_id: addr,
+        handle: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+        profile_url: `https://dydx.trade/portfolio/${addr}`,
+        season_id: period,
+        rank: t.ranking || traders.length + 1,
+        roi,
+        pnl: t.totalPnl || null,
+        win_rate: winRate,
+        max_drawdown: null,
+        arena_score: calculateArenaScore(roi, t.totalPnl, null, winRate, period),
+        captured_at: capturedAt,
+      })
+    }
+
+    if (data.data.length < pageSize) break
+    await sleep(300)
+  }
+
+  return traders
 }
 
 async function fetchHistoricalPnl(address: string): Promise<EquityCurvePoint[]> {
@@ -230,8 +304,20 @@ async function fetchPeriod(
   // We use the same data for all periods but the enrichment/scoring varies by period.
   const entries = await fetchLeaderboardFromHeroku()
 
+  // Strategy 2: Copin API fallback
   if (entries.length === 0) {
-    return { total: 0, saved: 0, error: 'No data from dYdX Heroku API' }
+    logger.warn(`[${SOURCE}] Heroku API returned 0 entries, trying Copin API fallback...`)
+    try {
+      const copinTraders = await fetchViaCopinApi(period)
+      if (copinTraders.length > 0) {
+        logger.info(`[${SOURCE}] Copin API returned ${copinTraders.length} traders for ${period}`)
+        const { saved, error } = await upsertTraders(supabase, copinTraders)
+        return { total: copinTraders.length, saved, error }
+      }
+    } catch (err) {
+      logger.warn(`[${SOURCE}] Copin API failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    return { total: 0, saved: 0, error: 'No data from dYdX Heroku API or Copin API' }
   }
 
   // Parse to enrichable format using Heroku CLC data
