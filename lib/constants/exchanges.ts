@@ -132,6 +132,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'blofin',       // Requires BLOFIN env vars (not set)
   'weex',         // Copy-trade API returning 521 (origin down) since 2026-03
   'mux',          // Requires THEGRAPH_API_KEY (not set), Copin has 0 traders
+  'kwenta',       // Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
+  'synthetix',    // Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
 ]
 
 // ---------------------------------------------------------------------------
