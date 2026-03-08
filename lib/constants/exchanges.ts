@@ -56,6 +56,8 @@ export type TraderSource =
   | 'perpetual_protocol'
   // Solana DEX
   | 'drift'
+  // Arbitrum DEX
+  | 'paradex'
   // New CEX
   | 'bitunix'
   // Dune on-chain data
@@ -104,6 +106,7 @@ export const ALL_SOURCES: TraderSource[] = [
   'jupiter_perps',
   'aevo',
   'drift',
+  'paradex',
   // New CEX
   'bitunix',
   // Web3 bots
@@ -241,6 +244,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   dydx: { name: 'dYdX', sourceType: 'web3', reliability: 90, trustWeight: 0.95, roiType: 'realized' },
   hyperliquid: { name: 'Hyperliquid', sourceType: 'web3', reliability: 95, trustWeight: 1.0, roiType: 'mixed' },
   drift: { name: 'Drift', sourceType: 'web3', reliability: 80, trustWeight: 0.90, roiType: 'mixed' },
+  paradex: { name: 'Paradex', sourceType: 'web3', reliability: 80, trustWeight: 0.90, roiType: 'realized' },
   // kwenta, mux, vertex, synthetix: removed — no accessible public leaderboard APIs
   gains: { name: 'Gains Network', sourceType: 'web3', reliability: 95, trustWeight: 0.95, roiType: 'realized' },
   jupiter_perps: { name: 'Jupiter Perps', sourceType: 'web3', reliability: 85, trustWeight: 0.95, roiType: 'mixed' },

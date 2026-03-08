@@ -640,6 +640,7 @@ export const PLATFORM_FORMAT: Record<string, PlatformFormatConfig> = {
   'jupiter-perps':  { roiFormat: 'decimal', winRateFormat: 'decimal' },
   jupiter_perps:    { roiFormat: 'decimal', winRateFormat: 'decimal' },
   aevo:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  paradex:          { roiFormat: 'decimal', winRateFormat: 'decimal' },
   kwenta:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
   synthetix:        { roiFormat: 'decimal', winRateFormat: 'decimal' },
   mux:              { roiFormat: 'decimal', winRateFormat: 'decimal' },

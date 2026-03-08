@@ -11,7 +11,7 @@
  *   group=d  → gains, htx_futures, dydx, phemex, bybit_spot (every 6h)
  *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 6h)
  *   group=f  → mexc, bingx, gateio, weex, bitmart (every 6h)
- *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap (every 6h)
+ *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap, paradex (every 6h)
  *
  * Dead/blocked platforms removed:
  *   - kucoin: APIs return 404, feature discontinued
@@ -46,7 +46,7 @@ const GROUPS: Record<string, string[]> = {
   // Group F: Mid-tier CEX (every 6h) — 5 platforms (was 12h)
   f: ['mexc', 'bingx', 'gateio', 'weex', 'bitmart'],
   // Group G: New CEX + DEX (every 6h) — 5 platforms (was 12h)
-  g: ['drift', 'bitunix', 'web3_bot', 'uniswap', 'pancakeswap'],
+  g: ['drift', 'bitunix', 'web3_bot', 'uniswap', 'pancakeswap', 'paradex'],
 }
 
 interface BatchResult {
