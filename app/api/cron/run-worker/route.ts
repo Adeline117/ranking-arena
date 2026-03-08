@@ -176,7 +176,7 @@ async function upsertLeaderboardData(
 ) {
   const now = new Date().toISOString();
 
-  // Upsert sources
+  // Upsert sources — try upsert first, fall back to individual inserts if unique constraint missing
   const sources = entries.map(e => ({
     platform,
     market_type,
@@ -188,9 +188,21 @@ async function upsertLeaderboardData(
     raw: e.raw,
   }));
 
-  await supabase
+  const { error: srcUpsertErr } = await supabase
     .from('trader_sources_v2')
     .upsert(sources, { onConflict: 'platform,market_type,trader_key' });
+
+  if (srcUpsertErr?.message?.includes('ON CONFLICT')) {
+    // Unique constraint on (platform, market_type, trader_key) missing.
+    // Fall back to plain inserts — duplicates will be ignored if they error,
+    // or inserted if the row doesn't exist yet.
+    for (const src of sources) {
+      const { error: insertErr } = await supabase.from('trader_sources_v2').insert(src);
+      if (insertErr && !insertErr.message.includes('duplicate key')) {
+        logger.warn(`[run-worker] trader_sources_v2 insert fallback error: ${insertErr.message}`);
+      }
+    }
+  }
 
   // Insert snapshots
   const snapshots = entries

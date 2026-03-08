@@ -182,7 +182,17 @@ async function upsertLeaderboardData(
     display_name: e.display_name, profile_url: e.profile_url,
     last_seen_at: now, is_active: true, raw: e.raw,
   }))
-  await supabase.from('trader_sources_v2').upsert(sources, { onConflict: 'platform,market_type,trader_key' })
+  const { error: srcUpsertErr } = await supabase.from('trader_sources_v2').upsert(sources, { onConflict: 'platform,market_type,trader_key' })
+  if (srcUpsertErr?.message?.includes('ON CONFLICT')) {
+    // Unique constraint on (platform, market_type, trader_key) missing.
+    // Fall back to plain inserts — duplicates ignored if they error.
+    for (const src of sources) {
+      const { error: insertErr } = await supabase.from('trader_sources_v2').insert(src)
+      if (insertErr && !insertErr.message.includes('duplicate key')) {
+        logger.warn(`[inline-jobs] trader_sources_v2 insert fallback error: ${insertErr.message}`)
+      }
+    }
+  }
 
   const snapshots = entries
     .filter(e => e.metrics.roi_pct != null || Object.keys(e.metrics).length > 0)
