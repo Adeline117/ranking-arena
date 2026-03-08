@@ -45,8 +45,11 @@ const HEADERS: Record<string, string> = {
   'Accept-Language': 'en-US,en;q=0.9',
 }
 
-/** Multiple API endpoint patterns to try */
+/** Multiple API endpoint patterns to try — Dec 2025 migration may have changed paths */
 const API_ENDPOINTS = [
+  // New copy trading mode endpoint (Dec 2025 launch)
+  (page: number, days: number) =>
+    `https://phemex.com/api/phemex-user/copy-trading/v2/leaders?pageNo=${page}&pageSize=${PAGE_SIZE}&days=${days}&sortBy=roi&sortType=desc`,
   // Internal web API (discovered from browser interception)
   (page: number, days: number) =>
     `https://phemex.com/api/phemex-user/users/children/queryTraderWithCopySetting?pageNo=${page}&pageSize=${PAGE_SIZE}&days=${days}`,
@@ -56,6 +59,9 @@ const API_ENDPOINTS = [
   // api.phemex.com endpoint
   (page: number, days: number) =>
     `https://api.phemex.com/copy-trading/public/traders?page=${page}&pageSize=${PAGE_SIZE}&sortBy=roi&sortOrder=desc&period=${days}d`,
+  // vapi.phemex.com (VIP endpoint, may work from some IPs)
+  (page: number, days: number) =>
+    `https://vapi.phemex.com/copy-trading/public/traders?page=${page}&pageSize=${PAGE_SIZE}&sortBy=roi&sortOrder=desc&period=${days}d`,
 ]
 
 interface PhemexTrader {
