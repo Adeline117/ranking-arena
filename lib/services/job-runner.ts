@@ -168,13 +168,13 @@ export class JobRunner {
       for (const trader of traders) {
         const marketType = getMarketType(trader.platform);
         await query(
-          `INSERT INTO trader_sources_v2 (platform, market_type, trader_key, display_name, avatar_url, profile_url, last_seen)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `INSERT INTO trader_sources_v2 (platform, market_type, trader_key, display_name, profile_url, last_seen_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (platform, market_type, trader_key) DO UPDATE SET
              display_name = COALESCE($4, trader_sources_v2.display_name),
-             avatar_url = COALESCE($5, trader_sources_v2.avatar_url),
-             last_seen = $7`,
-          [trader.platform, marketType, trader.trader_key, trader.display_name, null, trader.profile_url, new Date().toISOString()],
+             profile_url = COALESCE($5, trader_sources_v2.profile_url),
+             last_seen_at = $6`,
+          [trader.platform, marketType, trader.trader_key, trader.display_name, trader.profile_url, new Date().toISOString()],
         );
       }
     }

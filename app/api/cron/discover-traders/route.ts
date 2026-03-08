@@ -34,8 +34,13 @@ export async function GET(request: NextRequest) {
     const results: Array<{ platform: string; job_id: string | null }> = [];
 
     for (const platform of platforms) {
-      const job = await runner.enqueueDiscovery(platform as Platform, 3);
-      results.push({ platform, job_id: job?.id || null });
+      try {
+        const job = await runner.enqueueDiscovery(platform as Platform, 3);
+        results.push({ platform, job_id: job?.id || null });
+      } catch (err) {
+        logger.warn(`[discover-traders] Failed to enqueue ${platform}: ${err instanceof Error ? err.message : String(err)}`)
+        results.push({ platform, job_id: null });
+      }
     }
 
     // Record pipeline metrics
