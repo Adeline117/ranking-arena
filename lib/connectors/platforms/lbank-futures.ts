@@ -55,11 +55,20 @@ export class LbankFuturesConnector extends BaseConnector {
 
   async discoverLeaderboard(window: Window, limit = 100, _offset = 0): Promise<DiscoverResult> {
     try {
-      // Attempt internal API (likely won't work without Puppeteer)
-      const _rawLb = await this.request<{ data?: { list?: LBankLeaderboardEntry[] } }>(
-        `https://www.lbank.com/api/copy-trading/leaders?limit=${limit}`,
-        { method: 'GET', headers: this.getHeaders() }
-      )
+      // Try VPS scraper first
+      let _rawLb = await this.fetchViaVPS<{ data?: { list?: LBankLeaderboardEntry[] } }>('/lbank/leaderboard', {
+        page: 1,
+        pageSize: limit,
+      });
+
+      // Fallback to direct API if VPS failed (likely won't work without Puppeteer)
+      if (!_rawLb) {
+        _rawLb = await this.request<{ data?: { list?: LBankLeaderboardEntry[] } }>(
+          `https://www.lbank.com/api/copy-trading/leaders?limit=${limit}`,
+          { method: 'GET', headers: this.getHeaders() }
+        );
+      }
+
       const data = warnValidate(LbankFuturesLeaderboardResponseSchema, _rawLb, 'lbank-futures/leaderboard')
 
       const list = data?.data?.list || []

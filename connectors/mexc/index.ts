@@ -37,23 +37,33 @@ export class MexcConnector extends BaseConnector {
       const pages = Math.ceil(limit / pageSize);
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
-        const params = new URLSearchParams({
-          page: String(page),
-          pageSize: String(pageSize),
-          sortBy: 'roi',
-          sortType: 'DESC',
+        // Try VPS scraper first
+        let response = await this.fetchViaVPS<MexcListResponse>('/mexc/leaderboard', {
+          page,
+          pageSize,
           periodDays: WINDOW_MAP[window],
         });
 
-        const response = await this.fetchJSON<MexcListResponse>(
-          `${LIST_API}?${params.toString()}`,
-          {
-            headers: {
-              'Referer': `${API_BASE}/copy-trading`,
-              'Origin': API_BASE,
-            },
-          }
-        );
+        // Fallback to direct API if VPS failed
+        if (!response) {
+          const params = new URLSearchParams({
+            page: String(page),
+            pageSize: String(pageSize),
+            sortBy: 'roi',
+            sortType: 'DESC',
+            periodDays: WINDOW_MAP[window],
+          });
+
+          response = await this.fetchJSON<MexcListResponse>(
+            `${LIST_API}?${params.toString()}`,
+            {
+              headers: {
+                'Referer': `${API_BASE}/copy-trading`,
+                'Origin': API_BASE,
+              },
+            }
+          );
+        }
 
         if (!response?.data?.list) break;
 
