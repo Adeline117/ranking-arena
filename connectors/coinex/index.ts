@@ -48,18 +48,22 @@ export class CoinexConnector extends BaseConnector {
 
         if (vpsResponse?.data?.data) {
           // VPS scraper returns: { data: { data: [...] } }
+          // Map VPS response to connector format
           traders = vpsResponse.data.data.map((item: any) => ({
-            trader_id: item.trader_id,
-            nick_name: item.nickname || item.account_name,
-            avatar: item.avatar,
-            roi: this.parseNumber(item.profit_rate) as number,
-            win_rate: this.parseNumber(item.winning_rate) as number,
-            pnl: this.parseNumber(item.profit_amount) as number,
-            trade_count: this.parseNumber(item.trade_count) as number,
-            aum: this.parseNumber(item.aum) as number,
-            max_drawdown: this.parseNumber(item.mdd) as number,
+            trader_id: item.trader_id || item.uid || item.user_id,
+            nick_name: item.nickname || item.nick_name || item.account_name,
+            avatar: item.avatar || item.avatar_url,
+            roi: this.parseNumber(item.profit_rate || item.roi || item.roiRate) as number,
+            win_rate: this.parseNumber(item.winning_rate || item.win_rate || item.winRate) as number,
+            pnl: this.parseNumber(item.profit_amount || item.pnl || item.profit) as number,
+            trade_count: this.parseNumber(item.trade_count || item.tradeCount) as number,
+            aum: this.parseNumber(item.aum || item.total_assets) as number,
+            max_drawdown: this.parseNumber(item.mdd || item.max_drawdown || item.maxDrawdown) as number,
             raw: item,
           }));
+        } else if (vpsResponse?.data?.items) {
+          // Alternative VPS format
+          traders = vpsResponse.data.items;
         } else {
           // Fallback to direct API
           const params = new URLSearchParams({
@@ -201,7 +205,10 @@ interface CoinexListResponse {
 }
 
 interface CoinexVPSResponse {
-  data: { data: any[] };
+  data: { 
+    data?: any[];
+    items?: CoinexTraderItem[];
+  };
 }
 
 interface CoinexTraderItem {
