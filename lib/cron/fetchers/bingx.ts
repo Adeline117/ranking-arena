@@ -265,35 +265,83 @@ async function fetchPeriod(
     }
   }
 
-  // VPS proxy fallback when CF Worker also fails
+  // VPS proxy fallback with paginated v2 API — POST to qq-os.com via VPS
   if (allTraders.size === 0) {
     const vpsUrl = process.env.VPS_PROXY_URL || process.env.VPS_PROXY_SG
     if (vpsUrl) {
-      logger.warn(`[${SOURCE}] Trying VPS proxy...`)
-      const realApiUrl = `https://api-app.qq-os.com/api/copy-trade-facade/v2/leaderboard/rank?pageIndex=1&pageSize=${PAGE_SIZE}&timeType=${periodType}`
-      try {
-        const res = await fetch(vpsUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
-          },
-          body: JSON.stringify({ url: realApiUrl, method: 'GET', headers: HEADERS }),
-          signal: AbortSignal.timeout(15_000),
-        })
-        if (res.ok) {
+      logger.warn(`[${SOURCE}] Trying VPS proxy with paginated v2 API...`)
+      const v2ApiUrl = 'https://api-app.qq-os.com/api/copy-trade-facade/v2/leaderboard/rank'
+      const maxPagesVps = Math.ceil(TARGET / PAGE_SIZE) // 10 pages × 50 = 500
+      let consecutiveEmpty = 0
+
+      for (let page = 1; page <= maxPagesVps; page++) {
+        try {
+          const res = await fetch(vpsUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
+            },
+            body: JSON.stringify({
+              url: v2ApiUrl,
+              method: 'POST',
+              headers: {
+                ...HEADERS,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                pageIndex: page,
+                pageSize: PAGE_SIZE,
+                periodType,
+                copyTradeType: 1,
+                sortType: 1,
+              }),
+            }),
+            signal: AbortSignal.timeout(15_000),
+          })
+
+          if (!res.ok) {
+            logger.warn(`[${SOURCE}] VPS proxy v2 page ${page} HTTP ${res.status}`)
+            break
+          }
+
           const data = (await res.json()) as BingxResponse
           const list = extractList(data)
+
+          if (list.length === 0) {
+            consecutiveEmpty++
+            if (consecutiveEmpty >= 2) break
+            continue
+          }
+
+          let newCount = 0
           for (const item of list) {
             const id = String(item.uniqueId || item.uid || item.traderId || item.trader || item.apiIdentity || item.id || '')
-            if (id && id !== 'undefined' && !allTraders.has(id)) allTraders.set(id, item)
+            if (id && id !== 'undefined' && !allTraders.has(id)) {
+              allTraders.set(id, item)
+              newCount++
+            }
           }
-          if (allTraders.size > 0) {
-            logger.info(`[${SOURCE}] VPS proxy got ${allTraders.size} traders`)
+
+          if (newCount === 0) {
+            consecutiveEmpty++
+            if (consecutiveEmpty >= 2) break
+          } else {
+            consecutiveEmpty = 0
           }
+
+          logger.info(`[${SOURCE}] VPS proxy v2 page ${page}: +${newCount} traders (total: ${allTraders.size})`)
+
+          if (list.length < PAGE_SIZE || allTraders.size >= TARGET) break
+          await sleep(500)
+        } catch (err) {
+          logger.warn(`[${SOURCE}] VPS proxy v2 page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+          break
         }
-      } catch (err) {
-        logger.warn(`[${SOURCE}] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+
+      if (allTraders.size > 0) {
+        logger.info(`[${SOURCE}] VPS proxy v2 API got ${allTraders.size} traders total`)
       }
     }
   }
