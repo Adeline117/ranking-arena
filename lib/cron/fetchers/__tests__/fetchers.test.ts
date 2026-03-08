@@ -198,20 +198,26 @@ describe('Shared Utilities', () => {
   })
 
   describe('normalizeWinRate', () => {
-    test('converts decimal to percentage', () => {
-      expect(normalizeWinRate(0.65)).toBe(65)
-      expect(normalizeWinRate(0.5)).toBe(50)
-      expect(normalizeWinRate(1)).toBe(100)
+    test('converts decimal to percentage with explicit format', () => {
+      expect(normalizeWinRate(0.65, 'decimal')).toBe(65)
+      expect(normalizeWinRate(0.5, 'decimal')).toBe(50)
+      expect(normalizeWinRate(1, 'decimal')).toBe(100)
     })
 
-    test('leaves percentage values as-is', () => {
+    test('leaves percentage values as-is with explicit format', () => {
+      expect(normalizeWinRate(65, 'percentage')).toBe(65)
+      expect(normalizeWinRate(100, 'percentage')).toBe(100)
+      expect(normalizeWinRate(50, 'percentage')).toBe(50)
+    })
+
+    test('legacy heuristic works without format', () => {
+      expect(normalizeWinRate(0.65)).toBe(65)
       expect(normalizeWinRate(65)).toBe(65)
-      expect(normalizeWinRate(100)).toBe(100)
-      expect(normalizeWinRate(50)).toBe(50)
     })
 
     test('handles null', () => {
       expect(normalizeWinRate(null)).toBeNull()
+      expect(normalizeWinRate(null, 'decimal')).toBeNull()
     })
   })
 })

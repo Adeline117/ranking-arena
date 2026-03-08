@@ -16,6 +16,7 @@ import {
   fetchWithFallback,
   sleep,
   normalizeWinRate,
+  getWinRateFormat,
 } from './shared'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
@@ -149,7 +150,7 @@ async function fetchPeriod(
     if (roi <= (config.mapping.minRoi ?? 0)) continue
 
     let winRate = mapped.win_rate ?? null
-    if (winRate != null && config.mapping.winRateIsDecimal) winRate = normalizeWinRate(winRate)
+    if (winRate != null && config.mapping.winRateIsDecimal) winRate = normalizeWinRate(winRate, 'decimal')
 
     const maxDrawdown = mapped.max_drawdown ?? null
     rank++

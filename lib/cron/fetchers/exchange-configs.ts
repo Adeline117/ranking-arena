@@ -7,7 +7,7 @@
 
 import { type ExchangeConfig, createConfigDrivenFetcher } from './config-driven-fetcher'
 import type { PlatformFetcher } from './shared'
-import { parseNum, normalizeWinRate, normalizeROI } from './shared'
+import { parseNum, normalizeWinRate, normalizeROI, getWinRateFormat } from './shared'
 
 function genericExtractList(response: unknown): unknown[] {
   if (!response || typeof response !== 'object') return []
@@ -56,7 +56,7 @@ const toobitConfig: ExchangeConfig = {
         profile_url: `https://www.toobit.com/en-US/copy-trading/leader/${id}`,
         roi,
         pnl: parseNum(item.pnl),
-        win_rate: normalizeWinRate(parseNum(item.winRate)),
+        win_rate: normalizeWinRate(parseNum(item.winRate), getWinRateFormat('toobit')),
         max_drawdown: parseNum(item.maxDrawdown),
         followers: parseNum(item.followers ?? item.followerCount ?? item.copiers),
       }
@@ -94,7 +94,7 @@ const btseConfig: ExchangeConfig = {
         profile_url: `https://www.btse.com/en/copy-trading/leader/${id}`,
         roi,
         pnl: parseNum(item.pnl),
-        win_rate: normalizeWinRate(parseNum(item.winRate)),
+        win_rate: normalizeWinRate(parseNum(item.winRate), getWinRateFormat('btse')),
         max_drawdown: parseNum(item.maxDrawdown),
         followers: parseNum(item.followers ?? item.copiers),
       }
@@ -132,7 +132,7 @@ const cryptocomConfig: ExchangeConfig = {
         profile_url: `https://crypto.com/exchange/copy-trading/leader/${id}`,
         roi,
         pnl: parseNum(item.pnl),
-        win_rate: normalizeWinRate(parseNum(item.winRate ?? item.win_rate)),
+        win_rate: normalizeWinRate(parseNum(item.winRate ?? item.win_rate), getWinRateFormat('cryptocom')),
         max_drawdown: parseNum(item.maxDrawdown ?? item.max_drawdown),
         followers: parseNum(item.followers ?? item.followerCount ?? item.copiers),
       }

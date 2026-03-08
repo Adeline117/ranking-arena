@@ -20,6 +20,7 @@ import {
   sleep,
   parseNum,
   normalizeWinRate,
+  getWinRateFormat,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -189,8 +190,7 @@ async function enrichTraderDetail(
 
     let winRate = parseNum(d.winRate)
     // Detail API returns winRate as decimal 0-1
-    if (winRate != null && winRate > 0 && winRate <= 1) winRate *= 100
-    winRate = normalizeWinRate(winRate)
+    winRate = normalizeWinRate(winRate, 'decimal')
 
     let maxDrawdown = parseNum(d.maxDrawdown ?? d.mdd)
     if (maxDrawdown != null) maxDrawdown = Math.abs(maxDrawdown)
@@ -280,8 +280,7 @@ async function fetchPeriod(
 
     const pnl = parseNum(item.pnl ?? item.profit)
     const wrRaw = parseNum(item.winRate)
-    // winRate from API is 0-100; normalizeWinRate handles <=1 → *100
-    const winRate = normalizeWinRate(wrRaw != null ? (wrRaw > 1 ? wrRaw : wrRaw * 100) : null)
+    const winRate = normalizeWinRate(wrRaw, getWinRateFormat(SOURCE))
     const mddRaw = parseNum(item.mdd ?? item.maxDrawdown)
     const maxDrawdown = mddRaw != null ? Math.abs(mddRaw) : null
     const followers =

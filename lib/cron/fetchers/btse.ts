@@ -26,6 +26,7 @@ import {
   parseNum,
   normalizeWinRate,
   normalizeROI,
+  getWinRateFormat,
 } from './shared'
 import { logger } from '@/lib/logger'
 import { captureException } from '@/lib/utils/logger'
@@ -78,7 +79,7 @@ function parseTrader(item: BtseTrader, period: string, rank: number): TraderData
   roi = normalizeROI(roi, SOURCE) ?? roi
 
   const pnl = parseNum(item.pnl)
-  const winRate = normalizeWinRate(parseNum(item.winRate))
+  const winRate = normalizeWinRate(parseNum(item.winRate), getWinRateFormat(SOURCE))
   let maxDrawdown = parseNum(item.maxDrawdown)
   if (maxDrawdown !== null && Math.abs(maxDrawdown) > 0 && Math.abs(maxDrawdown) <= 1) maxDrawdown *= 100
 

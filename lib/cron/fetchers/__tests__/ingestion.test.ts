@@ -238,33 +238,41 @@ describe('classifyFetchError', () => {
 // ============================================
 
 describe('normalizeWinRate', () => {
-  test('converts decimal (0-1) to percentage', () => {
-    expect(normalizeWinRate(0.65)).toBe(65)
-    expect(normalizeWinRate(0.5)).toBe(50)
-    expect(normalizeWinRate(0)).toBe(0)
+  test('converts decimal (0-1) to percentage with explicit format', () => {
+    expect(normalizeWinRate(0.65, 'decimal')).toBe(65)
+    expect(normalizeWinRate(0.5, 'decimal')).toBe(50)
+    expect(normalizeWinRate(0, 'decimal')).toBe(0)
   })
 
-  test('converts 1.0 to 100', () => {
-    expect(normalizeWinRate(1)).toBe(100)
+  test('converts 1.0 to 100 with decimal format', () => {
+    expect(normalizeWinRate(1, 'decimal')).toBe(100)
   })
 
-  test('leaves percentage values (>1) unchanged', () => {
-    expect(normalizeWinRate(65)).toBe(65)
-    expect(normalizeWinRate(100)).toBe(100)
-    expect(normalizeWinRate(50)).toBe(50)
-    expect(normalizeWinRate(2)).toBe(2)
+  test('leaves percentage values unchanged with percentage format', () => {
+    expect(normalizeWinRate(65, 'percentage')).toBe(65)
+    expect(normalizeWinRate(100, 'percentage')).toBe(100)
+    expect(normalizeWinRate(50, 'percentage')).toBe(50)
+    expect(normalizeWinRate(2, 'percentage')).toBe(2)
   })
 
   test('handles null', () => {
     expect(normalizeWinRate(null)).toBeNull()
+    expect(normalizeWinRate(null, 'decimal')).toBeNull()
+    expect(normalizeWinRate(null, 'percentage')).toBeNull()
   })
 
-  test('handles edge case: 0.99 converts to 99', () => {
-    expect(normalizeWinRate(0.99)).toBe(99)
+  test('decimal format: 0.99 converts to 99', () => {
+    expect(normalizeWinRate(0.99, 'decimal')).toBeCloseTo(99)
   })
 
-  test('handles edge case: 0.01 converts to 1', () => {
-    expect(normalizeWinRate(0.01)).toBeCloseTo(1)
+  test('decimal format: 0.01 converts to 1', () => {
+    expect(normalizeWinRate(0.01, 'decimal')).toBeCloseTo(1)
+  })
+
+  test('legacy heuristic (no format) still works', () => {
+    expect(normalizeWinRate(0.65)).toBe(65)
+    expect(normalizeWinRate(65)).toBe(65)
+    expect(normalizeWinRate(0)).toBe(0)
   })
 })
 
@@ -273,17 +281,17 @@ describe('normalizeWinRate', () => {
 // ============================================
 
 describe('normalizeROI', () => {
-  test('converts decimal ROI for known decimal platforms', () => {
+  test('converts decimal ROI for known decimal platforms (always multiplies by 100)', () => {
     const decimalPlatforms = ['hyperliquid', 'dydx', 'drift', 'gmx', 'gains', 'vertex', 'jupiter-perps', 'aevo']
     for (const platform of decimalPlatforms) {
-      expect(normalizeROI(0.5, platform)).toBe(50) // 0.5 -> 50%
-      expect(normalizeROI(1.5, platform)).toBe(1.5) // |1.5| > 1, already percentage
-      expect(normalizeROI(-0.3, platform)).toBe(-30) // -0.3 -> -30%
+      expect(normalizeROI(0.5, platform)).toBe(50)   // 0.5 -> 50%
+      expect(normalizeROI(1.5, platform)).toBe(150)   // 1.5 -> 150% (fix: was wrongly left as 1.5)
+      expect(normalizeROI(-0.3, platform)).toBe(-30)  // -0.3 -> -30%
     }
   })
 
   test('leaves ROI unchanged for percentage platforms', () => {
-    const pctPlatforms = ['binance_futures', 'bybit', 'okx_futures', 'bitget_futures']
+    const pctPlatforms = ['binance_futures', 'bybit', 'okx_futures']
     for (const platform of pctPlatforms) {
       expect(normalizeROI(50, platform)).toBe(50)
       expect(normalizeROI(150, platform)).toBe(150)
@@ -294,28 +302,40 @@ describe('normalizeROI', () => {
   test('handles null ROI', () => {
     expect(normalizeROI(null, 'binance_futures')).toBeNull()
     expect(normalizeROI(null, 'hyperliquid')).toBeNull()
+    expect(normalizeROI(null, 'decimal')).toBeNull()
   })
 
-  test('safety check: large decimal platform values (>1) treated as already percentage', () => {
-    // If value is already > 1 on a decimal platform, don't multiply
-    expect(normalizeROI(50, 'hyperliquid')).toBe(50)
-    expect(normalizeROI(150, 'gmx')).toBe(150)
-    expect(normalizeROI(9.99, 'hyperliquid')).toBe(9.99)
+  test('decimal format: always multiplies by 100 regardless of magnitude', () => {
+    // With explicit format, no heuristic — always multiply
+    expect(normalizeROI(0.5, 'decimal')).toBe(50)
+    expect(normalizeROI(1.5, 'decimal')).toBe(150)
+    expect(normalizeROI(9.99, 'decimal')).toBe(999)
+    expect(normalizeROI(50, 'decimal')).toBe(5000)  // Would be wrong input, but format is explicit
   })
 
-  test('boundary: value of exactly 1 on decimal platform is multiplied', () => {
-    // abs(1) <= 1, so treated as decimal → multiply by 100
+  test('percentage format: never multiplies', () => {
+    expect(normalizeROI(50, 'percentage')).toBe(50)
+    expect(normalizeROI(0.5, 'percentage')).toBe(0.5)
+    expect(normalizeROI(150, 'percentage')).toBe(150)
+  })
+
+  test('decimal platform: value of exactly 1 is multiplied', () => {
     expect(normalizeROI(1, 'hyperliquid')).toBe(100)
   })
 
-  test('boundary: value of 1.01 on decimal platform is NOT multiplied', () => {
-    // abs(1.01) > 1, already percentage
-    expect(normalizeROI(1.01, 'hyperliquid')).toBe(1.01)
+  test('decimal platform: value > 1 is also multiplied (no heuristic)', () => {
+    // This is the key fix — 1.5 on Hyperliquid means 150%
+    expect(normalizeROI(1.5, 'hyperliquid')).toBe(150)
   })
 
   test('zero ROI returns 0 for any platform', () => {
     expect(normalizeROI(0, 'binance_futures')).toBe(0)
     expect(normalizeROI(0, 'hyperliquid')).toBe(0)
+  })
+
+  test('legacy heuristic (no format) still works', () => {
+    expect(normalizeROI(0.5)).toBe(50)   // |0.5| <= 1 → multiply
+    expect(normalizeROI(50)).toBe(50)     // |50| > 1 → keep
   })
 })
 

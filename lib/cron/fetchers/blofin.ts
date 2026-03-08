@@ -27,6 +27,7 @@ import {
   parseNum,
   normalizeWinRate,
   normalizeROI,
+  getWinRateFormat,
 } from './shared'
 import { type StatsDetail, upsertStatsDetail } from './enrichment'
 import { logger } from '@/lib/logger'
@@ -111,8 +112,7 @@ function parseTrader(item: BlofinTrader, period: string): TraderData | null {
   const pnl = parseNum(item.pnl ?? item.profit ?? item.totalPnl)
 
   let winRate = parseNum(item.winRate)
-  if (winRate !== null && winRate > 0 && winRate <= 1) winRate *= 100
-  winRate = normalizeWinRate(winRate)
+  winRate = normalizeWinRate(winRate, getWinRateFormat(SOURCE))
 
   let maxDrawdown = parseNum(item.maxDrawdown ?? item.mdd)
   if (maxDrawdown !== null) {

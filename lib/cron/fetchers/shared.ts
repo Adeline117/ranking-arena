@@ -609,32 +609,136 @@ export function parseNum(v: unknown): number | null {
   return isNaN(n) ? null : n
 }
 
-export function normalizeWinRate(wr: number | null): number | null {
+/**
+ * Platform data format configuration.
+ * Declares whether each platform returns ROI and win_rate as decimal (0.5 = 50%) or percentage (50 = 50%).
+ */
+export type DataFormat = 'decimal' | 'percentage'
+
+export interface PlatformFormatConfig {
+  roiFormat: DataFormat
+  winRateFormat: DataFormat
+}
+
+/**
+ * Explicit format declarations for every known platform.
+ * 'decimal' means 0.5 = 50%, 'percentage' means 50 = 50%.
+ *
+ * NOTE: Some fetchers (binance-futures, gateio, binance-spot, bybit, bybit-spot)
+ * do their own ROI conversion inline (e.g. `roi * 100`) before calling normalizeROI,
+ * so their entries here reflect what the API *actually* returns, but callers may
+ * skip normalizeROI entirely. Update those fetchers if migrating them.
+ */
+export const PLATFORM_FORMAT: Record<string, PlatformFormatConfig> = {
+  // DEX platforms — typically return decimal
+  hyperliquid:      { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  dydx:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  drift:            { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  gmx:              { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  gains:            { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  vertex:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  'jupiter-perps':  { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  jupiter_perps:    { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  aevo:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  kwenta:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  synthetix:        { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  mux:              { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  uniswap:          { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  pancakeswap:      { roiFormat: 'decimal', winRateFormat: 'decimal' },
+
+  // CEX platforms returning decimal ROI
+  gateio:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  coinex:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  bingx:            { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  toobit:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  btse:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  cryptocom:        { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  pionex:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  mexc:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  bitget_futures:   { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  bitget_spot:      { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  kucoin:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  blofin:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+
+  // CEX platforms returning percentage ROI
+  binance_futures:  { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  binance_spot:     { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  bybit:            { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  bybit_spot:       { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  okx_futures:      { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  okx_web3:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  htx_futures:      { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  phemex:           { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  weex:             { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  bitmart:          { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  bitunix:          { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  xt:               { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  binance_web3:     { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  web3_bot:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  lbank:            { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  okx_spot:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  perpetual_protocol: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  whitebit:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  bitfinex:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
+}
+
+/**
+ * Normalize win rate to percentage form (50 = 50%).
+ *
+ * @param wr - raw win rate value
+ * @param format - 'decimal' (0.65 = 65%) or 'percentage' (65 = 65%).
+ *                 If omitted, uses legacy heuristic (wr <= 1 → decimal) with a warning.
+ */
+export function normalizeWinRate(wr: number | null, format?: DataFormat): number | null {
   if (wr == null) return null
+  if (format === 'decimal') return wr * 100
+  if (format === 'percentage') return wr
+  // Legacy heuristic fallback — log warning in non-test environments
+  if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+    console.warn(`[normalizeWinRate] No format specified for value ${wr}, using heuristic. Pass 'decimal' or 'percentage' explicitly.`)
+  }
   return wr <= 1 ? wr * 100 : wr
 }
 
 /**
  * Normalize ROI to percentage form (50 = 50%).
- * Platforms that return decimal ROI (0.5 = 50%) are listed in DECIMAL_ROI_PLATFORMS.
- * Heuristic: |value| <= 1 → likely decimal (covers -100% to +100%) → multiply by 100.
- * Values with |value| > 1 are assumed already in percentage form.
+ *
+ * @param rawRoi - raw ROI value from the exchange API
+ * @param platformOrFormat - either a platform name (looked up in PLATFORM_FORMAT)
+ *                           or an explicit DataFormat ('decimal' | 'percentage').
+ *                           If omitted, uses legacy heuristic with a warning.
  */
-const DECIMAL_ROI_PLATFORMS = new Set([
-  'hyperliquid', 'dydx', 'drift', 'gmx', 'gains', 'vertex',
-  'jupiter-perps', 'aevo', 'gateio', 'toobit', 'bingx', 'coinex',
-  'mexc', 'btse', 'cryptocom', 'bitget_futures', 'bitget_spot',
-  'kucoin', 'pionex',
-])
-
-export function normalizeROI(rawRoi: number | null, platform?: string): number | null {
+export function normalizeROI(rawRoi: number | null, platformOrFormat?: string | DataFormat): number | null {
   if (rawRoi == null) return null
-  if (platform && DECIMAL_ROI_PLATFORMS.has(platform)) {
-    // |value| <= 1 means decimal form (e.g., 0.03 = 3%), convert to percentage
-    // |value| > 1 means already percentage form (e.g., 300 = 300%)
-    return Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi
+
+  // Resolve format
+  let format: DataFormat | undefined
+  if (platformOrFormat === 'decimal' || platformOrFormat === 'percentage') {
+    format = platformOrFormat
+  } else if (platformOrFormat) {
+    format = PLATFORM_FORMAT[platformOrFormat]?.roiFormat
   }
-  return rawRoi
+
+  if (format === 'decimal') {
+    return rawRoi * 100
+  }
+  if (format === 'percentage') {
+    return rawRoi
+  }
+
+  // Legacy heuristic fallback — log warning in non-test environments
+  if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+    console.warn(`[normalizeROI] No format resolved for platform="${platformOrFormat}", value=${rawRoi}. Using heuristic. Pass format explicitly.`)
+  }
+  return Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi
+}
+
+/**
+ * Get the win rate format for a platform from PLATFORM_FORMAT.
+ * Returns undefined if platform is not found (triggers legacy heuristic in normalizeWinRate).
+ */
+export function getWinRateFormat(platform: string): DataFormat | undefined {
+  return PLATFORM_FORMAT[platform]?.winRateFormat
 }
 // ============================================
 // Verify Endpoint Helper
