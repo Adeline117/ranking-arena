@@ -37,24 +37,43 @@ export class BitgetFuturesConnector extends BaseConnector {
       const pages = Math.ceil(limit / pageSize);
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
-        const body = {
-          pageNo: page,
+        // Try VPS scraper first (bypasses WAF)
+        let vpsResponse = await this.fetchViaVPS<BitgetListResponse>('/bitget/leaderboard', {
+          page,
           pageSize,
-          periodType: WINDOW_MAP[window],
-          sortBy: 'ROI',
-          sortType: 'DESC',
-          productType: 'USDT-FUTURES',
-        };
-
-        const response = await this.postJSON<BitgetListResponse>(LIST_API, body, {
-          'Origin': API_BASE,
-          'Referer': `${API_BASE}/copy-trading`,
-          'language': 'en_US',
+          period: WINDOW_MAP[window],
+          type: 'futures',
         });
 
-        if (!response?.data?.traderList) break;
+        let traderList: BitgetTraderItem[] = [];
 
-        for (const item of response.data.traderList) {
+        if (vpsResponse?.data?.traderList) {
+          traderList = vpsResponse.data.traderList;
+        } else {
+          // Fallback to direct API (likely to fail with 403)
+          const body = {
+            pageNo: page,
+            pageSize,
+            periodType: WINDOW_MAP[window],
+            sortBy: 'ROI',
+            sortType: 'DESC',
+            productType: 'USDT-FUTURES',
+          };
+
+          const response = await this.postJSON<BitgetListResponse>(LIST_API, body, {
+            'Origin': API_BASE,
+            'Referer': `${API_BASE}/copy-trading`,
+            'language': 'en_US',
+          });
+
+          if (response?.data?.traderList) {
+            traderList = response.data.traderList;
+          }
+        }
+
+        if (traderList.length === 0) break;
+
+        for (const item of traderList) {
           entries.push({
             trader_key: item.traderId || item.traderUid,
             display_name: item.nickName || item.traderName || null,
@@ -66,7 +85,7 @@ export class BitgetFuturesConnector extends BaseConnector {
           });
         }
 
-        if (response.data.traderList.length < pageSize) break;
+        if (traderList.length < pageSize) break;
         await this.sleep(this.getRandomDelay(2000, 4000));
       }
 
@@ -202,24 +221,43 @@ export class BitgetSpotConnector extends BaseConnector {
       const pages = Math.ceil(limit / pageSize);
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
-        const body = {
-          pageNo: page,
+        // Try VPS scraper first (bypasses WAF)
+        let vpsResponse = await this.fetchViaVPS<BitgetListResponse>('/bitget/leaderboard', {
+          page,
           pageSize,
-          periodType: WINDOW_MAP[window],
-          sortBy: 'ROI',
-          sortType: 'DESC',
-          productType: 'SPOT',
-        };
-
-        const response = await this.postJSON<BitgetListResponse>(LIST_API, body, {
-          'Origin': API_BASE,
-          'Referer': `${API_BASE}/copy-trading/spot`,
-          'language': 'en_US',
+          period: WINDOW_MAP[window],
+          type: 'spot',
         });
 
-        if (!response?.data?.traderList) break;
+        let traderList: BitgetTraderItem[] = [];
 
-        for (const item of response.data.traderList) {
+        if (vpsResponse?.data?.traderList) {
+          traderList = vpsResponse.data.traderList;
+        } else {
+          // Fallback to direct API (likely to fail with 403)
+          const body = {
+            pageNo: page,
+            pageSize,
+            periodType: WINDOW_MAP[window],
+            sortBy: 'ROI',
+            sortType: 'DESC',
+            productType: 'SPOT',
+          };
+
+          const response = await this.postJSON<BitgetListResponse>(LIST_API, body, {
+            'Origin': API_BASE,
+            'Referer': `${API_BASE}/copy-trading/spot`,
+            'language': 'en_US',
+          });
+
+          if (response?.data?.traderList) {
+            traderList = response.data.traderList;
+          }
+        }
+
+        if (traderList.length === 0) break;
+
+        for (const item of traderList) {
           entries.push({
             trader_key: item.traderId || item.traderUid,
             display_name: item.nickName || item.traderName || null,
@@ -231,7 +269,7 @@ export class BitgetSpotConnector extends BaseConnector {
           });
         }
 
-        if (response.data.traderList.length < pageSize) break;
+        if (traderList.length < pageSize) break;
         await this.sleep(this.getRandomDelay(2000, 4000));
       }
 
