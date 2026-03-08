@@ -298,10 +298,12 @@ export async function GET(request: NextRequest) {
 
     if (snapError) {
       logger.error('generate-activities: failed to fetch snapshots', snapError)
+      await plog.error(new Error(snapError.message))
       return NextResponse.json({ error: snapError.message }, { status: 500 })
     }
 
     if (!rawSnapshots || rawSnapshots.length === 0) {
+      await plog.success(0, { message: 'No snapshots in window' })
       return NextResponse.json({ ok: true, message: 'No snapshots in window', generated: 0 })
     }
 
