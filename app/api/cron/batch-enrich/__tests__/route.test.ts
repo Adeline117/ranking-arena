@@ -21,8 +21,11 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
   },
 }))
 
-const mockFetch = jest.fn()
-global.fetch = mockFetch
+// Mock the enrichment runner — batch-enrich now calls inline, not via fetch
+const mockRunEnrichment = jest.fn()
+jest.mock('@/lib/cron/enrichment-runner', () => ({
+  runEnrichment: (...args: unknown[]) => mockRunEnrichment(...args),
+}))
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
@@ -48,16 +51,10 @@ describe('GET /api/cron/batch-enrich', () => {
 
   beforeAll(() => {
     process.env.CRON_SECRET = CRON_SECRET
-    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000'
   })
 
   beforeEach(() => {
     jest.clearAllMocks()
-    jest.useFakeTimers({ advanceTimers: true })
-  })
-
-  afterEach(() => {
-    jest.useRealTimers()
   })
 
   // ---- Auth ----------------------------------------------------------------
@@ -84,7 +81,7 @@ describe('GET /api/cron/batch-enrich', () => {
   // ---- Successful execution ------------------------------------------------
 
   it('enriches high + medium priority platforms for 7D period', async () => {
-    mockFetch.mockResolvedValue({ ok: true })
+    mockRunEnrichment.mockResolvedValue({ ok: true, summary: { total: 10, enriched: 10, failed: 0 }, results: {} })
 
     const res = await GET(createCronRequest(CRON_SECRET, { period: '7D' }))
     const body = await res.json()
@@ -98,7 +95,7 @@ describe('GET /api/cron/batch-enrich', () => {
   })
 
   it('enriches high + medium priority for 90D period', async () => {
-    mockFetch.mockResolvedValue({ ok: true })
+    mockRunEnrichment.mockResolvedValue({ ok: true, summary: { total: 10, enriched: 10, failed: 0 }, results: {} })
 
     const res = await GET(createCronRequest(CRON_SECRET, { period: '90D' }))
     const body = await res.json()
@@ -108,7 +105,7 @@ describe('GET /api/cron/batch-enrich', () => {
   })
 
   it('enriches all platforms when all=true', async () => {
-    mockFetch.mockResolvedValue({ ok: true })
+    mockRunEnrichment.mockResolvedValue({ ok: true, summary: { total: 10, enriched: 10, failed: 0 }, results: {} })
 
     const res = await GET(createCronRequest(CRON_SECRET, { period: '7D', all: 'true' }))
     const body = await res.json()
@@ -118,8 +115,8 @@ describe('GET /api/cron/batch-enrich', () => {
 
   // ---- Error handling ------------------------------------------------------
 
-  it('reports failures when enrichment API returns errors', async () => {
-    mockFetch.mockResolvedValue({ ok: false, status: 500 })
+  it('reports failures when enrichment returns errors', async () => {
+    mockRunEnrichment.mockResolvedValue({ ok: false, summary: { total: 10, enriched: 0, failed: 10 }, results: {} })
 
     const res = await GET(createCronRequest(CRON_SECRET, { period: '7D' }))
     const body = await res.json()
@@ -128,8 +125,8 @@ describe('GET /api/cron/batch-enrich', () => {
     expect(body.failed).toBe(14)
   })
 
-  it('handles network errors gracefully', async () => {
-    mockFetch.mockRejectedValue(new Error('Connection refused'))
+  it('handles thrown errors gracefully', async () => {
+    mockRunEnrichment.mockRejectedValue(new Error('Connection refused'))
 
     const res = await GET(createCronRequest(CRON_SECRET, { period: '7D' }))
     const body = await res.json()
