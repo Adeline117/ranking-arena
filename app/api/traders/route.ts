@@ -28,7 +28,7 @@ const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>
 const SOURCES_TTL = 5 * 60 * 1000
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
-const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, is_outlier, computed_at, season_id, sharpe_ratio'
+const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, is_outlier, computed_at, season_id, sharpe_ratio, trader_type'
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
@@ -183,6 +183,9 @@ async function fetchFromLeaderboard(
     style_confidence: row.style_confidence != null ? Number(row.style_confidence) : null,
     // Risk metrics
     sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
+    // Bot classification
+    is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+    trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
   }))
 
   // Deduplicate 0x addresses (case-insensitive) — VPS imports may write checksum-case
