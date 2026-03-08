@@ -467,6 +467,12 @@ export default function ExchangeRankingClient({
                   <span style={{ fontSize: 13, fontWeight: 600, color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {name}
                   </span>
+                  {(t.platform === 'web3_bot' || t.trader_type === 'bot' || t.is_bot) && (
+                    <span style={{
+                      padding: '0px 4px', borderRadius: 4, fontSize: 9, fontWeight: 600, flexShrink: 0,
+                      color: '#a78bfa', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)',
+                    }}>Bot</span>
+                  )}
                 </div>
                 <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 700, color: roiColor }}>
                   {formatROI(t.roi)}
