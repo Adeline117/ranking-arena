@@ -167,15 +167,39 @@ export class JobRunner {
 
       for (const trader of traders) {
         const marketType = getMarketType(trader.platform);
-        await query(
-          `INSERT INTO trader_sources_v2 (platform, market_type, trader_key, display_name, profile_url, last_seen_at)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (platform, market_type, trader_key) DO UPDATE SET
-             display_name = COALESCE($4, trader_sources_v2.display_name),
-             profile_url = COALESCE($5, trader_sources_v2.profile_url),
-             last_seen_at = $6`,
-          [trader.platform, marketType, trader.trader_key, trader.display_name, trader.profile_url, new Date().toISOString()],
-        );
+        const now = new Date().toISOString();
+        try {
+          await query(
+            `INSERT INTO trader_sources_v2 (platform, market_type, trader_key, display_name, profile_url, last_seen_at)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (platform, market_type, trader_key) DO UPDATE SET
+               display_name = COALESCE($4, trader_sources_v2.display_name),
+               profile_url = COALESCE($5, trader_sources_v2.profile_url),
+               last_seen_at = $6`,
+            [trader.platform, marketType, trader.trader_key, trader.display_name, trader.profile_url, now],
+          );
+        } catch (err: unknown) {
+          // If unique constraint is missing, fall back to UPDATE-or-INSERT
+          if (err instanceof Error && err.message.includes('ON CONFLICT')) {
+            const updated = await query(
+              `UPDATE trader_sources_v2 SET
+                 display_name = COALESCE($4, display_name),
+                 profile_url = COALESCE($5, profile_url),
+                 last_seen_at = $6
+               WHERE platform = $1 AND market_type = $2 AND trader_key = $3`,
+              [trader.platform, marketType, trader.trader_key, trader.display_name, trader.profile_url, now],
+            );
+            if (!updated.rowCount) {
+              await query(
+                `INSERT INTO trader_sources_v2 (platform, market_type, trader_key, display_name, profile_url, last_seen_at)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [trader.platform, marketType, trader.trader_key, trader.display_name, trader.profile_url, now],
+              );
+            }
+          } else {
+            throw err;
+          }
+        }
       }
     }
   }
@@ -310,17 +334,45 @@ export class JobRunner {
   ): Promise<RefreshJob | null> {
     const idempotencyKey = `${jobType}:${platform}:${traderKey || 'all'}:${new Date().toISOString().slice(0, 13)}`;
 
-    const result = await queryOne(
-      `INSERT INTO refresh_jobs (job_type, platform, trader_key, priority, status, idempotency_key)
-       VALUES ($1, $2, $3, $4, 'pending', $5)
-       ON CONFLICT (idempotency_key) DO UPDATE SET
-         status = CASE WHEN refresh_jobs.status = 'completed' THEN 'pending' ELSE refresh_jobs.status END,
-         attempts = CASE WHEN refresh_jobs.status = 'completed' THEN 0 ELSE refresh_jobs.attempts END
-       RETURNING *`,
-      [jobType, platform, traderKey, priority, idempotencyKey],
-    );
+    try {
+      const result = await queryOne(
+        `INSERT INTO refresh_jobs (job_type, platform, trader_key, priority, status, idempotency_key)
+         VALUES ($1, $2, $3, $4, 'pending', $5)
+         ON CONFLICT (idempotency_key) DO UPDATE SET
+           status = CASE WHEN refresh_jobs.status = 'completed' THEN 'pending' ELSE refresh_jobs.status END,
+           attempts = CASE WHEN refresh_jobs.status = 'completed' THEN 0 ELSE refresh_jobs.attempts END
+         RETURNING *`,
+        [jobType, platform, traderKey, priority, idempotencyKey],
+      );
 
-    return result as RefreshJob | null;
+      return result as RefreshJob | null;
+    } catch (err: unknown) {
+      // If unique constraint on idempotency_key is missing, fall back to check-then-insert
+      if (err instanceof Error && err.message.includes('ON CONFLICT')) {
+        const existing = await queryOne(
+          `SELECT * FROM refresh_jobs WHERE idempotency_key = $1`,
+          [idempotencyKey],
+        );
+        if (existing) {
+          // Re-enqueue if completed
+          if ((existing as unknown as RefreshJob).status === 'completed') {
+            await query(
+              `UPDATE refresh_jobs SET status = 'pending', attempts = 0 WHERE idempotency_key = $1`,
+              [idempotencyKey],
+            );
+          }
+          return existing as unknown as RefreshJob;
+        }
+        const result = await queryOne(
+          `INSERT INTO refresh_jobs (job_type, platform, trader_key, priority, status, idempotency_key)
+           VALUES ($1, $2, $3, $4, 'pending', $5)
+           RETURNING *`,
+          [jobType, platform, traderKey, priority, idempotencyKey],
+        );
+        return result as RefreshJob | null;
+      }
+      throw err;
+    }
   }
 
   // ============================================
