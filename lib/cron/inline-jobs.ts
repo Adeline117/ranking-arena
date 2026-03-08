@@ -45,13 +45,40 @@ export async function runWorkerInline(): Promise<InlineJobResult> {
     const MAX_JOBS = 3
     const results: Array<{ job_id: string; platform: string; status: string; error?: string }> = []
 
-    for (let i = 0; i < MAX_JOBS; i++) {
-      const { data: jobs } = await supabase.rpc('claim_refresh_job', {
+    // Try to claim a job — if the RPC or table doesn't exist, gracefully skip
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let firstJob: any = null
+    try {
+      const { data: jobs, error: rpcError } = await supabase.rpc('claim_refresh_job', {
         p_worker_id: workerId,
         p_platforms: null,
         p_job_types: null,
       })
-      const job = jobs?.[0]
+      if (rpcError) {
+        // RPC doesn't exist or refresh_jobs table missing — v2 job queue not deployed
+        return { name, status: 'success', durationMs: Date.now() - start, detail: { skipped: true, reason: 'claim_refresh_job RPC not available' } }
+      }
+      firstJob = jobs?.[0] ?? null
+    } catch {
+      // RPC function doesn't exist — gracefully skip
+      return { name, status: 'success', durationMs: Date.now() - start, detail: { skipped: true, reason: 'claim_refresh_job RPC not available' } }
+    }
+
+    if (!firstJob) {
+      return { name, status: 'success', durationMs: Date.now() - start, detail: { jobs_processed: 0 } }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let job: any = firstJob
+
+    for (let i = 0; i < MAX_JOBS; i++) {
+      if (i > 0) {
+        const { data: jobs } = await supabase.rpc('claim_refresh_job', {
+          p_worker_id: workerId,
+          p_platforms: null,
+          p_job_types: null,
+        })
+        job = jobs?.[0] ?? null
+      }
       if (!job) break
 
       try {
