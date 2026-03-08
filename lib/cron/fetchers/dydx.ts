@@ -1,11 +1,12 @@
 /**
  * dYdX v4 — Inline fetcher for Vercel serverless
- * API: Uses Cloudflare Worker proxy to bypass geo-restrictions
  *
- * Endpoints:
- * - Leaderboard: /dydx/leaderboard
- * - Historical PnL: /dydx/historical-pnl
- * - Subaccount: /dydx/subaccount
+ * Primary data source: dYdX external API (Heroku)
+ *   - Weekly CLC (competition leaderboard): PnL + equity snapshots, ~3500 traders
+ *   - Fee leaderboard: total fees paid, ~2800 traders
+ *
+ * The old indexer /v4/leaderboard/pnl endpoint was removed (~2026-03).
+ * Enrichment still uses the indexer for historical PnL and subaccount data.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -24,29 +25,38 @@ import { captureException } from '@/lib/utils/logger'
 const SOURCE = 'dydx'
 const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 const INDEXER_URL = 'https://indexer.dydx.trade'
+const HEROKU_API = 'https://pp-external-api-ffb2ad95ef03.herokuapp.com/api'
 const TARGET = 500
 const ENRICH_LIMIT = 300
 const ENRICH_CONCURRENCY = 5
 const ENRICH_DELAY_MS = 300
 
-// Map periods to dYdX API format
-const PERIOD_MAP: Record<string, string> = {
-  '7D': 'PERIOD_7D',
-  '30D': 'PERIOD_30D',
-  '90D': 'PERIOD_90D',
-}
-
 // ── API response types ──
 
-interface DydxLeaderboardEntry {
+interface HerokuClcEntry {
   address: string
-  pnl: string
-  currentEquity?: string
-  rank?: number
+  pnl: number
+  volume: number
+  position: number
+  dollarReward?: number
+  startOfThisWeekPnlSnapshot?: {
+    equity: string
+    netTransfers: string
+    totalPnl: string
+    createdAt: string
+  }
+  latestPnlSnapshot?: {
+    equity: string
+    netTransfers: string
+    totalPnl: string
+    createdAt: string
+  }
 }
 
-interface DydxLeaderboardResponse {
-  leaderboard?: DydxLeaderboardEntry[]
+interface HerokuClcResponse {
+  success: boolean
+  data: HerokuClcEntry[]
+  pagination: { total: number; totalPages: number; page: number; perPage: number }
 }
 
 interface DydxHistoricalPnl {
@@ -70,91 +80,70 @@ interface DydxSubaccountResponse {
 
 // ── Fetch helpers ──
 
-async function fetchLeaderboard(period: string): Promise<DydxLeaderboardEntry[]> {
-  const dydxPeriod = PERIOD_MAP[period] || 'PERIOD_30D'
+/**
+ * Fetch leaderboard from dYdX Heroku external API (weekly CLC competition).
+ * This is the primary source since the indexer /v4/leaderboard/pnl was removed.
+ * Returns traders sorted by PnL with equity snapshots.
+ */
+async function fetchLeaderboardFromHeroku(): Promise<HerokuClcEntry[]> {
+  const allTraders: HerokuClcEntry[] = []
+  const perPage = 200
+  const maxPages = Math.ceil(TARGET / perPage) + 1
 
-  // Strategy 1: CF Worker proxy (for geo-blocked regions)
-  try {
-    const proxyUrl = `${PROXY_URL}/dydx/leaderboard?period=${dydxPeriod}&limit=${TARGET}`
-    const data = await fetchJson<DydxLeaderboardResponse>(proxyUrl, { timeoutMs: 20000 })
-    if (data?.leaderboard && data.leaderboard.length > 0) {
-      logger.warn(`[dydx] CF Worker proxy success: ${data.leaderboard.length} entries`)
-      return data.leaderboard
-    }
-  } catch (err) {
-    logger.warn(`[dydx] CF Worker proxy failed: ${err instanceof Error ? err.message : String(err)}`)
-  }
-
-  // Strategy 2: Direct indexer API
-  try {
-    const directUrl = `${INDEXER_URL}/v4/leaderboard/pnl?period=${dydxPeriod}&limit=${TARGET}`
-    const data = await fetchJson<DydxLeaderboardResponse>(directUrl, { timeoutMs: 20000 })
-    if (data?.leaderboard && data.leaderboard.length > 0) {
-      logger.warn(`[dydx] Direct API success: ${data.leaderboard.length} entries`)
-      return data.leaderboard
-    }
-  } catch (err) {
-    logger.warn(`[dydx] Direct API failed: ${err instanceof Error ? err.message : String(err)}`)
-  }
-
-  // Strategy 3: VPS proxy fallback (route indexer request through SG/JP VPS)
-  const vpsUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP
-  if (vpsUrl) {
+  for (let page = 1; page <= maxPages; page++) {
     try {
-      logger.warn(`[dydx] Trying VPS proxy fallback...`)
-      const targetUrl = `${INDEXER_URL}/v4/leaderboard/pnl?period=${dydxPeriod}&limit=${TARGET}`
-      const res = await fetch(vpsUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Proxy-Key': process.env.VPS_PROXY_KEY || '',
-        },
-        body: JSON.stringify({ url: targetUrl, method: 'GET', headers: { Accept: 'application/json' } }),
-        signal: AbortSignal.timeout(30000),
-      })
-      if (res.ok) {
-        const data = (await res.json()) as DydxLeaderboardResponse
-        if (data?.leaderboard && data.leaderboard.length > 0) {
-          logger.warn(`[dydx] VPS proxy success: ${data.leaderboard.length} entries`)
-          return data.leaderboard
-        }
-      }
+      const url = `${HEROKU_API}/dydx-weekly-clc?perPage=${perPage}&page=${page}`
+      const data = await fetchJson<HerokuClcResponse>(url, { timeoutMs: 20000 })
+
+      if (!data?.success || !data.data || data.data.length === 0) break
+
+      allTraders.push(...data.data)
+      logger.warn(`[dydx] Heroku CLC page ${page}: ${data.data.length} entries (total: ${allTraders.length}/${data.pagination.total})`)
+
+      if (allTraders.length >= TARGET || page >= data.pagination.totalPages) break
+      await sleep(300)
     } catch (err) {
-      logger.warn(`[dydx] VPS proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+      logger.warn(`[dydx] Heroku CLC page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+      break
     }
   }
 
-  return []
+  return allTraders
 }
 
 async function fetchHistoricalPnl(address: string): Promise<EquityCurvePoint[]> {
   try {
     // Try proxy first
     const proxyUrl = `${PROXY_URL}/dydx/historical-pnl?address=${address}&subaccountNumber=0&limit=90`
-    const data = await fetchJson<DydxHistoricalPnlResponse>(proxyUrl, { timeoutMs: 10000 })
+    let historicalPnl: DydxHistoricalPnl[] | undefined
 
-    if (!data?.historicalPnl || data.historicalPnl.length === 0) {
-      // Try direct
-      const directUrl = `${INDEXER_URL}/v4/historical-pnl?address=${address}&subaccountNumber=0&limit=90`
-      const directData = await fetchJson<DydxHistoricalPnlResponse>(directUrl, { timeoutMs: 10000 })
-      if (!directData?.historicalPnl) return []
-      data.historicalPnl = directData.historicalPnl
+    try {
+      const data = await fetchJson<DydxHistoricalPnlResponse>(proxyUrl, { timeoutMs: 10000 })
+      historicalPnl = data?.historicalPnl
+    } catch {
+      // Proxy failed, try direct
     }
 
+    if (!historicalPnl || historicalPnl.length === 0) {
+      const directUrl = `${INDEXER_URL}/v4/historical-pnl?address=${address}&subaccountNumber=0&limit=90`
+      const directData = await fetchJson<DydxHistoricalPnlResponse>(directUrl, { timeoutMs: 10000 })
+      historicalPnl = directData?.historicalPnl
+    }
+
+    if (!historicalPnl || historicalPnl.length === 0) return []
+
     // Convert to equity curve format
-    return data.historicalPnl
+    return historicalPnl
       .map(h => ({
         date: h.createdAt.split('T')[0],
-        roi: 0, // Will calculate below
+        roi: 0,
         pnl: parseFloat(h.totalPnl) || 0,
       }))
       .reverse() // API returns newest first
       .map((point, idx, arr) => {
-        // Calculate ROI relative to initial equity
         const initialPnl = arr[0]?.pnl || 0
         const currentPnl = point.pnl
         const pnlDiff = currentPnl - initialPnl
-        // Estimate ROI based on PnL change (assume ~$10k starting capital as reference)
         const roi = initialPnl !== 0 ? (pnlDiff / Math.abs(initialPnl)) * 100 : 0
         return { ...point, roi }
       })
@@ -168,6 +157,15 @@ async function fetchSubaccountEquity(address: string): Promise<number | null> {
   try {
     const proxyUrl = `${PROXY_URL}/dydx/subaccount?address=${address}&subaccountNumber=0`
     const data = await fetchJson<DydxSubaccountResponse>(proxyUrl, { timeoutMs: 10000 })
+    if (data?.subaccount?.equity) {
+      return parseFloat(data.subaccount.equity)
+    }
+  } catch {
+    // Proxy failed, try direct
+  }
+  try {
+    const directUrl = `${INDEXER_URL}/v4/addresses/${address}/subaccounts/0`
+    const data = await fetchJson<DydxSubaccountResponse>(directUrl, { timeoutMs: 10000 })
     if (data?.subaccount?.equity) {
       return parseFloat(data.subaccount.equity)
     }
@@ -185,6 +183,7 @@ interface EnrichableTrader {
   equity: number | null
   equityCurve: EquityCurvePoint[]
   maxDrawdown: number | null
+  volume: number
 }
 
 async function enrichTraders(traders: EnrichableTrader[]): Promise<void> {
@@ -227,61 +226,70 @@ async function fetchPeriod(
   supabase: SupabaseClient,
   period: string
 ): Promise<{ total: number; saved: number; error?: string }> {
-  const entries = await fetchLeaderboard(period)
+  // The Heroku API only has weekly competition data (no period filter).
+  // We use the same data for all periods but the enrichment/scoring varies by period.
+  const entries = await fetchLeaderboardFromHeroku()
 
   if (entries.length === 0) {
-    return { total: 0, saved: 0, error: 'No leaderboard data from dYdX (may be geo-blocked)' }
+    return { total: 0, saved: 0, error: 'No data from dYdX Heroku API' }
   }
 
-  // Parse to enrichable format
-  const parsed: EnrichableTrader[] = entries.map(e => ({
-    address: e.address,
-    pnl: parseFloat(e.pnl) || 0,
-    equity: e.currentEquity ? parseFloat(e.currentEquity) : null,
-    equityCurve: [],
-    maxDrawdown: null,
-  }))
+  // Parse to enrichable format using Heroku CLC data
+  const parsed: EnrichableTrader[] = entries.map(e => {
+    const latestEquity = e.latestPnlSnapshot?.equity ? parseFloat(e.latestPnlSnapshot.equity) : null
+    return {
+      address: e.address,
+      pnl: e.pnl || 0,
+      equity: latestEquity,
+      equityCurve: [],
+      maxDrawdown: null,
+      volume: e.volume || 0,
+    }
+  })
 
-  // Filter and sort
-  const validTraders = parsed.filter(t => t.pnl !== 0)
-  validTraders.sort((a, b) => b.pnl - a.pnl)
+  // Filter and sort by absolute PnL (both positive and negative PnL traders are valuable)
+  const validTraders = parsed.filter(t => t.address && t.address.startsWith('dydx'))
+  validTraders.sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
   const topTraders = validTraders.slice(0, TARGET)
 
-  // Enrich with historical PnL and equity
-  await enrichTraders(topTraders)
-
-  // Phase 3: Save equity curves and stats_detail for ALL periods (extended from 90D only)
-  logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
-  let curvesSaved = 0
-  let statsSaved = 0
-  for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
-    if (trader.equityCurve.length > 0) {
-      await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
-      curvesSaved++
-    }
-    // Save stats_detail
-    const stats: StatsDetail = {
-      totalTrades: null,
-      profitableTradesPct: null,
-      avgHoldingTimeHours: null,
-      avgProfit: null,
-      avgLoss: null,
-      largestWin: null,
-      largestLoss: null,
-      sharpeRatio: null,
-      maxDrawdown: trader.maxDrawdown,
-      currentDrawdown: null,
-      volatility: null,
-      copiersCount: null,
-      copiersPnl: null,
-      aum: trader.equity,
-      winningPositions: null,
-      totalPositions: null,
-    }
-    const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
-    if (s) statsSaved++
+  // Enrich with historical PnL and equity (only for 90D to save time)
+  if (period === '90D') {
+    await enrichTraders(topTraders)
   }
-  logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
+
+  // Save equity curves and stats_detail
+  if (period === '90D') {
+    logger.warn(`[${SOURCE}] Saving equity curves and stats details for ${period}...`)
+    let curvesSaved = 0
+    let statsSaved = 0
+    for (const trader of topTraders.slice(0, ENRICH_LIMIT)) {
+      if (trader.equityCurve.length > 0) {
+        await upsertEquityCurve(supabase, SOURCE, trader.address, period, trader.equityCurve)
+        curvesSaved++
+      }
+      const stats: StatsDetail = {
+        totalTrades: null,
+        profitableTradesPct: null,
+        avgHoldingTimeHours: null,
+        avgProfit: null,
+        avgLoss: null,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio: null,
+        maxDrawdown: trader.maxDrawdown,
+        currentDrawdown: null,
+        volatility: null,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: trader.equity,
+        winningPositions: null,
+        totalPositions: null,
+      }
+      const { saved: s } = await upsertStatsDetail(supabase, SOURCE, trader.address, period, stats)
+      if (s) statsSaved++
+    }
+    logger.warn(`[${SOURCE}] Saved ${curvesSaved} curves, ${statsSaved} stats for ${period}`)
+  }
 
   // Build TraderData
   const capturedAt = new Date().toISOString()
@@ -302,7 +310,7 @@ async function fetchPeriod(
       pnl: t.pnl || null,
       win_rate: null,
       max_drawdown: t.maxDrawdown,
-      aum: t.equity, // Save current equity as AUM
+      aum: t.equity,
       arena_score: calculateArenaScore(clampedRoi, t.pnl, t.maxDrawdown, null, period),
       captured_at: capturedAt,
     }

@@ -20,7 +20,6 @@
  *   - lbank: needs session auth, crashes headless browser
  *   - bitget_spot: no public API (all endpoints return 404)
  *   - blofin: needs credentials (BLOFIN env vars not set)
- *   - dydx: /v4/leaderboard/pnl endpoint removed from indexer (404 globally since ~2026-03)
  *   - phemex: CloudFront blocks all our IPs (VPS SG, Vercel hnd1, scraper) since ~2026-03-06
  */
 
@@ -44,8 +43,8 @@ const GROUPS: Record<string, string[]> = {
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
   c: ['okx_web3', 'aevo', 'xt'],
-  // Group D: CEX+DEX (every 6h) — 3 platforms (dydx: API removed, phemex: CloudFront blocked)
-  d: ['gains', 'htx_futures', 'bybit_spot'],
+  // Group D: CEX+DEX (every 6h) — 4 platforms (phemex: CloudFront blocked)
+  d: ['gains', 'htx_futures', 'dydx', 'bybit_spot'],
   // Group E: Lower-priority DEX (every 6h) — 5 platforms (was 8h)
   e: ['coinex', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
