@@ -12,7 +12,8 @@
  *   npx tsx scripts/cron/auto-fix-platform.ts
  * 
  * Cron (every 4 hours):
- *   0 */4 * * * cd ~/ranking-arena && npx tsx scripts/cron/auto-fix-platform.ts >> logs/auto-fix.log 2>&1
+ *   0 STAR-SLASH-4 STAR STAR STAR cd ~/ranking-arena && npx tsx scripts/cron/auto-fix-platform.ts >> logs/auto-fix.log 2>&1
+ *   (Replace STAR with * and STAR-SLASH with * followed by /)
  */
 
 import fs from 'fs';
