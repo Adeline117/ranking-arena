@@ -63,6 +63,7 @@ export type TraderSource =
   | 'paradex'
   // New CEX
   | 'bitunix'
+  | 'btcc'
   // Dune on-chain data
   | 'dune_gmx'
   | 'dune_hyperliquid'
@@ -112,6 +113,7 @@ export const ALL_SOURCES: TraderSource[] = [
   'paradex',
   // New CEX
   'bitunix',
+  'btcc',
   // Web3 bots
   'web3_bot',
 ]
@@ -275,6 +277,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
   dune_uniswap: { name: 'Uniswap (Dune)', sourceType: 'spot', reliability: 85, trustWeight: 0.85, roiType: 'realized' },
   dune_defi: { name: 'DeFi (Dune)', sourceType: 'web3', reliability: 80, trustWeight: 0.80, roiType: 'mixed' },
   bitunix: { name: 'Bitunix', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
+  btcc: { name: 'BTCC', sourceType: 'futures', reliability: 65, trustWeight: 0.75, roiType: 'mixed' },
   web3_bot: { name: 'Web3 Bot', sourceType: 'web3', reliability: 75, trustWeight: 0.70, roiType: 'mixed' },
   kwenta: { name: 'Kwenta', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },
   synthetix: { name: 'Synthetix', sourceType: 'futures', reliability: 70, trustWeight: 0.75, roiType: 'mixed' },

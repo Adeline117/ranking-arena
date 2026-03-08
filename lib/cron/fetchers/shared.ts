@@ -673,6 +673,7 @@ export const PLATFORM_FORMAT: Record<string, PlatformFormatConfig> = {
   weex:             { roiFormat: 'percentage', winRateFormat: 'decimal' },
   bitmart:          { roiFormat: 'percentage', winRateFormat: 'percentage' },
   bitunix:          { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  btcc:             { roiFormat: 'percentage', winRateFormat: 'percentage' },
   xt:               { roiFormat: 'percentage', winRateFormat: 'percentage' },
   binance_web3:     { roiFormat: 'percentage', winRateFormat: 'percentage' },
   web3_bot:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
