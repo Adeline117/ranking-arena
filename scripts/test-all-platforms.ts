@@ -5,6 +5,10 @@
  * Usage: npx tsx scripts/test-all-platforms.ts
  */
 
+// Load environment variables
+import { config } from 'dotenv';
+config({ path: '.env.local' });
+
 import { getAllConnectorKeys, getConnector } from '../connectors';
 import type { Platform, MarketType, Window } from '../connectors/base/types';
 import fs from 'fs';
