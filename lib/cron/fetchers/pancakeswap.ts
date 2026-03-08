@@ -27,7 +27,7 @@ interface SwapEntry {
 
 async function fetchSwapsPage(first: number, skip: number): Promise<SwapEntry[]> {
   if (!PANCAKESWAP_SUBGRAPH) {
-    throw new Error('Missing THEGRAPH_API_KEY — required for PancakeSwap subgraph')
+    return [] // THEGRAPH_API_KEY not configured — skip gracefully
   }
   const query = `{
     swaps(first: ${first}, skip: ${skip}, orderBy: amountUSD, orderDirection: desc) {
