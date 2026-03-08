@@ -95,10 +95,11 @@ async function run() {
   const localPath = `/tmp/${filename}`
 
   try {
-    // pg_dump → gzip
+    // pg_dump → gzip (使用 PostgreSQL 17 版本以匹配 Supabase 服务器)
+    const pgDumpPath = '/opt/homebrew/opt/postgresql@17/bin/pg_dump'
     console.log(`[backup] Dumping${fullMode ? ' full database' : ` ${TRADER_TABLES.length} tables`}...`)
     execSync(
-      `pg_dump "${DATABASE_URL}" ${tableArgs} --no-owner --no-privileges | gzip > ${localPath}`,
+      `${pgDumpPath} "${DATABASE_URL}" ${tableArgs} --no-owner --no-privileges | gzip > ${localPath}`,
       { stdio: ['pipe', 'pipe', 'pipe'], timeout: 600_000 }
     )
 
