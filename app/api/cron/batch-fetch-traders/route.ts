@@ -8,10 +8,16 @@
  *   group=a  → bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
- *   group=d  → gains, htx_futures, dydx (every 6h)
- *   group=e  → coinex, bitget_spot, binance_web3, kwenta, synthetix, mux (every 8h)
- *   group=f  → mexc, kucoin, blofin, bingx, gateio, lbank, weex, bitmart, bitunix (every 12h)
+ *   group=d  → gains, htx_futures, dydx, phemex (every 6h)
+ *   group=e  → coinex, binance_web3, kwenta, synthetix, mux (every 8h)
+ *   group=f  → mexc, bingx, gateio, weex, bitmart, bitunix (every 12h)
  *   group=g  → uniswap, pancakeswap, web3_bot, drift (every 12h)
+ *
+ * Dead/blocked platforms removed:
+ *   - kucoin: APIs return 404, feature discontinued
+ *   - lbank: needs session auth, crashes headless browser
+ *   - bitget_spot: no public API (all endpoints return 404)
+ *   - blofin: needs credentials (BLOFIN env vars not set)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -37,10 +43,14 @@ const GROUPS: Record<string, string[]> = {
   // Group D: Working CEX+DEX (every 6h) — 4 platforms
   // perpetual_protocol removed: Studio subgraph returns 404 (dead)
   d: ['gains', 'htx_futures', 'dydx', 'phemex'],
-  // Group E: Lower-priority (every 8h) — 6 platforms (added DEX subgraph fetchers)
-  e: ['coinex', 'bitget_spot', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
-  // Group F: Lower-priority CEX (every 12h) — periodic retry
-  f: ['mexc', 'kucoin', 'blofin', 'bingx', 'gateio', 'lbank', 'weex', 'bitmart', 'bitunix'],
+  // Group E: Lower-priority (every 8h) — 5 platforms
+  // bitget_spot removed: no public API (all endpoints return 404)
+  e: ['coinex', 'binance_web3', 'kwenta', 'synthetix', 'mux'],
+  // Group F: Lower-priority CEX (every 12h) — 6 platforms
+  // kucoin removed: APIs return 404, feature discontinued
+  // lbank removed: needs session auth, crashes headless browser
+  // blofin removed: needs BLOFIN env vars (not configured)
+  f: ['mexc', 'bingx', 'gateio', 'weex', 'bitmart', 'bitunix'],
   // Group G: DEX Subgraph + Solana (every 12h) — The Graph queries + Drift
   g: ['uniswap', 'pancakeswap', 'web3_bot', 'drift'],
 }
