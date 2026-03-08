@@ -38,14 +38,23 @@ export class MexcConnector extends BaseConnector {
 
       for (let page = 1; page <= pages && entries.length < limit; page++) {
         // Try VPS scraper first
-        let response = await this.fetchViaVPS<MexcListResponse>('/mexc/leaderboard', {
+        let vpsResponse = await this.fetchViaVPS<any>('/mexc/leaderboard', {
           page,
           pageSize,
           periodDays: WINDOW_MAP[window],
         });
 
-        // Fallback to direct API if VPS failed
-        if (!response) {
+        let traderList: any[] = [];
+
+        if (vpsResponse) {
+          // VPS scraper returns: { goldTraders: [...], silverTraders: [...] }
+          const allTraders = [
+            ...(vpsResponse.goldTraders || []),
+            ...(vpsResponse.silverTraders || []),
+          ];
+          traderList = allTraders;
+        } else {
+          // Fallback to direct API
           const params = new URLSearchParams({
             page: String(page),
             pageSize: String(pageSize),
@@ -54,7 +63,7 @@ export class MexcConnector extends BaseConnector {
             periodDays: WINDOW_MAP[window],
           });
 
-          response = await this.fetchJSON<MexcListResponse>(
+          const response = await this.fetchJSON<MexcListResponse>(
             `${LIST_API}?${params.toString()}`,
             {
               headers: {
@@ -63,11 +72,14 @@ export class MexcConnector extends BaseConnector {
               },
             }
           );
+
+          if (!response?.data?.list) break;
+          traderList = response.data.list;
         }
 
-        if (!response?.data?.list) break;
+        if (traderList.length === 0) break;
 
-        for (const item of response.data.list) {
+        for (const item of traderList) {
           entries.push({
             trader_key: item.traderId || item.uid,
             display_name: item.nickName || null,
@@ -79,7 +91,7 @@ export class MexcConnector extends BaseConnector {
           });
         }
 
-        if (response.data.list.length < pageSize) break;
+        if (traderList.length < pageSize) break;
         await this.sleep(this.getRandomDelay(3000, 5000));
       }
 
