@@ -125,7 +125,7 @@ export const ALL_SOURCES: TraderSource[] = [
 export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'kucoin',       // APIs return 404, feature discontinued
   'lbank',        // Session auth required, crashes headless browser
-  'phemex',       // CloudFront blocks all VPS/Vercel IPs since 2026-03
+  'phemex',       // CloudFront blocks Vercel/VPS — data fetched via Mac Mini crontab (fetch-phemex.mjs)
   'bitget_spot',  // No public API (all endpoints return 404)
   'blofin',       // Requires BLOFIN env vars (not set)
   'weex',         // Copy-trade API returning 521 (origin down) since 2026-03
