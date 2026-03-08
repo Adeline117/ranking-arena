@@ -26,6 +26,7 @@
  *   - kwenta: merged into Synthetix, Copin stopped indexing Sep 2025
  *   - synthetix: migrated to ETH mainnet, no public leaderboard API
  *   - uniswap/pancakeswap: need THEGRAPH_API_KEY (not set)
+ *   - toobit: API returns HTML (needs browser session), only 238 snapshots
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -50,8 +51,8 @@ const GROUPS: Record<string, string[]> = {
   c: ['okx_web3', 'aevo', 'xt'],
   // Group D: CEX+DEX (every 6h) — 4 platforms
   d: ['gains', 'htx_futures', 'dydx', 'bybit_spot'],
-  // Group E: CEX+DEX (every 6h) — 3 platforms
-  e: ['coinex', 'binance_web3', 'toobit'],
+  // Group E: CEX+DEX (every 6h) — 2 platforms
+  e: ['coinex', 'binance_web3'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
   // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
