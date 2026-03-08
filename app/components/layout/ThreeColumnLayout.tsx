@@ -39,13 +39,12 @@ export default function ThreeColumnLayout({
   const { t } = useLanguage()
   const [widgetsExpanded, setWidgetsExpanded] = useState(false)
   const isDesktop = useIsDesktop(1024)
-  const isTablet = useIsDesktop(768)
   const hasSidebarContent = !!(leftSidebar || rightSidebar)
 
   return (
     <div className="three-col-layout">
-      {/* Left sidebar — only mount on desktop (≥1024px) to save mobile JS/network */}
-      {leftSidebar && isDesktop && (
+      {/* Left sidebar — CSS handles visibility via media queries to avoid CLS */}
+      {leftSidebar && (
         <aside className="three-col-left hide-tablet">
           {leftSidebar}
         </aside>
@@ -138,8 +137,8 @@ export default function ThreeColumnLayout({
         )}
       </main>
 
-      {/* Right sidebar — only mount on tablet+ (≥768px) to save mobile JS/network */}
-      {rightSidebar && isTablet && (
+      {/* Right sidebar — CSS handles visibility via media queries to avoid CLS */}
+      {rightSidebar && (
         <aside className="three-col-right hide-mobile">
           {rightSidebar}
         </aside>
