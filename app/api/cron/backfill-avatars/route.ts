@@ -173,9 +173,12 @@ async function fetchXTAvatar(traderId: string): Promise<string | null> {
 }
 
 // Bulk leaderboard fetchers for platforms that support it
+// Max 120s per bulk fetch to stay within serverless budget
+const BULK_DEADLINE_MS = 120_000
+
 async function fetchXTBulk(): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
-  
+
   for (const sortType of ['INCOME_RATE', 'TOTAL_INCOME', 'WIN_RATE', 'FOLLOWERS']) {
     for (const days of [7, 30, 90]) {
       for (let pageNo = 1; pageNo <= 100; pageNo++) {
@@ -422,6 +425,7 @@ export async function GET(request: Request) {
   }
 
   if (!platform) {
+    await plog.error(new Error('platform parameter required'))
     return NextResponse.json({
       error: 'platform parameter required',
       available: Object.keys(INDIVIDUAL_FETCHERS),
@@ -431,6 +435,7 @@ export async function GET(request: Request) {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !supabaseKey) {
+    await plog.error(new Error('missing env'))
     return NextResponse.json({ error: 'missing env' }, { status: 500 })
   }
   const supabase = createClient(supabaseUrl, supabaseKey)
@@ -459,9 +464,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...result, message: 'No missing avatars' })
   }
 
-  // Try bulk fetch first
+  // Try bulk fetch first (timeout 120s to stay within serverless budget)
   if (mode !== 'individual' && BULK_FETCHERS[platform]) {
-    const bulkMap = await BULK_FETCHERS[platform]()
+    const bulkMap = await Promise.race([
+      BULK_FETCHERS[platform](),
+      new Promise<Map<string, string>>((resolve) =>
+        setTimeout(() => resolve(new Map()), BULK_DEADLINE_MS)
+      ),
+    ])
     
     for (const t of traders) {
       const avatar = bulkMap.get(t.source_trader_id) || bulkMap.get(t.handle)
@@ -483,18 +493,21 @@ export async function GET(request: Request) {
   }
 
   // Fall back to individual fetching for remaining
+  // Safety: stop 30s before maxDuration to ensure plog.success() runs
+  const functionDeadline = Date.now() + 250_000 // ~4m10s of 5m budget
   if (mode !== 'bulk' && INDIVIDUAL_FETCHERS[platform]) {
     const remaining = traders.filter(_t => {
       // Skip already updated
       return true // We'll check via a simpler approach
     })
-    
+
     const delayMs = platform.includes('binance') ? 3000 : 1500
     let individualUpdated = 0
-    
+
     for (const t of remaining.slice(0, limit)) {
       if (individualUpdated + result.updated >= limit) break
-      
+      if (Date.now() > functionDeadline) break // safety timeout
+
       try {
         const avatar = await INDIVIDUAL_FETCHERS[platform](t.source_trader_id)
         if (avatar && !avatar.includes('default') && !avatar.includes('blockie')) {
@@ -508,7 +521,7 @@ export async function GET(request: Request) {
       } catch {
         result.errors++
       }
-      
+
       await sleep(delayMs)
     }
   }

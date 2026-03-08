@@ -47,7 +47,8 @@ const HIGH_PRIORITY = ['binance_futures', 'bybit', 'okx_futures', 'bitget_future
 const MEDIUM_PRIORITY = ['binance_spot', 'bybit_spot', 'bitget_spot', 'mexc', 'htx_futures', 'dydx', 'gains', 'aevo']
 
 // Lower priority (enriched only with all=true)
-const LOWER_PRIORITY = ['kucoin', 'jupiter_perps', 'kwenta', 'synthetix', 'mux']
+// kwenta/synthetix/mux removed: no viable data source since 2025
+const LOWER_PRIORITY = ['jupiter_perps']
 
 interface BatchResult {
   platform: string
@@ -94,10 +95,16 @@ export async function GET(request: NextRequest) {
   // Per-platform enrichment timeout: 80s leaves buffer within 300s total for 3 concurrent
   const ENRICH_TIMEOUT_MS = 80_000
 
+  const functionStart = Date.now()
+
   // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
   for (const period of periodsToRun) {
     // Bail early if we're running low on time (leave 30s for cleanup/logging)
-    const elapsed = Date.now() - Date.now()
+    const elapsed = Date.now() - functionStart
+    if (elapsed > 250_000) {
+      results.push({ platform: '*', period, status: 'error', durationMs: 0, error: `Skipped: ${Math.round(elapsed / 1000)}s elapsed, <50s remaining` })
+      continue
+    }
 
     // Run enrichments inline in parallel batches of 3
     const BATCH_CONCURRENCY = 3

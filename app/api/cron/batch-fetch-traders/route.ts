@@ -9,22 +9,23 @@
  *   group=a2 → bybit, bitget_futures, okx_futures (every 3h)
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
- *   group=d  → gains, htx_futures, dydx, bybit_spot, toobit (every 6h)
- *   group=e  → coinex, binance_web3 (every 6h)
+ *   group=d  → gains, htx_futures, dydx, bybit_spot (every 6h)
+ *   group=e  → coinex, binance_web3, toobit (every 6h)
  *   group=f  → mexc, bingx (every 6h)
  *   group=h  → gateio, bitmart, btcc (every 6h)
- *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap, paradex (every 6h)
+ *   group=g  → drift, bitunix, web3_bot, paradex (every 6h)
  *
  * Dead/blocked platforms removed:
  *   - kucoin: APIs return 404, feature discontinued
  *   - lbank: needs session auth, crashes headless browser
  *   - bitget_spot: no public API (all endpoints return 404)
  *   - blofin: needs credentials (BLOFIN env vars not set)
- *   - phemex: CloudFront blocks all our IPs (VPS SG, Vercel hnd1, scraper) since ~2026-03-06
+ *   - phemex: CloudFront blocks — data fetched via Mac Mini crontab (fetch-phemex.mjs)
  *   - weex: copy-trade API returning 521 (origin down) since 2026-03
  *   - mux: requires THEGRAPH_API_KEY (not set), Copin has 0 traders
- *   - kwenta: Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
- *   - synthetix: Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
+ *   - kwenta: merged into Synthetix, Copin stopped indexing Sep 2025
+ *   - synthetix: migrated to ETH mainnet, no public leaderboard API
+ *   - uniswap/pancakeswap: need THEGRAPH_API_KEY (not set)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -47,17 +48,17 @@ const GROUPS: Record<string, string[]> = {
   b: ['hyperliquid', 'gmx', 'jupiter_perps'],
   // Group C: Mid-priority (every 4h) — 3 platforms, ~70s parallel
   c: ['okx_web3', 'aevo', 'xt'],
-  // Group D: CEX+DEX (every 6h) — 5 platforms (phemex: CloudFront blocked)
-  d: ['gains', 'htx_futures', 'dydx', 'bybit_spot', 'toobit'],
-  // Group E: DEX (every 6h) — 2 platforms
-  // kwenta/synthetix removed: Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
-  e: ['coinex', 'binance_web3'],
+  // Group D: CEX+DEX (every 6h) — 4 platforms
+  d: ['gains', 'htx_futures', 'dydx', 'bybit_spot'],
+  // Group E: CEX+DEX (every 6h) — 3 platforms
+  e: ['coinex', 'binance_web3', 'toobit'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
   // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
   h: ['gateio', 'bitmart', 'btcc'],
-  // Group G: New CEX + DEX (every 6h) — 6 platforms
-  g: ['drift', 'bitunix', 'web3_bot', 'uniswap', 'pancakeswap', 'paradex'],
+  // Group G: DEX (every 6h) — 4 platforms
+  // uniswap/pancakeswap removed: need THEGRAPH_API_KEY (not set)
+  g: ['drift', 'bitunix', 'web3_bot', 'paradex'],
 }
 
 interface BatchResult {

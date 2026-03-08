@@ -37,10 +37,12 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       logger.error('[cleanup-deleted-accounts] Query error:', error)
+      await plog.error(error)
       return NextResponse.json({ error: 'Query failed' }, { status: 500 })
     }
 
     if (!expiredAccounts || expiredAccounts.length === 0) {
+      await plog.success(0, { message: 'No accounts to cleanup' })
       return NextResponse.json({ message: 'No accounts to cleanup', deleted: 0 })
     }
 
