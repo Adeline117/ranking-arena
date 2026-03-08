@@ -1,8 +1,8 @@
 /**
  * Batch enrich dispatcher
  *
- * Consolidates multiple enrich cron jobs into one call.
- * Calls /api/cron/enrich for each platform sequentially.
+ * Calls enrichment logic INLINE (in-process) instead of via HTTP,
+ * avoiding Cloudflare timeouts and Vercel deployment protection issues.
  *
  * Query params:
  *   period=90D|30D|7D (default: 90D) - which time period to enrich
@@ -11,12 +11,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { runEnrichment, type EnrichmentResult } from '@/lib/cron/enrichment-runner'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 // Platform configs with limits per period
-const PLATFORM_CONFIGS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
+const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
   binance_futures: { limit90: 200, limit30: 150, limit7: 100 },
   binance_spot: { limit90: 100, limit30: 80, limit7: 50 },
   bybit: { limit90: 200, limit30: 150, limit7: 100 },
@@ -52,6 +53,8 @@ interface BatchResult {
   period: string
   status: 'success' | 'error'
   durationMs: number
+  enriched?: number
+  failed?: number
   error?: string
 }
 
@@ -65,71 +68,53 @@ export async function GET(request: NextRequest) {
   const period = request.nextUrl.searchParams.get('period') || '90D'
   const enrichAll = request.nextUrl.searchParams.get('all') === 'true'
 
-  // Validate period
   if (!['7D', '30D', '90D'].includes(period)) {
     return NextResponse.json({ error: 'Invalid period, must be 7D, 30D, or 90D' }, { status: 400 })
   }
 
-  // Prefer production domain (no deployment protection) over VERCEL_URL
-  // Each enrichment call has maxDuration=60s, well within Cloudflare's proxy timeout
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-
-  // Determine which platforms to enrich based on period and all flag
+  // Determine which platforms to enrich
   let platforms: string[]
   if (enrichAll) {
     platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...LOWER_PRIORITY]
-  } else if (period === '90D') {
-    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY]
   } else {
-    // For 7D and 30D, include both HIGH and MEDIUM priority
     platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY]
   }
 
   const results: BatchResult[] = []
   const plog = await PipelineLogger.start(`batch-enrich-${period}`, { period, enrichAll, platforms })
 
-  // Run enrichments in parallel batches of 3 (was sequential with 2s delay = 28s+ idle)
+  // Run enrichments inline in parallel batches of 3
   const BATCH_CONCURRENCY = 3
-  const enrichPlatform = async (platform: string): Promise<BatchResult> => {
-    const config = PLATFORM_CONFIGS[platform]
-    if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
-
-    const limit = period === '90D' ? config.limit90 : period === '30D' ? config.limit30 : config.limit7
-    const start = Date.now()
-
-    try {
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${cronSecret}`,
-      }
-      if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
-        headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-      }
-
-      const res = await fetch(
-        `${baseUrl}/api/cron/enrich?platform=${platform}&period=${period}&limit=${limit}`,
-        { method: 'GET', headers }
-      )
-      return {
-        platform, period,
-        status: res.ok ? 'success' : 'error',
-        durationMs: Date.now() - start,
-        error: res.ok ? undefined : `HTTP ${res.status}`,
-      }
-    } catch (err) {
-      return {
-        platform, period,
-        status: 'error',
-        durationMs: Date.now() - start,
-        error: err instanceof Error ? err.message : String(err),
-      }
-    }
-  }
-
-  // Process in batches of BATCH_CONCURRENCY
   for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
     const batch = platforms.slice(i, i + BATCH_CONCURRENCY)
-    const batchResults = await Promise.all(batch.map(enrichPlatform))
+    const batchResults = await Promise.all(
+      batch.map(async (platform): Promise<BatchResult> => {
+        const config = PLATFORM_LIMITS[platform]
+        if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
+
+        const limit = period === '90D' ? config.limit90 : period === '30D' ? config.limit30 : config.limit7
+        const start = Date.now()
+
+        try {
+          const result: EnrichmentResult = await runEnrichment({ platform, period, limit })
+          return {
+            platform, period,
+            status: result.ok ? 'success' : 'error',
+            durationMs: Date.now() - start,
+            enriched: result.summary.enriched,
+            failed: result.summary.failed,
+            error: result.ok ? undefined : `${result.summary.failed} enrichments failed`,
+          }
+        } catch (err) {
+          return {
+            platform, period,
+            status: 'error',
+            durationMs: Date.now() - start,
+            error: err instanceof Error ? err.message : String(err),
+          }
+        }
+      })
+    )
     results.push(...batchResults)
   }
 
