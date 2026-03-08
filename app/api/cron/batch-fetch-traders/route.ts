@@ -10,9 +10,9 @@
  *   group=b  → hyperliquid, gmx, jupiter_perps (every 4h)
  *   group=c  → okx_web3, aevo, xt (every 4h)
  *   group=d  → gains, htx_futures, dydx, bybit_spot, toobit (every 6h)
- *   group=e  → coinex, binance_web3, kwenta, synthetix (every 6h)
+ *   group=e  → coinex, binance_web3 (every 6h)
  *   group=f  → mexc, bingx (every 6h)
- *   group=h  → gateio, bitmart (every 6h)
+ *   group=h  → gateio, bitmart, btcc (every 6h)
  *   group=g  → drift, bitunix, web3_bot, uniswap, pancakeswap, paradex (every 6h)
  *
  * Dead/blocked platforms removed:
@@ -23,8 +23,8 @@
  *   - phemex: CloudFront blocks all our IPs (VPS SG, Vercel hnd1, scraper) since ~2026-03-06
  *   - weex: copy-trade API returning 521 (origin down) since 2026-03
  *   - mux: requires THEGRAPH_API_KEY (not set), Copin has 0 traders
- *   - kwenta: RESTORED — Copin API as primary (free, no key)
- *   - synthetix: RESTORED — Copin API as primary (free, no key)
+ *   - kwenta: Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
+ *   - synthetix: Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -49,8 +49,9 @@ const GROUPS: Record<string, string[]> = {
   c: ['okx_web3', 'aevo', 'xt'],
   // Group D: CEX+DEX (every 6h) — 5 platforms (phemex: CloudFront blocked)
   d: ['gains', 'htx_futures', 'dydx', 'bybit_spot', 'toobit'],
-  // Group E: DEX (every 6h) — 4 platforms (kwenta/synthetix use Copin API, no key needed)
-  e: ['coinex', 'binance_web3', 'kwenta', 'synthetix'],
+  // Group E: DEX (every 6h) — 2 platforms
+  // kwenta/synthetix removed: Copin stopped indexing Sep 2025, TheGraph needs THEGRAPH_API_KEY
+  e: ['coinex', 'binance_web3'],
   // Group F: Slow CEX (every 6h) — 2 platforms, parallel (~141s + ~60s = ~200s)
   f: ['mexc', 'bingx'],
   // Group H: Fast CEX (every 6h) — 3 platforms, parallel (~25s each)
